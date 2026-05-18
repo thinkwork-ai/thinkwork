@@ -52,6 +52,7 @@ import { registerTraceCommand } from "./commands/trace.js";
 import { registerDashboardCommand } from "./commands/dashboard.js";
 import { registerEvalCommand } from "./commands/eval.js";
 import { registerWikiCommand } from "./commands/wiki.js";
+import { registerEnterpriseCommand } from "./commands/enterprise.js";
 
 const program = new Command();
 
@@ -147,6 +148,7 @@ registerPerformanceCommand(program);
 registerTraceCommand(program);
 registerDashboardCommand(program);
 registerEvalCommand(program);
+registerEnterpriseCommand(program);
 
 // Wiki (Compounding Memory) pipeline controls — admin-only.
 registerWikiCommand(program);

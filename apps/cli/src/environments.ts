@@ -7,7 +7,13 @@
  * having to cd into the right directory or pass --dir every time.
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+} from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -27,6 +33,25 @@ export interface EnvironmentConfig {
 
 const THINKWORK_HOME = join(homedir(), ".thinkwork");
 const ENVIRONMENTS_DIR = join(THINKWORK_HOME, "environments");
+const ENTERPRISE_DEPLOYMENTS_DIR = join(
+  THINKWORK_HOME,
+  "enterprise-deployments",
+);
+
+export interface EnterpriseDeploymentConfig {
+  customerSlug: string;
+  repository: string;
+  targetDir: string;
+  accountId: string;
+  region: string;
+  stages: string[];
+  artifactBucket: string;
+  stateBucket: string;
+  lockTable: string;
+  releaseVersion: string;
+  releaseManifestUrl: string;
+  updatedAt: string;
+}
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -43,6 +68,36 @@ export function saveEnvironment(config: EnvironmentConfig): void {
     join(envDir, "config.json"),
     JSON.stringify(config, null, 2) + "\n",
   );
+}
+
+export function saveEnterpriseDeployment(
+  config: EnterpriseDeploymentConfig,
+): void {
+  ensureDir(ENTERPRISE_DEPLOYMENTS_DIR);
+  writeFileSync(
+    join(ENTERPRISE_DEPLOYMENTS_DIR, `${config.customerSlug}.json`),
+    JSON.stringify(config, null, 2) + "\n",
+  );
+}
+
+export function loadEnterpriseDeployment(
+  customerSlug: string,
+): EnterpriseDeploymentConfig | null {
+  const configPath = join(ENTERPRISE_DEPLOYMENTS_DIR, `${customerSlug}.json`);
+  if (!existsSync(configPath)) return null;
+  return JSON.parse(readFileSync(configPath, "utf-8"));
+}
+
+export function listEnterpriseDeployments(): EnterpriseDeploymentConfig[] {
+  if (!existsSync(ENTERPRISE_DEPLOYMENTS_DIR)) return [];
+  return readdirSync(ENTERPRISE_DEPLOYMENTS_DIR)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => {
+      return JSON.parse(
+        readFileSync(join(ENTERPRISE_DEPLOYMENTS_DIR, name), "utf-8"),
+      );
+    })
+    .sort((a, b) => a.customerSlug.localeCompare(b.customerSlug));
 }
 
 /**
