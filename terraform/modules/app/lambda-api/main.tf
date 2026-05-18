@@ -544,9 +544,9 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
   })
 }
 
-resource "aws_iam_role_policy" "lambda_thread_idle_memory_learning_invoke" {
-  name = "thread-idle-memory-learning-invoke"
-  role = aws_iam_role.lambda.id
+resource "aws_iam_policy" "thread_idle_memory_learning_invoke" {
+  name        = "thinkwork-${var.stage}-thread-idle-memory-learning-invoke"
+  description = "Allow API job-trigger Lambda to invoke requester idle memory learning worker."
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -556,6 +556,11 @@ resource "aws_iam_role_policy" "lambda_thread_idle_memory_learning_invoke" {
       Resource = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-thread-idle-memory-learning"
     }]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_thread_idle_memory_learning_invoke" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.thread_idle_memory_learning_invoke.arn
 }
 
 # Step Functions admin operations — for createRoutine / publishRoutineVersion

@@ -23,9 +23,14 @@ describe("Requester memory Terraform wiring", () => {
     const source = read(LAMBDA_API_MAIN);
 
     expect(source).toMatch(
-      /resource "aws_iam_role_policy" "lambda_thread_idle_memory_learning_invoke"/,
+      /resource "aws_iam_policy" "thread_idle_memory_learning_invoke"/,
     );
-    expect(source).toContain("thread-idle-memory-learning-invoke");
+    expect(source).toMatch(
+      /resource "aws_iam_role_policy_attachment" "lambda_thread_idle_memory_learning_invoke"/,
+    );
+    expect(source).toContain(
+      "thinkwork-${var.stage}-thread-idle-memory-learning-invoke",
+    );
     expect(source).toContain(
       "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-thread-idle-memory-learning",
     );
