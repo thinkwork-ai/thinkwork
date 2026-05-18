@@ -54,8 +54,8 @@ type EvalRun {
   agentTemplateName: String
   scheduledJobId: ID
   status: String!
-  # Deprecated for manual/scheduled eval runs; direct-AgentCore evals always
-  # use Kimi K2.5.
+  # Model used for the direct-AgentCore eval run. Manual runs default to
+  # Kimi K2.5; explicit overrides must be available in model_catalog.
   model: String
   categories: [String!]!
   totalTests: Int!
@@ -169,8 +169,8 @@ input StartEvalRunInput {
   # default Agent template and the platform-managed system eval agent.
   agentId: ID
   agentTemplateId: ID
-  # Deprecated; direct-AgentCore evals always use Kimi K2.5 and reject
-  # non-Kimi overrides.
+  # Optional model override for the direct-AgentCore eval run. Omit to use
+  # Kimi K2.5; non-default overrides must be available in model_catalog.
   model: String
   # Subset of categories to run; empty = all enabled test cases for the tenant.
   categories: [String!]

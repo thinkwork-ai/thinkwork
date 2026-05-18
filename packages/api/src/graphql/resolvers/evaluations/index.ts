@@ -16,6 +16,7 @@ import {
   evalTestCases,
   agents,
   agentTemplates,
+  modelCatalog,
 } from "@thinkwork/database-pg/schema";
 import {
   fetchSpansForSession,
@@ -645,6 +646,30 @@ interface StartEvalRunInput {
   testCaseIds?: string[] | null;
 }
 
+async function resolveEvalModelId(inputModel: string | null | undefined) {
+  const requested = inputModel?.trim() || DEFAULT_EVAL_MODEL_ID;
+  if (requested === DEFAULT_EVAL_MODEL_ID) return requested;
+
+  const [availableModel] = await db
+    .select({ modelId: modelCatalog.model_id })
+    .from(modelCatalog)
+    .where(
+      and(
+        eq(modelCatalog.model_id, requested),
+        eq(modelCatalog.is_available, true),
+      ),
+    )
+    .limit(1);
+
+  if (!availableModel) {
+    throw new Error(
+      `Eval model ${requested} is not available in the model catalog.`,
+    );
+  }
+
+  return requested;
+}
+
 async function resolveRunTarget(args: {
   tenantId: string;
   input: StartEvalRunInput;
@@ -690,13 +715,9 @@ const startEvalRun = async (
       "Computer eval targets are no longer supported. Evals run directly against AgentCore Agent templates.",
     );
   }
-  if (args.input.model && args.input.model !== DEFAULT_EVAL_MODEL_ID) {
-    throw new Error(
-      `Eval model overrides are no longer supported. Evals use ${DEFAULT_EVAL_MODEL_ID}.`,
-    );
-  }
 
   const target = await resolveRunTarget(args);
+  const model = await resolveEvalModelId(args.input.model);
 
   const [run] = await db
     .insert(evalRuns)
@@ -706,7 +727,7 @@ const startEvalRun = async (
       computer_id: null,
       agent_template_id: target.agentTemplateId,
       status: "pending",
-      model: DEFAULT_EVAL_MODEL_ID,
+      model,
       categories: args.input.categories ?? [],
     })
     .returning();
