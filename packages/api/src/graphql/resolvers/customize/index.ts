@@ -3,7 +3,9 @@ import { disableSkill } from "./disableSkill.mutation.js";
 import { disableWorkflow } from "./disableWorkflow.mutation.js";
 import { enableSkill } from "./enableSkill.mutation.js";
 import { enableWorkflow } from "./enableWorkflow.mutation.js";
+import { installSkill } from "./installSkill.mutation.js";
 import { skillCatalog } from "./skillCatalog.query.js";
+import { uninstallSkill } from "./uninstallSkill.mutation.js";
 import { workflowCatalog } from "./workflowCatalog.query.js";
 
 export const customizeQueries = {
@@ -17,4 +19,6 @@ export const customizeMutations = {
   disableSkill,
   enableWorkflow,
   disableWorkflow,
+  installSkill,
+  uninstallSkill,
 };
