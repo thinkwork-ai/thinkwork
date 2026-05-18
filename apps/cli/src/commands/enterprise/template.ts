@@ -49,7 +49,11 @@ export function renderEnterpriseDeployRepoTemplate(
   });
 
   const templateFiles = listTemplateFiles(templateRoot).filter(
-    (path) => !relative(templateRoot, path).startsWith("terraform/stages/"),
+    (path) =>
+      !relative(templateRoot, path).startsWith("terraform/stages/") &&
+      !/^terraform\/backend-[^.]+\.hcl$/.test(
+        relative(templateRoot, path).split("\\").join("/"),
+      ),
   );
   const written: string[] = [];
   const preserved: string[] = [];
@@ -57,14 +61,22 @@ export function renderEnterpriseDeployRepoTemplate(
   for (const templatePath of templateFiles) {
     const relativePath = relative(templateRoot, templatePath);
     const outputPath = join(targetDir, relativePath);
-    const content = applyTemplate(
+    let content = applyTemplate(
       readFileSync(templatePath, "utf8"),
       replacements,
     );
+    if (relativePath.split("\\").join("/") === "customer/deployment.json") {
+      content = renderCustomerDeploymentJson(content, customerSlug, stages);
+    }
     writeManagedFile(outputPath, content, written, preserved);
   }
 
   const stageTemplateRoot = join(templateRoot, "terraform", "stages");
+  const backendTemplatePath = join(
+    templateRoot,
+    "terraform",
+    "backend-dev.hcl",
+  );
   for (const stage of stages) {
     const explicitTemplate = join(stageTemplateRoot, `${stage}.tfvars`);
     const fallbackTemplate = join(stageTemplateRoot, "dev.tfvars");
@@ -82,6 +94,16 @@ export function renderEnterpriseDeployRepoTemplate(
       STAGE: stage,
     });
     writeManagedFile(outputPath, content, written, preserved);
+
+    const backendPath = join(targetDir, "terraform", `backend-${stage}.hcl`);
+    const backendContent = applyTemplate(
+      readFileSync(backendTemplatePath, "utf8"),
+      {
+        ...replacements,
+        STAGE: stage,
+      },
+    );
+    writeManagedFile(backendPath, backendContent, written, preserved);
   }
 
   return { targetDir, written, preserved };
@@ -163,6 +185,29 @@ function buildTemplateReplacements(
     TERRAFORM_MODULE_VERSION:
       options.terraformModuleVersion ?? releaseVersion.replace(/^v/, ""),
   };
+}
+
+function renderCustomerDeploymentJson(
+  content: string,
+  customerSlug: string,
+  stages: string[],
+): string {
+  const deployment = JSON.parse(content);
+  deployment.stages = Object.fromEntries(
+    stages.map((stage) => [
+      stage,
+      {
+        tenantSlug:
+          stage === "prod" ? customerSlug : `${customerSlug}-${stage}`,
+        evalPacks: [],
+        seedPacks: [],
+        skillPacks: [],
+        workspaceDefaultPacks: [],
+        branding: null,
+      },
+    ]),
+  );
+  return `${JSON.stringify(deployment, null, 2)}\n`;
 }
 
 function listTemplateFiles(root: string): string[] {
