@@ -217,6 +217,12 @@ variable "lambda_artifact_prefix" {
   default     = "latest/lambdas"
 }
 
+variable "require_lambda_artifacts" {
+  description = "Fail planning unless either lambda_zips_dir or lambda_artifact_bucket/lambda_artifact_prefix is configured. Enterprise deployment repos should set this to true."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_zips_dir" {
   description = "Local directory containing Lambda zip artifacts (from scripts/build-lambdas.sh). Enables real handlers when set."
   type        = string

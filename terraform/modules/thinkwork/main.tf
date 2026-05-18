@@ -257,8 +257,9 @@ module "api" {
   account_id = var.account_id
   region     = var.region
 
-  lambda_artifact_bucket = var.lambda_artifact_bucket
-  lambda_artifact_prefix = var.lambda_artifact_prefix
+  lambda_artifact_bucket   = var.lambda_artifact_bucket
+  lambda_artifact_prefix   = var.lambda_artifact_prefix
+  require_lambda_artifacts = var.require_lambda_artifacts
 
   db_cluster_arn        = module.database.db_cluster_arn
   db_cluster_endpoint   = module.database.cluster_endpoint

@@ -74,6 +74,11 @@ output "api_endpoint" {
   value = module.api.api_endpoint
 }
 
+output "lambda_artifact_mode" {
+  description = "Resolved Lambda artifact source mode: local, s3, or placeholder."
+  value       = module.api.lambda_artifact_mode
+}
+
 output "api_id" {
   description = "aws_apigatewayv2_api.main.id — needed by the www-dns module to map api.<domain> onto the HTTP API."
   value       = module.api.api_id

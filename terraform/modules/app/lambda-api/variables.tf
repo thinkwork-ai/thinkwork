@@ -16,6 +16,7 @@ variable "region" {
 variable "lambda_artifact_bucket" {
   description = "S3 bucket containing Lambda deployment artifacts"
   type        = string
+  default     = ""
 }
 
 variable "lambda_artifact_prefix" {
@@ -124,6 +125,12 @@ variable "lambda_zips_dir" {
   description = "Local directory containing Lambda zip artifacts (from scripts/build-lambdas.sh). Set to enable real handlers."
   type        = string
   default     = ""
+}
+
+variable "require_lambda_artifacts" {
+  description = "Fail planning unless either lambda_zips_dir or lambda_artifact_bucket/lambda_artifact_prefix is configured. Enterprise deployment repos should set this to true."
+  type        = bool
+  default     = false
 }
 
 variable "db_password" {

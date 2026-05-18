@@ -111,6 +111,24 @@ variable "lambda_zips_dir" {
   default     = ""
 }
 
+variable "lambda_artifact_bucket" {
+  description = "S3 bucket containing Lambda release artifacts. Mutually exclusive with lambda_zips_dir."
+  type        = string
+  default     = ""
+}
+
+variable "lambda_artifact_prefix" {
+  description = "S3 key prefix containing Lambda release artifacts, for example releases/v1.2.3/lambdas."
+  type        = string
+  default     = "latest/lambdas"
+}
+
+variable "require_lambda_artifacts" {
+  description = "Fail planning unless either lambda_zips_dir or lambda_artifact_bucket/lambda_artifact_prefix is configured."
+  type        = bool
+  default     = false
+}
+
 variable "enable_workspace_orchestration" {
   description = "Enable S3 EventBridge/SQS routing and the workspace event dispatcher for folder-native workspace orchestration."
   type        = bool
@@ -355,6 +373,9 @@ module "thinkwork" {
   google_oauth_client_secret     = var.google_oauth_client_secret
   pre_signup_lambda_zip          = var.pre_signup_lambda_zip
   lambda_zips_dir                = var.lambda_zips_dir
+  lambda_artifact_bucket         = var.lambda_artifact_bucket
+  lambda_artifact_prefix         = var.lambda_artifact_prefix
+  require_lambda_artifacts       = var.require_lambda_artifacts
   enable_workspace_orchestration = var.enable_workspace_orchestration
   api_auth_secret                = var.api_auth_secret
 
@@ -494,6 +515,11 @@ resource "cloudflare_record" "agents_ns" {
 output "api_endpoint" {
   description = "API Gateway endpoint URL"
   value       = module.thinkwork.api_endpoint
+}
+
+output "lambda_artifact_mode" {
+  description = "Resolved Lambda artifact source mode: local, s3, or placeholder."
+  value       = module.thinkwork.lambda_artifact_mode
 }
 
 output "api_domain" {
