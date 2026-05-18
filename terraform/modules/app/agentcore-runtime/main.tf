@@ -68,6 +68,12 @@ variable "memory_engine" {
   }
 }
 
+variable "requester_idle_memory_learning_enabled" {
+  description = "When true, requester memory learning runs through the API idle/dreaming pipeline instead of runtime retain-on-every-turn."
+  type        = bool
+  default     = false
+}
+
 # memory-retain Lambda name + ARN are constructed locally rather than
 # taken as inputs to avoid a circular dependency: the lambda-api module
 # already consumes this module's outputs (agentcore_function_name/arn).
@@ -336,12 +342,13 @@ resource "aws_lambda_function" "agentcore" {
 
   environment {
     variables = {
-      PORT                   = "8080"
-      AWS_LWA_PORT           = "8080"
-      AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
-      AGENTCORE_FILES_BUCKET = var.bucket_name
-      MEMORY_ENGINE          = var.memory_engine
-      MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
+      PORT                                   = "8080"
+      AWS_LWA_PORT                           = "8080"
+      AGENTCORE_MEMORY_ID                    = var.agentcore_memory_id
+      AGENTCORE_FILES_BUCKET                 = var.bucket_name
+      MEMORY_ENGINE                          = var.memory_engine
+      REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
+      MEMORY_RETAIN_FN_NAME                  = local.memory_retain_fn_name
       # Needed by run_skill_dispatch.py to POST terminal state back to
       # /api/skills/complete after a composition run finishes.
       THINKWORK_API_URL       = var.api_endpoint

@@ -271,15 +271,16 @@ resource "aws_lambda_function" "agentcore_flue" {
 
   environment {
     variables = {
-      PORT                   = "8080"
-      AWS_LWA_PORT           = "8080"
-      AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
-      AGENTCORE_FILES_BUCKET = var.bucket_name
-      MEMORY_ENGINE          = var.memory_engine
-      MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
-      HINDSIGHT_ENDPOINT     = var.hindsight_endpoint
-      THINKWORK_API_URL      = var.api_endpoint
-      API_AUTH_SECRET        = var.api_auth_secret
+      PORT                                   = "8080"
+      AWS_LWA_PORT                           = "8080"
+      AGENTCORE_MEMORY_ID                    = var.agentcore_memory_id
+      AGENTCORE_FILES_BUCKET                 = var.bucket_name
+      MEMORY_ENGINE                          = var.memory_engine
+      REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
+      MEMORY_RETAIN_FN_NAME                  = local.memory_retain_fn_name
+      HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
+      THINKWORK_API_URL                      = var.api_endpoint
+      API_AUTH_SECRET                        = var.api_auth_secret
       # Plan §005 U4 — AuroraSessionStore uses the RDS Data API to persist
       # Flue's SessionData blobs against threads.session_data. Empty during
       # the first greenfield apply (DB cluster doesn't exist yet); the

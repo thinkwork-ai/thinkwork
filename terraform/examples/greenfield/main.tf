@@ -181,6 +181,30 @@ variable "wiki_compile_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
+variable "requester_idle_memory_learning_enabled" {
+  description = "Enable requester-scoped 15-minute idle memory learning."
+  type        = bool
+  default     = true
+}
+
+variable "requester_memory_dreaming_enabled" {
+  description = "Enable recurring requester memory dreaming sweeps."
+  type        = bool
+  default     = true
+}
+
+variable "requester_memory_dreaming_schedule_expression" {
+  description = "EventBridge Scheduler expression for requester memory dreaming sweeps."
+  type        = string
+  default     = "cron(30 4 * * ? *)"
+}
+
+variable "requester_memory_dreaming_model_id" {
+  description = "Bedrock Converse model id for requester memory REM reflection."
+  type        = string
+  default     = "openai.gpt-oss-120b-1:0"
+}
+
 variable "company_brain_source_agent_model_id" {
   description = <<-EOT
     Bedrock model id the GraphQL Company Brain source-agent runtime uses
@@ -411,13 +435,17 @@ module "thinkwork" {
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to
   # whatever the Lambda env defaults to.
-  wiki_compile_model_id               = var.wiki_compile_model_id
-  company_brain_source_agent_model_id = var.company_brain_source_agent_model_id
-  wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
-  wiki_deterministic_linking_enabled  = var.wiki_deterministic_linking_enabled
-  google_places_api_key               = var.google_places_api_key
-  nova_act_api_key                    = var.nova_act_api_key
-  agentcore_code_interpreter_id       = var.agentcore_code_interpreter_id
+  wiki_compile_model_id                         = var.wiki_compile_model_id
+  company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
+  wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
+  wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
+  google_places_api_key                         = var.google_places_api_key
+  requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
+  requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
+  requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
+  requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
+  nova_act_api_key                              = var.nova_act_api_key
+  agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
 
   # Mapbox public token for apps/computer MapView primitive. Flows through
   # to scripts/build-computer.sh → VITE_MAPBOX_PUBLIC_TOKEN.

@@ -775,8 +775,18 @@ describe("user context workspace target", () => {
         { Key: `tenants/${TENANT_A}/users/${USER_ID}/USER.md` },
         { Key: `tenants/${TENANT_A}/users/${USER_ID}/knowledge-pack.md` },
         { Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/MEMORY.md` },
+        { Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/DREAMS.md` },
         {
           Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/candidates/2026-05-18.md`,
+        },
+        {
+          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/dreaming/rem/2026-05-18.md`,
+        },
+        {
+          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/.dreams/2026-05-18.json`,
+        },
+        {
+          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/reports/thread-idle/run-1.md`,
         },
       ],
     });
@@ -806,7 +816,19 @@ describe("user context workspace target", () => {
         overridden: false,
       },
       {
+        path: "memory/DREAMS.md",
+        source: "user",
+        sha256: "",
+        overridden: false,
+      },
+      {
         path: "memory/candidates/2026-05-18.md",
+        source: "user",
+        sha256: "",
+        overridden: false,
+      },
+      {
+        path: "memory/dreaming/rem/2026-05-18.md",
         source: "user",
         sha256: "",
         overridden: false,
@@ -832,6 +854,26 @@ describe("user context workspace target", () => {
       content: "- Prefers concise summaries\n",
     });
     expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  it("blocks hidden requester memory internals from direct User context reads", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+
+    const getRes = await parse(
+      await handler(
+        event({
+          action: "get",
+          userId: USER_ID,
+          path: "memory/.dreams/2026-05-18.json",
+        }),
+      ),
+    );
+
+    expect(getRes.statusCode).toBe(403);
+    expect(getRes.body.error).toContain("User context path is not editable");
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
   });
 
   it("writes requester context files directly to the tenant/user S3 prefix", async () => {

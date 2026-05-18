@@ -613,6 +613,52 @@ Target branch: `main`
 
 None.
 
+# Requester Memory Dreaming - 2026-05-18
+
+## Status
+
+- Branch: `codex/requester-memory-dreaming`
+- Started: `2026-05-18T19:18:00Z`
+- Plan: `docs/plans/2026-05-18-002-feat-requester-memory-dreaming-plan.md`
+- Implemented locally:
+  - Added requester memory dreaming storage/source listing with public dream reports and hidden `.dreams` state.
+  - Added broad user-level dreaming sweep with light, REM, deep, and deterministic compaction/promotion phases.
+  - Added LLM REM reflection through Bedrock Converse with deterministic fallback.
+  - Added `requester-memory-dreaming` Lambda handler, build artifact wiring, Terraform feature flags, and nightly EventBridge Scheduler rule.
+  - Enabled dev greenfield defaults for requester idle learning and requester memory dreaming.
+  - Updated User context listing so admins can see `memory/DREAMS.md` and `memory/dreaming/...` while hidden internal/report files stay filtered.
+
+## Verification Log
+
+- `pnpm install` - passed, required because the new worktree had no `node_modules`.
+- `pnpm --filter @thinkwork/api test -- src/lib/requester-memory/dreaming.test.ts src/handlers/requester-memory-dreaming.test.ts src/lib/requester-memory/storage.test.ts src/__tests__/workspace-files-handler.test.ts` - passed, 80 tests.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api lint` - skipped because `@thinkwork/api` has no `lint` script.
+- `pnpm --filter @thinkwork/api test` - passed, 2,945 tests and 16 skipped across 320 files.
+- `bash scripts/build-lambdas.sh requester-memory-dreaming && bash scripts/build-lambdas.sh thread-idle-memory-learning` - passed.
+- `pnpm dlx prettier@3.8.2 --write ...` - passed for touched TypeScript files. Root `pnpm exec prettier` is unavailable in this worktree because the workspace does not expose a local prettier binary.
+- `terraform fmt ...` - passed.
+- `terraform -chdir=terraform/examples/greenfield init -backend=false` - passed.
+- `terraform -chdir=terraform/examples/greenfield validate` - passed.
+- `agent-browser open http://localhost:5174/knowledge/user && agent-browser snapshot -i` - passed; unauthenticated browser redirected to `/sign-in?next=%2Fknowledge%2Fuser` as expected.
+- `pnpm --filter @thinkwork/admin typecheck` - skipped because `@thinkwork/admin` has no `typecheck` script.
+- `pnpm --filter @thinkwork/admin build` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Opened [#1404](https://github.com/thinkwork-ai/thinkwork/pull/1404).
+- GitHub PR checks on [#1404](https://github.com/thinkwork-ai/thinkwork/pull/1404) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+
+## Blockers
+
+None.
+
 ---
 
 # Slack File Attachment Hotfix - 2026-05-17

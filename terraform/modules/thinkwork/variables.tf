@@ -185,6 +185,30 @@ variable "enable_workspace_orchestration" {
   default     = false
 }
 
+variable "requester_idle_memory_learning_enabled" {
+  description = "Enable requester-scoped 15-minute idle memory learning."
+  type        = bool
+  default     = false
+}
+
+variable "requester_memory_dreaming_enabled" {
+  description = "Enable recurring requester memory dreaming sweeps."
+  type        = bool
+  default     = false
+}
+
+variable "requester_memory_dreaming_schedule_expression" {
+  description = "EventBridge Scheduler expression for requester memory dreaming sweeps."
+  type        = string
+  default     = "cron(30 4 * * ? *)"
+}
+
+variable "requester_memory_dreaming_model_id" {
+  description = "Bedrock Converse model id for requester memory REM reflection."
+  type        = string
+  default     = "openai.gpt-oss-120b-1:0"
+}
+
 # ---------------------------------------------------------------------------
 # Naming / Buckets
 # ---------------------------------------------------------------------------
