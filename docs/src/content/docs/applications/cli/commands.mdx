@@ -995,6 +995,107 @@ thinkwork tenant settings set [tenant] [--default-model <id>] [--monthly-budget-
 
 ---
 
+## agent
+
+Agent lifecycle + capabilities, skills, budgets, API keys, email channels, and version history. Largest command group of Phase 2. Implementations live under `apps/cli/src/commands/agent/`.
+
+```bash
+thinkwork agent <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`. Alias: `agents`.
+
+### agent list / get
+
+```bash
+thinkwork agent list [--status IDLE|BUSY|OFFLINE|ERROR] [--type AGENT|GATEWAY|SUPERVISOR] [--include-system] [--all]
+thinkwork agent get <id>
+```
+
+`list` returns the caller's paired agents; `--all` switches to the admin-only `allTenantAgents` query (every agent in the tenant, requires owner/admin). `get` returns the agent with its capabilities, skills, and budget policy.
+
+### agent create / update / delete
+
+```bash
+thinkwork agent create [name] --template <id> [--role <r>] [--type <t>] [--parent <id>] [--reports-to <id>] [--system-prompt <text>|--system-prompt-file <path>] [--model <id>]
+thinkwork agent update <id> [same field flags as create]
+thinkwork agent delete <id> [--yes]
+```
+
+- `--template` is **required** for create (`CreateAgentInput.templateId` is non-null). See `thinkwork template list` for IDs.
+- `--type` accepts `AGENT | GATEWAY | SUPERVISOR` (the actual enum values — the scaffolded help text mentioning HUMAN_PAIR / TEAM_AGENT / SUB_AGENT was outdated).
+- `--model` carries into `runtimeConfig.model` rather than a top-level field.
+- `delete` archives (soft-delete) the agent; existing threads stay, no new work routed.
+
+### agent status / unpause
+
+```bash
+thinkwork agent status <id> <IDLE|BUSY|OFFLINE|ERROR>
+thinkwork agent unpause <id>     # convenience: set status IDLE
+```
+
+### agent capabilities set
+
+```bash
+thinkwork agent capabilities set <agentId> --capability <name> [--enabled|--disabled]
+```
+
+The API exposes `setAgentCapabilities` as a bulk-replace mutation, so the CLI reads the agent's current capability list, modifies in place (or inserts), and rewrites the full set. Same read-modify-write pattern as `kb attach/detach`.
+
+### agent skills set
+
+```bash
+thinkwork agent skills set <agentId> --skill <id> [--enabled|--disabled] [--config <json>] [--rate-limit <rpm>]
+```
+
+Same bulk-replace shape as capabilities. `--config` parses as JSON; `--rate-limit` is requests/minute.
+
+### agent budget set / clear
+
+```bash
+thinkwork agent budget set <agentId> --limit-usd <amount> [--window daily|weekly|monthly] [--action PAUSE|ALERT]
+thinkwork agent budget clear <agentId>
+```
+
+- `--window` defaults to `monthly`, `--action` defaults to `PAUSE`.
+- `clear` removes the per-agent policy; the agent falls back to the tenant-wide budget.
+
+### agent api-key
+
+```bash
+thinkwork agent api-key list <agentId>
+thinkwork agent api-key create <agentId> [--name <label>] [--expires <iso>]
+thinkwork agent api-key revoke <keyId> [--yes]
+```
+
+- `create` returns `{ apiKey: {...metadata}, plainTextKey }`. **The plaintext secret prints once** — save it; the server doesn't store it.
+- `--expires` is currently a no-op (the `AgentApiKey` row has no expiration field); the flag is accepted for forward compat.
+- `revoke` honors `-y/--yes`.
+
+### agent email
+
+```bash
+thinkwork agent email enable  <agentId> [--local-part <x>]
+thinkwork agent email disable <agentId>
+thinkwork agent email allowlist <agentId> <sender>...
+```
+
+- `enable` toggles the email channel on; with `--local-part`, also claims a vanity address (`<local-part>@<tenant-domain>`).
+- `disable` releases the vanity address (idempotent if none was claimed) and toggles the channel off.
+- `allowlist` replaces the full list of permitted sender addresses (positional varargs).
+
+### agent version list / rollback
+
+```bash
+thinkwork agent version list <agentId> [--limit <n>]
+thinkwork agent version rollback <agentId> <versionId> [--yes]
+```
+
+- `list` is paginated by `--limit` (default 20).
+- `rollback` creates a *new* version pointing at the old config (history is preserved). Honors `-y/--yes`.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
@@ -1002,29 +1103,12 @@ The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` sh
 | Phase | Commands |
 |-------|----------|
 | 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
-| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template), [`tenant`](#tenant) shipped · [`agent`](#agent) next |
+| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template), [`tenant`](#tenant), [`agent`](#agent) — **Phase 2 complete** |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
 
 The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
-
-### agent
-
-Agent lifecycle + capabilities, skills, budgets, API keys, email, and version history. Largest command group.
-
-```bash
-thinkwork agent list | get <id> | create [name] [--template] [--role] [--type] [--system-prompt-file]
-thinkwork agent update <id> | delete <id> | status <id> <status> | unpause <id>
-thinkwork agent capabilities set <id> --capability <name> [--enabled|--disabled]
-thinkwork agent skills set <id> --skill <id> [--enabled|--disabled] [--config <json>] [--rate-limit]
-thinkwork agent budget set <id> --limit-usd <n> [--window] [--action PAUSE|ALERT]
-thinkwork agent budget clear <id>
-thinkwork agent api-key create <id> --name <n> [--expires]
-thinkwork agent api-key list <id> | revoke <keyId>
-thinkwork agent email enable <id> [--local-part] | disable <id> | allowlist <id> <senders...>
-thinkwork agent version list <id> | rollback <id> <versionId>
-```
 
 ### routine
 

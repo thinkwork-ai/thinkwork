@@ -14,6 +14,27 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
+    "\n  query CliAgents(\n    $tenantId: ID!\n    $status: AgentStatus\n    $type: AgentType\n    $includeSystem: Boolean\n  ) {\n    agents(\n      tenantId: $tenantId\n      status: $status\n      type: $type\n      includeSystem: $includeSystem\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n": typeof types.CliAgentsDocument,
+    "\n  query CliAllTenantAgents(\n    $tenantId: ID!\n    $includeSystem: Boolean\n    $includeSubAgents: Boolean\n  ) {\n    allTenantAgents(\n      tenantId: $tenantId\n      includeSystem: $includeSystem\n      includeSubAgents: $includeSubAgents\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n": typeof types.CliAllTenantAgentsDocument,
+    "\n  query CliAgent($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n      role\n      type\n      source\n      status\n      systemPrompt\n      runtime\n      adapterType\n      templateId\n      version\n      humanPairId\n      parentAgentId\n      reportsToId\n      lastHeartbeatAt\n      createdAt\n      updatedAt\n      capabilities {\n        capability\n        enabled\n        config\n      }\n      skills {\n        skillId\n        enabled\n        rateLimitRpm\n      }\n      budgetPolicy {\n        period\n        limitUsd\n        actionOnExceed\n      }\n    }\n  }\n": typeof types.CliAgentDocument,
+    "\n  mutation CliCreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": typeof types.CliCreateAgentDocument,
+    "\n  mutation CliUpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      status\n    }\n  }\n": typeof types.CliUpdateAgentDocument,
+    "\n  mutation CliDeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.CliDeleteAgentDocument,
+    "\n  mutation CliUpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n    }\n  }\n": typeof types.CliUpdateAgentStatusDocument,
+    "\n  mutation CliSetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      capability\n      enabled\n    }\n  }\n": typeof types.CliSetAgentCapabilitiesDocument,
+    "\n  mutation CliSetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      skillId\n      enabled\n      rateLimitRpm\n    }\n  }\n": typeof types.CliSetAgentSkillsDocument,
+    "\n  mutation CliSetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n": typeof types.CliSetAgentBudgetPolicyDocument,
+    "\n  mutation CliDeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n": typeof types.CliDeleteAgentBudgetPolicyDocument,
+    "\n  query CliAgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n": typeof types.CliAgentApiKeysDocument,
+    "\n  mutation CliCreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n": typeof types.CliCreateAgentApiKeyDocument,
+    "\n  mutation CliRevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n": typeof types.CliRevokeAgentApiKeyDocument,
+    "\n  mutation CliToggleAgentEmail($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      capability\n      enabled\n    }\n  }\n": typeof types.CliToggleAgentEmailDocument,
+    "\n  mutation CliClaimVanityEmail($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      capability\n      enabled\n      config\n    }\n  }\n": typeof types.CliClaimVanityEmailDocument,
+    "\n  mutation CliReleaseVanityEmail($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      capability\n      enabled\n    }\n  }\n": typeof types.CliReleaseVanityEmailDocument,
+    "\n  mutation CliUpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(agentId: $agentId, allowedSenders: $allowedSenders) {\n      capability\n      config\n    }\n  }\n": typeof types.CliUpdateAgentEmailAllowlistDocument,
+    "\n  query CliAgentVersions($agentId: ID!, $limit: Int) {\n    agentVersions(agentId: $agentId, limit: $limit) {\n      id\n      versionNumber\n      createdBy\n      createdAt\n      agentId\n    }\n  }\n": typeof types.CliAgentVersionsDocument,
+    "\n  mutation CliRollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      version\n    }\n  }\n": typeof types.CliRollbackAgentVersionDocument,
+    "\n  query CliAgentTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliAgentTenantBySlugDocument,
     "\n  query CliEvalRuns($tenantId: ID!, $agentId: ID, $limit: Int, $offset: Int) {\n    evalRuns(\n      tenantId: $tenantId\n      agentId: $agentId\n      limit: $limit\n      offset: $offset\n    ) {\n      totalCount\n      items {\n        id\n        status\n        model\n        categories\n        agentId\n        agentName\n        agentTemplateId\n        agentTemplateName\n        totalTests\n        passed\n        failed\n        passRate\n        regression\n        costUsd\n        errorMessage\n        startedAt\n        completedAt\n        createdAt\n      }\n    }\n  }\n": typeof types.CliEvalRunsDocument,
     "\n  query CliEvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      agentId\n      agentName\n      agentTemplateId\n      agentTemplateName\n      totalTests\n      passed\n      failed\n      passRate\n      regression\n      costUsd\n      errorMessage\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n": typeof types.CliEvalRunDocument,
     "\n  query CliEvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      expected\n      actualOutput\n      evaluatorResults\n      assertions\n      errorMessage\n      createdAt\n    }\n  }\n": typeof types.CliEvalRunResultsDocument,
@@ -106,6 +127,27 @@ type Documents = {
     "\n  query CliWikiCompileJobs($tenantId: ID!, $ownerId: ID, $limit: Int) {\n    wikiCompileJobs(tenantId: $tenantId, ownerId: $ownerId, limit: $limit) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      claimedAt\n      startedAt\n      finishedAt\n      error\n      metrics\n      createdAt\n    }\n  }\n": typeof types.CliWikiCompileJobsDocument,
 };
 const documents: Documents = {
+    "\n  query CliAgents(\n    $tenantId: ID!\n    $status: AgentStatus\n    $type: AgentType\n    $includeSystem: Boolean\n  ) {\n    agents(\n      tenantId: $tenantId\n      status: $status\n      type: $type\n      includeSystem: $includeSystem\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n": types.CliAgentsDocument,
+    "\n  query CliAllTenantAgents(\n    $tenantId: ID!\n    $includeSystem: Boolean\n    $includeSubAgents: Boolean\n  ) {\n    allTenantAgents(\n      tenantId: $tenantId\n      includeSystem: $includeSystem\n      includeSubAgents: $includeSubAgents\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n": types.CliAllTenantAgentsDocument,
+    "\n  query CliAgent($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n      role\n      type\n      source\n      status\n      systemPrompt\n      runtime\n      adapterType\n      templateId\n      version\n      humanPairId\n      parentAgentId\n      reportsToId\n      lastHeartbeatAt\n      createdAt\n      updatedAt\n      capabilities {\n        capability\n        enabled\n        config\n      }\n      skills {\n        skillId\n        enabled\n        rateLimitRpm\n      }\n      budgetPolicy {\n        period\n        limitUsd\n        actionOnExceed\n      }\n    }\n  }\n": types.CliAgentDocument,
+    "\n  mutation CliCreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": types.CliCreateAgentDocument,
+    "\n  mutation CliUpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      status\n    }\n  }\n": types.CliUpdateAgentDocument,
+    "\n  mutation CliDeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.CliDeleteAgentDocument,
+    "\n  mutation CliUpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n    }\n  }\n": types.CliUpdateAgentStatusDocument,
+    "\n  mutation CliSetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      capability\n      enabled\n    }\n  }\n": types.CliSetAgentCapabilitiesDocument,
+    "\n  mutation CliSetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      skillId\n      enabled\n      rateLimitRpm\n    }\n  }\n": types.CliSetAgentSkillsDocument,
+    "\n  mutation CliSetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n": types.CliSetAgentBudgetPolicyDocument,
+    "\n  mutation CliDeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n": types.CliDeleteAgentBudgetPolicyDocument,
+    "\n  query CliAgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n": types.CliAgentApiKeysDocument,
+    "\n  mutation CliCreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n": types.CliCreateAgentApiKeyDocument,
+    "\n  mutation CliRevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n": types.CliRevokeAgentApiKeyDocument,
+    "\n  mutation CliToggleAgentEmail($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      capability\n      enabled\n    }\n  }\n": types.CliToggleAgentEmailDocument,
+    "\n  mutation CliClaimVanityEmail($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      capability\n      enabled\n      config\n    }\n  }\n": types.CliClaimVanityEmailDocument,
+    "\n  mutation CliReleaseVanityEmail($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      capability\n      enabled\n    }\n  }\n": types.CliReleaseVanityEmailDocument,
+    "\n  mutation CliUpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(agentId: $agentId, allowedSenders: $allowedSenders) {\n      capability\n      config\n    }\n  }\n": types.CliUpdateAgentEmailAllowlistDocument,
+    "\n  query CliAgentVersions($agentId: ID!, $limit: Int) {\n    agentVersions(agentId: $agentId, limit: $limit) {\n      id\n      versionNumber\n      createdBy\n      createdAt\n      agentId\n    }\n  }\n": types.CliAgentVersionsDocument,
+    "\n  mutation CliRollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      version\n    }\n  }\n": types.CliRollbackAgentVersionDocument,
+    "\n  query CliAgentTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliAgentTenantBySlugDocument,
     "\n  query CliEvalRuns($tenantId: ID!, $agentId: ID, $limit: Int, $offset: Int) {\n    evalRuns(\n      tenantId: $tenantId\n      agentId: $agentId\n      limit: $limit\n      offset: $offset\n    ) {\n      totalCount\n      items {\n        id\n        status\n        model\n        categories\n        agentId\n        agentName\n        agentTemplateId\n        agentTemplateName\n        totalTests\n        passed\n        failed\n        passRate\n        regression\n        costUsd\n        errorMessage\n        startedAt\n        completedAt\n        createdAt\n      }\n    }\n  }\n": types.CliEvalRunsDocument,
     "\n  query CliEvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      agentId\n      agentName\n      agentTemplateId\n      agentTemplateName\n      totalTests\n      passed\n      failed\n      passRate\n      regression\n      costUsd\n      errorMessage\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n": types.CliEvalRunDocument,
     "\n  query CliEvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      expected\n      actualOutput\n      evaluatorResults\n      assertions\n      errorMessage\n      createdAt\n    }\n  }\n": types.CliEvalRunResultsDocument,
@@ -212,6 +254,90 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown;
 
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgents(\n    $tenantId: ID!\n    $status: AgentStatus\n    $type: AgentType\n    $includeSystem: Boolean\n  ) {\n    agents(\n      tenantId: $tenantId\n      status: $status\n      type: $type\n      includeSystem: $includeSystem\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n"): (typeof documents)["\n  query CliAgents(\n    $tenantId: ID!\n    $status: AgentStatus\n    $type: AgentType\n    $includeSystem: Boolean\n  ) {\n    agents(\n      tenantId: $tenantId\n      status: $status\n      type: $type\n      includeSystem: $includeSystem\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAllTenantAgents(\n    $tenantId: ID!\n    $includeSystem: Boolean\n    $includeSubAgents: Boolean\n  ) {\n    allTenantAgents(\n      tenantId: $tenantId\n      includeSystem: $includeSystem\n      includeSubAgents: $includeSubAgents\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n"): (typeof documents)["\n  query CliAllTenantAgents(\n    $tenantId: ID!\n    $includeSystem: Boolean\n    $includeSubAgents: Boolean\n  ) {\n    allTenantAgents(\n      tenantId: $tenantId\n      includeSystem: $includeSystem\n      includeSubAgents: $includeSubAgents\n    ) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      templateId\n      lastHeartbeatAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgent($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n      role\n      type\n      source\n      status\n      systemPrompt\n      runtime\n      adapterType\n      templateId\n      version\n      humanPairId\n      parentAgentId\n      reportsToId\n      lastHeartbeatAt\n      createdAt\n      updatedAt\n      capabilities {\n        capability\n        enabled\n        config\n      }\n      skills {\n        skillId\n        enabled\n        rateLimitRpm\n      }\n      budgetPolicy {\n        period\n        limitUsd\n        actionOnExceed\n      }\n    }\n  }\n"): (typeof documents)["\n  query CliAgent($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n      role\n      type\n      source\n      status\n      systemPrompt\n      runtime\n      adapterType\n      templateId\n      version\n      humanPairId\n      parentAgentId\n      reportsToId\n      lastHeartbeatAt\n      createdAt\n      updatedAt\n      capabilities {\n        capability\n        enabled\n        config\n      }\n      skills {\n        skillId\n        enabled\n        rateLimitRpm\n      }\n      budgetPolicy {\n        period\n        limitUsd\n        actionOnExceed\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      capability\n      enabled\n    }\n  }\n"): (typeof documents)["\n  mutation CliSetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      capability\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      skillId\n      enabled\n      rateLimitRpm\n    }\n  }\n"): (typeof documents)["\n  mutation CliSetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      skillId\n      enabled\n      rateLimitRpm\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n"): (typeof documents)["\n  mutation CliSetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n"): (typeof documents)["\n  mutation CliDeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliAgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliRevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliRevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliToggleAgentEmail($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      capability\n      enabled\n    }\n  }\n"): (typeof documents)["\n  mutation CliToggleAgentEmail($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      capability\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliClaimVanityEmail($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      capability\n      enabled\n      config\n    }\n  }\n"): (typeof documents)["\n  mutation CliClaimVanityEmail($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      capability\n      enabled\n      config\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliReleaseVanityEmail($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      capability\n      enabled\n    }\n  }\n"): (typeof documents)["\n  mutation CliReleaseVanityEmail($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      capability\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(agentId: $agentId, allowedSenders: $allowedSenders) {\n      capability\n      config\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(agentId: $agentId, allowedSenders: $allowedSenders) {\n      capability\n      config\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgentVersions($agentId: ID!, $limit: Int) {\n    agentVersions(agentId: $agentId, limit: $limit) {\n      id\n      versionNumber\n      createdBy\n      createdAt\n      agentId\n    }\n  }\n"): (typeof documents)["\n  query CliAgentVersions($agentId: ID!, $limit: Int) {\n    agentVersions(agentId: $agentId, limit: $limit) {\n      id\n      versionNumber\n      createdBy\n      createdAt\n      agentId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliRollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      version\n    }\n  }\n"): (typeof documents)["\n  mutation CliRollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      version\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgentTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliAgentTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
