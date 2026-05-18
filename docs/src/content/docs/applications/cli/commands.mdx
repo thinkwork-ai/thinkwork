@@ -899,6 +899,57 @@ Both verbs use the bulk `setAgentKnowledgeBases` mutation under the hood as a re
 
 ---
 
+## template
+
+Agent templates — reusable configs you spawn agents from. Use templates to bake in model, prompt files, default capabilities, skills, knowledge bases, and sandbox/browser/web-search opt-in. Linked agents do **not** auto-sync when a template changes — use `template sync-agent` / `template sync-all` deliberately.
+
+```bash
+thinkwork template <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`. Alias: `templates`.
+
+### template list / get
+
+```bash
+thinkwork template list
+thinkwork template get <id>
+```
+
+`list` shows id / name / slug / runtime / kind / model / published. `get` returns the full template record.
+
+### template create / update / delete
+
+```bash
+thinkwork template create [name] [--from-agent <id>] [--model <m>] [--description <t>] [--system-prompt-file <path>]
+thinkwork template update <id> [--name <n>] [--model <m>] [--description <t>] [--system-prompt-file <path>]
+thinkwork template delete <id> [--yes]
+```
+
+- `--from-agent <id>` clones name + role + linked-template model from an existing agent. The CLI composes the `CreateAgentTemplateInput` client-side; the template's deep config (skills, knowledge bases, workspace files) is not cloned — edit those in the admin UI after create if needed.
+- `--system-prompt-file` is currently a no-op flag with a warning. Template prompt content lives in linked workspace files; edit them via the admin UI.
+- `update` is partial — only flags passed are sent in `UpdateAgentTemplateInput`.
+- `delete` honors `-y/--yes`. Linked agents are unaffected; they just stop being in sync.
+
+### template diff
+
+```bash
+thinkwork template diff <templateId> <agentId>
+```
+
+Side-by-side compare on the top-level fields the CLI tracks (name, description / role, runtime, model). Deeper config (skills / KB / workspace files) is not compared at the CLI level — use the admin UI for a full diff.
+
+### template sync-agent / sync-all
+
+```bash
+thinkwork template sync-agent <templateId> <agentId> [--yes]
+thinkwork template sync-all   <templateId>           [--yes]
+```
+
+Both invoke their respective mutations server-side (`syncTemplateToAgent` / `syncTemplateToAllAgents`). Both prompt for confirmation in a TTY unless `-y/--yes` is passed. `sync-all` reports `agentsSynced` / `agentsFailed` plus any per-agent error strings.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
@@ -906,7 +957,7 @@ The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` sh
 | Phase | Commands |
 |-------|----------|
 | 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
-| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb) shipped · [`agent`](#agent), [`template`](#template), [`tenant`](#tenant) next |
+| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template) shipped · [`tenant`](#tenant), [`agent`](#agent) next |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
@@ -928,18 +979,6 @@ thinkwork agent api-key create <id> --name <n> [--expires]
 thinkwork agent api-key list <id> | revoke <keyId>
 thinkwork agent email enable <id> [--local-part] | disable <id> | allowlist <id> <senders...>
 thinkwork agent version list <id> | rollback <id> <versionId>
-```
-
-### template
-
-Agent templates (reusable config for spawning agents) and template-linked sync.
-
-```bash
-thinkwork template list | get <id> | create [name] [--from-agent] [--system-prompt-file]
-thinkwork template update <id> | delete <id>
-thinkwork template diff <templateId> <agentId>
-thinkwork template sync-agent <templateId> <agentId>
-thinkwork template sync-all <templateId>
 ```
 
 ### tenant
