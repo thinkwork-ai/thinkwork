@@ -12,11 +12,17 @@ export async function runEvalSeed(opts: SeedOptions): Promise<void> {
   const ctx = await resolveEvalContext(opts);
   const data = await gqlMutate(ctx.client, SeedEvalTestCasesDoc, {
     tenantId: ctx.tenantId,
-    categories: opts.category && opts.category.length > 0 ? opts.category : null,
+    categories:
+      opts.category && opts.category.length > 0 ? opts.category : null,
   });
   if (isJsonMode()) {
-    printJson({ inserted: data.seedEvalTestCases });
+    printJson({
+      source: "built-in-yaml-seed",
+      inserted: data.seedEvalTestCases,
+    });
     return;
   }
-  printSuccess(`Seeded ${data.seedEvalTestCases} new test case(s). (Duplicates were skipped.)`);
+  printSuccess(
+    `Seeded ${data.seedEvalTestCases} new test case(s). (Duplicates were skipped.)`,
+  );
 }

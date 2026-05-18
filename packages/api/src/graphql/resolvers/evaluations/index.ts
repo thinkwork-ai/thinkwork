@@ -569,7 +569,9 @@ async function ensureTenantSeeded(tenantId: string): Promise<void> {
     _seededTenants.add(tenantId);
     return;
   }
-  const { EVAL_SEEDS } = await import("../../../lib/eval-seeds.js");
+  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } = await import(
+    "../../../lib/eval-seeds.js"
+  );
   if (EVAL_SEEDS.length === 0) {
     _seededTenants.add(tenantId);
     return;
@@ -583,7 +585,7 @@ async function ensureTenantSeeded(tenantId: string): Promise<void> {
         category: s.category,
         query: s.query,
         assertions: s.assertions,
-        source: "yaml-seed" as const,
+        source: BUILT_IN_EVAL_SEED_SOURCE,
         tags: seedTags(s),
         agentcore_evaluator_ids:
           s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0
@@ -766,8 +768,9 @@ async function invokeEvalRunner(
       "EVAL_RUNNER_FN is not configured (set EVAL_RUNNER_FN or STAGE).",
     );
   }
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const payload: { runId: string; input?: { testCaseIds: string[] } } = {
     runId,
@@ -890,7 +893,9 @@ const seedEvalTestCases = async (
   args: { tenantId: string; categories?: string[] | null },
   _ctx: GraphQLContext,
 ) => {
-  const { EVAL_SEEDS } = await import("../../../lib/eval-seeds.js");
+  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } = await import(
+    "../../../lib/eval-seeds.js"
+  );
   const filtered =
     args.categories && args.categories.length > 0
       ? EVAL_SEEDS.filter((s) => args.categories!.includes(s.category))
@@ -907,7 +912,7 @@ const seedEvalTestCases = async (
     category: s.category,
     query: s.query,
     assertions: s.assertions,
-    source: "yaml-seed" as const,
+    source: BUILT_IN_EVAL_SEED_SOURCE,
     tags: seedTags(s),
     agentcore_evaluator_ids:
       s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0

@@ -1,6 +1,7 @@
 import { Command } from "commander";
 
 import { registerEnterpriseBootstrapCommand } from "./enterprise/bootstrap.js";
+import { registerEnterpriseOverlayCommand } from "./enterprise/overlay.js";
 
 export function registerEnterpriseCommand(program: Command): void {
   const enterprise = program
@@ -10,4 +11,5 @@ export function registerEnterpriseCommand(program: Command): void {
     );
 
   registerEnterpriseBootstrapCommand(enterprise);
+  registerEnterpriseOverlayCommand(enterprise);
 }

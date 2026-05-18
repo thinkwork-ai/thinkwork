@@ -57,6 +57,8 @@ describe("enterprise deploy workflow template", () => {
     expect(workflow).toContain("Update AgentCore runtimes");
     expect(workflow).toContain("Sync static site bundles");
     expect(workflow).toContain("Apply customer overlay contract");
+    expect(workflow).toContain("thinkwork-cli@${CLI_VERSION}");
+    expect(workflow).toContain("enterprise overlay apply");
     expect(workflow).toContain("Run smoke checks");
     expect(workflow).toContain("Write deploy summary");
   });

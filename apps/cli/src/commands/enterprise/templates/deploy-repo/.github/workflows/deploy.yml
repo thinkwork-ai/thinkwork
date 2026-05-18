@@ -177,10 +177,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/apply-release.mjs record-overlay \
+          CLI_VERSION="${{ steps.lock.outputs.release }}"
+          CLI_VERSION="${CLI_VERSION#v}"
+          TENANT_SLUG="$(jq -r --arg stage "$STAGE" '.stages[$stage].tenantSlug' customer/deployment.json)"
+          npx -y "thinkwork-cli@${CLI_VERSION}" --json enterprise overlay apply . \
             --stage "$STAGE" \
-            --deployment customer/deployment.json \
-            --work-dir "$RELEASE_DIR"
+            --region "${{ vars.AWS_REGION }}" \
+            --tenant "$TENANT_SLUG" \
+            > "$RELEASE_DIR/overlay-report.json"
 
       - name: Run smoke checks
         if: ${{ github.event.inputs.run_smokes == 'true' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'smokes') }}
