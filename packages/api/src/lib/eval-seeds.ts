@@ -39,6 +39,9 @@ export interface SeedTestCase {
   threshold?: number;
 }
 
+export const BUILT_IN_EVAL_SEED_SOURCE = "yaml-seed" as const;
+export const CUSTOMER_OVERLAY_EVAL_SOURCE = "customer-overlay" as const;
+
 export const EVAL_SEED_CATEGORIES = [
   "red-team-prompt-injection",
   "red-team-tool-misuse",
