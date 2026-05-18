@@ -1,0 +1,98 @@
+# thinkwork-managed: enterprise-deploy-template
+name: Deploy ThinkWork
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "Deployment stage"
+        type: choice
+        required: true
+        options:
+          - dev
+          - prod
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: thinkwork-${{ github.event.inputs.stage }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.event.inputs.stage }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.stage }}
+    env:
+      STAGE: ${{ github.event.inputs.stage }}
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read pinned ThinkWork release
+        id: lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f thinkwork.lock
+          test -f customer/deployment.json
+          echo "release=$(jq -r '.thinkwork.release' thinkwork.lock)" >> "$GITHUB_OUTPUT"
+          echo "manifest_url=$(jq -r '.thinkwork.manifestUrl' thinkwork.lock)" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256=$(jq -r '.thinkwork.manifestSha256' thinkwork.lock)" >> "$GITHUB_OUTPUT"
+          echo "artifact_bucket=$(jq -r '.artifacts.bucket' thinkwork.lock)" >> "$GITHUB_OUTPUT"
+          echo "lambda_prefix=$(jq -r '.artifacts.lambdaPrefix' thinkwork.lock)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: thinkwork-${{ github.event.inputs.stage }}-${{ github.run_id }}
+
+      - name: Fetch release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "${{ steps.lock.outputs.manifest_url }}" -o /tmp/thinkwork-release.json
+          if [ "${{ steps.lock.outputs.manifest_sha256 }}" != "CHANGE_ME" ]; then
+            echo "${{ steps.lock.outputs.manifest_sha256 }}  /tmp/thinkwork-release.json" | sha256sum -c -
+          fi
+
+      - name: Upload release Lambda artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -r '.artifacts[] | select(.type == "lambda") | [.url, .name] | @tsv' /tmp/thinkwork-release.json |
+            while IFS=$'\t' read -r url name; do
+              curl -fsSL "$url" -o "/tmp/$name"
+              aws s3 cp "/tmp/$name" "s3://${{ steps.lock.outputs.artifact_bucket }}/${{ steps.lock.outputs.lambda_prefix }}/$name"
+            done
+
+      - name: Terraform init
+        working-directory: terraform
+        shell: bash
+        run: terraform init -backend-config="backend-${STAGE}.hcl"
+
+      - name: Terraform apply
+        working-directory: terraform
+        shell: bash
+        env:
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+          TF_VAR_api_auth_secret: ${{ secrets.TF_VAR_API_AUTH_SECRET }}
+        run: |
+          set -euo pipefail
+          terraform workspace select "$STAGE" || terraform workspace new "$STAGE"
+          terraform apply \
+            -var-file="stages/${STAGE}.tfvars" \
+            -var="lambda_artifact_bucket=${{ steps.lock.outputs.artifact_bucket }}" \
+            -var="lambda_artifact_prefix=${{ steps.lock.outputs.lambda_prefix }}" \
+            -auto-approve
+
+      - name: Record overlay contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e --arg stage "$STAGE" '.stages[$stage]' customer/deployment.json
