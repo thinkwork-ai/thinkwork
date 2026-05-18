@@ -65,7 +65,9 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 // eslint-disable-next-line import/first
 import {
   requireAdminOrApiKeyCaller,
+  requireAdminOrServiceCaller,
   requireAgentAllowsOperation,
+  hasServiceSecret,
 } from "../graphql/resolvers/core/authz.js";
 // eslint-disable-next-line import/first
 import { adminRoleCheck } from "../graphql/resolvers/core/adminRoleCheck.query.js";
@@ -331,5 +333,122 @@ describe("adminRoleCheck — scoped caller-own query", () => {
     await expect(
       adminRoleCheck(null, {}, apikeyCtx({ tenantId: null })),
     ).rejects.toThrow();
+  });
+});
+
+function serviceCtx(tenantId: string | null = "tenant-A"): any {
+  return {
+    auth: {
+      authType: "service",
+      principalId: null,
+      tenantId,
+      email: null,
+      agentId: null,
+    },
+  };
+}
+
+describe("hasServiceSecret — bearer-detection helper", () => {
+  it("returns true for apikey callers (declared-identity service-secret)", () => {
+    expect(hasServiceSecret(apikeyCtx())).toBe(true);
+  });
+
+  it("returns true for service callers (bearer-only service-secret)", () => {
+    expect(hasServiceSecret(serviceCtx())).toBe(true);
+  });
+
+  it("returns false for cognito JWT callers", () => {
+    expect(hasServiceSecret(cognitoCtx())).toBe(false);
+  });
+});
+
+describe("requireAdminOrServiceCaller — admin gate that admits bare service callers", () => {
+  beforeEach(() => {
+    mockAgentSkillsRows.mockReset();
+    mockMemberRows.mockReset();
+    mockResolveCallerUserId.mockReset();
+    mockResolveCallerTenantId.mockReset();
+  });
+
+  it("allows a bare service caller without further checks (the bearer IS the credential)", async () => {
+    await expect(
+      requireAdminOrServiceCaller(
+        serviceCtx(),
+        "tenant-A",
+        "update_tenant_settings",
+      ),
+    ).resolves.toBeUndefined();
+    // Service auth must NOT consult tenant_members or agent_skills —
+    // bearer-only callers have no declared identity to look up.
+    expect(mockMemberRows).not.toHaveBeenCalled();
+    expect(mockAgentSkillsRows).not.toHaveBeenCalled();
+  });
+
+  it("delegates cognito callers to the tenant-admin gate (admin → allow)", async () => {
+    mockResolveCallerUserId.mockResolvedValue("admin-1");
+    mockMemberRows.mockReturnValue([{ role: "admin" }]);
+    await expect(
+      requireAdminOrServiceCaller(
+        cognitoCtx(),
+        "tenant-A",
+        "update_tenant_settings",
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("delegates cognito callers to the tenant-admin gate (member → FORBIDDEN)", async () => {
+    mockResolveCallerUserId.mockResolvedValue("user-1");
+    mockMemberRows.mockReturnValue([{ role: "member" }]);
+    await expect(
+      requireAdminOrServiceCaller(
+        cognitoCtx(),
+        "tenant-A",
+        "update_tenant_settings",
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+  });
+
+  it("delegates apikey callers through requireAdminOrApiKeyCaller (admin + agent allowlist → allow)", async () => {
+    mockMemberRows.mockReturnValue([{ role: "admin" }]);
+    mockAgentSkillsRows.mockReturnValue([
+      {
+        enabled: true,
+        permissions: { operations: ["update_tenant_settings"] },
+      },
+    ]);
+    await expect(
+      requireAdminOrServiceCaller(
+        apikeyCtx(),
+        "tenant-A",
+        "update_tenant_settings",
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("delegates apikey callers through requireAdminOrApiKeyCaller (op not on allowlist → FORBIDDEN)", async () => {
+    mockMemberRows.mockReturnValue([{ role: "admin" }]);
+    mockAgentSkillsRows.mockReturnValue([
+      {
+        enabled: true,
+        permissions: { operations: ["something_else"] },
+      },
+    ]);
+    await expect(
+      requireAdminOrServiceCaller(
+        apikeyCtx(),
+        "tenant-A",
+        "update_tenant_settings",
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+  });
+
+  it("refuses unknown authType loudly (UNAUTHENTICATED)", async () => {
+    await expect(
+      requireAdminOrServiceCaller(
+        { auth: { authType: "anonymous" as any } } as any,
+        "tenant-A",
+        "update_tenant_settings",
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "UNAUTHENTICATED" } });
   });
 });

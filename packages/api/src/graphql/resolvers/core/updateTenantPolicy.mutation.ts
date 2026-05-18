@@ -210,7 +210,7 @@ async function requirePlatformOperator(ctx: GraphQLContext): Promise<void> {
 async function resolvePolicyActorUserId(
   ctx: GraphQLContext,
 ): Promise<string | null> {
-  if (ctx.auth.authType !== "apikey") return await resolveCallerUserId(ctx);
+  if (ctx.auth.authType === "cognito") return await resolveCallerUserId(ctx);
   if (ctx.auth.principalId) return ctx.auth.principalId;
   if (!ctx.auth.email) return null;
 

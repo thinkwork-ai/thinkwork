@@ -12,7 +12,7 @@ import {
 	threads,
 } from "../../utils.js";
 import { documents, recipes, retryQueue } from "@thinkwork/database-pg/schema";
-import { requireTenantMember } from "../core/authz.js";
+import { requireTenantMember, hasServiceSecret } from "../core/authz.js";
 
 export const deleteThread = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const [thread] = await db
@@ -21,7 +21,7 @@ export const deleteThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		.where(eq(threads.id, args.id));
 	if (!thread) return false;
 
-	if (ctx.auth.authType !== "apikey") {
+	if (!hasServiceSecret(ctx)) {
 		await requireTenantMember(ctx, thread.tenant_id);
 	}
 

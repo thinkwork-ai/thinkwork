@@ -55,26 +55,29 @@ describe("authenticate — Bearer-as-apikey fallback (CLI/Strands back-compat)",
 		process.env.API_AUTH_SECRET = prev;
 	});
 
-	it("accepts Authorization: Bearer <API_AUTH_SECRET> with no x-api-key header", async () => {
+	it("accepts Authorization: Bearer <API_AUTH_SECRET> with no x-api-key header (classifies as `service`)", async () => {
 		// The thinkwork CLI (apps/cli/src/api-client.ts) and the Strands
 		// agentcore container send the service secret this way. Without
 		// this branch they would 401 after the SPA migrates off the same
-		// shared secret.
+		// shared secret. Bearer-only callers — no x-principal-id, no
+		// x-agent-id — classify as `service` (vs `apikey` when identity
+		// headers are present); see requireAdminOrServiceCaller in
+		// graphql/resolvers/core/authz.ts.
 		const auth = await authenticate({
 			authorization: "Bearer tw-test-secret",
 			"x-tenant-id": "tenant-abc",
 		});
 		expect(auth).not.toBeNull();
-		expect(auth!.authType).toBe("apikey");
+		expect(auth!.authType).toBe("service");
 		expect(auth!.tenantId).toBe("tenant-abc");
 	});
 
-	it("accepts the uppercase Authorization header too", async () => {
+	it("accepts the uppercase Authorization header too (still `service` when bearer-only)", async () => {
 		const auth = await authenticate({
 			Authorization: "Bearer tw-test-secret",
 		});
 		expect(auth).not.toBeNull();
-		expect(auth!.authType).toBe("apikey");
+		expect(auth!.authType).toBe("service");
 	});
 
 	it("rejects a non-matching Bearer token with no x-api-key", async () => {

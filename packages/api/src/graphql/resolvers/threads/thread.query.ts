@@ -12,7 +12,7 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireTenantAdmin, hasServiceSecret } from "../core/authz.js";
 import { GraphQLError } from "graphql";
 
 /**
@@ -39,7 +39,7 @@ export const thread = async (
 ) => {
   let callerTenantId: string | null = null;
   let callerUserId: string | null = null;
-  let isTenantAdminCaller = ctx.auth.authType === "apikey";
+  let isTenantAdminCaller = hasServiceSecret(ctx);
   if (ctx.auth.authType === "cognito") {
     callerTenantId = await resolveCallerTenantId(ctx);
     if (!callerTenantId) return null;

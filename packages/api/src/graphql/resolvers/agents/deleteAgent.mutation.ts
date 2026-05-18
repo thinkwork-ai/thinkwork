@@ -5,17 +5,18 @@ import {
 	invokeJobScheduleManager,
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
+import { hasServiceSecret } from "../core/authz.js";
 import { emitAuditEvent } from "../../../lib/compliance/emit.js";
 
 export async function deleteAgent(_parent: any, args: any, ctx: GraphQLContext) {
-	// Compliance audit actor: branch by auth path. Apikey callers
-	// identify as `system` with a stable platform-credential constant
-	// (the x-principal-id header is unverified per
-	// packages/api/src/lib/tenant-membership.ts:112-114). Cognito callers
-	// identify as `user` with the resolved users.id, falling back to the
-	// cognito sub when the users-lookup misses.
+	// Compliance audit actor: branch by auth path. Service-secret callers
+	// (apikey + bare service) identify as `system` with a stable
+	// platform-credential constant (the x-principal-id header is
+	// unverified per packages/api/src/lib/tenant-membership.ts:112-114).
+	// Cognito callers identify as `user` with the resolved users.id,
+	// falling back to the cognito sub when the users-lookup misses.
 	const auditActor: { actorId: string; actorType: "user" | "system" } =
-		ctx.auth.authType === "apikey"
+		hasServiceSecret(ctx)
 			? { actorId: "platform-credential", actorType: "system" }
 			: await (async () => {
 				const { userId } = await resolveCaller(ctx);

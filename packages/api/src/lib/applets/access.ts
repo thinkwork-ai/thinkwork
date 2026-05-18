@@ -41,7 +41,9 @@ export function assertAppletArtifactAccess(
 }
 
 export function assertCanWriteApplet(ctx: GraphQLContext, tenantId: string) {
-  if (ctx.auth.authType !== "apikey" || ctx.auth.tenantId !== tenantId) {
+  const isServiceSecret =
+    ctx.auth.authType === "apikey" || ctx.auth.authType === "service";
+  if (!isServiceSecret || ctx.auth.tenantId !== tenantId) {
     throw new GraphQLError("Applet writes require service authentication", {
       extensions: { code: "FORBIDDEN" },
     });
