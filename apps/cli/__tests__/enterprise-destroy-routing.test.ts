@@ -160,6 +160,46 @@ describe("enterprise destroy routing", () => {
     ).rejects.toThrow(/without --yes/);
   });
 
+  it("uses a stern confirmation message before enterprise destroy", async () => {
+    const promptConfirm = vi.fn(async () => true);
+    const dispatchDeployWorkflow = vi.fn(async () => ({
+      target: "acme/deploy:deploy.yml:dev",
+      status: "created" as const,
+      message: "dispatched",
+    }));
+
+    await runEnterpriseDestroy(
+      {
+        customer: "acme",
+        repo: "acme/deploy",
+        stage: "dev",
+        wait: false,
+      },
+      {
+        stdinIsTty: true,
+        promptConfirm,
+        workflowClient: {
+          dispatchDeployWorkflow,
+          latestDeployRun: vi.fn(async () => ({
+            id: "123",
+            url: "https://github.com/acme/deploy/actions/runs/123",
+            status: "queued",
+            failedJobs: [],
+          })),
+          getRun: vi.fn(),
+          listRunArtifacts: vi.fn(),
+        },
+      },
+    );
+
+    expect(promptConfirm).toHaveBeenCalledWith(
+      expect.stringContaining("permanently remove the \"dev\" stage stack"),
+    );
+    expect(promptConfirm).toHaveBeenCalledWith(
+      expect.stringContaining("Customer-wide bootstrap resources"),
+    );
+  });
+
   it("dispatches operation=destroy with smokes disabled", async () => {
     const dispatchDeployWorkflow = vi.fn(async () => ({
       target: "acme/deploy:deploy.yml:dev",
