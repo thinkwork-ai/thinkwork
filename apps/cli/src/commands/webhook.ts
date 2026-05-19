@@ -1,10 +1,11 @@
 /**
  * `thinkwork webhook ...` — inbound webhooks that dispatch agents or routines.
  *
- * GraphQL surface: webhooks/webhook queries + createWebhook/updateWebhook/
- * deleteWebhook/regenerateWebhookToken mutations. test/deliveries are
- * scaffolded but the API doesn't expose them yet; they print a clear
- * "not yet implemented at the API" error.
+ * Full verb set: list / get / create / update / delete / rotate /
+ * deliveries / test. `test` records a synthetic delivery row
+ * (resolution_status="test") without triggering dispatch; the CLI
+ * also prints a curl one-liner for end-to-end reachability against
+ * the public URL.
  */
 
 import { Command } from "commander";

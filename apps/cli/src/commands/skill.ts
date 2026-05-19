@@ -1,11 +1,15 @@
 /**
- * `thinkwork skill ...` — skill catalog browse + custom-plugin push.
+ * `thinkwork skill ...` — skill catalog browse + tenant-scoped install/upgrade
+ * + custom-plugin push.
  *
  * - catalog / list: backed by the skillCatalog GraphQL query.
- * - push: existing REST-based plugin upload flow (Cognito-auth required).
- * - install/upgrade/create/update/delete: scaffolded but the API doesn't
- *   currently expose the per-tenant install/upgrade surface — those
- *   handlers print a clear "API surface pending" error for now.
+ * - install / upgrade: idempotent upsert into tenant_skills via the
+ *   installSkill mutation. Both verbs call the same mutation; the
+ *   distinction is purely user-facing.
+ * - delete: removes the tenant_skills row via uninstallSkill.
+ * - push: existing REST plugin-upload flow (Cognito auth required).
+ * - create / update: RETIRED — custom-skill authoring is `skill push`.
+ *   Running them prints the retirement message and exits 2.
  */
 
 import { Command } from "commander";
