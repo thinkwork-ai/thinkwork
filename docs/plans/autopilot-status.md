@@ -20,7 +20,7 @@ Target branch: `main`
 - Active branch: `codex/one-line-deploy-u2`
 - Active worktree: `.Codex/worktrees/one-line-deploy-u2`
 - Started: 2026-05-19
-- PR: pending
+- PR: [#1423](https://github.com/thinkwork-ai/thinkwork/pull/1423)
 - CI: pending
 
 ### Progress Log
@@ -28,7 +28,7 @@ Target branch: `main`
 | Date       | Unit | Branch                     | PR                                                           | Status           | Verification                                                                                                                                                                                                                                                                                                                                                                   | Notes                                                                                                                                |
 | ---------- | ---- | -------------------------- | ------------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | 2026-05-19 | U1   | `codex/one-line-deploy-u1` | [#1421](https://github.com/thinkwork-ai/thinkwork/pull/1421) | Merged           | `pnpm --filter thinkwork-cli test -- enterprise-preflight.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check`; GitHub checks                   | Added GitHub/git readiness preflight after the existing AWS login path. Squash merged as `3511cbcfde8740bc0cbd5a0d6ae2a9703779c29f`. |
-| 2026-05-19 | U2   | `codex/one-line-deploy-u2` | pending                                                      | Locally verified | `pnpm --filter thinkwork-cli test -- enterprise-deploy-routing.test.ts deploy-registration.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check` | Adds top-level `thinkwork deploy` enterprise mode routing while preserving the local Terraform default path.                         |
+| 2026-05-19 | U2   | `codex/one-line-deploy-u2` | [#1423](https://github.com/thinkwork-ai/thinkwork/pull/1423) | Locally verified | `pnpm --filter thinkwork-cli test -- enterprise-deploy-routing.test.ts deploy-registration.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check` | Adds top-level `thinkwork deploy` enterprise mode routing while preserving the local Terraform default path.                         |
 
 ### CI / Merge Log
 
@@ -41,6 +41,7 @@ Target branch: `main`
 - 2026-05-19: Started U2 in `.Codex/worktrees/one-line-deploy-u2` on branch `codex/one-line-deploy-u2`.
 - 2026-05-19: Implemented U2 top-level deploy routing, enterprise deployment repo detection, enterprise component validation, command registration coverage, and metadata registry field extensions.
 - 2026-05-19: U2 local verification passed: focused deploy routing/no-required-options tests, CLI typecheck, CLI build, full CLI test suite, workspace lint/typecheck, full `pnpm test`, touched-file Prettier check, and `git diff --check`.
+- 2026-05-19: Opened [#1423](https://github.com/thinkwork-ai/thinkwork/pull/1423) for U2; CI pending.
 
 ### Blockers
 
