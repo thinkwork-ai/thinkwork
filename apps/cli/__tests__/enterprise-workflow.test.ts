@@ -163,4 +163,41 @@ describe("enterprise workflow dispatch and watch", () => {
     expect(result.run?.conclusion).toBe("success");
     expect(result.discoveryWarning).toMatch(/aws unavailable/);
   });
+
+  it("dispatches destroy operation without post-destroy URL discovery", async () => {
+    const client = workflowClient({
+      listRunArtifacts: vi.fn(async () => ["thinkwork-destroy-dev-123"]),
+    });
+    const discoverUrls = vi.fn(() => ({
+      apiEndpoint: "https://api.example.test",
+    }));
+
+    const result = await runEnterpriseWorkflow(
+      {
+        operation: "destroy",
+        repository: "acme/deploy",
+        stage: "dev",
+        component: "all",
+        runSmokes: false,
+        wait: true,
+        region: "us-east-1",
+      },
+      {
+        client,
+        discoverUrls,
+        sleep: vi.fn(async () => undefined),
+      },
+    );
+
+    expect(client.dispatchDeployWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "destroy",
+        component: "all",
+        runSmokes: false,
+      }),
+    );
+    expect(discoverUrls).not.toHaveBeenCalled();
+    expect(result.artifacts).toEqual(["thinkwork-destroy-dev-123"]);
+    expect(result.urls).toEqual({});
+  });
 });

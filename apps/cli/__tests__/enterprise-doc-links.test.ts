@@ -67,6 +67,8 @@ describe("enterprise deployment docs and generated runbook", () => {
     expect(enterpriseDoc.indexOf("thinkwork deploy --bootstrap")).toBeLessThan(
       enterpriseDoc.indexOf("gh workflow run deploy.yml"),
     );
+    expect(enterpriseDoc).toContain("thinkwork destroy");
+    expect(enterpriseDoc).toContain("operation=destroy");
     expect(enterpriseDoc).toContain(
       "full ThinkWork source fork is break-glass debt",
     );
@@ -92,6 +94,8 @@ describe("enterprise deployment docs and generated runbook", () => {
     );
     expect(runbook).toContain("thinkwork deploy --bootstrap");
     expect(runbook).toContain("thinkwork deploy");
+    expect(runbook).toContain("thinkwork destroy");
+    expect(runbook).toContain("operation=destroy");
     expect(runbook).toContain("--customer acme --stage dev");
     expect(runbook.indexOf("thinkwork deploy --bootstrap")).toBeLessThan(
       runbook.indexOf("gh workflow run deploy.yml"),

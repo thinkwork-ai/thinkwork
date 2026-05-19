@@ -51,6 +51,19 @@ access and GitHub admin access to this repository.
    thinkwork me --stage dev --region {{REGION}}
    ```
 
+5. Remove a stage:
+
+   ```bash
+   thinkwork destroy
+   ```
+
+   Run this from inside the generated deployment repo. The CLI prompts for the
+   stage, confirms the destructive action, dispatches the customer repo workflow
+   with `operation=destroy`, waits for GitHub Actions, and reports the run URL.
+   It removes the selected stage stack while preserving customer-wide bootstrap
+   resources such as the deployment repo, Terraform state bucket, artifact
+   bucket, OIDC provider, and GitHub Environment configuration.
+
 ## Manual Fallback
 
 Use these commands only when troubleshooting or when you need to split the
@@ -124,6 +137,20 @@ one-line flow into explicit steps.
    thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage prod --component all
    ```
 
+7. Destroy a stage manually:
+
+   ```bash
+   gh workflow run deploy.yml \
+     --repo <github-owner>/<github-repo> \
+     -f operation=destroy \
+     -f stage=dev \
+     -f component=all \
+     -f run_smokes=false
+   ```
+
+   Prefer `thinkwork destroy`; use direct `gh workflow run` only as a
+   troubleshooting fallback.
+
 ## Workflow Components
 
 | Component    | What it does                                                                                                                                           |
@@ -133,6 +160,10 @@ one-line flow into explicit steps.
 | `artifacts`  | Re-copy pinned Lambda/static/runtime artifacts without Terraform apply.                                                                                |
 | `overlays`   | Apply only `customer/` evals, skills, workspace defaults, seeds, and branding records.                                                                 |
 | `smokes`     | Run smoke checks against an already-deployed stage.                                                                                                    |
+
+Set workflow `operation=destroy` to remove the selected stage stack. Destroy
+always uses Terraform for the whole stage; component-specific destroy is not
+supported.
 
 ## Overlay-Only Changes
 

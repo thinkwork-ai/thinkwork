@@ -307,17 +307,24 @@ thinkwork doctor -s <stage>
 
 ## destroy
 
-Tear down the stack.
+Tear down a stage. Inside a generated enterprise deployment repo, or when
+`--customer`/`--repo` is provided, this dispatches the customer-owned CI
+workflow with `operation=destroy`. Outside enterprise context it runs local
+Terraform destroy.
 
 ```bash
 thinkwork destroy -s <stage> [options]
 ```
 
-| Flag                     | Description                           |
-| ------------------------ | ------------------------------------- |
-| `-s, --stage <name>`     | Stage name (required)                 |
-| `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` |
-| `-y, --yes`              | Skip confirmation                     |
+| Flag                     | Description                                                 |
+| ------------------------ | ----------------------------------------------------------- |
+| `-s, --stage <name>`     | Stage name. Prompts in enterprise TTY flows when omitted.   |
+| `-c, --component <tier>` | Local Terraform only: `foundation`, `data`, `app`, or `all` |
+| `--customer <slug>`      | Enterprise customer slug                                    |
+| `--repo <owner/name>`    | Enterprise deployment repository                            |
+| `--wait`, `--no-wait`    | Wait or return after enterprise workflow dispatch           |
+| `--local-terraform`      | Force local Terraform destroy inside a deployment repo      |
+| `-y, --yes`              | Skip confirmation                                           |
 
 <Aside type="caution">
   `destroy` deletes your Aurora database, all S3 data, and all application

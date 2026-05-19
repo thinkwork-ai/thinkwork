@@ -46,6 +46,7 @@ describe("enterprise deploy workflow template", () => {
 
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN }}");
+    expect(workflow).toContain("operation:");
     expect(workflow).toContain("component:");
     expect(workflow).toContain("run_smokes:");
     expect(workflow).toContain("Fetch and verify release manifest");
@@ -53,6 +54,7 @@ describe("enterprise deploy workflow template", () => {
     expect(workflow).toContain("Prepare release artifacts");
     expect(workflow).toContain("Select Terraform workspace");
     expect(workflow).toContain("Terraform apply");
+    expect(workflow).toContain("Terraform destroy");
     expect(workflow).toContain("Copy runtime images into customer ECR");
     expect(workflow).toContain("Update AgentCore runtimes");
     expect(workflow).toContain("Sync static site bundles");
@@ -61,6 +63,10 @@ describe("enterprise deploy workflow template", () => {
     expect(workflow).toContain("enterprise overlay apply");
     expect(workflow).toContain("Run smoke checks");
     expect(workflow).toContain("Write deploy summary");
+    expect(workflow).toContain('--operation "$OPERATION"');
+    expect(workflow).toContain(
+      "thinkwork-${{ github.event.inputs.operation }}-${{ github.event.inputs.stage }}-${{ github.run_id }}",
+    );
   });
 
   it("never references long-lived AWS access key secrets", () => {
