@@ -28,98 +28,172 @@ import {
 } from "../ui.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { isCancellation } from "../lib/interactive.js";
+import {
+  runEnterpriseDeploy,
+  shouldUseEnterpriseDeploy,
+  type EnterpriseDeployOptions,
+  type EnterpriseDeployResult,
+} from "./enterprise/deploy.js";
 
-export function registerDeployCommand(program: Command): void {
+export interface DeployCommandOptions extends EnterpriseDeployOptions {
+  profile?: string;
+  stage?: string;
+  component: string;
+  yes?: boolean;
+}
+
+export interface DeployCommandDependencies {
+  localDeploy?: (opts: DeployCommandOptions) => Promise<void>;
+  enterpriseDeploy?: (
+    opts: DeployCommandOptions,
+  ) => Promise<EnterpriseDeployResult>;
+  shouldUseEnterprise?: (opts: DeployCommandOptions) => boolean;
+}
+
+export function registerDeployCommand(
+  program: Command,
+  deps: DeployCommandDependencies = {},
+): void {
   program
     .command("deploy")
     .description(
-      "Run terraform apply for a stage. Prompts for stage in a TTY when omitted.",
+      "Deploy ThinkWork with local Terraform or a customer-owned enterprise CI repo.",
     )
     .option("-p, --profile <name>", "AWS profile")
     .option("-s, --stage <name>", "Deployment stage")
     .option(
       "-c, --component <tier>",
-      "Component tier (foundation|data|app|all)",
+      "Component (local: foundation|data|app|all; enterprise: all|foundation|artifacts|overlays|smokes)",
       "all",
     )
+    .option("--bootstrap", "Bootstrap enterprise CI deployment authority")
+    .option("--customer <slug>", "Enterprise customer slug")
+    .option("--repo <owner/name>", "Customer GitHub deployment repository")
+    .option("--create-repo", "Create the customer deployment repository")
+    .option("--checkout-dir <path>", "Managed enterprise deployment checkout")
+    .option("--wait", "Wait for enterprise CI workflow completion")
+    .option("--no-wait", "Do not wait for enterprise CI workflow completion")
+    .option(
+      "--local-terraform",
+      "Force the local Terraform deploy path even inside an enterprise deployment repo",
+    )
+    .option("--release-version <version>", "Pinned ThinkWork release version")
+    .option("--manifest-url <url>", "Pinned ThinkWork release manifest URL")
+    .option(
+      "--manifest-sha256 <sha256>",
+      "Pinned ThinkWork release manifest SHA-256",
+    )
+    .option(
+      "--terraform-module-version <version>",
+      "Pinned Terraform Registry module version",
+    )
     .option("-y, --yes", "Skip interactive confirmation (for CI)")
-    .action(
-      async (opts: { stage?: string; component: string; yes?: boolean }) => {
-        const startTime = Date.now();
+    .action(async (opts: DeployCommandOptions) => {
+      try {
+        await runDeployCommand(opts, deps);
+      } catch (err) {
+        if (isCancellation(err)) return;
+        printError((err as Error).message);
+        process.exit(1);
+      }
+    });
+}
 
-        try {
-          const stage = await resolveStage({ flag: opts.stage });
+export async function runDeployCommand(
+  opts: DeployCommandOptions,
+  deps: DeployCommandDependencies = {},
+): Promise<void> {
+  const shouldUseEnterprise =
+    deps.shouldUseEnterprise ?? shouldUseEnterpriseDeploy;
+  if (shouldUseEnterprise(opts)) {
+    const enterpriseDeploy = deps.enterpriseDeploy ?? runEnterpriseDeploy;
+    const result = await enterpriseDeploy(opts);
+    printEnterpriseDeploySummary(result);
+    return;
+  }
 
-          const compCheck = validateComponent(opts.component);
-          if (!compCheck.valid) {
-            printError(compCheck.error!);
-            process.exit(1);
-          }
+  const localDeploy = deps.localDeploy ?? runLocalTerraformDeploy;
+  await localDeploy(opts);
+}
 
-          const identity = getAwsIdentity();
-          printHeader("deploy", stage, identity);
+export async function runLocalTerraformDeploy(
+  opts: DeployCommandOptions,
+): Promise<void> {
+  const startTime = Date.now();
+  const stage = await resolveStage({ flag: opts.stage });
 
-          if (!identity) {
-            printWarning(
-              "Could not resolve AWS identity. Is the AWS CLI configured?",
-            );
-          }
+  const compCheck = validateComponent(opts.component);
+  if (!compCheck.valid) {
+    printError(compCheck.error!);
+    process.exit(1);
+  }
 
-          if (isProdLike(stage) && !opts.yes) {
-            const ok = await confirm(
-              `  Stage "${stage}" is production-like. Deploy?`,
-            );
-            if (!ok) {
-              console.log("  Aborted.");
-              process.exit(0);
-            }
-          } else if (!opts.yes) {
-            const ok = await confirm(`  Deploy to stage "${stage}"?`);
-            if (!ok) {
-              console.log("  Aborted.");
-              process.exit(0);
-            }
-          }
+  const identity = getAwsIdentity();
+  printHeader("deploy", stage, identity);
 
-          const terraformDir =
-            process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
-          const tiers = expandComponent(opts.component as Component);
+  if (!identity) {
+    printWarning("Could not resolve AWS identity. Is the AWS CLI configured?");
+  }
 
-          for (let i = 0; i < tiers.length; i++) {
-            const tier = tiers[i];
-            printTierHeader(tier, i, tiers.length);
+  if (isProdLike(stage) && !opts.yes) {
+    const ok = await confirm(`  Stage "${stage}" is production-like. Deploy?`);
+    if (!ok) {
+      console.log("  Aborted.");
+      process.exit(0);
+    }
+  } else if (!opts.yes) {
+    const ok = await confirm(`  Deploy to stage "${stage}"?`);
+    if (!ok) {
+      console.log("  Aborted.");
+      process.exit(0);
+    }
+  }
 
-            const cwd = resolveTierDir(terraformDir, stage, tier);
-            await ensureInit(cwd);
-            await ensureWorkspace(cwd, stage);
+  const terraformDir = process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
+  const tiers = expandComponent(opts.component as Component);
 
-            const code = await runTerraform(cwd, [
-              "apply",
-              "-auto-approve",
-              `-var=stage=${stage}`,
-            ]);
-            if (code !== 0) {
-              printError(`Deploy failed for ${tier} (exit ${code})`);
-              process.exit(code);
-            }
-          }
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
+    printTierHeader(tier, i, tiers.length);
 
-          printSuccess("Deploy complete");
+    const cwd = resolveTierDir(terraformDir, stage, tier);
+    await ensureInit(cwd);
+    await ensureWorkspace(cwd, stage);
 
-          // Post-deploy probe: surface any AgentCore Strands runtime drift as a
-          // warning. AgentCore has no "flush warm pool" API for DEFAULT endpoints
-          // (see scripts/post-deploy.sh for the rationale); this is an
-          // early-warning check, not a mitigation. Intentionally non-fatal —
-          // the 15-minute AgentCore reconciler is the real backstop.
-          await runPostDeployProbe(stage);
+    const code = await runTerraform(cwd, [
+      "apply",
+      "-auto-approve",
+      `-var=stage=${stage}`,
+    ]);
+    if (code !== 0) {
+      printError(`Deploy failed for ${tier} (exit ${code})`);
+      process.exit(code);
+    }
+  }
 
-          printSummary("deploy", stage, tiers, startTime);
-        } catch (err) {
-          if (isCancellation(err)) return;
-          throw err;
-        }
-      },
+  printSuccess("Deploy complete");
+
+  // Post-deploy probe: surface any AgentCore Strands runtime drift as a
+  // warning. AgentCore has no "flush warm pool" API for DEFAULT endpoints
+  // (see scripts/post-deploy.sh for the rationale); this is an
+  // early-warning check, not a mitigation. Intentionally non-fatal —
+  // the 15-minute AgentCore reconciler is the real backstop.
+  await runPostDeployProbe(stage);
+
+  printSummary("deploy", stage, tiers, startTime);
+}
+
+function printEnterpriseDeploySummary(result: EnterpriseDeployResult): void {
+  if (result.kind === "bootstrap") {
+    printSuccess(
+      `Enterprise deploy bootstrap prepared ${result.request.customerSlug} ${result.request.stage}`,
     );
+    return;
+  }
+
+  printSuccess(
+    `Enterprise deploy routed for ${result.request.customerSlug} ${result.request.stage}`,
+  );
 }
 
 async function runPostDeployProbe(stage: string): Promise<void> {
