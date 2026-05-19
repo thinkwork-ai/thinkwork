@@ -3,6 +3,7 @@ import type { PgTransaction } from "drizzle-orm/pg-core";
 import {
   tenantEntityPages,
   tenantEntityPageAliases,
+  tenantEntityPageLinks,
   tenantEntityPageSections,
   tenantEntitySectionSources,
 } from "@thinkwork/database-pg/schema";
@@ -10,12 +11,9 @@ import { db as defaultDb } from "../db.js";
 import {
   canPromote,
   deriveSourceFacetType,
-  isKnownEntitySubtype,
   isKnownSectionSourceKind,
-  isTenantEntitySubtype,
   type FactCitation,
   type FacetType,
-  type TenantEntitySubtype,
 } from "./facet-types.js";
 
 export type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
@@ -24,7 +22,7 @@ export interface TenantEntityPageRow {
   id: string;
   tenant_id: string;
   type: "entity" | "topic" | "decision";
-  entity_subtype: TenantEntitySubtype;
+  entity_subtype: string;
   slug: string;
   title: string;
   summary: string | null;
@@ -55,6 +53,20 @@ export interface WriteFacetSectionInput {
   sources: FactCitation[];
   position?: number;
   allowPromotion?: boolean;
+}
+
+export interface FindTenantEntityPageBySlugInput {
+  tenantId: string;
+  type?: "entity" | "topic" | "decision";
+  subtype: string;
+  slug: string;
+}
+
+export interface UpsertTenantEntityPageLinkInput {
+  fromPageId: string;
+  toPageId: string;
+  relationshipSlug: string;
+  context?: string | null;
 }
 
 export interface TenantEntitySectionForBody {
@@ -129,6 +141,48 @@ export async function findOrCreateTenantEntityPage(
   }
 
   return page as TenantEntityPageRow;
+}
+
+export async function findTenantEntityPageBySlug(
+  input: FindTenantEntityPageBySlugInput,
+  db: DbClient = defaultDb,
+): Promise<TenantEntityPageRow | null> {
+  const rows = await db
+    .select()
+    .from(tenantEntityPages)
+    .where(
+      and(
+        eq(tenantEntityPages.tenant_id, input.tenantId),
+        eq(tenantEntityPages.type, input.type ?? "entity"),
+        eq(
+          tenantEntityPages.entity_subtype,
+          normalizeTenantSubtype(input.subtype),
+        ),
+        eq(tenantEntityPages.slug, normalizeSlug(input.slug)),
+        eq(tenantEntityPages.status, "active"),
+      ),
+    )
+    .limit(1);
+  return (rows[0] as TenantEntityPageRow | undefined) ?? null;
+}
+
+export async function upsertTenantEntityPageLink(
+  input: UpsertTenantEntityPageLinkInput,
+  db: DbClient = defaultDb,
+): Promise<boolean> {
+  if (input.fromPageId === input.toPageId) return false;
+  const relationshipSlug = normalizeTenantSubtype(input.relationshipSlug);
+  const returned = await db
+    .insert(tenantEntityPageLinks)
+    .values({
+      from_page_id: input.fromPageId,
+      to_page_id: input.toPageId,
+      kind: relationshipSlug,
+      context: input.context ?? null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: tenantEntityPageLinks.id });
+  return returned.length > 0;
 }
 
 export async function recordTenantEntitySectionSources(
@@ -315,11 +369,12 @@ export async function findPageSourcesAcrossSurfaces(
   return (result as unknown as { rows?: AcrossSurfaceSourceHit[] }).rows ?? [];
 }
 
-export function normalizeTenantSubtype(subtype: string): TenantEntitySubtype {
-  if (!isKnownEntitySubtype(subtype) || !isTenantEntitySubtype(subtype)) {
+export function normalizeTenantSubtype(subtype: string): string {
+  const normalized = subtype.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_]{0,63}$/.test(normalized)) {
     throw new Error(`unsupported tenant entity subtype: ${subtype}`);
   }
-  return subtype;
+  return normalized;
 }
 
 function normalizeSlug(value: string): string {

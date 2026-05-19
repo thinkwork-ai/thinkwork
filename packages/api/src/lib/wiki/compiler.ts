@@ -88,6 +88,11 @@ import {
 	applyOntologyMaterializationGate,
 	type OntologyGateMetrics,
 } from "../ontology/materialization-gate.js";
+import { materializePlannerPageToBrain } from "../ontology/materializer.js";
+import {
+	findTenantEntityPageBySlug,
+	upsertTenantEntityPageLink,
+} from "../brain/repository.js";
 import { wikiPageSections, wikiPageLinks } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -218,6 +223,9 @@ export interface RunJobResult {
 		ontology_gate_rejected_relationships?: number;
 		ontology_gate_unresolved_observations?: number;
 		ontology_gate_suggestion_candidates?: number;
+		brain_pages_upserted?: number;
+		brain_facets_written?: number;
+		brain_links_upserted?: number;
 	};
 	error?: string;
 }
@@ -853,6 +861,22 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			createdPage,
 			newPageSections.flatMap((s) => s.sources.map((r) => r.ref)),
 		);
+		if (args.ontologySnapshot && np.entityTypeSlug) {
+			const brainResult = await materializePlannerPageToBrain({
+				tenantId: job.tenant_id,
+				page: {
+					...np,
+					slug,
+				},
+				snapshot: args.ontologySnapshot,
+			});
+			if (brainResult.pageUpserted) {
+				metrics.brain_pages_upserted =
+					(metrics.brain_pages_upserted ?? 0) + 1;
+			}
+			metrics.brain_facets_written =
+				(metrics.brain_facets_written ?? 0) + brainResult.facetsWritten;
+		}
 	}
 
 	// 3. Unresolved mentions (cheap — accumulate only)
@@ -918,12 +942,32 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			page,
 			promotionSections.flatMap((s) => s.sources.map((r) => r.ref)),
 		);
+		if (args.ontologySnapshot && pr.entityTypeSlug) {
+			const brainResult = await materializePlannerPageToBrain({
+				tenantId: job.tenant_id,
+				page: {
+					type: pr.type,
+					entityTypeSlug: pr.entityTypeSlug,
+					slug,
+					title: pr.title,
+					sections: pr.sections,
+				},
+				snapshot: args.ontologySnapshot,
+			});
+			if (brainResult.pageUpserted) {
+				metrics.brain_pages_upserted =
+					(metrics.brain_pages_upserted ?? 0) + 1;
+			}
+			metrics.brain_facets_written =
+				(metrics.brain_facets_written ?? 0) + brainResult.facetsWritten;
+		}
 	}
 
 	// 5. Page links — resolve (type, slug) pairs against the scope's active
 	// pages AFTER all upserts/promotions have landed so a link can reference
 	// any page created earlier in this same plan.
 	if (plan.pageLinks && plan.pageLinks.length > 0) {
+		const brainEntityTypesByPageKey = entityTypesByPageKey(plan);
 		for (const link of plan.pageLinks) {
 			const from = await findPageBySlug({
 				tenantId: job.tenant_id,
@@ -943,8 +987,45 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				fromPageId: from.id,
 				toPageId: to.id,
 				context: link.context ?? null,
+				kind: link.relationshipTypeSlug ?? undefined,
 			});
 			metrics.links_upserted = (metrics.links_upserted ?? 0) + 1;
+			if (args.ontologySnapshot && link.relationshipTypeSlug) {
+				const fromSubtype = brainEntityTypesByPageKey.get(
+					pageRefKey(link.fromType, link.fromSlug),
+				);
+				const toSubtype = brainEntityTypesByPageKey.get(
+					pageRefKey(link.toType, link.toSlug),
+				);
+				if (fromSubtype && toSubtype) {
+					const [brainFrom, brainTo] = await Promise.all([
+						findTenantEntityPageBySlug({
+							tenantId: job.tenant_id,
+							type: link.fromType,
+							subtype: fromSubtype,
+							slug: link.fromSlug,
+						}),
+						findTenantEntityPageBySlug({
+							tenantId: job.tenant_id,
+							type: link.toType,
+							subtype: toSubtype,
+							slug: link.toSlug,
+						}),
+					]);
+					if (brainFrom && brainTo) {
+						const inserted = await upsertTenantEntityPageLink({
+							fromPageId: brainFrom.id,
+							toPageId: brainTo.id,
+							relationshipSlug: link.relationshipTypeSlug,
+							context: link.context ?? null,
+						});
+						if (inserted) {
+							metrics.brain_links_upserted =
+								(metrics.brain_links_upserted ?? 0) + 1;
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -1742,6 +1823,28 @@ function recordGateMetrics(
 	>) {
 		metrics[key] = (metrics[key] ?? 0) + value;
 	}
+}
+
+function entityTypesByPageKey(plan: PlannerResult): Map<string, string> {
+	const entries: Array<[string, string]> = [];
+	for (const page of plan.newPages) {
+		if (page.entityTypeSlug) {
+			entries.push([pageRefKey(page.type, page.slug), page.entityTypeSlug]);
+		}
+	}
+	for (const promotion of plan.promotions) {
+		if (promotion.entityTypeSlug) {
+			entries.push([
+				pageRefKey(promotion.type, promotion.slug),
+				promotion.entityTypeSlug,
+			]);
+		}
+	}
+	return new Map(entries);
+}
+
+function pageRefKey(type: WikiPageType, slug: string): string {
+	return `${type}:${slug}`;
 }
 
 function makeResult(

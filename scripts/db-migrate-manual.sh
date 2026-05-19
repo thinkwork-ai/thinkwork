@@ -13,7 +13,7 @@
 # (`-- creates:` / `-- creates-column:` / `-- creates-extension:` /
 # `-- creates-constraint:` / `-- creates-function:` / `-- creates-trigger:`)
 # and drop markers (`-- drops:` /
-# `-- drops-column:`) and probes the target
+# `-- drops-column:` / `-- drops-constraint:`) and probes the target
 # $DATABASE_URL to report APPLIED / MISSING (creates) or DROPPED /
 # STILL_PRESENT (drops) per object.
 #
@@ -43,6 +43,7 @@
 #   -- creates-role: <role_name>               # probes pg_catalog.pg_roles (global, unqualified)
 #   -- drops: public.<table_or_index_name>      # probes ABSENT (DROPPED/STILL_PRESENT)
 #   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
+#   -- drops-constraint: public.<table_name>.<constraint_name> # probes ABSENT
 # Multiple markers per file are fine. A file with zero markers is reported
 # as UNVERIFIED (explicitly flagged, since "no markers" is a header-quality
 # issue that should be fixed at PR time).
@@ -216,6 +217,19 @@ probe_constraint() {
   fi
 }
 
+probe_constraint_absent() {
+  # Accepts public.table.constraint — returns DROPPED when the constraint is
+  # absent, STILL_PRESENT when it is still attached to the table.
+  local qualified="$1"
+  local result
+  result=$(probe_constraint "$qualified")
+  if [[ "$result" == "MISSING" ]]; then
+    echo "DROPPED"
+  else
+    echo "STILL_PRESENT"
+  fi
+}
+
 probe_function() {
   # Accepts public.function_name. Assumes no overloaded argument-sensitive
   # verification is needed for migration marker checks.
@@ -354,13 +368,17 @@ for f in "${WALK_FILES[@]}"; do
     grep -oE "^--[[:space:]]+drops-column:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  drop_constraint_markers=$(
+    grep -oE "^--[[:space:]]+drops-constraint:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
   drop_obj_markers=$(
     grep -oE "^--[[:space:]]+drops:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$drop_col_markers" && -z "$drop_obj_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- drops:', or '-- drops-column:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" ]]; then
+    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- drops:', '-- drops-column:', or '-- drops-constraint:' markers in header)"
     any_unverified=1
     continue
   fi
@@ -389,6 +407,9 @@ for f in "${WALK_FILES[@]}"; do
     fi
     if [[ -n "$drop_col_markers" ]]; then
       while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
+    fi
+    if [[ -n "$drop_constraint_markers" ]]; then
+      while IFS= read -r m; do echo "    drops-constraint: $m"; done <<< "$drop_constraint_markers"
     fi
     if [[ -n "$drop_obj_markers" ]]; then
       while IFS= read -r m; do echo "    drops: $m"; done <<< "$drop_obj_markers"
@@ -459,6 +480,14 @@ for f in "${WALK_FILES[@]}"; do
       echo "    drop $m -> $result"
       [[ "$result" == "STILL_PRESENT" ]] && any_missing=1
     done <<< "$drop_col_markers"
+  fi
+  if [[ -n "$drop_constraint_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_constraint_absent "$m")
+      echo "    drop constraint $m -> $result"
+      [[ "$result" == "STILL_PRESENT" ]] && any_missing=1
+    done <<< "$drop_constraint_markers"
   fi
   if [[ -n "$drop_obj_markers" ]]; then
     while IFS= read -r m; do

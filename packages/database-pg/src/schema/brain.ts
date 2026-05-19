@@ -142,10 +142,6 @@ export const tenantEntityPages = brain.table(
 			"pages_type_allowed",
 			sql`${table.type} IN ('entity','topic','decision')`,
 		),
-		check(
-			"pages_entity_subtype_allowed",
-			sql`${table.entity_subtype} IN ('customer','opportunity','order','person')`,
-		),
 	],
 );
 

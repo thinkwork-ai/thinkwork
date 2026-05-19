@@ -664,6 +664,7 @@ const {
   mockWriter,
   mockGetServices,
   mockLoadOntologyCompileSnapshot,
+  mockMaterializer,
   testOntologySnapshot,
 } = vi.hoisted(() => {
   const testOntologySnapshot = {
@@ -774,6 +775,14 @@ const {
   const mockPlanner = { runPlanner: vi.fn() };
   const mockWriter = { writeSection: vi.fn() };
   const mockLoadOntologyCompileSnapshot = vi.fn();
+  const mockMaterializer = {
+    materializePlannerPageToBrain: vi.fn().mockResolvedValue({
+      pageId: "brain-page-1",
+      pageUpserted: true,
+      facetsWritten: 1,
+      sourcesRetained: 1,
+    }),
+  };
   return {
     mockAdapter,
     mockRepo,
@@ -781,6 +790,7 @@ const {
     mockWriter,
     mockGetServices,
     mockLoadOntologyCompileSnapshot,
+    mockMaterializer,
     testOntologySnapshot,
   };
 });
@@ -861,6 +871,16 @@ vi.mock("../lib/ontology/compile-snapshot.js", async (importOriginal) => {
     ...actual,
     loadOntologyCompileSnapshot: (...args: unknown[]) =>
       mockLoadOntologyCompileSnapshot(...args),
+  };
+});
+
+vi.mock("../lib/ontology/materializer.js", async (importOriginal) => {
+  const actual =
+    (await importOriginal()) as typeof import("../lib/ontology/materializer.js");
+  return {
+    ...actual,
+    materializePlannerPageToBrain: (...args: unknown[]) =>
+      mockMaterializer.materializePlannerPageToBrain(...args),
   };
 });
 
@@ -964,6 +984,12 @@ describe("runCompileJob", () => {
     // override per-scenario.
     mockPlacesService.resolveBatchPlace.mockResolvedValue(null);
     mockLoadOntologyCompileSnapshot.mockResolvedValue(testOntologySnapshot);
+    mockMaterializer.materializePlannerPageToBrain.mockResolvedValue({
+      pageId: "brain-page-1",
+      pageUpserted: true,
+      facetsWritten: 1,
+      sourcesRetained: 1,
+    });
   });
 
   it("creates a new page from the planner's newPages output", async () => {
@@ -1079,6 +1105,61 @@ describe("runCompileJob", () => {
     expect(result.metrics.ontology_gate_rejected_pages).toBe(1);
     expect(result.metrics.ontology_gate_unresolved_observations).toBe(1);
     expect(result.metrics.ontology_gate_suggestion_candidates).toBe(1);
+  });
+
+  it("mirrors approved ontology-shaped new pages into Brain facets", async () => {
+    scriptAdapter([
+      {
+        records: [makeRecord("r1")],
+        nextCursor: {
+          updatedAt: new Date("2026-04-18T00:00:00Z"),
+          recordId: "r1",
+        },
+      },
+      { records: [], nextCursor: null },
+    ]);
+    mockPlanner.runPlanner.mockResolvedValueOnce({
+      pageUpdates: [],
+      newPages: [
+        {
+          type: "entity",
+          entityTypeSlug: "customer",
+          slug: "acme",
+          title: "Acme",
+          sections: [
+            {
+              slug: "overview",
+              facetSlug: "overview",
+              heading: "Overview",
+              body_md: "Acme is active.",
+              source_refs: ["r1"],
+            },
+          ],
+          source_refs: ["r1"],
+        },
+      ],
+      unresolvedMentions: [],
+      promotions: [],
+      pageLinks: [],
+      usage: { inputTokens: 100, outputTokens: 40 },
+    });
+
+    const result = await runCompileJob(sampleJob);
+
+    expect(result.status).toBe("succeeded");
+    expect(mockRepo.upsertPage).toHaveBeenCalled();
+    expect(mockMaterializer.materializePlannerPageToBrain).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "t1",
+        page: expect.objectContaining({
+          entityTypeSlug: "customer",
+          slug: "acme",
+        }),
+        snapshot: testOntologySnapshot,
+      }),
+    );
+    expect(result.metrics.brain_pages_upserted).toBe(1);
+    expect(result.metrics.brain_facets_written).toBe(1);
   });
 
   it("queues continuation jobs for scheduler drain instead of invoking itself", async () => {
