@@ -226,9 +226,11 @@ export interface RunJobResult {
 		ontology_gate_approved_pages?: number;
 		ontology_gate_approved_facets?: number;
 		ontology_gate_approved_relationships?: number;
+		ontology_gate_approved_connected_pages?: number;
 		ontology_gate_rejected_pages?: number;
 		ontology_gate_rejected_facets?: number;
 		ontology_gate_rejected_relationships?: number;
+		ontology_gate_rejected_isolated_pages?: number;
 		ontology_gate_unresolved_observations?: number;
 		ontology_gate_suggestion_candidates?: number;
 		brain_pages_upserted?: number;
