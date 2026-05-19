@@ -92,6 +92,182 @@ export const ThreadsPagedQuery = gql`
   }
 `;
 
+export const SpacesQuery = gql`
+  query Spaces($tenantId: ID!) {
+    spaces(tenantId: $tenantId, status: ACTIVE) {
+      id
+      slug
+      name
+      description
+      kind
+      templateKey
+      status
+      updatedAt
+    }
+  }
+`;
+
+export const SpaceQuery = gql`
+  query Space($id: ID!) {
+    space(id: $id) {
+      id
+      tenantId
+      slug
+      name
+      description
+      prompt
+      kind
+      status
+      checklistTemplates {
+        id
+        key
+        name
+        description
+        items {
+          id
+          key
+          title
+          description
+          roleKey
+          required
+          sortOrder
+        }
+      }
+      integrations {
+        id
+        provider
+        status
+        writebackPolicy
+      }
+      agentAssignments {
+        id
+        agentId
+        localRole
+        autoSubscribe
+        status
+        agent {
+          id
+          name
+          slug
+        }
+      }
+    }
+  }
+`;
+
+export const SpaceThreadsQuery = gql`
+  query SpaceThreads(
+    $tenantId: ID!
+    $spaceId: ID!
+    $search: String
+    $limit: Int
+    $offset: Int
+  ) {
+    threadsPaged(
+      tenantId: $tenantId
+      spaceId: $spaceId
+      search: $search
+      showArchived: false
+      sortField: "updated"
+      sortDir: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        number
+        identifier
+        title
+        status
+        channel
+        spaceId
+        metadata
+        lastActivityAt
+        lastTurnCompletedAt
+        archivedAt
+        createdAt
+        updatedAt
+      }
+      totalCount
+    }
+  }
+`;
+
+export const SpaceThreadContextQuery = gql`
+  query SpaceThreadContext($id: ID!) {
+    thread(id: $id) {
+      id
+      title
+      status
+      channel
+      spaceId
+      metadata
+      archivedAt
+      createdAt
+      updatedAt
+      participants {
+        id
+        participantType
+        role
+        notificationPreference
+        user {
+          id
+          name
+          email
+        }
+        agent {
+          id
+          name
+          slug
+        }
+      }
+    }
+  }
+`;
+
+export const ThreadLinkedTasksQuery = gql`
+  query ThreadLinkedTasks($tenantId: ID!, $threadId: ID!) {
+    threadLinkedTasks(tenantId: $tenantId, threadId: $threadId) {
+      id
+      title
+      required
+      roleKey
+      assigneeDisplay
+      externalTaskId
+      externalTaskUrl
+      status
+      blocked
+      syncStatus
+      lastSyncedAt
+      updatedAt
+    }
+  }
+`;
+
+export const StartCustomerOnboardingMutation = gql`
+  mutation StartCustomerOnboarding($input: StartCustomerOnboardingInput!) {
+    startCustomerOnboarding(input: $input) {
+      threadId
+      idempotent
+      missingFields
+      thread {
+        id
+        title
+        spaceId
+      }
+      linkedTasks {
+        checklistItemId
+        title
+        externalTaskId
+        externalTaskUrl
+        status
+        blocked
+        syncStatus
+      }
+    }
+  }
+`;
+
 export const ComputerThreadQuery = gql`
   query ComputerThread($id: ID!, $messageLimit: Int) {
     thread(id: $id) {

@@ -26,6 +26,8 @@ import { getIdToken } from "@/lib/auth";
 
 interface ComputerThreadDetailRouteProps {
   threadId: string;
+  backHref?: string;
+  documentTitlePrefix?: string;
 }
 
 interface ThreadResult {
@@ -112,6 +114,8 @@ interface RunbookRunsResult {
 
 export function ComputerThreadDetailRoute({
   threadId,
+  backHref = "/threads",
+  documentTitlePrefix = "Thread",
 }: ComputerThreadDetailRouteProps) {
   const { tenantId } = useTenant();
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(
@@ -147,13 +151,13 @@ export function ComputerThreadDetailRoute({
   );
 
   usePageHeaderActions({
-    backHref: "/threads",
+    backHref,
     title: threadTitle,
     // Tab title gets the "Thread · " prefix to match the section pattern
     // used by Memory and other pages ("Memory · ThinkWork", etc.). The
     // in-page header keeps the bare thread title — no need to repeat
     // "Thread" inside the page the user is already on.
-    documentTitle: `Thread · ${threadTitle}`,
+    documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
     action: (
       <ThreadDetailActions
         threadId={threadId}

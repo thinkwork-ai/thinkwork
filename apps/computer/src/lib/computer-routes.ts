@@ -6,6 +6,7 @@ export class InvalidComputerRouteParamError extends Error {
 }
 
 export const COMPUTER_THREADS_ROUTE = "/threads" as const;
+export const COMPUTER_SPACES_ROUTE = "/spaces" as const;
 export const COMPUTER_NEW_THREAD_ROUTE = "/new" as const;
 export const COMPUTER_ARTIFACTS_ROUTE = "/artifacts" as const;
 export const COMPUTER_MEMORY_ROUTE = "/memory" as const;
@@ -13,6 +14,7 @@ export const COMPUTER_CUSTOMIZE_ROUTE = "/customize" as const;
 
 export const COMPUTER_ROUTE_LABELS = {
   threads: "Threads",
+  spaces: "Spaces",
   newThread: "New",
   artifacts: "Artifacts",
   memory: "Memory",
