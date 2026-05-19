@@ -153,6 +153,10 @@ export interface RunJobResult {
 		aggregation_output_tokens?: number;
 		/** Set when the aggregation pass errored; leaf work still succeeded. */
 		aggregation_error?: string;
+		/** True when an active ontology is present and the legacy aggregation
+		 * pass is suppressed because its hub pages/links are taxonomy-shaped
+		 * rather than ontology-shaped. */
+		aggregation_ontology_suppressed?: boolean;
 		/** newPages that got folded into an existing page via exact alias
 		 * match, preventing duplicate entities like "Nana" + "Nana Restaurant". */
 		alias_dedup_merged?: number;
@@ -199,6 +203,10 @@ export interface RunJobResult {
 		 * operators can distinguish "flag off" from "no candidates" at a
 		 * glance. */
 		deterministic_linking_flag_suppressed?: boolean;
+		/** True when an active ontology is present and legacy deterministic
+		 * reference/hierarchy emitters are suppressed until they can emit
+		 * approved ontology relationship kinds. */
+		deterministic_linking_ontology_suppressed?: boolean;
 		/** Total retry attempts across every Bedrock call this job — planner,
 		 * aggregation planner, and section writer all feed into this counter.
 		 * Successful calls with 0 retries contribute nothing. Rising values
@@ -451,20 +459,24 @@ export async function runCompileJob(
 		// retry cleanly on the next compile.
 		// ---------------------------------------------------------------
 		if (isAggregationPassEnabled() && allRecordsThisJob.length > 0) {
-			try {
-				await runAggregationPass({
-					job,
-					records: allRecordsThisJob,
-					jobStartedAt,
-					metrics,
-					modelId: opts.modelId,
-				});
-			} catch (aggErr) {
-				const msg = (aggErr as Error)?.message || String(aggErr);
-				console.warn(
-					`[wiki-compiler] aggregation pass failed for job=${job.id}: ${msg}`,
-				);
-				metrics.aggregation_error = msg;
+			if (ontologySnapshot && !ontologySnapshot.conservative) {
+				metrics.aggregation_ontology_suppressed = true;
+			} else {
+				try {
+					await runAggregationPass({
+						job,
+						records: allRecordsThisJob,
+						jobStartedAt,
+						metrics,
+						modelId: opts.modelId,
+					});
+				} catch (aggErr) {
+					const msg = (aggErr as Error)?.message || String(aggErr);
+					console.warn(
+						`[wiki-compiler] aggregation pass failed for job=${job.id}: ${msg}`,
+					);
+					metrics.aggregation_error = msg;
+				}
 			}
 		}
 
@@ -611,6 +623,7 @@ interface ApplyPlanArgs {
 	candidatePages?: Array<{
 		id: string;
 		type: WikiPageType;
+		entityTypeSlug?: string | null;
 		slug: string;
 		title: string;
 		summary: string | null;
@@ -627,15 +640,19 @@ interface ApplyPlanArgs {
 async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	const { job, records, metrics } = args;
 	let plan = args.plan;
+	const candidatePages = args.candidatePages ?? [];
 	if (args.ontologySnapshot) {
 		const gate = applyOntologyMaterializationGate({
 			plan,
 			snapshot: args.ontologySnapshot,
+			candidatePageEntityTypes: entityTypesByPageKey({
+				candidatePages,
+				plan,
+			}),
 		});
 		plan = gate.plan;
 		recordGateMetrics(metrics, gate.metrics);
 	}
-	const candidatePages = args.candidatePages ?? [];
 	const recordById = new Map(records.map((r) => [r.id, r]));
 	// Pages this call to applyPlan touched — fed into the deterministic
 	// linker so we don't emit links for scope-level pages that weren't
@@ -970,7 +987,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	// pages AFTER all upserts/promotions have landed so a link can reference
 	// any page created earlier in this same plan.
 	if (plan.pageLinks && plan.pageLinks.length > 0) {
-		const brainEntityTypesByPageKey = entityTypesByPageKey(plan);
+		const brainEntityTypesByPageKey = entityTypesByPageKey({
+			candidatePages,
+			plan,
+		});
 		for (const link of plan.pageLinks) {
 			const from = await findPageBySlug({
 				tenantId: job.tenant_id,
@@ -1040,7 +1060,9 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	// whole scope, so routine scope-wide compiles don't churn unrelated
 	// links. Errors inside either emitter are swallowed per-candidate, so
 	// the compile never fails on link-writing alone.
-	if (!isDeterministicLinkingEnabled()) {
+	if (args.ontologySnapshot && !args.ontologySnapshot.conservative) {
+		metrics.deterministic_linking_ontology_suppressed = true;
+	} else if (!isDeterministicLinkingEnabled()) {
 		metrics.deterministic_linking_flag_suppressed = true;
 	} else if (affectedPages.length > 0 && records.length > 0) {
 		const scope = { tenantId: job.tenant_id, ownerId: job.owner_id };
@@ -1828,14 +1850,26 @@ function recordGateMetrics(
 	}
 }
 
-function entityTypesByPageKey(plan: PlannerResult): Map<string, string> {
+function entityTypesByPageKey(args: {
+	candidatePages?: Array<{
+		type: WikiPageType;
+		slug: string;
+		entityTypeSlug?: string | null;
+	}>;
+	plan: PlannerResult;
+}): Map<string, string> {
 	const entries: Array<[string, string]> = [];
-	for (const page of plan.newPages) {
+	for (const page of args.candidatePages ?? []) {
 		if (page.entityTypeSlug) {
 			entries.push([pageRefKey(page.type, page.slug), page.entityTypeSlug]);
 		}
 	}
-	for (const promotion of plan.promotions) {
+	for (const page of args.plan.newPages) {
+		if (page.entityTypeSlug) {
+			entries.push([pageRefKey(page.type, page.slug), page.entityTypeSlug]);
+		}
+	}
+	for (const promotion of args.plan.promotions) {
 		if (promotion.entityTypeSlug) {
 			entries.push([
 				pageRefKey(promotion.type, promotion.slug),
