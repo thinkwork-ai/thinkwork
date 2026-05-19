@@ -5,6 +5,10 @@ import {
   linkedTasks,
   messages,
 } from "@thinkwork/database-pg/schema";
+import {
+  createCoordinatorAgentService,
+  type CoordinatorAgentService,
+} from "../spaces/coordinator-agent.js";
 
 import {
   type LinkedTaskStatus,
@@ -117,6 +121,7 @@ export interface LinkedTaskSyncRepository {
 
 export interface SyncLinkedTaskDeps {
   repository?: LinkedTaskSyncRepository;
+  coordinator?: Pick<CoordinatorAgentService, "enqueueWakeup">;
   now?: () => Date;
 }
 
@@ -140,6 +145,7 @@ export async function syncLinkedTaskFromProviderEvent(
   deps: SyncLinkedTaskDeps = {},
 ): Promise<SyncLinkedTaskResult> {
   const repository = deps.repository ?? new DrizzleLinkedTaskSyncRepository();
+  const coordinator = deps.coordinator ?? createCoordinatorAgentService();
   const provider = input.provider ?? "lastmile";
   const task = await repository.findByExternalTaskId({
     tenantId: input.tenantId,
@@ -227,6 +233,15 @@ export async function syncLinkedTaskFromProviderEvent(
         required: counts.required,
         completed: counts.completed,
       },
+    });
+    await coordinator.enqueueWakeup({
+      tenantId: input.tenantId,
+      spaceId: task.spaceId,
+      threadId: task.threadId,
+      reason: "completion_summary",
+      idempotencyKey: `space-coordinator:${input.tenantId}:${task.threadId}:completion_summary`,
+      summary: `All required onboarding tasks are complete (${counts.completed}/${counts.required}). Prepare a final summary and archive recommendation.`,
+      requestedBy: { type: "system" },
     });
   }
 

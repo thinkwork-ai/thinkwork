@@ -71,6 +71,14 @@ const richPayload = {
   ],
 };
 
+const noopCoordinator = {
+  enqueueWakeup: async () => ({
+    ok: true as const,
+    enqueued: false as const,
+    reason: "coordinator_assignment_not_found" as const,
+  }),
+};
+
 describe("startCustomerOnboardingWorkflow", () => {
   it("creates one case thread, kickoff, participants, and linked LastMile tasks", async () => {
     const repository = makeRepository();
@@ -113,6 +121,15 @@ describe("startCustomerOnboardingWorkflow", () => {
           },
         }),
     };
+    const coordinator = {
+      enqueueWakeup: vi.fn(async () => ({
+        ok: true as const,
+        enqueued: true as const,
+        wakeupRequestId: "wakeup-1",
+        agentId: "agent-coordinator",
+        assignmentId: "assignment-1",
+      })),
+    };
 
     const result = await startCustomerOnboardingWorkflow(
       {
@@ -121,7 +138,7 @@ describe("startCustomerOnboardingWorkflow", () => {
         opportunity: richPayload,
         startedBy: { type: "system" },
       },
-      { repository, taskAdapter },
+      { repository, taskAdapter, coordinator },
     );
 
     expect(result).toMatchObject({
@@ -163,6 +180,14 @@ describe("startCustomerOnboardingWorkflow", () => {
       }),
     );
     expect(repository.linkedTasks).toHaveLength(2);
+    expect(coordinator.enqueueWakeup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        threadId: "thread-1",
+        reason: "kickoff_triage",
+      }),
+    );
   });
 
   it("returns the existing Thread for duplicate close-won events without creating tasks", async () => {
@@ -184,7 +209,7 @@ describe("startCustomerOnboardingWorkflow", () => {
         source: "webhook",
         opportunity: richPayload,
       },
-      { repository, taskAdapter },
+      { repository, taskAdapter, coordinator: noopCoordinator },
     );
 
     expect(result).toMatchObject({
@@ -212,7 +237,7 @@ describe("startCustomerOnboardingWorkflow", () => {
         },
         startedBy: { type: "user", id: "user-1" },
       },
-      { repository, taskAdapter },
+      { repository, taskAdapter, coordinator: noopCoordinator },
     );
 
     expect(result.missingFields).toEqual([
@@ -256,7 +281,7 @@ describe("startCustomerOnboardingWorkflow", () => {
         source: "webhook",
         opportunity: richPayload,
       },
-      { repository, taskAdapter },
+      { repository, taskAdapter, coordinator: noopCoordinator },
     );
 
     expect(result.linkedTasks[0]).toMatchObject({
@@ -279,7 +304,11 @@ describe("startCustomerOnboardingWorkflow", () => {
           source: "webhook",
           opportunity: { opportunityId: "opp-no-customer" },
         },
-        { repository, taskAdapter: successfulTaskAdapter("LM-1") },
+        {
+          repository,
+          taskAdapter: successfulTaskAdapter("LM-1"),
+          coordinator: noopCoordinator,
+        },
       ),
     ).rejects.toMatchObject({
       status: 400,

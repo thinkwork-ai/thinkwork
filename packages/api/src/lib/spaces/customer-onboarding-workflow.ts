@@ -24,6 +24,10 @@ import type {
   LinkedTaskStatus,
   LinkedTaskSyncStatus,
 } from "../linked-tasks/status.js";
+import {
+  createCoordinatorAgentService,
+  type CoordinatorAgentService,
+} from "./coordinator-agent.js";
 
 export const CUSTOMER_ONBOARDING_TEMPLATE_KEY = "customer_onboarding";
 
@@ -207,6 +211,7 @@ export interface LastMileTasksWorkflowAdapter {
 export interface CustomerOnboardingWorkflowDeps {
   repository?: CustomerOnboardingWorkflowRepository;
   taskAdapter?: LastMileTasksWorkflowAdapter;
+  coordinator?: Pick<CoordinatorAgentService, "enqueueWakeup">;
   now?: () => Date;
 }
 
@@ -229,6 +234,7 @@ export async function startCustomerOnboardingWorkflow(
     deps.repository ?? new DrizzleCustomerOnboardingRepository();
   const taskAdapter =
     deps.taskAdapter ?? createUnavailableLastMileTaskAdapter();
+  const coordinator = deps.coordinator ?? createCoordinatorAgentService();
   const normalized = normalizeCustomerOnboardingSource(input.opportunity);
 
   const space = await repository.findSpace({
@@ -321,6 +327,17 @@ export async function startCustomerOnboardingWorkflow(
       },
     });
   }
+
+  await coordinator.enqueueWakeup({
+    tenantId: input.tenantId,
+    spaceId: space.id,
+    threadId: thread.id,
+    reason: "kickoff_triage",
+    idempotencyKey: `space-coordinator:${input.tenantId}:${thread.id}:kickoff_triage`,
+    summary:
+      "A new customer onboarding Thread was created and checklist tasks were mirrored. Review missing facts, unassigned tasks, and possible blockers.",
+    requestedBy: input.startedBy ?? { type: "system" },
+  });
 
   return {
     thread,

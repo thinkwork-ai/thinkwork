@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { CoordinatorAgentService } from "../spaces/coordinator-agent.js";
 import {
   type LinkedTaskMirrorRow,
   type LinkedTaskMilestoneInput,
@@ -29,6 +30,7 @@ const baseTask: LinkedTaskMirrorRow = {
 describe("syncLinkedTaskFromProviderEvent", () => {
   it("updates a completed task and posts one Thread milestone", async () => {
     const repo = makeRepository([baseTask]);
+    const coordinator = makeCoordinator();
 
     const result = await syncLinkedTaskFromProviderEvent(
       {
@@ -39,7 +41,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
         status: "completed",
         occurredAt: "2026-05-19T15:00:00Z",
       },
-      { repository: repo },
+      { repository: repo, coordinator },
     );
 
     expect(result).toMatchObject({
@@ -67,6 +69,14 @@ describe("syncLinkedTaskFromProviderEvent", () => {
       "Collect sales tax exemption completed.",
       "All required onboarding tasks are complete (1/1). @coordinator can prepare the final summary and archive recommendation.",
     ]);
+    expect(coordinator.wakeups).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        threadId: "thread-1",
+        reason: "completion_summary",
+      }),
+    ]);
   });
 
   it("coalesces duplicate external events without duplicate Thread milestones", async () => {
@@ -80,7 +90,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
         eventName: "task.completed",
         status: "completed",
       },
-      { repository: repo },
+      { repository: repo, coordinator: makeCoordinator() },
     );
     const duplicate = await syncLinkedTaskFromProviderEvent(
       {
@@ -90,7 +100,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
         eventName: "task.completed",
         status: "completed",
       },
-      { repository: repo },
+      { repository: repo, coordinator: makeCoordinator() },
     );
 
     expect(duplicate).toMatchObject({
@@ -103,6 +113,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
 
   it("updates provider chatter without posting timeline noise", async () => {
     const repo = makeRepository([baseTask]);
+    const coordinator = makeCoordinator();
 
     const result = await syncLinkedTaskFromProviderEvent(
       {
@@ -111,7 +122,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
         eventName: "task.updated",
         status: "in_progress",
       },
-      { repository: repo },
+      { repository: repo, coordinator },
     );
 
     expect(result).toMatchObject({
@@ -122,6 +133,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
     expect(repo.tasks[0]).toMatchObject({ status: "in_progress" });
     expect(repo.events).toEqual([]);
     expect(repo.messages).toEqual([]);
+    expect(coordinator.wakeups).toEqual([]);
   });
 
   it("records reassignment and due-date milestones when important fields change", async () => {
@@ -139,7 +151,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
           displayName: "Finance",
         },
       },
-      { repository: repo },
+      { repository: repo, coordinator: makeCoordinator() },
     );
     await syncLinkedTaskFromProviderEvent(
       {
@@ -150,7 +162,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
         status: "todo",
         dueAt: "2026-05-25",
       },
-      { repository: repo },
+      { repository: repo, coordinator: makeCoordinator() },
     );
 
     expect(repo.events.map((event) => event.eventType)).toEqual([
@@ -199,7 +211,7 @@ describe("syncLinkedTaskFromProviderEvent", () => {
           eventName: "task.completed",
           status: "completed",
         },
-        { repository: repo },
+        { repository: repo, coordinator: makeCoordinator() },
       ),
     ).resolves.toMatchObject({
       ok: true,
@@ -283,4 +295,23 @@ function makeRepository(initialTasks: LinkedTaskMirrorRow[]) {
   } satisfies LinkedTaskSyncRepository & typeof state;
 
   return repository;
+}
+
+function makeCoordinator() {
+  const coordinator = {
+    wakeups: [] as Parameters<CoordinatorAgentService["enqueueWakeup"]>[0][],
+    async enqueueWakeup(
+      input: Parameters<CoordinatorAgentService["enqueueWakeup"]>[0],
+    ) {
+      coordinator.wakeups.push(input);
+      return {
+        ok: true as const,
+        enqueued: true as const,
+        wakeupRequestId: "wakeup-1",
+        agentId: "agent-coordinator",
+        assignmentId: "assignment-1",
+      };
+    },
+  };
+  return coordinator;
 }

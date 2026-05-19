@@ -44,6 +44,7 @@ describe("refreshLinkedTasks", () => {
         { tenantId: "tenant-1", threadId: "thread-1" },
         {
           refreshRepository: refreshRepo,
+          coordinator: makeCoordinator(),
           taskAdapter: adapter,
           syncRepository: syncRepo.repository,
         },
@@ -78,6 +79,7 @@ describe("refreshLinkedTasks", () => {
       { tenantId: "tenant-1" },
       {
         refreshRepository: refreshRepo,
+        coordinator: makeCoordinator(),
         taskAdapter: adapter,
         syncRepository: syncRepo.repository,
       },
@@ -185,4 +187,18 @@ function makeSyncRepository(initialTasks: LinkedTaskMirrorRow[]) {
     },
   };
   return { ...state, repository };
+}
+
+function makeCoordinator() {
+  return {
+    async enqueueWakeup() {
+      return {
+        ok: true as const,
+        enqueued: true as const,
+        wakeupRequestId: "wakeup-1",
+        agentId: "agent-coordinator",
+        assignmentId: "assignment-1",
+      };
+    },
+  };
 }
