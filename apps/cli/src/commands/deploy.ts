@@ -14,6 +14,7 @@ import {
 import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
+  resolveTerraformRoot,
   ensureInit,
   ensureWorkspace,
   runTerraform,
@@ -161,11 +162,13 @@ export async function runLocalTerraformDeploy(
   if (stage !== initialStage) {
     printHeader("deploy", stage, identity);
     if (!identity) {
-      printWarning("Could not resolve AWS identity. Is the AWS CLI configured?");
+      printWarning(
+        "Could not resolve AWS identity. Is the AWS CLI configured?",
+      );
     }
   }
 
-  const terraformDir = process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
+  const terraformDir = resolveTerraformRoot();
   const tiers = expandComponent(opts.component as Component);
 
   for (let i = 0; i < tiers.length; i++) {

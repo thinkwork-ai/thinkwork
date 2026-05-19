@@ -22,10 +22,46 @@ export interface TerraformOptions {
 }
 
 /**
+ * Resolve the root directory that contains Thinkwork Terraform layouts.
+ *
+ * CLI commands may be run from nested workspace directories such as apps/mobile.
+ * In that case, process.cwd() is not the Terraform root; walk upward looking for
+ * a repo-local terraform/ directory before falling back to the current directory.
+ */
+export function resolveTerraformRoot(startDir = process.cwd()): string {
+  const configured = process.env.THINKWORK_TERRAFORM_DIR;
+  if (configured) return configured;
+
+  let current = path.resolve(startDir);
+  while (true) {
+    if (isTerraformRoot(current)) return current;
+
+    const nestedTerraform = path.join(current, "terraform");
+    if (isTerraformRoot(nestedTerraform)) return nestedTerraform;
+
+    const parent = path.dirname(current);
+    if (parent === current) return path.resolve(startDir);
+    current = parent;
+  }
+}
+
+function isTerraformRoot(dir: string): boolean {
+  return (
+    existsSync(path.join(dir, "examples", "greenfield")) ||
+    existsSync(path.join(dir, "environments")) ||
+    existsSync(path.join(dir, "main.tf"))
+  );
+}
+
+/**
  * Resolves the working directory for a given tier.
  * Looks for environments/<stage>/<tier>/ first, falls back to examples/greenfield/.
  */
-export function resolveTierDir(terraformDir: string, stage: string, tier: string): string {
+export function resolveTierDir(
+  terraformDir: string,
+  stage: string,
+  tier: string,
+): string {
   // Check for environment-specific dir first
   const envDir = path.join(terraformDir, "environments", stage, tier);
   if (existsSync(envDir)) {
@@ -53,7 +89,10 @@ export function resolveTierDir(terraformDir: string, stage: string, tier: string
  * Ensures the Terraform workspace matches the stage name.
  * Creates the workspace if it doesn't exist.
  */
-export async function ensureWorkspace(cwd: string, stage: string): Promise<void> {
+export async function ensureWorkspace(
+  cwd: string,
+  stage: string,
+): Promise<void> {
   // List existing workspaces
   const list = await runTerraformRaw(cwd, ["workspace", "list"]);
   const workspaces = list
@@ -83,7 +122,12 @@ function runTerraformRaw(cwd: string, args: string[]): Promise<string> {
     proc.stderr.on("data", (d) => (stderr += d));
     proc.on("close", (code) => {
       if (code === 0) resolve(stdout);
-      else reject(new Error(`terraform ${args.join(" ")} failed (exit ${code}): ${stderr}`));
+      else
+        reject(
+          new Error(
+            `terraform ${args.join(" ")} failed (exit ${code}): ${stderr}`,
+          ),
+        );
     });
   });
 }

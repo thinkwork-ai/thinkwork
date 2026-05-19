@@ -2,7 +2,12 @@ import { Command } from "commander";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { getAwsIdentity } from "../aws.js";
-import { resolveTierDir, ensureInit, ensureWorkspace } from "../terraform.js";
+import {
+  resolveTierDir,
+  resolveTerraformRoot,
+  ensureInit,
+  ensureWorkspace,
+} from "../terraform.js";
 import { printHeader, printSuccess, printError } from "../ui.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { isCancellation } from "../lib/interactive.js";
@@ -40,7 +45,9 @@ function runScript(scriptPath: string, args: string[]): Promise<number> {
 export function registerBootstrapCommand(program: Command): void {
   program
     .command("bootstrap")
-    .description("Seed workspace defaults, skill catalog, and per-tenant files for a stage. Prompts for stage in a TTY when omitted.")
+    .description(
+      "Seed workspace defaults, skill catalog, and per-tenant files for a stage. Prompts for stage in a TTY when omitted.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .action(async (opts: { stage?: string }) => {
       let stage: string;
@@ -54,7 +61,7 @@ export function registerBootstrapCommand(program: Command): void {
       const identity = getAwsIdentity();
       printHeader("bootstrap", stage, identity);
 
-      const terraformDir = process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
+      const terraformDir = resolveTerraformRoot();
       const cwd = resolveTierDir(terraformDir, stage, "app");
 
       await ensureInit(cwd);

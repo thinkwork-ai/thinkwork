@@ -10,7 +10,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { resolveTerraformDir } from "./environments.js";
-import { resolveTierDir } from "./terraform.js";
+import { resolveTierDir, resolveTerraformRoot } from "./terraform.js";
 import { getApiAuthSecretFromLambda } from "./aws-discovery.js";
 import { printError } from "./ui.js";
 
@@ -29,7 +29,7 @@ export function resolveTfvarsPath(stage: string): string {
     const direct = `${tfDir}/terraform.tfvars`;
     if (existsSync(direct)) return direct;
   }
-  const terraformDir = process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
+  const terraformDir = resolveTerraformRoot();
   const cwd = resolveTierDir(terraformDir, stage, "app");
   return `${cwd}/terraform.tfvars`;
 }
@@ -127,8 +127,7 @@ export function resolveApiConfig(
   }
 
   // Prefer tfvars (local) when available; fall back to the Lambda env read.
-  const authSecret =
-    tfAuthSecret ?? getApiAuthSecretFromLambda(stage, region);
+  const authSecret = tfAuthSecret ?? getApiAuthSecretFromLambda(stage, region);
   if (!authSecret) {
     printError(
       `Cannot read api_auth_secret. Tried terraform.tfvars at ${tfvarsPath} and the \`thinkwork-${stage}-api-tenants\` Lambda env. Deploy the stack or set --profile to a role with lambda:GetFunctionConfiguration.`,
