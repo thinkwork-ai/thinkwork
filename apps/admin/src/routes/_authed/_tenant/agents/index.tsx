@@ -80,7 +80,7 @@ const columns: ColumnDef<AgentRow>[] = [
   },
   {
     accessorKey: "agentTemplateName",
-    header: "Agent Template",
+    header: "Base Config",
     cell: ({ row }) =>
       row.original.agentTemplateName ? (
         <Badge variant="outline" className="text-xs whitespace-nowrap">

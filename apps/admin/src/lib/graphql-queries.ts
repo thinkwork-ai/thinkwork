@@ -180,6 +180,134 @@ export const DeleteAgentMutation = graphql(`
   }
 `);
 
+// ---------------------------------------------------------------------------
+// Spaces
+// ---------------------------------------------------------------------------
+
+export const SpacesListQuery = graphql(`
+  query SpacesList($tenantId: ID!) {
+    spaces(tenantId: $tenantId, status: ACTIVE) {
+      id
+      tenantId
+      slug
+      name
+      description
+      status
+      kind
+      templateKey
+      updatedAt
+      members {
+        id
+        role
+        user {
+          id
+          name
+          email
+          image
+        }
+      }
+      agentAssignments {
+        id
+        localRole
+        autoSubscribe
+        status
+        agent {
+          id
+          name
+          slug
+          avatarUrl
+        }
+      }
+      checklistTemplates {
+        id
+        name
+        items {
+          id
+          required
+        }
+      }
+      integrations {
+        id
+        provider
+        status
+        writebackPolicy
+      }
+    }
+  }
+`);
+
+export const SpaceAdminDetailQuery = graphql(`
+  query SpaceAdminDetail($id: ID!) {
+    space(id: $id) {
+      id
+      tenantId
+      slug
+      name
+      description
+      prompt
+      status
+      kind
+      templateKey
+      config
+      createdAt
+      updatedAt
+      members {
+        id
+        role
+        notificationPreference
+        user {
+          id
+          name
+          email
+          image
+        }
+      }
+      agentAssignments {
+        id
+        agentId
+        localRole
+        localInstructions
+        autoSubscribe
+        allowedCapabilities
+        allowedTools
+        status
+        agent {
+          id
+          name
+          slug
+          avatarUrl
+          status
+        }
+      }
+      checklistTemplates {
+        id
+        key
+        name
+        description
+        config
+        items {
+          id
+          key
+          title
+          description
+          roleKey
+          required
+          sortOrder
+          externalTaskTemplate
+        }
+      }
+      integrations {
+        id
+        provider
+        status
+        writebackPolicy
+        config
+        webhookConfigRef
+      }
+    }
+  }
+`);
+
 export const UpdateAgentStatusMutation = graphql(`
   mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {
     updateAgentStatus(id: $id, status: $status) {
@@ -748,6 +876,7 @@ export const ThreadsPagedQuery = gql`
     $limit: Int
     $offset: Int
     $computerId: ID
+    $spaceId: ID
   ) {
     threadsPaged(
       tenantId: $tenantId
@@ -758,6 +887,7 @@ export const ThreadsPagedQuery = gql`
       limit: $limit
       offset: $offset
       computerId: $computerId
+      spaceId: $spaceId
     ) {
       items {
         id
@@ -769,6 +899,7 @@ export const ThreadsPagedQuery = gql`
         assigneeId
         agentId
         computerId
+        spaceId
         userId
         agent {
           id

@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  Bot,
+  FolderKanban,
   LayoutDashboard,
   MessagesSquare,
   Inbox,
-  Monitor,
   Users,
   Repeat,
   BarChart3,
@@ -16,7 +17,6 @@ import {
   Webhook,
   Slack,
   CalendarClock,
-  LayoutTemplate,
   ShieldCheck,
   AppWindow,
 } from "lucide-react";
@@ -212,6 +212,7 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/spaces", icon: FolderKanban, label: "Spaces" },
     {
       to: "/threads",
       icon: MessagesSquare,
@@ -249,12 +250,7 @@ export function AppSidebar() {
   ];
 
   const agentsItems: NavItem[] = [
-    {
-      to: "/computers",
-      icon: Monitor,
-      label: "Computers",
-    },
-    { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
+    { to: "/agents", icon: Bot, label: "Agents" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/ontology", icon: Network, label: "Ontology" },

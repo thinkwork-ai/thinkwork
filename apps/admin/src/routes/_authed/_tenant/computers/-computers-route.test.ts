@@ -15,14 +15,14 @@ describe("Computers admin routes", () => {
   const detailRouteSource = readSource("./$computerId.tsx");
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
 
-  it("exposes Computers as a primary admin surface", () => {
-    expect(sidebarSource).toContain('label: "Computers"');
-    expect(sidebarSource).toContain('to: "/computers"');
-    expect(commandPaletteSource).toContain('label: "Computers"');
-    expect(commandPaletteSource).toContain('to: "/computers"');
+  it("hides legacy Computers from primary admin navigation", () => {
+    expect(sidebarSource).not.toContain('label: "Computers"');
+    expect(sidebarSource).not.toContain('to: "/computers"');
+    expect(commandPaletteSource).not.toContain('label: "Computers"');
+    expect(commandPaletteSource).not.toContain('to: "/computers"');
   });
 
-  it("places Computers first under Agentic OS instead of the top work group", () => {
+  it("places Spaces and Agents in the visible admin IA", () => {
     expect(sidebarSource).toContain("<SidebarGroupLabel>Agentic OS");
     expect(sidebarSource).not.toContain("<SidebarGroupLabel>Managed Harness");
     const workItemsStart = sidebarSource.indexOf(
@@ -40,10 +40,19 @@ describe("Computers admin routes", () => {
     );
     const agentsItemsSource = sidebarSource.slice(agentsItemsStart);
 
-    expect(agentsItemsSource).toMatch(/=\s*\[\s*\{\s*to: "\/computers"/);
+    expect(workItemsSource).toMatch(
+      /to: "\/dashboard"[\s\S]+to: "\/spaces"[\s\S]+to: "\/threads"/,
+    );
+    expect(agentsItemsSource).toMatch(/=\s*\[\s*\{\s*to: "\/agents"/);
     expect(workItemsSource).toContain('label: "Dashboard"');
+    expect(workItemsSource).toContain('label: "Spaces"');
     expect(workItemsSource).toContain('label: "Threads"');
     expect(workItemsSource).not.toContain('to: "/computers"');
+    expect(workItemsSource).not.toContain('to: "/agent-templates"');
+    expect(agentsItemsSource).not.toContain('to: "/computers"');
+    expect(agentsItemsSource).not.toContain('to: "/agent-templates"');
+    expect(commandPaletteSource).toContain('label: "Spaces"');
+    expect(commandPaletteSource).toContain('to: "/spaces"');
   });
 
   it("does not show a Computers count badge in the sidebar", () => {

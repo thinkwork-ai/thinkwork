@@ -5,7 +5,7 @@ import {
   MessagesSquare,
   Inbox,
   Bot,
-  Monitor,
+  FolderKanban,
   Repeat,
   BarChart3,
   Network,
@@ -31,9 +31,9 @@ import {
 
 const NAV_ITEMS = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+  { label: "Spaces", to: "/spaces", icon: FolderKanban },
   { label: "Threads", to: "/threads", icon: MessagesSquare },
   { label: "Inbox", to: "/inbox", icon: Inbox },
-  { label: "Computers", to: "/computers", icon: Monitor },
   { label: "Artifacts", to: "/applets", icon: AppWindow },
   { label: "Agents", to: "/agents", icon: Bot },
   { label: "Routines", to: "/automations/routines", icon: Repeat },
@@ -96,7 +96,7 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => runAction(() => openNewAgent())}>
             <Plus className="mr-2 h-4 w-4" />
-            New Managed Agent
+            New Agent
           </CommandItem>
         </CommandGroup>
 
