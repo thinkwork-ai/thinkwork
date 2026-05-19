@@ -25,22 +25,24 @@ access and GitHub admin access to this repository.
 2. Run the top-level bootstrap:
 
    ```bash
-   thinkwork deploy --bootstrap \
-     --customer {{CUSTOMER_SLUG}} \
-     --repo <github-owner>/<github-repo> \
-     --stage dev
+   thinkwork deploy --bootstrap
    ```
 
-   The CLI creates or reuses the deployment repo checkout, bootstraps dev and
-   prod deployment authority, sets GitHub Environment secrets through `gh`,
-   commits and pushes managed files, dispatches the dev workflow, waits for the
-   run, and prints deploy evidence plus discovered URLs.
+   The CLI prompts for the customer slug, stage, GitHub deployment repo,
+   whether to create the repo if it does not exist, and required secret values.
+   It creates or reuses the deployment repo checkout, bootstraps dev and prod
+   deployment authority, sets GitHub Environment secrets through `gh`, commits
+   and pushes managed files, dispatches the dev workflow, waits for the run, and
+   prints deploy evidence plus discovered URLs.
 
 3. Deploy again after repo or overlay changes:
 
    ```bash
-   thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage dev
+   thinkwork deploy
    ```
+
+   Run this from inside the generated deployment repo. From another directory,
+   pass `--customer {{CUSTOMER_SLUG}} --stage dev`.
 
 4. Log in to the deployed stack:
 

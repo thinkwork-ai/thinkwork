@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -113,7 +114,9 @@ export interface EnterpriseDeployDependencies {
   runBootstrap?: (
     options: EnterpriseBootstrapOptions,
   ) => Promise<EnterpriseBootstrapResult>;
-  promptInput?: (message: string) => Promise<string>;
+  promptInput?: (message: string, defaultValue?: string) => Promise<string>;
+  promptConfirm?: (message: string) => Promise<boolean>;
+  inferRepository?: (repoRoot: string) => string | undefined;
   repositoryClient?: EnterpriseRepositoryClient;
   gitClient?: EnterpriseGitClient;
   secretSetter?: EnterpriseSecretSetter;
@@ -172,6 +175,42 @@ export function findEnterpriseDeploymentRepo(
   }
 }
 
+export function inferGitHubRepositoryFromRemote(
+  repoRoot: string,
+): string | undefined {
+  let remote: string;
+  try {
+    remote = execFileSync(
+      "git",
+      ["-C", repoRoot, "remote", "get-url", "origin"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+  } catch {
+    return undefined;
+  }
+
+  return parseGitHubRepositoryRemote(remote);
+}
+
+export function parseGitHubRepositoryRemote(
+  remote: string,
+): string | undefined {
+  const normalized = remote.trim().replace(/\.git$/, "");
+  const patterns = [
+    /^git@github\.com:([^/]+)\/(.+)$/,
+    /^https:\/\/github\.com\/([^/]+)\/(.+)$/,
+    /^ssh:\/\/git@github\.com\/([^/]+)\/(.+)$/,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(normalized);
+    if (match) return `${match[1]}/${match[2]}`;
+  }
+  return undefined;
+}
+
 export function shouldUseEnterpriseDeploy(
   options: EnterpriseDeployOptions,
   deps: Pick<EnterpriseDeployDependencies, "cwd" | "loadDeployment"> = {},
@@ -192,8 +231,10 @@ export async function resolveEnterpriseDeployRequest(
   const cwd = deps.cwd ?? process.cwd();
   const repoContext = findEnterpriseDeploymentRepo(cwd);
   const loadDeployment = deps.loadDeployment ?? loadEnterpriseDeployment;
-  const stdinIsTty = deps.stdinIsTty ?? process.stdin.isTTY;
+  const stdinIsTty = deps.stdinIsTty ?? Boolean(process.stdin.isTTY);
   const component = options.component ?? "all";
+  const inferRepository =
+    deps.inferRepository ?? inferGitHubRepositoryFromRemote;
 
   const componentCheck = validateEnterpriseDeployComponent(component);
   if (!componentCheck.valid) {
@@ -204,14 +245,25 @@ export async function resolveEnterpriseDeployRequest(
     options.customer ??
     repoContext?.customerSlug ??
     (await promptWhenInteractive(
-      "Customer slug:",
+      "Customer slug (for example acme):",
       stdinIsTty,
       deps.promptInput,
       "Customer slug is required for enterprise deploy. Pass --customer <slug>.",
     ));
   const registry = loadDeployment(customerSlug);
   const stage =
-    options.stage ?? registry?.defaultStage ?? repoContext?.stages[0] ?? "dev";
+    options.stage ??
+    registry?.defaultStage ??
+    repoContext?.stages[0] ??
+    (options.bootstrap
+      ? await promptWhenInteractive(
+          "Deployment stage:",
+          stdinIsTty,
+          deps.promptInput,
+          "Deployment stage is required for enterprise bootstrap. Pass --stage <name>.",
+          "dev",
+        )
+      : "dev");
   const stageCheck = validateStage(stage);
   if (!stageCheck.valid) {
     throw new Error(stageCheck.error);
@@ -220,11 +272,13 @@ export async function resolveEnterpriseDeployRequest(
   const repository =
     options.repo ??
     registry?.repository ??
+    (repoContext ? inferRepository(repoContext.repoRoot) : undefined) ??
     (await promptWhenInteractive(
       "GitHub deployment repo (owner/name):",
       stdinIsTty,
       deps.promptInput,
       "GitHub repository is required for enterprise deploy. Pass --repo <owner/name>.",
+      `${customerSlug}/${customerSlug}-thinkwork-deploy`,
     ));
   const checkoutDir =
     options.checkoutDir ??
@@ -252,6 +306,7 @@ export async function runEnterpriseDeploy(
   deps: EnterpriseDeployDependencies = {},
 ): Promise<EnterpriseDeployResult> {
   const request = await resolveEnterpriseDeployRequest(options, deps);
+  const stdinIsTty = deps.stdinIsTty ?? Boolean(process.stdin.isTTY);
 
   if (!request.repository) {
     throw new Error(
@@ -302,6 +357,13 @@ export async function runEnterpriseDeploy(
       targetDir: request.checkoutDir,
       createRepo: request.createRepo,
       dryRun: options.dryRun,
+      promptCreateRepo:
+        !options.yes && !options.dryRun && stdinIsTty
+          ? async (repository) =>
+              (deps.promptConfirm ?? confirm)(
+                `  GitHub repository ${repository} does not exist. Create it as a private repository?`,
+              )
+          : undefined,
     },
     repositoryClient,
     gitClient,
@@ -363,11 +425,16 @@ async function promptWhenInteractive(
   stdinIsTty: boolean,
   promptInput: EnterpriseDeployDependencies["promptInput"],
   nonInteractiveError: string,
+  defaultValue?: string,
 ): Promise<string> {
   if (!stdinIsTty) throw new Error(nonInteractiveError);
-  if (promptInput) return promptInput(message);
+  if (promptInput) {
+    const value = await promptInput(message, defaultValue);
+    return value.trim() || defaultValue || value;
+  }
   const { input } = await import("@inquirer/prompts");
-  return input({ message });
+  const value = await input({ message, default: defaultValue });
+  return value.trim() || defaultValue || value;
 }
 
 function enterpriseBootstrapStages(requestedStage: string): string[] {

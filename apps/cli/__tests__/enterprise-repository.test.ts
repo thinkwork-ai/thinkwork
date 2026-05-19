@@ -85,6 +85,28 @@ describe("enterprise deployment repository lifecycle", () => {
     );
   });
 
+  it("can prompt to create a missing private repo during interactive bootstrap", async () => {
+    const repos = repoClient(false);
+    const promptCreateRepo = vi.fn(async () => true);
+
+    const result = await prepareEnterpriseRepository(
+      {
+        repository: "acme/deploy",
+        targetDir: "/tmp/deploy",
+        promptCreateRepo,
+      },
+      repos,
+      gitClient(false),
+    );
+
+    expect(result.steps.map((step) => step.status)).toEqual([
+      "created",
+      "created",
+    ]);
+    expect(promptCreateRepo).toHaveBeenCalledWith("acme/deploy");
+    expect(repos.createPrivateRepository).toHaveBeenCalledWith("acme/deploy");
+  });
+
   it("fails before mutation when the repo is missing and creation was not requested", async () => {
     await expect(
       prepareEnterpriseRepository(

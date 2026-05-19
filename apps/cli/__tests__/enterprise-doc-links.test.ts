@@ -91,7 +91,8 @@ describe("enterprise deployment docs and generated runbook", () => {
       "bootstrap -> workflow dispatch -> CI deploy -> overlay apply -> smoke summary",
     );
     expect(runbook).toContain("thinkwork deploy --bootstrap");
-    expect(runbook).toContain("thinkwork deploy --customer acme --stage dev");
+    expect(runbook).toContain("thinkwork deploy");
+    expect(runbook).toContain("--customer acme --stage dev");
     expect(runbook.indexOf("thinkwork deploy --bootstrap")).toBeLessThan(
       runbook.indexOf("gh workflow run deploy.yml"),
     );

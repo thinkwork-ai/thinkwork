@@ -25,6 +25,7 @@ export interface EnterpriseRepositoryPrepareOptions {
   targetDir: string;
   createRepo?: boolean;
   dryRun?: boolean;
+  promptCreateRepo?: (repository: string) => Promise<boolean>;
 }
 
 export interface EnterpriseRepositoryPrepareResult {
@@ -141,9 +142,14 @@ export async function prepareEnterpriseRepository(
   const exists = await client.repositoryExists(options.repository);
   const steps: BootstrapStepResult[] = [];
   if (!exists) {
-    if (!options.createRepo) {
+    const shouldCreate =
+      options.createRepo ||
+      (options.promptCreateRepo
+        ? await options.promptCreateRepo(options.repository)
+        : false);
+    if (!shouldCreate) {
       throw new Error(
-        `GitHub repository ${options.repository} does not exist. Pass --create-repo to create it.`,
+        `GitHub repository ${options.repository} does not exist. Pass --create-repo to create it or choose an existing repository.`,
       );
     }
     steps.push(await client.createPrivateRepository(options.repository));
