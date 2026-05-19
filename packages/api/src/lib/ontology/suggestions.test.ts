@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildOntologyScanDedupeKey,
+  collectOntologySuggestionSources,
   extractOntologySuggestionFeatures,
   parseOntologySynthesisResponse,
   startOntologySuggestionScanJob,
@@ -84,6 +85,22 @@ class FakeScanDb {
         return { where: () => Promise.resolve([]) };
       },
     };
+  }
+}
+
+class FakeSourceDb {
+  constructor(private selectRows: unknown[][]) {}
+
+  select() {
+    const rows = this.selectRows.shift() ?? [];
+    const chain = {
+      from: () => chain,
+      innerJoin: () => chain,
+      where: () => chain,
+      orderBy: () => chain,
+      limit: () => Promise.resolve(rows),
+    };
+    return chain;
   }
 }
 
@@ -257,6 +274,137 @@ describe("ontology suggestions", () => {
 
     expect(features).toEqual([]);
     expect(proposals).toEqual([]);
+  });
+
+  it("collects Hindsight memory records as ontology suggestion evidence", async () => {
+    const db = new FakeSourceDb([
+      [],
+      [],
+      [],
+      [{ id: "user-1", email: "eric@example.com", name: "Eric" }],
+    ]);
+    const memoryAdapter = {
+      kind: "hindsight" as const,
+      inspect: vi.fn().mockResolvedValue([
+        {
+          id: "mem-1",
+          tenantId: "tenant-1",
+          ownerType: "user",
+          ownerId: "user-1",
+          threadId: "thread-1",
+          kind: "unit",
+          sourceType: "thread_turn",
+          status: "active",
+          content: {
+            text: "Acme was promised a rollout plan by 5/24 with Sara as owner.",
+          },
+          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          createdAt: "2026-05-17T12:00:00.000Z",
+          metadata: { fact_type: "observation" },
+        },
+      ]),
+    };
+
+    const result = await collectOntologySuggestionSources({
+      tenantId: "tenant-1",
+      db: db as any,
+      memoryAdapter,
+    });
+
+    expect(memoryAdapter.inspect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        ownerType: "user",
+        ownerId: "user-1",
+      }),
+    );
+    expect(result.providerStatuses).toContainEqual({
+      provider: "hindsight",
+      state: "ok",
+      count: 1,
+    });
+    expect(result.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKind: "hindsight_memory_unit",
+          sourceRef: "mem-1",
+          text: expect.stringContaining("rollout plan"),
+          metadata: expect.objectContaining({
+            ownerId: "user-1",
+            threadId: "thread-1",
+            factType: "observation",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("includes unresolved ontology-gate rejections as suggestion evidence", async () => {
+    const db = new FakeSourceDb([
+      [],
+      [],
+      [
+        {
+          id: "mention-1",
+          alias: "Sprocket Inc",
+          mentionCount: 2,
+          suggestedType: "entity",
+          entitySubtype: "vendor",
+          sampleContexts: [
+            {
+              quote: "Rejected ontology candidate: Sprocket Inc",
+              source_ref: "r1",
+            },
+          ],
+          lastSeenAt: new Date("2026-05-17T12:00:00.000Z"),
+        },
+      ],
+      [],
+    ]);
+
+    const result = await collectOntologySuggestionSources({
+      tenantId: "tenant-1",
+      db: db as any,
+      memoryAdapter: {
+        kind: "hindsight" as const,
+        inspect: vi.fn().mockResolvedValue([]),
+      },
+    });
+
+    expect(result.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKind: "ontology_gate_rejection",
+          sourceRef: "mention-1",
+          text: expect.stringContaining("entity type vendor"),
+        }),
+      ]),
+    );
+
+    const features = extractOntologySuggestionFeatures({
+      observations: result.observations,
+      activeOntology: activeOntology(),
+    });
+    const proposals = await synthesizeOntologyChangeSetProposals({
+      tenantId: "tenant-1",
+      features,
+      activeOntology: activeOntology(),
+      llmEnabled: false,
+    });
+
+    expect(proposals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "rejected-vendor-entity-type",
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              itemType: "entity_type",
+              targetSlug: "vendor",
+            }),
+          ]),
+        }),
+      ]),
+    );
   });
 
   it("fails malformed model JSON instead of persisting partial suggestions", () => {
