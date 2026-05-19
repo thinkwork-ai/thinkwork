@@ -134,9 +134,13 @@ export async function runEnterpriseDestroy(
         "Refusing to destroy an enterprise stage without --yes in a non-interactive session.",
       );
     }
+    const impact =
+      `  This will dispatch operation=destroy to ${request.repository} and ` +
+      `permanently remove the "${request.stage}" stage stack for "${request.customerSlug}". ` +
+      "Customer-wide bootstrap resources such as the deployment repository, Terraform state bucket, artifact bucket, and OIDC trust are preserved.";
     const message = isProdLike(request.stage)
-      ? `  Stage "${request.stage}" is production-like. Destroy the enterprise stage stack for "${request.customerSlug}" via ${request.repository}?`
-      : `  Destroy enterprise stage "${request.stage}" for "${request.customerSlug}" via ${request.repository}?`;
+      ? `  Stage "${request.stage}" is production-like.\n${impact}\n  Continue?`
+      : `${impact}\n  Continue?`;
     const ok = await (deps.promptConfirm ?? confirm)(message);
     if (!ok) {
       throw new Error("Enterprise destroy aborted.");

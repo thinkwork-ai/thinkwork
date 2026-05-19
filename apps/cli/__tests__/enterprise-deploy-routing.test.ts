@@ -439,6 +439,49 @@ describe("top-level enterprise deploy routing", () => {
     );
   });
 
+  it("prompts for normal deploy values when run bare in an interactive deployment repo", async () => {
+    const root = tempDir();
+    writeDeploymentRepo(root);
+    const promptInput = vi.fn(async (_message, defaultValue) => {
+      return defaultValue ?? "";
+    });
+    const promptSelect = vi.fn(async (options) => options.defaultValue);
+    const promptConfirm = vi.fn(async () => false);
+
+    const request = await resolveEnterpriseDeployRequest(
+      { component: "all" },
+      {
+        stdinIsTty: true,
+        cwd: root,
+        loadDeployment: vi.fn(() => null),
+        inferRepository: vi.fn(() => "acme/deploy"),
+        promptInput,
+        promptSelect,
+        promptConfirm,
+      },
+    );
+
+    expect(request).toEqual(
+      expect.objectContaining({
+        customerSlug: "acme",
+        repository: "acme/deploy",
+        stage: "dev",
+        component: "all",
+        runSmokes: false,
+      }),
+    );
+    expect(promptInput).toHaveBeenCalledWith("Deployment stage:", "dev");
+    expect(promptSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Deployment component:",
+        defaultValue: "all",
+      }),
+    );
+    expect(promptConfirm).toHaveBeenCalledWith(
+      "Run smoke checks after deploy?",
+    );
+  });
+
   it("infers GitHub owner/name from common origin remote formats", () => {
     expect(parseGitHubRepositoryRemote("git@github.com:acme/deploy.git")).toBe(
       "acme/deploy",

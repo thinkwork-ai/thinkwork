@@ -83,6 +83,7 @@ export interface EnterpriseDeployRequest {
   checkoutDir: string;
   stage: string;
   component: EnterpriseDeployComponent;
+  runSmokes: boolean;
   bootstrap: boolean;
   wait: boolean;
   createRepo: boolean;
@@ -115,6 +116,11 @@ export interface EnterpriseDeployDependencies {
     options: EnterpriseBootstrapOptions,
   ) => Promise<EnterpriseBootstrapResult>;
   promptInput?: (message: string, defaultValue?: string) => Promise<string>;
+  promptSelect?: <T extends string>(options: {
+    message: string;
+    choices: Array<{ name: string; value: T; description?: string }>;
+    defaultValue: T;
+  }) => Promise<T>;
   promptConfirm?: (message: string) => Promise<boolean>;
   inferRepository?: (repoRoot: string) => string | undefined;
   repositoryClient?: EnterpriseRepositoryClient;
@@ -232,9 +238,13 @@ export async function resolveEnterpriseDeployRequest(
   const repoContext = findEnterpriseDeploymentRepo(cwd);
   const loadDeployment = deps.loadDeployment ?? loadEnterpriseDeployment;
   const stdinIsTty = deps.stdinIsTty ?? Boolean(process.stdin.isTTY);
-  const component = options.component ?? "all";
   const inferRepository =
     deps.inferRepository ?? inferGitHubRepositoryFromRemote;
+  const component = await resolveEnterpriseDeployComponent(
+    options,
+    stdinIsTty,
+    deps,
+  );
 
   const componentCheck = validateEnterpriseDeployComponent(component);
   if (!componentCheck.valid) {
@@ -251,19 +261,18 @@ export async function resolveEnterpriseDeployRequest(
       "Customer slug is required for enterprise deploy. Pass --customer <slug>.",
     ));
   const registry = loadDeployment(customerSlug);
+  const stageDefault =
+    registry?.defaultStage ?? repoContext?.stages[0] ?? "dev";
   const stage =
     options.stage ??
-    registry?.defaultStage ??
-    repoContext?.stages[0] ??
     (options.bootstrap
-      ? await promptWhenInteractive(
-          "Deployment stage:",
+      ? await resolveEnterpriseBootstrapStage(
+          registry,
+          repoContext,
           stdinIsTty,
-          deps.promptInput,
-          "Deployment stage is required for enterprise bootstrap. Pass --stage <name>.",
-          "dev",
+          deps,
         )
-      : "dev");
+      : await resolveEnterpriseDispatchStage(stageDefault, stdinIsTty, deps));
   const stageCheck = validateStage(stage);
   if (!stageCheck.valid) {
     throw new Error(stageCheck.error);
@@ -286,6 +295,12 @@ export async function resolveEnterpriseDeployRequest(
     registry?.targetDir ??
     repoContext?.repoRoot ??
     join(resolve(cwd), `${customerSlug}-thinkwork-deploy`);
+  const runSmokes = await resolveEnterpriseRunSmokes(
+    options,
+    component as EnterpriseDeployComponent,
+    stdinIsTty,
+    deps,
+  );
 
   return {
     customerSlug,
@@ -293,6 +308,7 @@ export async function resolveEnterpriseDeployRequest(
     checkoutDir: resolve(checkoutDir),
     stage,
     component: component as EnterpriseDeployComponent,
+    runSmokes,
     bootstrap: options.bootstrap === true,
     wait: options.wait !== false,
     createRepo: options.createRepo === true,
@@ -420,6 +436,109 @@ export async function runEnterpriseDeploy(
   };
 }
 
+async function resolveEnterpriseBootstrapStage(
+  registry: EnterpriseDeploymentConfig | null,
+  repoContext: EnterpriseDeploymentRepoContext | null,
+  stdinIsTty: boolean,
+  deps: EnterpriseDeployDependencies,
+): Promise<string> {
+  return (
+    registry?.defaultStage ??
+    repoContext?.stages[0] ??
+    (await promptWhenInteractive(
+      "Deployment stage:",
+      stdinIsTty,
+      deps.promptInput,
+      "Deployment stage is required for enterprise bootstrap. Pass --stage <name>.",
+      "dev",
+    ))
+  );
+}
+
+async function resolveEnterpriseDispatchStage(
+  defaultValue: string,
+  stdinIsTty: boolean,
+  deps: EnterpriseDeployDependencies,
+): Promise<string> {
+  if (!stdinIsTty) return defaultValue;
+  return promptWhenInteractive(
+    "Deployment stage:",
+    stdinIsTty,
+    deps.promptInput,
+    "Deployment stage is required for enterprise deploy. Pass --stage <name>.",
+    defaultValue,
+  );
+}
+
+async function resolveEnterpriseDeployComponent(
+  options: EnterpriseDeployOptions,
+  stdinIsTty: boolean,
+  deps: EnterpriseDeployDependencies,
+): Promise<string> {
+  const defaultValue = options.component ?? "all";
+  if (options.bootstrap || !stdinIsTty) return defaultValue;
+  if (
+    !ENTERPRISE_DEPLOY_COMPONENTS.includes(
+      defaultValue as EnterpriseDeployComponent,
+    )
+  ) {
+    return defaultValue;
+  }
+
+  return promptSelectWhenInteractive(
+    {
+      message: "Deployment component:",
+      choices: [
+        {
+          name: "all",
+          value: "all",
+          description:
+            "Deploy release artifacts, Terraform, runtimes, overlays, and smokes",
+        },
+        {
+          name: "foundation",
+          value: "foundation",
+          description: "Terraform apply only",
+        },
+        {
+          name: "artifacts",
+          value: "artifacts",
+          description: "Release artifacts, runtime images, and static bundles",
+        },
+        {
+          name: "overlays",
+          value: "overlays",
+          description: "Customer overlays only",
+        },
+        {
+          name: "smokes",
+          value: "smokes",
+          description: "Smoke checks against an existing stage",
+        },
+      ],
+      defaultValue: defaultValue as EnterpriseDeployComponent,
+    },
+    deps.promptSelect,
+  );
+}
+
+async function resolveEnterpriseRunSmokes(
+  options: EnterpriseDeployOptions,
+  component: EnterpriseDeployComponent,
+  stdinIsTty: boolean,
+  deps: EnterpriseDeployDependencies,
+): Promise<boolean> {
+  if (options.runSmokes !== undefined) return options.runSmokes;
+  if (options.bootstrap || !stdinIsTty) return true;
+  if (component !== "all" && component !== "smokes") return true;
+
+  return promptConfirmWhenInteractive(
+    "Run smoke checks after deploy?",
+    true,
+    deps.promptConfirm,
+  );
+}
+
 async function promptWhenInteractive(
   message: string,
   stdinIsTty: boolean,
@@ -435,6 +554,33 @@ async function promptWhenInteractive(
   const { input } = await import("@inquirer/prompts");
   const value = await input({ message, default: defaultValue });
   return value.trim() || defaultValue || value;
+}
+
+async function promptSelectWhenInteractive<T extends string>(
+  options: {
+    message: string;
+    choices: Array<{ name: string; value: T; description?: string }>;
+    defaultValue: T;
+  },
+  promptSelect: EnterpriseDeployDependencies["promptSelect"],
+): Promise<T> {
+  if (promptSelect) return promptSelect(options);
+  const { select } = await import("@inquirer/prompts");
+  return select({
+    message: options.message,
+    choices: options.choices,
+    default: options.defaultValue,
+  });
+}
+
+async function promptConfirmWhenInteractive(
+  message: string,
+  defaultValue: boolean,
+  promptConfirm: EnterpriseDeployDependencies["promptConfirm"],
+): Promise<boolean> {
+  if (promptConfirm) return promptConfirm(message);
+  const { confirm: confirmPrompt } = await import("@inquirer/prompts");
+  return confirmPrompt({ message, default: defaultValue });
 }
 
 function enterpriseBootstrapStages(requestedStage: string): string[] {
@@ -488,7 +634,7 @@ async function dispatchEnterpriseWorkflow(
       repository: request.repository,
       stage: request.stage,
       component: request.component,
-      runSmokes: options.runSmokes ?? true,
+      runSmokes: request.runSmokes,
       wait: request.wait,
       region: bootstrap?.plan.region ?? request.registry?.region,
     },
