@@ -63,7 +63,7 @@ export type WikiSectionSourceKind =
 	| "web_url"
 	| "mcp_url";
 export type WikiUnresolvedStatus = "open" | "promoted" | "ignored";
-export type WikiPageLinkKind = "reference" | "parent_of" | "child_of";
+export type WikiPageLinkKind = "reference" | "parent_of" | "child_of" | string;
 export type SectionPromotionStatus =
 	| "none"
 	| "candidate"
