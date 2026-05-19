@@ -79,6 +79,11 @@ Examples:
 			"--model <id>",
 			"Bedrock model ID override for the post-reset compile.",
 		)
+		.option("--dry-run", "Report affected rows without mutating or enqueuing.")
+		.option(
+			"--include-brain",
+			"Also delete tenant-shared ontology Brain derived rows before recompiling.",
+		)
 		.option("-y, --yes", "Skip the confirmation prompt.")
 		.option(
 			"--watch",
@@ -93,6 +98,9 @@ Examples:
 
   # Scripted (no prompt)
   $ thinkwork wiki rebuild --tenant acme --agent agt-xyz --yes --json
+
+  # Preview impact, including tenant Brain derived rows
+  $ thinkwork wiki rebuild --tenant acme --agent agt-xyz --include-brain --dry-run
 `,
 		)
 		.action(async (opts, cmd) => {

@@ -4,7 +4,6 @@ Compounding Memory (wiki) read path.
 v1 is strictly user-scoped: every read requires both `tenantId` and
 `userId`. See .prds/compounding-memory-scoping.md.
 """
-
 enum WikiPageType {
   ENTITY
   TOPIC
@@ -142,13 +141,25 @@ extend type Query {
   """
   Read one compiled page by slug. `userId` is required.
   """
-  wikiPage(tenantId: ID!, userId: ID, ownerId: ID, type: WikiPageType!, slug: String!): WikiPage
+  wikiPage(
+    tenantId: ID!
+    userId: ID
+    ownerId: ID
+    type: WikiPageType!
+    slug: String!
+  ): WikiPage
 
   """
   Postgres full-text search over compiled pages in a single (tenant, user)
   scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
   """
-  wikiSearch(tenantId: ID!, userId: ID, ownerId: ID, query: String!, limit: Int = 20): [WikiSearchResult!]!
+  wikiSearch(
+    tenantId: ID!
+    userId: ID
+    ownerId: ID
+    query: String!
+    limit: Int = 20
+  ): [WikiSearchResult!]!
 
   """
   Pages that link to the given page. Visibility is derived from the target
@@ -209,6 +220,9 @@ type WikiResetCursorResult {
   ownerId: ID! @deprecated(reason: "Use userId")
   cursorCleared: Boolean!
   pagesArchived: Int!
+  dryRun: Boolean!
+  brainIncluded: Boolean!
+  impact: AWSJSON
 }
 
 extend type Mutation {
@@ -222,7 +236,13 @@ extend type Mutation {
   path; if the invoke fails and a polling worker claims the job later, the
   compile falls back to the env-default model.
   """
-  compileWikiNow(tenantId: ID!, userId: ID, ownerId: ID, modelId: String): WikiCompileJob!
+  compileWikiNow(
+    tenantId: ID!
+    userId: ID
+    ownerId: ID
+    modelId: String
+    forceNew: Boolean = false
+  ): WikiCompileJob!
 
   """
   Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -249,5 +269,7 @@ extend type Mutation {
     userId: ID
     ownerId: ID
     force: Boolean = false
+    dryRun: Boolean = false
+    includeBrain: Boolean = false
   ): WikiResetCursorResult!
 }

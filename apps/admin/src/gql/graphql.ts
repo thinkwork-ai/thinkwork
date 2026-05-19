@@ -1409,6 +1409,19 @@ export type DelegateThreadInput = {
   threadId: Scalars['ID']['input'];
 };
 
+/**
+ * Result of `deleteScheduledJob`. `id` echoes the row that was removed;
+ * `ok` is false when no row matched (already deleted, or tenant mismatch).
+ * The EventBridge schedule, when one existed, is removed by the
+ * job-schedule-manager Lambda first; if that side-effect fails the
+ * resolver throws so the DB row is preserved and the caller can retry.
+ */
+export type DeleteScheduledJobResult = {
+  __typename?: 'DeleteScheduledJobResult';
+  id: Scalars['ID']['output'];
+  ok: Scalars['Boolean']['output'];
+};
+
 export type DeploymentStatus = {
   __typename?: 'DeploymentStatus';
   accountId?: Maybe<Scalars['String']['output']>;
@@ -1663,6 +1676,17 @@ export type InboxItemStatusEvent = {
   tenantId: Scalars['ID']['output'];
   title?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type InstallSkillInput = {
+  skillId: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+  /**
+   * Optional version pin. When omitted, the resolver reads the current
+   * version from `skill_catalog`. Re-installing an already-installed
+   * skill is an idempotent upsert (used by `skill upgrade` too).
+   */
+  version?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type InviteMemberInput = {
@@ -2039,6 +2063,7 @@ export type Mutation = {
   deleteRoutine: Scalars['Boolean']['output'];
   deleteRoutineTrigger: Scalars['Boolean']['output'];
   deleteRun: Scalars['Boolean']['output'];
+  deleteScheduledJob: DeleteScheduledJobResult;
   deleteTeam: Scalars['Boolean']['output'];
   deleteTenantCredential: Scalars['Boolean']['output'];
   deleteThread: Scalars['Boolean']['output'];
@@ -2052,6 +2077,13 @@ export type Mutation = {
   enqueueComputerTask: ComputerTask;
   escalateThread: Thread;
   importN8nRoutine: Routine;
+  /**
+   * Install a catalog skill into a tenant (upsert into `tenant_skills`).
+   * Idempotent: re-running with the same slug bumps the row's
+   * `version` + `updated_at`. Used by both `skill install` and `skill
+   * upgrade` on the CLI.
+   */
+  installSkill: TenantSkill;
   inviteMember: TenantMember;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
@@ -2099,6 +2131,7 @@ export type Mutation = {
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
+  runScheduledJob: RunScheduledJobResult;
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
   seedEvalTestCases: Scalars['Int']['output'];
@@ -2122,8 +2155,24 @@ export type Mutation = {
   syncTemplateToAgent: Agent;
   /** Sync template to every linked agent in a tenant. idempotencyKey optional. */
   syncTemplateToAllAgents: SyncSummary;
+  /**
+   * Inserts a synthetic delivery row for the webhook so an operator can
+   * confirm the config exists and the delivery-log pipeline is reachable.
+   * Does NOT trigger any downstream dispatch — the row carries
+   * `resolutionStatus: "test"`, so a follow-up
+   * `webhookDeliveries(webhookId)` query shows it. For end-to-end
+   * reachability checks against the public URL, curl the webhook's
+   * token endpoint directly.
+   */
+  testWebhook: WebhookDelivery;
   toggleAgentEmailChannel: AgentCapability;
   triggerRoutineRun: RoutineExecution;
+  /**
+   * Uninstall a skill from a tenant (delete the `tenant_skills` row).
+   * Returns true when a row was deleted, false when no matching install
+   * existed (idempotent no-op).
+   */
+  uninstallSkill: Scalars['Boolean']['output'];
   uninstallSlackWorkspace: SlackWorkspace;
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
@@ -2145,6 +2194,7 @@ export type Mutation = {
   updateRecipe: Recipe;
   updateRoutine: Routine;
   updateRoutineDefinition: RoutineDefinition;
+  updateScheduledJob: ScheduledJob;
   updateTeam: Team;
   updateTenant: Tenant;
   updateTenantCredential: TenantCredential;
@@ -2305,6 +2355,7 @@ export type MutationClaimVanityEmailAddressArgs = {
 
 
 export type MutationCompileWikiNowArgs = {
+  forceNew?: InputMaybe<Scalars['Boolean']['input']>;
   modelId?: InputMaybe<Scalars['String']['input']>;
   ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
@@ -2526,6 +2577,11 @@ export type MutationDeleteRunArgs = {
 };
 
 
+export type MutationDeleteScheduledJobArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationDeleteTeamArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2589,6 +2645,11 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationImportN8nRoutineArgs = {
   input: ImportN8nRoutineInput;
+};
+
+
+export type MutationInstallSkillArgs = {
+  input: InstallSkillInput;
 };
 
 
@@ -2811,7 +2872,9 @@ export type MutationRequestRevisionArgs = {
 
 
 export type MutationResetWikiCursorArgs = {
+  dryRun?: InputMaybe<Scalars['Boolean']['input']>;
   force?: InputMaybe<Scalars['Boolean']['input']>;
+  includeBrain?: InputMaybe<Scalars['Boolean']['input']>;
   ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   userId?: InputMaybe<Scalars['ID']['input']>;
@@ -2855,6 +2918,11 @@ export type MutationRotateTenantCredentialArgs = {
 
 export type MutationRunBrainPageEnrichmentArgs = {
   input: RunBrainPageEnrichmentInput;
+};
+
+
+export type MutationRunScheduledJobArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -2965,6 +3033,11 @@ export type MutationSyncTemplateToAllAgentsArgs = {
 };
 
 
+export type MutationTestWebhookArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationToggleAgentEmailChannelArgs = {
   agentId: Scalars['ID']['input'];
   enabled: Scalars['Boolean']['input'];
@@ -2974,6 +3047,12 @@ export type MutationToggleAgentEmailChannelArgs = {
 export type MutationTriggerRoutineRunArgs = {
   input?: InputMaybe<Scalars['AWSJSON']['input']>;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationUninstallSkillArgs = {
+  skillId: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -3095,6 +3174,12 @@ export type MutationUpdateRoutineArgs = {
 
 export type MutationUpdateRoutineDefinitionArgs = {
   input: UpdateRoutineDefinitionInput;
+};
+
+
+export type MutationUpdateScheduledJobArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateScheduledJobInput;
 };
 
 
@@ -3702,6 +3787,12 @@ export type Query = {
   userComputerAssignments: Array<UserComputerAssignment>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
+  /**
+   * List recent webhook deliveries for one webhook. Tenant-scoped via the
+   * webhook's row (cross-tenant ids return empty). Newest first. Hard
+   * cap of 500 rows; default 50.
+   */
+  webhookDeliveries: Array<WebhookDelivery>;
   webhooks: Array<Webhook>;
   /**
    * Pages that link to the given page. Visibility is derived from the target
@@ -4515,6 +4606,12 @@ export type QueryWebhookArgs = {
 };
 
 
+export type QueryWebhookDeliveriesArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  webhookId: Scalars['ID']['input'];
+};
+
+
 export type QueryWebhooksArgs = {
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -4904,6 +5001,23 @@ export type RunBrainPageEnrichmentInput = {
   query?: InputMaybe<Scalars['String']['input']>;
   sourceFamilies?: InputMaybe<Array<BrainEnrichmentSourceFamily>>;
   tenantId: Scalars['ID']['input'];
+};
+
+/**
+ * Result of `runScheduledJob`. Synchronously invokes the job-trigger
+ * Lambda with the same payload AWS Scheduler would have sent at the
+ * next firing — effectively "run now". `dispatched` is true when the
+ * Lambda accepted the invocation; downstream side effects (thread turn,
+ * routine execution, eval run) happen asynchronously and aren't part of
+ * this result. `statusCode` echoes the Lambda's response code so
+ * operators can distinguish accept (200/202) vs throttle / error.
+ */
+export type RunScheduledJobResult = {
+  __typename?: 'RunScheduledJobResult';
+  dispatched: Scalars['Boolean']['output'];
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  statusCode?: Maybe<Scalars['Int']['output']>;
 };
 
 export type RunbookCatalogItem = {
@@ -5508,6 +5622,25 @@ export type TenantSettings = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+/**
+ * Tenant-scoped skill installation row (mirrors the `tenant_skills`
+ * table). Distinct from `SkillCatalogItem` which is the
+ * display-projection used by the Customize UI — this type carries the
+ * version + source metadata operators need from the CLI.
+ */
+export type TenantSkill = {
+  __typename?: 'TenantSkill';
+  catalogVersion?: Maybe<Scalars['String']['output']>;
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  installedAt: Scalars['AWSDateTime']['output'];
+  skillId: Scalars['String']['output'];
+  source: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  version?: Maybe<Scalars['String']['output']>;
+};
+
 export type TenantToolInventory = {
   __typename?: 'TenantToolInventory';
   agents: Array<TenantToolInventoryAgent>;
@@ -5974,6 +6107,26 @@ export type UpdateRoutineInput = {
   type?: InputMaybe<Scalars['String']['input']>;
 };
 
+/**
+ * Partial-update input for `updateScheduledJob`. Any field set updates that
+ * column on the scheduled_jobs row. Changing `scheduleExpression`,
+ * `scheduleType`, `timezone`, or `enabled` propagates to AWS EventBridge
+ * via the job-schedule-manager Lambda (re-creates the underlying schedule
+ * when the expression changes; toggles state when only `enabled` changes).
+ * `config` is sent as an object — the resolver passes it through to the
+ * Lambda which JSON-serializes for the DB column.
+ */
+export type UpdateScheduledJobInput = {
+  config?: InputMaybe<Scalars['AWSJSON']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  prompt?: InputMaybe<Scalars['String']['input']>;
+  scheduleExpression?: InputMaybe<Scalars['String']['input']>;
+  scheduleType?: InputMaybe<Scalars['String']['input']>;
+  timezone?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type UpdateTeamInput = {
   budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
@@ -6191,6 +6344,41 @@ export type Webhook = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+/**
+ * A single inbound webhook request as recorded by `POST /webhooks/{token}`.
+ * Rows are PII-bearing (provider task titles, customer names, comment
+ * text in `bodyPreview`); 90-day retention is enforced by a cleanup
+ * Lambda. The GraphQL surface here intentionally redacts nothing — the
+ * endpoint is admin-tier via `requireAdminOrServiceCaller`.
+ */
+export type WebhookDelivery = {
+  __typename?: 'WebhookDelivery';
+  bodyPreview?: Maybe<Scalars['String']['output']>;
+  bodySha256?: Maybe<Scalars['String']['output']>;
+  bodySizeBytes?: Maybe<Scalars['Int']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  externalTaskId?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  isReplay: Scalars['Boolean']['output'];
+  normalizedKind?: Maybe<Scalars['String']['output']>;
+  providerEventId?: Maybe<Scalars['String']['output']>;
+  providerName?: Maybe<Scalars['String']['output']>;
+  providerUserId?: Maybe<Scalars['String']['output']>;
+  receivedAt: Scalars['AWSDateTime']['output'];
+  resolutionStatus: Scalars['String']['output'];
+  retryCount: Scalars['Int']['output'];
+  signatureStatus: Scalars['String']['output'];
+  sourceIp?: Maybe<Scalars['String']['output']>;
+  statusCode?: Maybe<Scalars['Int']['output']>;
+  targetType?: Maybe<Scalars['String']['output']>;
+  tenantId?: Maybe<Scalars['ID']['output']>;
+  threadCreated?: Maybe<Scalars['Boolean']['output']>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+  webhookId?: Maybe<Scalars['ID']['output']>;
+};
+
 export type WikiCompileJob = {
   __typename?: 'WikiCompileJob';
   attempt: Scalars['Int']['output'];
@@ -6363,7 +6551,10 @@ export type WikiPromotedFromSection = {
 
 export type WikiResetCursorResult = {
   __typename?: 'WikiResetCursorResult';
+  brainIncluded: Scalars['Boolean']['output'];
   cursorCleared: Scalars['Boolean']['output'];
+  dryRun: Scalars['Boolean']['output'];
+  impact?: Maybe<Scalars['AWSJSON']['output']>;
   /** @deprecated Use userId */
   ownerId: Scalars['ID']['output'];
   pagesArchived: Scalars['Int']['output'];

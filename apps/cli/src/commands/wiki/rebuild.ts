@@ -38,7 +38,11 @@ interface RebuildJson {
 	ok: boolean;
 	scope: { tenantId: string; tenantSlug: string; agentId: string };
 	pagesArchived: number | null;
+	brainPagesDeleted: number | null;
 	jobId: string | null;
+	dryRun: boolean;
+	brainIncluded: boolean;
+	impact: unknown | null;
 	error: string | null;
 }
 
@@ -63,14 +67,16 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 
 	// Confirm unless --yes or --json (JSON mode is scripted and should not
 	// hang on a prompt).
-	const skipConfirm = opts.yes === true || isJsonMode();
+	const dryRun = opts.dryRun === true;
+	const includeBrain = opts.includeBrain === true;
+	const skipConfirm = dryRun || opts.yes === true || isJsonMode();
 	if (!skipConfirm) {
 		if (!isInteractive()) {
 			requireTty("Rebuild confirmation (--yes)");
 		}
 		const ok = await promptOrExit(() =>
 			confirm({
-				message: `Rebuild wiki for ${agentLabel}? This archives every active page in the scope and recompiles from scratch.`,
+				message: `Rebuild wiki for ${agentLabel}? This archives every active page in the scope${includeBrain ? " and deletes tenant Brain derived rows" : ""}, then recompiles from scratch.`,
 				default: false,
 			}),
 		);
@@ -88,17 +94,30 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 				prefixText: "  ",
 			}).start();
 	let pagesArchived = 0;
+	let brainPagesDeleted = 0;
+	let resetImpact: unknown | null = null;
 	try {
 		const data = await gqlMutate(ctx.client, ResetWikiCursorDoc, {
 			tenantId: ctx.tenantId,
 			ownerId: agentId,
 			force: true,
+			dryRun,
+			includeBrain,
 		});
 		pagesArchived = data.resetWikiCursor.pagesArchived;
-		if (resetSpinner)
-			resetSpinner.succeed(
-				`${pagesArchived} page${pagesArchived === 1 ? "" : "s"} archived, cursor cleared.`,
-			);
+		brainPagesDeleted = extractImpactNumber(
+			data.resetWikiCursor.impact,
+			"brainPagesDeleted",
+		);
+		resetImpact = data.resetWikiCursor.impact ?? null;
+		if (resetSpinner) {
+			if (dryRun) resetSpinner.succeed("Dry-run impact report generated.");
+			else {
+				resetSpinner.succeed(
+					`${pagesArchived} page${pagesArchived === 1 ? "" : "s"} archived, cursor cleared.`,
+				);
+			}
+		}
 	} catch (err) {
 		const classified = classifyMutationError(err);
 		if (resetSpinner) resetSpinner.fail(`Reset failed: ${classified.message}`);
@@ -110,7 +129,11 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 				agentId,
 			},
 			pagesArchived: null,
+			brainPagesDeleted: null,
 			jobId: null,
+			dryRun,
+			brainIncluded: includeBrain,
+			impact: null,
 			error: classified.message,
 		};
 		if (isJsonMode()) printJson(result);
@@ -119,6 +142,27 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 			process.exit(2);
 		}
 		process.exit(1);
+	}
+
+	if (dryRun) {
+		const result: RebuildJson = {
+			ok: true,
+			scope: {
+				tenantId: ctx.tenantId,
+				tenantSlug: ctx.tenantSlug,
+				agentId,
+			},
+			pagesArchived,
+			brainPagesDeleted,
+			jobId: null,
+			dryRun: true,
+			brainIncluded: includeBrain,
+			impact: resetImpact,
+			error: null,
+		};
+		if (isJsonMode()) printJson(result);
+		else renderImpact(resetImpact, { tenantSlug: ctx.tenantSlug, agentLabel });
+		process.exit(0);
 	}
 
 	// ── Step 2: enqueue compile (reset has already committed) ────────────────
@@ -134,6 +178,7 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 			tenantId: ctx.tenantId,
 			ownerId: agentId,
 			modelId: opts.model ?? null,
+			forceNew: true,
 		});
 		jobId = data.compileWikiNow.id;
 		if (compileSpinner)
@@ -152,7 +197,11 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 				agentId,
 			},
 			pagesArchived,
+			brainPagesDeleted,
 			jobId: null,
+			dryRun: false,
+			brainIncluded: includeBrain,
+			impact: resetImpact,
 			error: classified.message,
 		};
 		if (isJsonMode()) printJson(result);
@@ -177,7 +226,11 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 			agentId,
 		},
 		pagesArchived,
+		brainPagesDeleted,
 		jobId,
+		dryRun: false,
+		brainIncluded: includeBrain,
+		impact: resetImpact,
 		error: null,
 	};
 	if (isJsonMode()) {
@@ -188,6 +241,7 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 			["Tenant", ctx.tenantSlug],
 			["Agent", agentLabel],
 			["Pages archived", String(pagesArchived)],
+			["Brain pages deleted", includeBrain ? String(brainPagesDeleted) : "—"],
 			["Compile job", jobId ?? "—"],
 			["Model override", opts.model ?? "(default)"],
 		]);
@@ -197,6 +251,58 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 	if (opts.watch && jobId) {
 		await watchRebuildJob(ctx, { agentId, jobId, agentLabel });
 	}
+}
+
+function renderImpact(
+	impact: unknown,
+	args: { tenantSlug: string; agentLabel: string },
+): void {
+	const before = readObject(readObject(impact, "before"), "wiki");
+	const brain = readObject(readObject(impact, "before"), "brain");
+	const openJobs = readObject(readObject(impact, "before"), "openJobs");
+	console.log("");
+	printKeyValue([
+		["Tenant", args.tenantSlug],
+		["Agent", args.agentLabel],
+		["Dry run", "yes"],
+		["Active wiki pages", metric(before, "active_pages")],
+		["Wiki sections", metric(before, "sections")],
+		["Wiki links", metric(before, "links")],
+		["Wiki aliases", metric(before, "aliases")],
+		["Unresolved mentions", metric(before, "unresolved_mentions")],
+		["Cursor present", metric(before, "has_cursor")],
+		["Pending jobs", metric(openJobs, "pendingJobs")],
+		["Running jobs", metric(openJobs, "runningJobs")],
+		["Brain pages", brain ? metric(brain, "pages") : "not included"],
+		["Brain sections", brain ? metric(brain, "sections") : "not included"],
+		[
+			"Brain section sources",
+			brain ? metric(brain, "section_sources") : "not included",
+		],
+	]);
+	printWarning("Dry run only. Re-run with --yes to archive/reset and enqueue.");
+}
+
+function extractImpactNumber(impact: unknown, key: string): number {
+	const value = readObject(impact)?.[key];
+	return typeof value === "number" ? value : 0;
+}
+
+function metric(obj: Record<string, unknown> | null, key: string): string {
+	if (!obj) return "—";
+	const value = obj[key];
+	if (value == null) return "—";
+	return String(value);
+}
+
+function readObject(value: unknown, key?: string): Record<string, unknown> | null {
+	const target =
+		key && value && typeof value === "object"
+			? (value as Record<string, unknown>)[key]
+			: value;
+	return target && typeof target === "object"
+		? (target as Record<string, unknown>)
+		: null;
 }
 
 async function watchRebuildJob(
@@ -239,4 +345,3 @@ async function watchRebuildJob(
 		process.exit(1);
 	}
 }
-
