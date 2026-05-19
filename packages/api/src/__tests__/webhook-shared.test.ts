@@ -302,6 +302,24 @@ describe("webhook resolver outcomes", () => {
 		expect(mockInsert).not.toHaveBeenCalled();
 	});
 
+	it("returns resolver-handled JSON without creating a skill run", async () => {
+		const handler = makeHandler(async () => ({
+			ok: true,
+			handled: true,
+			body: { threadId: "thread-1", idempotent: false },
+		}));
+
+		const res = await handler(makeEvent("{}"));
+
+		expect(res.statusCode).toBe(200);
+		expect(JSON.parse(res.body as string)).toEqual({
+			threadId: "thread-1",
+			idempotent: false,
+		});
+		expect(mockInsert).not.toHaveBeenCalled();
+		expect(mockInvokeSkillRun).not.toHaveBeenCalled();
+	});
+
 	it("maps resolver {ok:false, status} to HTTP status", async () => {
 		const handler = makeHandler(async () => ({
 			ok: false,

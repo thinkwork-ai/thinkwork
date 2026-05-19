@@ -137,8 +137,38 @@ type SpaceIntegration {
   updatedAt: AWSDateTime!
 }
 
+type StartCustomerOnboardingPayload {
+  thread: Thread!
+  threadId: ID!
+  idempotent: Boolean!
+  missingFields: [String!]!
+  linkedTasks: [CustomerOnboardingLinkedTaskResult!]!
+}
+
+type CustomerOnboardingLinkedTaskResult {
+  checklistItemId: ID!
+  title: String!
+  externalTaskId: String!
+  externalTaskUrl: String
+  status: LinkedTaskStatus!
+  blocked: Boolean!
+  syncStatus: LinkedTaskSyncStatus!
+}
+
+input StartCustomerOnboardingInput {
+  tenantId: ID!
+  spaceId: ID
+  opportunity: AWSJSON!
+}
+
 extend type Query {
   spaces(tenantId: ID!, status: SpaceStatus): [Space!]!
   space(id: ID!): Space
   customerOnboardingSpace(tenantId: ID!): Space
+}
+
+extend type Mutation {
+  startCustomerOnboarding(
+    input: StartCustomerOnboardingInput!
+  ): StartCustomerOnboardingPayload!
 }

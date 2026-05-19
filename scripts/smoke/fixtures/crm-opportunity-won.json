@@ -1,6 +1,28 @@
 {
   "event": "opportunity.won",
   "opportunityId": "smoke-opp-0001",
+  "opportunityUrl": "https://lastmile.example/opportunities/smoke-opp-0001",
   "customerId": "smoke-cust-0001",
-  "occurredAt": "2026-04-21T18:00:00Z"
+  "companyName": "Smoke Test Customer",
+  "salesRep": {
+    "name": "Smoke Sales",
+    "email": "sales@example.com"
+  },
+  "contacts": [
+    {
+      "name": "Smoke Buyer",
+      "email": "buyer@example.com"
+    }
+  ],
+  "dealValue": 100000,
+  "productPlan": "Enterprise",
+  "closeDate": "2026-05-19",
+  "documents": [
+    {
+      "title": "Signed order form",
+      "url": "https://docs.example/smoke-order-form"
+    }
+  ],
+  "notes": "Smoke fixture for deterministic Customer Onboarding Space kickoff.",
+  "occurredAt": "2026-05-19T15:00:00Z"
 }

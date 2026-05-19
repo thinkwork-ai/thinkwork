@@ -1381,6 +1381,17 @@ export type CreateWebhookInput = {
   tenantId: Scalars['ID']['input'];
 };
 
+export type CustomerOnboardingLinkedTaskResult = {
+  __typename?: 'CustomerOnboardingLinkedTaskResult';
+  blocked: Scalars['Boolean']['output'];
+  checklistItemId: Scalars['ID']['output'];
+  externalTaskId: Scalars['String']['output'];
+  externalTaskUrl?: Maybe<Scalars['String']['output']>;
+  status: LinkedTaskStatus;
+  syncStatus: LinkedTaskSyncStatus;
+  title: Scalars['String']['output'];
+};
+
 export type CustomizeBindings = {
   __typename?: 'CustomizeBindings';
   computerId: Scalars['ID']['output'];
@@ -2219,6 +2230,7 @@ export type Mutation = {
   setComputerAssignments: Array<ComputerAssignment>;
   setRoutineTrigger: RoutineTrigger;
   setUserComputerAssignments: Array<ComputerAssignment>;
+  startCustomerOnboarding: StartCustomerOnboardingPayload;
   startEvalRun: EvalRun;
   startOntologySuggestionScan: OntologySuggestionScanJob;
   startSkillRun: SkillRun;
@@ -3060,6 +3072,11 @@ export type MutationSetRoutineTriggerArgs = {
 
 export type MutationSetUserComputerAssignmentsArgs = {
   input: SetUserComputerAssignmentsInput;
+};
+
+
+export type MutationStartCustomerOnboardingArgs = {
+  input: StartCustomerOnboardingInput;
 };
 
 
@@ -5533,6 +5550,21 @@ export enum SpaceStatus {
   Active = 'ACTIVE',
   Archived = 'ARCHIVED'
 }
+
+export type StartCustomerOnboardingInput = {
+  opportunity: Scalars['AWSJSON']['input'];
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+export type StartCustomerOnboardingPayload = {
+  __typename?: 'StartCustomerOnboardingPayload';
+  idempotent: Scalars['Boolean']['output'];
+  linkedTasks: Array<CustomerOnboardingLinkedTaskResult>;
+  missingFields: Array<Scalars['String']['output']>;
+  thread: Thread;
+  threadId: Scalars['ID']['output'];
+};
 
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
