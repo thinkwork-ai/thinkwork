@@ -99,10 +99,30 @@ describe("ontology templates", () => {
       expect.arrayContaining([
         "key_people",
         "opportunities",
+        "support_cases",
         "open_commitments",
         "risks_and_landmines",
         "recent_activity",
       ]),
     );
+  });
+
+  it("includes seed templates for the broader business ontology", () => {
+    expect(Object.keys(SEED_ONTOLOGY_TEMPLATES)).toEqual(
+      expect.arrayContaining([
+        "support_case",
+        "commitment",
+        "risk",
+        "decision",
+      ]),
+    );
+    expect(
+      SEED_ONTOLOGY_TEMPLATES.commitment.sections.map(
+        (section) => section.slug,
+      ),
+    ).toEqual(expect.arrayContaining(["status", "evidence"]));
+    expect(
+      SEED_ONTOLOGY_TEMPLATES.risk.sections.map((section) => section.slug),
+    ).toContain("assessment");
   });
 });

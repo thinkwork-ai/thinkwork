@@ -42,6 +42,39 @@ Target branch: `main`
 
 ---
 
+## Current Run: Ontology-Gated Hindsight Wiki
+
+Plan: `docs/plans/2026-05-19-002-feat-ontology-gated-hindsight-wiki-plan.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: U1 — Active Ontology Compile Snapshot
+- Active branch: `codex/ontology-gate-u1`
+- Active worktree: `.Codex/worktrees/ontology-gate-u1`
+- Started: 2026-05-19
+- PR: pending
+- CI: pending
+
+### Progress Log
+
+| Date       | Unit | Branch                   | PR      | Status      | Verification                                                                                                                                                                                                                                                  | Notes                                                                                                                                                                                                                                    |
+| ---------- | ---- | ------------------------ | ------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-19 | U1   | `codex/ontology-gate-u1` | pending | Implemented | `pnpm --filter @thinkwork/api test -- src/lib/ontology/compile-snapshot.test.ts src/lib/ontology/templates.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm dlx prettier@3.5.3 --write ...`; `git diff --check` | Added the active ontology compile snapshot contract, conservative no-active-version behavior, approved-only sets/maps for entity types/facets/relationships/mappings, relationship endpoint helper, and broader business seed templates. |
+
+### CI / Merge Log
+
+- 2026-05-19: Started autopilot run. Read `AGENTS.md`, the ontology-gated Hindsight Wiki plan, the existing ontology change-set plan, and relevant wiki/ontology repository code.
+- 2026-05-19: Created `.Codex/worktrees/ontology-gate-u1` on branch `codex/ontology-gate-u1` from `origin/main`.
+- 2026-05-19: U1 local verification passed with focused ontology tests, API typecheck, full API test suite, Prettier write on touched files, and whitespace checks.
+
+### Blockers
+
+- None at this time.
+
+---
+
 ## Current Run: Requester Memory Processing Stabilization
 
 Plan: `docs/plans/2026-05-18-001-feat-requester-idle-memory-learning-plan.md`

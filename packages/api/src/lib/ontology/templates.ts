@@ -69,6 +69,11 @@ export const SEED_ONTOLOGY_TEMPLATES: Record<
         "hindsight_memory_unit",
         "memory_unit",
       ]),
+      seedSection("support_cases", "Support Cases", "operational", 35, [
+        "support_case",
+        "hindsight_memory_unit",
+        "memory_unit",
+      ]),
       seedSection("open_commitments", "Open Commitments", "activity", 40, [
         "support_case",
         "hindsight_memory_unit",
@@ -157,6 +162,97 @@ export const SEED_ONTOLOGY_TEMPLATES: Record<
       seedSection("recent_activity", "Recent Activity", "activity", 30, [
         "hindsight_memory_unit",
         "memory_unit",
+      ]),
+    ],
+  },
+  support_case: {
+    entityTypeSlug: "support_case",
+    entityTypeName: "Support Case",
+    broadType: "service_record",
+    description: "A customer issue, escalation, defect, or help request.",
+    guidanceNotes:
+      "Compile customer impact, current status, owner, severity, and the resolution trail from cited evidence.",
+    source: "seed",
+    sections: [
+      seedSection("overview", "Overview", "compiled", 10, [
+        "support_case",
+        "hindsight_memory_unit",
+        "memory_unit",
+      ]),
+      seedSection("status", "Status", "operational", 20, [
+        "support_case",
+        "hindsight_memory_unit",
+        "memory_unit",
+      ]),
+      seedSection("resolution_trail", "Resolution Trail", "activity", 30, [
+        "support_case",
+        "hindsight_memory_unit",
+        "memory_unit",
+      ]),
+    ],
+  },
+  commitment: {
+    entityTypeSlug: "commitment",
+    entityTypeName: "Commitment",
+    broadType: "promise",
+    description:
+      "A promise, follow-up, delivery obligation, or action item owed by or to the company.",
+    guidanceNotes:
+      "Capture owner, recipient, due date, current status, and source evidence.",
+    source: "seed",
+    sections: [
+      seedSection("status", "Status", "operational", 10, [
+        "support_case",
+        "hindsight_memory_unit",
+        "memory_unit",
+      ]),
+      seedSection("evidence", "Evidence", "activity", 20, [
+        "hindsight_memory_unit",
+        "memory_unit",
+        "support_case",
+      ]),
+    ],
+  },
+  risk: {
+    entityTypeSlug: "risk",
+    entityTypeName: "Risk",
+    broadType: "risk",
+    description:
+      "A business risk, objection, blocker, competitor threat, or delivery concern.",
+    guidanceNotes:
+      "Separate observed evidence from speculative impact and mitigation.",
+    source: "seed",
+    sections: [
+      seedSection("assessment", "Assessment", "compiled", 10, [
+        "support_case",
+        "hindsight_memory_unit",
+        "memory_unit",
+      ]),
+      seedSection("mitigation", "Mitigation", "activity", 20, [
+        "hindsight_memory_unit",
+        "memory_unit",
+        "support_case",
+      ]),
+    ],
+  },
+  decision: {
+    entityTypeSlug: "decision",
+    entityTypeName: "Decision",
+    broadType: "decision",
+    description:
+      "A durable decision with rationale, tradeoffs, and affected business objects.",
+    guidanceNotes:
+      "Prefer the most recent explicit decision evidence and preserve rationale.",
+    source: "seed",
+    sections: [
+      seedSection("summary", "Summary", "compiled", 10, [
+        "hindsight_memory_unit",
+        "memory_unit",
+      ]),
+      seedSection("rationale", "Rationale", "compiled", 20, [
+        "hindsight_memory_unit",
+        "memory_unit",
+        "artifact",
       ]),
     ],
   },
