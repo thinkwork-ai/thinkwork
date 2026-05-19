@@ -84,7 +84,7 @@ export function useToggleMutation(
   const toggle = useCallback(
     async (key: string, nextConnected: boolean) => {
       if (!computerId) {
-        toast.error("Select an assigned Computer before changing Customize.");
+        toast.error("Select an assigned workspace before changing Customize.");
         return;
       }
       setPendingSlugs((prev) => {

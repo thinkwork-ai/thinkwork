@@ -37,6 +37,51 @@ locals {
     ? "agentcore"
     : local.hindsight_enabled ? "hindsight" : "agentcore"
   )
+
+  # The end-user app is now canonically hosted at app.<domain>. Keep
+  # computer_domain as a compatibility fallback so older module callers and
+  # stages can upgrade without a flag-day.
+  end_user_app_domain          = var.app_domain != "" ? var.app_domain : var.computer_domain
+  end_user_app_certificate_arn = var.app_certificate_arn != "" ? var.app_certificate_arn : var.computer_certificate_arn
+  computer_compat_redirect_enabled = (
+    var.app_domain != "" &&
+    var.computer_domain != "" &&
+    var.computer_domain != local.end_user_app_domain
+  )
+  computer_compat_redirect_function_code = local.computer_compat_redirect_enabled ? trimspace(<<-EOF
+    function handler(event) {
+      var request = event.request;
+      var host = request.headers.host && request.headers.host.value;
+      if (host === "${var.computer_domain}") {
+        var parts = [];
+        var querystring = request.querystring || {};
+        for (var key in querystring) {
+          if (!querystring.hasOwnProperty(key)) continue;
+          var item = querystring[key];
+          if (item.multiValue) {
+            for (var i = 0; i < item.multiValue.length; i++) {
+              parts.push(key + '=' + item.multiValue[i].value);
+            }
+          } else if (item.value === '') {
+            parts.push(key);
+          } else {
+            parts.push(key + '=' + item.value);
+          }
+        }
+        return {
+          statusCode: 301,
+          statusDescription: 'Moved Permanently',
+          headers: {
+            location: {
+              value: "https://${local.end_user_app_domain}" + request.uri + (parts.length ? '?' + parts.join('&') : '')
+            }
+          }
+        };
+      }
+      return request;
+    }
+  EOF
+  ) : ""
 }
 
 ################################################################################
@@ -84,29 +129,31 @@ module "cognito" {
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
 
-  # Single ThinkworkAdmin Cognito client serves both admin and computer SPAs.
+  # Single ThinkworkAdmin Cognito client serves both admin and end-user SPAs.
   # apps/computer reuses this client by design — same humans, same tenant
   # invitations, single sign-in across both surfaces. Each origin (admin
-  # distribution, admin custom domain, computer distribution, computer custom
-  # domain, plus localhost dev for both) needs both bare and /auth/callback
-  # entries because the OAuth flow lands on /auth/callback and the SPA's
-  # post-OAuth redirect lands on the bare origin.
-  admin_callback_urls = concat(
+  # distribution, admin custom domain, app distribution, app custom domain,
+  # compatibility computer domain, plus localhost dev for both) needs both
+  # bare and /auth/callback entries because the OAuth flow lands on
+  # /auth/callback and the SPA's post-OAuth redirect lands on the bare origin.
+  admin_callback_urls = distinct(concat(
     var.admin_callback_urls,
     ["https://${module.admin_site.distribution_domain}", "https://${module.admin_site.distribution_domain}/auth/callback"],
     var.admin_domain != "" ? ["https://${var.admin_domain}", "https://${var.admin_domain}/auth/callback"] : [],
     ["https://${module.computer_site.distribution_domain}", "https://${module.computer_site.distribution_domain}/auth/callback"],
+    local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}", "https://${local.end_user_app_domain}/auth/callback"] : [],
     var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : [],
     ["http://localhost:5180", "http://localhost:5180/auth/callback"]
-  )
-  admin_logout_urls = concat(
+  ))
+  admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
     ["https://${module.admin_site.distribution_domain}"],
     var.admin_domain != "" ? ["https://${var.admin_domain}"] : [],
     ["https://${module.computer_site.distribution_domain}"],
+    local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}"] : [],
     var.computer_domain != "" ? ["https://${var.computer_domain}"] : [],
     ["http://localhost:5180"]
-  )
+  ))
   mobile_callback_urls = var.mobile_callback_urls
   mobile_logout_urls   = var.mobile_logout_urls
 }
@@ -585,7 +632,7 @@ module "admin_site" {
 }
 
 ################################################################################
-# Computer Static Site (apps/computer — end-user surface at computer.thinkwork.ai)
+# End-User App Static Site (apps/computer — canonical surface at app.thinkwork.ai)
 ################################################################################
 
 locals {
@@ -607,11 +654,15 @@ locals {
 module "computer_site" {
   source = "../app/static-site"
 
-  stage           = var.stage
-  site_name       = "computer"
-  is_spa          = true
-  custom_domain   = var.computer_domain
-  certificate_arn = var.computer_certificate_arn
+  stage         = var.stage
+  site_name     = "computer"
+  is_spa        = true
+  custom_domain = local.end_user_app_domain
+  custom_domain_aliases = local.computer_compat_redirect_enabled ? [
+    var.computer_domain,
+  ] : []
+  certificate_arn              = local.end_user_app_certificate_arn
+  viewer_request_function_code = local.computer_compat_redirect_function_code
 
   # Plan-012 U10: host CSP defends the parent origin. Iframe-shell's
   # own CSP (set on computer_sandbox_site below) carries the

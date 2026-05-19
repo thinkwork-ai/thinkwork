@@ -25,7 +25,7 @@ export function ApprovalQueue({
     return (
       <QueueState
         label="No pending approvals"
-        detail="The Computer will pause here when it needs your decision."
+        detail="ThinkWork will pause here when it needs your decision."
       />
     );
   }

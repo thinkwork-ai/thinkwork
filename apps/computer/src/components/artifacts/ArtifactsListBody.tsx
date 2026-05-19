@@ -2,10 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
-import {
-  type AppletPreviewNode,
-  toAppletPreview,
-} from "@/lib/app-artifacts";
+import { type AppletPreviewNode, toAppletPreview } from "@/lib/app-artifacts";
 import { computerArtifactRoute } from "@/lib/computer-routes";
 import { AppletsQuery } from "@/lib/graphql-queries";
 import { ArtifactsTable } from "./ArtifactsTable";
@@ -114,7 +111,7 @@ function ArtifactsListBodyView({
     : fetching
       ? "Loading artifacts…"
       : items.length === 0
-        ? "Ask Computer to create an artifact and it will appear here."
+        ? "Ask ThinkWork to create an artifact and it will appear here."
         : "No artifacts match your filters.";
 
   return (

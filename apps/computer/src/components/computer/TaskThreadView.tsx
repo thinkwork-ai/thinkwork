@@ -161,9 +161,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-    !showStreamingBuffer &&
-    !showProcessingShimmer,
+      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+      !showStreamingBuffer &&
+      !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -184,7 +184,7 @@ export function TaskThreadView({
           {transcriptMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
-              detail="Computer is preparing this thread."
+              detail="ThinkWork is preparing this thread."
             />
           ) : (
             transcriptMessages.map((message, index) => (
@@ -276,7 +276,7 @@ function TranscriptSegment({
               })}
               {streamState!.status === "streaming" ? (
                 <span
-                  aria-label="Computer is typing"
+                  aria-label="ThinkWork is typing"
                   className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground align-middle"
                 />
               ) : null}
@@ -1232,7 +1232,7 @@ function actionRowForEvent(event: TaskThreadEvent) {
   if (eventType.startsWith("computer_task_")) {
     return {
       title: eventType
-        .replace(/^computer_task_/, "Computer run ")
+        .replace(/^computer_task_/, "Workspace run ")
         .replace(/_/g, " "),
       detail,
       kind: "thinking" as const,
@@ -1369,7 +1369,7 @@ function turnSummary(turn: TaskThreadTurn, usage: Record<string, unknown>) {
     formatTurnDuration(turn),
     formatTokenUsage(usage),
   ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "Computer is working.";
+  return parts.length > 0 ? parts.join(" · ") : "ThinkWork is working.";
 }
 
 function formatInvocationSource(source: unknown) {

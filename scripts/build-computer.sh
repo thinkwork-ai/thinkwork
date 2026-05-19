@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and deploy the computer app to S3 + CloudFront.
+# Build and deploy the end-user app to S3 + CloudFront.
 #
 # Reads environment config from Terraform outputs, builds a production
 # Vite bundle, syncs to S3, and invalidates the CloudFront cache.
@@ -7,8 +7,9 @@
 # apps/computer reuses the existing ThinkworkAdmin Cognito client (same
 # users, single sign-in across both surfaces) so VITE_COGNITO_CLIENT_ID
 # is sourced from the admin_client_id Terraform output, not a separate
-# computer client. The terraform/modules/thinkwork concat() extends that
-# client's CallbackURLs to include computer.thinkwork.ai automatically.
+# app client. The terraform/modules/thinkwork concat() extends that
+# client's CallbackURLs to include app.thinkwork.ai and the compatibility
+# computer.thinkwork.ai redirect automatically.
 #
 # Usage:
 #   bash scripts/build-computer.sh <stage>
@@ -36,8 +37,8 @@ APPSYNC_API_KEY="$(tf_output_raw appsync_api_key)"
 USER_POOL_ID="$(tf_output_raw user_pool_id)"
 ADMIN_CLIENT_ID="$(tf_output_raw admin_client_id)"
 AUTH_DOMAIN="$(tf_output_raw auth_domain)"
-COMPUTER_BUCKET="$(tf_output_raw computer_bucket_name)"
-COMPUTER_CF_ID="$(tf_output_raw computer_distribution_id)"
+APP_BUCKET="$(tf_output_raw app_bucket_name 2>/dev/null || tf_output_raw computer_bucket_name)"
+APP_CF_ID="$(tf_output_raw app_distribution_id 2>/dev/null || tf_output_raw computer_distribution_id)"
 COMPUTER_SANDBOX_BUCKET="$(tf_output_raw computer_sandbox_bucket_name 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_CF_ID="$(tf_output_raw computer_sandbox_distribution_id 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_URL="$(tf_output_raw computer_sandbox_url 2>/dev/null || echo '')"
@@ -46,7 +47,7 @@ MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_raw mapbox_public_token)
 
 if [[ -z "$COMPUTER_SANDBOX_URL" || -z "$COMPUTER_SANDBOX_BUCKET" || -z "$COMPUTER_SANDBOX_CF_ID" ]]; then
   cat >&2 <<EOF
-Computer sandbox infrastructure is required for generated app rendering.
+Sandbox infrastructure is required for generated app rendering.
 Missing one or more Terraform outputs:
   computer_sandbox_url='${COMPUTER_SANDBOX_URL}'
   computer_sandbox_bucket_name='${COMPUTER_SANDBOX_BUCKET}'
@@ -58,7 +59,7 @@ fi
 
 if [[ -z "$COMPUTER_SANDBOX_PARENT_ORIGINS" ]]; then
   cat >&2 <<EOF
-Computer sandbox parent-origin allowlist is required.
+Sandbox parent-origin allowlist is required.
 Missing Terraform output: computer_sandbox_allowed_parent_origins
 EOF
   exit 1
@@ -70,7 +71,7 @@ COGNITO_DOMAIN="https://${AUTH_DOMAIN}.auth.${REGION}.amazoncognito.com"
 # Construct WebSocket URL from AppSync API URL
 APPSYNC_WS_URL="${APPSYNC_REALTIME_URL}"
 
-echo "▸ Building computer app ..."
+echo "▸ Building app ..."
 cd "$REPO_ROOT"
 
 # Write production env file.
@@ -108,15 +109,15 @@ VITE_ALLOWED_PARENT_ORIGINS="${COMPUTER_SANDBOX_PARENT_ORIGINS}" \
 VITE_MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN}" \
   pnpm --filter @thinkwork/computer build:iframe-shell
 
-echo "▸ Syncing to S3 bucket: $COMPUTER_BUCKET ..."
-aws s3 sync apps/computer/dist/ "s3://${COMPUTER_BUCKET}/" \
+echo "▸ Syncing to S3 bucket: $APP_BUCKET ..."
+aws s3 sync apps/computer/dist/ "s3://${APP_BUCKET}/" \
   --delete \
   --exclude "iframe-shell/*" \
   --region "$REGION"
 
-echo "▸ Invalidating CloudFront cache: $COMPUTER_CF_ID ..."
+echo "▸ Invalidating CloudFront cache: $APP_CF_ID ..."
 aws cloudfront create-invalidation \
-  --distribution-id "$COMPUTER_CF_ID" \
+  --distribution-id "$APP_CF_ID" \
   --paths "/*" \
   --region "$REGION" \
   --output text > /dev/null
@@ -133,9 +134,9 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-COMPUTER_URL="$(cd "$TF_DIR" && tf_output_raw computer_url)"
+APP_URL="$(cd "$TF_DIR" && (tf_output_raw app_url 2>/dev/null || tf_output_raw computer_url))"
 echo ""
-echo "✓ Computer deployed: ${COMPUTER_URL:-https://<pending>}"
+echo "✓ App deployed: ${APP_URL:-https://<pending>}"
 if [[ -n "$COMPUTER_SANDBOX_URL" ]]; then
   echo "✓ Sandbox iframe-shell deployed: $COMPUTER_SANDBOX_URL"
 fi

@@ -50,7 +50,7 @@ export function RunbookConfirmation({
   const summary =
     stringValue(data.summary) ??
     stringValue(data.description) ??
-    "Confirm before Computer starts this runbook.";
+    "Confirm before ThinkWork starts this runbook.";
   const isApproval = mode === "approval" && Boolean(runbookRunId);
   const effectiveDecision = decision ?? persistedDecision;
   const canDecide = isApproval && !effectiveDecision;

@@ -165,14 +165,14 @@ describe("useToggleMutation core", () => {
     expect(toastMessage).not.toHaveBeenCalled();
   });
 
-  it("missing computer id surfaces a toast and skips both mutations", async () => {
+  it("missing workspace id surfaces a toast and skips both mutations", async () => {
     setComputerId(null);
     const { result } = renderHook(() => useToggleMutation(opts));
     await act(async () => {
       await result.current.toggle("sales-prep", true);
     });
     expect(toastError).toHaveBeenCalledWith(
-      expect.stringMatching(/Select an assigned Computer/),
+      expect.stringMatching(/Select an assigned workspace/),
     );
     expect(enableExec).not.toHaveBeenCalled();
     expect(disableExec).not.toHaveBeenCalled();

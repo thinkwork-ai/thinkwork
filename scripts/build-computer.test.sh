@@ -28,4 +28,11 @@ if [[ ${#missing_outputs[@]} -gt 0 ]]; then
   exit 1
 fi
 
+for app_output in app_bucket_name app_distribution_id app_url; do
+  if ! grep -Eq "tf_output_raw[[:space:]]+${app_output}" "$BUILD_SCRIPT"; then
+    printf 'build-computer.sh should prefer Terraform output %s before legacy computer_* aliases\n' "$app_output" >&2
+    exit 1
+  fi
+done
+
 echo "build-computer tests passed"

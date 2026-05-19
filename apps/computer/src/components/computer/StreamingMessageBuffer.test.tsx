@@ -16,7 +16,7 @@ describe("StreamingMessageBuffer", () => {
     );
 
     expect(screen.getByText("Hello world")).toBeTruthy();
-    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+    expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
   });
 
   it("parses Markdown in streamed chunks", () => {
@@ -31,7 +31,7 @@ describe("StreamingMessageBuffer", () => {
 
     expect(screen.getByText("Bold")).toBeTruthy();
     expect(screen.getByText("link")).toBeTruthy();
-    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+    expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
   });
 
   it("uses the same tightened prose density modifiers as persisted messages", () => {
@@ -75,6 +75,6 @@ describe("StreamingMessageBuffer", () => {
         />,
       ),
     ).not.toThrow();
-    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+    expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
   });
 });

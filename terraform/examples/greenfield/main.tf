@@ -332,6 +332,7 @@ locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
   admin_domain    = var.www_domain != "" ? "admin.${var.www_domain}" : ""
+  app_domain      = var.www_domain != "" ? "app.${var.www_domain}" : ""
   computer_domain = var.www_domain != "" ? "computer.${var.www_domain}" : ""
   sandbox_domain  = var.www_domain != "" ? "sandbox.${var.www_domain}" : ""
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
@@ -417,8 +418,14 @@ module "thinkwork" {
   admin_domain          = local.www_dns_enabled ? local.admin_domain : ""
   admin_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
-  # Computer SPA custom domain (derived from www_domain — computer.<apex>).
-  # Same ACM cert covers it via the include_computer SAN gate on www_dns.
+  # End-user app custom domain (derived from www_domain — app.<apex>).
+  # Same ACM cert covers it via the include_app SAN gate on www_dns.
+  app_domain          = local.www_dns_enabled ? local.app_domain : ""
+  app_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
+  # Deprecated compatibility host (derived from www_domain — computer.<apex>).
+  # www-dns redirects this host to app.<apex> while old bookmarks/OAuth
+  # callbacks are still in circulation.
   computer_domain          = local.www_dns_enabled ? local.computer_domain : ""
   computer_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
@@ -427,7 +434,7 @@ module "thinkwork" {
   # the shared apex/www/docs/admin/computer/api certificate.
   computer_sandbox_domain                 = local.www_dns_enabled ? local.sandbox_domain : ""
   computer_sandbox_certificate_arn        = local.www_dns_enabled ? aws_acm_certificate_validation.computer_sandbox[0].certificate_arn : ""
-  computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.computer_domain},https://${local.admin_domain}" : ""
+  computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.app_domain},https://${local.admin_domain}" : ""
 
   # SES inbound email subdomain (delegated Route53 subzone).
   ses_inbound_domain = var.ses_inbound_domain
@@ -489,15 +496,14 @@ module "www_dns" {
   include_admin                = true
   admin_cloudfront_domain_name = module.thinkwork.admin_distribution_domain
 
-  # Computer: same cycle-avoidance pattern as docs/admin. Phase one of the
-  # two-phase first apply (#971) used a static empty string here to dodge an
-  # "Invalid count argument" plan error while module.thinkwork.computer_site
-  # didn't yet exist in state. Now that the distribution is created and its
-  # domain is known, this can read the real output — `!= ""` resolves to a
-  # static true and the Cloudflare CNAME for computer.<domain> gets created
-  # on this apply.
-  include_computer                = true
-  computer_cloudfront_domain_name = module.thinkwork.computer_distribution_domain
+  # End-user app: canonical app.<apex> host. The underlying source package is
+  # still apps/computer for compatibility.
+  include_app                = true
+  app_cloudfront_domain_name = module.thinkwork.app_distribution_domain
+
+  # Compatibility host: computer.<apex> redirects to app.<apex> while old
+  # bookmarks and OAuth callbacks are still in circulation.
+  include_computer = true
 
   # Computer iframe sandbox: same cycle-avoidance pattern as computer.
   include_computer_sandbox                = true
@@ -652,18 +658,33 @@ output "admin_bucket_name" {
   value       = module.thinkwork.admin_bucket_name
 }
 
+output "app_url" {
+  description = "End-user app URL"
+  value       = local.www_dns_enabled ? "https://${local.app_domain}" : "https://${module.thinkwork.app_distribution_domain}"
+}
+
+output "app_distribution_id" {
+  description = "CloudFront distribution ID for app (for cache invalidation)"
+  value       = module.thinkwork.app_distribution_id
+}
+
+output "app_bucket_name" {
+  description = "S3 bucket for app assets"
+  value       = module.thinkwork.app_bucket_name
+}
+
 output "computer_url" {
-  description = "Computer app URL"
-  value       = local.www_dns_enabled ? "https://${local.computer_domain}" : "https://${module.thinkwork.computer_distribution_domain}"
+  description = "Deprecated alias for app_url"
+  value       = local.www_dns_enabled ? "https://${local.app_domain}" : "https://${module.thinkwork.app_distribution_domain}"
 }
 
 output "computer_distribution_id" {
-  description = "CloudFront distribution ID for computer (for cache invalidation)"
+  description = "Deprecated alias for app_distribution_id"
   value       = module.thinkwork.computer_distribution_id
 }
 
 output "computer_bucket_name" {
-  description = "S3 bucket for computer app assets"
+  description = "Deprecated alias for app_bucket_name"
   value       = module.thinkwork.computer_bucket_name
 }
 

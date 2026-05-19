@@ -58,7 +58,9 @@ export function TaskDashboard({
 }: TaskDashboardProps) {
   usePageHeaderActions({
     title: "Threads",
-    subtitle: isLoading ? "Loading..." : `${totalCount} thread${totalCount === 1 ? "" : "s"}`,
+    subtitle: isLoading
+      ? "Loading..."
+      : `${totalCount} thread${totalCount === 1 ? "" : "s"}`,
   });
   const columns = useMemo<ColumnDef<TaskSummary>[]>(
     () => [
@@ -116,7 +118,7 @@ export function TaskDashboard({
         ) : (
           <section
             className="flex min-h-0 flex-1 flex-col overflow-hidden"
-            aria-label="Computer threads table"
+            aria-label="Threads table"
           >
             <DataTable
               columns={columns}
@@ -217,7 +219,9 @@ function StatusDot({
         : normalized === "in_progress" || normalized === "in review"
           ? "border-blue-500"
           : "border-yellow-500";
-  return <span className={`size-3.5 shrink-0 rounded-full border-2 ${color}`} />;
+  return (
+    <span className={`size-3.5 shrink-0 rounded-full border-2 ${color}`} />
+  );
 }
 
 function ownerLabel(thread: TaskSummary) {

@@ -82,6 +82,66 @@ describe("U3 — static-site response-headers extension", () => {
   });
 });
 
+describe("Spaces U1 — app domain compatibility", () => {
+  it("static-site supports compatibility aliases and a viewer-request function", () => {
+    const source = read(STATIC_SITE_MAIN);
+    expect(source).toMatch(/variable "custom_domain_aliases"/);
+    expect(source).toMatch(/variable "viewer_request_function_code"/);
+    expect(source).toMatch(
+      /resource "aws_cloudfront_function" "viewer_request"/,
+    );
+    expect(source).toMatch(/aliases\s*=\s*local\.custom_domain_aliases/);
+  });
+
+  it("thinkwork module exposes app domain inputs and keeps computer compatibility inputs", () => {
+    const source = read(THINKWORK_VARS);
+    expect(source).toMatch(/variable "app_domain"/);
+    expect(source).toMatch(/variable "app_certificate_arn"/);
+    expect(source).toMatch(/variable "computer_domain"/);
+    expect(source).toMatch(/Deprecated compatibility domain/);
+  });
+
+  it("thinkwork module attaches computer as an app alias with a 301 redirect function", () => {
+    const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(/end_user_app_domain\s*=/);
+    expect(source).toMatch(/computer_compat_redirect_enabled\s*=/);
+    expect(source).toMatch(/statusCode:\s*301/);
+    expect(source).toMatch(
+      /custom_domain_aliases\s*=\s*local\.computer_compat_redirect_enabled/,
+    );
+    expect(source).toMatch(
+      /viewer_request_function_code\s*=\s*local\.computer_compat_redirect_function_code/,
+    );
+  });
+
+  it("www-dns wires app.<apex> and the computer compatibility CNAME", () => {
+    const vars = read(WWW_DNS_VARS);
+    const main = read(WWW_DNS_MAIN);
+    expect(vars).toMatch(/variable "include_app"/);
+    expect(vars).toMatch(/variable "app_cloudfront_domain_name"/);
+    expect(main).toMatch(/var\.include_app \? \[local\.app\] : \[\]/);
+    expect(main).toMatch(/resource "cloudflare_record" "app"/);
+    expect(main).toMatch(
+      /content = var\.include_app \? var\.app_cloudfront_domain_name : var\.computer_cloudfront_domain_name/,
+    );
+  });
+
+  it("greenfield derives app.<apex> and exposes app outputs while preserving computer aliases", () => {
+    const source = read(GREENFIELD_MAIN);
+    expect(source).toMatch(
+      /app_domain\s*=\s*var\.www_domain != "" \? "app\.\$\{var\.www_domain\}" : ""/,
+    );
+    expect(source).toMatch(
+      /app_domain\s*=\s*local\.www_dns_enabled \? local\.app_domain : ""/,
+    );
+    expect(source).toMatch(/include_app\s*=\s*true/);
+    expect(source).toMatch(/app_cloudfront_domain_name\s*=/);
+    expect(source).toMatch(/output "app_url"/);
+    expect(source).toMatch(/output "computer_url"/);
+    expect(source).toMatch(/Deprecated alias for app_url/);
+  });
+});
+
 describe("U3 — computer_sandbox_site instance", () => {
   it('thinkwork main.tf declares module "computer_sandbox_site"', () => {
     const source = read(THINKWORK_MAIN);
@@ -194,7 +254,7 @@ describe("U3 — sandbox variables", () => {
       /computer_sandbox_certificate_arn\s*=\s*local\.www_dns_enabled \? aws_acm_certificate_validation\.computer_sandbox\[0\]\.certificate_arn : ""/,
     );
     expect(source).toMatch(
-      /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.computer_domain\},https:\/\/\$\{local\.admin_domain\}" : ""/,
+      /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.app_domain\},https:\/\/\$\{local\.admin_domain\}" : ""/,
     );
   });
 
@@ -315,7 +375,7 @@ describe("U11.5 — computer deploy script sandbox enforcement", () => {
     expect(source).toMatch(
       /COMPUTER_SANDBOX_URL="\$\(tf_output_raw computer_sandbox_url/,
     );
-    expect(source).toMatch(/Computer sandbox infrastructure is required/);
+    expect(source).toMatch(/Sandbox infrastructure is required/);
     expect(source).toMatch(/exit 1/);
     expect(source).not.toMatch(/APPLET_LEGACY_LOADER/);
     expect(source).not.toMatch(/VITE_APPLET_LEGACY_LOADER/);

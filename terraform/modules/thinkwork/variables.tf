@@ -350,14 +350,26 @@ variable "admin_certificate_arn" {
   default     = ""
 }
 
+variable "app_domain" {
+  description = "Canonical custom domain for the end-user app (e.g. app.thinkwork.ai). Leave empty to fall back to computer_domain for compatibility."
+  type        = string
+  default     = ""
+}
+
+variable "app_certificate_arn" {
+  description = "ACM certificate ARN for the canonical end-user app domain (us-east-1, required for CloudFront custom domains). Leave empty to fall back to computer_certificate_arn for compatibility."
+  type        = string
+  default     = ""
+}
+
 variable "computer_domain" {
-  description = "Custom domain for the computer SPA (e.g. computer.thinkwork.ai). Leave empty for CloudFront default."
+  description = "Deprecated compatibility domain for the end-user app (e.g. computer.thinkwork.ai). When app_domain is set, this domain should redirect to app_domain instead of serving the SPA directly."
   type        = string
   default     = ""
 }
 
 variable "computer_certificate_arn" {
-  description = "ACM certificate ARN for the computer domain (us-east-1, required for CloudFront custom domains)."
+  description = "Deprecated ACM certificate ARN for the compatibility computer domain. Prefer app_certificate_arn for new deployments."
   type        = string
   default     = ""
 }

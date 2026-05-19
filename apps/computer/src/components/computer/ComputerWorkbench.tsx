@@ -76,8 +76,8 @@ export function ComputerWorkbench() {
     if (!tenantId || !computerId) {
       setError(
         noAssignedComputers
-          ? "You need access to a shared Computer before starting work."
-          : "Your selected Computer is not ready yet. Try again in a moment.",
+          ? "You need access to a workspace before starting work."
+          : "Your selected workspace is not ready yet. Try again in a moment.",
       );
       return;
     }
@@ -107,7 +107,7 @@ export function ComputerWorkbench() {
           },
         });
         if (result.error) {
-          setError(result.error.message ?? "Failed to start Computer work");
+          setError(result.error.message ?? "Failed to start work");
           return;
         }
         const threadId = result.data?.createThread?.id;
@@ -129,7 +129,7 @@ export function ComputerWorkbench() {
         },
       });
       if (created.error) {
-        setError(created.error.message ?? "Failed to start Computer work");
+        setError(created.error.message ?? "Failed to start work");
         return;
       }
       const threadId = created.data?.createThread?.id;
@@ -193,7 +193,7 @@ export function ComputerWorkbench() {
       <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-5 px-4 py-8 sm:px-6">
         <header className="text-center">
           <h1 className="text-balance text-3xl font-normal leading-tight tracking-normal sm:text-4xl">
-            {selectedComputer?.name || "ThinkWork Computer"}
+            {selectedComputer?.name || "ThinkWork"}
           </h1>
         </header>
 
@@ -203,13 +203,13 @@ export function ComputerWorkbench() {
               value={selectedComputerId ?? undefined}
               onValueChange={setSelectedComputerId}
             >
-              <SelectTrigger aria-label="Select Computer">
-                <SelectValue placeholder="Select a Computer" />
+              <SelectTrigger aria-label="Select workspace">
+                <SelectValue placeholder="Select a workspace" />
               </SelectTrigger>
               <SelectContent>
                 {computers.map((computer) => (
                   <SelectItem key={computer.id} value={computer.id}>
-                    {computer.name || computer.slug || "Computer"}
+                    {computer.name || computer.slug || "Workspace"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -217,8 +217,8 @@ export function ComputerWorkbench() {
           </div>
         ) : noAssignedComputers && !computersFetching ? (
           <p className="mx-auto max-w-md text-center text-sm text-muted-foreground">
-            You do not have access to a shared Computer yet. Ask your tenant
-            operator to assign one before starting work.
+            You do not have access to a workspace yet. Ask your tenant operator
+            to assign one before starting work.
           </p>
         ) : null}
 
@@ -239,7 +239,7 @@ export function ComputerWorkbench() {
 }
 
 function titleFromPrompt(prompt: string): string {
-  const firstLine = prompt.split(/\n/)[0]?.trim() || "New Computer thread";
+  const firstLine = prompt.split(/\n/)[0]?.trim() || "New thread";
   return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
 }
 

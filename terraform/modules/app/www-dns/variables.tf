@@ -42,14 +42,26 @@ variable "admin_cloudfront_domain_name" {
   default     = ""
 }
 
+variable "include_app" {
+  description = "When true, add app.<domain> to the ACM cert SANs and create a Cloudflare CNAME for the canonical end-user app."
+  type        = bool
+  default     = false
+}
+
+variable "app_cloudfront_domain_name" {
+  description = "CloudFront distribution domain name for the canonical end-user app. Used as the target for the app.<domain> Cloudflare CNAME when include_app is true."
+  type        = string
+  default     = ""
+}
+
 variable "include_computer" {
-  description = "When true, add computer.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Same cycle-avoidance rationale as include_docs."
+  description = "When true, add computer.<domain> to the ACM cert SANs. With include_app=true this creates a compatibility redirect to app.<domain>; otherwise it creates the legacy CNAME to computer_cloudfront_domain_name."
   type        = bool
   default     = false
 }
 
 variable "computer_cloudfront_domain_name" {
-  description = "CloudFront distribution domain name for the computer SPA. Used as the target for the computer.<domain> Cloudflare CNAME when include_computer is true."
+  description = "Deprecated CloudFront distribution domain name for the legacy computer SPA. Only used when include_computer=true and include_app=false."
   type        = string
   default     = ""
 }

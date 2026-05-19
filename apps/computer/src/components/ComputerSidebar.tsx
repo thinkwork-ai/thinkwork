@@ -115,9 +115,6 @@ export function ComputerSidebar() {
                     <span className="truncate text-base font-semibold leading-none tracking-tight">
                       ThinkWork
                     </span>
-                    <span className="mt-0.5 truncate text-xs leading-none text-muted-foreground">
-                      Cloud Computer
-                    </span>
                   </div>
                 </Link>
               </SidebarMenuButton>

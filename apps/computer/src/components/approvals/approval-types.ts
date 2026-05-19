@@ -44,7 +44,7 @@ export function summarizeApproval(approval: ComputerApproval): ApprovalSummary {
       textValue(config.action_description) ||
       textValue(config.description) ||
       approval.description?.trim() ||
-      "Review the requested action before the Computer continues.",
+      "Review the requested action before ThinkWork continues.",
     evidence: extractEvidence(config),
     emailDraft,
     rawConfig: config,

@@ -177,7 +177,7 @@ describe("ComputerThreadDetailRoute", () => {
     expect(screen.getByText("Streaming through the route")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /thinking/i }));
     expect(screen.getByText("Browser unavailable")).toBeTruthy();
-    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+    expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
     expect(screen.queryByLabelText("Processing request")).toBeNull();
   });
 
