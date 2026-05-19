@@ -1253,6 +1253,7 @@ export async function upsertSections(
 	db: DbClient = defaultDb,
 ): Promise<void> {
 	for (const section of sections) {
+		const heading = normalizeSectionHeading(section.heading, section.section_slug);
 		// Belt-and-suspenders: strip `[[wikilink]]` brackets before persist.
 		// Prompts already forbid them, but models slip and they render as
 		// literal noise on mobile (links come from wiki_page_links, not
@@ -1276,7 +1277,7 @@ export async function upsertSections(
 			await db
 				.update(wikiPageSections)
 				.set({
-					heading: section.heading,
+					heading,
 					body_md: cleanBody,
 					position: section.position,
 					last_source_at: sql`now()` as any,
@@ -1289,7 +1290,7 @@ export async function upsertSections(
 				.values({
 					page_id: pageId,
 					section_slug: section.section_slug,
-					heading: section.heading,
+					heading,
 					body_md: cleanBody,
 					position: section.position,
 					last_source_at: sql`now()` as any,
@@ -2623,6 +2624,21 @@ export async function upsertPlace(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+export function normalizeSectionHeading(
+	rawHeading: unknown,
+	sectionSlug: string,
+): string {
+	const heading = typeof rawHeading === "string" ? rawHeading.trim() : "";
+	if (heading) return heading;
+
+	const fromSlug = sectionSlug
+		.replace(/[_-]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!fromSlug) return "Overview";
+	return fromSlug.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
 
 /**
  * Render page body markdown by concatenating sections ordered by `position`,
