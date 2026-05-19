@@ -18,6 +18,7 @@ const {
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
   mockRequireTenantAdmin,
+  mockHasSpaceMemberAccess,
   threadsTable,
 } = vi.hoisted(() => {
   const captured: unknown[][] = [];
@@ -42,6 +43,7 @@ const {
   const threads = {
     tenant_id: tableCol("threads.tenant_id"),
     computer_id: tableCol("threads.computer_id"),
+    space_id: tableCol("threads.space_id"),
     user_id: tableCol("threads.user_id"),
     status: tableCol("threads.status"),
     title: tableCol("threads.title"),
@@ -86,6 +88,7 @@ const {
         throw new GraphQLError("Tenant admin role required");
       },
     ),
+    mockHasSpaceMemberAccess: vi.fn(async () => true),
     mockAsc: asc,
     mockDesc: desc,
     threadsTable: threads,
@@ -114,6 +117,10 @@ vi.mock("../core/authz.js", () => ({
     ctx?.auth?.authType === "apikey" || ctx?.auth?.authType === "service",
 }));
 
+vi.mock("../spaces/shared.js", () => ({
+  hasSpaceMemberAccess: mockHasSpaceMemberAccess,
+}));
+
 import { threadsPaged_query } from "./threadsPaged.query.js";
 
 const TENANT = "tenant-a";
@@ -129,6 +136,8 @@ beforeEach(() => {
   mockRequireTenantAdmin.mockRejectedValue(
     new GraphQLError("Tenant admin role required"),
   );
+  mockHasSpaceMemberAccess.mockReset();
+  mockHasSpaceMemberAccess.mockResolvedValue(true);
 });
 
 describe("threadsPaged filter assembly", () => {
@@ -201,5 +210,61 @@ describe("threadsPaged filter assembly", () => {
       (c: any) => c?.__eq?.field === threadsTable.user_id,
     );
     expect(hasUser).toBe(false);
+  });
+
+  it("adds a space_id condition when spaceId is set", async () => {
+    await threadsPaged_query(
+      {},
+      { tenantId: TENANT, spaceId: "space-onboarding" },
+      {} as any,
+    );
+    const allConditions = capturedConditions.flat();
+    const hasSpace = allConditions.some(
+      (c: any) =>
+        c?.__eq?.field === threadsTable.space_id &&
+        c?.__eq?.value === "space-onboarding",
+    );
+    expect(hasSpace).toBe(true);
+  });
+
+  it("lets non-admin Space members list collaborative Space threads without a user_id filter", async () => {
+    await threadsPaged_query(
+      {},
+      { tenantId: TENANT, spaceId: "space-onboarding" },
+      { auth: { authType: "cognito" } } as any,
+    );
+    expect(mockHasSpaceMemberAccess).toHaveBeenCalledWith(
+      { auth: { authType: "cognito" } },
+      TENANT,
+      "space-onboarding",
+    );
+    const allConditions = capturedConditions.flat();
+    const hasSpace = allConditions.some(
+      (c: any) =>
+        c?.__eq?.field === threadsTable.space_id &&
+        c?.__eq?.value === "space-onboarding",
+    );
+    const hasUser = allConditions.some(
+      (c: any) => c?.__eq?.field === threadsTable.user_id,
+    );
+    expect(hasSpace).toBe(true);
+    expect(hasUser).toBe(false);
+  });
+
+  it("returns an empty page when a Cognito caller lacks Space access", async () => {
+    mockHasSpaceMemberAccess.mockResolvedValue(false);
+
+    const result = await threadsPaged_query(
+      {},
+      { tenantId: TENANT, spaceId: "space-locked" },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(result).toEqual({ items: [], totalCount: 0 });
+    const allConditions = capturedConditions.flat();
+    const hasSpace = allConditions.some(
+      (c: any) => c?.__eq?.field === threadsTable.space_id,
+    );
+    expect(hasSpace).toBe(false);
   });
 });

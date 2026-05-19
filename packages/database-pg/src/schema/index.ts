@@ -28,6 +28,7 @@ export * from "./thread-idle-learning";
 export * from "./knowledge-bases";
 export * from "./email-channel";
 export * from "./thread-dependencies";
+export * from "./thread-participants";
 export * from "./retry-queue";
 export * from "./artifacts";
 export * from "./webhooks";

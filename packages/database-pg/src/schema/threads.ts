@@ -17,8 +17,10 @@ import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
 import { agents } from "./agents";
 import { computers } from "./computers";
+import { spaces } from "./spaces";
 import { messages } from "./messages";
 import { threadDependencies } from "./thread-dependencies";
+import { threadParticipants } from "./thread-participants";
 
 // ---------------------------------------------------------------------------
 // 6.1 — threads
@@ -35,6 +37,9 @@ export const threads = pgTable(
 			.notNull(),
 		agent_id: uuid("agent_id").references(() => agents.id),
 		computer_id: uuid("computer_id").references(() => computers.id),
+		space_id: uuid("space_id").references(() => spaces.id, {
+			onDelete: "set null",
+		}),
 		user_id: uuid("user_id").references(() => users.id),
 		number: integer("number").notNull(),
 		identifier: text("identifier"),
@@ -111,6 +116,11 @@ export const threads = pgTable(
 		index("idx_threads_tenant_channel").on(table.tenant_id, table.channel),
 		index("idx_threads_tenant_user").on(table.tenant_id, table.user_id),
 		index("idx_threads_computer").on(table.tenant_id, table.computer_id),
+		index("idx_threads_tenant_space_updated").on(
+			table.tenant_id,
+			table.space_id,
+			table.updated_at,
+		),
 	],
 );
 
@@ -219,6 +229,10 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
 		fields: [threads.computer_id],
 		references: [computers.id],
 	}),
+	space: one(spaces, {
+		fields: [threads.space_id],
+		references: [spaces.id],
+	}),
 	user: one(users, {
 		fields: [threads.user_id],
 		references: [users.id],
@@ -236,6 +250,7 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
 	messages: many(messages),
 	attachments: many(threadAttachments),
 	labelAssignments: many(threadLabelAssignments),
+	participants: many(threadParticipants),
 	// PRD-09: Dependency relations
 	dependencies: many(threadDependencies, { relationName: "dependencyBlockedBy" }),
 	blocks: many(threadDependencies, { relationName: "dependencyBlocks" }),

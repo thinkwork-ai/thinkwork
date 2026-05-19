@@ -15,6 +15,7 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 import { requireTenantAdmin, hasServiceSecret } from "../core/authz.js";
+import { hasSpaceMemberAccess } from "../spaces/shared.js";
 
 export const threadsPaged_query = async (
   _parent: any,
@@ -41,7 +42,17 @@ export const threadsPaged_query = async (
   }
 
   const conditions: any[] = [eq(threads.tenant_id, args.tenantId)];
-  if (authType === "cognito" && !isTenantAdminCaller) {
+  if (args.spaceId) {
+    if (
+      authType === "cognito" &&
+      !(await hasSpaceMemberAccess(ctx, args.tenantId, args.spaceId))
+    ) {
+      return { items: [], totalCount: 0 };
+    }
+    conditions.push(eq(threads.space_id, args.spaceId));
+  }
+
+  if (authType === "cognito" && !isTenantAdminCaller && !args.spaceId) {
     if (!callerUserId) return { items: [], totalCount: 0 };
     conditions.push(eq(threads.user_id, callerUserId));
   }
