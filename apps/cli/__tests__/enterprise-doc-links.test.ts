@@ -61,6 +61,12 @@ describe("enterprise deployment docs and generated runbook", () => {
     );
     expect(enterpriseDoc).toContain("--repo acme-corp/acme-thinkwork-deploy");
     expect(enterpriseDoc).not.toContain("--github-owner");
+    expect(enterpriseDoc).toMatch(
+      /thinkwork login[\s\S]*thinkwork deploy --bootstrap/,
+    );
+    expect(enterpriseDoc.indexOf("thinkwork deploy --bootstrap")).toBeLessThan(
+      enterpriseDoc.indexOf("gh workflow run deploy.yml"),
+    );
     expect(enterpriseDoc).toContain(
       "full ThinkWork source fork is break-glass debt",
     );
@@ -83,6 +89,11 @@ describe("enterprise deployment docs and generated runbook", () => {
 
     expect(runbook).toContain(
       "bootstrap -> workflow dispatch -> CI deploy -> overlay apply -> smoke summary",
+    );
+    expect(runbook).toContain("thinkwork deploy --bootstrap");
+    expect(runbook).toContain("thinkwork deploy --customer acme --stage dev");
+    expect(runbook.indexOf("thinkwork deploy --bootstrap")).toBeLessThan(
+      runbook.indexOf("gh workflow run deploy.yml"),
     );
     expect(runbook).toContain("Never commit secrets");
     expect(runbook).toContain("GitHub Environment secrets");

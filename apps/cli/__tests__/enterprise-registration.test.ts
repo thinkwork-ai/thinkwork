@@ -13,6 +13,8 @@ describe("enterprise command registration", () => {
       (cmd) => cmd.name() === "enterprise",
     );
     expect(enterprise).toBeDefined();
+    expect(enterprise!.description()).toContain("Low-level");
+    expect(enterprise!.description()).toContain("thinkwork deploy --bootstrap");
     const bootstrap = enterprise?.commands.find(
       (cmd) => cmd.name() === "bootstrap",
     );
