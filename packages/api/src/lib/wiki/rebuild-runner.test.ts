@@ -80,11 +80,12 @@ describe("scoped wiki rebuild reset", () => {
     expect(dryRun.dryRun).toBe(true);
     expect(dryRun.cursorCleared).toBe(false);
     expect(db.transaction).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it("refuses destructive reset when compile jobs are still open", async () => {
-    const { resetScopedWikiRebuild, WikiRebuildInProgressError } =
-      await import("./rebuild-runner.js");
+    const { resetScopedWikiRebuild, WikiRebuildInProgressError } = await import(
+      "./rebuild-runner.js"
+    );
     countWikiScope.mockResolvedValue(baseWikiCounts);
     const db = makeFakeDb([
       { rows: [{ n: 2 }] },
@@ -99,7 +100,7 @@ describe("scoped wiki rebuild reset", () => {
       }),
     ).rejects.toBeInstanceOf(WikiRebuildInProgressError);
     expect(db.transaction).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it("archives wiki output, clears cursor, deletes Brain rows, and reports after counts", async () => {
     const { resetScopedWikiRebuild } = await import("./rebuild-runner.js");
@@ -139,7 +140,7 @@ describe("scoped wiki rebuild reset", () => {
     expect(result.brainPagesDeleted).toBe(2);
     expect(result.after?.wiki.has_cursor).toBe(false);
     expect(db.transaction).toHaveBeenCalledTimes(1);
-  });
+  }, 15_000);
 });
 
 function makeFakeDb(

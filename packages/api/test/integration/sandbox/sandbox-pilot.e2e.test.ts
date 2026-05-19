@@ -169,8 +169,14 @@ async function createThread(
   const db = await openDb(env);
   try {
     const result = await db.execute(
-      sql`INSERT INTO threads (tenant_id, agent_id, user_id, number, identifier, title, status, created_by_type, created_by_id, created_at, updated_at)
-          VALUES (${fixtures.tenantId}::uuid, ${fixtures.agentId}::uuid, ${fixtures.userId}::uuid, 1, ${`${fixtures.names.tenantSlug}-1`}, ${"sandbox-e2e thread"}, 'active', 'user', ${fixtures.userId}, NOW(), NOW())
+      sql`WITH default_space AS (
+            INSERT INTO spaces (tenant_id, slug, name, description, status, kind, template_key)
+            VALUES (${fixtures.tenantId}::uuid, 'general', 'General', 'Default Space for sandbox E2E Threads.', 'active', 'custom', 'general')
+            ON CONFLICT (tenant_id, slug) DO UPDATE SET status = 'active', updated_at = NOW()
+            RETURNING id
+          )
+          INSERT INTO threads (tenant_id, agent_id, user_id, space_id, number, identifier, title, status, created_by_type, created_by_id, created_at, updated_at)
+          VALUES (${fixtures.tenantId}::uuid, ${fixtures.agentId}::uuid, ${fixtures.userId}::uuid, (SELECT id FROM default_space), 1, ${`${fixtures.names.tenantSlug}-1`}, ${"sandbox-e2e thread"}, 'active', 'user', ${fixtures.userId}, NOW(), NOW())
           RETURNING id`,
     );
     const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);

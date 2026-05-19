@@ -31,6 +31,7 @@ export const ComputerThreadsQuery = gql`
       userId
       number
       identifier
+      spaceId
       title
       status
       channel

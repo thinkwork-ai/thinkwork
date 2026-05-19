@@ -41,7 +41,7 @@ type Thread {
   tenantId: ID!
   agentId: ID
   computerId: ID
-  spaceId: ID
+  spaceId: ID!
   userId: ID
   agent: Agent
   computer: Computer
@@ -232,7 +232,7 @@ type ThreadParticipant {
   id: ID!
   tenantId: ID!
   threadId: ID!
-  spaceId: ID
+  spaceId: ID!
   participantType: ThreadParticipantType!
   userId: ID
   agentId: ID

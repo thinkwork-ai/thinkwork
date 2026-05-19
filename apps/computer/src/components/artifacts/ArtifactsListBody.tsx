@@ -157,7 +157,7 @@ function ArtifactsListBodyView({
 export function ArtifactsCreateAction() {
   return (
     <Button asChild size="sm">
-      <Link to="/new">Create artifact</Link>
+      <Link to="/spaces">Open Spaces</Link>
     </Button>
   );
 }

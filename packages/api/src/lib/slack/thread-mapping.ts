@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   messages,
   slackThreads,
+  spaces,
   tenants,
   threads,
 } from "@thinkwork/database-pg/schema";
@@ -158,6 +159,31 @@ function createDrizzleSlackThreadMappingStore(
       return row ?? null;
     },
     async createThread(input) {
+      const [space] = await dbClient
+        .insert(spaces)
+        .values({
+          tenant_id: input.tenantId,
+          slug: "general",
+          name: "General",
+          description:
+            "Default Space for conversations that are not part of a configured workflow.",
+          prompt:
+            "Use this Space for general collaboration, ad hoc questions, and Threads that do not belong to a specialized workflow.",
+          status: "active",
+          kind: "custom",
+          template_key: "general",
+          config: {
+            workflow: "general",
+            version: 1,
+            source: "slack_thread_mapping",
+          },
+        })
+        .onConflictDoUpdate({
+          target: [spaces.tenant_id, spaces.slug],
+          set: { status: "active", updated_at: new Date() },
+        })
+        .returning({ id: spaces.id });
+      if (!space) throw new Error("Default Space not found");
       const [tenant] = await dbClient
         .update(tenants)
         .set({ issue_counter: sql`${tenants.issue_counter} + 1` })
@@ -169,6 +195,7 @@ function createDrizzleSlackThreadMappingStore(
         .values({
           tenant_id: input.tenantId,
           computer_id: input.computerId,
+          space_id: space.id,
           user_id: input.actorId,
           number: tenant.nextNumber,
           identifier: `SLACK-${tenant.nextNumber}`,

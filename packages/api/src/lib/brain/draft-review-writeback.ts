@@ -33,22 +33,23 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GraphQLError } from "graphql";
 
 import {
-	agentWorkspaceEvents,
-	agentWorkspaceRuns,
-	agents,
-	and,
-	db as defaultDb,
-	eq,
-	messages,
-	sql,
-	tenants,
-	threadTurns,
-	threads,
+  agentWorkspaceEvents,
+  agentWorkspaceRuns,
+  agents,
+  and,
+  db as defaultDb,
+  eq,
+  messages,
+  sql,
+  spaces,
+  tenants,
+  threadTurns,
+  threads,
 } from "../../graphql/utils.js";
 import { sendExternalTaskPush } from "../push-notifications.js";
 import type {
-	DraftCompileCandidate,
-	DraftCompileResult,
+  DraftCompileCandidate,
+  DraftCompileResult,
 } from "../wiki/draft-compile.js";
 import type { WikiCompileJobRow } from "../wiki/repository.js";
 
@@ -57,33 +58,33 @@ type DbLike = typeof defaultDb;
 export type DraftWritebackTargetTable = "wiki_pages" | "tenant_entity_pages";
 
 export interface DraftWritebackContext {
-	job: WikiCompileJobRow;
-	pageTable: DraftWritebackTargetTable;
-	pageId: string;
-	pageTitle: string;
-	candidates: DraftCompileCandidate[];
-	/**
-	 * Optional: the agent the user was viewing when they triggered enrichment.
-	 * When present + valid for this tenant, the writeback creates the thread
-	 * + workspace_run on this agent so the result lands in the user's current
-	 * view. When absent or invalid, falls back to the user's paired agent or
-	 * any tenant agent (via resolveAgentContext).
-	 */
-	requestingAgentId?: string | null;
+  job: WikiCompileJobRow;
+  pageTable: DraftWritebackTargetTable;
+  pageId: string;
+  pageTitle: string;
+  candidates: DraftCompileCandidate[];
+  /**
+   * Optional: the agent the user was viewing when they triggered enrichment.
+   * When present + valid for this tenant, the writeback creates the thread
+   * + workspace_run on this agent so the result lands in the user's current
+   * view. When absent or invalid, falls back to the user's paired agent or
+   * any tenant agent (via resolveAgentContext).
+   */
+  requestingAgentId?: string | null;
 }
 
 export interface DraftWritebackIO {
-	db?: DbLike;
-	s3?: S3Client;
-	bucket?: string;
+  db?: DbLike;
+  s3?: S3Client;
+  bucket?: string;
 }
 
 export interface DraftWritebackResult {
-	threadId: string;
-	threadTurnId: string;
-	workspaceRunId: string | null;
-	reviewObjectKey: string | null;
-	status: "awaiting_review" | "done" | "cancelled";
+  threadId: string;
+  threadTurnId: string;
+  workspaceRunId: string | null;
+  reviewObjectKey: string | null;
+  status: "awaiting_review" | "done" | "cancelled";
 }
 
 const PAYLOAD_KIND = "brain_enrichment_draft_review";
@@ -112,156 +113,156 @@ const PAYLOAD_KIND = "brain_enrichment_draft_review";
  * thread/turn/run rows. The reconciler is the recovery path.
  */
 export async function writeDraftReviewSuccess(args: {
-	context: DraftWritebackContext;
-	result: DraftCompileResult;
-	io?: DraftWritebackIO;
+  context: DraftWritebackContext;
+  result: DraftCompileResult;
+  io?: DraftWritebackIO;
 }): Promise<DraftWritebackResult> {
-	const io = args.io ?? {};
-	const db = io.db ?? defaultDb;
-	const bucket = io.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
-	if (!bucket) {
-		throw new GraphQLError("WORKSPACE_BUCKET is not configured", {
-			extensions: { code: "FAILED_PRECONDITION" },
-		});
-	}
-	const s3 = io.s3 ?? new S3Client({});
+  const io = args.io ?? {};
+  const db = io.db ?? defaultDb;
+  const bucket = io.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
+  if (!bucket) {
+    throw new GraphQLError("WORKSPACE_BUCKET is not configured", {
+      extensions: { code: "FAILED_PRECONDITION" },
+    });
+  }
+  const s3 = io.s3 ?? new S3Client({});
 
-	const { tenantSlug, agentId, agentSlug } = await resolveAgentContext({
-		db,
-		tenantId: args.context.job.tenant_id,
-		userId: args.context.job.owner_id,
-		requestingAgentId: args.context.requestingAgentId,
-	});
+  const { tenantSlug, agentId, agentSlug } = await resolveAgentContext({
+    db,
+    tenantId: args.context.job.tenant_id,
+    userId: args.context.job.owner_id,
+    requestingAgentId: args.context.requestingAgentId,
+  });
 
-	const reviewId = randomUUID();
-	const reviewObjectKey = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/review/brain-enrichment-draft-${reviewId}.json`;
+  const reviewId = randomUUID();
+  const reviewObjectKey = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/review/brain-enrichment-draft-${reviewId}.json`;
 
-	const payload = {
-		kind: PAYLOAD_KIND as typeof PAYLOAD_KIND,
-		proposedBodyMd: args.result.proposedBodyMd,
-		snapshotMd: args.result.snapshotMd,
-		regions: args.result.regions,
-		pageTitle: args.context.pageTitle,
-		targetPageTable: args.context.pageTable,
-		targetPageId: args.context.pageId,
-		// Snapshotted candidate input — useful for trace/diagnostics; the
-		// review surface ignores it (regions carry their own provenance).
-		candidates: args.context.candidates,
-	};
+  const payload = {
+    kind: PAYLOAD_KIND as typeof PAYLOAD_KIND,
+    proposedBodyMd: args.result.proposedBodyMd,
+    snapshotMd: args.result.snapshotMd,
+    regions: args.result.regions,
+    pageTitle: args.context.pageTitle,
+    targetPageTable: args.context.pageTable,
+    targetPageId: args.context.pageId,
+    // Snapshotted candidate input — useful for trace/diagnostics; the
+    // review surface ignores it (regions carry their own provenance).
+    candidates: args.context.candidates,
+  };
 
-	const put = await s3.send(
-		new PutObjectCommand({
-			Bucket: bucket,
-			Key: reviewObjectKey,
-			Body: JSON.stringify(payload),
-			ContentType: "application/json; charset=utf-8",
-			Metadata: { "thinkwork-review-kind": PAYLOAD_KIND },
-		}),
-	);
+  const put = await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: reviewObjectKey,
+      Body: JSON.stringify(payload),
+      ContentType: "application/json; charset=utf-8",
+      Metadata: { "thinkwork-review-kind": PAYLOAD_KIND },
+    }),
+  );
 
-	const { thread, turn, threadIdentifier } = await openThread({
-		db,
-		tenantId: args.context.job.tenant_id,
-		agentId,
-		userId: args.context.job.owner_id,
-		title: `Review Brain enrichment draft: ${args.context.pageTitle}`,
-		preview:
-			args.result.regions.length === 1
-				? "1 page region needs review."
-				: `${args.result.regions.length} page regions need review.`,
-		status: "todo",
-		metadata: {
-			kind: PAYLOAD_KIND,
-			targetPageTable: args.context.pageTable,
-			targetPageId: args.context.pageId,
-			regionCount: args.result.regions.length,
-			compileJobId: args.context.job.id,
-		},
-	});
+  const { thread, turn, threadIdentifier } = await openThread({
+    db,
+    tenantId: args.context.job.tenant_id,
+    agentId,
+    userId: args.context.job.owner_id,
+    title: `Review Brain enrichment draft: ${args.context.pageTitle}`,
+    preview:
+      args.result.regions.length === 1
+        ? "1 page region needs review."
+        : `${args.result.regions.length} page regions need review.`,
+    status: "todo",
+    metadata: {
+      kind: PAYLOAD_KIND,
+      targetPageTable: args.context.pageTable,
+      targetPageId: args.context.pageId,
+      regionCount: args.result.regions.length,
+      compileJobId: args.context.job.id,
+    },
+  });
 
-	const [run] = await db
-		.insert(agentWorkspaceRuns)
-		.values({
-			tenant_id: args.context.job.tenant_id,
-			agent_id: agentId,
-			target_path: `brain/${args.context.pageTable}/${args.context.pageId}`,
-			status: "awaiting_review",
-			source_object_key: reviewObjectKey,
-			request_object_key: reviewObjectKey,
-			current_thread_turn_id: turn.id,
-			last_event_at: new Date(),
-			updated_at: new Date(),
-		})
-		.returning({ id: agentWorkspaceRuns.id });
+  const [run] = await db
+    .insert(agentWorkspaceRuns)
+    .values({
+      tenant_id: args.context.job.tenant_id,
+      agent_id: agentId,
+      target_path: `brain/${args.context.pageTable}/${args.context.pageId}`,
+      status: "awaiting_review",
+      source_object_key: reviewObjectKey,
+      request_object_key: reviewObjectKey,
+      current_thread_turn_id: turn.id,
+      last_event_at: new Date(),
+      updated_at: new Date(),
+    })
+    .returning({ id: agentWorkspaceRuns.id });
 
-	// onConflictDoNothing on idempotency_key — defense in depth. The runner's
-	// terminal-status short-circuit (runDraftCompileJobById's running/failed
-	// guards) is the primary protection against duplicate writebacks. If a
-	// duplicate slips through anyway (e.g., concurrent worker race that the
-	// FOR UPDATE SKIP LOCKED claim somehow bypasses), this swallows the
-	// duplicate event silently rather than throwing mid-writeback after
-	// thread/turn/run have already been written.
-	await db
-		.insert(agentWorkspaceEvents)
-		.values({
-			tenant_id: args.context.job.tenant_id,
-			agent_id: agentId,
-			run_id: run.id,
-			event_type: "review.requested",
-			idempotency_key: `brain-enrichment-draft:${args.context.job.id}`,
-			bucket,
-			source_object_key: reviewObjectKey,
-			object_etag: put.ETag ?? null,
-			sequencer: reviewId,
-			reason: PAYLOAD_KIND,
-			payload,
-			actor_type: "user",
-			actor_id: args.context.job.owner_id,
-		})
-		.onConflictDoNothing();
+  // onConflictDoNothing on idempotency_key — defense in depth. The runner's
+  // terminal-status short-circuit (runDraftCompileJobById's running/failed
+  // guards) is the primary protection against duplicate writebacks. If a
+  // duplicate slips through anyway (e.g., concurrent worker race that the
+  // FOR UPDATE SKIP LOCKED claim somehow bypasses), this swallows the
+  // duplicate event silently rather than throwing mid-writeback after
+  // thread/turn/run have already been written.
+  await db
+    .insert(agentWorkspaceEvents)
+    .values({
+      tenant_id: args.context.job.tenant_id,
+      agent_id: agentId,
+      run_id: run.id,
+      event_type: "review.requested",
+      idempotency_key: `brain-enrichment-draft:${args.context.job.id}`,
+      bucket,
+      source_object_key: reviewObjectKey,
+      object_etag: put.ETag ?? null,
+      sequencer: reviewId,
+      reason: PAYLOAD_KIND,
+      payload,
+      actor_type: "user",
+      actor_id: args.context.job.owner_id,
+    })
+    .onConflictDoNothing();
 
-	await db.insert(messages).values({
-		thread_id: thread.id,
-		tenant_id: args.context.job.tenant_id,
-		role: "assistant",
-		content: renderDraftReadyMessage({
-			pageTitle: args.context.pageTitle,
-			regionCount: args.result.regions.length,
-		}),
-		sender_type: "system",
-		sender_id: args.context.job.owner_id,
-		metadata: {
-			kind: "brain_enrichment_draft_ready",
-			compileJobId: args.context.job.id,
-			workspaceRunId: run.id,
-			regionCount: args.result.regions.length,
-		},
-	});
+  await db.insert(messages).values({
+    thread_id: thread.id,
+    tenant_id: args.context.job.tenant_id,
+    role: "assistant",
+    content: renderDraftReadyMessage({
+      pageTitle: args.context.pageTitle,
+      regionCount: args.result.regions.length,
+    }),
+    sender_type: "system",
+    sender_id: args.context.job.owner_id,
+    metadata: {
+      kind: "brain_enrichment_draft_ready",
+      compileJobId: args.context.job.id,
+      workspaceRunId: run.id,
+      regionCount: args.result.regions.length,
+    },
+  });
 
-	// Fire-and-forget push so a backgrounded mobile client surfaces a banner
-	// for "draft ready" — without this, the user has no signal anything
-	// happened until they re-open the app and check the thread list.
-	// sendExternalTaskPush is itself best-effort (logs but doesn't throw on
-	// missing token / Expo failure), so this never blocks the writeback.
-	void sendExternalTaskPush({
-		userId: args.context.job.owner_id,
-		tenantId: args.context.job.tenant_id,
-		threadId: thread.id,
-		title: `Draft ready: ${args.context.pageTitle}`,
-		body:
-			args.result.regions.length === 1
-				? "1 page region needs review."
-				: `${args.result.regions.length} page regions need review.`,
-		eventKind: PAYLOAD_KIND,
-	});
+  // Fire-and-forget push so a backgrounded mobile client surfaces a banner
+  // for "draft ready" — without this, the user has no signal anything
+  // happened until they re-open the app and check the thread list.
+  // sendExternalTaskPush is itself best-effort (logs but doesn't throw on
+  // missing token / Expo failure), so this never blocks the writeback.
+  void sendExternalTaskPush({
+    userId: args.context.job.owner_id,
+    tenantId: args.context.job.tenant_id,
+    threadId: thread.id,
+    title: `Draft ready: ${args.context.pageTitle}`,
+    body:
+      args.result.regions.length === 1
+        ? "1 page region needs review."
+        : `${args.result.regions.length} page regions need review.`,
+    eventKind: PAYLOAD_KIND,
+  });
 
-	return {
-		threadId: thread.id,
-		threadTurnId: turn.id,
-		workspaceRunId: run.id,
-		reviewObjectKey,
-		status: "awaiting_review",
-	};
+  return {
+    threadId: thread.id,
+    threadTurnId: turn.id,
+    workspaceRunId: run.id,
+    reviewObjectKey,
+    status: "awaiting_review",
+  };
 }
 
 /**
@@ -270,73 +271,73 @@ export async function writeDraftReviewSuccess(args: {
  * sees a record of the run without an open review surface.
  */
 export async function writeDraftReviewNoOp(args: {
-	context: DraftWritebackContext;
-	io?: DraftWritebackIO;
+  context: DraftWritebackContext;
+  io?: DraftWritebackIO;
 }): Promise<DraftWritebackResult> {
-	const io = args.io ?? {};
-	const db = io.db ?? defaultDb;
-	const { agentId } = await resolveAgentContext({
-		db,
-		tenantId: args.context.job.tenant_id,
-		userId: args.context.job.owner_id,
-		requestingAgentId: args.context.requestingAgentId,
-	});
+  const io = args.io ?? {};
+  const db = io.db ?? defaultDb;
+  const { agentId } = await resolveAgentContext({
+    db,
+    tenantId: args.context.job.tenant_id,
+    userId: args.context.job.owner_id,
+    requestingAgentId: args.context.requestingAgentId,
+  });
 
-	const { thread, turn } = await openThread({
-		db,
-		tenantId: args.context.job.tenant_id,
-		agentId,
-		userId: args.context.job.owner_id,
-		title: `Brain enrichment: ${args.context.pageTitle}`,
-		preview: "No enrichment landed — page already covers all facts.",
-		status: "done",
-		metadata: {
-			kind: "brain_enrichment_draft_no_op",
-			targetPageTable: args.context.pageTable,
-			targetPageId: args.context.pageId,
-			compileJobId: args.context.job.id,
-		},
-	});
+  const { thread, turn } = await openThread({
+    db,
+    tenantId: args.context.job.tenant_id,
+    agentId,
+    userId: args.context.job.owner_id,
+    title: `Brain enrichment: ${args.context.pageTitle}`,
+    preview: "No enrichment landed — page already covers all facts.",
+    status: "done",
+    metadata: {
+      kind: "brain_enrichment_draft_no_op",
+      targetPageTable: args.context.pageTable,
+      targetPageId: args.context.pageId,
+      compileJobId: args.context.job.id,
+    },
+  });
 
-	await db.insert(messages).values({
-		thread_id: thread.id,
-		tenant_id: args.context.job.tenant_id,
-		role: "assistant",
-		content: `No enrichment landed: the draft compile concluded "${args.context.pageTitle}" already covers all the new facts in the requested sources.`,
-		sender_type: "system",
-		sender_id: args.context.job.owner_id,
-		metadata: {
-			kind: "brain_enrichment_draft_no_op",
-			compileJobId: args.context.job.id,
-		},
-	});
+  await db.insert(messages).values({
+    thread_id: thread.id,
+    tenant_id: args.context.job.tenant_id,
+    role: "assistant",
+    content: `No enrichment landed: the draft compile concluded "${args.context.pageTitle}" already covers all the new facts in the requested sources.`,
+    sender_type: "system",
+    sender_id: args.context.job.owner_id,
+    metadata: {
+      kind: "brain_enrichment_draft_no_op",
+      compileJobId: args.context.job.id,
+    },
+  });
 
-	// Close the turn — there's no review surface to wait on.
-	await db
-		.update(threadTurns)
-		.set({
-			status: "succeeded",
-			finished_at: new Date(),
-			last_activity_at: new Date(),
-		})
-		.where(eq(threadTurns.id, turn.id));
+  // Close the turn — there's no review surface to wait on.
+  await db
+    .update(threadTurns)
+    .set({
+      status: "succeeded",
+      finished_at: new Date(),
+      last_activity_at: new Date(),
+    })
+    .where(eq(threadTurns.id, turn.id));
 
-	void sendExternalTaskPush({
-		userId: args.context.job.owner_id,
-		tenantId: args.context.job.tenant_id,
-		threadId: thread.id,
-		title: `Brain enrichment: ${args.context.pageTitle}`,
-		body: "No new info to add — the page already covers all the facts.",
-		eventKind: "brain_enrichment_draft_no_op",
-	});
+  void sendExternalTaskPush({
+    userId: args.context.job.owner_id,
+    tenantId: args.context.job.tenant_id,
+    threadId: thread.id,
+    title: `Brain enrichment: ${args.context.pageTitle}`,
+    body: "No new info to add — the page already covers all the facts.",
+    eventKind: "brain_enrichment_draft_no_op",
+  });
 
-	return {
-		threadId: thread.id,
-		threadTurnId: turn.id,
-		workspaceRunId: null,
-		reviewObjectKey: null,
-		status: "done",
-	};
+  return {
+    threadId: thread.id,
+    threadTurnId: turn.id,
+    workspaceRunId: null,
+    reviewObjectKey: null,
+    status: "done",
+  };
 }
 
 /**
@@ -344,76 +345,76 @@ export async function writeDraftReviewNoOp(args: {
  * happened and didn't silently disappear. No review surface is created.
  */
 export async function writeDraftReviewFailure(args: {
-	context: DraftWritebackContext;
-	error: string;
-	io?: DraftWritebackIO;
+  context: DraftWritebackContext;
+  error: string;
+  io?: DraftWritebackIO;
 }): Promise<DraftWritebackResult> {
-	const io = args.io ?? {};
-	const db = io.db ?? defaultDb;
-	const { agentId } = await resolveAgentContext({
-		db,
-		tenantId: args.context.job.tenant_id,
-		userId: args.context.job.owner_id,
-		requestingAgentId: args.context.requestingAgentId,
-	});
+  const io = args.io ?? {};
+  const db = io.db ?? defaultDb;
+  const { agentId } = await resolveAgentContext({
+    db,
+    tenantId: args.context.job.tenant_id,
+    userId: args.context.job.owner_id,
+    requestingAgentId: args.context.requestingAgentId,
+  });
 
-	const { thread, turn } = await openThread({
-		db,
-		tenantId: args.context.job.tenant_id,
-		agentId,
-		userId: args.context.job.owner_id,
-		title: `Brain enrichment failed: ${args.context.pageTitle}`,
-		preview: "Draft compile failed.",
-		status: "cancelled",
-		metadata: {
-			kind: "brain_enrichment_draft_failed",
-			reason: "compile_failed",
-			targetPageTable: args.context.pageTable,
-			targetPageId: args.context.pageId,
-			compileJobId: args.context.job.id,
-			error: args.error,
-		},
-	});
+  const { thread, turn } = await openThread({
+    db,
+    tenantId: args.context.job.tenant_id,
+    agentId,
+    userId: args.context.job.owner_id,
+    title: `Brain enrichment failed: ${args.context.pageTitle}`,
+    preview: "Draft compile failed.",
+    status: "cancelled",
+    metadata: {
+      kind: "brain_enrichment_draft_failed",
+      reason: "compile_failed",
+      targetPageTable: args.context.pageTable,
+      targetPageId: args.context.pageId,
+      compileJobId: args.context.job.id,
+      error: args.error,
+    },
+  });
 
-	await db.insert(messages).values({
-		thread_id: thread.id,
-		tenant_id: args.context.job.tenant_id,
-		role: "assistant",
-		content: `Draft compile for "${args.context.pageTitle}" failed: ${args.error}`,
-		sender_type: "system",
-		sender_id: args.context.job.owner_id,
-		metadata: {
-			kind: "brain_enrichment_draft_failed",
-			compileJobId: args.context.job.id,
-			error: args.error,
-		},
-	});
+  await db.insert(messages).values({
+    thread_id: thread.id,
+    tenant_id: args.context.job.tenant_id,
+    role: "assistant",
+    content: `Draft compile for "${args.context.pageTitle}" failed: ${args.error}`,
+    sender_type: "system",
+    sender_id: args.context.job.owner_id,
+    metadata: {
+      kind: "brain_enrichment_draft_failed",
+      compileJobId: args.context.job.id,
+      error: args.error,
+    },
+  });
 
-	await db
-		.update(threadTurns)
-		.set({
-			status: "cancelled",
-			finished_at: new Date(),
-			last_activity_at: new Date(),
-		})
-		.where(eq(threadTurns.id, turn.id));
+  await db
+    .update(threadTurns)
+    .set({
+      status: "cancelled",
+      finished_at: new Date(),
+      last_activity_at: new Date(),
+    })
+    .where(eq(threadTurns.id, turn.id));
 
-	void sendExternalTaskPush({
-		userId: args.context.job.owner_id,
-		tenantId: args.context.job.tenant_id,
-		threadId: thread.id,
-		title: `Brain enrichment failed: ${args.context.pageTitle}`,
-		body: args.error,
-		eventKind: "brain_enrichment_draft_failed",
-	});
+  void sendExternalTaskPush({
+    userId: args.context.job.owner_id,
+    tenantId: args.context.job.tenant_id,
+    threadId: thread.id,
+    title: `Brain enrichment failed: ${args.context.pageTitle}`,
+    body: args.error,
+    eventKind: "brain_enrichment_draft_failed",
+  });
 
-	return {
-		threadId: thread.id,
-		threadTurnId: turn.id,
-		workspaceRunId: null,
-		reviewObjectKey: null,
-		status: "cancelled",
-	};
+  return {
+    threadId: thread.id,
+    threadTurnId: turn.id,
+    workspaceRunId: null,
+    reviewObjectKey: null,
+    status: "cancelled",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -421,163 +422,193 @@ export async function writeDraftReviewFailure(args: {
 // ---------------------------------------------------------------------------
 
 async function resolveAgentContext(args: {
-	db: DbLike;
-	tenantId: string;
-	userId: string;
-	requestingAgentId?: string | null;
+  db: DbLike;
+  tenantId: string;
+  userId: string;
+  requestingAgentId?: string | null;
 }): Promise<{
-	tenantSlug: string;
-	agentId: string;
-	agentSlug: string;
+  tenantSlug: string;
+  agentId: string;
+  agentSlug: string;
 }> {
-	const [tenantInfo] = await args.db
-		.select({ slug: tenants.slug })
-		.from(tenants)
-		.where(eq(tenants.id, args.tenantId))
-		.limit(1);
-	if (!tenantInfo) {
-		throw new GraphQLError("Tenant not found", {
-			extensions: { code: "NOT_FOUND" },
-		});
-	}
+  const [tenantInfo] = await args.db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, args.tenantId))
+    .limit(1);
+  if (!tenantInfo) {
+    throw new GraphQLError("Tenant not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
 
-	// Prefer the agent the user was viewing when they triggered enrichment.
-	// Without this, the thread lands on the user's paired agent — which is
-	// often a different agent than the one the user was looking at, making
-	// the result invisible from the view that triggered it (observed live
-	// in dev: enrichment from "Sandbox" agent landed under "Marco" agent).
-	// Lookup is tenant-scoped so a stale or cross-tenant agentId is ignored.
-	if (args.requestingAgentId) {
-		const [requesting] = await args.db
-			.select({ id: agents.id, slug: agents.slug })
-			.from(agents)
-			.where(
-				and(
-					eq(agents.id, args.requestingAgentId),
-					eq(agents.tenant_id, args.tenantId),
-				),
-			)
-			.limit(1);
-		if (requesting) {
-			return {
-				tenantSlug: tenantInfo.slug,
-				agentId: requesting.id,
-				agentSlug: requesting.slug ?? requesting.id,
-			};
-		}
-	}
+  // Prefer the agent the user was viewing when they triggered enrichment.
+  // Without this, the thread lands on the user's paired agent — which is
+  // often a different agent than the one the user was looking at, making
+  // the result invisible from the view that triggered it (observed live
+  // in dev: enrichment from "Sandbox" agent landed under "Marco" agent).
+  // Lookup is tenant-scoped so a stale or cross-tenant agentId is ignored.
+  if (args.requestingAgentId) {
+    const [requesting] = await args.db
+      .select({ id: agents.id, slug: agents.slug })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.id, args.requestingAgentId),
+          eq(agents.tenant_id, args.tenantId),
+        ),
+      )
+      .limit(1);
+    if (requesting) {
+      return {
+        tenantSlug: tenantInfo.slug,
+        agentId: requesting.id,
+        agentSlug: requesting.slug ?? requesting.id,
+      };
+    }
+  }
 
-	const [paired] = await args.db
-		.select({ id: agents.id, slug: agents.slug })
-		.from(agents)
-		.where(
-			and(
-				eq(agents.tenant_id, args.tenantId),
-				eq(agents.human_pair_id, args.userId),
-			),
-		)
-		.limit(1);
-	if (paired) {
-		return {
-			tenantSlug: tenantInfo.slug,
-			agentId: paired.id,
-			agentSlug: paired.slug ?? paired.id,
-		};
-	}
+  const [paired] = await args.db
+    .select({ id: agents.id, slug: agents.slug })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.tenant_id, args.tenantId),
+        eq(agents.human_pair_id, args.userId),
+      ),
+    )
+    .limit(1);
+  if (paired) {
+    return {
+      tenantSlug: tenantInfo.slug,
+      agentId: paired.id,
+      agentSlug: paired.slug ?? paired.id,
+    };
+  }
 
-	const [fallback] = await args.db
-		.select({ id: agents.id, slug: agents.slug })
-		.from(agents)
-		.where(eq(agents.tenant_id, args.tenantId))
-		.limit(1);
-	if (!fallback) {
-		throw new GraphQLError("No agent is available to host this review", {
-			extensions: { code: "FAILED_PRECONDITION" },
-		});
-	}
-	return {
-		tenantSlug: tenantInfo.slug,
-		agentId: fallback.id,
-		agentSlug: fallback.slug ?? fallback.id,
-	};
+  const [fallback] = await args.db
+    .select({ id: agents.id, slug: agents.slug })
+    .from(agents)
+    .where(eq(agents.tenant_id, args.tenantId))
+    .limit(1);
+  if (!fallback) {
+    throw new GraphQLError("No agent is available to host this review", {
+      extensions: { code: "FAILED_PRECONDITION" },
+    });
+  }
+  return {
+    tenantSlug: tenantInfo.slug,
+    agentId: fallback.id,
+    agentSlug: fallback.slug ?? fallback.id,
+  };
 }
 
 async function openThread(args: {
-	db: DbLike;
-	tenantId: string;
-	agentId: string;
-	userId: string;
-	title: string;
-	preview: string;
-	status: "todo" | "done" | "cancelled";
-	metadata: Record<string, unknown>;
+  db: DbLike;
+  tenantId: string;
+  agentId: string;
+  userId: string;
+  title: string;
+  preview: string;
+  status: "todo" | "done" | "cancelled";
+  metadata: Record<string, unknown>;
 }): Promise<{
-	thread: { id: string };
-	turn: { id: string };
-	threadIdentifier: string;
+  thread: { id: string };
+  turn: { id: string };
+  threadIdentifier: string;
 }> {
-	const [tenant] = await args.db
-		.update(tenants)
-		.set({ issue_counter: sql`${tenants.issue_counter} + 1` })
-		.where(eq(tenants.id, args.tenantId))
-		.returning({ nextNumber: sql<number>`${tenants.issue_counter}` });
-	if (!tenant) {
-		throw new GraphQLError("Tenant not found", {
-			extensions: { code: "NOT_FOUND" },
-		});
-	}
-	const identifier = `API-${tenant.nextNumber}`;
+  const [tenant] = await args.db
+    .update(tenants)
+    .set({ issue_counter: sql`${tenants.issue_counter} + 1` })
+    .where(eq(tenants.id, args.tenantId))
+    .returning({ nextNumber: sql<number>`${tenants.issue_counter}` });
+  if (!tenant) {
+    throw new GraphQLError("Tenant not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+  const identifier = `API-${tenant.nextNumber}`;
+  const [space] = await args.db
+    .insert(spaces)
+    .values({
+      tenant_id: args.tenantId,
+      slug: "general",
+      name: "General",
+      description:
+        "Default Space for conversations that are not part of a configured workflow.",
+      prompt:
+        "Use this Space for general collaboration, ad hoc questions, and Threads that do not belong to a specialized workflow.",
+      status: "active",
+      kind: "custom",
+      template_key: "general",
+      config: {
+        workflow: "general",
+        version: 1,
+        source: "brain_draft_writeback",
+      },
+    })
+    .onConflictDoUpdate({
+      target: [spaces.tenant_id, spaces.slug],
+      set: { status: "active", updated_at: new Date() },
+    })
+    .returning({ id: spaces.id });
+  if (!space) {
+    throw new GraphQLError("Default Space not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
 
-	const [thread] = await args.db
-		.insert(threads)
-		.values({
-			tenant_id: args.tenantId,
-			agent_id: args.agentId,
-			user_id: args.userId,
-			number: tenant.nextNumber,
-			identifier,
-			title: args.title,
-			status: args.status,
-			priority: "medium",
-			type: "task",
-			channel: "api",
-			assignee_type: "user",
-			assignee_id: args.userId,
-			reporter_id: args.userId,
-			labels: ["brain", "enrichment", "draft"],
-			last_response_preview: args.preview,
-			metadata: args.metadata,
-			created_by_type: "system",
-			created_by_id: args.userId,
-		})
-		.returning({ id: threads.id });
+  const [thread] = await args.db
+    .insert(threads)
+    .values({
+      tenant_id: args.tenantId,
+      agent_id: args.agentId,
+      space_id: space.id,
+      user_id: args.userId,
+      number: tenant.nextNumber,
+      identifier,
+      title: args.title,
+      status: args.status,
+      priority: "medium",
+      type: "task",
+      channel: "api",
+      assignee_type: "user",
+      assignee_id: args.userId,
+      reporter_id: args.userId,
+      labels: ["brain", "enrichment", "draft"],
+      last_response_preview: args.preview,
+      metadata: args.metadata,
+      created_by_type: "system",
+      created_by_id: args.userId,
+    })
+    .returning({ id: threads.id });
 
-	const [turn] = await args.db
-		.insert(threadTurns)
-		.values({
-			tenant_id: args.tenantId,
-			agent_id: args.agentId,
-			invocation_source: "brain_enrichment_draft",
-			trigger_detail: `brain_enrichment_draft:${args.metadata.compileJobId}`,
-			thread_id: thread.id,
-			status: args.status === "todo" ? "running" : "succeeded",
-			kind: "agent_turn",
-			started_at: new Date(),
-			last_activity_at: new Date(),
-		})
-		.returning({ id: threadTurns.id });
+  const [turn] = await args.db
+    .insert(threadTurns)
+    .values({
+      tenant_id: args.tenantId,
+      agent_id: args.agentId,
+      invocation_source: "brain_enrichment_draft",
+      trigger_detail: `brain_enrichment_draft:${args.metadata.compileJobId}`,
+      thread_id: thread.id,
+      status: args.status === "todo" ? "running" : "succeeded",
+      kind: "agent_turn",
+      started_at: new Date(),
+      last_activity_at: new Date(),
+    })
+    .returning({ id: threadTurns.id });
 
-	return { thread, turn, threadIdentifier: identifier };
+  return { thread, turn, threadIdentifier: identifier };
 }
 
 function renderDraftReadyMessage(args: {
-	pageTitle: string;
-	regionCount: number;
+  pageTitle: string;
+  regionCount: number;
 }): string {
-	const regionWord = args.regionCount === 1 ? "region" : "regions";
-	return [
-		`A draft enrichment for **${args.pageTitle}** is ready to review.`,
-		"",
-		`The draft has ${args.regionCount} changed ${regionWord}. Tap to review the proposed page in place, toggle accept/reject per region, or use "Show changes" to see a stacked before/after diff.`,
-	].join("\n");
+  const regionWord = args.regionCount === 1 ? "region" : "regions";
+  return [
+    `A draft enrichment for **${args.pageTitle}** is ready to review.`,
+    "",
+    `The draft has ${args.regionCount} changed ${regionWord}. Tap to review the proposed page in place, toggle accept/reject per region, or use "Show changes" to see a stacked before/after diff.`,
+  ].join("\n");
 }

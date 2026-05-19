@@ -2,8 +2,8 @@
  * Thread participants.
  *
  * Space-scoped threads can have many human and agent participants. This table
- * is intentionally separate from thread ownership/assignee fields so existing
- * one-user/non-Space threads keep their historical behavior.
+ * is intentionally separate from thread ownership/assignee fields so Space
+ * membership, mention delivery, and assignment can evolve independently.
  */
 
 import {
@@ -33,9 +33,9 @@ export const threadParticipants = pgTable(
     thread_id: uuid("thread_id")
       .references(() => threads.id, { onDelete: "cascade" })
       .notNull(),
-    space_id: uuid("space_id").references(() => spaces.id, {
-      onDelete: "set null",
-    }),
+    space_id: uuid("space_id")
+      .references(() => spaces.id)
+      .notNull(),
     participant_type: text("participant_type").notNull(),
     user_id: uuid("user_id").references(() => users.id, {
       onDelete: "cascade",

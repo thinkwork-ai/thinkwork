@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { exchangeCodeForSession, storeTokensInCognitoStorage, getGoogleSignInUrl } from "@/lib/auth";
+import {
+  exchangeCodeForSession,
+  storeTokensInCognitoStorage,
+  getGoogleSignInUrl,
+} from "@/lib/auth";
 
 export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
@@ -21,8 +25,13 @@ function AuthCallback() {
       // PreSignUp trigger throws on first Google sign-in to link accounts.
       // Cognito retries automatically, but the redirect carries the error.
       // Tell user to try again — the link is now established.
-      if (error_description?.includes("PreSignUp") || error_description?.includes("Provider linked")) {
-        setError("Account linking in progress. Please try signing in with Google again.");
+      if (
+        error_description?.includes("PreSignUp") ||
+        error_description?.includes("Provider linked")
+      ) {
+        setError(
+          "Account linking in progress. Please try signing in with Google again.",
+        );
       } else {
         setError(error_description || oauthError || "OAuth failed");
       }
@@ -43,12 +52,12 @@ function AuthCallback() {
         storeTokensInCognitoStorage(tokens);
         // If opened as popup, notify parent and close
         if (window.opener) {
-          window.opener.location.href = "/new";
+          window.opener.location.href = "/spaces";
           window.close();
           return;
         }
         // Full reload so AuthProvider picks up the new session from localStorage
-        window.location.href = "/new";
+        window.location.href = "/spaces";
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");

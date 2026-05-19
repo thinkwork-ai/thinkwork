@@ -22,6 +22,7 @@ import {
   resolveThreadComputer,
   routeRunbookForComputerMessage,
 } from "../../../lib/computers/thread-cutover.js";
+import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
 import { hasSpaceMemberAccess } from "../spaces/shared.js";
 
 export const createThread = async (
@@ -41,9 +42,24 @@ export const createThread = async (
     await requireTenantMember(ctx, i.tenantId);
   }
 
-  let threadSpace: { id: string; tenant_id: string; status: string } | null =
-    null;
-  if (i.spaceId) {
+  const createdByType = i.createdByType ?? "user";
+  const createdById =
+    createdByType === "user"
+      ? ((await resolveCallerFromAuth(ctx.auth)).userId ?? i.createdById)
+      : i.createdById;
+  if (createdByType === "user" && !createdById) {
+    throw new GraphQLError("Requester user identity required", {
+      extensions: { code: "UNAUTHENTICATED" },
+    });
+  }
+
+  let threadSpace: { id: string; tenant_id: string; status: string };
+  if (!i.spaceId) {
+    threadSpace = await ensureDefaultThreadSpace({
+      tenantId: i.tenantId,
+      userId: createdByType === "user" ? createdById : null,
+    });
+  } else {
     const [spaceRow] = await db
       .select({
         id: spaces.id,
@@ -70,17 +86,6 @@ export const createThread = async (
       });
     }
     threadSpace = spaceRow;
-  }
-
-  const createdByType = i.createdByType ?? "user";
-  const createdById =
-    createdByType === "user"
-      ? ((await resolveCallerFromAuth(ctx.auth)).userId ?? i.createdById)
-      : i.createdById;
-  if (createdByType === "user" && !createdById) {
-    throw new GraphQLError("Requester user identity required", {
-      extensions: { code: "UNAUTHENTICATED" },
-    });
   }
   const threadComputer = await resolveThreadComputer({
     tenantId: i.tenantId,
@@ -145,7 +150,7 @@ export const createThread = async (
         tenant_id: i.tenantId,
         agent_id: threadComputer ? null : i.agentId,
         computer_id: threadComputer?.id,
-        space_id: threadSpace?.id,
+        space_id: threadSpace.id,
         user_id: createdByType === "user" ? createdById : undefined,
         number: nextNumber,
         identifier,
@@ -163,49 +168,47 @@ export const createThread = async (
       })
       .returning();
 
-    if (threadSpace) {
-      const participantRows: (typeof threadParticipants.$inferInsert)[] = [];
-      if (createdByType === "user" && createdById) {
-        participantRows.push({
-          tenant_id: i.tenantId,
-          thread_id: threadRow.id,
-          space_id: threadSpace.id,
-          participant_type: "user",
-          user_id: createdById,
-          role: "requester",
-          source: "thread_creator",
-        });
-      }
+    const participantRows: (typeof threadParticipants.$inferInsert)[] = [];
+    if (createdByType === "user" && createdById) {
+      participantRows.push({
+        tenant_id: i.tenantId,
+        thread_id: threadRow.id,
+        space_id: threadSpace.id,
+        participant_type: "user",
+        user_id: createdById,
+        role: "requester",
+        source: "thread_creator",
+      });
+    }
 
-      const autoSubscribedAgents = await tx
-        .select({
-          agent_id: spaceAgentAssignments.agent_id,
-          local_role: spaceAgentAssignments.local_role,
-        })
-        .from(spaceAgentAssignments)
-        .where(
-          and(
-            eq(spaceAgentAssignments.tenant_id, i.tenantId),
-            eq(spaceAgentAssignments.space_id, threadSpace.id),
-            eq(spaceAgentAssignments.status, "active"),
-            eq(spaceAgentAssignments.auto_subscribe, true),
-          ),
-        );
-      for (const assignment of autoSubscribedAgents) {
-        participantRows.push({
-          tenant_id: i.tenantId,
-          thread_id: threadRow.id,
-          space_id: threadSpace.id,
-          participant_type: "agent",
-          agent_id: assignment.agent_id,
-          role: assignment.local_role ?? "agent",
-          source: "space_auto_subscribe",
-        });
-      }
+    const autoSubscribedAgents = await tx
+      .select({
+        agent_id: spaceAgentAssignments.agent_id,
+        local_role: spaceAgentAssignments.local_role,
+      })
+      .from(spaceAgentAssignments)
+      .where(
+        and(
+          eq(spaceAgentAssignments.tenant_id, i.tenantId),
+          eq(spaceAgentAssignments.space_id, threadSpace.id),
+          eq(spaceAgentAssignments.status, "active"),
+          eq(spaceAgentAssignments.auto_subscribe, true),
+        ),
+      );
+    for (const assignment of autoSubscribedAgents) {
+      participantRows.push({
+        tenant_id: i.tenantId,
+        thread_id: threadRow.id,
+        space_id: threadSpace.id,
+        participant_type: "agent",
+        agent_id: assignment.agent_id,
+        role: assignment.local_role ?? "agent",
+        source: "space_auto_subscribe",
+      });
+    }
 
-      if (participantRows.length > 0) {
-        await tx.insert(threadParticipants).values(participantRows);
-      }
+    if (participantRows.length > 0) {
+      await tx.insert(threadParticipants).values(participantRows);
     }
 
     let firstMsgId: string | null = null;

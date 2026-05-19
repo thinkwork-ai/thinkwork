@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useSubscription } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Bot, Monitor, Plus, User, UserPlus } from "lucide-react";
-import { IconCloudComputing } from "@tabler/icons-react";
+import { AtSign, Bot, Plus } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -21,10 +20,10 @@ import {
 import {
   AgentsListQuery,
   OnAgentStatusChangedSubscription,
+  SpacesListQuery,
 } from "@/lib/graphql-queries";
 import { AgentRuntime } from "@/gql/graphql";
 import { useDialog } from "@/context/DialogContext";
-import { formatUsd, relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/")({
   component: AgentsPage,
@@ -37,16 +36,9 @@ type AgentRow = {
   type: string;
   status: string;
   runtime: AgentRuntime | null;
-  agentTemplateName: string | null;
-  agentTemplateId: string | null;
-  adapterType: string | null;
-  isByob: boolean;
-  humanPairName: string | null;
-  budgetLimitUsd: number | null;
-  lastHeartbeatAt: string | null;
+  mentionHandle: string | null;
+  assignedSpaces: string[];
 };
-
-const SERVERLESS_ADAPTERS = new Set(["sdk", "strands"]);
 
 const formatHarness = (runtime: AgentRuntime | null | undefined): string => {
   if (!runtime) return "—";
@@ -59,32 +51,19 @@ const columns: ColumnDef<AgentRow>[] = [
     header: "Name",
     cell: ({ row }) => (
       <span className="flex items-center gap-1.5 font-medium whitespace-nowrap">
-        {row.original.isByob ? (
-          <Monitor className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-        ) : (
-          <IconCloudComputing className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-        )}
+        <Bot className="h-3.5 w-3.5 shrink-0 text-primary" />
         {row.original.name}
       </span>
     ),
   },
   {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => (
-      <span className="whitespace-nowrap">
-        <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
-      </span>
-    ),
-    size: 100,
-  },
-  {
-    accessorKey: "agentTemplateName",
-    header: "Base Config",
+    accessorKey: "mentionHandle",
+    header: "Mention",
     cell: ({ row }) =>
-      row.original.agentTemplateName ? (
-        <Badge variant="outline" className="text-xs whitespace-nowrap">
-          {row.original.agentTemplateName}
+      row.original.mentionHandle ? (
+        <Badge variant="outline" className="gap-1 text-xs whitespace-nowrap">
+          <AtSign className="h-3 w-3" />
+          {row.original.mentionHandle}
         </Badge>
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
@@ -92,8 +71,45 @@ const columns: ColumnDef<AgentRow>[] = [
     size: 140,
   },
   {
+    accessorKey: "role",
+    header: "Role",
+    cell: ({ row }) => {
+      const role = row.original.role?.trim();
+      return role ? (
+        <span className="text-sm text-foreground whitespace-nowrap">
+          {role}
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      );
+    },
+    size: 140,
+  },
+  {
+    accessorKey: "assignedSpaces",
+    header: "Spaces",
+    cell: ({ row }) =>
+      row.original.assignedSpaces.length === 0 ? (
+        <span className="text-xs text-muted-foreground">—</span>
+      ) : (
+        <div className="flex max-w-[320px] flex-wrap gap-1">
+          {row.original.assignedSpaces.slice(0, 3).map((space) => (
+            <Badge key={space} variant="outline" className="text-xs">
+              {space}
+            </Badge>
+          ))}
+          {row.original.assignedSpaces.length > 3 ? (
+            <Badge variant="outline" className="text-xs">
+              +{row.original.assignedSpaces.length - 3}
+            </Badge>
+          ) : null}
+        </div>
+      ),
+    size: 220,
+  },
+  {
     accessorKey: "runtime",
-    header: "Harness",
+    header: "Runtime",
     cell: ({ row }) =>
       row.original.runtime ? (
         <Badge variant="outline" className="text-xs whitespace-nowrap">
@@ -105,51 +121,18 @@ const columns: ColumnDef<AgentRow>[] = [
     size: 110,
   },
   {
-    accessorKey: "humanPairName",
-    header: "Human",
-    cell: ({ row }) =>
-      row.original.humanPairName ? (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-          <User className="h-3 w-3 shrink-0" />
-          <span className="truncate max-w-[120px]">
-            {row.original.humanPairName}
-          </span>
-        </span>
-      ) : (
-        <span className="text-xs text-muted-foreground">—</span>
-      ),
-  },
-  {
-    accessorKey: "budgetLimitUsd",
-    header: "Budget",
-    cell: ({ row }) => {
-      const { budgetLimitUsd } = row.original;
-      if (budgetLimitUsd == null)
-        return <span className="text-xs text-muted-foreground">—</span>;
-      return (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {formatUsd(budgetLimitUsd, 0)}/mo
-        </span>
-      );
-    },
-    size: 120,
-  },
-  {
-    accessorKey: "lastHeartbeatAt",
-    header: "Heartbeat",
-    cell: ({ row }) =>
-      row.original.lastHeartbeatAt ? (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {relativeTime(row.original.lastHeartbeatAt)}
-        </span>
-      ) : (
-        <span className="text-xs text-muted-foreground">—</span>
-      ),
-    size: 130,
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap">
+        <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
+      </span>
+    ),
+    size: 100,
   },
 ];
 
-type SortField = "name" | "status" | "agentTemplateName" | "lastHeartbeatAt";
+type SortField = "name" | "status" | "role";
 
 function AgentsPage() {
   const { tenantId } = useTenant();
@@ -162,6 +145,12 @@ function AgentsPage() {
 
   const [result, reexecute] = useQuery({
     query: AgentsListQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+  const [spacesResult] = useQuery({
+    query: SpacesListQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId,
     requestPolicy: "cache-and-network",
@@ -181,8 +170,21 @@ function AgentsPage() {
   }, [subResult.data, reexecute]);
 
   const agents = result.data?.agents ?? [];
+  const spaces = spacesResult.data?.spaces ?? [];
 
   const rows: AgentRow[] = useMemo(() => {
+    const spacesByAgent = new Map<string, string[]>();
+    for (const space of spaces) {
+      for (const assignment of space.agentAssignments ?? []) {
+        const agentId = assignment.agent?.id;
+        if (!agentId || assignment.status === "ARCHIVED") continue;
+        spacesByAgent.set(agentId, [
+          ...(spacesByAgent.get(agentId) ?? []),
+          space.name,
+        ]);
+      }
+    }
+
     const mapped = agents.map((a) => ({
       id: a.id,
       name: a.name,
@@ -190,16 +192,8 @@ function AgentsPage() {
       type: a.type,
       status: a.status,
       runtime: (a as any).runtime ?? null,
-      agentTemplateName: (a as any).agentTemplate?.name ?? null,
-      agentTemplateId: (a as any).templateId ?? null,
-      adapterType: a.adapterType ?? null,
-      isByob: !!a.adapterType && !SERVERLESS_ADAPTERS.has(a.adapterType),
-      humanPairName: a.humanPair?.name ?? a.humanPair?.email ?? null,
-      budgetLimitUsd:
-        (a as any).budgetPolicy?.limitUsd != null
-          ? Number((a as any).budgetPolicy.limitUsd)
-          : null,
-      lastHeartbeatAt: a.lastHeartbeatAt ?? null,
+      mentionHandle: a.slug ?? null,
+      assignedSpaces: spacesByAgent.get(a.id) ?? [],
     }));
     const dir = sortDir === "asc" ? 1 : -1;
     mapped.sort((a, b) => {
@@ -210,7 +204,7 @@ function AgentsPage() {
       return dir * (Number(av) - Number(bv));
     });
     return mapped;
-  }, [agents, sortField, sortDir]);
+  }, [agents, spaces, sortField, sortDir]);
 
   if (!tenantId) return <PageSkeleton />;
   const isLoading = result.fetching && !result.data;
@@ -221,21 +215,12 @@ function AgentsPage() {
         <>
           <PageHeader
             title="Agents"
-            description="Manage and monitor your agents"
+            description="Configure role-based agents that can be mentioned inside Spaces"
             actions={
-              <>
-                <Button onClick={() => openNewAgent()}>
-                  <Plus className="h-4 w-4" />
-                  New Agent
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => navigate({ to: "/agents/invites" })}
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Invite BYOB
-                </Button>
-              </>
+              <Button onClick={() => openNewAgent()}>
+                <Plus className="h-4 w-4" />
+                New Agent
+              </Button>
             }
           />
           <div className="flex items-center gap-2 mt-4">
@@ -250,8 +235,7 @@ function AgentsPage() {
                 options={[
                   { value: "name", label: "Name" },
                   { value: "status", label: "Status" },
-                  { value: "agentTemplateName", label: "Agent Template" },
-                  { value: "lastHeartbeatAt", label: "Heartbeat" },
+                  { value: "role", label: "Role" },
                 ]}
                 field={sortField}
                 direction={sortDir}
@@ -269,7 +253,7 @@ function AgentsPage() {
         <EmptyState
           icon={Bot}
           title="No agents yet"
-          description="Create your first agent to get started."
+          description="Create a role-based agent, then assign it to a Space so people can mention it in Threads."
           action={{ label: "New Agent", onClick: () => openNewAgent() }}
         />
       ) : (

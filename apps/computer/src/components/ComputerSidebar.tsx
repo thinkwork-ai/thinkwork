@@ -5,7 +5,6 @@ import {
   Brain,
   GalleryVerticalEnd,
   MessagesSquare,
-  PenSquare,
   Repeat,
   SlidersHorizontal,
   Shapes,
@@ -29,7 +28,6 @@ import {
   COMPUTER_ARTIFACTS_ROUTE,
   COMPUTER_CUSTOMIZE_ROUTE,
   COMPUTER_MEMORY_ROUTE,
-  COMPUTER_NEW_THREAD_ROUTE,
   COMPUTER_SPACES_ROUTE,
   COMPUTER_THREADS_ROUTE,
 } from "@/lib/computer-routes";
@@ -138,24 +136,10 @@ export function ComputerSidebar() {
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === COMPUTER_NEW_THREAD_ROUTE}
-                  tooltip="New"
-                >
-                  <Link to={COMPUTER_NEW_THREAD_ROUTE}>
-                    <PenSquare />
-                    <span>New</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
               {navItems.map((item) => {
                 const isActive =
                   pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`) ||
-                  (item.href === COMPUTER_THREADS_ROUTE &&
-                    pathname.startsWith(`${COMPUTER_NEW_THREAD_ROUTE}/`));
+                  pathname.startsWith(`${item.href}/`);
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
