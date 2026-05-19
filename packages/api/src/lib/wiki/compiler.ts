@@ -83,6 +83,11 @@ import {
 import { scoreSectionAggregation } from "./promotion-scorer.js";
 import { db as defaultDb } from "../db.js";
 import { loadOntologyCompileSnapshot } from "../ontology/compile-snapshot.js";
+import type { OntologyCompileSnapshot } from "../ontology/compile-snapshot.js";
+import {
+	applyOntologyMaterializationGate,
+	type OntologyGateMetrics,
+} from "../ontology/materialization-gate.js";
 import { wikiPageSections, wikiPageLinks } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -205,6 +210,14 @@ export interface RunJobResult {
 		ontology_conservative?: boolean;
 		/** Approved ontology version used to shape planner output, if any. */
 		ontology_active_version_id?: string | null;
+		ontology_gate_approved_pages?: number;
+		ontology_gate_approved_facets?: number;
+		ontology_gate_approved_relationships?: number;
+		ontology_gate_rejected_pages?: number;
+		ontology_gate_rejected_facets?: number;
+		ontology_gate_rejected_relationships?: number;
+		ontology_gate_unresolved_observations?: number;
+		ontology_gate_suggestion_candidates?: number;
 	};
 	error?: string;
 }
@@ -396,6 +409,7 @@ export async function runCompileJob(
 				knownPageRefs,
 				candidatePages,
 				placesCtx,
+				ontologySnapshot,
 			});
 
 			// Advance cursor only after a clean apply.
@@ -594,6 +608,7 @@ interface ApplyPlanArgs {
 		summary: string | null;
 		aliases: string[];
 	}>;
+	ontologySnapshot?: OntologyCompileSnapshot;
 }
 
 /**
@@ -602,7 +617,16 @@ interface ApplyPlanArgs {
  * surface that in metrics.
  */
 async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
-	const { job, records, plan, metrics } = args;
+	const { job, records, metrics } = args;
+	let plan = args.plan;
+	if (args.ontologySnapshot) {
+		const gate = applyOntologyMaterializationGate({
+			plan,
+			snapshot: args.ontologySnapshot,
+		});
+		plan = gate.plan;
+		recordGateMetrics(metrics, gate.metrics);
+	}
 	const candidatePages = args.candidatePages ?? [];
 	const recordById = new Map(records.map((r) => [r.id, r]));
 	// Pages this call to applyPlan touched — fed into the deterministic
@@ -1707,6 +1731,17 @@ function emptyMetrics(): RunJobResult["metrics"] {
 		bedrock_retries: 0,
 		bedrock_retry_exhausted: 0,
 	};
+}
+
+function recordGateMetrics(
+	metrics: RunJobResult["metrics"],
+	gateMetrics: OntologyGateMetrics,
+): void {
+	for (const [key, value] of Object.entries(gateMetrics) as Array<
+		[keyof OntologyGateMetrics, number]
+	>) {
+		metrics[key] = (metrics[key] ?? 0) + value;
+	}
 }
 
 function makeResult(
