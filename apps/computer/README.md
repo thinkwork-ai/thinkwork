@@ -1,6 +1,6 @@
-# ThinkWork Computer
+# ThinkWork App
 
-End-user Computer surface for blank threads, Computer-owned thread history, generated app artifacts, approvals, and memory.
+End-user ThinkWork surface for blank threads, workspace-owned thread history, generated app artifacts, approvals, and memory.
 
 ## Local Dev
 
@@ -20,18 +20,18 @@ Use `5174` instead when you need the admin-compatible callback port locally.
 
 ## Deployed Smoke
 
-The plan-facing Computer v1 smoke command is:
+The plan-facing app smoke command is:
 
 ```bash
 scripts/smoke-computer.sh dev
 ```
 
-It creates a real deployed Computer thread, subscribes to AppSync before sending a prompt, verifies live streamed chunks match the persisted assistant response and completed `computer_tasks` row, then checks the deployed Computer surface APIs for thread-table loading, approval round-trip, memory listing, and browser-evidence observability.
+It creates a real deployed thread, subscribes to AppSync before sending a prompt, verifies live streamed chunks match the persisted assistant response and completed `computer_tasks` row, then checks the deployed app surface APIs for thread-table loading, approval round-trip, memory listing, and browser-evidence observability.
 
 The same command also runs the applet pipeline smoke:
 
 - saves or regenerates a stable smoke applet through the deployed API and asserts the `ok`, `validated`, and `persisted` pins
-- verifies `/artifacts/$appId` serves the deployed Computer SPA shell
+- verifies `/artifacts/$appId` serves the deployed app SPA shell
 - invokes the saved applet's deterministic `refresh()` export and checks per-source statuses
 - round-trips `saveAppletState` / `appletState`
 - seeds the canonical LastMile CRM pipeline-risk applet and opens it through the applet route
@@ -47,13 +47,13 @@ The default prompt is `Build a simple CRM pipeline dashboard from the available 
 
 ## Runbook Smoke
 
-Computer runbooks add Confirmation and Queue UI for published repeatable work. The runbook smoke defaults to a deterministic repo dry-run:
+Runbooks add Confirmation and Queue UI for published repeatable work. The runbook smoke defaults to a deterministic repo dry-run:
 
 ```bash
 node scripts/smoke/computer-runbook-smoke.mjs
 ```
 
-To exercise a deployed Computer, database, GraphQL API, and runbook lifecycle:
+To exercise a deployed app, database, GraphQL API, and runbook lifecycle:
 
 ```bash
 SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/computer-runbook-smoke.mjs
@@ -67,7 +67,7 @@ To run the browser-backed evidence path manually:
 SMOKE_BROWSER_SCENARIO=1 SMOKE_REQUIRE_BROWSER_EVIDENCE=1 scripts/smoke-computer.sh dev
 ```
 
-That mode temporarily enables the backing agent's `browser_automation` capability for the smoke turn, waits for durable `browser_automation_*` Computer events, then restores the prior capability state.
+That mode temporarily enables the backing agent's `browser_automation` capability for the smoke turn, waits for durable `browser_automation_*` events, then restores the prior capability state.
 
 To require a successful Nova Act browser run rather than any durable browser event:
 

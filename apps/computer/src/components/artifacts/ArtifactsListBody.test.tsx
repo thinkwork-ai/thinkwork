@@ -1,9 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArtifactsListBody } from "./ArtifactsListBody";
 import type { ArtifactItem } from "./artifacts-filtering";
@@ -92,16 +87,14 @@ function bodyRows(): HTMLElement[] {
 describe("ArtifactsListBody", () => {
   it("renders an empty state message when items is empty", () => {
     render(<ArtifactsListBody items={[]} />);
-    expect(
-      screen.getByTestId("artifacts-table-empty").textContent,
-    ).toMatch(/Ask Computer to create an artifact/i);
+    expect(screen.getByTestId("artifacts-table-empty").textContent).toMatch(
+      /Ask ThinkWork to create an artifact/i,
+    );
   });
 
   it("renders an error state when errorMessage is set and items is empty", () => {
     render(<ArtifactsListBody items={[]} errorMessage="boom" />);
-    expect(screen.getByTestId("artifacts-error").textContent).toMatch(
-      /boom/,
-    );
+    expect(screen.getByTestId("artifacts-error").textContent).toMatch(/boom/);
   });
 
   it("renders a loading shell when fetching with no rows", () => {
@@ -126,9 +119,7 @@ describe("ArtifactsListBody", () => {
 
   it("filters by title text in the search input", () => {
     render(<ArtifactsListBody items={items} />);
-    const search = screen.getByTestId(
-      "artifacts-search",
-    ) as HTMLInputElement;
+    const search = screen.getByTestId("artifacts-search") as HTMLInputElement;
     fireEvent.change(search, { target: { value: "lastmile" } });
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
@@ -137,9 +128,7 @@ describe("ArtifactsListBody", () => {
 
   it("filters by modelId text even when title doesn't contain it", () => {
     render(<ArtifactsListBody items={items} />);
-    const search = screen.getByTestId(
-      "artifacts-search",
-    ) as HTMLInputElement;
+    const search = screen.getByTestId("artifacts-search") as HTMLInputElement;
     fireEvent.change(search, { target: { value: "sonnet" } });
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
@@ -149,9 +138,15 @@ describe("ArtifactsListBody", () => {
   it("renders the toolbar with search left, tabs centered, kind dropdown right", () => {
     render(<ArtifactsListBody items={items} />);
     const toolbar = screen.getByTestId("artifacts-toolbar");
-    expect(toolbar.querySelector('[data-testid="artifacts-search"]')).not.toBeNull();
-    expect(toolbar.querySelector('[data-testid="artifacts-tabs"]')).not.toBeNull();
-    expect(toolbar.querySelector('[data-testid="artifacts-kind"]')).not.toBeNull();
+    expect(
+      toolbar.querySelector('[data-testid="artifacts-search"]'),
+    ).not.toBeNull();
+    expect(
+      toolbar.querySelector('[data-testid="artifacts-tabs"]'),
+    ).not.toBeNull();
+    expect(
+      toolbar.querySelector('[data-testid="artifacts-kind"]'),
+    ).not.toBeNull();
   });
 
   it("forwards row clicks to the artifact viewer route", () => {

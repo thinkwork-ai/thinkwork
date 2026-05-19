@@ -237,7 +237,7 @@ function AddJobButton({
             </span>
           </TooltipTrigger>
           <TooltipContent>
-            This Computer has no source agent yet — use admin to create the
+            This workspace has no source agent yet — use admin to create the
             schedule.
           </TooltipContent>
         </Tooltip>
@@ -359,9 +359,9 @@ function AutomationsPage() {
   if (noAssignedComputers) {
     return (
       <main className="flex h-full w-full flex-col items-center justify-center bg-background p-6 text-center">
-        <p className="text-base font-medium">No shared Computer assigned</p>
+        <p className="text-base font-medium">No workspace assigned</p>
         <p className="mt-1 max-w-md text-sm text-muted-foreground">
-          Ask your tenant operator to assign a shared Computer before managing
+          Ask your tenant operator to assign a workspace before managing
           automations.
         </p>
       </main>
@@ -396,7 +396,7 @@ function AutomationsPage() {
           <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed p-12 text-center">
             <p className="text-base font-medium">No automations yet</p>
             <p className="text-sm text-muted-foreground">
-              Scheduled jobs created from this Computer will appear here.
+              Scheduled jobs created from this workspace will appear here.
             </p>
           </div>
         </div>

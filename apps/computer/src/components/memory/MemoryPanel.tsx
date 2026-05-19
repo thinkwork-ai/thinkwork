@@ -37,7 +37,7 @@ export function MemoryPanel({
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-8">
         <header>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Things your Computer can carry across threads.
+            Things ThinkWork can carry across threads.
           </p>
         </header>
 

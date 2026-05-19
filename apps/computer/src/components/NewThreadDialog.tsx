@@ -102,25 +102,25 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
           <div className="grid gap-3 py-4">
             {noAssignedComputers ? (
               <p className="text-sm text-muted-foreground">
-                You don't have access to a shared Computer yet. Ask your tenant
+                You don't have access to a workspace yet. Ask your tenant
                 operator to assign one before creating threads.
               </p>
             ) : (
               <>
                 {computers.length > 1 ? (
                   <>
-                    <Label htmlFor="new-thread-computer">Computer</Label>
+                    <Label htmlFor="new-thread-computer">Workspace</Label>
                     <Select
                       value={selectedComputerId ?? undefined}
                       onValueChange={setSelectedComputerId}
                     >
                       <SelectTrigger id="new-thread-computer">
-                        <SelectValue placeholder="Select a Computer" />
+                        <SelectValue placeholder="Select a workspace" />
                       </SelectTrigger>
                       <SelectContent>
                         {computers.map((computer) => (
                           <SelectItem key={computer.id} value={computer.id}>
-                            {computer.name || computer.slug || "Computer"}
+                            {computer.name || computer.slug || "Workspace"}
                           </SelectItem>
                         ))}
                       </SelectContent>

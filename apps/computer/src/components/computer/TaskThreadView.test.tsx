@@ -201,7 +201,7 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.getByText("Working on it")).toBeTruthy();
-    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+    expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
   });
 
   it("projects persisted runbook queue parts into the prompt queue after reload", () => {
@@ -920,7 +920,7 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.getByText("Your name is Eric.")).toBeTruthy();
-    expect(screen.queryByLabelText("Computer is typing")).toBeNull();
+    expect(screen.queryByLabelText("ThinkWork is typing")).toBeNull();
   });
 
   it("renders a completed Computer task response when the assistant message has not refetched yet", () => {
@@ -1191,7 +1191,7 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.getByLabelText("Processing request")).toBeTruthy();
-    expect(screen.queryByLabelText("Computer is typing")).toBeNull();
+    expect(screen.queryByLabelText("ThinkWork is typing")).toBeNull();
   });
 
   it("prefers streaming chunks over the processing shimmer", () => {
@@ -1310,7 +1310,7 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.getByText("Working")).toBeTruthy();
-    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+    expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
   });
 
   it("renders streaming partial Markdown without crashing", () => {
@@ -1336,7 +1336,7 @@ describe("TaskThreadView", () => {
         />,
       ),
     ).not.toThrow();
-    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+    expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
   });
 
   it("renders empty content placeholder when assistant message body is blank", () => {
@@ -1902,9 +1902,7 @@ describe("TaskThreadView", () => {
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
       expect(wrapper.style.maxHeight).toBe("280px");
       expect(wrapper.className).toContain("overflow-hidden");
-      expect(
-        screen.getByRole("button", { name: /show more/i }),
-      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
     });
 
     it("expands to full content when Show more is clicked", () => {
@@ -1920,9 +1918,7 @@ describe("TaskThreadView", () => {
       // The clamp affordance flips to "Show less" once expanded so the
       // user can re-collapse without scrolling past the full prompt.
       expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
-      expect(
-        screen.getByRole("button", { name: /show less/i }),
-      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: /show less/i })).toBeTruthy();
     });
 
     it("re-collapses back to clipped state when Show less is clicked", () => {
@@ -1935,9 +1931,7 @@ describe("TaskThreadView", () => {
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
       expect(wrapper.style.maxHeight).toBe("280px");
-      expect(
-        screen.getByRole("button", { name: /show more/i }),
-      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
       expect(screen.queryByRole("button", { name: /show less/i })).toBeNull();
     });
 
@@ -1945,9 +1939,7 @@ describe("TaskThreadView", () => {
       mockScrollHeight(120);
       const { rerender } = renderUserMessage("Tiny prompt");
 
-      expect(
-        screen.queryByRole("button", { name: /show more/i }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
 
       mockScrollHeight(900);
       rerender(
@@ -1968,9 +1960,7 @@ describe("TaskThreadView", () => {
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
       expect(wrapper.style.maxHeight).toBe("280px");
-      expect(
-        screen.getByRole("button", { name: /show more/i }),
-      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
     });
 
     it("leaves long assistant messages unchanged", () => {

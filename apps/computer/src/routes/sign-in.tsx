@@ -28,7 +28,7 @@ function SignInPage() {
     <div className="min-h-svh flex flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="flex items-center gap-3">
         <Bot className="h-8 w-8 text-primary" />
-        <span className="text-2xl font-semibold tracking-tight">ThinkWork Computer</span>
+        <span className="text-2xl font-semibold tracking-tight">ThinkWork</span>
       </div>
       <p className="max-w-md text-center text-sm text-muted-foreground">
         Sign in with the Google account associated with your tenant.
@@ -37,7 +37,7 @@ function SignInPage() {
         Continue with Google
       </Button>
       <p className="text-xs text-muted-foreground">
-        ThinkWork Computer is the desktop end-user surface for your AI workplace.
+        ThinkWork is the collaborative workspace for your AI workplace.
       </p>
     </div>
   );

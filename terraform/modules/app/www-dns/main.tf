@@ -3,13 +3,15 @@
 #
 # Responsibilities:
 #   1. ACM certificate in us-east-1 covering apex + www
-#      (+ optional docs + optional admin).
+#      (+ optional docs + optional admin + optional app + optional computer).
 #   2. Cloudflare DNS records for ACM DNS validation.
 #   3. Apex CNAME in Cloudflare → primary CloudFront distribution (DNS-only).
 #   4. Second CloudFront distribution fronting an S3 website-redirect bucket
 #      that 301s www.<domain> → https://<domain>, plus its Cloudflare CNAME.
 #   5. Optional docs.<domain> CNAME → docs CloudFront distribution.
 #   6. Optional admin.<domain> CNAME → admin CloudFront distribution.
+#   7. Optional app.<domain> CNAME → end-user app CloudFront distribution.
+#   8. Optional computer.<domain> → app.<domain> 301 compatibility redirect.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -33,6 +35,7 @@ locals {
   www      = "www.${var.domain}"
   docs     = "docs.${var.domain}"
   admin    = "admin.${var.domain}"
+  app      = "app.${var.domain}"
   computer = "computer.${var.domain}"
   sandbox  = "sandbox.${var.domain}"
   api      = "api.${var.domain}"
@@ -49,17 +52,20 @@ locals {
     [local.www],
     var.include_docs ? [local.docs] : [],
     var.include_admin ? [local.admin] : [],
+    var.include_app ? [local.app] : [],
     var.include_computer ? [local.computer] : [],
     var.include_api ? [local.api] : [],
   )
 
   # Existing CNAME records stay gated on non-empty targets because their target
   # outputs are already known in the deployed stack. Newly bootstrapped records
-  # such as the sandbox CNAME must gate only on an explicit boolean so Terraform
-  # can plan the resource count before the new CloudFront distribution exists.
+  # such as app/computer compatibility/sandbox CNAMEs must gate only on explicit
+  # booleans so Terraform can plan the resource count before the new CloudFront
+  # distribution exists.
   create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
   create_admin_record    = var.include_admin && var.admin_cloudfront_domain_name != ""
-  create_computer_record = var.include_computer && var.computer_cloudfront_domain_name != ""
+  create_app_record      = var.include_app
+  create_computer_record = var.include_computer
   create_api_record      = var.include_api && var.api_gateway_id != ""
 }
 
@@ -267,7 +273,28 @@ resource "cloudflare_record" "admin" {
 }
 
 ################################################################################
-# computer.<domain> → computer CloudFront distribution (optional)
+# app.<domain> → end-user app CloudFront distribution (optional)
+################################################################################
+
+resource "cloudflare_record" "app" {
+  count = local.create_app_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.app
+  content = var.app_cloudfront_domain_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} app → CloudFront"
+}
+
+################################################################################
+# computer.<domain> → compatibility target (optional)
+#
+# With include_app=true, this alias points at the same app distribution as
+# app.<domain>; that distribution's viewer-request function performs the 301
+# to app.<domain>. Legacy deployments without include_app keep the old direct
+# CNAME behavior.
 ################################################################################
 
 resource "cloudflare_record" "computer" {
@@ -275,11 +302,11 @@ resource "cloudflare_record" "computer" {
 
   zone_id = var.cloudflare_zone_id
   name    = local.computer
-  content = var.computer_cloudfront_domain_name
+  content = var.include_app ? var.app_cloudfront_domain_name : var.computer_cloudfront_domain_name
   type    = "CNAME"
   ttl     = 300
   proxied = false
-  comment = "thinkwork-${var.stage} computer → CloudFront"
+  comment = var.include_app ? "thinkwork-${var.stage} computer → app compatibility alias" : "thinkwork-${var.stage} computer → CloudFront"
 }
 
 ################################################################################

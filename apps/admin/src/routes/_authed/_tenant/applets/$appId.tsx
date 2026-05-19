@@ -15,12 +15,7 @@ import {
   AdminAppletQuery,
   AdminUpdateAppletSourceMutation,
 } from "@/lib/graphql-queries";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { languageForFile } from "@/lib/codemirror-language";
 import { relativeTime } from "@/lib/utils";
 
@@ -283,16 +278,18 @@ async function saveSource({
 }
 
 function liveArtifactUrl(appId: string) {
-  const configured = String(import.meta.env.VITE_COMPUTER_URL ?? "").trim();
-  const base = configured || inferComputerOrigin();
+  const configured = String(
+    import.meta.env.VITE_APP_URL ?? import.meta.env.VITE_COMPUTER_URL ?? "",
+  ).trim();
+  const base = configured || inferAppOrigin();
   return `${base.replace(/\/+$/, "")}/artifacts/${encodeURIComponent(appId)}`;
 }
 
-function inferComputerOrigin() {
+function inferAppOrigin() {
   if (window.location.hostname.startsWith("admin.")) {
-    return window.location.origin.replace("//admin.", "//computer.");
+    return window.location.origin.replace("//admin.", "//app.");
   }
-  return "https://computer.thinkwork.ai";
+  return "https://app.thinkwork.ai";
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

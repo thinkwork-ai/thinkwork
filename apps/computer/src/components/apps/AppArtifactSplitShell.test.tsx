@@ -18,16 +18,16 @@ describe("AppArtifactSplitShell", () => {
     expect(
       screen
         .getByTestId("app-artifact-split-shell")
-        .querySelector('[data-generated-app-artifact]'),
+        .querySelector("[data-generated-app-artifact]"),
     ).toBeTruthy();
     expect(
       screen
         .getByTestId("app-artifact-split-shell")
         .querySelector('[data-runtime-mode="sandboxedGenerated"]'),
     ).toBeTruthy();
-    expect(screen.queryByText("Made with ThinkWork Computer")).toBeNull();
+    expect(screen.queryByText("Made with ThinkWork")).toBeNull();
     expect(screen.queryByText("New thread")).toBeNull();
-    expect(screen.queryByLabelText("Computer provenance")).toBeNull();
+    expect(screen.queryByLabelText("ThinkWork provenance")).toBeNull();
     expect(screen.getByText("App body")).toBeTruthy();
   });
 });

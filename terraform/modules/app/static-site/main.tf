@@ -27,6 +27,12 @@ variable "custom_domain" {
   default     = ""
 }
 
+variable "custom_domain_aliases" {
+  description = "Additional custom domains attached to the same CloudFront distribution. Useful for compatibility hosts that redirect at viewer-request time."
+  type        = list(string)
+  default     = []
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN for the custom domain (us-east-1, required for CloudFront)"
   type        = string
@@ -37,6 +43,12 @@ variable "is_spa" {
   description = "When true, configure CloudFront for a single-page app: drop the directory-rewrite function and fall back to /index.html with 200 on 403/404 so the client router can handle deep links."
   type        = bool
   default     = false
+}
+
+variable "viewer_request_function_code" {
+  description = "Optional CloudFront Function code to run on viewer-request. When set, it replaces the default non-SPA directory rewrite association."
+  type        = string
+  default     = ""
 }
 
 # ---------------------------------------------------------------------------
@@ -111,6 +123,17 @@ locals {
       : ""
     )
   )
+
+  viewer_request_function_enabled = var.viewer_request_function_code != ""
+  viewer_request_function_arn = (
+    local.viewer_request_function_enabled
+    ? aws_cloudfront_function.viewer_request[0].arn
+    : (!var.is_spa ? aws_cloudfront_function.rewrite.arn : "")
+  )
+  custom_domain_aliases = distinct(compact(concat(
+    var.custom_domain != "" ? [var.custom_domain] : [],
+    var.custom_domain_aliases,
+  )))
 }
 
 check "policy_inputs_are_mutually_exclusive" {
@@ -240,6 +263,14 @@ resource "aws_cloudfront_function" "rewrite" {
   EOF
 }
 
+resource "aws_cloudfront_function" "viewer_request" {
+  count   = local.viewer_request_function_enabled ? 1 : 0
+  name    = "thinkwork-${var.stage}-${var.site_name}-viewer-request"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = var.viewer_request_function_code
+}
+
 locals {
   # For SPAs, 403/404 from S3 means "not a real asset" — serve index.html with
   # a 200 so the client router can resolve the route. For directory-style
@@ -260,7 +291,7 @@ locals {
 resource "aws_cloudfront_distribution" "site" {
   enabled             = true
   default_root_object = "index.html"
-  aliases             = var.custom_domain != "" ? [var.custom_domain] : []
+  aliases             = local.custom_domain_aliases
   price_class         = "PriceClass_100"
 
   origin {
@@ -278,10 +309,10 @@ resource "aws_cloudfront_distribution" "site" {
     response_headers_policy_id = local.effective_response_headers_policy_id != "" ? local.effective_response_headers_policy_id : null
 
     dynamic "function_association" {
-      for_each = var.is_spa ? [] : [1]
+      for_each = local.viewer_request_function_arn != "" ? [1] : []
       content {
         event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.rewrite.arn
+        function_arn = local.viewer_request_function_arn
       }
     }
 

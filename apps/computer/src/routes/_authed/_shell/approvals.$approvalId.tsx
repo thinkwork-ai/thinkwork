@@ -75,7 +75,7 @@ function ApprovalDetailPage() {
     setSubmitError(null);
     const result = await reject({
       id: approvalId,
-      input: { reviewNotes: "Denied in ThinkWork Computer" },
+      input: { reviewNotes: "Denied in ThinkWork" },
     });
     if (result.error) {
       setSubmitError(result.error.message);
@@ -91,7 +91,7 @@ function ApprovalDetailPage() {
           <header className="grid gap-1">
             <h1 className="text-xl font-semibold tracking-tight">Approvals</h1>
             <p className="text-sm text-muted-foreground">
-              Pending Computer decisions.
+              Pending ThinkWork decisions.
             </p>
           </header>
           <ApprovalQueue
@@ -103,7 +103,9 @@ function ApprovalDetailPage() {
         </aside>
         <ApprovalDetail
           approval={
-            data?.inboxItem?.type === "computer_approval" ? data.inboxItem : null
+            data?.inboxItem?.type === "computer_approval"
+              ? data.inboxItem
+              : null
           }
           isLoading={fetching && !data}
           error={error?.message ?? null}

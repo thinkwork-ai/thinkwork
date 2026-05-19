@@ -148,25 +148,51 @@ output "admin_url" {
   value       = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
 }
 
-# Computer static site (apps/computer — end-user surface)
+locals {
+  end_user_app_url = local.end_user_app_domain != "" ? "https://${local.end_user_app_domain}" : "https://${module.computer_site.distribution_domain}"
+}
+
+# End-user app static site (apps/computer — internal package name retained)
+output "app_distribution_id" {
+  description = "CloudFront distribution ID for the end-user app"
+  value       = module.computer_site.distribution_id
+}
+
+output "app_distribution_domain" {
+  description = "CloudFront domain for the end-user app"
+  value       = module.computer_site.distribution_domain
+}
+
+output "app_bucket_name" {
+  description = "S3 bucket for end-user app assets"
+  value       = module.computer_site.bucket_name
+}
+
+output "app_url" {
+  description = "Public URL for the end-user app (custom app domain when set, CloudFront default otherwise)"
+  value       = local.end_user_app_url
+}
+
+# Deprecated compatibility aliases. Keep these stable for existing scripts and
+# external callers while the source package remains apps/computer.
 output "computer_distribution_id" {
-  description = "CloudFront distribution ID for the computer app"
+  description = "Deprecated alias for app_distribution_id"
   value       = module.computer_site.distribution_id
 }
 
 output "computer_distribution_domain" {
-  description = "CloudFront domain for the computer app"
+  description = "Deprecated alias for app_distribution_domain"
   value       = module.computer_site.distribution_domain
 }
 
 output "computer_bucket_name" {
-  description = "S3 bucket for computer app assets"
+  description = "Deprecated alias for app_bucket_name"
   value       = module.computer_site.bucket_name
 }
 
 output "computer_url" {
-  description = "Public URL for the computer app (custom domain when set, CloudFront default otherwise)"
-  value       = var.computer_domain != "" ? "https://${var.computer_domain}" : "https://${module.computer_site.distribution_domain}"
+  description = "Deprecated alias for app_url"
+  value       = local.end_user_app_url
 }
 
 # Computer sandbox subdomain (plan-012 U3 / U11.5 — iframe-isolated

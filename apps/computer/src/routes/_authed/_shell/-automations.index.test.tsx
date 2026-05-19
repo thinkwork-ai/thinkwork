@@ -175,7 +175,7 @@ describe("apps/computer Automations route", () => {
       expect(screen.getByText("No automations yet")).toBeTruthy(),
     );
     expect(
-      screen.getByText(/Scheduled jobs created from this Computer/),
+      screen.getByText(/Scheduled jobs created from this workspace/),
     ).toBeTruthy();
   });
 
