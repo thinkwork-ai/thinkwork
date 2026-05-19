@@ -151,6 +151,7 @@ describe("Thread type attribution resolvers", () => {
         role: "requester",
         source: "thread_creator",
         notification_preference: "subscribed",
+        last_read_at: new Date("2026-05-19T12:00:00.000Z"),
       },
       {
         id: "participant-agent",
@@ -179,6 +180,7 @@ describe("Thread type attribution resolvers", () => {
         participantType: "USER",
         userId: "user-1",
         notificationPreference: "SUBSCRIBED",
+        lastReadAt: "2026-05-19T12:00:00.000Z",
       }),
       expect.objectContaining({
         id: "participant-agent",

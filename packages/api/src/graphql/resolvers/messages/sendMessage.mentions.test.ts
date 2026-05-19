@@ -21,4 +21,12 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("senderType");
     expect(source).toContain("senderId");
   });
+
+  it("refreshes activity for non-Computer Space collaboration user messages", () => {
+    expect(source).toContain("!isUserMessage || !thread.computer_id");
+    expect(source).toContain(
+      "collaboration without a Computer needs human messages",
+    );
+    expect(source).toContain("notifyThreadUpdate");
+  });
 });

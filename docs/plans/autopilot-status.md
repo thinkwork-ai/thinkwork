@@ -6,6 +6,37 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Spaces Collaborative Chat UI
+
+Plan: `docs/plans/2026-05-19-005-feat-spaces-collaborative-chat-ui-plan.md`
+
+Requirements:
+
+- `docs/brainstorms/2026-05-19-spaces-collaborative-user-app-ui-requirements.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: U1 - Participant-Scoped Read State
+- Active branch: `codex/spaces-chat-u1-read-state`
+- Active worktree: `.Codex/worktrees/spaces-chat-u1`
+- Started: 2026-05-19
+- PR: not opened
+- CI: not started; local verification passed
+
+### Progress Log
+
+| Date       | Unit | Branch                            | PR      | Status      | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Notes                                                                                                                                                                                                                             |
+| ---------- | ---- | --------------------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-19 | U1   | `codex/spaces-chat-u1-read-state` | pending | In progress | `pnpm schema:build`; CLI/admin/mobile codegen; focused API/database tests; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm --filter thinkwork-cli typecheck`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0110_thread_participant_read_state.sql`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present test`; touched-file Prettier check; `git diff --check` | Added participant-scoped Thread read state, caller-specific `Thread.lastReadAt` overlay for paged queries, participant-aware unread counts, read-state mutation isolation, and collaborative Space user-message activity refresh. |
+
+### CI / Merge Log
+
+- 2026-05-19: Started autopilot run. Read `AGENTS.md`, the Compound `ce-work` and `ce-worktree` workflow docs, the plan, the prior Spaces onboarding ledger, and relevant prior docs in `docs/solutions/` / adjacent plans.
+- 2026-05-19: Created `.Codex/worktrees/spaces-chat-u1` on branch `codex/spaces-chat-u1-read-state` from `origin/main`.
+- 2026-05-19: U1 local verification passed with schema/codegen regeneration, focused resolver/schema tests, API/database/CLI typechecks, manual migration dry-run, workspace lint/typecheck/test, touched-file Prettier check, and whitespace checks. Preparing PR.
+
 ## Current Run: Spaces Customer Onboarding V1
 
 Plan: `docs/plans/2026-05-19-003-feat-spaces-customer-onboarding-v1-plan.md`

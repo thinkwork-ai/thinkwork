@@ -34,6 +34,25 @@ describe("Space thread participants schema", () => {
     expect(columns.role.default).toBe("member");
     expect(columns.source.default).toBe("manual");
     expect(columns.notification_preference.default).toBe("subscribed");
+    expect(columns.last_read_at.notNull).toBe(false);
+  });
+
+  it("declares participant-scoped read-state migration markers", () => {
+    const migration0110 = readFileSync(
+      join(HERE, "..", "drizzle", "0110_thread_participant_read_state.sql"),
+      "utf-8",
+    );
+
+    for (const marker of [
+      "creates-column: public.thread_participants.last_read_at",
+      "creates: public.idx_thread_participants_user_unread",
+    ]) {
+      expect(migration0110).toContain(`-- ${marker}`);
+    }
+    expect(migration0110).toContain("ADD COLUMN IF NOT EXISTS last_read_at");
+    expect(migration0110).toContain(
+      "WHERE participant_type = 'user' AND user_id IS NOT NULL",
+    );
   });
 
   it("declares manual migration markers for Space thread objects", () => {

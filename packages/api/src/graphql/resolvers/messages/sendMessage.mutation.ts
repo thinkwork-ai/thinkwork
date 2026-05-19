@@ -185,10 +185,11 @@ export const sendMessage = async (
     }
   }
 
-  // Only bump updated_at and notify for non-user messages (agent responses).
-  // User messages should NOT move the thread to the top — that happens when
-  // the agent responds (via chat-agent-invoke.ts).
-  if (!isUserMessage) {
+  // Computer-owned user messages should NOT move the thread to the top — that
+  // happens when the Computer responds (via chat-agent-invoke.ts). Space
+  // collaboration without a Computer needs human messages to refresh activity
+  // immediately so other participants get unread Inbox state.
+  if (!isUserMessage || !thread.computer_id) {
     await db
       .update(threads)
       .set({ updated_at: new Date() })
