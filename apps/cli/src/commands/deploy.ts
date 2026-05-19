@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import {
   validateComponent,
+  validateStage,
   expandComponent,
   isProdLike,
   type Component,
@@ -48,6 +49,12 @@ export interface DeployCommandDependencies {
     opts: DeployCommandOptions,
   ) => Promise<EnterpriseDeployResult>;
   shouldUseEnterprise?: (opts: DeployCommandOptions) => boolean;
+}
+
+export interface ConfirmLocalDeployStageDependencies {
+  confirm?: (message: string) => Promise<boolean>;
+  promptInput?: (message: string) => Promise<string>;
+  stdoutIsTty?: boolean;
 }
 
 export function registerDeployCommand(
@@ -131,7 +138,7 @@ export async function runLocalTerraformDeploy(
   opts: DeployCommandOptions,
 ): Promise<void> {
   const startTime = Date.now();
-  const stage = await resolveStage({ flag: opts.stage });
+  const initialStage = await resolveStage({ flag: opts.stage });
 
   const compCheck = validateComponent(opts.component);
   if (!compCheck.valid) {
@@ -140,23 +147,21 @@ export async function runLocalTerraformDeploy(
   }
 
   const identity = getAwsIdentity();
-  printHeader("deploy", stage, identity);
+  printHeader("deploy", initialStage, identity);
 
   if (!identity) {
     printWarning("Could not resolve AWS identity. Is the AWS CLI configured?");
   }
 
-  if (isProdLike(stage) && !opts.yes) {
-    const ok = await confirm(`  Stage "${stage}" is production-like. Deploy?`);
-    if (!ok) {
-      console.log("  Aborted.");
-      process.exit(0);
-    }
-  } else if (!opts.yes) {
-    const ok = await confirm(`  Deploy to stage "${stage}"?`);
-    if (!ok) {
-      console.log("  Aborted.");
-      process.exit(0);
+  const stage = await confirmLocalDeployStage(initialStage, opts);
+  if (!stage) {
+    console.log("  Aborted.");
+    process.exit(0);
+  }
+  if (stage !== initialStage) {
+    printHeader("deploy", stage, identity);
+    if (!identity) {
+      printWarning("Could not resolve AWS identity. Is the AWS CLI configured?");
     }
   }
 
@@ -192,6 +197,52 @@ export async function runLocalTerraformDeploy(
   await runPostDeployProbe(stage);
 
   printSummary("deploy", stage, tiers, startTime);
+}
+
+export async function confirmLocalDeployStage(
+  initialStage: string,
+  opts: Pick<DeployCommandOptions, "yes">,
+  deps: ConfirmLocalDeployStageDependencies = {},
+): Promise<string | null> {
+  if (opts.yes) return initialStage;
+
+  let stage = initialStage;
+  while (true) {
+    const ok = await (deps.confirm ?? confirm)(deployConfirmMessage(stage));
+    if (ok) return stage;
+
+    const canPromptForAnotherStage =
+      deps.stdoutIsTty ?? Boolean(process.stdout.isTTY);
+    if (!canPromptForAnotherStage) return null;
+
+    const nextStage = (
+      await promptAlternativeDeployStage(stage, deps.promptInput)
+    ).trim();
+    if (!nextStage) return null;
+
+    const check = validateStage(nextStage);
+    if (!check.valid) {
+      throw new Error(check.error);
+    }
+    stage = nextStage;
+  }
+}
+
+function deployConfirmMessage(stage: string): string {
+  return isProdLike(stage)
+    ? `  Stage "${stage}" is production-like. Deploy?`
+    : `  Deploy to stage "${stage}"?`;
+}
+
+async function promptAlternativeDeployStage(
+  currentStage: string,
+  promptInput: ConfirmLocalDeployStageDependencies["promptInput"],
+): Promise<string> {
+  const message = `Deployment stage to deploy instead of "${currentStage}" (blank to abort):`;
+  if (promptInput) return promptInput(message);
+
+  const { input } = await import("@inquirer/prompts");
+  return input({ message });
 }
 
 function printEnterpriseDeploySummary(result: EnterpriseDeployResult): void {
