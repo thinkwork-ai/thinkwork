@@ -57,18 +57,19 @@ Target branch: `main`
 
 ### Current Unit
 
-- Active unit: U1 — Active Ontology Compile Snapshot
-- Active branch: `codex/ontology-gate-u1`
-- Active worktree: `.Codex/worktrees/ontology-gate-u1`
+- Active unit: U2 — Ontology-Shaped Planner Contract
+- Active branch: `codex/ontology-gate-u2`
+- Active worktree: `.Codex/worktrees/ontology-gate-u2`
 - Started: 2026-05-19
-- PR: [#1422](https://github.com/thinkwork-ai/thinkwork/pull/1422)
+- PR: pending
 - CI: pending
 
 ### Progress Log
 
-| Date       | Unit | Branch                   | PR                                                           | Status    | Verification                                                                                                                                                                                                                                                  | Notes                                                                                                                                                                                                                                    |
-| ---------- | ---- | ------------------------ | ------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-19 | U1   | `codex/ontology-gate-u1` | [#1422](https://github.com/thinkwork-ai/thinkwork/pull/1422) | In review | `pnpm --filter @thinkwork/api test -- src/lib/ontology/compile-snapshot.test.ts src/lib/ontology/templates.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm dlx prettier@3.5.3 --write ...`; `git diff --check` | Added the active ontology compile snapshot contract, conservative no-active-version behavior, approved-only sets/maps for entity types/facets/relationships/mappings, relationship endpoint helper, and broader business seed templates. |
+| Date       | Unit | Branch                   | PR                                                           | Status      | Verification                                                                                                                                                                                                                                                                                                                                                              | Notes                                                                                                                                                                                                                                    |
+| ---------- | ---- | ------------------------ | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-19 | U1   | `codex/ontology-gate-u1` | [#1422](https://github.com/thinkwork-ai/thinkwork/pull/1422) | Merged      | `pnpm --filter @thinkwork/api test -- src/lib/ontology/compile-snapshot.test.ts src/lib/ontology/templates.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm dlx prettier@3.5.3 --write ...`; `git diff --check`; GitHub checks                                                                                              | Added the active ontology compile snapshot contract, conservative no-active-version behavior, approved-only sets/maps for entity types/facets/relationships/mappings, relationship endpoint helper, and broader business seed templates. |
+| 2026-05-19 | U2   | `codex/ontology-gate-u2` | pending                                                      | Implemented | `pnpm --filter @thinkwork/api test -- src/__tests__/wiki-compiler.test.ts src/lib/ontology/compile-snapshot.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm dlx prettier --check packages/api/src/lib/wiki/planner.ts packages/api/src/__tests__/wiki-compiler.test.ts docs/plans/autopilot-status.md`; `git diff --check` | Added ontology snapshot input and ontology-shaped candidate metadata to the Wiki planner contract; kept `compiler.ts` in its existing tab-indented style to avoid whole-file formatter churn.                                            |
 
 ### CI / Merge Log
 
@@ -76,6 +77,9 @@ Target branch: `main`
 - 2026-05-19: Created `.Codex/worktrees/ontology-gate-u1` on branch `codex/ontology-gate-u1` from `origin/main`.
 - 2026-05-19: U1 local verification passed with focused ontology tests, API typecheck, full API test suite, Prettier write on touched files, and whitespace checks.
 - 2026-05-19: Opened [#1422](https://github.com/thinkwork-ai/thinkwork/pull/1422) for U1.
+- 2026-05-19: Required checks passed for [#1422](https://github.com/thinkwork-ai/thinkwork/pull/1422). The first merge attempt hit a status-doc conflict after `main` moved; rebased, resolved the status ledger by preserving both active runs, reran focused tests/typecheck/format checks, force-pushed, watched CI pass again, and squash merged as `eecaf4f27c845080179c27461bdf55304a879509`.
+- 2026-05-19: Deleted remote/local branch `codex/ontology-gate-u1`, removed `.Codex/worktrees/ontology-gate-u1`, fast-forwarded `main`, and started U2 in `.Codex/worktrees/ontology-gate-u2` on branch `codex/ontology-gate-u2`.
+- 2026-05-19: U2 local verification passed with focused planner/compiler tests, API typecheck, full API test suite, targeted Prettier check on formatted touched files, and whitespace checks. `compiler.ts` has pre-existing whole-file Prettier drift, so U2 kept its small compiler changes in the surrounding tab-indented style.
 
 ### Blockers
 

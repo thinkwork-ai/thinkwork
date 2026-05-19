@@ -267,6 +267,7 @@ describe("seedAliasesForTitle", () => {
 
 import {
   buildPlannerUserPrompt,
+  describeOntologySnapshotForPrompt,
   validatePlannerResult,
   _test as plannerTestExports,
 } from "../lib/wiki/planner.js";
@@ -344,6 +345,73 @@ describe("validatePlannerResult", () => {
     };
     expect(() => validatePlannerResult(bad)).toThrow(/pageId missing/);
   });
+
+  it("accepts ontology-shaped metadata on structured candidates", () => {
+    const shaped = {
+      ...validPlan,
+      newPages: [
+        {
+          ...validPlan.newPages[0],
+          entityTypeSlug: "customer",
+          sections: [
+            {
+              ...validPlan.newPages[0].sections[0],
+              facetSlug: "overview",
+            },
+          ],
+        },
+      ],
+      pageLinks: [
+        {
+          fromType: "entity",
+          fromSlug: "taberna-dos-mercadores",
+          toType: "entity",
+          toSlug: "eric-odom",
+          relationshipTypeSlug: "has_stakeholder",
+        },
+      ],
+    };
+
+    expect(() => validatePlannerResult(shaped)).not.toThrow();
+  });
+
+  it("rejects structured facets without an entityTypeSlug", () => {
+    const bad = {
+      ...validPlan,
+      newPages: [
+        {
+          ...validPlan.newPages[0],
+          sections: [
+            {
+              ...validPlan.newPages[0].sections[0],
+              facetSlug: "overview",
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() => validatePlannerResult(bad)).toThrow(/entityTypeSlug required/);
+  });
+
+  it("rejects malformed ontology slug fields", () => {
+    const bad = {
+      ...validPlan,
+      pageLinks: [
+        {
+          fromType: "entity",
+          fromSlug: "taberna-dos-mercadores",
+          toType: "entity",
+          toSlug: "eric-odom",
+          relationshipTypeSlug: "",
+        },
+      ],
+    };
+
+    expect(() => validatePlannerResult(bad)).toThrow(
+      /relationshipTypeSlug must be a non-empty string/,
+    );
+  });
 });
 
 describe("planner system prompt", () => {
@@ -356,6 +424,69 @@ describe("planner system prompt", () => {
     );
   });
 });
+
+function promptOntologySnapshot() {
+  return {
+    tenantId: "t1",
+    activeVersionId: "version-1",
+    activeVersionNumber: 1,
+    conservative: false,
+    entityTypeSlugs: new Set(["customer", "person"]),
+    relationshipTypeSlugs: new Set(["has_stakeholder"]),
+    facetTemplateKeys: new Set(["customer:overview"]),
+    externalMappingKeys: new Set(),
+    entityTypesBySlug: new Map([
+      [
+        "customer",
+        {
+          id: "entity-customer",
+          slug: "customer",
+          name: "Customer",
+          broadType: "organization",
+          description: null,
+          aliases: ["account"],
+          guidanceNotes: null,
+          externalMappings: [],
+        },
+      ],
+    ]),
+    relationshipTypesBySlug: new Map([
+      [
+        "has_stakeholder",
+        {
+          id: "rel-stakeholder",
+          slug: "has_stakeholder",
+          name: "Has stakeholder",
+          description: null,
+          inverseName: "Stakeholder of",
+          sourceTypeSlugs: ["customer"],
+          targetTypeSlugs: ["person"],
+          aliases: [],
+          guidanceNotes: null,
+          externalMappings: [],
+        },
+      ],
+    ]),
+    facetTemplatesByKey: new Map([
+      [
+        "customer:overview",
+        {
+          key: "customer:overview",
+          entityTypeSlug: "customer",
+          slug: "overview",
+          heading: "Overview",
+          facetType: "compiled",
+          position: 10,
+          sourcePriority: ["hindsight_memory_unit"],
+          prompt: null,
+          guidanceNotes: null,
+          source: "tenant",
+        },
+      ],
+    ]),
+    templatesByEntityType: {},
+  };
+}
 
 describe("buildPlannerUserPrompt", () => {
   const record = {
@@ -408,6 +539,36 @@ describe("buildPlannerUserPrompt", () => {
     expect(prompt).toContain("Open unresolved mentions in this scope");
     expect(prompt).toContain("id=m1");
     expect(prompt).toContain("Required output JSON shape");
+  });
+
+  it("includes active ontology options when a snapshot is supplied", () => {
+    const prompt = buildPlannerUserPrompt({
+      tenantId: "t1",
+      ownerId: "a1",
+      records: [record],
+      candidatePages: [],
+      openMentions: [],
+      ontologySnapshot: promptOntologySnapshot() as any,
+    });
+
+    expect(prompt).toContain("Approved business ontology");
+    expect(prompt).toContain("customer: Customer");
+    expect(prompt).toContain("customer:overview");
+    expect(prompt).toContain("has_stakeholder");
+    expect(prompt).toContain("entityTypeSlug");
+    expect(prompt).toContain("relationshipTypeSlug");
+  });
+
+  it("describes conservative ontology snapshots without authorizing structured fields", () => {
+    const text = describeOntologySnapshotForPrompt({
+      ...promptOntologySnapshot(),
+      activeVersionId: null,
+      activeVersionNumber: null,
+      conservative: true,
+    } as any);
+
+    expect(text).toContain("No active approved ontology version");
+    expect(text).toContain("Do not emit entityTypeSlug");
   });
 
   it("strips photos + raw from metadata to keep the prompt focused", () => {
@@ -496,57 +657,133 @@ vi.mock("../lib/wiki/places-service.js", async (importOriginal) => {
   };
 });
 
-const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
-  vi.hoisted(() => {
-    const mockAdapter = {
-      kind: "hindsight" as const,
-      listRecordsUpdatedSince: vi.fn(),
-    };
-    const mockGetServices = vi.fn(() => ({
-      adapter: mockAdapter,
-      config: { engine: "hindsight" },
-    }));
-    const mockRepo = {
-      getCursor: vi.fn(),
-      setCursor: vi.fn(),
-      completeCompileJob: vi.fn(),
-      findPageById: vi.fn(),
-      findAliasMatches: vi.fn().mockResolvedValue([]),
-      findAliasMatchesFuzzy: vi.fn().mockResolvedValue([]),
-      listPagesForScope: vi.fn().mockResolvedValue([]),
-      listOpenMentions: vi.fn().mockResolvedValue([]),
-      listPageSections: vi.fn().mockResolvedValue([]),
-      upsertPage: vi.fn().mockResolvedValue({
-        id: "page-new",
-        type: "entity",
-        slug: "page-new",
-        title: "page-new",
-      }),
-      upsertPageLink: vi.fn().mockResolvedValue(true),
-      upsertUnresolvedMention: vi.fn(),
-      markUnresolvedPromoted: vi.fn(),
-      findPagesByExactTitle: vi.fn().mockResolvedValue([]),
-      findPagesByFuzzyTitle: vi.fn().mockResolvedValue([]),
-      findMemoryUnitPageSources: vi.fn().mockResolvedValue([]),
-      bumpSectionLastSeen: vi.fn().mockResolvedValue(0),
-      enqueueCompileJob: vi.fn().mockResolvedValue({
-        inserted: false,
-        job: {
-          id: "chained-job",
-          tenant_id: "t1",
-          owner_id: "a1",
-          trigger: "bootstrap_import",
+const {
+  mockAdapter,
+  mockRepo,
+  mockPlanner,
+  mockWriter,
+  mockGetServices,
+  mockLoadOntologyCompileSnapshot,
+  testOntologySnapshot,
+} = vi.hoisted(() => {
+  const testOntologySnapshot = {
+    tenantId: "t1",
+    activeVersionId: "ontology-version-1",
+    activeVersionNumber: 1,
+    conservative: false,
+    entityTypeSlugs: new Set(["customer", "person"]),
+    relationshipTypeSlugs: new Set(["has_stakeholder"]),
+    facetTemplateKeys: new Set(["customer:overview"]),
+    externalMappingKeys: new Set(),
+    entityTypesBySlug: new Map([
+      [
+        "customer",
+        {
+          id: "entity-customer",
+          slug: "customer",
+          name: "Customer",
+          broadType: "organization",
+          description: null,
+          aliases: ["account"],
+          guidanceNotes: null,
+          externalMappings: [],
         },
-      }),
-      countDuplicateTitleCandidates: vi.fn().mockResolvedValue(0),
-      findPlaceById: vi.fn().mockResolvedValue(null),
-      findPageByPlaceId: vi.fn().mockResolvedValue(null),
-      normalizeAlias: (s: string) => s.toLowerCase().trim(),
-    };
-    const mockPlanner = { runPlanner: vi.fn() };
-    const mockWriter = { writeSection: vi.fn() };
-    return { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices };
-  });
+      ],
+    ]),
+    relationshipTypesBySlug: new Map([
+      [
+        "has_stakeholder",
+        {
+          id: "rel-stakeholder",
+          slug: "has_stakeholder",
+          name: "Has stakeholder",
+          description: null,
+          inverseName: "Stakeholder of",
+          sourceTypeSlugs: ["customer"],
+          targetTypeSlugs: ["person"],
+          aliases: [],
+          guidanceNotes: null,
+          externalMappings: [],
+        },
+      ],
+    ]),
+    facetTemplatesByKey: new Map([
+      [
+        "customer:overview",
+        {
+          key: "customer:overview",
+          entityTypeSlug: "customer",
+          slug: "overview",
+          heading: "Overview",
+          facetType: "compiled",
+          position: 10,
+          sourcePriority: ["hindsight_memory_unit"],
+          prompt: null,
+          guidanceNotes: null,
+          source: "tenant",
+        },
+      ],
+    ]),
+    templatesByEntityType: {},
+  };
+  const mockAdapter = {
+    kind: "hindsight" as const,
+    listRecordsUpdatedSince: vi.fn(),
+  };
+  const mockGetServices = vi.fn(() => ({
+    adapter: mockAdapter,
+    config: { engine: "hindsight" },
+  }));
+  const mockRepo = {
+    getCursor: vi.fn(),
+    setCursor: vi.fn(),
+    completeCompileJob: vi.fn(),
+    findPageById: vi.fn(),
+    findAliasMatches: vi.fn().mockResolvedValue([]),
+    findAliasMatchesFuzzy: vi.fn().mockResolvedValue([]),
+    listPagesForScope: vi.fn().mockResolvedValue([]),
+    listOpenMentions: vi.fn().mockResolvedValue([]),
+    listPageSections: vi.fn().mockResolvedValue([]),
+    upsertPage: vi.fn().mockResolvedValue({
+      id: "page-new",
+      type: "entity",
+      slug: "page-new",
+      title: "page-new",
+    }),
+    upsertPageLink: vi.fn().mockResolvedValue(true),
+    upsertUnresolvedMention: vi.fn(),
+    markUnresolvedPromoted: vi.fn(),
+    findPagesByExactTitle: vi.fn().mockResolvedValue([]),
+    findPagesByFuzzyTitle: vi.fn().mockResolvedValue([]),
+    findMemoryUnitPageSources: vi.fn().mockResolvedValue([]),
+    bumpSectionLastSeen: vi.fn().mockResolvedValue(0),
+    enqueueCompileJob: vi.fn().mockResolvedValue({
+      inserted: false,
+      job: {
+        id: "chained-job",
+        tenant_id: "t1",
+        owner_id: "a1",
+        trigger: "bootstrap_import",
+      },
+    }),
+    countDuplicateTitleCandidates: vi.fn().mockResolvedValue(0),
+    findPlaceById: vi.fn().mockResolvedValue(null),
+    findPageByPlaceId: vi.fn().mockResolvedValue(null),
+    normalizeAlias: (s: string) => s.toLowerCase().trim(),
+  };
+  const mockPlanner = { runPlanner: vi.fn() };
+  const mockWriter = { writeSection: vi.fn() };
+  const mockLoadOntologyCompileSnapshot = vi.fn();
+  return {
+    mockAdapter,
+    mockRepo,
+    mockPlanner,
+    mockWriter,
+    mockGetServices,
+    mockLoadOntologyCompileSnapshot,
+    testOntologySnapshot,
+  };
+});
 
 vi.mock("../lib/memory/index.js", () => ({
   getMemoryServices: mockGetServices,
@@ -614,6 +851,16 @@ vi.mock("../lib/wiki/section-writer.js", async (importOriginal) => {
   return {
     ...actual,
     writeSection: (...args: unknown[]) => mockWriter.writeSection(...args),
+  };
+});
+
+vi.mock("../lib/ontology/compile-snapshot.js", async (importOriginal) => {
+  const actual =
+    (await importOriginal()) as typeof import("../lib/ontology/compile-snapshot.js");
+  return {
+    ...actual,
+    loadOntologyCompileSnapshot: (...args: unknown[]) =>
+      mockLoadOntologyCompileSnapshot(...args),
   };
 });
 
@@ -716,6 +963,7 @@ describe("runCompileJob", () => {
     // Default: no places resolved. Tests that exercise the place_id wire
     // override per-scenario.
     mockPlacesService.resolveBatchPlace.mockResolvedValue(null);
+    mockLoadOntologyCompileSnapshot.mockResolvedValue(testOntologySnapshot);
   });
 
   it("creates a new page from the planner's newPages output", async () => {
@@ -757,6 +1005,16 @@ describe("runCompileJob", () => {
     expect(result.metrics.records_read).toBe(2);
     expect(result.metrics.pages_upserted).toBe(1);
     expect(result.metrics.planner_calls).toBe(1);
+    expect(result.metrics.ontology_active_version_id).toBe(
+      "ontology-version-1",
+    );
+    expect(mockLoadOntologyCompileSnapshot).toHaveBeenCalledWith({
+      tenantId: "t1",
+    });
+    expect(mockPlanner.runPlanner).toHaveBeenCalledWith(
+      expect.objectContaining({ ontologySnapshot: testOntologySnapshot }),
+      expect.any(Object),
+    );
     expect(mockRepo.upsertPage).toHaveBeenCalledTimes(1);
     expect(mockWriter.writeSection).not.toHaveBeenCalled();
     expect(mockRepo.setCursor).toHaveBeenCalledWith(

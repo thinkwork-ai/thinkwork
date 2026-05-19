@@ -20,6 +20,7 @@
  */
 
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
+import type { OntologyCompileSnapshot } from "../ontology/compile-snapshot.js";
 import { invokeClaudeJson } from "./bedrock.js";
 import {
   describeAllPageTypes,
@@ -54,10 +55,12 @@ export interface PlannerBatch {
   records: ThinkWorkMemoryRecord[];
   candidatePages: PlannerCandidatePage[];
   openMentions: PlannerOpenMention[];
+  ontologySnapshot?: OntologyCompileSnapshot;
 }
 
 export interface PlannedSectionUpdate {
   slug: string;
+  facetSlug?: string | null;
   rationale: string;
   proposed_body_md: string;
   /**
@@ -81,6 +84,7 @@ export interface PlannedPageUpdate {
 
 export interface PlannedNewPageSection {
   slug: string;
+  facetSlug?: string | null;
   heading: string;
   body_md: string;
   /** Per-section provenance — see PlannedSectionUpdate.source_refs. */
@@ -89,6 +93,7 @@ export interface PlannedNewPageSection {
 
 export interface PlannedNewPage {
   type: WikiPageType;
+  entityTypeSlug?: string | null;
   slug: string;
   title: string;
   aliases?: string[];
@@ -105,6 +110,7 @@ export interface PlannedNewPage {
 export interface PlannedUnresolvedMention {
   alias: string;
   suggestedType: WikiPageType | null;
+  entityTypeSlug?: string | null;
   context: string;
   source_ref: string;
 }
@@ -113,6 +119,7 @@ export interface PlannedPromotion {
   mentionId: string;
   reason: string;
   type: WikiPageType;
+  entityTypeSlug?: string | null;
   title: string;
   slug: string;
   sections: PlannedNewPageSection[];
@@ -130,6 +137,7 @@ export interface PlannedPageLink {
   fromSlug: string;
   toType: WikiPageType;
   toSlug: string;
+  relationshipTypeSlug?: string | null;
   /** One-line description of why the link exists (for backlink context). */
   context?: string;
 }
@@ -240,7 +248,8 @@ Return a JSON object with these five arrays. Any can be empty. Bias toward \`unr
 6. Links should only reference \`(type, slug)\` pairs that exist in \`candidatePages\` OR are being created in this same response's \`newPages\`. Never invent pages by link alone.
 7. **Never write record IDs, UUIDs, hex identifiers, or internal keys into section prose.** Phrases like "see records 1c907c71-...", "id=abc-123", or dumps of Hindsight unit ids are forbidden in \`proposed_body_md\` / \`body_md\`. Provenance belongs in \`source_refs\` only; the body is for human-readable content.
 8. **Do NOT use \`[[Title]]\` wikilink syntax in section bodies.** Cross-page relationships are stored in \`pageLinks\` (which you still emit on the JSON root), not inline in prose. Write the entity name as plain prose — "Marco is an AI assistant powered by ThinkWork" — without any brackets. The rendered wiki hyperlinks via the Connected Pages section that reads from \`wiki_page_links\`.
-9. Output **only valid JSON**. No prose, no markdown fences.`;
+9. When an approved ontology snapshot is provided, use only its listed \`entityTypeSlug\`, \`facetSlug\`, and \`relationshipTypeSlug\` values for structured business-domain candidates. If the evidence does not fit an approved type/facet/relationship, emit \`unresolvedMentions\` instead of inventing ontology fields.
+10. Output **only valid JSON**. No prose, no markdown fences.`;
 
 const PLANNER_OUTPUT_SCHEMA = `{
   "pageUpdates": [
@@ -250,6 +259,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "sections": [
         {
           "slug": "<section slug from the page type>",
+          "facetSlug": "<approved ontology facet slug, optional>",
           "rationale": "<one sentence: why this section changes>",
           "proposed_body_md": "<full markdown body for the section>",
           "source_refs": ["<record id that inform THIS section>"]
@@ -260,6 +270,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
   "newPages": [
     {
       "type": "entity | topic | decision",
+      "entityTypeSlug": "<approved ontology entity type slug, optional>",
       "slug": "<kebab-case slug>",
       "title": "<display title>",
       "aliases": ["<optional alternate names>"],
@@ -268,6 +279,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "sections": [
         {
           "slug": "<section slug>",
+          "facetSlug": "<approved ontology facet slug, optional>",
           "heading": "<section heading>",
           "body_md": "<section body markdown>",
           "source_refs": ["<record id that inform THIS section>"]
@@ -289,6 +301,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "fromSlug": "<slug of source page; must exist in candidatePages or newPages>",
       "toType": "entity | topic | decision",
       "toSlug": "<slug of target page; must exist in candidatePages or newPages>",
+      "relationshipTypeSlug": "<approved ontology relationship type slug, optional>",
       "context": "<one-line description of why the link exists; shown to the user on backlinks>"
     }
   ],
@@ -353,6 +366,9 @@ export function buildPlannerUserPrompt(batch: PlannerBatch): string {
     }
   }
 
+  lines.push("\n## Approved business ontology for structured candidates\n");
+  lines.push(describeOntologySnapshotForPrompt(batch.ontologySnapshot));
+
   lines.push("\n## Required output JSON shape\n");
   lines.push("```");
   lines.push(PLANNER_OUTPUT_SCHEMA);
@@ -360,6 +376,82 @@ export function buildPlannerUserPrompt(batch: PlannerBatch): string {
   lines.push(
     "\nReturn ONLY the JSON object. No prose, no fences. Include empty arrays for categories that don't apply.",
   );
+
+  return lines.join("\n");
+}
+
+export function describeOntologySnapshotForPrompt(
+  snapshot?: OntologyCompileSnapshot,
+): string {
+  if (!snapshot) {
+    return "(none supplied)\nDo not emit entityTypeSlug, facetSlug, or relationshipTypeSlug.";
+  }
+
+  if (snapshot.conservative) {
+    return [
+      "No active approved ontology version is available.",
+      "Do not emit entityTypeSlug, facetSlug, or relationshipTypeSlug. Prefer unresolvedMentions for business-domain observations that are not already covered by the page taxonomy.",
+    ].join("\n");
+  }
+
+  const lines: string[] = [];
+  lines.push(
+    `Active ontology version: ${snapshot.activeVersionNumber ?? "unknown"} (${snapshot.activeVersionId ?? "unknown id"})`,
+  );
+
+  lines.push("\nEntity types:");
+  const entityTypes = Array.from(snapshot.entityTypesBySlug.values()).sort(
+    (a, b) => a.slug.localeCompare(b.slug),
+  );
+  if (entityTypes.length === 0) {
+    lines.push("- (none)");
+  } else {
+    for (const entityType of entityTypes) {
+      lines.push(
+        `- ${entityType.slug}: ${entityType.name}` +
+          (entityType.description ? ` — ${entityType.description}` : "") +
+          (entityType.aliases.length > 0
+            ? ` aliases=${JSON.stringify(entityType.aliases.slice(0, 6))}`
+            : ""),
+      );
+    }
+  }
+
+  lines.push("\nFacet templates:");
+  const facetTemplates = Array.from(snapshot.facetTemplatesByKey.values()).sort(
+    (a, b) =>
+      a.entityTypeSlug.localeCompare(b.entityTypeSlug) ||
+      a.slug.localeCompare(b.slug),
+  );
+  if (facetTemplates.length === 0) {
+    lines.push("- (none)");
+  } else {
+    for (const facet of facetTemplates) {
+      lines.push(
+        `- ${facet.entityTypeSlug}:${facet.slug} heading=${JSON.stringify(facet.heading)}` +
+          ` facetSlug=${facet.slug}`,
+      );
+    }
+  }
+
+  lines.push("\nRelationship types:");
+  const relationshipTypes = Array.from(
+    snapshot.relationshipTypesBySlug.values(),
+  ).sort((a, b) => a.slug.localeCompare(b.slug));
+  if (relationshipTypes.length === 0) {
+    lines.push("- (none)");
+  } else {
+    for (const relationshipType of relationshipTypes) {
+      const sourceTypes = relationshipType.sourceTypeSlugs.join("|") || "*";
+      const targetTypes = relationshipType.targetTypeSlugs.join("|") || "*";
+      lines.push(
+        `- ${relationshipType.slug}: ${relationshipType.name} (${sourceTypes} -> ${targetTypes})` +
+          (relationshipType.description
+            ? ` — ${relationshipType.description}`
+            : ""),
+      );
+    }
+  }
 
   return lines.join("\n");
 }
@@ -507,6 +599,7 @@ export function validatePlannerResult(
       console.warn(`[planner] dropping pageLink with missing toSlug`);
       return false;
     }
+    validateOptionalString(link, "relationshipTypeSlug", "pageLinks");
     return true;
   });
 
@@ -518,6 +611,16 @@ export function validatePlannerResult(
       throw new Error("pageUpdates.pageId missing");
     }
     requireArray(up, "sections");
+    for (const section of up.sections as unknown[]) {
+      if (!section || typeof section !== "object") {
+        throw new Error("pageUpdates.sections entry not object");
+      }
+      validateOptionalString(
+        section as Record<string, unknown>,
+        "facetSlug",
+        "pageUpdates.sections",
+      );
+    }
   }
 
   for (const p of v.newPages as unknown[]) {
@@ -532,7 +635,24 @@ export function validatePlannerResult(
     if (typeof np.slug !== "string" || np.slug.length === 0) {
       throw new Error("newPages.slug missing");
     }
+    validateOptionalString(np, "entityTypeSlug", "newPages");
     requireArray(np, "sections");
+    for (const section of np.sections as unknown[]) {
+      if (!section || typeof section !== "object") {
+        throw new Error("newPages.sections entry not object");
+      }
+      const ns = section as Record<string, unknown>;
+      validateOptionalString(ns, "facetSlug", "newPages.sections");
+      if (
+        ns.facetSlug !== undefined &&
+        ns.facetSlug !== null &&
+        (np.entityTypeSlug === undefined || np.entityTypeSlug === null)
+      ) {
+        throw new Error(
+          "newPages.entityTypeSlug required when sections include facetSlug",
+        );
+      }
+    }
   }
 
   for (const m of v.unresolvedMentions as unknown[]) {
@@ -543,6 +663,7 @@ export function validatePlannerResult(
     if (typeof um.alias !== "string" || um.alias.length === 0) {
       throw new Error("unresolvedMentions.alias missing");
     }
+    validateOptionalString(um, "entityTypeSlug", "unresolvedMentions");
   }
 
   for (const pr of v.promotions as unknown[]) {
@@ -554,6 +675,25 @@ export function validatePlannerResult(
     }
     if (!isPageType(p.type))
       throw new Error(`promotions.type invalid: ${p.type}`);
+    validateOptionalString(p, "entityTypeSlug", "promotions");
+    if (Array.isArray(p.sections)) {
+      for (const section of p.sections as unknown[]) {
+        if (!section || typeof section !== "object") {
+          throw new Error("promotions.sections entry not object");
+        }
+        const ps = section as Record<string, unknown>;
+        validateOptionalString(ps, "facetSlug", "promotions.sections");
+        if (
+          ps.facetSlug !== undefined &&
+          ps.facetSlug !== null &&
+          (p.entityTypeSlug === undefined || p.entityTypeSlug === null)
+        ) {
+          throw new Error(
+            "promotions.entityTypeSlug required when sections include facetSlug",
+          );
+        }
+      }
+    }
   }
 }
 
@@ -565,6 +705,17 @@ function requireArray(obj: Record<string, unknown>, key: string): void {
 
 function isPageType(v: unknown): v is WikiPageType {
   return v === "entity" || v === "topic" || v === "decision";
+}
+
+function validateOptionalString(
+  obj: Record<string, unknown>,
+  key: string,
+  label: string,
+): void {
+  if (obj[key] === undefined || obj[key] === null) return;
+  if (typeof obj[key] !== "string" || obj[key].length === 0) {
+    throw new Error(`${label}.${key} must be a non-empty string when present`);
+  }
 }
 
 // ---------------------------------------------------------------------------
