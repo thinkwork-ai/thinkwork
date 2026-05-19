@@ -626,6 +626,41 @@ export async function completeCompileJob(
 		.where(eq(wikiCompileJobs.id, args.jobId));
 }
 
+/**
+ * Active ontology materialization is triple-first: a visible page must have
+ * an approved ontology subtype and at least one persisted page relationship.
+ * Archive derived rows that slipped through side paths (for example place
+ * backing pages or capped batches whose links did not persist yet). Future
+ * compiles can resurrect a page through upsertPage once it has a valid triple.
+ */
+export async function archiveOntologyNonTriplePages(
+	args: { tenantId: string; ownerId: string },
+	db: DbClient = defaultDb,
+): Promise<number> {
+	const result = await db.execute(sql`
+		UPDATE ${wikiPages} p
+		SET status = 'archived',
+		    updated_at = now()
+		WHERE p.tenant_id = ${args.tenantId}
+		  AND p.owner_id = ${args.ownerId}
+		  AND p.status = 'active'
+		  AND (
+		    p.entity_subtype IS NULL
+		    OR NOT EXISTS (
+		      SELECT 1
+		      FROM ${wikiPageLinks} l
+		      WHERE l.from_page_id = p.id
+		         OR l.to_page_id = p.id
+		    )
+		  )
+		RETURNING p.id
+	`);
+	const rows = Array.isArray(result)
+		? result
+		: ((result as { rows?: unknown[] })?.rows ?? []);
+	return rows.length;
+}
+
 // ---------------------------------------------------------------------------
 // Compile cursors
 // ---------------------------------------------------------------------------

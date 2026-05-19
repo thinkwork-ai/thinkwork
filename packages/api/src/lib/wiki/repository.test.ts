@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  archiveOntologyNonTriplePages,
   normalizeSectionBody,
   normalizeSectionHeading,
   renderBodyMarkdown,
@@ -51,5 +52,20 @@ describe("renderBodyMarkdown", () => {
     ]);
 
     expect(out).toBe("## Trip Notes");
+  });
+});
+
+describe("archiveOntologyNonTriplePages", () => {
+  it("returns the number of archived derived pages", async () => {
+    const db = {
+      execute: async () => ({ rows: [{ id: "p1" }, { id: "p2" }] }),
+    };
+
+    const archived = await archiveOntologyNonTriplePages(
+      { tenantId: "tenant-1", ownerId: "owner-1" },
+      db as never,
+    );
+
+    expect(archived).toBe(2);
   });
 });
