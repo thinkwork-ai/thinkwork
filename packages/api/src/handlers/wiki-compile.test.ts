@@ -111,4 +111,17 @@ describe("wiki-compile handler", () => {
     });
     expect(mocks.runJobById).not.toHaveBeenCalled();
   });
+
+  it("does not redrive an id-targeted job when the CAS claim loses", async () => {
+    mocks.runJobById.mockResolvedValue(null);
+
+    const result = await handler({ jobId: "job-1" });
+
+    expect(result).toEqual({
+      ok: true,
+      jobId: "job-1",
+      status: "already_done",
+    });
+    expect(mocks.writeUserKnowledgePack).not.toHaveBeenCalled();
+  });
 });

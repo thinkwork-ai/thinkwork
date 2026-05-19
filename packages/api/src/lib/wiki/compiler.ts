@@ -22,6 +22,7 @@ import {
 	findPageById,
 	findPageBySlug,
 	bumpSectionLastSeen,
+	claimCompileJobById,
 	DEDUPE_BUCKET_SECONDS,
 	enqueueCompileJob,
 	parseCompileDedupeBucket,
@@ -595,9 +596,8 @@ export async function runJobById(
 	jobId: string,
 	opts: RunCompileJobOpts = {},
 ): Promise<RunJobResult | null> {
-	const job = await getCompileJob(jobId);
+	const job = await claimCompileJobById(jobId);
 	if (!job) return null;
-	if (job.status === "succeeded" || job.status === "skipped") return null;
 	return runCompileJob(job, opts);
 }
 

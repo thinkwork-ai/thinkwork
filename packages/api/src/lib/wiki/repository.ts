@@ -475,10 +475,13 @@ export async function enqueueEnrichmentDraftCompileJob(
 	);
 }
 
+const STALE_RUNNING_COMPILE_JOB_MINUTES = 10;
+
 /**
  * Claim the next pending compile job for processing. Uses FOR UPDATE SKIP
  * LOCKED so multiple compile workers can run concurrently without stepping
- * on each other. Returns null if nothing is claimable.
+ * on each other. Jobs left in `running` by a Lambda timeout are reclaimable
+ * after a short lease window so the queue cannot wedge forever.
  */
 export async function claimNextCompileJob(
 	db: DbClient = defaultDb,
@@ -488,11 +491,20 @@ export async function claimNextCompileJob(
 		SET status = 'running',
 		    claimed_at = now(),
 		    started_at = now(),
+		    finished_at = NULL,
+		    error = CASE
+		      WHEN status = 'running' THEN 'retrying stale running wiki compile job'
+		      ELSE error
+		    END,
 		    attempt = attempt + 1
 		WHERE id = (
 			SELECT id
 			FROM ${wikiCompileJobs}
 			WHERE status = 'pending'
+			   OR (
+			     status = 'running'
+			     AND started_at < now() - (${STALE_RUNNING_COMPILE_JOB_MINUTES} || ' minutes')::interval
+			   )
 			ORDER BY created_at ASC
 			FOR UPDATE SKIP LOCKED
 			LIMIT 1
@@ -549,9 +561,9 @@ export async function getCompileJob(
 
 /**
  * Atomically claim a specific compile job by id. Sets status='running' iff
- * the row is currently 'pending', returning the updated row. Returns null
- * when the row is in any other state (already running, succeeded, failed,
- * skipped) so a concurrent invoker refuses to redrive.
+ * the row is currently 'pending' or stale-running, returning the updated row.
+ * Returns null when the row is in any other state (freshly running, succeeded,
+ * failed, skipped) so a concurrent invoker refuses to redrive.
  *
  * This is the per-job equivalent of `claimNextCompileJob` (which uses
  * FOR UPDATE SKIP LOCKED on the queue head). For id-targeted invocations —
@@ -571,8 +583,20 @@ export async function claimCompileJobById(
 		SET status = 'running',
 		    claimed_at = now(),
 		    started_at = now(),
+		    finished_at = NULL,
+		    error = CASE
+		      WHEN status = 'running' THEN 'retrying stale running wiki compile job'
+		      ELSE error
+		    END,
 		    attempt = attempt + 1
-		WHERE id = ${jobId} AND status = 'pending'
+		WHERE id = ${jobId}
+		  AND (
+		    status = 'pending'
+		    OR (
+		      status = 'running'
+		      AND started_at < now() - (${STALE_RUNNING_COMPILE_JOB_MINUTES} || ' minutes')::interval
+		    )
+		  )
 		RETURNING *
 	`);
 	const row = Array.isArray(result)
