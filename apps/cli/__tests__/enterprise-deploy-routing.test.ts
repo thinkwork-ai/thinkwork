@@ -11,6 +11,8 @@ import {
 } from "../src/commands/deploy.js";
 import {
   findEnterpriseDeploymentRepo,
+  inferGitHubRepositoryFromRemote,
+  parseGitHubRepositoryRemote,
   resolveEnterpriseDeployRequest,
   runEnterpriseDeploy,
   shouldUseEnterpriseDeploy,
@@ -200,6 +202,35 @@ describe("top-level enterprise deploy routing", () => {
     ).rejects.toThrow(/Pass --customer <slug>/);
   });
 
+  it("prompts for bootstrap values so thinkwork deploy --bootstrap can start bare in a TTY", async () => {
+    const answers = new Map([
+      ["Customer slug (for example acme):", "acme"],
+      ["Deployment stage:", ""],
+      ["GitHub deployment repo (owner/name):", ""],
+    ]);
+
+    const request = await resolveEnterpriseDeployRequest(
+      { bootstrap: true, component: "all" },
+      {
+        stdinIsTty: true,
+        cwd: tempDir(),
+        loadDeployment: vi.fn(() => null),
+        promptInput: vi.fn(async (message, defaultValue) => {
+          return answers.get(message) ?? defaultValue ?? "";
+        }),
+      },
+    );
+
+    expect(request).toEqual(
+      expect.objectContaining({
+        customerSlug: "acme",
+        repository: "acme/acme-thinkwork-deploy",
+        stage: "dev",
+        bootstrap: true,
+      }),
+    );
+  });
+
   it("validates component names against the selected deploy mode", async () => {
     await expect(
       resolveEnterpriseDeployRequest(
@@ -366,6 +397,61 @@ describe("top-level enterprise deploy routing", () => {
         lastWorkflowUrl: "https://github.com/acme/deploy/actions/runs/456",
       }),
     );
+  });
+
+  it("dispatches normal deploys from a generated deployment repo with no flags", async () => {
+    const root = tempDir();
+    writeDeploymentRepo(root);
+    const dispatchDeployWorkflow = vi.fn(async () => ({
+      target: "acme/deploy:deploy.yml:dev",
+      status: "created" as const,
+      message: "dispatched",
+    }));
+
+    const result = await runEnterpriseDeploy(
+      { component: "all", wait: false },
+      {
+        stdinIsTty: false,
+        cwd: root,
+        loadDeployment: vi.fn(() => null),
+        inferRepository: vi.fn(() => "acme/deploy"),
+        workflowClient: {
+          dispatchDeployWorkflow,
+          latestDeployRun: vi.fn(async () => ({
+            id: "789",
+            url: "https://github.com/acme/deploy/actions/runs/789",
+            status: "queued",
+            failedJobs: [],
+          })),
+          getRun: vi.fn(),
+          listRunArtifacts: vi.fn(),
+        },
+      },
+    );
+
+    expect(result.kind).toBe("dispatch");
+    expect(dispatchDeployWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: "acme/deploy",
+        stage: "dev",
+        component: "all",
+      }),
+    );
+  });
+
+  it("infers GitHub owner/name from common origin remote formats", () => {
+    expect(parseGitHubRepositoryRemote("git@github.com:acme/deploy.git")).toBe(
+      "acme/deploy",
+    );
+    expect(
+      parseGitHubRepositoryRemote("https://github.com/acme/deploy.git"),
+    ).toBe("acme/deploy");
+    expect(
+      parseGitHubRepositoryRemote("ssh://git@github.com/acme/deploy.git"),
+    ).toBe("acme/deploy");
+    expect(
+      inferGitHubRepositoryFromRemote("/definitely/not/a/git/repository"),
+    ).toBeUndefined();
   });
 });
 

@@ -74,17 +74,18 @@ administrator access and GitHub admin access to the deployment repository.
    should be authenticated with `gh` and allowed to create repository
    environments, variables, and secrets.
 
-2. **Run the guided one-line bootstrap**
+2. **Run the guided bootstrap**
 
    ```bash
    thinkwork deploy --bootstrap
    ```
 
-   In an interactive terminal, the CLI prompts for the customer slug, GitHub
-   deployment repo, and production-like secret values. It creates or reuses a
-   managed checkout, bootstraps dev and prod deployment authority, commits and
-   pushes the generated repo files, dispatches the requested stage, waits for
-   GitHub Actions, and prints the run URL plus discovered ThinkWork URLs.
+   In an interactive terminal, this command walks through the setup: customer
+   slug, stage, GitHub deployment repo, whether to create the repo if it does
+   not exist, and production-like secret values. It creates or reuses a managed
+   checkout, bootstraps dev and prod deployment authority, commits and pushes
+   the generated repo files, dispatches the requested stage, waits for GitHub
+   Actions, and prints the run URL plus discovered ThinkWork URLs.
 
    For scripted first deploys, pass the values explicitly:
 
@@ -102,11 +103,15 @@ administrator access and GitHub admin access to the deployment repository.
 3. **Deploy again after repo or overlay changes**
 
    ```bash
-   thinkwork deploy --customer acme --stage dev
+   cd acme-thinkwork-deploy
+   thinkwork deploy
    ```
 
-   Use `--component overlays`, `--component smokes`, or `--no-wait` when you
-   need a narrower follow-up run.
+   From inside the generated deployment repo, bare `thinkwork deploy` reads the
+   customer, stage, and repository context from the repo and dispatches the
+   normal customer workflow. Use `--customer acme --stage dev` from outside the
+   repo, or add `--component overlays`, `--component smokes`, or `--no-wait`
+   when you need a narrower follow-up run.
 
 4. **Log in to the deployed stack**
 
@@ -121,7 +126,8 @@ administrator access and GitHub admin access to the deployment repository.
 
 The one-line path automates the manual bootstrap flow:
 
-1. Resolves the customer, repository, stage, and managed checkout.
+1. Prompts for or resolves the customer, stage, repository, and managed
+   checkout.
 2. Creates or clones the private customer deployment repo.
 3. Resolves the ThinkWork release manifest and computes its checksum.
 4. Bootstraps AWS state buckets, lock table, artifact bucket, OIDC provider,

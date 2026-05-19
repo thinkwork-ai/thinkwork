@@ -38,7 +38,7 @@ describe("deploy command registration", () => {
     expect(
       deploy!.options.find((option) => option.flags === "--bootstrap")
         ?.description,
-    ).toContain("one-line enterprise bootstrap");
+    ).toContain("guided enterprise bootstrap");
     expect(deploy!.options.every((option) => option.mandatory !== true)).toBe(
       true,
     );

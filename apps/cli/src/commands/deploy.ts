@@ -68,7 +68,7 @@ export function registerDeployCommand(
     )
     .option(
       "--bootstrap",
-      "Run one-line enterprise bootstrap: repo, trust, secrets, push, workflow",
+      "Run guided enterprise bootstrap: repo, trust, secrets, push, workflow",
     )
     .option("--customer <slug>", "Enterprise customer slug")
     .option("--repo <owner/name>", "Customer GitHub deployment repository")
