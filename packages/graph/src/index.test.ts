@@ -4,6 +4,7 @@ import {
   WikiGraph,
   MemoryGraphQuery,
   WikiGraphQuery,
+  buildConnectedWikiGraphData,
   MEMORY_COLOR,
   ENTITY_COLOR,
   MEMORY_TYPE_COLORS,
@@ -40,5 +41,57 @@ describe("@thinkwork/graph public API", () => {
     expect(PAGE_TYPE_FORCE_COLORS.DECISION).toMatch(/^#[0-9a-f]{6}$/i);
     expect(pageTypeLabel("TOPIC")).toBe("Topic");
     expect(pageTypeLabel(undefined)).toBe("Page");
+  });
+
+  it("builds wiki graph data from connected triples only", () => {
+    const nodes = [
+      {
+        id: "u1:a",
+        pageId: "a",
+        agentId: "u1",
+        label: "A",
+        nodeType: "page",
+        entityType: "ENTITY",
+        slug: "a",
+        edgeCount: 1,
+      },
+      {
+        id: "u1:b",
+        pageId: "b",
+        agentId: "u1",
+        label: "B",
+        nodeType: "page",
+        entityType: "ENTITY",
+        slug: "b",
+        edgeCount: 1,
+      },
+      {
+        id: "u1:orphan",
+        pageId: "orphan",
+        agentId: "u1",
+        label: "Orphan",
+        nodeType: "page",
+        entityType: "ENTITY",
+        slug: "orphan",
+        edgeCount: 0,
+      },
+    ] as const;
+
+    const graph = buildConnectedWikiGraphData(nodes as any, [
+      [
+        "u1",
+        {
+          edges: [
+            { source: "a", target: "b", label: "has task", weight: 0.7 },
+            { source: "a", target: "missing", label: "ignored" },
+          ],
+        },
+      ],
+    ]);
+
+    expect(graph.nodes.map((n) => n.id)).toEqual(["u1:a", "u1:b"]);
+    expect(graph.links).toEqual([
+      { source: "u1:a", target: "u1:b", label: "has task", weight: 0.7 },
+    ]);
   });
 });
