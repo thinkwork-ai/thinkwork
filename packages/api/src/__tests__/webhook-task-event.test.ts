@@ -1,143 +1,173 @@
 /**
  * Focused resolver test for the task-event handler.
  *
- * The resolver must hit the DB to resolve the prior run's skill_id +
- * inputs, so this test stubs the db lookup. Full HTTP-cycle coverage
- * lives in webhook-shared.test.ts.
+ * Full HTTP-cycle coverage lives in webhook-shared.test.ts. This suite keeps
+ * LastMile payload parsing and linked-task sync handoff honest.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSelect } = vi.hoisted(() => ({ mockSelect: vi.fn() }));
-
-type Rows = Record<string, unknown>[];
-const selectChain = (rows: Rows) => ({
-	from: () => ({ where: () => Promise.resolve(rows) }),
-});
-
-vi.mock("../lib/db.js", () => ({
-	db: {
-		select: () => selectChain((mockSelect() as Rows) ?? []),
-	},
+const { mockSyncLinkedTaskFromProviderEvent } = vi.hoisted(() => ({
+  mockSyncLinkedTaskFromProviderEvent: vi.fn(),
 }));
 
-vi.mock("@thinkwork/database-pg/schema", () => ({
-	skillRuns: {
-		id: "skill_runs.id",
-		tenant_id: "skill_runs.tenant_id",
-		skill_id: "skill_runs.skill_id",
-		skill_version: "skill_runs.skill_version",
-		resolved_inputs: "skill_runs.resolved_inputs",
-		agent_id: "skill_runs.agent_id",
-	},
-	tenantSystemUsers: {},
-}));
-
-vi.mock("drizzle-orm", () => ({
-	and: (...a: unknown[]) => ({ _and: a }),
-	eq: (...a: unknown[]) => ({ _eq: a }),
-	sql: (...a: unknown[]) => ({ _sql: a }),
-}));
-
-vi.mock("../graphql/utils.js", () => ({
-	hashResolvedInputs: vi.fn(() => "hash-fixed"),
-	invokeSkillRun: vi.fn(async () => ({ ok: true })),
-}));
-
-vi.mock("@aws-sdk/client-secrets-manager", () => ({
-	SecretsManagerClient: vi.fn().mockImplementation(() => ({ send: vi.fn() })),
-	GetSecretValueCommand: vi.fn(),
-	ResourceNotFoundException: class extends Error {},
+vi.mock("../lib/linked-tasks/sync-linked-task.js", () => ({
+  syncLinkedTaskFromProviderEvent: mockSyncLinkedTaskFromProviderEvent,
 }));
 
 const { resolveTaskEvent } = await import("../handlers/webhooks/task-event.js");
 
 const TENANT = "tenant-a";
-const PRIOR_RUN_ID = "run-123";
 
 beforeEach(() => {
-	vi.resetAllMocks();
+  vi.resetAllMocks();
+  mockSyncLinkedTaskFromProviderEvent.mockResolvedValue({
+    ok: true,
+    skipped: false,
+    linkedTask: {
+      id: "linked-task-1",
+      threadId: "thread-1",
+      status: "completed",
+      syncStatus: "synced",
+    },
+    eventType: "completed",
+    milestonePosted: true,
+    allRequiredComplete: true,
+  });
 });
 
 describe("resolveTaskEvent", () => {
-	it("re-invokes the triggering run's skill with its original inputs", async () => {
-		mockSelect.mockReturnValueOnce([
-			{
-				id: PRIOR_RUN_ID,
-				tenant_id: TENANT,
-				skill_id: "customer-onboarding-reconciler",
-				skill_version: 2,
-				resolved_inputs: { customerId: "c-1", opportunityId: "o-1" },
-				agent_id: "agent-42",
-			},
-		]);
+  it("syncs relevant LastMile task events into linked task mirrors", async () => {
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        event: "task.completed",
+        eventId: "evt-1",
+        taskId: "LM-1",
+        status: "complete",
+        title: "Collect sales tax exemption",
+        url: "https://tasks.example/LM-1",
+        occurredAt: "2026-05-19T15:00:00Z",
+        assignee: {
+          id: "acct-1",
+          name: "Accounting",
+        },
+      }),
+    });
 
-		const result = await resolveTaskEvent({
-			tenantId: TENANT,
-			rawBody: JSON.stringify({
-				event: "task.completed",
-				taskId: "task-1",
-				metadata: { triggeredByRunId: PRIOR_RUN_ID },
-			}),
-		});
+    expect(mockSyncLinkedTaskFromProviderEvent).toHaveBeenCalledWith({
+      tenantId: TENANT,
+      externalTaskId: "LM-1",
+      externalEventId: "evt-1",
+      eventName: "task.completed",
+      status: "complete",
+      blocked: undefined,
+      title: "Collect sales tax exemption",
+      externalTaskUrl: "https://tasks.example/LM-1",
+      assignee: {
+        externalId: "acct-1",
+        displayName: "Accounting",
+      },
+      dueAt: null,
+      occurredAt: "2026-05-19T15:00:00Z",
+      raw: expect.any(Object),
+    });
+    expect(result).toEqual({
+      ok: true,
+      handled: true,
+      body: {
+        linkedTaskId: "linked-task-1",
+        threadId: "thread-1",
+        status: "completed",
+        syncStatus: "synced",
+        eventType: "completed",
+        milestonePosted: true,
+        allRequiredComplete: true,
+      },
+    });
+  });
 
-		expect(result).toEqual({
-			ok: true,
-			skillId: "customer-onboarding-reconciler",
-			skillVersion: 2,
-			inputs: { customerId: "c-1", opportunityId: "o-1" },
-			triggeredByRunId: PRIOR_RUN_ID,
-			agentId: "agent-42",
-		});
-	});
+  it("accepts nested task payloads from provider variants", async () => {
+    await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        event: "task.reassigned",
+        externalEventId: "evt-2",
+        task: {
+          id: "LM-2",
+          status: "todo",
+          assignee: {
+            userId: "finance-1",
+            displayName: "Finance",
+          },
+        },
+      }),
+    });
 
-	it("skips events whose type is not task.completed", async () => {
-		const result = await resolveTaskEvent({
-			tenantId: TENANT,
-			rawBody: JSON.stringify({
-				event: "task.updated",
-				taskId: "t",
-				metadata: { triggeredByRunId: PRIOR_RUN_ID },
-			}),
-		});
-		expect(result).toMatchObject({ ok: true, skip: true });
-	});
+    expect(mockSyncLinkedTaskFromProviderEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalTaskId: "LM-2",
+        externalEventId: "evt-2",
+        eventName: "task.reassigned",
+        status: "todo",
+        assignee: {
+          externalId: "finance-1",
+          displayName: "Finance",
+        },
+      }),
+    );
+  });
 
-	it("skips tasks without triggeredByRunId rather than guessing", async () => {
-		const result = await resolveTaskEvent({
-			tenantId: TENANT,
-			rawBody: JSON.stringify({ event: "task.completed", taskId: "t" }),
-		});
-		expect(result).toMatchObject({ ok: true, skip: true });
-		expect(result).toMatchObject({
-			reason: expect.stringContaining("triggeredByRunId"),
-		});
-	});
+  it("skips events whose type is not task sync material", async () => {
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        event: "task.comment_added",
+        taskId: "LM-1",
+      }),
+    });
+    expect(result).toMatchObject({ ok: true, skip: true });
+    expect(mockSyncLinkedTaskFromProviderEvent).not.toHaveBeenCalled();
+  });
 
-	it("returns 403 when triggeredByRunId belongs to another tenant", async () => {
-		// The DB where clause includes `tenant_id = args.tenantId`, so a
-		// cross-tenant run returns empty.
-		mockSelect.mockReturnValueOnce([]);
-		const result = await resolveTaskEvent({
-			tenantId: TENANT,
-			rawBody: JSON.stringify({
-				event: "task.completed",
-				taskId: "t",
-				metadata: { triggeredByRunId: "foreign-run" },
-			}),
-		});
-		expect(result).toEqual({
-			ok: false,
-			status: 403,
-			message: "triggeredByRunId does not belong to this tenant",
-		});
-	});
+  it("skips task events for external tasks that ThinkWork does not mirror", async () => {
+    mockSyncLinkedTaskFromProviderEvent.mockResolvedValueOnce({
+      ok: true,
+      skipped: true,
+      reason: "linked task mirror not found",
+    });
 
-	it("returns 400 on malformed JSON", async () => {
-		const result = await resolveTaskEvent({
-			tenantId: TENANT,
-			rawBody: "not json",
-		});
-		expect(result).toMatchObject({ ok: false, status: 400 });
-	});
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        event: "task.completed",
+        taskId: "foreign-task",
+      }),
+    });
+    expect(result).toEqual({
+      ok: true,
+      skip: true,
+      reason: "linked task mirror not found",
+    });
+  });
+
+  it("returns 400 on malformed JSON", async () => {
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: "not json",
+    });
+    expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it("returns 400 when a relevant event has no external task id", async () => {
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({ event: "task.completed" }),
+    });
+    expect(result).toEqual({
+      ok: false,
+      status: 400,
+      message: "externalTaskId or taskId is required",
+    });
+  });
 });
