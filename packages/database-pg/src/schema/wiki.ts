@@ -335,10 +335,6 @@ export const wikiUnresolvedMentions = wiki.table(
 			table.status,
 			table.last_seen_at,
 		),
-		check(
-			"unresolved_mentions_entity_subtype_allowed",
-			sql`${table.entity_subtype} IS NULL OR ${table.entity_subtype} IN ('customer','opportunity','order','person','concept','reflection')`,
-		),
 	],
 );
 

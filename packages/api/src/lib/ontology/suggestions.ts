@@ -8,8 +8,13 @@ import {
   tenantEntityExternalRefs,
   tenantEntityPageSections,
   tenantEntityPages,
+  users,
+  wikiUnresolvedMentions,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
+import { getMemoryServices } from "../memory/index.js";
+import type { MemoryAdapter } from "../memory/adapter.js";
+import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { invokeClaudeJson, parseJsonResponse } from "../wiki/bedrock.js";
 import {
   listOntologyDefinitions,
@@ -27,6 +32,8 @@ type DbLike = typeof defaultDb;
 
 const OPEN_CHANGE_SET_STATUSES = ["draft", "pending_review"] as const;
 const ONTOLOGY_SCAN_BUCKET_SECONDS = 300;
+const HINDSIGHT_SCAN_USER_LIMIT = 25;
+const HINDSIGHT_SCAN_RECORD_LIMIT = 75;
 const SUPPORT_CASE_SOURCE_RE =
   /(support|case|ticket|zendesk|intercom|helpdesk)/i;
 const COMMITMENT_TEXT_RE =
@@ -44,7 +51,7 @@ export interface OntologySuggestionObservation extends OntologyEvidenceInput {
 }
 
 export interface OntologySuggestionFeature {
-  kind: "customer_commitment" | "support_case_refs";
+  kind: "customer_commitment" | "support_case_refs" | "rejected_entity_type";
   title: string;
   evidence: OntologyEvidenceInput[];
   frequency: number;
@@ -384,6 +391,9 @@ export async function runOntologySuggestionScan(args: {
 export async function collectOntologySuggestionSources(args: {
   tenantId: string;
   db?: DbLike;
+  memoryAdapter?: Pick<MemoryAdapter, "kind" | "inspect">;
+  hindsightUserLimit?: number;
+  hindsightRecordLimit?: number;
 }): Promise<{
   observations: OntologySuggestionObservation[];
   providerStatuses: OntologyScanProviderStatus[];
@@ -469,15 +479,201 @@ export async function collectOntologySuggestionSources(args: {
     count: externalRows.length,
   });
 
-  providerStatuses.push({
-    provider: "hindsight",
-    state: process.env.HINDSIGHT_ENDPOINT ? "degraded" : "unavailable",
-    detail: process.env.HINDSIGHT_ENDPOINT
-      ? "Hindsight scan adapter not yet wired for ontology suggestions; using Brain and external refs."
-      : "Hindsight endpoint unavailable; using Brain and external refs.",
+  const unresolvedRows = await db
+    .select({
+      id: wikiUnresolvedMentions.id,
+      alias: wikiUnresolvedMentions.alias,
+      mentionCount: wikiUnresolvedMentions.mention_count,
+      suggestedType: wikiUnresolvedMentions.suggested_type,
+      entitySubtype: wikiUnresolvedMentions.entity_subtype,
+      sampleContexts: wikiUnresolvedMentions.sample_contexts,
+      lastSeenAt: wikiUnresolvedMentions.last_seen_at,
+    })
+    .from(wikiUnresolvedMentions)
+    .where(
+      and(
+        eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+        eq(wikiUnresolvedMentions.status, "open"),
+      ),
+    )
+    .orderBy(desc(wikiUnresolvedMentions.last_seen_at))
+    .limit(300);
+  for (const row of unresolvedRows) {
+    const text = summarizeUnresolvedMention(row);
+    const evidence = evidenceFromText({
+      sourceKind: "ontology_gate_rejection",
+      sourceRef: row.id,
+      sourceLabel: row.alias,
+      text,
+      observedAt: row.lastSeenAt,
+      metadata: {
+        mentionCount: row.mentionCount,
+        suggestedType: row.suggestedType,
+        entitySubtype: row.entitySubtype,
+      },
+    });
+    if (evidence) observations.push({ ...evidence, text });
+  }
+
+  const hindsight = await collectHindsightSuggestionObservations({
+    tenantId: args.tenantId,
+    db,
+    memoryAdapter: args.memoryAdapter,
+    userLimit: args.hindsightUserLimit ?? HINDSIGHT_SCAN_USER_LIMIT,
+    recordLimit: args.hindsightRecordLimit ?? HINDSIGHT_SCAN_RECORD_LIMIT,
   });
+  observations.push(...hindsight.observations);
+  providerStatuses.push(hindsight.providerStatus);
 
   return { observations, providerStatuses };
+}
+
+async function collectHindsightSuggestionObservations(args: {
+  tenantId: string;
+  db: DbLike;
+  memoryAdapter?: Pick<MemoryAdapter, "kind" | "inspect">;
+  userLimit: number;
+  recordLimit: number;
+}): Promise<{
+  observations: OntologySuggestionObservation[];
+  providerStatus: OntologyScanProviderStatus;
+}> {
+  let adapter = args.memoryAdapter;
+  if (!adapter) {
+    try {
+      adapter = getMemoryServices().adapter;
+    } catch (err) {
+      return {
+        observations: [],
+        providerStatus: {
+          provider: "hindsight",
+          state: process.env.HINDSIGHT_ENDPOINT ? "degraded" : "unavailable",
+          detail:
+            err instanceof Error
+              ? err.message
+              : "Hindsight memory adapter unavailable",
+        },
+      };
+    }
+  }
+
+  if (adapter.kind !== "hindsight") {
+    return {
+      observations: [],
+      providerStatus: {
+        provider: "hindsight",
+        state: "skipped",
+        detail: `Active memory engine is ${adapter.kind}; Hindsight observations not scanned.`,
+      },
+    };
+  }
+
+  try {
+    const userRows = await args.db
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+      })
+      .from(users)
+      .where(eq(users.tenant_id, args.tenantId))
+      .orderBy(desc(users.updated_at))
+      .limit(args.userLimit);
+
+    const observations: OntologySuggestionObservation[] = [];
+    for (const user of userRows) {
+      const records = await adapter.inspect({
+        tenantId: args.tenantId,
+        ownerType: "user",
+        ownerId: user.id,
+        limit: args.recordLimit,
+      });
+      for (const record of records) {
+        const observation = observationFromMemoryRecord(record, {
+          userEmail: user.email,
+          userName: user.name,
+        });
+        if (observation) observations.push(observation);
+      }
+    }
+
+    return {
+      observations,
+      providerStatus: {
+        provider: "hindsight",
+        state: "ok",
+        count: observations.length,
+      },
+    };
+  } catch (err) {
+    return {
+      observations: [],
+      providerStatus: {
+        provider: "hindsight",
+        state: "degraded",
+        detail:
+          err instanceof Error
+            ? err.message
+            : "Hindsight observation scan failed",
+      },
+    };
+  }
+}
+
+function observationFromMemoryRecord(
+  record: ThinkWorkMemoryRecord,
+  user: { userEmail: string | null; userName: string | null },
+): OntologySuggestionObservation | null {
+  const text = record.content.text || record.content.summary || "";
+  const evidence = evidenceFromText({
+    sourceKind: "hindsight_memory_unit",
+    sourceRef: record.id,
+    sourceLabel:
+      user.userName ||
+      user.userEmail ||
+      record.metadata?.documentId?.toString() ||
+      record.sourceType,
+    text,
+    observedAt: record.updatedAt ?? record.createdAt,
+    metadata: {
+      ownerId: record.ownerId,
+      threadId: record.threadId ?? null,
+      memoryKind: record.kind,
+      sourceType: record.sourceType,
+      backendRefs: record.backendRefs,
+      factType: record.metadata?.fact_type ?? record.metadata?.factType ?? null,
+      context: record.metadata?.context ?? null,
+      tags: record.metadata?.tags ?? null,
+    },
+  });
+  return evidence ? { ...evidence, text } : null;
+}
+
+function summarizeUnresolvedMention(row: {
+  alias: string;
+  mentionCount: number;
+  suggestedType: string | null;
+  entitySubtype: string | null;
+  sampleContexts: unknown;
+}): string {
+  const samples = Array.isArray(row.sampleContexts)
+    ? row.sampleContexts
+        .map((sample) =>
+          sample && typeof sample === "object"
+            ? stringValue((sample as Record<string, unknown>).quote)
+            : "",
+        )
+        .filter(Boolean)
+    : [];
+  return [
+    row.alias,
+    row.entitySubtype ? `entity type ${row.entitySubtype}` : "",
+    row.suggestedType ? `suggested ${row.suggestedType}` : "",
+    `seen ${row.mentionCount} time${row.mentionCount === 1 ? "" : "s"}`,
+    ...samples,
+  ]
+    .filter(Boolean)
+    .join(" - ");
 }
 
 function summarizeExternalPayload(payload: unknown): string {
@@ -524,8 +720,10 @@ export function extractOntologySuggestionFeatures(args: {
 
   const supportCaseEvidence = dedupeEvidence(
     args.observations
-      .filter((observation) =>
-        SUPPORT_CASE_SOURCE_RE.test(observation.sourceKind),
+      .filter(
+        (observation) =>
+          SUPPORT_CASE_SOURCE_RE.test(observation.sourceKind) ||
+          SUPPORT_CASE_SOURCE_RE.test(observation.text),
       )
       .map((observation) => observation),
     8,
@@ -536,6 +734,43 @@ export function extractOntologySuggestionFeatures(args: {
       title: "Support case facets",
       evidence: supportCaseEvidence,
       frequency: supportCaseEvidence.length,
+    });
+  }
+
+  const rejectedEntityEvidence = new Map<
+    string,
+    { evidence: OntologyEvidenceInput[]; frequency: number }
+  >();
+  for (const observation of args.observations) {
+    if (observation.sourceKind !== "ontology_gate_rejection") continue;
+    const entityTypeSlug = stringValue(observation.metadata?.entitySubtype);
+    if (
+      !entityTypeSlug ||
+      args.activeOntology.entityTypeSlugs.has(entityTypeSlug)
+    ) {
+      continue;
+    }
+    const bucket =
+      rejectedEntityEvidence.get(entityTypeSlug) ??
+      ({ evidence: [], frequency: 0 } as {
+        evidence: OntologyEvidenceInput[];
+        frequency: number;
+      });
+    bucket.evidence.push(observation);
+    bucket.frequency += Math.max(
+      1,
+      numberValue(observation.metadata?.mentionCount, 1),
+    );
+    rejectedEntityEvidence.set(entityTypeSlug, bucket);
+  }
+  for (const [entityTypeSlug, bucket] of rejectedEntityEvidence) {
+    if (bucket.frequency < 2) continue;
+    features.push({
+      kind: "rejected_entity_type",
+      title: `Repeated rejected ${entityTypeSlug} entity candidates`,
+      evidence: dedupeEvidence(bucket.evidence, 8),
+      frequency: bucket.frequency,
+      metadata: { entityTypeSlug },
     });
   }
 
@@ -853,6 +1088,48 @@ function deterministicProposals(
     });
   }
 
+  for (const rejectedEntity of features.filter(
+    (feature) => feature.kind === "rejected_entity_type",
+  )) {
+    const entityTypeSlug = stringValue(rejectedEntity.metadata?.entityTypeSlug);
+    if (!entityTypeSlug || activeOntology.entityTypeSlugs.has(entityTypeSlug)) {
+      continue;
+    }
+    const evidence = dedupeEvidence(rejectedEntity.evidence, 5);
+    proposals.push({
+      key: `rejected-${entityTypeSlug}-entity-type`,
+      title: `Review ${entityTypeSlug} entity type`,
+      summary:
+        "The ontology gate repeatedly rejected structured candidates with this entity type slug. Review whether it should become an approved business entity type.",
+      confidence: 0.7,
+      observedFrequency: rejectedEntity.frequency,
+      expectedImpact: {
+        entityTypes: [entityTypeSlug],
+      },
+      items: [
+        {
+          itemType: "entity_type",
+          action: "create",
+          targetKind: "entity_type",
+          targetSlug: entityTypeSlug,
+          title: `Add ${formatTitleFromSlug(entityTypeSlug)} entity type`,
+          description:
+            "Approve this recurring rejected ontology candidate if it represents a durable business concept for this tenant.",
+          proposedValue: {
+            slug: entityTypeSlug,
+            name: formatTitleFromSlug(entityTypeSlug),
+            broadType: "business_object",
+            aliases: [],
+            guidanceNotes:
+              "Created from repeated ontology-gate rejections. Review examples before approval.",
+          },
+          confidence: 0.7,
+          evidence,
+        },
+      ],
+    });
+  }
+
   return proposals;
 }
 
@@ -1052,6 +1329,14 @@ function slugValue(value: unknown): string {
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "") || "ontology_item"
   );
+}
+
+function formatTitleFromSlug(slug: string): string {
+  return slug
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function toDateOrNull(value: Date | string | null | undefined): Date | null {
