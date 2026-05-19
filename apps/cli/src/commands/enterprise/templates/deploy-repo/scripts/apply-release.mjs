@@ -460,6 +460,7 @@ async function writeSummary() {
   const terraformDir = required("--terraform-dir");
   const summary = {
     stage: required("--stage"),
+    operation: optional("--operation") ?? "deploy",
     component: required("--component"),
     release: manifest.release,
     artifacts: await readJson(join(workDir, "prepared-artifacts.json"), null),

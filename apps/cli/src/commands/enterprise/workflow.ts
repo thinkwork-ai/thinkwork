@@ -13,6 +13,7 @@ export interface EnterpriseWorkflowDispatchOptions {
   stage: string;
   component: EnterpriseDeployComponent;
   runSmokes?: boolean;
+  operation?: "deploy" | "destroy";
 }
 
 export interface EnterpriseWorkflowRun {
@@ -68,7 +69,7 @@ export class WorkflowRunFailedError extends Error {
     const failedJobs =
       run.failedJobs.length > 0 ? run.failedJobs.join(", ") : "unknown job";
     super(
-      `Enterprise deploy workflow failed (${run.conclusion ?? "unknown"}): ${failedJobs}. Inspect logs with: gh run view ${run.id} --log`,
+      `Enterprise workflow failed (${run.conclusion ?? "unknown"}): ${failedJobs}. Inspect logs with: gh run view ${run.id} --log`,
     );
   }
 }
@@ -78,23 +79,22 @@ export class GhCliEnterpriseWorkflowClient implements EnterpriseWorkflowClient {
     options: EnterpriseWorkflowDispatchOptions,
   ): Promise<BootstrapStepResult> {
     const repository = parseGitHubRepository(options.repository).fullName;
-    gh([
-      "workflow",
-      "run",
-      "deploy.yml",
-      "--repo",
-      repository,
+    const fields = [
+      ...(options.operation === "destroy"
+        ? ["--field", "operation=destroy"]
+        : []),
       "--field",
       `stage=${options.stage}`,
       "--field",
       `component=${options.component}`,
       "--field",
       `run_smokes=${String(options.runSmokes ?? true)}`,
-    ]);
+    ];
+    gh(["workflow", "run", "deploy.yml", "--repo", repository, ...fields]);
     return {
       target: `${repository}:deploy.yml:${options.stage}`,
       status: "created",
-      message: `Dispatched deploy workflow for ${options.stage}.`,
+      message: `Dispatched ${options.operation ?? "deploy"} workflow for ${options.stage}.`,
     };
   }
 
@@ -179,7 +179,7 @@ export async function runEnterpriseWorkflow(
   if (!options.wait) {
     if (!run) {
       throw new Error(
-        `Dispatched deploy workflow for ${options.stage}, but no GitHub Actions run was found. Inspect ${options.repository} Actions manually.`,
+        `Dispatched ${options.operation ?? "deploy"} workflow for ${options.stage}, but no GitHub Actions run was found. Inspect ${options.repository} Actions manually.`,
       );
     }
     return {
@@ -192,7 +192,7 @@ export async function runEnterpriseWorkflow(
   }
   if (!run) {
     throw new Error(
-      `Dispatched deploy workflow for ${options.stage}, but no GitHub Actions run was found. Inspect ${options.repository} Actions manually.`,
+      `Dispatched ${options.operation ?? "deploy"} workflow for ${options.stage}, but no GitHub Actions run was found. Inspect ${options.repository} Actions manually.`,
     );
   }
 
@@ -214,10 +214,15 @@ export async function runEnterpriseWorkflow(
       completedRun.id,
     );
   } catch {
-    artifacts = [`thinkwork-deploy-${options.stage}-${completedRun.id}`];
+    artifacts = [
+      `thinkwork-${options.operation ?? "deploy"}-${options.stage}-${completedRun.id}`,
+    ];
   }
 
-  const discovery = discoverStageUrls(options, deps);
+  const discovery =
+    options.operation === "destroy"
+      ? { urls: {}, warning: undefined }
+      : discoverStageUrls(options, deps);
   return {
     dispatch,
     run: completedRun,

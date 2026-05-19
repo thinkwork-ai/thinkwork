@@ -4,6 +4,14 @@ name: Deploy ThinkWork
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: "Deploy or destroy the stage stack"
+        type: choice
+        required: true
+        default: deploy
+        options:
+          - deploy
+          - destroy
       stage:
         description: "Deployment stage"
         type: string
@@ -36,10 +44,11 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy ${{ github.event.inputs.stage }}
+    name: ${{ github.event.inputs.operation == 'destroy' && 'Destroy' || 'Deploy' }} ${{ github.event.inputs.stage }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.stage }}
     env:
+      OPERATION: ${{ github.event.inputs.operation }}
       STAGE: ${{ github.event.inputs.stage }}
       COMPONENT: ${{ github.event.inputs.component }}
       RUN_SMOKES: ${{ github.event.inputs.run_smokes }}
@@ -96,7 +105,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Prepare release artifacts
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -107,25 +116,25 @@ jobs:
             --lambda-prefix "${{ steps.lock.outputs.lambda_prefix }}"
 
       - name: Terraform init
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
+        if: ${{ github.event.inputs.operation == 'destroy' || github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
         working-directory: terraform
         shell: bash
         run: terraform init -backend-config="backend-${STAGE}.hcl"
 
       - name: Select Terraform workspace
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
+        if: ${{ github.event.inputs.operation == 'destroy' || github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
         working-directory: terraform
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$COMPONENT" = "all" ] || [ "$COMPONENT" = "foundation" ]; then
+          if [ "$OPERATION" = "deploy" ] && { [ "$COMPONENT" = "all" ] || [ "$COMPONENT" = "foundation" ]; }; then
             terraform workspace select "$STAGE" || terraform workspace new "$STAGE"
           else
             terraform workspace select "$STAGE"
           fi
 
       - name: Terraform apply
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation') }}
         working-directory: terraform
         shell: bash
         env:
@@ -139,8 +148,23 @@ jobs:
             -var="lambda_artifact_prefix=${{ steps.lock.outputs.lambda_prefix }}" \
             -auto-approve
 
+      - name: Terraform destroy
+        if: ${{ github.event.inputs.operation == 'destroy' }}
+        working-directory: terraform
+        shell: bash
+        env:
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+          TF_VAR_api_auth_secret: ${{ secrets.TF_VAR_API_AUTH_SECRET }}
+        run: |
+          set -euo pipefail
+          terraform destroy \
+            -var-file="stages/${STAGE}.tfvars" \
+            -var="lambda_artifact_bucket=${{ steps.lock.outputs.artifact_bucket }}" \
+            -var="lambda_artifact_prefix=${{ steps.lock.outputs.lambda_prefix }}" \
+            -auto-approve
+
       - name: Copy runtime images into customer ECR
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -153,7 +177,7 @@ jobs:
             --ecr-repository-url "$ECR_REPOSITORY_URL"
 
       - name: Update AgentCore runtimes
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -163,7 +187,7 @@ jobs:
             --region "${{ vars.AWS_REGION }}"
 
       - name: Sync static site bundles
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -173,7 +197,7 @@ jobs:
             --terraform-dir terraform
 
       - name: Apply customer overlay contract
-        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'overlays' }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'overlays') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,7 +211,7 @@ jobs:
             > "$RELEASE_DIR/overlay-report.json"
 
       - name: Run smoke checks
-        if: ${{ github.event.inputs.run_smokes == 'true' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'smokes') }}
+        if: ${{ github.event.inputs.operation == 'deploy' && github.event.inputs.run_smokes == 'true' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'smokes') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -206,6 +230,7 @@ jobs:
             --work-dir "$RELEASE_DIR" \
             --terraform-dir terraform \
             --stage "$STAGE" \
+            --operation "$OPERATION" \
             --component "$COMPONENT" \
             --output "$DEPLOY_SUMMARY_JSON"
           cat "$DEPLOY_SUMMARY_JSON"
@@ -214,6 +239,7 @@ jobs:
             echo
             jq -r '
               "- Stage: " + .stage,
+              "- Operation: " + .operation,
               "- Release: " + .release.version,
               "- Component: " + .component,
               "- API: " + (.outputs.api_endpoint // "n/a"),
@@ -228,7 +254,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: thinkwork-deploy-${{ github.event.inputs.stage }}-${{ github.run_id }}
+          name: thinkwork-${{ github.event.inputs.operation }}-${{ github.event.inputs.stage }}-${{ github.run_id }}
           path: |
             /tmp/thinkwork-release/*.json
             /tmp/thinkwork-release/runtime-images.json
