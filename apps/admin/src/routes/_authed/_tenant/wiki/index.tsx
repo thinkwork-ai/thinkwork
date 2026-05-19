@@ -1,17 +1,19 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   createFileRoute,
+  Link,
   redirect,
   useNavigate,
   useSearch,
 } from "@tanstack/react-router";
 import { useQuery, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, Search, X, Sparkles } from "lucide-react";
+import { AlertTriangle, Loader2, Search, X, Sparkles } from "lucide-react";
 import {
   AgentsListQuery,
   TenantMembersListQuery,
   RecentWikiPagesQuery,
+  WikiCompileJobsAdminQuery,
   WikiSearchQuery,
 } from "@/lib/graphql-queries";
 import {
@@ -22,7 +24,10 @@ import {
   pageTypeLabel,
   type WikiPageType,
 } from "@thinkwork/graph";
-import { WikiPageSheet, type WikiPageSheetEdge } from "@/components/WikiPageSheet";
+import {
+  WikiPageSheet,
+  type WikiPageSheetEdge,
+} from "@/components/WikiPageSheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -38,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { compileJobGateCounts } from "./-compile-job-gate-counts";
 
 type WikiView = "pages" | "graph";
 
@@ -57,7 +63,9 @@ export const Route = createFileRoute("/_authed/_tenant/wiki/")({
   validateSearch: (
     search: Record<string, unknown>,
   ): { agent?: string; view?: WikiView } => ({
-    ...(typeof search.agent === "string" && search.agent ? { agent: search.agent } : {}),
+    ...(typeof search.agent === "string" && search.agent
+      ? { agent: search.agent }
+      : {}),
     ...(isWikiView(search.view) ? { view: search.view } : {}),
   }),
 });
@@ -87,6 +95,18 @@ type UserScope = {
   agentIds: string[];
 };
 
+type CompileJobRow = {
+  id: string;
+  status: string;
+  trigger: string;
+  attempt: number;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  createdAt: string;
+  error?: string | null;
+  metrics?: unknown;
+};
+
 function agentUserId(agent: any): string | null {
   return agent.humanPairId ?? agent.humanPair?.id ?? null;
 }
@@ -104,6 +124,87 @@ function PageTypeBadge({ type }: { type: WikiPageType }) {
     >
       {pageTypeLabel(type)}
     </Badge>
+  );
+}
+
+function latestJobTimestamp(job: CompileJobRow): string {
+  return job.finishedAt ?? job.startedAt ?? job.createdAt;
+}
+
+function formatCompactDateTime(value?: string | null): string {
+  if (!value) return "\u2014";
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function CompileJobObservability({
+  error,
+  jobs,
+}: {
+  error?: { message?: string } | null;
+  jobs: CompileJobRow[];
+}) {
+  const latest = jobs[0] ?? null;
+  const counts = compileJobGateCounts(latest?.metrics);
+  const hasRejected = counts.rejected > 0 || counts.unresolved > 0;
+  return (
+    <div className="grid shrink-0 gap-3 border-b border-border pb-3 md:grid-cols-[1fr_1.2fr]">
+      <div className="rounded-md border border-border p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">
+              Latest compile
+            </p>
+            <p className="mt-1 text-sm font-medium">
+              {error ? "Unavailable" : latest ? latest.status : "No jobs"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {error
+                ? "Could not load compile job status"
+                : latest
+                  ? `${latest.trigger} - ${formatCompactDateTime(latestJobTimestamp(latest))}`
+                  : "No compile activity yet"}
+            </p>
+          </div>
+          {hasRejected && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-amber-500/50 text-amber-700"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Review
+            </Badge>
+          )}
+        </div>
+        {hasRejected && (
+          <Link
+            to="/ontology"
+            className="mt-3 inline-flex text-xs font-medium text-primary hover:underline"
+          >
+            Open ontology suggestions
+          </Link>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <MetricTile label="Approved" value={counts.approved} />
+        <MetricTile label="Rejected" value={counts.rejected} />
+        <MetricTile label="Unresolved" value={counts.unresolved} />
+        <MetricTile label="Brain" value={counts.brainPages} />
+      </div>
+    </div>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+    </div>
   );
 }
 
@@ -142,7 +243,8 @@ export function WikiPage({
     [updateFilters, view],
   );
   const setView = useCallback(
-    (nextView: WikiView) => updateFilters({ agent: selectedAgentId, view: nextView }),
+    (nextView: WikiView) =>
+      updateFilters({ agent: selectedAgentId, view: nextView }),
     [updateFilters, selectedAgentId],
   );
 
@@ -167,6 +269,11 @@ export function WikiPage({
   const [membersResult] = useQuery({
     query: TenantMembersListQuery,
     variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const [compileJobsResult] = useQuery({
+    query: WikiCompileJobsAdminQuery,
+    variables: { tenantId: tenantId ?? "", ownerId: null, limit: 5 },
     pause: !tenantId,
   });
 
@@ -219,10 +326,16 @@ export function WikiPage({
 
   const isAllAgents = selectedAgentId === "all";
   const selectedScope = userScopes.find(
-    (scope) => scope.userId === selectedAgentId || scope.agentIds.includes(selectedAgentId),
+    (scope) =>
+      scope.userId === selectedAgentId ||
+      scope.agentIds.includes(selectedAgentId),
   );
-  const selectedScopeId = isAllAgents ? "all" : (selectedScope?.userId ?? selectedAgentId);
-  const effectiveUserId = isAllAgents ? userScopes[0]?.userId : selectedScope?.userId;
+  const selectedScopeId = isAllAgents
+    ? "all"
+    : (selectedScope?.userId ?? selectedAgentId);
+  const effectiveUserId = isAllAgents
+    ? userScopes[0]?.userId
+    : selectedScope?.userId;
   const effectiveUserIds = useMemo(
     () => (isAllAgents ? userScopes.map((scope) => scope.userId) : []),
     [isAllAgents, userScopes],
@@ -276,7 +389,9 @@ export function WikiPage({
   // Search — single user in v1. All-Users + search is deferred; we
   // fall back to the first user's scope so the user sees *something*
   // rather than an empty panel.
-  const searchUserId = isAllAgents ? (userScopes[0]?.userId ?? "") : (effectiveUserId ?? "");
+  const searchUserId = isAllAgents
+    ? (userScopes[0]?.userId ?? "")
+    : (effectiveUserId ?? "");
   const [searchResult] = useQuery({
     query: WikiSearchQuery,
     variables: {
@@ -331,6 +446,13 @@ export function WikiPage({
     searchUserId,
     userLabels,
   ]);
+  const compileJobs = (compileJobsResult.data?.wikiCompileJobs ??
+    []) as CompileJobRow[];
+  const latestCompileCounts = compileJobGateCounts(compileJobs[0]?.metrics);
+  const hasGateEvidenceWithoutPages =
+    !activeSearch &&
+    rows.length === 0 &&
+    (latestCompileCounts.rejected > 0 || latestCompileCounts.unresolved > 0);
 
   const columns: ColumnDef<WikiRow>[] = [
     {
@@ -354,7 +476,9 @@ export function WikiPage({
       header: "User",
       size: 120,
       cell: ({ row }) => (
-        <span className="text-muted-foreground text-xs">{row.original.agentName}</span>
+        <span className="text-muted-foreground text-xs">
+          {row.original.agentName}
+        </span>
       ),
     },
     {
@@ -456,8 +580,12 @@ export function WikiPage({
       </div>
 
       <div className={embedded ? "min-h-0 flex-1" : "min-h-0 flex-1 px-4"}>
+        <CompileJobObservability
+          error={compileJobsResult.error}
+          jobs={compileJobs}
+        />
         {view === "graph" ? (
-          <div className="h-full relative border border-border rounded-lg overflow-hidden">
+          <div className="mt-3 h-[calc(100%-76px)] relative border border-border rounded-lg overflow-hidden">
             <WikiGraph
               ref={graphRef}
               tenantId={tenantId ?? ""}
@@ -482,8 +610,18 @@ export function WikiPage({
             <p className="text-sm text-muted-foreground max-w-sm">
               {activeSearch
                 ? "No pages match your search."
-                : "No compiled pages yet — ask an agent a few questions and come back in a few minutes."}
+                : hasGateEvidenceWithoutPages
+                  ? "Evidence exists, but the ontology gate did not find an approved type for a compiled page yet."
+                  : "No compiled pages yet — ask an agent a few questions and come back in a few minutes."}
             </p>
+            {hasGateEvidenceWithoutPages && (
+              <Link
+                to="/ontology"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Review ontology suggestions
+              </Link>
+            )}
           </div>
         ) : (
           <DataTable
@@ -532,7 +670,9 @@ export function WikiPage({
                 setGraphNodeEdges(prev.edges);
               }}
               onEdgeClick={(edge) => {
-                const result = graphRef.current?.getNodeWithEdges(edge.targetId);
+                const result = graphRef.current?.getNodeWithEdges(
+                  edge.targetId,
+                );
                 if (result && graphNode) {
                   setGraphNodeHistory((h) => [
                     ...h,

@@ -3022,6 +3022,24 @@ export const WikiSearchQuery = graphql(`
   }
 `);
 
+export const WikiCompileJobsAdminQuery = graphql(`
+  query AdminWikiCompileJobs($tenantId: ID!, $ownerId: ID, $limit: Int) {
+    wikiCompileJobs(tenantId: $tenantId, ownerId: $ownerId, limit: $limit) {
+      id
+      tenantId
+      ownerId
+      status
+      trigger
+      attempt
+      startedAt
+      finishedAt
+      error
+      metrics
+      createdAt
+    }
+  }
+`);
+
 export const ThreadTracesQuery = graphql(`
   query ThreadTraces($threadId: ID!, $tenantId: ID!) {
     threadTraces(threadId: $threadId, tenantId: $tenantId) {
