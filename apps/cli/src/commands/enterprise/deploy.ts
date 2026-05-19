@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { isProdLike, validateStage } from "../../config.js";
 import {
   loadEnterpriseDeployment,
+  saveEnterpriseDeployment,
   type EnterpriseDeploymentConfig,
 } from "../../environments.js";
 import { confirm } from "../../prompt.js";
@@ -13,10 +14,6 @@ import {
   type EnterpriseBootstrapOptions,
   type EnterpriseBootstrapResult,
 } from "./bootstrap.js";
-import {
-  GhCliEnterpriseBootstrapClient,
-  parseGitHubRepository,
-} from "./github.js";
 import { resolveEnterpriseReleasePin } from "./release.js";
 import {
   commitAndPushEnterpriseRepository,
@@ -33,6 +30,12 @@ import {
   type EnterpriseSecretName,
   type EnterpriseSecretSetter,
 } from "./secrets.js";
+import {
+  runEnterpriseWorkflow,
+  type EnterpriseWorkflowClient,
+  type EnterpriseWorkflowDependencies,
+  type EnterpriseWorkflowResult,
+} from "./workflow.js";
 import type { BootstrapStepResult } from "./aws-bootstrap.js";
 
 export const ENTERPRISE_DEPLOY_COMPONENTS = [
@@ -61,6 +64,7 @@ export interface EnterpriseDeployOptions {
   dbPassword?: string;
   apiAuthSecret?: string;
   dryRun?: boolean;
+  runSmokes?: boolean;
   stage?: string;
   component?: string;
   yes?: boolean;
@@ -94,10 +98,12 @@ export type EnterpriseDeployResult =
       secrets: BootstrapStepResult[];
       git: BootstrapStepResult[];
       dispatch: BootstrapStepResult[];
+      workflow: EnterpriseWorkflowResult;
     }
   | {
       kind: "dispatch";
       request: EnterpriseDeployRequest;
+      workflow: EnterpriseWorkflowResult;
     };
 
 export interface EnterpriseDeployDependencies {
@@ -113,10 +119,11 @@ export interface EnterpriseDeployDependencies {
   secretSetter?: EnterpriseSecretSetter;
   promptSecret?: (stage: string, name: EnterpriseSecretName) => Promise<string>;
   fetchManifest?: (url: string) => Promise<ArrayBuffer>;
-  dispatchWorkflow?: (
-    repository: string,
-    stage: string,
-  ) => Promise<BootstrapStepResult>;
+  workflowClient?: EnterpriseWorkflowClient;
+  discoverUrls?: EnterpriseWorkflowDependencies["discoverUrls"];
+  workflowProgress?: EnterpriseWorkflowDependencies["progress"];
+  sleep?: EnterpriseWorkflowDependencies["sleep"];
+  saveDeployment?: (config: EnterpriseDeploymentConfig) => void;
 }
 
 export function validateEnterpriseDeployComponent(component: string): {
@@ -213,14 +220,12 @@ export async function resolveEnterpriseDeployRequest(
   const repository =
     options.repo ??
     registry?.repository ??
-    (options.bootstrap
-      ? await promptWhenInteractive(
-          "GitHub deployment repo (owner/name):",
-          stdinIsTty,
-          deps.promptInput,
-          "GitHub repository is required for enterprise deploy bootstrap. Pass --repo <owner/name>.",
-        )
-      : undefined);
+    (await promptWhenInteractive(
+      "GitHub deployment repo (owner/name):",
+      stdinIsTty,
+      deps.promptInput,
+      "GitHub repository is required for enterprise deploy. Pass --repo <owner/name>.",
+    ));
   const checkoutDir =
     options.checkoutDir ??
     registry?.checkoutDir ??
@@ -248,15 +253,16 @@ export async function runEnterpriseDeploy(
 ): Promise<EnterpriseDeployResult> {
   const request = await resolveEnterpriseDeployRequest(options, deps);
 
-  if (!request.bootstrap) {
-    throw new Error(
-      "Enterprise CI deploy dispatch is not implemented yet. Run with --bootstrap for first-time setup or use `thinkwork enterprise bootstrap --dispatch`.",
-    );
-  }
   if (!request.repository) {
     throw new Error(
       "GitHub repository is required for enterprise deploy bootstrap. Pass --repo <owner/name>.",
     );
+  }
+
+  if (!request.bootstrap) {
+    const workflow = await dispatchEnterpriseWorkflow(request, options, deps);
+    persistWorkflowMetadata(request, workflow, undefined, deps.saveDeployment);
+    return { kind: "dispatch", request, workflow };
   }
 
   if (!options.yes && !options.dryRun) {
@@ -332,20 +338,13 @@ export async function runEnterpriseDeploy(
         },
       ]
     : await commitAndPushEnterpriseRepository(request.checkoutDir, gitClient);
-  const dispatch = options.dryRun
-    ? [
-        {
-          target: `${request.repository}:deploy.yml:${request.stage}`,
-          status: "planned" as const,
-          message: `Would dispatch deploy workflow for ${request.stage}.`,
-        },
-      ]
-    : [
-        await (deps.dispatchWorkflow ?? defaultDispatchWorkflow)(
-          request.repository,
-          request.stage,
-        ),
-      ];
+  const workflow = options.dryRun
+    ? plannedEnterpriseWorkflow(request)
+    : await dispatchEnterpriseWorkflow(request, options, deps, bootstrap);
+  const dispatch = [workflow.dispatch];
+  if (!options.dryRun) {
+    persistWorkflowMetadata(request, workflow, bootstrap, deps.saveDeployment);
+  }
 
   return {
     kind: "bootstrap",
@@ -355,6 +354,7 @@ export async function runEnterpriseDeploy(
     secrets,
     git,
     dispatch,
+    workflow,
   };
 }
 
@@ -405,11 +405,93 @@ async function resolveReleaseManifestSha256(options: {
   return createHash("sha256").update(Buffer.from(body)).digest("hex");
 }
 
-async function defaultDispatchWorkflow(
-  repository: string,
-  stage: string,
-): Promise<BootstrapStepResult> {
-  return new GhCliEnterpriseBootstrapClient(
-    parseGitHubRepository(repository),
-  ).dispatchWorkflow(stage);
+async function dispatchEnterpriseWorkflow(
+  request: EnterpriseDeployRequest,
+  options: EnterpriseDeployOptions,
+  deps: EnterpriseDeployDependencies,
+  bootstrap?: EnterpriseBootstrapResult,
+): Promise<EnterpriseWorkflowResult> {
+  if (!request.repository) {
+    throw new Error(
+      "GitHub repository is required for enterprise deploy. Pass --repo <owner/name>.",
+    );
+  }
+  return runEnterpriseWorkflow(
+    {
+      repository: request.repository,
+      stage: request.stage,
+      component: request.component,
+      runSmokes: options.runSmokes ?? true,
+      wait: request.wait,
+      region: bootstrap?.plan.region ?? request.registry?.region,
+    },
+    {
+      client: deps.workflowClient,
+      discoverUrls: deps.discoverUrls,
+      progress:
+        deps.workflowProgress ??
+        (request.wait && process.stdout.isTTY
+          ? (message) => console.log(`  ${message}`)
+          : undefined),
+      sleep: deps.sleep,
+    },
+  );
+}
+
+function plannedEnterpriseWorkflow(
+  request: EnterpriseDeployRequest,
+): EnterpriseWorkflowResult {
+  const repository = request.repository ?? "<repo>";
+  return {
+    dispatch: {
+      target: `${repository}:deploy.yml:${request.stage}`,
+      status: "planned",
+      message: `Would dispatch deploy workflow for ${request.stage}.`,
+    },
+    artifacts: [],
+    urls: {},
+    waited: false,
+  };
+}
+
+function persistWorkflowMetadata(
+  request: EnterpriseDeployRequest,
+  workflow: EnterpriseWorkflowResult,
+  bootstrap: EnterpriseBootstrapResult | undefined,
+  saveDeployment = saveEnterpriseDeployment,
+): void {
+  if (!workflow.run) return;
+  const timestamp = new Date().toISOString();
+
+  if (bootstrap) {
+    const plan = bootstrap.plan;
+    saveDeployment({
+      customerSlug: plan.customerSlug,
+      repository: plan.repository,
+      targetDir: plan.targetDir,
+      checkoutDir: plan.targetDir,
+      defaultStage: request.stage,
+      lastWorkflowRunId: workflow.run.id,
+      lastWorkflowUrl: workflow.run.url,
+      accountId: plan.accountId,
+      region: plan.region,
+      stages: plan.stages,
+      artifactBucket: plan.aws.artifactBucket,
+      stateBucket: plan.aws.stateBucket,
+      lockTable: plan.aws.lockTable,
+      releaseVersion: plan.release.version,
+      releaseManifestUrl: plan.release.manifestUrl,
+      updatedAt: timestamp,
+    });
+    return;
+  }
+
+  if (!request.registry) return;
+  saveDeployment({
+    ...request.registry,
+    defaultStage: request.stage,
+    lastWorkflowRunId: workflow.run.id,
+    lastWorkflowUrl: workflow.run.url,
+    updatedAt: timestamp,
+  });
 }

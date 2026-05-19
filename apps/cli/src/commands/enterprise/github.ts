@@ -29,7 +29,10 @@ export interface EnterpriseGitHubBootstrapClient {
     environment: GitHubEnvironmentPlan,
   ): Promise<BootstrapStepResult>;
   writeRepositoryFiles(targetDir: string): Promise<BootstrapStepResult>;
-  dispatchWorkflow(stage: string): Promise<BootstrapStepResult>;
+  dispatchWorkflow(
+    stage: string,
+    options?: { component?: string; runSmokes?: boolean },
+  ): Promise<BootstrapStepResult>;
 }
 
 export function parseGitHubRepository(input: string): GitHubRepository {
@@ -133,7 +136,10 @@ export class GhCliEnterpriseBootstrapClient
     };
   }
 
-  async dispatchWorkflow(stage: string): Promise<BootstrapStepResult> {
+  async dispatchWorkflow(
+    stage: string,
+    options: { component?: string; runSmokes?: boolean } = {},
+  ): Promise<BootstrapStepResult> {
     gh([
       "workflow",
       "run",
@@ -142,6 +148,10 @@ export class GhCliEnterpriseBootstrapClient
       this.repository.fullName,
       "--field",
       `stage=${stage}`,
+      "--field",
+      `component=${options.component ?? "all"}`,
+      "--field",
+      `run_smokes=${String(options.runSmokes ?? true)}`,
     ]);
     return {
       target: `${this.repository.fullName}:deploy.yml:${stage}`,

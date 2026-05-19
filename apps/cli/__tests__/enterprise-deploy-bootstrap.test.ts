@@ -5,7 +5,29 @@ import type { EnterpriseBootstrapResult } from "../src/commands/enterprise/boots
 
 function bootstrapResult(): EnterpriseBootstrapResult {
   return {
-    plan: {} as EnterpriseBootstrapResult["plan"],
+    plan: {
+      customerSlug: "acme",
+      targetDir: "/tmp/deploy",
+      repository: "acme/deploy",
+      stages: ["dev", "prod"],
+      accountId: "123456789012",
+      region: "us-east-1",
+      release: {
+        version: "v1.2.3",
+        manifestUrl: "https://example.test/manifest.json",
+        manifestSha256: "abc123",
+        terraformModuleVersion: "1.2.3",
+      },
+      aws: {
+        artifactBucket: "acme-thinkwork-release-artifacts",
+        stateBucket: "acme-thinkwork-terraform-state",
+        lockTable: "acme-thinkwork-terraform-locks",
+        oidcProviderArn:
+          "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
+        stageRoles: [],
+      },
+      github: {} as EnterpriseBootstrapResult["plan"]["github"],
+    },
     template: { written: ["thinkwork.lock"], preserved: [] },
     aws: [],
     github: [],
@@ -31,10 +53,23 @@ describe("one-shot enterprise deploy bootstrap", () => {
       status: "updated" as const,
       message: "pushed",
     }));
-    const dispatchWorkflow = vi.fn(async () => ({
+    const dispatchDeployWorkflow = vi.fn(async () => ({
       target: "acme/deploy:deploy.yml:dev",
       status: "created" as const,
       message: "dispatched",
+    }));
+    const latestDeployRun = vi.fn(async () => ({
+      id: "123",
+      url: "https://github.com/acme/deploy/actions/runs/123",
+      status: "in_progress",
+      failedJobs: [],
+    }));
+    const getRun = vi.fn(async () => ({
+      id: "123",
+      url: "https://github.com/acme/deploy/actions/runs/123",
+      status: "completed",
+      conclusion: "success",
+      failedJobs: [],
     }));
 
     const result = await runEnterpriseDeploy(
@@ -73,7 +108,17 @@ describe("one-shot enterprise deploy bootstrap", () => {
           push,
         },
         secretSetter: { setEnvironmentSecret },
-        dispatchWorkflow,
+        workflowClient: {
+          dispatchDeployWorkflow,
+          latestDeployRun,
+          getRun,
+          listRunArtifacts: vi.fn(async () => ["thinkwork-deploy-dev-123"]),
+        },
+        discoverUrls: vi.fn(() => ({
+          apiEndpoint: "https://api.example.test",
+          adminUrl: "https://admin.example.test",
+        })),
+        sleep: vi.fn(async () => undefined),
         fetchManifest: vi.fn(async () =>
           Buffer.from("release-manifest").buffer.slice(0),
         ),
@@ -92,7 +137,21 @@ describe("one-shot enterprise deploy bootstrap", () => {
     expect(setEnvironmentSecret).toHaveBeenCalledTimes(4);
     expect(commitAll).toHaveBeenCalledOnce();
     expect(push).toHaveBeenCalledOnce();
-    expect(dispatchWorkflow).toHaveBeenCalledWith("acme/deploy", "dev");
+    expect(dispatchDeployWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: "acme/deploy",
+        stage: "dev",
+        component: "all",
+        runSmokes: true,
+      }),
+    );
+    expect(latestDeployRun).toHaveBeenCalled();
+    expect(getRun).toHaveBeenCalledWith("acme/deploy", "123");
+    expect(result.workflow.run?.url).toBe(
+      "https://github.com/acme/deploy/actions/runs/123",
+    );
+    expect(result.workflow.artifacts).toEqual(["thinkwork-deploy-dev-123"]);
+    expect(result.workflow.urls.adminUrl).toBe("https://admin.example.test");
     expect(JSON.stringify(result)).not.toContain("prod-db");
     expect(JSON.stringify(result)).not.toContain("prod-api");
   });

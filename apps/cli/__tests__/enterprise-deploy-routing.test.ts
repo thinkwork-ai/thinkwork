@@ -66,7 +66,29 @@ function writeDeploymentRepo(root: string): void {
 
 function bootstrapResult(): EnterpriseBootstrapResult {
   return {
-    plan: {} as EnterpriseBootstrapResult["plan"],
+    plan: {
+      customerSlug: "acme",
+      targetDir: "/tmp/deploy",
+      repository: "acme/deploy",
+      stages: ["dev", "prod"],
+      accountId: "123456789012",
+      region: "us-east-1",
+      release: {
+        version: "v1.2.3",
+        manifestUrl: "https://example.test/manifest.json",
+        manifestSha256: "abc123",
+        terraformModuleVersion: "1.2.3",
+      },
+      aws: {
+        artifactBucket: "acme-thinkwork-release-artifacts",
+        stateBucket: "acme-thinkwork-terraform-state",
+        lockTable: "acme-thinkwork-terraform-locks",
+        oidcProviderArn:
+          "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
+        stageRoles: [],
+      },
+      github: {} as EnterpriseBootstrapResult["plan"]["github"],
+    },
     template: { written: [], preserved: [] },
     aws: [],
     github: [],
@@ -98,6 +120,16 @@ describe("top-level enterprise deploy routing", () => {
       secrets: [],
       git: [],
       dispatch: [],
+      workflow: {
+        dispatch: {
+          target: "acme/deploy:deploy.yml:dev",
+          status: "created" as const,
+          message: "dispatched",
+        },
+        artifacts: [],
+        urls: {},
+        waited: false,
+      },
     }));
 
     await runDeployCommand(
@@ -202,6 +234,7 @@ describe("top-level enterprise deploy routing", () => {
         manifestSha256: "abc123",
         dbPassword: "dev-db",
         apiAuthSecret: "dev-api",
+        wait: false,
         yes: true,
       },
       {
@@ -234,11 +267,21 @@ describe("top-level enterprise deploy routing", () => {
         secretSetter: {
           setEnvironmentSecret: vi.fn(async () => undefined),
         },
-        dispatchWorkflow: vi.fn(async () => ({
-          target: "acme/deploy:deploy.yml:dev",
-          status: "created",
-          message: "dispatched",
-        })),
+        workflowClient: {
+          dispatchDeployWorkflow: vi.fn(async () => ({
+            target: "acme/deploy:deploy.yml:dev",
+            status: "created",
+            message: "dispatched",
+          })),
+          latestDeployRun: vi.fn(async () => ({
+            id: "123",
+            url: "https://github.com/acme/deploy/actions/runs/123",
+            status: "queued",
+            failedJobs: [],
+          })),
+          getRun: vi.fn(),
+          listRunArtifacts: vi.fn(),
+        },
       },
     );
 
@@ -255,6 +298,74 @@ describe("top-level enterprise deploy routing", () => {
       dispatchWorkflow: false,
       dryRun: undefined,
     });
+  });
+
+  it("dispatches follow-up enterprise deploys from saved registry metadata", async () => {
+    const saveDeployment = vi.fn();
+    const dispatchDeployWorkflow = vi.fn(async () => ({
+      target: "acme/deploy:deploy.yml:prod",
+      status: "created" as const,
+      message: "dispatched",
+    }));
+
+    const result = await runEnterpriseDeploy(
+      {
+        customer: "acme",
+        stage: "prod",
+        component: "smokes",
+        runSmokes: true,
+        wait: false,
+      },
+      {
+        stdinIsTty: false,
+        loadDeployment: vi.fn(() => ({
+          customerSlug: "acme",
+          repository: "acme/deploy",
+          targetDir: "/tmp/deploy",
+          checkoutDir: "/tmp/deploy",
+          defaultStage: "dev",
+          accountId: "123456789012",
+          region: "us-east-1",
+          stages: ["dev", "prod"],
+          artifactBucket: "acme-thinkwork-release-artifacts",
+          stateBucket: "acme-thinkwork-terraform-state",
+          lockTable: "acme-thinkwork-terraform-locks",
+          releaseVersion: "v1.2.3",
+          releaseManifestUrl: "https://example.test/manifest.json",
+          updatedAt: "2026-05-19T00:00:00.000Z",
+        })),
+        workflowClient: {
+          dispatchDeployWorkflow,
+          latestDeployRun: vi.fn(async () => ({
+            id: "456",
+            url: "https://github.com/acme/deploy/actions/runs/456",
+            status: "queued",
+            failedJobs: [],
+          })),
+          getRun: vi.fn(),
+          listRunArtifacts: vi.fn(),
+        },
+        saveDeployment,
+      },
+    );
+
+    expect(result.kind).toBe("dispatch");
+    expect(dispatchDeployWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: "acme/deploy",
+        stage: "prod",
+        component: "smokes",
+        runSmokes: true,
+      }),
+    );
+    expect(saveDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerSlug: "acme",
+        defaultStage: "prod",
+        lastWorkflowRunId: "456",
+        lastWorkflowUrl: "https://github.com/acme/deploy/actions/runs/456",
+      }),
+    );
   });
 });
 
