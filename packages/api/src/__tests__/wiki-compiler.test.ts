@@ -744,6 +744,7 @@ const {
   const mockRepo = {
     getCursor: vi.fn(),
     setCursor: vi.fn(),
+    claimCompileJobById: vi.fn(),
     completeCompileJob: vi.fn(),
     findPageById: vi.fn(),
     findPageBySlug: vi.fn().mockResolvedValue(null),
@@ -821,6 +822,8 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
     // swap the DB-touching helpers.
     getCursor: (...args: unknown[]) => mockRepo.getCursor(...args),
     setCursor: (...args: unknown[]) => mockRepo.setCursor(...args),
+    claimCompileJobById: (...args: unknown[]) =>
+      mockRepo.claimCompileJobById(...args),
     completeCompileJob: (...args: unknown[]) =>
       mockRepo.completeCompileJob(...args),
     findPageById: (...args: unknown[]) => mockRepo.findPageById(...args),
@@ -910,7 +913,7 @@ vi.mock("../lib/ontology/materializer.js", async (importOriginal) => {
   };
 });
 
-import { runCompileJob } from "../lib/wiki/compiler.js";
+import { runCompileJob, runJobById } from "../lib/wiki/compiler.js";
 
 const sampleJob = {
   id: "job-1",
@@ -976,6 +979,7 @@ describe("runCompileJob", () => {
       updatedAt: null,
       recordId: null,
     });
+    mockRepo.claimCompileJobById.mockResolvedValue(sampleJob);
     mockRepo.listPagesForScope.mockResolvedValue([]);
     mockRepo.listOpenMentions.mockResolvedValue([]);
     mockRepo.listPageSections.mockResolvedValue([]);
@@ -1025,6 +1029,31 @@ describe("runCompileJob", () => {
     });
     mockBrainRepo.findTenantEntityPageBySlug.mockResolvedValue(null);
     mockBrainRepo.upsertTenantEntityPageLink.mockResolvedValue(false);
+  });
+
+  it("claims id-targeted jobs before running them", async () => {
+    scriptAdapter([{ records: [], nextCursor: null }]);
+
+    const result = await runJobById("job-1");
+
+    expect(result?.status).toBe("succeeded");
+    expect(mockRepo.claimCompileJobById).toHaveBeenCalledWith("job-1");
+    expect(mockRepo.completeCompileJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-1",
+        status: "succeeded",
+      }),
+    );
+  });
+
+  it("does not run id-targeted jobs that cannot be claimed", async () => {
+    mockRepo.claimCompileJobById.mockResolvedValueOnce(null);
+
+    const result = await runJobById("job-1");
+
+    expect(result).toBeNull();
+    expect(mockRepo.getCursor).not.toHaveBeenCalled();
+    expect(mockRepo.completeCompileJob).not.toHaveBeenCalled();
   });
 
   it("creates a new page from the planner's newPages output", async () => {
