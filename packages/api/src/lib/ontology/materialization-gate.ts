@@ -17,9 +17,11 @@ export interface OntologyGateMetrics {
   ontology_gate_approved_pages: number;
   ontology_gate_approved_facets: number;
   ontology_gate_approved_relationships: number;
+  ontology_gate_approved_connected_pages: number;
   ontology_gate_rejected_pages: number;
   ontology_gate_rejected_facets: number;
   ontology_gate_rejected_relationships: number;
+  ontology_gate_rejected_isolated_pages: number;
   ontology_gate_unresolved_observations: number;
   ontology_gate_suggestion_candidates: number;
 }
@@ -103,14 +105,43 @@ export function applyOntologyMaterializationGate(
       unresolvedMentions,
     }),
   );
+  const connectedPageKeys = connectedKeysForLinks(pageLinks);
+  const connectedNewPages = newPages.filter((page) =>
+    allowMaterializedPageWithRelationship({
+      type: page.type,
+      slug: page.slug,
+      title: page.title,
+      entityTypeSlug: page.entityTypeSlug ?? null,
+      suggestedType: page.type,
+      sourceRef: firstPageSourceRef(page) ?? "ontology-gate",
+      connectedPageKeys,
+      snapshot: args.snapshot,
+      metrics,
+      unresolvedMentions,
+    }),
+  );
+  const connectedPromotions = promotions.filter((promotion) =>
+    allowMaterializedPageWithRelationship({
+      type: promotion.type,
+      slug: promotion.slug,
+      title: promotion.title,
+      entityTypeSlug: promotion.entityTypeSlug ?? null,
+      suggestedType: promotion.type,
+      sourceRef: firstSectionSourceRef(promotion.sections) ?? "ontology-gate",
+      connectedPageKeys,
+      snapshot: args.snapshot,
+      metrics,
+      unresolvedMentions,
+    }),
+  );
 
   return {
     plan: {
       ...args.plan,
       pageUpdates,
-      newPages,
+      newPages: connectedNewPages,
       unresolvedMentions,
-      promotions,
+      promotions: connectedPromotions,
       pageLinks,
     },
     metrics,
@@ -122,9 +153,11 @@ export function emptyGateMetrics(): OntologyGateMetrics {
     ontology_gate_approved_pages: 0,
     ontology_gate_approved_facets: 0,
     ontology_gate_approved_relationships: 0,
+    ontology_gate_approved_connected_pages: 0,
     ontology_gate_rejected_pages: 0,
     ontology_gate_rejected_facets: 0,
     ontology_gate_rejected_relationships: 0,
+    ontology_gate_rejected_isolated_pages: 0,
     ontology_gate_unresolved_observations: 0,
     ontology_gate_suggestion_candidates: 0,
   };
@@ -318,6 +351,48 @@ function allowRelationship(args: {
   });
   args.metrics.ontology_gate_unresolved_observations += 1;
   return false;
+}
+
+function allowMaterializedPageWithRelationship(args: {
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  entityTypeSlug: string | null;
+  suggestedType: WikiPageType;
+  sourceRef: string;
+  connectedPageKeys: Set<string>;
+  snapshot: OntologyCompileSnapshot;
+  metrics: OntologyGateMetrics;
+  unresolvedMentions: PlannedUnresolvedMention[];
+}): boolean {
+  if (args.snapshot.conservative) return true;
+  if (args.connectedPageKeys.has(pageKey(args.type, args.slug))) {
+    args.metrics.ontology_gate_approved_connected_pages += 1;
+    return true;
+  }
+
+  args.metrics.ontology_gate_rejected_pages += 1;
+  args.metrics.ontology_gate_rejected_isolated_pages += 1;
+  args.metrics.ontology_gate_suggestion_candidates += 1;
+  args.unresolvedMentions.push({
+    alias: args.title,
+    suggestedType: args.suggestedType,
+    entityTypeSlug: args.entityTypeSlug,
+    context:
+      "Rejected ontology candidate without an approved relationship triple",
+    source_ref: args.sourceRef,
+  });
+  args.metrics.ontology_gate_unresolved_observations += 1;
+  return false;
+}
+
+function connectedKeysForLinks(links: PlannedPageLink[]): Set<string> {
+  const connected = new Set<string>();
+  for (const link of links) {
+    connected.add(pageKey(link.fromType, link.fromSlug));
+    connected.add(pageKey(link.toType, link.toSlug));
+  }
+  return connected;
 }
 
 function rejectPageCandidate(args: {

@@ -1010,7 +1010,12 @@ describe("runCompileJob", () => {
     // Default: no places resolved. Tests that exercise the place_id wire
     // override per-scenario.
     mockPlacesService.resolveBatchPlace.mockResolvedValue(null);
-    mockLoadOntologyCompileSnapshot.mockResolvedValue(testOntologySnapshot);
+    mockLoadOntologyCompileSnapshot.mockResolvedValue({
+      ...testOntologySnapshot,
+      activeVersionId: null,
+      activeVersionNumber: null,
+      conservative: true,
+    });
     mockMaterializer.materializePlannerPageToBrain.mockResolvedValue({
       pageId: "brain-page-1",
       pageUpserted: true,
@@ -1061,14 +1066,14 @@ describe("runCompileJob", () => {
     expect(result.metrics.records_read).toBe(2);
     expect(result.metrics.pages_upserted).toBe(1);
     expect(result.metrics.planner_calls).toBe(1);
-    expect(result.metrics.ontology_active_version_id).toBe(
-      "ontology-version-1",
-    );
+    expect(result.metrics.ontology_active_version_id).toBeNull();
     expect(mockLoadOntologyCompileSnapshot).toHaveBeenCalledWith({
       tenantId: "t1",
     });
     expect(mockPlanner.runPlanner).toHaveBeenCalledWith(
-      expect.objectContaining({ ontologySnapshot: testOntologySnapshot }),
+      expect.objectContaining({
+        ontologySnapshot: expect.objectContaining({ conservative: true }),
+      }),
       expect.any(Object),
     );
     expect(mockRepo.upsertPage).toHaveBeenCalledTimes(1);
@@ -1092,6 +1097,7 @@ describe("runCompileJob", () => {
   });
 
   it("reroutes unapproved ontology-shaped new pages before database writes", async () => {
+    mockLoadOntologyCompileSnapshot.mockResolvedValueOnce(testOntologySnapshot);
     scriptAdapter([
       {
         records: [makeRecord("r1")],
@@ -1143,7 +1149,60 @@ describe("runCompileJob", () => {
     expect(result.metrics.ontology_gate_suggestion_candidates).toBe(1);
   });
 
+  it("reroutes approved ontology pages when they have no relationship triple", async () => {
+    mockLoadOntologyCompileSnapshot.mockResolvedValueOnce(testOntologySnapshot);
+    scriptAdapter([
+      {
+        records: [makeRecord("r1")],
+        nextCursor: {
+          updatedAt: new Date("2026-04-18T00:00:00Z"),
+          recordId: "r1",
+        },
+      },
+      { records: [], nextCursor: null },
+    ]);
+    mockPlanner.runPlanner.mockResolvedValueOnce({
+      pageUpdates: [],
+      newPages: [
+        {
+          type: "entity",
+          entityTypeSlug: "customer",
+          slug: "acme",
+          title: "Acme",
+          sections: [
+            {
+              slug: "overview",
+              facetSlug: "overview",
+              heading: "Overview",
+              body_md: "Potential customer.",
+              source_refs: ["r1"],
+            },
+          ],
+          source_refs: ["r1"],
+        },
+      ],
+      unresolvedMentions: [],
+      promotions: [],
+      pageLinks: [],
+      usage: { inputTokens: 100, outputTokens: 40 },
+    });
+
+    const result = await runCompileJob(sampleJob);
+
+    expect(result.status).toBe("succeeded");
+    expect(mockRepo.upsertPage).not.toHaveBeenCalled();
+    expect(result.metrics.ontology_gate_approved_pages).toBe(1);
+    expect(result.metrics.ontology_gate_rejected_isolated_pages).toBe(1);
+    expect(mockRepo.upsertUnresolvedMention).toHaveBeenCalledWith(
+      expect.objectContaining({
+        alias: "Acme",
+        suggested_type: "entity",
+      }),
+    );
+  });
+
   it("approves ontology relationships between existing candidate pages", async () => {
+    mockLoadOntologyCompileSnapshot.mockResolvedValueOnce(testOntologySnapshot);
     scriptAdapter([
       {
         records: [makeRecord("r1")],
@@ -1277,7 +1336,7 @@ describe("runCompileJob", () => {
           entityTypeSlug: "customer",
           slug: "acme",
         }),
-        snapshot: testOntologySnapshot,
+        snapshot: expect.objectContaining({ conservative: true }),
       }),
     );
     expect(result.metrics.brain_pages_upserted).toBe(1);
@@ -1498,6 +1557,7 @@ describe("runCompileJob", () => {
   });
 
   it("suppresses legacy deterministic linkers when active ontology is present", async () => {
+    mockLoadOntologyCompileSnapshot.mockResolvedValueOnce(testOntologySnapshot);
     scriptAdapter([
       { records: [makeRecord("r1")], nextCursor: null },
       { records: [], nextCursor: null },
@@ -1538,6 +1598,7 @@ describe("runCompileJob", () => {
   });
 
   it("suppresses legacy aggregation when active ontology is present", async () => {
+    mockLoadOntologyCompileSnapshot.mockResolvedValueOnce(testOntologySnapshot);
     const restore = process.env.WIKI_AGGREGATION_PASS_ENABLED;
     process.env.WIKI_AGGREGATION_PASS_ENABLED = "true";
     try {

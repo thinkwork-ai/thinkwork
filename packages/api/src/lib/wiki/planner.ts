@@ -251,7 +251,8 @@ Return a JSON object with these five arrays. Any can be empty. Bias toward \`unr
 7. **Never write record IDs, UUIDs, hex identifiers, or internal keys into section prose.** Phrases like "see records 1c907c71-...", "id=abc-123", or dumps of Hindsight unit ids are forbidden in \`proposed_body_md\` / \`body_md\`. Provenance belongs in \`source_refs\` only; the body is for human-readable content.
 8. **Do NOT use \`[[Title]]\` wikilink syntax in section bodies.** Cross-page relationships are stored in \`pageLinks\` (which you still emit on the JSON root), not inline in prose. Write the entity name as plain prose — "Marco is an AI assistant powered by ThinkWork" — without any brackets. The rendered wiki hyperlinks via the Connected Pages section that reads from \`wiki_page_links\`.
 9. When an approved ontology snapshot is provided, every new durable page or promotion MUST carry an approved \`entityTypeSlug\`, and every page link MUST carry an approved \`relationshipTypeSlug\`. Use only the listed \`entityTypeSlug\`, \`facetSlug\`, and \`relationshipTypeSlug\` values. If the evidence does not fit an approved type/facet/relationship, emit \`unresolvedMentions\` instead of creating a generic entity/topic/reference.
-10. Output **only valid JSON**. No prose, no markdown fences.`;
+10. When an approved ontology snapshot is provided, every new durable page or promotion MUST participate in at least one approved pageLinks triple, either as \`from*\` or \`to*\`. A standalone ontology node is not useful; if you cannot connect it to an existing candidate page or another new page with an approved relationship, emit an \`unresolvedMentions\` observation instead.
+11. Output **only valid JSON**. No prose, no markdown fences.`;
 
 const PLANNER_OUTPUT_SCHEMA = `{
   "pageUpdates": [

@@ -190,11 +190,21 @@ describe("applyOntologyMaterializationGate", () => {
           ],
         },
       ],
+      pageLinks: [
+        {
+          fromType: "entity",
+          fromSlug: "acme",
+          toType: "entity",
+          toSlug: "ada",
+          relationshipTypeSlug: "has_stakeholder",
+        },
+      ],
     });
 
     const result = applyOntologyMaterializationGate({
       plan,
       snapshot: ontologySnapshot(),
+      candidatePageEntityTypes: new Map([["entity:ada", "person"]]),
     });
 
     expect(
