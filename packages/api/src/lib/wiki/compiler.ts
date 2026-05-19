@@ -82,6 +82,7 @@ import {
 } from "./aggregation-planner.js";
 import { scoreSectionAggregation } from "./promotion-scorer.js";
 import { db as defaultDb } from "../db.js";
+import { loadOntologyCompileSnapshot } from "../ontology/compile-snapshot.js";
 import { wikiPageSections, wikiPageLinks } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -199,6 +200,11 @@ export interface RunJobResult {
 		 * fires, the job is dead — but treated as a counter so it aggregates
 		 * cleanly across jobs in downstream dashboards. */
 		bedrock_retry_exhausted?: number;
+		/** True when no approved ontology version exists, so planner output
+		 * should stay taxonomy-only and unresolved rather than structured. */
+		ontology_conservative?: boolean;
+		/** Approved ontology version used to shape planner output, if any. */
+		ontology_active_version_id?: string | null;
 	};
 	error?: string;
 }
@@ -298,6 +304,11 @@ export async function runCompileJob(
 			tenantId: job.tenant_id,
 			ownerId: job.owner_id,
 		});
+		const ontologySnapshot = await loadOntologyCompileSnapshot({
+			tenantId: job.tenant_id,
+		});
+		metrics.ontology_conservative = ontologySnapshot.conservative;
+		metrics.ontology_active_version_id = ontologySnapshot.activeVersionId;
 
 		while (metrics.records_read < maxRecordsThisJob) {
 			const pageSize = Math.min(
@@ -338,6 +349,7 @@ export async function runCompileJob(
 					ownerId: job.owner_id,
 					records,
 					candidatePages,
+					ontologySnapshot,
 					openMentions: openMentions.map((m) => ({
 						id: m.id,
 						alias: m.alias,
