@@ -669,6 +669,7 @@ const {
   mockGetServices,
   mockLoadOntologyCompileSnapshot,
   mockMaterializer,
+  mockBrainRepo,
   testOntologySnapshot,
 } = vi.hoisted(() => {
   const testOntologySnapshot = {
@@ -744,6 +745,7 @@ const {
     setCursor: vi.fn(),
     completeCompileJob: vi.fn(),
     findPageById: vi.fn(),
+    findPageBySlug: vi.fn().mockResolvedValue(null),
     findAliasMatches: vi.fn().mockResolvedValue([]),
     findAliasMatchesFuzzy: vi.fn().mockResolvedValue([]),
     listPagesForScope: vi.fn().mockResolvedValue([]),
@@ -788,6 +790,10 @@ const {
       sourcesRetained: 1,
     }),
   };
+  const mockBrainRepo = {
+    findTenantEntityPageBySlug: vi.fn().mockResolvedValue(null),
+    upsertTenantEntityPageLink: vi.fn().mockResolvedValue(false),
+  };
   return {
     mockAdapter,
     mockRepo,
@@ -796,6 +802,7 @@ const {
     mockGetServices,
     mockLoadOntologyCompileSnapshot,
     mockMaterializer,
+    mockBrainRepo,
     testOntologySnapshot,
   };
 });
@@ -816,6 +823,7 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
     completeCompileJob: (...args: unknown[]) =>
       mockRepo.completeCompileJob(...args),
     findPageById: (...args: unknown[]) => mockRepo.findPageById(...args),
+    findPageBySlug: (...args: unknown[]) => mockRepo.findPageBySlug(...args),
     findAliasMatches: (...args: unknown[]) =>
       mockRepo.findAliasMatches(...args),
     findAliasMatchesFuzzy: (...args: unknown[]) =>
@@ -847,6 +855,18 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
     findPlaceById: (...args: unknown[]) => mockRepo.findPlaceById(...args),
     findPageByPlaceId: (...args: unknown[]) =>
       mockRepo.findPageByPlaceId(...args),
+  };
+});
+
+vi.mock("../lib/brain/repository.js", async (importOriginal) => {
+  const actual =
+    (await importOriginal()) as typeof import("../lib/brain/repository.js");
+  return {
+    ...actual,
+    findTenantEntityPageBySlug: (...args: unknown[]) =>
+      mockBrainRepo.findTenantEntityPageBySlug(...args),
+    upsertTenantEntityPageLink: (...args: unknown[]) =>
+      mockBrainRepo.upsertTenantEntityPageLink(...args),
   };
 });
 
@@ -972,6 +992,7 @@ describe("runCompileJob", () => {
     mockRepo.findPagesByFuzzyTitle.mockResolvedValue([]);
     mockRepo.bumpSectionLastSeen.mockResolvedValue(0);
     mockRepo.findMemoryUnitPageSources.mockResolvedValue([]);
+    mockRepo.findPageBySlug.mockResolvedValue(null);
     mockRepo.countDuplicateTitleCandidates.mockResolvedValue(0);
     mockRepo.enqueueCompileJob.mockResolvedValue({
       inserted: false,
@@ -996,6 +1017,8 @@ describe("runCompileJob", () => {
       facetsWritten: 1,
       sourcesRetained: 1,
     });
+    mockBrainRepo.findTenantEntityPageBySlug.mockResolvedValue(null);
+    mockBrainRepo.upsertTenantEntityPageLink.mockResolvedValue(false);
   });
 
   it("creates a new page from the planner's newPages output", async () => {
@@ -1118,6 +1141,92 @@ describe("runCompileJob", () => {
     expect(result.metrics.ontology_gate_rejected_pages).toBe(1);
     expect(result.metrics.ontology_gate_unresolved_observations).toBe(1);
     expect(result.metrics.ontology_gate_suggestion_candidates).toBe(1);
+  });
+
+  it("approves ontology relationships between existing candidate pages", async () => {
+    scriptAdapter([
+      {
+        records: [makeRecord("r1")],
+        nextCursor: {
+          updatedAt: new Date("2026-04-18T00:00:00Z"),
+          recordId: "r1",
+        },
+      },
+      { records: [], nextCursor: null },
+    ]);
+    mockRepo.listPagesForScope.mockResolvedValue([
+      {
+        id: "page-acme",
+        type: "entity",
+        entityTypeSlug: "customer",
+        slug: "acme",
+        title: "Acme",
+        summary: null,
+        body_md: null,
+        last_compiled_at: null,
+        backlink_count: 0,
+        aliases: [],
+      },
+      {
+        id: "page-eric",
+        type: "entity",
+        entityTypeSlug: "person",
+        slug: "eric-odom",
+        title: "Eric Odom",
+        summary: null,
+        body_md: null,
+        last_compiled_at: null,
+        backlink_count: 0,
+        aliases: [],
+      },
+    ]);
+    mockRepo.findPageBySlug.mockImplementation(async (args: any) => {
+      if (args.slug === "acme") return { id: "page-acme" };
+      if (args.slug === "eric-odom") return { id: "page-eric" };
+      return null;
+    });
+    mockBrainRepo.findTenantEntityPageBySlug.mockImplementation(
+      async (args: any) => ({ id: `brain-${args.subtype}-${args.slug}` }),
+    );
+    mockBrainRepo.upsertTenantEntityPageLink.mockResolvedValue(true);
+    mockPlanner.runPlanner.mockResolvedValueOnce({
+      pageUpdates: [],
+      newPages: [],
+      unresolvedMentions: [],
+      promotions: [],
+      pageLinks: [
+        {
+          fromType: "entity",
+          fromSlug: "acme",
+          toType: "entity",
+          toSlug: "eric-odom",
+          relationshipTypeSlug: "has_stakeholder",
+          context: "Eric is involved with Acme.",
+        },
+      ],
+      usage: { inputTokens: 100, outputTokens: 40 },
+    });
+
+    const result = await runCompileJob(sampleJob);
+
+    expect(result.status).toBe("succeeded");
+    expect(result.metrics.ontology_gate_approved_relationships).toBe(1);
+    expect(result.metrics.ontology_gate_rejected_relationships).toBe(0);
+    expect(result.metrics.links_upserted).toBe(1);
+    expect(mockRepo.upsertPageLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromPageId: "page-acme",
+        toPageId: "page-eric",
+        kind: "has_stakeholder",
+      }),
+    );
+    expect(mockBrainRepo.upsertTenantEntityPageLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromPageId: "brain-customer-acme",
+        toPageId: "brain-person-eric-odom",
+        relationshipSlug: "has_stakeholder",
+      }),
+    );
   });
 
   it("mirrors approved ontology-shaped new pages into Brain facets", async () => {
@@ -1388,7 +1497,7 @@ describe("runCompileJob", () => {
     expect(result.error).toMatch(/listRecordsUpdatedSince/);
   });
 
-  it("emits link-densification metric keys at zero when no candidates match", async () => {
+  it("suppresses legacy deterministic linkers when active ontology is present", async () => {
     scriptAdapter([
       { records: [makeRecord("r1")], nextCursor: null },
       { records: [], nextCursor: null },
@@ -1420,20 +1529,66 @@ describe("runCompileJob", () => {
     const result = await runCompileJob(sampleJob);
 
     expect(result.status).toBe("succeeded");
-    // Clean-path metrics — no city/journal candidates surfaced, so both
-    // emitters wrote nothing.
     expect(result.metrics.links_written_deterministic).toBe(0);
     expect(result.metrics.links_written_co_mention).toBe(0);
+    expect(result.metrics.deterministic_linking_ontology_suppressed).toBe(true);
     expect(result.metrics.duplicate_candidates_count).toBe(3);
-    expect(
-      result.metrics.deterministic_linking_flag_suppressed,
-    ).toBeUndefined();
+    expect(mockRepo.findPagesByExactTitle).not.toHaveBeenCalled();
+    expect(mockRepo.findMemoryUnitPageSources).not.toHaveBeenCalled();
+  });
+
+  it("suppresses legacy aggregation when active ontology is present", async () => {
+    const restore = process.env.WIKI_AGGREGATION_PASS_ENABLED;
+    process.env.WIKI_AGGREGATION_PASS_ENABLED = "true";
+    try {
+      scriptAdapter([
+        { records: [makeRecord("r1")], nextCursor: null },
+        { records: [], nextCursor: null },
+      ]);
+      mockPlanner.runPlanner.mockResolvedValueOnce({
+        pageUpdates: [],
+        newPages: [
+          {
+            type: "entity",
+            entityTypeSlug: "customer",
+            slug: "slug-x",
+            title: "Title X",
+            sections: [
+              {
+                slug: "overview",
+                heading: "Overview",
+                body_md: "Plain.",
+              },
+            ],
+            source_refs: ["r1"],
+          },
+        ],
+        unresolvedMentions: [],
+        promotions: [],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      });
+
+      const result = await runCompileJob(sampleJob);
+      expect(result.status).toBe("succeeded");
+      expect(result.metrics.aggregation_ontology_suppressed).toBe(true);
+    } finally {
+      if (restore === undefined) {
+        delete process.env.WIKI_AGGREGATION_PASS_ENABLED;
+      } else {
+        process.env.WIKI_AGGREGATION_PASS_ENABLED = restore;
+      }
+    }
   });
 
   it("records deterministic_linking_flag_suppressed when the flag is off", async () => {
     const restore = process.env.WIKI_DETERMINISTIC_LINKING_ENABLED;
     process.env.WIKI_DETERMINISTIC_LINKING_ENABLED = "false";
     try {
+      mockLoadOntologyCompileSnapshot.mockResolvedValueOnce({
+        ...testOntologySnapshot,
+        activeVersionId: null,
+        conservative: true,
+      });
       scriptAdapter([
         { records: [makeRecord("r1")], nextCursor: null },
         { records: [], nextCursor: null },
@@ -1729,6 +1884,11 @@ describe("runCompileJob", () => {
     });
 
     it("emits a hierarchy reference edge and increments links_written_place", async () => {
+      mockLoadOntologyCompileSnapshot.mockResolvedValueOnce({
+        ...testOntologySnapshot,
+        activeVersionId: null,
+        conservative: true,
+      });
       scriptAdapter([
         { records: [makeRecord("r1")], nextCursor: null },
         { records: [], nextCursor: null },
@@ -1803,6 +1963,11 @@ describe("runCompileJob", () => {
     });
 
     it("does not double-count when upsertPageLink hits ON CONFLICT DO NOTHING", async () => {
+      mockLoadOntologyCompileSnapshot.mockResolvedValueOnce({
+        ...testOntologySnapshot,
+        activeVersionId: null,
+        conservative: true,
+      });
       scriptAdapter([
         { records: [makeRecord("r1")], nextCursor: null },
         { records: [], nextCursor: null },

@@ -974,6 +974,7 @@ export async function listPagesForScope(
 	Array<{
 		id: string;
 		type: WikiPageType;
+		entityTypeSlug: string | null;
 		slug: string;
 		title: string;
 		summary: string | null;
@@ -988,6 +989,7 @@ export async function listPagesForScope(
 		.select({
 			id: wikiPages.id,
 			type: wikiPages.type,
+			entityTypeSlug: wikiPages.entity_subtype,
 			slug: wikiPages.slug,
 			title: wikiPages.title,
 			summary: wikiPages.summary,
@@ -1042,6 +1044,7 @@ export async function listPagesForScope(
 	return pageRows.map((p) => ({
 		id: p.id,
 		type: p.type as WikiPageType,
+		entityTypeSlug: p.entityTypeSlug,
 		slug: p.slug,
 		title: p.title,
 		summary: p.summary,
