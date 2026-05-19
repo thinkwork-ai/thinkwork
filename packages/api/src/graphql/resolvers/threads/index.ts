@@ -4,6 +4,7 @@ import { thread } from "./thread.query.js";
 import { threadByNumber } from "./threadByNumber.query.js";
 import { threadLabels_query } from "./threadLabels.query.js";
 import { unreadThreadCount } from "./unreadThreadCount.query.js";
+import { threadMentionTargets } from "./threadMentionTargets.query.js";
 
 import { createThread } from "./createThread.mutation.js";
 import { updateThread } from "./updateThread.mutation.js";
@@ -21,27 +22,28 @@ import { escalateThread } from "./escalateThread.mutation.js";
 import { delegateThread } from "./delegateThread.mutation.js";
 
 export const threadQueries = {
-	threads: threads_query,
-	threadsPaged: threadsPaged_query,
-	thread,
-	threadByNumber,
-	threadLabels: threadLabels_query,
-	unreadThreadCount,
+  threads: threads_query,
+  threadsPaged: threadsPaged_query,
+  thread,
+  threadByNumber,
+  threadLabels: threadLabels_query,
+  threadMentionTargets,
+  unreadThreadCount,
 };
 
 export const threadMutations = {
-	createThread,
-	updateThread,
-	deleteThread,
-	checkoutThread,
-	releaseThread,
-	createThreadLabel,
-	updateThreadLabel,
-	deleteThreadLabel,
-	assignThreadLabel,
-	removeThreadLabel,
-	addThreadDependency,
-	removeThreadDependency,
-	escalateThread,
-	delegateThread,
+  createThread,
+  updateThread,
+  deleteThread,
+  checkoutThread,
+  releaseThread,
+  createThreadLabel,
+  updateThreadLabel,
+  deleteThreadLabel,
+  assignThreadLabel,
+  removeThreadLabel,
+  addThreadDependency,
+  removeThreadDependency,
+  escalateThread,
+  delegateThread,
 };

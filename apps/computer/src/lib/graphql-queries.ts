@@ -295,6 +295,18 @@ export const ComputerThreadQuery = gql`
             toolCalls
             toolResults
             createdAt
+            sender {
+              type
+              id
+              displayName
+              avatarUrl
+            }
+            mentions {
+              id
+              targetType
+              targetId
+              displayName
+            }
             durableArtifact {
               id
               title
@@ -308,6 +320,84 @@ export const ComputerThreadQuery = gql`
           }
         }
       }
+    }
+  }
+`;
+
+export const SpaceThreadCollaborationQuery = gql`
+  query SpaceThreadCollaboration($id: ID!, $messageLimit: Int) {
+    thread(id: $id) {
+      id
+      spaceId
+      title
+      status
+      channel
+      archivedAt
+      metadata
+      participants {
+        id
+        participantType
+        role
+        user {
+          id
+          name
+          email
+          image
+        }
+        agent {
+          id
+          name
+          slug
+          avatarUrl
+        }
+      }
+      messages(limit: $messageLimit) {
+        edges {
+          node {
+            id
+            role
+            content
+            parts
+            metadata
+            createdAt
+            sender {
+              type
+              id
+              displayName
+              avatarUrl
+            }
+            mentions {
+              id
+              targetType
+              targetId
+              displayName
+            }
+            durableArtifact {
+              id
+              title
+              type
+              status
+              summary
+              metadata
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const ThreadMentionTargetsQuery = gql`
+  query ThreadMentionTargets($threadId: ID!) {
+    threadMentionTargets(threadId: $threadId) {
+      id
+      targetType
+      targetId
+      displayName
+      avatarUrl
+      role
     }
   }
 `;

@@ -1,7 +1,14 @@
 import type { GraphQLContext } from "../../context.js";
 import { GraphQLError } from "graphql";
-import { db, eq, messages, threads, messageToCamel } from "../../utils.js";
-import { notifyThreadUpdate } from "../../notify.js";
+import {
+  db,
+  eq,
+  messageMentions,
+  messages,
+  threads,
+  messageToCamel,
+} from "../../utils.js";
+import { notifyNewMessage, notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import {
   enqueueComputerThreadTurn,
@@ -9,6 +16,9 @@ import {
   routeRunbookForComputerMessage,
 } from "../../../lib/computers/thread-cutover.js";
 import { recordThreadActivityForIdleLearning } from "../../../lib/thread-idle-learning/activity.js";
+import { dispatchAgentMentions } from "../../../lib/mentions/dispatch-agent-mentions.js";
+import { parseMessageMentions } from "../../../lib/mentions/parse-message-mentions.js";
+import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -25,6 +35,7 @@ export const sendMessage = async (
     .select({
       tenant_id: threads.tenant_id,
       computer_id: threads.computer_id,
+      space_id: threads.space_id,
       user_id: threads.user_id,
       title: threads.title,
       status: threads.status,
@@ -60,6 +71,16 @@ export const sendMessage = async (
   // contents (s3_key, mime_type, size) live exclusively on the
   // thread_attachments table — never duplicated into messages.metadata.
   const parsedMetadata = i.metadata ? JSON.parse(i.metadata) : undefined;
+  const mentionTargets = await loadThreadMentionTargets({
+    tenantId: thread.tenant_id,
+    threadId: i.threadId,
+  });
+  validateExplicitMentions(i.mentions, mentionTargets);
+  const parsedMentions = parseMessageMentions({
+    content: i.content,
+    targets: mentionTargets,
+    explicitMentions: i.mentions,
+  });
 
   const [row] = await db
     .insert(messages)
@@ -75,6 +96,48 @@ export const sendMessage = async (
       metadata: parsedMetadata,
     })
     .returning();
+
+  if (parsedMentions.length > 0) {
+    await db
+      .insert(messageMentions)
+      .values(
+        parsedMentions.map((mention) => ({
+          tenant_id: thread.tenant_id,
+          thread_id: i.threadId,
+          message_id: row.id,
+          target_type: mention.targetType,
+          target_id: mention.targetId,
+          display_name: mention.displayName,
+          raw_text: mention.rawText,
+          start_offset: mention.startOffset,
+          end_offset: mention.endOffset,
+        })),
+      )
+      .onConflictDoNothing();
+    try {
+      await dispatchAgentMentions({
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        spaceId: thread.space_id,
+        messageId: row.id,
+        content: i.content,
+        mentions: parsedMentions,
+        sender: { type: senderType, id: senderId },
+      });
+    } catch (err) {
+      console.warn("[sendMessage] agent mention dispatch failed:", err);
+    }
+  }
+
+  notifyNewMessage({
+    messageId: row.id,
+    threadId: i.threadId,
+    tenantId: thread.tenant_id,
+    role: row.role,
+    content: row.content ?? undefined,
+    senderType,
+    senderId: senderId ?? undefined,
+  }).catch(() => {});
 
   // Auto-generate thread title from first user message (no updated_at bump)
   if (isUserMessage && i.content && thread.title === "Untitled conversation") {
@@ -167,3 +230,23 @@ export const sendMessage = async (
 
   return messageToCamel(row);
 };
+
+function validateExplicitMentions(
+  mentions: Array<{ targetType: string; targetId: string }> | null | undefined,
+  targets: Array<{ targetType: string; targetId: string }>,
+) {
+  if (!mentions?.length) return;
+  const allowed = new Set(
+    targets.map(
+      (target) => `${target.targetType.toLowerCase()}:${target.targetId}`,
+    ),
+  );
+  for (const mention of mentions) {
+    const key = `${mention.targetType.toLowerCase()}:${mention.targetId}`;
+    if (!allowed.has(key)) {
+      throw new GraphQLError("Mention target is not available in this Thread", {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+  }
+}

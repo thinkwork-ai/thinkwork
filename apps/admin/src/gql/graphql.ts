@@ -1919,9 +1919,11 @@ export type Message = {
   createdAt: Scalars['AWSDateTime']['output'];
   durableArtifact?: Maybe<Artifact>;
   id: Scalars['ID']['output'];
+  mentions: Array<MessageMention>;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   parts?: Maybe<Scalars['AWSJSON']['output']>;
   role: MessageRole;
+  sender?: Maybe<MessageSender>;
   senderId?: Maybe<Scalars['ID']['output']>;
   senderType?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
@@ -1959,12 +1961,43 @@ export type MessageEdge = {
   node: Message;
 };
 
+export type MessageMention = {
+  __typename?: 'MessageMention';
+  agent?: Maybe<Agent>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  displayName: Scalars['String']['output'];
+  endOffset?: Maybe<Scalars['Int']['output']>;
+  id: Scalars['ID']['output'];
+  messageId: Scalars['ID']['output'];
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  rawText?: Maybe<Scalars['String']['output']>;
+  startOffset?: Maybe<Scalars['Int']['output']>;
+  targetId: Scalars['ID']['output'];
+  targetType: MessageMentionTargetType;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  user?: Maybe<User>;
+};
+
+export enum MessageMentionTargetType {
+  Agent = 'AGENT',
+  User = 'USER'
+}
+
 export enum MessageRole {
   Assistant = 'ASSISTANT',
   System = 'SYSTEM',
   Tool = 'TOOL',
   User = 'USER'
 }
+
+export type MessageSender = {
+  __typename?: 'MessageSender';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  id?: Maybe<Scalars['ID']['output']>;
+  type: Scalars['String']['output'];
+};
 
 /**
  * Fact-type picker values exposed to the mobile quick-capture footer. Maps to
@@ -3870,6 +3903,7 @@ export type Query = {
   threadIdleLearningRuns: Array<ThreadIdleLearningRun>;
   threadLabels: Array<ThreadLabel>;
   threadLinkedTasks: Array<LinkedTask>;
+  threadMentionTargets: Array<ThreadMentionTarget>;
   threadTraces: Array<TraceEvent>;
   threadTurn?: Maybe<ThreadTurn>;
   threadTurnEvents: Array<ThreadTurnEvent>;
@@ -4635,6 +4669,11 @@ export type QueryThreadLinkedTasksArgs = {
 };
 
 
+export type QueryThreadMentionTargetsArgs = {
+  threadId: Scalars['ID']['input'];
+};
+
+
 export type QueryThreadTracesArgs = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
@@ -5303,6 +5342,7 @@ export type ScheduledJob = {
 
 export type SendMessageInput = {
   content?: InputMaybe<Scalars['String']['input']>;
+  mentions?: InputMaybe<Array<SendMessageMentionInput>>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   role: MessageRole;
   senderId?: InputMaybe<Scalars['ID']['input']>;
@@ -5310,6 +5350,15 @@ export type SendMessageInput = {
   threadId: Scalars['ID']['input'];
   toolCalls?: InputMaybe<Scalars['AWSJSON']['input']>;
   toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
+};
+
+export type SendMessageMentionInput = {
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  endOffset?: InputMaybe<Scalars['Int']['input']>;
+  rawText?: InputMaybe<Scalars['String']['input']>;
+  startOffset?: InputMaybe<Scalars['Int']['input']>;
+  targetId: Scalars['ID']['input'];
+  targetType: MessageMentionTargetType;
 };
 
 export type SetComputerAssignmentsInput = {
@@ -6111,6 +6160,16 @@ export enum ThreadLifecycleStatus {
   Idle = 'IDLE',
   Running = 'RUNNING'
 }
+
+export type ThreadMentionTarget = {
+  __typename?: 'ThreadMentionTarget';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  role?: Maybe<Scalars['String']['output']>;
+  targetId: Scalars['ID']['output'];
+  targetType: MessageMentionTargetType;
+};
 
 export type ThreadParticipant = {
   __typename?: 'ThreadParticipant';

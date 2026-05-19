@@ -245,6 +245,19 @@ type ThreadParticipant {
   updatedAt: AWSDateTime!
 }
 
+type ThreadMentionTarget {
+  id: ID!
+  targetType: MessageMentionTargetType!
+  targetId: ID!
+  displayName: String!
+  avatarUrl: String
+  role: String
+}
+
+extend type Query {
+  threadMentionTargets(threadId: ID!): [ThreadMentionTarget!]!
+}
+
 extend type Mutation {
   createThread(input: CreateThreadInput!): Thread!
   updateThread(id: ID!, input: UpdateThreadInput!): Thread!

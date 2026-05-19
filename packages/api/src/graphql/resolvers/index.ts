@@ -17,6 +17,10 @@ import { templateQueries, templateMutations } from "./templates/index.js";
 import { agentMutations } from "./agents/index.js";
 import { coreMutations } from "./core/index.js";
 import { messageMutations } from "./messages/index.js";
+import {
+  messageMentionTypeResolvers,
+  messageTypeResolvers,
+} from "./messages/types.js";
 import { teamMutations } from "./teams/index.js";
 import { triggerMutations } from "./triggers/index.js";
 import { threadMutations } from "./threads/index.js";
@@ -155,6 +159,8 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   Agent: agentTypeResolvers,
   Thread: threadTypeResolvers,
   ThreadParticipant: threadParticipantTypeResolvers,
+  Message: messageTypeResolvers,
+  MessageMention: messageMentionTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
