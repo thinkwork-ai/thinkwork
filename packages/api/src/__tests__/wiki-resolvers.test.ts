@@ -18,7 +18,9 @@ const {
   mockDb,
   mockAgentsRow,
   mockAdminRows,
+  mockTenantMemberRows,
   mockResolveCaller,
+  mockResolveCallerUserId,
   mockEnqueue,
   mockLambdaSend,
   mockListCompileJobs,
@@ -26,7 +28,9 @@ const {
 } = vi.hoisted(() => {
   const mockAgentsRow = vi.fn();
   const mockAdminRows = vi.fn();
+  const mockTenantMemberRows = vi.fn();
   const mockResolveCaller = vi.fn();
+  const mockResolveCallerUserId = vi.fn();
   const mockEnqueue = vi.fn();
   const mockListCompileJobs = vi.fn();
   const mockLambdaSend = vi.fn().mockResolvedValue({});
@@ -36,15 +40,23 @@ const {
       this.input = input;
     }
   }
+  const whereResult = (rows: unknown[]) =>
+    Object.assign(Promise.resolve(rows), {
+      limit: vi.fn().mockResolvedValue(rows),
+    });
   const chain = (rows: unknown[]) => ({
     from: vi.fn().mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        limit: vi.fn().mockResolvedValue(rows),
-      }),
+      where: vi.fn().mockReturnValue(whereResult(rows)),
     }),
   });
   const mockDb = {
-    select: vi.fn(() => chain(mockAgentsRow() as unknown[])),
+    select: vi.fn((fields?: Record<string, unknown>) =>
+      chain(
+        fields?.role === "tenant_members.role"
+          ? (mockTenantMemberRows() as unknown[])
+          : (mockAgentsRow() as unknown[]),
+      ),
+    ),
     execute: vi
       .fn()
       .mockImplementation(() => Promise.resolve({ rows: mockAdminRows() })),
@@ -53,7 +65,9 @@ const {
     mockDb,
     mockAgentsRow,
     mockAdminRows,
+    mockTenantMemberRows,
     mockResolveCaller,
+    mockResolveCallerUserId,
     mockEnqueue,
     mockLambdaSend,
     mockListCompileJobs,
@@ -63,19 +77,31 @@ const {
 
 vi.mock("../graphql/utils.js", () => ({
   db: mockDb,
+  and: (...conditions: unknown[]) => ({ __and: conditions }),
   eq: (a: unknown, b: unknown) => ({ __eq: [a, b] }),
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
     strings,
     values,
   }),
   agents: { id: "agents.id", tenant_id: "agents.tenant_id" },
+  agentSkills: {
+    agent_id: "agent_skills.agent_id",
+    enabled: "agent_skills.enabled",
+    permissions: "agent_skills.permissions",
+    skill_id: "agent_skills.skill_id",
+  },
+  tenantMembers: {
+    principal_id: "tenant_members.principal_id",
+    role: "tenant_members.role",
+    tenant_id: "tenant_members.tenant_id",
+  },
   users: { id: "users.id", tenant_id: "users.tenant_id", email: "users.email" },
 }));
 
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: vi.fn().mockResolvedValue(null),
   resolveCaller: mockResolveCaller,
-  resolveCallerUserId: vi.fn().mockResolvedValue(null),
+  resolveCallerUserId: mockResolveCallerUserId,
 }));
 
 vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
@@ -120,8 +146,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockResolveCaller.mockReset();
   mockResolveCaller.mockResolvedValue({ userId: "a1", tenantId: "t1" });
+  mockResolveCallerUserId.mockReset();
+  mockResolveCallerUserId.mockResolvedValue("admin-user");
   mockAdminRows.mockReset();
   mockAdminRows.mockReturnValue([]);
+  mockTenantMemberRows.mockReset();
+  mockTenantMemberRows.mockReturnValue([{ role: "admin" }]);
   mockLambdaSend.mockResolvedValue({});
   delete process.env.WIKI_COMPILE_FN;
   delete process.env.STAGE;
@@ -475,22 +505,45 @@ describe("wikiCompileJobs", () => {
     expect(out).toEqual([]);
   });
 
-  it("rejects cognito (end-user) caller for agent-scoped query", async () => {
+  it("allows cognito tenant admin caller for user-scoped query", async () => {
     mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
-    await expect(
-      wikiCompileJobs(
-        {},
-        { tenantId: "t1", userId: "a1" },
-        makeCtx({ authType: "cognito" }),
-      ),
-    ).rejects.toThrow(/Admin-only/);
-    expect(mockListCompileJobs).not.toHaveBeenCalled();
+    mockListCompileJobs.mockResolvedValueOnce([
+      makeJobRow({ id: "job-admin" }),
+    ]);
+    const out = await wikiCompileJobs(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "cognito" }),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("job-admin");
+    expect(mockListCompileJobs).toHaveBeenCalledWith({
+      tenantId: "t1",
+      ownerId: "a1",
+      limit: 10,
+    });
   });
 
-  it("rejects cognito caller for tenant-wide query", async () => {
+  it("allows cognito tenant admin caller for tenant-wide query", async () => {
+    mockListCompileJobs.mockResolvedValueOnce([makeJobRow({ owner_id: "a1" })]);
+    const out = await wikiCompileJobs(
+      {},
+      { tenantId: "t1" },
+      makeCtx({ authType: "cognito" }),
+    );
+    expect(out).toHaveLength(1);
+    expect(mockListCompileJobs).toHaveBeenCalledWith({
+      tenantId: "t1",
+      ownerId: null,
+      limit: 10,
+    });
+  });
+
+  it("rejects cognito caller without tenant admin role", async () => {
+    mockTenantMemberRows.mockReturnValueOnce([]);
     await expect(
       wikiCompileJobs({}, { tenantId: "t1" }, makeCtx({ authType: "cognito" })),
-    ).rejects.toThrow(/Admin-only/);
+    ).rejects.toThrow(/Tenant admin role required/);
     expect(mockListCompileJobs).not.toHaveBeenCalled();
   });
 
