@@ -167,7 +167,11 @@ function filterNewPage(args: {
   metrics: OntologyGateMetrics;
   unresolvedMentions: PlannedUnresolvedMention[];
 }): PlannedNewPage | null {
-  if (!hasStructuredPageSignal(args.page)) return args.page;
+  if (!hasStructuredPageSignal(args.page)) {
+    if (args.snapshot.conservative) return args.page;
+    rejectPageCandidate(args);
+    return null;
+  }
   if (!isApprovedEntityType(args.snapshot, args.page.entityTypeSlug)) {
     rejectPageCandidate(args);
     return null;
@@ -203,7 +207,21 @@ function filterPromotion(args: {
   metrics: OntologyGateMetrics;
   unresolvedMentions: PlannedUnresolvedMention[];
 }): PlannedPromotion | null {
-  if (!hasStructuredPageSignal(args.promotion)) return args.promotion;
+  if (!hasStructuredPageSignal(args.promotion)) {
+    if (args.snapshot.conservative) return args.promotion;
+    args.metrics.ontology_gate_rejected_pages += 1;
+    args.metrics.ontology_gate_suggestion_candidates += 1;
+    args.unresolvedMentions.push({
+      alias: args.promotion.title,
+      suggestedType: args.promotion.type,
+      entityTypeSlug: null,
+      context: `Rejected ontology promotion without approved entity type: ${args.promotion.reason}`,
+      source_ref:
+        firstSectionSourceRef(args.promotion.sections) ?? "ontology-gate",
+    });
+    args.metrics.ontology_gate_unresolved_observations += 1;
+    return null;
+  }
   if (!isApprovedEntityType(args.snapshot, args.promotion.entityTypeSlug)) {
     args.metrics.ontology_gate_rejected_pages += 1;
     args.metrics.ontology_gate_suggestion_candidates += 1;
@@ -252,7 +270,20 @@ function allowRelationship(args: {
   metrics: OntologyGateMetrics;
   unresolvedMentions: PlannedUnresolvedMention[];
 }): boolean {
-  if (!args.link.relationshipTypeSlug) return true;
+  if (!args.link.relationshipTypeSlug) {
+    if (args.snapshot.conservative) return true;
+    args.metrics.ontology_gate_rejected_relationships += 1;
+    args.metrics.ontology_gate_suggestion_candidates += 1;
+    args.unresolvedMentions.push({
+      alias: `${args.link.fromSlug} -> ${args.link.toSlug}`,
+      suggestedType: "topic",
+      context:
+        "Rejected wiki relationship without approved ontology relationship type",
+      source_ref: "ontology-gate",
+    });
+    args.metrics.ontology_gate_unresolved_observations += 1;
+    return false;
+  }
 
   const relationship = args.snapshot.relationshipTypesBySlug.get(
     args.link.relationshipTypeSlug,

@@ -93,6 +93,8 @@ type WikiPageProps = {
 type WikiRow = {
   id: string;
   type: WikiPageType;
+  entitySubtype: string | null;
+  displayType: string;
   slug: string;
   title: string;
   summary: string | null;
@@ -129,14 +131,20 @@ function agentUserLabel(agent: any): string {
   return agent.humanPair?.name ?? agent.humanPair?.email ?? agent.name;
 }
 
-function PageTypeBadge({ type }: { type: WikiPageType }) {
+function PageTypeBadge({
+  type,
+  displayType,
+}: {
+  type: WikiPageType;
+  displayType: string;
+}) {
   return (
     <Badge
       className={`font-normal text-xs ${
         PAGE_TYPE_BADGE_CLASSES[type] ?? "bg-muted text-muted-foreground"
       }`}
     >
-      {pageTypeLabel(type)}
+      {displayType || pageTypeLabel(type)}
     </Badge>
   );
 }
@@ -480,6 +488,8 @@ export function WikiPage({
   const toRow = (p: any, userId: string, userName: string): WikiRow => ({
     id: p.id,
     type: p.type as WikiPageType,
+    entitySubtype: p.entitySubtype ?? null,
+    displayType: p.displayType ?? pageTypeLabel(p.type),
     slug: p.slug,
     title: p.title,
     summary: p.summary ?? null,
@@ -557,7 +567,12 @@ export function WikiPage({
       accessorKey: "type",
       header: "Type",
       size: 110,
-      cell: ({ row }) => <PageTypeBadge type={row.original.type} />,
+      cell: ({ row }) => (
+        <PageTypeBadge
+          type={row.original.type}
+          displayType={row.original.displayType}
+        />
+      ),
     },
     {
       accessorKey: "title",
@@ -733,6 +748,7 @@ export function WikiPage({
               type={selectedRow.type}
               slug={selectedRow.slug}
               title={selectedRow.title}
+              displayType={selectedRow.displayType}
             />
           )}
         </SheetContent>
@@ -748,6 +764,7 @@ export function WikiPage({
               type={graphNode.entityType}
               slug={graphNode.slug}
               title={graphNode.label}
+              displayType={graphNode.displayType ?? undefined}
               connectedEdges={graphNodeEdges}
               historyDepth={graphNodeHistory.length}
               onBack={() => {

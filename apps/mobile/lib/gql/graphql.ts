@@ -6406,6 +6406,7 @@ export type WikiGraph = {
 
 export type WikiGraphEdge = {
   __typename?: 'WikiGraphEdge';
+  kind: Scalars['String']['output'];
   label: Scalars['String']['output'];
   source: Scalars['ID']['output'];
   target: Scalars['ID']['output'];
@@ -6421,7 +6422,9 @@ export type WikiGraphEdge = {
  */
 export type WikiGraphNode = {
   __typename?: 'WikiGraphNode';
+  displayType: Scalars['String']['output'];
   edgeCount: Scalars['Int']['output'];
+  entitySubtype?: Maybe<Scalars['String']['output']>;
   entityType: WikiPageType;
   id: Scalars['ID']['output'];
   label: Scalars['String']['output'];
@@ -6460,6 +6463,17 @@ export type WikiPage = {
    */
   children: Array<WikiPage>;
   createdAt: Scalars['AWSDateTime']['output'];
+  /**
+   * Human-readable type label for list/detail surfaces. Uses the approved
+   * ontology entity type when present; falls back to the legacy page type.
+   */
+  displayType: Scalars['String']['output'];
+  /**
+   * Approved ontology entity type slug materialized for this page, for example
+   * `customer`, `person`, `place`, or `support_case`. Null only for legacy or
+   * non-ontology pages.
+   */
+  entitySubtype?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   lastCompiledAt?: Maybe<Scalars['AWSDateTime']['output']>;
   /** @deprecated Use userId */

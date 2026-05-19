@@ -65,6 +65,63 @@ describe("applyOntologyMaterializationGate", () => {
     expect(result.metrics.ontology_gate_rejected_pages).toBe(0);
   });
 
+  it("rejects generic pages and links when an active ontology is present", () => {
+    const plan = planWith({
+      newPages: [
+        {
+          type: "topic",
+          slug: "mexico",
+          title: "Mexico",
+          source_refs: ["r1"],
+          sections: [
+            {
+              slug: "overview",
+              heading: "Overview",
+              body_md: "Travel note.",
+              source_refs: ["r1"],
+            },
+          ],
+        },
+      ],
+      pageLinks: [
+        {
+          fromType: "entity",
+          fromSlug: "acme",
+          toType: "entity",
+          toSlug: "ada",
+        },
+      ],
+    });
+
+    const result = applyOntologyMaterializationGate({
+      plan,
+      snapshot: ontologySnapshot(),
+      candidatePageEntityTypes: new Map([
+        ["entity:acme", "customer"],
+        ["entity:ada", "person"],
+      ]),
+    });
+
+    expect(result.plan.newPages).toEqual([]);
+    expect(result.plan.pageLinks).toEqual([]);
+    expect(result.plan.unresolvedMentions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          alias: "Mexico",
+          context: "Rejected ontology candidate: Mexico",
+        }),
+        expect.objectContaining({
+          alias: "acme -> ada",
+          context:
+            "Rejected wiki relationship without approved ontology relationship type",
+        }),
+      ]),
+    );
+    expect(result.metrics.ontology_gate_rejected_pages).toBe(1);
+    expect(result.metrics.ontology_gate_rejected_relationships).toBe(1);
+    expect(result.metrics.ontology_gate_unresolved_observations).toBe(2);
+  });
+
   it("reroutes unapproved entity pages into unresolved evidence", () => {
     const plan = planWith({
       newPages: [

@@ -25,6 +25,17 @@ type WikiPage {
   userId: ID!
   ownerId: ID! @deprecated(reason: "Use userId")
   type: WikiPageType!
+  """
+  Approved ontology entity type slug materialized for this page, for example
+  `customer`, `person`, `place`, or `support_case`. Null only for legacy or
+  non-ontology pages.
+  """
+  entitySubtype: String
+  """
+  Human-readable type label for list/detail surfaces. Uses the approved
+  ontology entity type when present; falls back to the legacy page type.
+  """
+  displayType: String!
   slug: String!
   title: String!
   summary: String
@@ -119,6 +130,8 @@ type WikiGraphNode {
   label: String!
   type: String!
   entityType: WikiPageType!
+  entitySubtype: String
+  displayType: String!
   slug: String!
   strategy: String
   edgeCount: Int!
@@ -128,6 +141,7 @@ type WikiGraphNode {
 type WikiGraphEdge {
   source: ID!
   target: ID!
+  kind: String!
   label: String!
   weight: Float!
 }

@@ -35,6 +35,7 @@ import type { WikiPageType } from "./repository.js";
 export interface PlannerCandidatePage {
   id: string;
   type: WikiPageType;
+  entityTypeSlug?: string | null;
   slug: string;
   title: string;
   summary: string | null;
@@ -249,7 +250,7 @@ Return a JSON object with these five arrays. Any can be empty. Bias toward \`unr
 6. Links should only reference \`(type, slug)\` pairs that exist in \`candidatePages\` OR are being created in this same response's \`newPages\`. Never invent pages by link alone.
 7. **Never write record IDs, UUIDs, hex identifiers, or internal keys into section prose.** Phrases like "see records 1c907c71-...", "id=abc-123", or dumps of Hindsight unit ids are forbidden in \`proposed_body_md\` / \`body_md\`. Provenance belongs in \`source_refs\` only; the body is for human-readable content.
 8. **Do NOT use \`[[Title]]\` wikilink syntax in section bodies.** Cross-page relationships are stored in \`pageLinks\` (which you still emit on the JSON root), not inline in prose. Write the entity name as plain prose — "Marco is an AI assistant powered by ThinkWork" — without any brackets. The rendered wiki hyperlinks via the Connected Pages section that reads from \`wiki_page_links\`.
-9. When an approved ontology snapshot is provided, use only its listed \`entityTypeSlug\`, \`facetSlug\`, and \`relationshipTypeSlug\` values for structured business-domain candidates. If the evidence does not fit an approved type/facet/relationship, emit \`unresolvedMentions\` instead of inventing ontology fields.
+9. When an approved ontology snapshot is provided, every new durable page or promotion MUST carry an approved \`entityTypeSlug\`, and every page link MUST carry an approved \`relationshipTypeSlug\`. Use only the listed \`entityTypeSlug\`, \`facetSlug\`, and \`relationshipTypeSlug\` values. If the evidence does not fit an approved type/facet/relationship, emit \`unresolvedMentions\` instead of creating a generic entity/topic/reference.
 10. Output **only valid JSON**. No prose, no markdown fences.`;
 
 const PLANNER_OUTPUT_SCHEMA = `{
@@ -272,7 +273,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
   "newPages": [
     {
       "type": "entity | topic | decision",
-      "entityTypeSlug": "<approved ontology entity type slug, optional>",
+      "entityTypeSlug": "<approved ontology entity type slug; required when ontology is supplied>",
       "slug": "<kebab-case slug>",
       "title": "<display title>",
       "aliases": ["<optional alternate names>"],
@@ -303,7 +304,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "fromSlug": "<slug of source page; must exist in candidatePages or newPages>",
       "toType": "entity | topic | decision",
       "toSlug": "<slug of target page; must exist in candidatePages or newPages>",
-      "relationshipTypeSlug": "<approved ontology relationship type slug, optional>",
+      "relationshipTypeSlug": "<approved ontology relationship type slug; required when ontology is supplied>",
       "context": "<one-line description of why the link exists; shown to the user on backlinks>"
     }
   ],
@@ -344,8 +345,11 @@ export function buildPlannerUserPrompt(batch: PlannerBatch): string {
     lines.push("(none)");
   } else {
     for (const p of batch.candidatePages) {
+      const entityType = p.entityTypeSlug
+        ? ` entityTypeSlug=${p.entityTypeSlug}`
+        : "";
       lines.push(
-        `- id=${p.id} type=${p.type} slug=${p.slug} title=${JSON.stringify(p.title)}` +
+        `- id=${p.id} type=${p.type}${entityType} slug=${p.slug} title=${JSON.stringify(p.title)}` +
           (p.summary
             ? ` summary=${JSON.stringify(truncate(p.summary, 200))}`
             : "") +
@@ -736,6 +740,13 @@ const KNOWN_ONTOLOGY_ENTITY_TYPE_SLUGS = new Set([
   "support_case",
   "commitment",
   "risk",
+  "decision",
+  "place",
+  "venue",
+  "trip",
+  "preference",
+  "project",
+  "task",
 ]);
 
 function normalizeEntityTypePage(

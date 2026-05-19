@@ -6,6 +6,17 @@ export function toGraphQLType(dbType: string): string {
 	return dbType.toUpperCase();
 }
 
+export function displayLabelFromSlug(
+	slug: string | null | undefined,
+): string | null {
+	if (!slug) return null;
+	return slug
+		.split("_")
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
+}
+
 export interface GraphQLWikiSection {
 	id: string;
 	sectionSlug: string;
@@ -21,6 +32,8 @@ export interface GraphQLWikiPage {
 	userId: string;
 	ownerId?: string;
 	type: string;
+	entitySubtype?: string | null;
+	displayType?: string;
 	slug: string;
 	title: string;
 	summary: string | null;
@@ -53,6 +66,7 @@ export function toGraphQLPage(
 		tenant_id: string;
 		owner_id: string;
 		type: string;
+		entity_subtype?: string | null;
 		slug: string;
 		title: string;
 		summary: string | null;
@@ -71,6 +85,11 @@ export function toGraphQLPage(
 		userId: row.owner_id,
 		ownerId: row.owner_id,
 		type: toGraphQLType(row.type),
+		entitySubtype: row.entity_subtype ?? null,
+		displayType:
+			displayLabelFromSlug(row.entity_subtype) ??
+			displayLabelFromSlug(row.type) ??
+			"Page",
 		slug: row.slug,
 		title: row.title,
 		summary: row.summary,

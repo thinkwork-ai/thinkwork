@@ -114,6 +114,12 @@ describe("ontology templates", () => {
         "commitment",
         "risk",
         "decision",
+        "place",
+        "venue",
+        "trip",
+        "preference",
+        "project",
+        "task",
       ]),
     );
     expect(

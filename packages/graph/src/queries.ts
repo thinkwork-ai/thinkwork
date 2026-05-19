@@ -39,6 +39,8 @@ export const WikiGraphQuery = gql`
         label
         type
         entityType
+        entitySubtype
+        displayType
         slug
         strategy
         edgeCount
@@ -47,6 +49,7 @@ export const WikiGraphQuery = gql`
       edges {
         source
         target
+        kind
         label
         weight
       }
