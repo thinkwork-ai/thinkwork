@@ -674,9 +674,7 @@ export function validatePlannerResult(
         ns.facetSlug !== null &&
         (np.entityTypeSlug === undefined || np.entityTypeSlug === null)
       ) {
-        throw new Error(
-          "newPages.entityTypeSlug required when sections include facetSlug",
-        );
+        delete ns.facetSlug;
       }
     }
   }
@@ -714,9 +712,7 @@ export function validatePlannerResult(
           ps.facetSlug !== null &&
           (p.entityTypeSlug === undefined || p.entityTypeSlug === null)
         ) {
-          throw new Error(
-            "promotions.entityTypeSlug required when sections include facetSlug",
-          );
+          delete ps.facetSlug;
         }
       }
     }

@@ -377,15 +377,15 @@ describe("validatePlannerResult", () => {
     expect(() => validatePlannerResult(shaped)).not.toThrow();
   });
 
-  it("rejects structured facets without an entityTypeSlug", () => {
-    const bad = {
+  it("drops structured facets without an entityTypeSlug", () => {
+    const shaped = {
       ...validPlan,
-			newPages: [
-				{
-					...validPlan.newPages[0],
-					entityTypeSlug: undefined,
-					sections: [
-						{
+      newPages: [
+        {
+          ...validPlan.newPages[0],
+          entityTypeSlug: undefined,
+          sections: [
+            {
               ...validPlan.newPages[0].sections[0],
               facetSlug: "overview",
             },
@@ -394,7 +394,8 @@ describe("validatePlannerResult", () => {
       ],
     };
 
-    expect(() => validatePlannerResult(bad)).toThrow(/entityTypeSlug required/);
+    expect(() => validatePlannerResult(shaped)).not.toThrow();
+    expect(shaped.newPages[0].sections[0]).not.toHaveProperty("facetSlug");
   });
 
   it("rejects malformed ontology slug fields", () => {
@@ -1078,10 +1079,10 @@ describe("runCompileJob", () => {
     );
     expect(mockRepo.upsertPage).toHaveBeenCalledTimes(1);
     expect(mockRepo.upsertPage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				slug: "taberna-dos-mercadores",
-				entity_subtype: "customer",
-			}),
+      expect.objectContaining({
+        slug: "taberna-dos-mercadores",
+        entity_subtype: "customer",
+      }),
     );
     expect(mockWriter.writeSection).not.toHaveBeenCalled();
     expect(mockRepo.setCursor).toHaveBeenCalledWith(

@@ -107,4 +107,35 @@ describe("validatePlannerResult", () => {
       )[0].sections[0],
     ).not.toHaveProperty("facetSlug");
   });
+
+  it("drops new page facet slugs when the entity type is missing", () => {
+    const plan = basePlan({
+      newPages: [
+        {
+          type: "entity",
+          title: "Pricing Notes",
+          slug: "pricing-notes",
+          sections: [
+            {
+              slug: "summary",
+              heading: "Summary",
+              body_md: "Pricing was discussed.",
+              facetSlug: "overview",
+              source_refs: ["mem-1"],
+            },
+          ],
+          source_refs: ["mem-1"],
+        },
+      ],
+    });
+
+    expect(() => validatePlannerResult(plan)).not.toThrow();
+    expect(
+      (
+        plan.newPages as Array<{
+          sections: Array<Record<string, unknown>>;
+        }>
+      )[0].sections[0],
+    ).not.toHaveProperty("facetSlug");
+  });
 });
