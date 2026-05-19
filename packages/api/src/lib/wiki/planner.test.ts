@@ -80,6 +80,25 @@ describe("validatePlannerResult", () => {
     });
   });
 
+  it("normalizes approved activity ontology slugs from the page type field", () => {
+    const plan = basePlan({
+      newPages: [
+        {
+          type: "activity",
+          title: "Cooking Class",
+          slug: "cooking-class",
+          sections: [],
+        },
+      ],
+    });
+
+    expect(() => validatePlannerResult(plan)).not.toThrow();
+    expect((plan.newPages as Array<Record<string, unknown>>)[0]).toMatchObject({
+      type: "entity",
+      entityTypeSlug: "activity",
+    });
+  });
+
   it("drops page update facet slugs when the entity type is missing", () => {
     const plan = basePlan({
       pageUpdates: [

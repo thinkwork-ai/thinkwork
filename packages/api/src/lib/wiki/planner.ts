@@ -741,6 +741,7 @@ const KNOWN_ONTOLOGY_ENTITY_TYPE_SLUGS = new Set([
   "place",
   "venue",
   "trip",
+  "activity",
   "preference",
   "project",
   "task",
