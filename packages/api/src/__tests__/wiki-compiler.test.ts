@@ -288,6 +288,7 @@ const validPlan = {
   newPages: [
     {
       type: "entity",
+      entityTypeSlug: "customer",
       slug: "taberna-dos-mercadores",
       title: "Taberna dos Mercadores",
       sections: [
@@ -309,6 +310,7 @@ const validPlan = {
       mentionId: "m1",
       reason: "crossed threshold",
       type: "entity",
+      entityTypeSlug: "customer",
       title: "Chef João",
       slug: "chef-joao",
       sections: [{ slug: "overview", heading: "Overview", body_md: "..." }],
@@ -378,11 +380,12 @@ describe("validatePlannerResult", () => {
   it("rejects structured facets without an entityTypeSlug", () => {
     const bad = {
       ...validPlan,
-      newPages: [
-        {
-          ...validPlan.newPages[0],
-          sections: [
-            {
+			newPages: [
+				{
+					...validPlan.newPages[0],
+					entityTypeSlug: undefined,
+					sections: [
+						{
               ...validPlan.newPages[0].sections[0],
               facetSlug: "overview",
             },
@@ -516,6 +519,7 @@ describe("buildPlannerUserPrompt", () => {
         {
           id: "p1",
           type: "entity",
+          entityTypeSlug: "customer",
           slug: "pastrami-places",
           title: "Pastrami Places",
           summary: null,
@@ -748,6 +752,7 @@ const {
     upsertPage: vi.fn().mockResolvedValue({
       id: "page-new",
       type: "entity",
+      entity_subtype: "customer",
       slug: "page-new",
       title: "page-new",
     }),
@@ -956,6 +961,7 @@ describe("runCompileJob", () => {
     mockRepo.upsertPage.mockResolvedValue({
       id: "page-new",
       type: "entity",
+      entity_subtype: "customer",
       slug: "page-new",
       title: "page-new",
     });
@@ -1008,6 +1014,7 @@ describe("runCompileJob", () => {
       newPages: [
         {
           type: "entity",
+          entityTypeSlug: "customer",
           slug: "taberna",
           title: "Taberna dos Mercadores",
           sections: [
@@ -1042,6 +1049,12 @@ describe("runCompileJob", () => {
       expect.any(Object),
     );
     expect(mockRepo.upsertPage).toHaveBeenCalledTimes(1);
+    expect(mockRepo.upsertPage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				slug: "taberna-dos-mercadores",
+				entity_subtype: "customer",
+			}),
+    );
     expect(mockWriter.writeSection).not.toHaveBeenCalled();
     expect(mockRepo.setCursor).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1177,6 +1190,7 @@ describe("runCompileJob", () => {
       pageUpdates: [],
       newPages: Array.from({ length: 26 }, (_, i) => ({
         type: "entity" as const,
+        entityTypeSlug: "customer",
         slug: `page-${i}`,
         title: `Page ${i}`,
         sections: [
@@ -1330,6 +1344,7 @@ describe("runCompileJob", () => {
           mentionId: "m-existing",
           reason: "seen four times",
           type: "entity",
+          entityTypeSlug: "customer",
           title: "Maria Santos",
           slug: "maria-santos",
           sections: [{ slug: "overview", heading: "Overview", body_md: "..." }],
@@ -1383,6 +1398,7 @@ describe("runCompileJob", () => {
       newPages: [
         {
           type: "entity",
+          entityTypeSlug: "customer",
           slug: "just-a-page",
           title: "Just a Page",
           sections: [
@@ -1427,6 +1443,7 @@ describe("runCompileJob", () => {
         newPages: [
           {
             type: "entity",
+            entityTypeSlug: "customer",
             slug: "slug-x",
             title: "Title X",
             sections: [
@@ -1475,6 +1492,7 @@ describe("runCompileJob", () => {
         newPages: [
           {
             type: "entity",
+            entityTypeSlug: "customer",
             slug,
             title,
             sections: [
@@ -1514,6 +1532,7 @@ describe("runCompileJob", () => {
         tenant_id: "t1",
         owner_id: "a1",
         type: "entity",
+        entity_subtype: "customer",
         slug: "austin",
         title: "Austin",
         status: "active",
@@ -1581,6 +1600,7 @@ describe("runCompileJob", () => {
         tenant_id: "t1",
         owner_id: "a1",
         type: "entity",
+        entity_subtype: "customer",
         slug: "austin",
         title: "Austin",
         status: "archived",
@@ -1612,6 +1632,7 @@ describe("runCompileJob", () => {
         tenant_id: "t1",
         owner_id: "a1",
         type: "entity",
+        entity_subtype: "customer",
         slug: "austin",
         title: "Austin",
         status: "active",
@@ -1652,6 +1673,7 @@ describe("runCompileJob", () => {
         newPages: [
           {
             type: "entity",
+            entityTypeSlug: "customer",
             slug,
             title,
             sections: [

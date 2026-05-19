@@ -67,20 +67,23 @@ describe("wikiGraph", () => {
 					{
 						id: "p1",
 						type: "entity",
+						entity_subtype: "person",
 						slug: "mom",
 						title: "Mom",
 						edge_count: 2,
 					},
 					{
 						id: "p2",
-						type: "topic",
+						type: "entity",
+						entity_subtype: "preference",
 						slug: "meals",
 						title: "Mom's meals",
 						edge_count: 1,
 					},
 					{
 						id: "p3",
-						type: "decision",
+						type: "entity",
+						entity_subtype: "decision",
 						slug: "home-care",
 						title: "Home care vs SNF",
 						edge_count: 1,
@@ -89,8 +92,8 @@ describe("wikiGraph", () => {
 			})
 			.mockResolvedValueOnce({
 				rows: [
-					{ source: "p1", target: "p2" },
-					{ source: "p3", target: "p1" },
+					{ source: "p1", target: "p2", kind: "has_preference" },
+					{ source: "p3", target: "p1", kind: "involves_person" },
 				],
 			});
 
@@ -106,6 +109,8 @@ describe("wikiGraph", () => {
 				label: "Mom",
 				type: "page",
 				entityType: "ENTITY",
+				entitySubtype: "person",
+				displayType: "Person",
 				slug: "mom",
 				strategy: null,
 				edgeCount: 2,
@@ -115,7 +120,9 @@ describe("wikiGraph", () => {
 				id: "p2",
 				label: "Mom's meals",
 				type: "page",
-				entityType: "TOPIC",
+				entityType: "ENTITY",
+				entitySubtype: "preference",
+				displayType: "Preference",
 				slug: "meals",
 				strategy: null,
 				edgeCount: 1,
@@ -125,7 +132,9 @@ describe("wikiGraph", () => {
 				id: "p3",
 				label: "Home care vs SNF",
 				type: "page",
-				entityType: "DECISION",
+				entityType: "ENTITY",
+				entitySubtype: "decision",
+				displayType: "Decision",
 				slug: "home-care",
 				strategy: null,
 				edgeCount: 1,
@@ -133,8 +142,20 @@ describe("wikiGraph", () => {
 			},
 		]);
 		expect(graph.edges).toEqual([
-			{ source: "p1", target: "p2", label: "references", weight: 0.5 },
-			{ source: "p3", target: "p1", label: "references", weight: 0.5 },
+			{
+				source: "p1",
+				target: "p2",
+				kind: "has_preference",
+				label: "Has Preference",
+				weight: 0.5,
+			},
+			{
+				source: "p3",
+				target: "p1",
+				kind: "involves_person",
+				label: "Involves Person",
+				weight: 0.5,
+			},
 		]);
 	});
 
@@ -159,6 +180,7 @@ describe("wikiGraph", () => {
 					{
 						id: "p-solo",
 						type: "topic",
+						entity_subtype: null,
 						slug: "solo",
 						title: "Solo page",
 						edge_count: 0,
@@ -185,6 +207,7 @@ describe("wikiGraph", () => {
 					{
 						id: "p1",
 						type: "entity",
+						entity_subtype: null,
 						slug: "x",
 						title: "X",
 						edge_count: null as unknown as number,

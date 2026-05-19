@@ -35,6 +35,7 @@ interface WikiPageSheetProps {
 	slug: string;
 	/** Title used in the sheet header until the full page loads. */
 	title: string;
+	displayType?: string;
 	connectedEdges?: WikiPageSheetEdge[];
 	historyDepth?: number;
 	onBack?: () => void;
@@ -47,6 +48,7 @@ export function WikiPageSheet({
 	type,
 	slug,
 	title,
+	displayType,
 	connectedEdges = [],
 	historyDepth = 0,
 	onBack,
@@ -63,6 +65,7 @@ export function WikiPageSheet({
 
 	const page = pageResult.data?.wikiPage;
 	const loadingPage = pageResult.fetching && !pageResult.data;
+	const typeLabel = page?.displayType ?? displayType ?? pageTypeLabel(type);
 
 	return (
 		<>
@@ -83,11 +86,11 @@ export function WikiPageSheet({
 							PAGE_TYPE_BADGE_CLASSES[type] ?? "bg-muted text-muted-foreground"
 						}`}
 					>
-						{pageTypeLabel(type)}
+						{typeLabel}
 					</Badge>
 				</SheetTitle>
 				<SheetDescription>
-					{pageTypeLabel(type)} page
+					{typeLabel} page
 					{connectedEdges.length > 0
 						? ` — ${connectedEdges.length} link${
 								connectedEdges.length !== 1 ? "s" : ""

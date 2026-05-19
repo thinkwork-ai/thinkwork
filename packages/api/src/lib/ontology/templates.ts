@@ -256,6 +256,90 @@ export const SEED_ONTOLOGY_TEMPLATES: Record<
       ]),
     ],
   },
+  place: {
+    entityTypeSlug: "place",
+    entityTypeName: "Place",
+    broadType: "place",
+    description: "A city, country, neighborhood, landmark, or geographic area.",
+    guidanceNotes:
+      "Capture why the place matters, parent geography, trips, visits, and user-specific context.",
+    source: "seed",
+    sections: [
+      seedSection("overview", "Overview", "compiled", 10),
+      seedSection("location_context", "Location Context", "relationship", 20),
+      seedSection("related_activity", "Related Activity", "activity", 30),
+    ],
+  },
+  venue: {
+    entityTypeSlug: "venue",
+    entityTypeName: "Venue",
+    broadType: "place",
+    description:
+      "A restaurant, hotel, attraction, office, store, or other named location.",
+    guidanceNotes:
+      "Compile concrete visit, preference, address, and parent-place evidence without inventing ratings.",
+    source: "seed",
+    sections: [
+      seedSection("overview", "Overview", "compiled", 10),
+      seedSection("visits", "Visits", "activity", 20),
+      seedSection("preferences", "Preferences", "compiled", 30),
+    ],
+  },
+  trip: {
+    entityTypeSlug: "trip",
+    entityTypeName: "Trip",
+    broadType: "event",
+    description: "A travel plan, itinerary, or remembered travel episode.",
+    guidanceNotes:
+      "Group places, venues, dates, companions, and open planning context from cited evidence.",
+    source: "seed",
+    sections: [
+      seedSection("overview", "Overview", "compiled", 10),
+      seedSection("itinerary", "Itinerary", "activity", 20),
+      seedSection("places", "Places", "relationship", 30),
+    ],
+  },
+  preference: {
+    entityTypeSlug: "preference",
+    entityTypeName: "Preference",
+    broadType: "preference",
+    description: "A durable user preference, taste, constraint, or priority.",
+    guidanceNotes:
+      "Keep preferences compact, sourced, and scoped to what the evidence actually says.",
+    source: "seed",
+    sections: [
+      seedSection("summary", "Summary", "compiled", 10),
+      seedSection("evidence", "Evidence", "activity", 20),
+    ],
+  },
+  project: {
+    entityTypeSlug: "project",
+    entityTypeName: "Project",
+    broadType: "work",
+    description: "A sustained workstream, initiative, or build effort.",
+    guidanceNotes:
+      "Track objective, current state, decisions, commitments, risks, and next work.",
+    source: "seed",
+    sections: [
+      seedSection("overview", "Overview", "compiled", 10),
+      seedSection("current_state", "Current State", "operational", 20),
+      seedSection("decisions", "Decisions", "compiled", 30),
+      seedSection("next_steps", "Next Steps", "activity", 40),
+    ],
+  },
+  task: {
+    entityTypeSlug: "task",
+    entityTypeName: "Task",
+    broadType: "work",
+    description: "A discrete task, to-do, or follow-up item.",
+    guidanceNotes:
+      "Capture owner, status, due date, dependency, and source evidence when available.",
+    source: "seed",
+    sections: [
+      seedSection("status", "Status", "operational", 10),
+      seedSection("evidence", "Evidence", "activity", 20),
+    ],
+  },
 };
 
 export async function resolveOntologyTemplates(args: {

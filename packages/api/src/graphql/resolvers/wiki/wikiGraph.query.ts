@@ -16,11 +16,12 @@ import { sql } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import { assertCanReadWikiScope } from "./auth.js";
-import { toGraphQLType } from "./mappers.js";
+import { displayLabelFromSlug, toGraphQLType } from "./mappers.js";
 
 interface WikiGraphNodeRow {
 	id: string;
 	type: string;
+	entity_subtype: string | null;
 	slug: string;
 	title: string;
 	edge_count: number;
@@ -29,6 +30,7 @@ interface WikiGraphNodeRow {
 interface WikiGraphEdgeRow {
 	source: string;
 	target: string;
+	kind: string;
 }
 
 export interface GraphQLWikiGraphNode {
@@ -36,6 +38,8 @@ export interface GraphQLWikiGraphNode {
 	label: string;
 	type: "page";
 	entityType: string;
+	entitySubtype: string | null;
+	displayType: string;
 	slug: string;
 	strategy: string | null;
 	edgeCount: number;
@@ -45,6 +49,7 @@ export interface GraphQLWikiGraphNode {
 export interface GraphQLWikiGraphEdge {
 	source: string;
 	target: string;
+	kind: string;
 	label: string;
 	weight: number;
 }
@@ -68,7 +73,7 @@ export const wikiGraph = async (
 	// the same neighbor should still render as one edge with degree 1.
 	const pageResult = await db.execute(sql`
 		WITH scope_pages AS (
-			SELECT id, type, slug, title
+			SELECT id, type, entity_subtype, slug, title
 			FROM wiki.pages
 			WHERE tenant_id = ${args.tenantId}
 			  AND owner_id = ${userId}
@@ -79,6 +84,7 @@ export const wikiGraph = async (
 			FROM wiki.page_links l
 			JOIN scope_pages sp1 ON sp1.id = l.from_page_id
 			JOIN scope_pages sp2 ON sp2.id = l.to_page_id
+			WHERE l.kind NOT IN ('reference', 'parent_of', 'child_of')
 		),
 		endpoints AS (
 			SELECT from_page_id AS page_id FROM scope_links
@@ -86,7 +92,7 @@ export const wikiGraph = async (
 			SELECT to_page_id AS page_id FROM scope_links
 		)
 		SELECT
-			sp.id, sp.type, sp.slug, sp.title,
+			sp.id, sp.type, sp.entity_subtype, sp.slug, sp.title,
 			COALESCE(ep.edge_count, 0)::int AS edge_count
 		FROM scope_pages sp
 		LEFT JOIN (
@@ -101,7 +107,7 @@ export const wikiGraph = async (
 		.rows ?? []) as WikiGraphNodeRow[];
 
 	const edgeResult = await db.execute(sql`
-		SELECT DISTINCT l.from_page_id AS source, l.to_page_id AS target
+		SELECT DISTINCT l.from_page_id AS source, l.to_page_id AS target, l.kind
 		FROM wiki.page_links l
 		JOIN wiki.pages p1 ON p1.id = l.from_page_id
 		JOIN wiki.pages p2 ON p2.id = l.to_page_id
@@ -111,6 +117,7 @@ export const wikiGraph = async (
 		  AND p2.tenant_id = ${args.tenantId}
 		  AND p2.owner_id = ${userId}
 		  AND p2.status = 'active'
+		  AND l.kind NOT IN ('reference', 'parent_of', 'child_of')
 	`);
 
 	const edgeRows = ((edgeResult as unknown as { rows?: WikiGraphEdgeRow[] })
@@ -121,6 +128,11 @@ export const wikiGraph = async (
 		label: r.title,
 		type: "page",
 		entityType: toGraphQLType(r.type),
+		entitySubtype: r.entity_subtype ?? null,
+		displayType:
+			displayLabelFromSlug(r.entity_subtype) ??
+			displayLabelFromSlug(r.type) ??
+			"Page",
 		slug: r.slug,
 		strategy: null,
 		edgeCount: Number(r.edge_count) || 0,
@@ -130,7 +142,8 @@ export const wikiGraph = async (
 	const edges: GraphQLWikiGraphEdge[] = edgeRows.map((r) => ({
 		source: r.source,
 		target: r.target,
-		label: "references",
+		kind: r.kind,
+		label: displayLabelFromSlug(r.kind) ?? r.kind,
 		weight: 0.5,
 	}));
 

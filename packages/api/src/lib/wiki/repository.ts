@@ -193,6 +193,8 @@ export interface UpsertPageInput {
 	tenant_id: string;
 	owner_id: string;
 	type: WikiPageType;
+	/** Approved ontology entity type slug, when this page materializes one. */
+	entity_subtype?: string | null;
 	slug: string;
 	title: string;
 	summary?: string | null;
@@ -1173,6 +1175,10 @@ export async function upsertPage(
 				.set({
 					title: input.title,
 					summary: input.summary ?? existing.summary,
+					entity_subtype:
+						input.entity_subtype !== undefined
+							? (input.entity_subtype ?? null)
+							: existing.entity_subtype,
 					status: nextStatus,
 					...(body_md !== undefined ? { body_md } : {}),
 					...(input.markCompiled
@@ -1199,6 +1205,7 @@ export async function upsertPage(
 					tenant_id: input.tenant_id,
 					owner_id: input.owner_id,
 					type: input.type,
+					entity_subtype: input.entity_subtype ?? null,
 					slug: input.slug,
 					title: input.title,
 					summary: input.summary ?? null,

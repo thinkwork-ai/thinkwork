@@ -66,6 +66,8 @@ export interface WikiGraphNode {
   label: string;
   nodeType: "page";
   entityType: WikiPageType;
+  entitySubtype?: string | null;
+  displayType?: string | null;
   slug: string;
   edgeCount: number;
   /** In multi-user mode the node id is prefixed with `${userId}:`; the
@@ -240,6 +242,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
               label: n.label ?? n.id,
               nodeType: "page",
               entityType: (n.entityType as WikiPageType) ?? "ENTITY",
+              entitySubtype: n.entitySubtype ?? null,
+              displayType: n.displayType ?? null,
               slug: n.slug,
               edgeCount: n.edgeCount ?? 0,
             });
@@ -256,6 +260,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
               label: n.label ?? n.id,
               nodeType: "page",
               entityType: (n.entityType as WikiPageType) ?? "ENTITY",
+              entitySubtype: n.entitySubtype ?? null,
+              displayType: n.displayType ?? null,
               slug: n.slug,
               edgeCount: n.edgeCount ?? 0,
             });
@@ -271,7 +277,9 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       if (!onTypesLoaded || allNodes.length === 0) return;
       const types = new Set<string>();
       for (const n of allNodes) {
-        types.add(PAGE_TYPE_LABELS[n.entityType] ?? n.entityType);
+        types.add(
+          n.displayType ?? PAGE_TYPE_LABELS[n.entityType] ?? n.entityType,
+        );
       }
       const sorted = Array.from(types).sort();
       const key = sorted.join(",");
@@ -289,7 +297,9 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       if (typeFilter && typeFilter.length > 0) {
         const filterSet = new Set(typeFilter);
         filtered = filtered.filter((n) =>
-          filterSet.has(PAGE_TYPE_LABELS[n.entityType] ?? n.entityType),
+          filterSet.has(
+            n.displayType ?? PAGE_TYPE_LABELS[n.entityType] ?? n.entityType,
+          ),
         );
       }
       if (searchQuery) {
@@ -398,7 +408,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           return {
             label: l.label || "references",
             targetLabel: otherNode?.label ?? otherId,
-            targetType: otherNode?.nodeType ?? "page",
+            targetType: otherNode?.displayType ?? otherNode?.nodeType ?? "page",
             targetId: otherId,
           };
         });
@@ -627,8 +637,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           linkLabel={(link: any) => link.label || "references"}
           nodeLabel={(node: any) =>
             `${node.label}${
-              node.entityType
-                ? ` (${PAGE_TYPE_LABELS[node.entityType as WikiPageType] ?? node.entityType})`
+              node.displayType || node.entityType
+                ? ` (${node.displayType ?? PAGE_TYPE_LABELS[node.entityType as WikiPageType] ?? node.entityType})`
                 : ""
             }${node.edgeCount ? ` — ${node.edgeCount} link${node.edgeCount === 1 ? "" : "s"}` : ""}`
           }

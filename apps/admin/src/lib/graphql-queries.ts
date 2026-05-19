@@ -2948,6 +2948,8 @@ export const WikiPageQuery = graphql(`
     wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
       id
       type
+      entitySubtype
+      displayType
       slug
       title
       summary
@@ -2973,6 +2975,8 @@ export const WikiBacklinksQuery = graphql(`
     wikiBacklinks(pageId: $pageId) {
       id
       type
+      entitySubtype
+      displayType
       slug
       title
       summary
@@ -2985,6 +2989,8 @@ export const RecentWikiPagesQuery = graphql(`
     recentWikiPages(userId: $userId, limit: $limit) {
       id
       type
+      entitySubtype
+      displayType
       slug
       title
       summary
@@ -3012,6 +3018,8 @@ export const WikiSearchQuery = graphql(`
       page {
         id
         type
+        entitySubtype
+        displayType
         slug
         title
         summary
