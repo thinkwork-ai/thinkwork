@@ -55,15 +55,19 @@ export const wikiCompileJobs = async (
     // Tenant-wide variant: require admin/service credential + matching
     // tenant, but skip the per-agent existence check since there's no
     // owner to validate.
-    const callerTenantId =
-      ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
-    if (!callerTenantId) {
-      throw new WikiAuthError("Tenant context required");
-    }
-    if (callerTenantId !== args.tenantId) {
-      throw new WikiAuthError("Access denied: tenant mismatch");
-    }
-    if (!hasServiceSecret(ctx)) {
+    if (hasServiceSecret(ctx)) {
+      if (ctx.auth.tenantId && ctx.auth.tenantId !== args.tenantId) {
+        throw new WikiAuthError("Access denied: tenant mismatch");
+      }
+    } else {
+      const callerTenantId =
+        ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
+      if (!callerTenantId) {
+        throw new WikiAuthError("Tenant context required");
+      }
+      if (callerTenantId !== args.tenantId) {
+        throw new WikiAuthError("Access denied: tenant mismatch");
+      }
       await requireTenantAdmin(ctx, args.tenantId);
     }
   }

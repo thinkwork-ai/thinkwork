@@ -562,7 +562,13 @@ export function validatePlannerResult(
       throw new Error("sectionPromotions.newPage missing");
     }
     const np = sp.newPage as Record<string, unknown>;
-    if (!isPageType(np.type)) {
+    if (
+      !isPageType(np.type) &&
+      normalizeEntityTypePage(np, "sectionPromotions.newPage")
+    ) {
+      // A model may put the ontology entity slug in `type`; normalize that
+      // common shape to the wiki page taxonomy.
+    } else if (!isPageType(np.type)) {
       throw new Error(`sectionPromotions.newPage.type invalid: ${np.type}`);
     }
     if (typeof np.title !== "string" || np.title.length === 0) {
@@ -639,8 +645,12 @@ export function validatePlannerResult(
     if (!p || typeof p !== "object")
       throw new Error("newPages entry not object");
     const np = p as Record<string, unknown>;
-    if (!isPageType(np.type))
+    if (!isPageType(np.type) && normalizeEntityTypePage(np, "newPages")) {
+      // A model may put the ontology entity slug in `type`; normalize that
+      // common shape to the wiki page taxonomy.
+    } else if (!isPageType(np.type)) {
       throw new Error(`newPages.type invalid: ${np.type}`);
+    }
     if (typeof np.title !== "string" || np.title.length === 0) {
       throw new Error("newPages.title missing");
     }
@@ -719,15 +729,52 @@ function isPageType(v: unknown): v is WikiPageType {
   return v === "entity" || v === "topic" || v === "decision";
 }
 
+const KNOWN_ONTOLOGY_ENTITY_TYPE_SLUGS = new Set([
+  "customer",
+  "person",
+  "opportunity",
+  "order",
+  "support_case",
+  "commitment",
+  "risk",
+]);
+
+function normalizeEntityTypePage(
+  obj: Record<string, unknown>,
+  label: string,
+): boolean {
+  if (typeof obj.type !== "string") return false;
+  const type = obj.type.trim().toLowerCase();
+  if (!KNOWN_ONTOLOGY_ENTITY_TYPE_SLUGS.has(type)) return false;
+  if (obj.entityTypeSlug !== undefined && obj.entityTypeSlug !== null) {
+    validateOptionalString(obj, "entityTypeSlug", label);
+    if (obj.entityTypeSlug !== undefined && obj.entityTypeSlug !== type) {
+      return false;
+    }
+  }
+  obj.type = "entity";
+  obj.entityTypeSlug = type;
+  return true;
+}
+
 function validateOptionalString(
   obj: Record<string, unknown>,
   key: string,
   label: string,
 ): void {
   if (obj[key] === undefined || obj[key] === null) return;
-  if (typeof obj[key] !== "string" || obj[key].length === 0) {
+  if (typeof obj[key] !== "string") {
     throw new Error(`${label}.${key} must be a non-empty string when present`);
   }
+  const trimmed = obj[key].trim();
+  if (trimmed.length === 0) {
+    if (key === "entityTypeSlug" || key === "facetSlug") {
+      delete obj[key];
+      return;
+    }
+    throw new Error(`${label}.${key} must be a non-empty string when present`);
+  }
+  obj[key] = trimmed;
 }
 
 // ---------------------------------------------------------------------------
