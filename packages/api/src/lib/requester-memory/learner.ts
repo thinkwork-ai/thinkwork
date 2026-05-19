@@ -12,6 +12,7 @@ import {
   renderDurableMemoryAppendSection,
   renderIdleLearningReport,
   renderThreadJournalAppendSection,
+  upsertCandidateSection,
   upsertThreadJournalSection,
 } from "./markdown.js";
 import {
@@ -207,17 +208,24 @@ export async function runRequesterIdleMemoryLearning(
       scheduledFor: input.scheduledFor,
       candidates: staged,
     });
-    const writeResult = await writeRequesterMemoryFileWithSnapshot({
-      tenantId: input.tenantId,
-      userId: input.requesterUserId,
-      runId: input.runId,
-      path: candidatePath,
-      content: appendMarkdownSection(existingCandidates, section),
+    const nextCandidates = upsertCandidateSection({
+      existing: existingCandidates,
+      section,
+      threadId: input.threadId,
     });
-    changedFiles.push({
-      ...stripPreviousContent(writeResult),
-      evidenceMessageIds: uniqueMessageIds(staged),
-    });
+    if (nextCandidates !== existingCandidates) {
+      const writeResult = await writeRequesterMemoryFileWithSnapshot({
+        tenantId: input.tenantId,
+        userId: input.requesterUserId,
+        runId: input.runId,
+        path: candidatePath,
+        content: nextCandidates,
+      });
+      changedFiles.push({
+        ...stripPreviousContent(writeResult),
+        evidenceMessageIds: uniqueMessageIds(staged),
+      });
+    }
   }
 
   if (promoted.length > 0) {

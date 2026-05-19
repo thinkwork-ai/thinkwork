@@ -6,6 +6,42 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Requester Memory Processing Stabilization
+
+Plan: `docs/plans/2026-05-18-001-feat-requester-idle-memory-learning-plan.md`
+
+Trigger: live end-to-end failure report for thread `ffca33a9-538a-4e03-b480-ba59ec4a7044`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: stabilize retry/idempotency behavior for requester memory processing
+- Active branch: `codex/requester-memory-idempotent-candidates`
+- Active worktree: `.Codex/worktrees/requester-memory-idempotent-candidates`
+- Started: 2026-05-18 19:15 CDT
+- PR: pending
+- CI: pending
+
+### Progress Log
+
+| Date       | Unit | Branch                                         | PR                                                           | Status      | Verification                                                                                                                                                                                                      | Notes                                                                                                                                                                                                                                                                                                                                                         |
+| ---------- | ---- | ---------------------------------------------- | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-18 | S1   | `codex/requester-memory-stable-journal`        | [#1417](https://github.com/thinkwork-ai/thinkwork/pull/1417) | Deployed    | `pnpm --filter @thinkwork/api test -- src/lib/requester-memory/learner.test.ts`; `pnpm --filter @thinkwork/api typecheck`; CI; deploy run `26067929687`; live rerun of job `01704b7a-c9ff-40cc-83e9-8a333efe9b95` | Removed volatile run ids from working journals and skipped unchanged journal rewrites. Live test normalized `memory/working/2026-05-18.md` once, then immediately reran the same idle job and got `status=no_change`, `changed_files=[]`, one thread heading, no `- Run:` lines, and hash `0b35bd1daa76ae106391850270287da823accaed430c8ed100d4b0f004b9a7dd`. |
+| 2026-05-18 | S2   | `codex/requester-memory-idempotent-candidates` | pending                                                      | In progress | `pnpm --filter @thinkwork/api test -- src/lib/requester-memory/learner.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier check; `git diff --check`                                        | Making staged candidate writes idempotent so weak memory candidates use one stable thread section rather than one append-only run section.                                                                                                                                                                                                                    |
+
+### CI / Merge Log
+
+- 2026-05-18 19:14 CDT: Confirmed PR [#1417](https://github.com/thinkwork-ai/thinkwork/pull/1417) deploy passed and verified the reported thread through the live `job-trigger` Lambda twice.
+- 2026-05-18 19:15 CDT: Started S2 in `.Codex/worktrees/requester-memory-idempotent-candidates` on branch `codex/requester-memory-idempotent-candidates`.
+- 2026-05-18 19:20 CDT: Implemented stable per-thread candidate sections and skip-on-unchanged candidate writes. Focused requester-memory tests, API typecheck, touched-file Prettier check, and diff whitespace check passed.
+
+### Blockers
+
+- None at this time.
+
+---
+
 ## Current Run: Enterprise Customer Deployment Repo
 
 Plan: `docs/plans/2026-05-18-002-feat-enterprise-deployment-repo-plan.md`
