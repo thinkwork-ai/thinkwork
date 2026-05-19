@@ -20,8 +20,8 @@ Target branch: `main`
 - Active branch: `codex/one-line-deploy-u5`
 - Active worktree: `.Codex/worktrees/one-line-deploy-u5`
 - Started: 2026-05-19
-- PR: pending
-- CI: pending PR creation
+- PR: [#1428](https://github.com/thinkwork-ai/thinkwork/pull/1428)
+- CI: pending
 
 ### Progress Log
 
@@ -31,7 +31,7 @@ Target branch: `main`
 | 2026-05-19 | U2   | `codex/one-line-deploy-u2` | [#1423](https://github.com/thinkwork-ai/thinkwork/pull/1423) | Merged           | `pnpm --filter thinkwork-cli test -- enterprise-deploy-routing.test.ts deploy-registration.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check`; GitHub checks                                                                                              | Added top-level `thinkwork deploy` enterprise mode routing while preserving the local Terraform default path. Squash merged as `026491a287067797547b19951b7d1b46505d9ba1`.                         |
 | 2026-05-19 | U3   | `codex/one-line-deploy-u3` | [#1425](https://github.com/thinkwork-ai/thinkwork/pull/1425) | Merged           | `pnpm --filter thinkwork-cli test -- enterprise-deploy-bootstrap.test.ts enterprise-repository.test.ts enterprise-secrets.test.ts enterprise-deploy-routing.test.ts deploy-registration.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check`; GitHub checks | Added one-shot enterprise bootstrap orchestration: repo lifecycle, release checksum, env secrets, commit/push, and workflow dispatch. Squash merged as `839b7def4efe2707c24ac89f58e32818380bd21f`. |
 | 2026-05-19 | U4   | `codex/one-line-deploy-u4` | [#1427](https://github.com/thinkwork-ai/thinkwork/pull/1427) | Merged           | `pnpm --filter thinkwork-cli test -- enterprise-workflow.test.ts enterprise-deploy-bootstrap.test.ts enterprise-deploy-routing.test.ts deploy-registration.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check`; GitHub checks                              | Added workflow run resolution/watching, final deploy summaries, URL discovery, and follow-up enterprise dispatch. Squash merged as `938f3058d2e69abf3a93239fd74ae14698d2b23d`.                     |
-| 2026-05-19 | U5   | `codex/one-line-deploy-u5` | pending                                                      | Locally verified | `pnpm --filter thinkwork-cli test -- enterprise-doc-links.test.ts deploy-registration.test.ts enterprise-registration.test.ts registration-smoke.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter @thinkwork/docs build`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check`                | Reframes docs and generated runbook around the one-line deploy path while preserving manual workflow fallback details.                                                                             |
+| 2026-05-19 | U5   | `codex/one-line-deploy-u5` | [#1428](https://github.com/thinkwork-ai/thinkwork/pull/1428) | Locally verified | `pnpm --filter thinkwork-cli test -- enterprise-doc-links.test.ts deploy-registration.test.ts enterprise-registration.test.ts registration-smoke.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter @thinkwork/docs build`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check`                | Reframes docs and generated runbook around the one-line deploy path while preserving manual workflow fallback details.                                                                             |
 
 ### CI / Merge Log
 
@@ -62,6 +62,7 @@ Target branch: `main`
 - 2026-05-19: Started U5 in `.Codex/worktrees/one-line-deploy-u5` on branch `codex/one-line-deploy-u5`.
 - 2026-05-19: Implemented U5 docs/help updates so the enterprise deployment docs and generated runbook lead with `thinkwork login` plus `thinkwork deploy --bootstrap`, with `thinkwork deploy --customer ...` for follow-up deploys and `gh workflow run` retained as manual fallback.
 - 2026-05-19: U5 local verification passed: focused docs/help/registration tests, CLI typecheck/build/full tests, docs build, workspace lint/typecheck, full `pnpm test`, touched-file Prettier check, and `git diff --check`.
+- 2026-05-19: Opened [#1428](https://github.com/thinkwork-ai/thinkwork/pull/1428) for U5; CI pending.
 
 ### Blockers
 
