@@ -39,6 +39,7 @@ interface EnsureThreadOpts {
   tenantId: string;
   agentId?: string;
   computerId?: string;
+  spaceId?: string;
   userId?: string;
   title?: string;
   channel: ThreadChannel;
@@ -63,6 +64,7 @@ export interface EnsureRecurringThreadOpts {
   recurringKey: string;
   title: string;
   entityRefs?: ThreadEntityRef[];
+  spaceId?: string;
 }
 
 export interface EnsureRecurringThreadResult extends EnsureThreadResult {
@@ -105,6 +107,7 @@ export async function ensureThreadForWork(
       tenant_id: opts.tenantId,
       agent_id: opts.computerId ? undefined : opts.agentId || undefined,
       computer_id: opts.computerId || undefined,
+      space_id: opts.spaceId || undefined,
       user_id: opts.userId || undefined,
       number: nextNumber,
       identifier,
@@ -170,6 +173,7 @@ export async function ensureRecurringThread(
     tenantId: opts.tenantId,
     agentId: opts.agentId,
     userId: opts.userId,
+    spaceId: opts.spaceId,
     title: opts.title,
     channel: "schedule",
   });

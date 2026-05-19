@@ -14,12 +14,39 @@ import {
   threadTurns,
   threadDependencies,
   computers,
+  spaces,
+  threadParticipants,
   computerToCamel,
   messageToCamel,
   snakeToCamel,
-  threadToCamel,
 } from "../../utils.js";
 import { artifactToCamelWithPayload } from "../artifacts/payload.js";
+
+const THREAD_PARTICIPANT_ENUM_FIELDS = new Set([
+  "participantType",
+  "notificationPreference",
+]);
+const SPACE_ENUM_FIELDS = new Set(["status", "kind"]);
+
+function uppercaseFields(
+  row: Record<string, unknown>,
+  fields: ReadonlySet<string>,
+) {
+  for (const field of fields) {
+    if (typeof row[field] === "string") {
+      row[field] = row[field].toUpperCase();
+    }
+  }
+  return row;
+}
+
+function threadParticipantToCamel(row: Record<string, unknown>) {
+  return uppercaseFields(snakeToCamel(row), THREAD_PARTICIPANT_ENUM_FIELDS);
+}
+
+function spaceToCamel(row: Record<string, unknown>) {
+  return uppercaseFields(snakeToCamel(row), SPACE_ENUM_FIELDS);
+}
 
 export const threadTypeResolvers = {
   agent: (thread: any, _args: any, ctx: GraphQLContext) => {
@@ -37,6 +64,34 @@ export const threadTypeResolvers = {
       .from(computers)
       .where(eq(computers.id, computerId));
     return row ? computerToCamel(row) : null;
+  },
+  space: async (thread: any) => {
+    if (thread.space && typeof thread.space === "object") return thread.space;
+    const spaceId = thread.spaceId || thread.space_id;
+    if (!spaceId) return null;
+    const threadTenantId = thread.tenantId ?? thread.tenant_id ?? null;
+    const conditions = [eq(spaces.id, spaceId)];
+    if (typeof threadTenantId === "string" && threadTenantId.length > 0) {
+      conditions.push(eq(spaces.tenant_id, threadTenantId));
+    }
+    const [row] = await db
+      .select()
+      .from(spaces)
+      .where(and(...conditions));
+    return row ? spaceToCamel(row) : null;
+  },
+  participants: async (thread: any) => {
+    const threadTenantId = thread.tenantId ?? thread.tenant_id ?? null;
+    const conditions = [eq(threadParticipants.thread_id, thread.id)];
+    if (typeof threadTenantId === "string" && threadTenantId.length > 0) {
+      conditions.push(eq(threadParticipants.tenant_id, threadTenantId));
+    }
+    const rows = await db
+      .select()
+      .from(threadParticipants)
+      .where(and(...conditions))
+      .orderBy(asc(threadParticipants.created_at));
+    return rows.map((row) => threadParticipantToCamel(row));
   },
   user: (thread: any, _args: any, ctx: GraphQLContext) => {
     if (thread.user && typeof thread.user === "object") return thread.user;
@@ -176,5 +231,20 @@ export const threadTypeResolvers = {
   },
   lifecycleStatus: (thread: any, _args: any, ctx: GraphQLContext) => {
     return ctx.loaders.threadLifecycleStatus.load(thread.id);
+  },
+};
+
+export const threadParticipantTypeResolvers = {
+  user: (participant: any, _args: any, ctx: GraphQLContext) => {
+    if (participant.user && typeof participant.user === "object")
+      return participant.user;
+    const userId = participant.userId || participant.user_id;
+    return userId ? ctx.loaders.user.load(userId) : null;
+  },
+  agent: (participant: any, _args: any, ctx: GraphQLContext) => {
+    if (participant.agent && typeof participant.agent === "object")
+      return participant.agent;
+    const agentId = participant.agentId || participant.agent_id;
+    return agentId ? ctx.loaders.agent.load(agentId) : null;
   },
 };

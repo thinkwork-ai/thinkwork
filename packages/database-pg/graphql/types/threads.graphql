@@ -41,10 +41,13 @@ type Thread {
   tenantId: ID!
   agentId: ID
   computerId: ID
+  spaceId: ID
   userId: ID
   agent: Agent
   computer: Computer
+  space: Space
   user: User
+  participants: [ThreadParticipant!]!
   messages(limit: Int, cursor: String): MessageConnection!
   number: Int!
   identifier: String
@@ -122,6 +125,7 @@ input CreateThreadInput {
   tenantId: ID!
   agentId: ID
   computerId: ID
+  spaceId: ID
   title: String!
   channel: ThreadChannel
   assigneeType: String
@@ -205,11 +209,40 @@ extend type Query {
     (plan 2026-05-13-005 U7).
     """
     computerId: ID
+    spaceId: ID
   ): ThreadsPage!
   thread(id: ID!): Thread
   threadByNumber(tenantId: ID!, number: Int!): Thread
   threadLabels(tenantId: ID!): [ThreadLabel!]!
   unreadThreadCount(tenantId: ID!, agentId: ID): Int!
+}
+
+enum ThreadParticipantType {
+  USER
+  AGENT
+}
+
+enum ThreadParticipantNotificationPreference {
+  SUBSCRIBED
+  MENTIONS
+  MUTED
+}
+
+type ThreadParticipant {
+  id: ID!
+  tenantId: ID!
+  threadId: ID!
+  spaceId: ID
+  participantType: ThreadParticipantType!
+  userId: ID
+  agentId: ID
+  user: User
+  agent: Agent
+  role: String!
+  source: String!
+  notificationPreference: ThreadParticipantNotificationPreference!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
 }
 
 extend type Mutation {

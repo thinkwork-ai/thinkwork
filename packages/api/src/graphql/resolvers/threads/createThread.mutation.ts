@@ -2,12 +2,16 @@ import type { GraphQLContext } from "../../context.js";
 import { GraphQLError } from "graphql";
 import {
   db,
+  and,
   eq,
   sql,
   agents,
   tenants,
   threads,
   messages,
+  spaces,
+  spaceAgentAssignments,
+  threadParticipants,
   threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
@@ -18,6 +22,7 @@ import {
   resolveThreadComputer,
   routeRunbookForComputerMessage,
 } from "../../../lib/computers/thread-cutover.js";
+import { hasSpaceMemberAccess } from "../spaces/shared.js";
 
 export const createThread = async (
   _parent: any,
@@ -34,6 +39,37 @@ export const createThread = async (
   // shared API secret and may legitimately create threads across tenants.
   if (ctx.auth.authType === "cognito") {
     await requireTenantMember(ctx, i.tenantId);
+  }
+
+  let threadSpace: { id: string; tenant_id: string; status: string } | null =
+    null;
+  if (i.spaceId) {
+    const [spaceRow] = await db
+      .select({
+        id: spaces.id,
+        tenant_id: spaces.tenant_id,
+        status: spaces.status,
+      })
+      .from(spaces)
+      .where(eq(spaces.id, i.spaceId));
+    if (
+      !spaceRow ||
+      spaceRow.tenant_id !== i.tenantId ||
+      spaceRow.status !== "active"
+    ) {
+      throw new GraphQLError("Space not found", {
+        extensions: { code: "NOT_FOUND" },
+      });
+    }
+    if (
+      ctx.auth.authType === "cognito" &&
+      !(await hasSpaceMemberAccess(ctx, i.tenantId, i.spaceId))
+    ) {
+      throw new GraphQLError("Space membership required", {
+        extensions: { code: "FORBIDDEN" },
+      });
+    }
+    threadSpace = spaceRow;
   }
 
   const createdByType = i.createdByType ?? "user";
@@ -109,6 +145,7 @@ export const createThread = async (
         tenant_id: i.tenantId,
         agent_id: threadComputer ? null : i.agentId,
         computer_id: threadComputer?.id,
+        space_id: threadSpace?.id,
         user_id: createdByType === "user" ? createdById : undefined,
         number: nextNumber,
         identifier,
@@ -125,6 +162,51 @@ export const createThread = async (
         due_at: i.dueAt ? new Date(i.dueAt) : undefined,
       })
       .returning();
+
+    if (threadSpace) {
+      const participantRows: (typeof threadParticipants.$inferInsert)[] = [];
+      if (createdByType === "user" && createdById) {
+        participantRows.push({
+          tenant_id: i.tenantId,
+          thread_id: threadRow.id,
+          space_id: threadSpace.id,
+          participant_type: "user",
+          user_id: createdById,
+          role: "requester",
+          source: "thread_creator",
+        });
+      }
+
+      const autoSubscribedAgents = await tx
+        .select({
+          agent_id: spaceAgentAssignments.agent_id,
+          local_role: spaceAgentAssignments.local_role,
+        })
+        .from(spaceAgentAssignments)
+        .where(
+          and(
+            eq(spaceAgentAssignments.tenant_id, i.tenantId),
+            eq(spaceAgentAssignments.space_id, threadSpace.id),
+            eq(spaceAgentAssignments.status, "active"),
+            eq(spaceAgentAssignments.auto_subscribe, true),
+          ),
+        );
+      for (const assignment of autoSubscribedAgents) {
+        participantRows.push({
+          tenant_id: i.tenantId,
+          thread_id: threadRow.id,
+          space_id: threadSpace.id,
+          participant_type: "agent",
+          agent_id: assignment.agent_id,
+          role: assignment.local_role ?? "agent",
+          source: "space_auto_subscribe",
+        });
+      }
+
+      if (participantRows.length > 0) {
+        await tx.insert(threadParticipants).values(participantRows);
+      }
+    }
 
     let firstMsgId: string | null = null;
     if (i.firstMessage) {

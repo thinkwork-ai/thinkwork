@@ -1345,6 +1345,7 @@ export type CreateThreadInput = {
   firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
 };
@@ -4587,6 +4588,7 @@ export type QueryThreadsPagedArgs = {
   showArchived?: InputMaybe<Scalars['Boolean']['input']>;
   sortDir?: InputMaybe<Scalars['String']['input']>;
   sortField?: InputMaybe<Scalars['String']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   statuses?: InputMaybe<Array<Scalars['String']['input']>>;
   tenantId: Scalars['ID']['input'];
 };
@@ -5877,8 +5879,11 @@ export type Thread = {
   messages: MessageConnection;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   number: Scalars['Int']['output'];
+  participants: Array<ThreadParticipant>;
   reporter?: Maybe<User>;
   reporterId?: Maybe<Scalars['ID']['output']>;
+  space?: Maybe<Space>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: ThreadStatus;
   tenantId: Scalars['ID']['output'];
@@ -5993,6 +5998,35 @@ export enum ThreadLifecycleStatus {
   Failed = 'FAILED',
   Idle = 'IDLE',
   Running = 'RUNNING'
+}
+
+export type ThreadParticipant = {
+  __typename?: 'ThreadParticipant';
+  agent?: Maybe<Agent>;
+  agentId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  notificationPreference: ThreadParticipantNotificationPreference;
+  participantType: ThreadParticipantType;
+  role: Scalars['String']['output'];
+  source: Scalars['String']['output'];
+  spaceId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  user?: Maybe<User>;
+  userId?: Maybe<Scalars['ID']['output']>;
+};
+
+export enum ThreadParticipantNotificationPreference {
+  Mentions = 'MENTIONS',
+  Muted = 'MUTED',
+  Subscribed = 'SUBSCRIBED'
+}
+
+export enum ThreadParticipantType {
+  Agent = 'AGENT',
+  User = 'USER'
 }
 
 export enum ThreadStatus {

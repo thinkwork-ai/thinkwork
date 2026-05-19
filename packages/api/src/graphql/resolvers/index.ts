@@ -134,7 +134,10 @@ export const mutationResolvers: Record<string, any> = {
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
-import { threadTypeResolvers } from "./threads/types.js";
+import {
+  threadParticipantTypeResolvers,
+  threadTypeResolvers,
+} from "./threads/types.js";
 import { memoryRecordTypeResolvers } from "./memory/types.js";
 import { wikiPageTypeResolvers } from "./wiki/index.js";
 import { routineExecutionTypeResolvers } from "./routines/types.js";
@@ -144,6 +147,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   Tenant: tenantTypeResolvers,
   Agent: agentTypeResolvers,
   Thread: threadTypeResolvers,
+  ThreadParticipant: threadParticipantTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
