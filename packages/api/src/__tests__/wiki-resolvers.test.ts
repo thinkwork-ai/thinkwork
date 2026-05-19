@@ -494,6 +494,22 @@ describe("wikiCompileJobs", () => {
     });
   });
 
+  it("returns tenant-wide jobs for api-key caller without tenant header", async () => {
+    mockListCompileJobs.mockResolvedValueOnce([makeJobRow({ owner_id: "a1" })]);
+    const out = await wikiCompileJobs(
+      {},
+      { tenantId: "t1" },
+      makeCtx({ authType: "apikey", tenantId: null }),
+    );
+    expect(out).toHaveLength(1);
+    expect(mockAgentsRow).not.toHaveBeenCalled();
+    expect(mockListCompileJobs).toHaveBeenCalledWith({
+      tenantId: "t1",
+      ownerId: null,
+      limit: 10,
+    });
+  });
+
   it("returns empty array when repository yields no rows", async () => {
     mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
     mockListCompileJobs.mockResolvedValueOnce([]);

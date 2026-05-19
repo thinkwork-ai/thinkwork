@@ -8,7 +8,14 @@ import {
 } from "@tanstack/react-router";
 import { useQuery, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Loader2, Search, X, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  History,
+  Loader2,
+  Search,
+  Sparkles,
+  X,
+} from "lucide-react";
 import {
   AgentsListQuery,
   TenantMembersListQuery,
@@ -33,6 +40,7 @@ import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -42,7 +50,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { compileJobGateCounts } from "./-compile-job-gate-counts";
 
 type WikiView = "pages" | "graph";
@@ -141,7 +155,39 @@ function formatCompactDateTime(value?: string | null): string {
   });
 }
 
-function CompileJobObservability({
+function LatestRunButton({
+  error,
+  jobs,
+  onClick,
+}: {
+  error?: { message?: string } | null;
+  jobs: CompileJobRow[];
+  onClick: () => void;
+}) {
+  const latest = jobs[0] ?? null;
+  const counts = compileJobGateCounts(latest?.metrics);
+  const hasRejected = counts.rejected > 0 || counts.unresolved > 0;
+  const label = error ? "Run unavailable" : latest ? latest.status : "No runs";
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={onClick}
+      className="gap-2"
+    >
+      {hasRejected ? (
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+      ) : (
+        <History className="h-3.5 w-3.5" />
+      )}
+      <span>Last run</span>
+      <span className="text-muted-foreground">{label}</span>
+    </Button>
+  );
+}
+
+function CompileJobRunSheet({
   error,
   jobs,
 }: {
@@ -152,14 +198,14 @@ function CompileJobObservability({
   const counts = compileJobGateCounts(latest?.metrics);
   const hasRejected = counts.rejected > 0 || counts.unresolved > 0;
   return (
-    <div className="grid shrink-0 gap-3 border-b border-border pb-3 md:grid-cols-[1fr_1.2fr]">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
       <div className="rounded-md border border-border p-3">
-        <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-medium text-muted-foreground">
+          Latest compile
+        </p>
+        <div className="mt-2 flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              Latest compile
-            </p>
-            <p className="mt-1 text-sm font-medium">
+            <p className="text-sm font-medium">
               {error ? "Unavailable" : latest ? latest.status : "No jobs"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -180,20 +226,45 @@ function CompileJobObservability({
             </Badge>
           )}
         </div>
-        {hasRejected && (
-          <Link
-            to="/ontology"
-            className="mt-3 inline-flex text-xs font-medium text-primary hover:underline"
-          >
-            Open ontology suggestions
-          </Link>
-        )}
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <MetricTile label="Approved" value={counts.approved} />
         <MetricTile label="Rejected" value={counts.rejected} />
         <MetricTile label="Unresolved" value={counts.unresolved} />
         <MetricTile label="Brain" value={counts.brainPages} />
+      </div>
+      {hasRejected && (
+        <Button asChild variant="outline" size="sm" className="justify-start">
+          <Link to="/ontology">Open ontology suggestions</Link>
+        </Button>
+      )}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">Recent runs</p>
+        {jobs.length === 0 ? (
+          <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+            No compile jobs yet.
+          </p>
+        ) : (
+          jobs.map((job) => (
+            <div
+              key={job.id}
+              className="rounded-md border border-border p-3 text-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">{job.status}</span>
+                <span className="text-xs text-muted-foreground">
+                  {job.trigger}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {formatCompactDateTime(latestJobTimestamp(job))}
+              </div>
+              {job.error && (
+                <p className="mt-2 text-xs text-destructive">{job.error}</p>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -251,6 +322,7 @@ export function WikiPage({
   // List-row detail sheet
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<WikiRow | null>(null);
+  const [compileSheetOpen, setCompileSheetOpen] = useState(false);
 
   // Graph-node detail sheet (separate state so user can toggle between
   // views without losing their place)
@@ -550,6 +622,11 @@ export function WikiPage({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <LatestRunButton
+            error={compileJobsResult.error}
+            jobs={compileJobs}
+            onClick={() => setCompileSheetOpen(true)}
+          />
           <ToggleGroup
             type="single"
             value={view}
@@ -580,12 +657,8 @@ export function WikiPage({
       </div>
 
       <div className={embedded ? "min-h-0 flex-1" : "min-h-0 flex-1 px-4"}>
-        <CompileJobObservability
-          error={compileJobsResult.error}
-          jobs={compileJobs}
-        />
         {view === "graph" ? (
-          <div className="mt-3 h-[calc(100%-76px)] relative border border-border rounded-lg overflow-hidden">
+          <div className="h-full relative border border-border rounded-lg overflow-hidden">
             <WikiGraph
               ref={graphRef}
               tenantId={tenantId ?? ""}
@@ -634,6 +707,21 @@ export function WikiPage({
           />
         )}
       </div>
+
+      <Sheet open={compileSheetOpen} onOpenChange={setCompileSheetOpen}>
+        <SheetContent className="sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle>Last Wiki Run</SheetTitle>
+            <SheetDescription>
+              Compile status and ontology gate counts for recent Wiki jobs.
+            </SheetDescription>
+          </SheetHeader>
+          <CompileJobRunSheet
+            error={compileJobsResult.error}
+            jobs={compileJobs}
+          />
+        </SheetContent>
+      </Sheet>
 
       {/* List-row detail sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
