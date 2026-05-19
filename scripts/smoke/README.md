@@ -24,7 +24,7 @@ This kit fills the gap.
 | `CHECKS.md`                               | Definition-of-passing + the full runbook per path. Read this first if a smoke fails.                                                                                |
 | `fixtures/sales-prep-chat.json`           | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog).                                                                                  |
 | `fixtures/sales-prep-catalog.json`        | Inputs for `catalog-smoke.sh`.                                                                                                                                      |
-| `fixtures/crm-opportunity-won.json`       | Valid CRM close-won event. Triggers `customer-onboarding-reconciler`.                                                                                               |
+| `fixtures/crm-opportunity-won.json`       | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                        |
 | `fixtures/task-completed.json`            | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                            |
 | `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                       |
 | `computer-runbook-smoke.mjs`              | Computer runbook smoke. Dry-run validates repo runbooks; live mode checks auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
@@ -85,7 +85,7 @@ it for vendor-side configuration. The webhook Lambdas fetch from
 Secrets Manager on every request, so no redeploy is needed after
 rotation.
 
-## Smoke test 1 — CRM opportunity-won → reconciler tick 1
+## Smoke test 1 — CRM opportunity-won → Customer Onboarding Thread
 
 ```sh
 scripts/smoke/webhook-smoke.sh \
@@ -96,36 +96,34 @@ scripts/smoke/webhook-smoke.sh \
 
 **What should happen:**
 
-1. HTTP 200 with `{"runId":"<uuid>","deduped":false}` in the body.
-2. New row in `skill_runs` with:
-   - `invocation_source = 'webhook'`
-   - `skill_id = 'customer-onboarding-reconciler'`
-   - `invoker_user_id` = the tenant's system-user uuid (first ever
-     webhook call for the tenant also inserts a row into
-     `tenant_system_users`)
-   - `status` transitions `running` → `complete` (the agent ran the
-     reconciler tick end-to-end and the deliverable landed on the row)
-     OR `running` → `failed` with a specific reason (missing
-     connector, agent loop error, config-fetch failure, etc.). Both
-     prove the webhook path reaches the container and the completion
-     callback updates the row.
-3. `failure_reason` names the specific cause, not an auth or dispatch
-   error.
+1. HTTP 200 with a body shaped like `{"threadId":"<uuid>","idempotent":false,"linkedTaskCount":5,"missingFields":[]}`.
+2. New or reused `threads` row with:
+   - `channel = 'webhook'`
+   - `space_id` pointing at the seeded Customer Onboarding Space
+   - `metadata->'customerOnboarding'->>'opportunityId' = 'smoke-opp-0001'`
+3. `linked_tasks` rows exist for the Space checklist. If LastMile Tasks is not fully configured yet, the rows should have `sync_status = 'error'` and a provider error in metadata rather than failing the webhook path.
+4. The coordinator agent receives a wakeup request when the Space has an active coordinator assignment.
 
 **Verify with:**
 
 ```sql
-SELECT id, status, invocation_source, invoker_user_id, failure_reason, started_at
-FROM skill_runs
-WHERE skill_id = 'customer-onboarding-reconciler'
-ORDER BY started_at DESC
+SELECT id, identifier, title, space_id, metadata
+FROM threads
+WHERE tenant_id = '<tenant-id>'
+  AND metadata->'customerOnboarding'->>'opportunityId' = 'smoke-opp-0001'
+ORDER BY created_at DESC
 LIMIT 5;
+
+SELECT title, status, sync_status, external_task_id, external_task_url
+FROM linked_tasks
+WHERE tenant_id = '<tenant-id>' AND thread_id = '<thread-id>'
+ORDER BY created_at;
 ```
 
-Also check the `tenant_system_users` table got a row for the tenant:
+Rerunning the same fixture should be idempotent:
 
-```sql
-SELECT id, tenant_id, created_at FROM tenant_system_users;
+```json
+{ "threadId": "<same uuid>", "idempotent": true, "linkedTaskCount": 0 }
 ```
 
 ## Smoke test 2 — task completion → reconciler tick 2
