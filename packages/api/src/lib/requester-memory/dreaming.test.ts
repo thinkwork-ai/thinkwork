@@ -20,6 +20,9 @@ function changed(path: string, content: string) {
 describe("requester memory dreaming", () => {
   it("runs light/rem/deep phases and promotes stable requester memory", async () => {
     const writes: Array<{ path: string; content: string }> = [];
+    const syncHindsight = vi
+      .fn()
+      .mockResolvedValue({ status: "success", files: [] });
     const result = await runRequesterMemoryDreamForUser(
       {
         runId: "dream-1",
@@ -62,9 +65,7 @@ describe("requester memory dreaming", () => {
           .mockResolvedValue(
             "The requester consistently prefers concise summaries.",
           ),
-        syncHindsight: vi
-          .fn()
-          .mockResolvedValue({ status: "success", files: [] }),
+        syncHindsight,
       },
     );
 
@@ -80,6 +81,17 @@ describe("requester memory dreaming", () => {
     expect(
       writes.find((write) => write.path === "memory/MEMORY.md")?.content,
     ).toContain("I prefer concise summaries");
+    expect(syncHindsight).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        userId: "user-1",
+        threadId: "requester-memory-dreaming",
+        changedFiles: expect.arrayContaining([
+          expect.objectContaining({ path: "memory/DREAMS.md" }),
+          expect.objectContaining({ path: "memory/MEMORY.md" }),
+        ]),
+      }),
+    );
   });
 
   it("skips users who are still active unless forced", async () => {

@@ -5,6 +5,7 @@ import type {
   RejectedLearningCandidate,
 } from "./learner.js";
 import type { RequesterMemoryHindsightSyncResult } from "./hindsight-sync.js";
+import type { RequesterThreadDigestRetainResult } from "./hindsight-primary.js";
 
 export function renderCandidateAppendSection(input: {
   runId: string;
@@ -133,8 +134,7 @@ export function renderDurableMemoryAppendSection(input: {
   return lines.join("\n");
 }
 
-export function renderThreadJournalAppendSection(input: {
-  runId: string;
+export function renderProcessedThreadMemoryDigestSection(input: {
   threadId: string;
   scheduledFor: string;
   thread: {
@@ -144,19 +144,13 @@ export function renderThreadJournalAppendSection(input: {
     type: string;
     channel: string;
   } | null;
-  messages: Array<{
-    id: string;
-    role: string;
-    content: string | null;
-  }>;
+  messageCount: number;
   attachmentCount: number;
+  candidateSummary: LearningCandidateSummary;
+  promoted: LearningCandidate[];
+  staged: LearningCandidate[];
+  rejectedCandidates: RejectedLearningCandidate[];
 }): string {
-  const userMessages = input.messages.filter(
-    (message) => message.role === "user",
-  );
-  const assistantMessages = input.messages.filter(
-    (message) => message.role === "assistant",
-  );
   const lines = [
     `## Thread ${input.threadId}`,
     "",
@@ -166,16 +160,25 @@ export function renderThreadJournalAppendSection(input: {
     `- Channel: ${input.thread?.channel ?? "unknown"}`,
     `- Status: ${input.thread?.status ?? "unknown"}`,
     `- Priority: ${input.thread?.priority ?? "unknown"}`,
-    `- Messages: ${input.messages.length}`,
-    `- Attachments: ${input.attachmentCount}`,
+    `- Messages reviewed: ${input.messageCount}`,
+    `- Attachments reviewed: ${input.attachmentCount}`,
+    `- Candidates extracted: ${input.candidateSummary.extracted}`,
+    `- Candidates accepted: ${input.candidateSummary.accepted}`,
+    `- Candidates promoted: ${input.candidateSummary.promoted}`,
+    `- Candidates staged: ${input.candidateSummary.staged}`,
+    `- Candidates rejected: ${input.candidateSummary.rejected}`,
     "",
-    "### Requester Messages",
+    "### Promoted Memory",
     "",
-    ...renderMessagePreviewLines(userMessages),
+    ...renderDigestCandidateLines(input.promoted),
     "",
-    "### Assistant Responses",
+    "### Staged Memory Candidates",
     "",
-    ...renderMessagePreviewLines(assistantMessages),
+    ...renderDigestCandidateLines(input.staged),
+    "",
+    "### Rejected Signals",
+    "",
+    ...renderDigestRejectedLines(input.rejectedCandidates),
     "",
   ];
 
@@ -198,6 +201,7 @@ export function renderIdleLearningReport(input: {
   transcriptMessageCount: number;
   attachmentCount: number;
   hindsightSync?: RequesterMemoryHindsightSyncResult;
+  primaryHindsightRetain?: RequesterThreadDigestRetainResult;
 }): string {
   const reportJson = {
     runId: input.runId,
@@ -212,6 +216,7 @@ export function renderIdleLearningReport(input: {
     changedPaths: input.changedPaths,
     transcriptMessageCount: input.transcriptMessageCount,
     attachmentCount: input.attachmentCount,
+    primaryHindsightRetain: input.primaryHindsightRetain ?? null,
     hindsightSync: input.hindsightSync ?? null,
   };
 
@@ -251,18 +256,22 @@ function renderRejectedLines(rejected: RejectedLearningCandidate[]): string[] {
   );
 }
 
-function renderMessagePreviewLines(
-  messages: Array<{ id: string; content: string | null }>,
-): string[] {
-  if (messages.length === 0) return ["- None"];
-  return messages.slice(0, 12).map((message) => {
-    const preview = previewText(message.content);
-    return `- ${message.id}: ${preview || "(empty)"}`;
-  });
+function renderDigestCandidateLines(candidates: LearningCandidate[]): string[] {
+  if (candidates.length === 0) return ["- None"];
+  return candidates.map(
+    (candidate) =>
+      `- [${candidate.category}] ${candidate.text}\n  Evidence: ${candidate.evidenceMessageIds.join(", ")}; score=${candidate.score.toFixed(2)}; hash=${candidate.hash}`,
+  );
 }
 
-function previewText(content: string | null): string {
-  return (content ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
+function renderDigestRejectedLines(
+  rejected: RejectedLearningCandidate[],
+): string[] {
+  if (rejected.length === 0) return ["- None"];
+  return rejected.map(
+    (candidate) =>
+      `- [${candidate.reason}] evidence=${candidate.evidenceMessageId} hash=${shortHash(candidate.text)}`,
+  );
 }
 
 function shortHash(text: string): string {

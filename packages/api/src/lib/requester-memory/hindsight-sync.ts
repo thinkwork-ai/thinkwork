@@ -111,6 +111,7 @@ export function requesterMemoryDocumentId(
 
 export function isHindsightSyncableRequesterMemoryPath(path: string): boolean {
   if (path === "memory/MEMORY.md") return true;
+  if (path === "memory/DREAMS.md") return true;
   const [root, collection, filename, extra] = path.split("/");
   return (
     root === "memory" &&

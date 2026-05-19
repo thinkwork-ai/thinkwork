@@ -338,7 +338,7 @@ export class HindsightAdapter implements MemoryAdapter {
       }),
     };
     await this.postItems(bankId, [item], "upsertMarkdownMemoryDocument", {
-      async: true,
+      async: req.async !== false,
     });
     console.log(
       `[hindsight-adapter] upsertMarkdownMemoryDocument ok bank=${bankId.slice(0, 18)} document=${req.documentId.slice(0, 64)} bytes=${content.length}`,

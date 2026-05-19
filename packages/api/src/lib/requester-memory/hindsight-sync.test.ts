@@ -49,6 +49,9 @@ describe("requester memory Hindsight sync", () => {
     expect(isHindsightSyncableRequesterMemoryPath("memory/MEMORY.md")).toBe(
       true,
     );
+    expect(isHindsightSyncableRequesterMemoryPath("memory/DREAMS.md")).toBe(
+      true,
+    );
     expect(
       isHindsightSyncableRequesterMemoryPath("memory/working/2026-05-18.md"),
     ).toBe(true);
