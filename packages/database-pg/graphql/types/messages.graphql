@@ -8,6 +8,11 @@ enum MessageRole {
   TOOL
 }
 
+enum MessageMentionTargetType {
+  USER
+  AGENT
+}
+
 type Message {
   id: ID!
   threadId: ID!
@@ -29,8 +34,34 @@ type Message {
   toolResults: AWSJSON
   metadata: AWSJSON
   tokenCount: Int
+  sender: MessageSender
+  mentions: [MessageMention!]!
   artifacts: [MessageArtifact!]!
   durableArtifact: Artifact
+  createdAt: AWSDateTime!
+}
+
+type MessageSender {
+  type: String!
+  id: ID
+  displayName: String!
+  avatarUrl: String
+}
+
+type MessageMention {
+  id: ID!
+  messageId: ID!
+  threadId: ID!
+  tenantId: ID!
+  targetType: MessageMentionTargetType!
+  targetId: ID!
+  displayName: String!
+  rawText: String
+  startOffset: Int
+  endOffset: Int
+  metadata: AWSJSON
+  user: User
+  agent: Agent
   createdAt: AWSDateTime!
 }
 
@@ -72,6 +103,16 @@ input SendMessageInput {
   toolCalls: AWSJSON
   toolResults: AWSJSON
   metadata: AWSJSON
+  mentions: [SendMessageMentionInput!]
+}
+
+input SendMessageMentionInput {
+  targetType: MessageMentionTargetType!
+  targetId: ID!
+  displayName: String
+  rawText: String
+  startOffset: Int
+  endOffset: Int
 }
 
 # --- Query / Mutation extensions ---

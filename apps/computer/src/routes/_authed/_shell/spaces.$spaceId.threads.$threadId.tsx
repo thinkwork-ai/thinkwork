@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { ComputerThreadDetailRoute } from "@/components/computer/ComputerThreadDetailRoute";
 import { OnboardingChecklistPanel } from "@/components/spaces/OnboardingChecklistPanel";
+import { SpaceThreadRoom } from "@/components/spaces/SpaceThreadRoom";
 import {
   sourceContextFromThreadMetadata,
   type LinkedTaskSummary,
 } from "@/components/spaces/space-types";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SpaceThreadContextQuery,
@@ -64,6 +65,13 @@ function SpaceThreadDetailPage() {
   const [{ fetching: archiving }, updateThread] =
     useMutation(UpdateThreadMutation);
   const thread = contextData?.thread ?? null;
+  const threadTitle = thread?.title?.trim() || "Space Thread";
+
+  usePageHeaderActions({
+    backHref: `/spaces/${spaceId}`,
+    title: threadTitle,
+    documentTitle: `Space Thread · ${threadTitle}`,
+  });
 
   if (thread?.spaceId && thread.spaceId !== spaceId) {
     return (
@@ -76,11 +84,7 @@ function SpaceThreadDetailPage() {
   return (
     <main className="grid h-full min-h-0 grid-cols-1 overflow-hidden bg-background xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-h-0 min-w-0">
-        <ComputerThreadDetailRoute
-          threadId={threadId}
-          backHref={`/spaces/${spaceId}`}
-          documentTitlePrefix="Space Thread"
-        />
+        <SpaceThreadRoom threadId={threadId} expectedSpaceId={spaceId} />
       </div>
       <OnboardingChecklistPanel
         tasks={taskData?.threadLinkedTasks ?? []}

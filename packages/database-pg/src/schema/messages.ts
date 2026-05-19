@@ -12,6 +12,8 @@ import {
 	timestamp,
 	jsonb,
 	index,
+	uniqueIndex,
+	check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
@@ -58,6 +60,55 @@ export const messages = pgTable(
 		index("idx_messages_tenant_id_created_at").on(
 			table.tenant_id,
 			table.created_at,
+		),
+	],
+);
+
+// ---------------------------------------------------------------------------
+// 2.2.1 — message_mentions
+// ---------------------------------------------------------------------------
+
+export const messageMentions = pgTable(
+	"message_mentions",
+	{
+		id: uuid("id")
+			.primaryKey()
+			.default(sql`gen_random_uuid()`),
+		tenant_id: uuid("tenant_id")
+			.references(() => tenants.id, { onDelete: "cascade" })
+			.notNull(),
+		thread_id: uuid("thread_id")
+			.references(() => threads.id, { onDelete: "cascade" })
+			.notNull(),
+		message_id: uuid("message_id")
+			.references(() => messages.id, { onDelete: "cascade" })
+			.notNull(),
+		target_type: text("target_type").notNull(),
+		target_id: uuid("target_id").notNull(),
+		display_name: text("display_name").notNull(),
+		raw_text: text("raw_text"),
+		start_offset: integer("start_offset"),
+		end_offset: integer("end_offset"),
+		metadata: jsonb("metadata"),
+		created_at: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+	},
+	(table) => [
+		uniqueIndex("uq_message_mentions_target").on(
+			table.message_id,
+			table.target_type,
+			table.target_id,
+		),
+		index("idx_message_mentions_thread").on(table.tenant_id, table.thread_id),
+		index("idx_message_mentions_target").on(
+			table.tenant_id,
+			table.target_type,
+			table.target_id,
+		),
+		check(
+			"message_mentions_target_type_allowed",
+			sql`${table.target_type} IN ('user','agent')`,
 		),
 	],
 );
@@ -132,6 +183,22 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
 		references: [tenants.id],
 	}),
 	artifacts: many(messageArtifacts),
+	mentions: many(messageMentions),
+}));
+
+export const messageMentionsRelations = relations(messageMentions, ({ one }) => ({
+	message: one(messages, {
+		fields: [messageMentions.message_id],
+		references: [messages.id],
+	}),
+	thread: one(threads, {
+		fields: [messageMentions.thread_id],
+		references: [threads.id],
+	}),
+	tenant: one(tenants, {
+		fields: [messageMentions.tenant_id],
+		references: [tenants.id],
+	}),
 }));
 
 export const messageArtifactsRelations = relations(

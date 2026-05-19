@@ -15,11 +15,13 @@ import {
   DeleteComputerMemoryRecordMutation,
   PromoteDraftAppletMutation,
   SpaceQuery,
+  SpaceThreadCollaborationQuery,
   SpacesQuery,
   SpaceThreadsQuery,
   SpaceThreadContextQuery,
   StartCustomerOnboardingMutation,
   ThreadLinkedTasksQuery,
+  ThreadMentionTargetsQuery,
   ThreadTurnUpdatedSubscription,
 } from "./graphql-queries";
 
@@ -121,5 +123,13 @@ describe("computer GraphQL queries", () => {
       "startCustomerOnboarding",
     );
     expect(print(StartCustomerOnboardingMutation)).toContain("missingFields");
+  });
+
+  it("requests collaborative Space Thread fields and mention targets", () => {
+    const thread = print(SpaceThreadCollaborationQuery);
+    expect(thread).toContain("sender");
+    expect(thread).toContain("mentions");
+    expect(thread).toContain("participants");
+    expect(print(ThreadMentionTargetsQuery)).toContain("threadMentionTargets");
   });
 });

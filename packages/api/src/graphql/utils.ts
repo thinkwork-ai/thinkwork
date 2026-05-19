@@ -38,6 +38,7 @@ import {
   modelCatalog,
   // Messages
   messages,
+  messageMentions,
   messageArtifacts,
   // Teams
   teams,
@@ -160,6 +161,7 @@ export {
   agentSkills,
   modelCatalog,
   messages,
+  messageMentions,
   messageArtifacts,
   teams,
   teamAgents,
@@ -265,8 +267,9 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -298,8 +301,9 @@ export async function getKbManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -352,8 +356,9 @@ export async function invokeChatAgent(payload: {
       );
       return false;
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     await lambda.send(
       new InvokeCommand({
@@ -387,8 +392,9 @@ export async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -417,8 +423,9 @@ export async function invokeJobScheduleManager(
       console.error("[graphql]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -523,8 +530,9 @@ async function getSkillRunInvokeFnName(
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -622,8 +630,9 @@ export async function invokeSkillRun(
         error: `${runtimeType} agentcore-invoke Lambda name not configured`,
       };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({
