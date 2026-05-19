@@ -56,6 +56,10 @@ import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
 import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
 import {
+  linkedTaskQueries,
+  linkedTaskTypeResolvers,
+} from "./linked-tasks/index.js";
+import {
   spaceAgentAssignmentTypeResolvers,
   spaceChecklistTemplateTypeResolvers,
   spaceMemberTypeResolvers,
@@ -97,6 +101,7 @@ export const queryResolvers: Record<string, any> = {
   ...slackQueries,
   ...ontologyQueries,
   ...spaceQueries,
+  ...linkedTaskQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -157,4 +162,5 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   SpaceMember: spaceMemberTypeResolvers,
   SpaceAgentAssignment: spaceAgentAssignmentTypeResolvers,
   SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,
+  LinkedTask: linkedTaskTypeResolvers,
 };

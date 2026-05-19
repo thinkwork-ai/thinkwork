@@ -1,0 +1,77 @@
+# Linked tasks are ThinkWork-side mirrors of checklist work whose system of
+# record remains an external task provider such as LastMile Tasks.
+
+enum LinkedTaskProvider {
+  LASTMILE
+}
+
+enum LinkedTaskStatus {
+  UNKNOWN
+  TODO
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+  CANCELLED
+}
+
+enum LinkedTaskSyncStatus {
+  PENDING
+  SYNCED
+  WARNING
+  ERROR
+}
+
+enum LinkedTaskEventType {
+  CREATED
+  COMPLETED
+  BLOCKED
+  REASSIGNED
+  DUE_DATE_CHANGED
+  SYNC_FAILED
+  WRITEBACK_POSTED
+}
+
+type LinkedTask {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  threadId: ID!
+  checklistItemId: ID
+  provider: LinkedTaskProvider!
+  externalTaskId: String!
+  externalTaskUrl: String
+  title: String!
+  required: Boolean!
+  roleKey: String
+  assigneeDisplay: String
+  assigneeExternalId: String
+  status: LinkedTaskStatus!
+  blocked: Boolean!
+  syncStatus: LinkedTaskSyncStatus!
+  lastSyncedAt: AWSDateTime
+  metadata: AWSJSON
+  events: [LinkedTaskEvent!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type LinkedTaskEvent {
+  id: ID!
+  tenantId: ID!
+  linkedTaskId: ID!
+  spaceId: ID!
+  threadId: ID!
+  provider: LinkedTaskProvider!
+  eventType: LinkedTaskEventType!
+  externalEventId: String
+  previousStatus: LinkedTaskStatus
+  newStatus: LinkedTaskStatus
+  message: String
+  metadata: AWSJSON
+  occurredAt: AWSDateTime!
+  createdAt: AWSDateTime!
+}
+
+extend type Query {
+  threadLinkedTasks(tenantId: ID!, threadId: ID!): [LinkedTask!]!
+}
