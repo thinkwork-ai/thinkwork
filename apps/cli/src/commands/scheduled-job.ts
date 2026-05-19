@@ -2,9 +2,10 @@
  * `thinkwork scheduled-job ...` — AWS Scheduler-backed recurring jobs that
  * invoke agents on a schedule.
  *
- * GraphQL surface today exposes only list/get/create (createScheduledJob).
- * update/delete/run are scaffolded but return clear "API not yet implemented"
- * errors until the server adds the mutations. Tracked as Phase-3 follow-up.
+ * Full verb set: list / get / create / update / delete / run. Schedule
+ * changes (create / update / delete) propagate to EventBridge via the
+ * job-schedule-manager Lambda; `run` invokes job-trigger directly with
+ * the row's payload to fire on-demand.
  */
 
 import { Command } from "commander";

@@ -1157,19 +1157,19 @@ thinkwork agent version rollback <agentId> <versionId> [--yes]
 
 ---
 
-## Roadmap — scaffolded commands
+## Command surface (all phases live)
 
-The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
+All 25 originally-scaffolded commands across Phases 1–5 are real and shipped. `thinkwork <cmd> --help` is authoritative for flags + examples; the sections below are summaries.
 
-| Phase                         | Commands                                                                                                                                                                                                                            |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 — Work & approvals          | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete**                                                                                                                          |
-| 2 — Agents & workspace        | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template), [`tenant`](#tenant), [`agent`](#agent) — **Phase 2 complete**                                                                                        |
-| 3 — Automation & integrations | ✅ [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) — **Phase 3 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference. |
-| 4 — Memory & artifacts        | ✅ [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) — **Phase 4 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference.                                                                        |
-| 5 — Observability & spend     | ✅ [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) — **Phase 5 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference.                        |
+| Phase                         | Commands                                                                                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — Work & approvals          | [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox)                                                                               |
+| 2 — Agents & workspace        | [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template), [`tenant`](#tenant), [`agent`](#agent)                                             |
+| 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) — `connector` retired |
+| 4 — Memory & artifacts        | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact)                                                                                              |
+| 5 — Observability & spend     | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard)                                              |
 
-The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
+`skill create` and `skill update` were **retired** — custom-skill authoring is `thinkwork skill push <folder>`. Invoking the retired verbs prints the explanation and exits 2.
 
 ### routine
 
@@ -1189,9 +1189,16 @@ thinkwork routine trigger-config delete <triggerId>
 AWS-Scheduler-backed recurring agent jobs. Alias: `cron`.
 
 ```bash
-thinkwork scheduled-job list | get <id> | create [name] [--agent|--routine] --schedule <cron|rate>
-thinkwork scheduled-job update <id> | delete <id> | run <id> [--wait]
+thinkwork scheduled-job list | get <id>
+thinkwork scheduled-job create [name] [--agent|--routine] --schedule <cron|rate> [--timezone] [--payload]
+thinkwork scheduled-job update <id> [--schedule] [--timezone] [--payload] [--enable|--disable] [--name] [--description] [--prompt]
+thinkwork scheduled-job delete <id> [--yes]
+thinkwork scheduled-job run <id>
 ```
+
+- `update` propagates schedule changes to AWS EventBridge synchronously via the job-schedule-manager Lambda. The DB row is preserved on Lambda failure so a retry is safe.
+- `delete` deprovisions the EventBridge schedule before removing the row. Confirmation prompt unless `--yes`.
+- `run` fires the job-trigger Lambda immediately with the row's payload (synchronous RequestResponse); downstream side effects (thread turn, routine run) remain async.
 
 ### turn
 
@@ -1217,23 +1224,32 @@ thinkwork wakeup create --agent <id> [--thread] [--delay-seconds] [--payload <js
 Inbound webhooks that dispatch agents or routines.
 
 ```bash
-thinkwork webhook list | get <id> | create [name] --target-type AGENT|ROUTINE --target-id <id> [--rate-limit]
-thinkwork webhook update <id> | delete <id>
-thinkwork webhook test <id> [--payload <json>] | rotate <id> | deliveries <id> [--limit]
+thinkwork webhook list | get <id>
+thinkwork webhook create [name] --target-type AGENT|ROUTINE --target-id <id> [--rate-limit]
+thinkwork webhook update <id> | delete <id> | rotate <id>
+thinkwork webhook test <id>
+thinkwork webhook deliveries <id> [--limit]
 ```
+
+- `test` records a synthetic delivery row (`resolution_status: "test"`) so you can confirm the webhook is wired without triggering downstream dispatch. The CLI prints a copy-pasteable curl one-liner for end-to-end reachability against the public URL.
+- `deliveries` lists recent inbound requests for one webhook (newest first; default 50, max 500). Rows are PII-bearing (provider task titles, customer names in body previews) — the read is admin-tier.
 
 ### skill
 
-Browse the catalog, install, upgrade, or publish custom skills.
+Browse the catalog and install / upgrade / uninstall tenant-scoped skills. Custom-skill authoring is `thinkwork skill push <folder>` — that uploads a folder and registers it as a tenant-owned skill.
 
 ```bash
 thinkwork skill catalog [--search] [--tag]
 thinkwork skill list [--custom-only]
 thinkwork skill install <slug> [--version]
-thinkwork skill upgrade <slug>
-thinkwork skill create [slug] [--name] [--description] [--manifest-file] [--endpoint]
-thinkwork skill update <slug> | delete <slug>
+thinkwork skill upgrade <slug> [--version]
+thinkwork skill delete <slug> [--yes]
+thinkwork skill push <folder>
 ```
+
+- `install` and `upgrade` both call the same idempotent `installSkill` mutation — upsert into `tenant_skills`. When `--version` is omitted the resolver reads the catalog's current version; for slugs not in the catalog, `--version` is required.
+- `delete` removes the `tenant_skills` row (does NOT cascade to agent assignments). Confirmation prompt unless `--yes`.
+- `skill create` and `skill update` are **retired** — use `skill push` for authoring. Running them prints the explanation and exits 2.
 
 ### memory
 

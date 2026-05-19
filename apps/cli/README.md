@@ -137,26 +137,31 @@ The CLI has two modes for every API-backed command:
 Any flag accepted by a command is also inferrable from env vars:
 `THINKWORK_STAGE`, `THINKWORK_TENANT`, `THINKWORK_API_KEY` (for CI).
 
-## Roadmap
+## Command surface
 
-The commands below are **scaffolded** in Phase 0 (help text + argument parsing
-ships now, so `thinkwork --help` shows the full surface area) and fill in
-phase-by-phase. Running a scaffolded command prints a "not yet implemented"
-message and exits with code 2.
+All 25 originally-scaffolded commands across Phases 1–5 are now live.
+`thinkwork <cmd> --help` is authoritative for flags + examples.
 
 | Phase | Domain | Commands |
 |-------|--------|----------|
-| **0 (now)** | Foundation | `login` (Cognito + AWS), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
-| 1 | Work & approvals | ✅ `thread`, `message`, `label`, `inbox` — **Phase 1 complete** |
-| 2 | Agents & workspace | ✅ `member`, `team`, `kb`, `template`, `tenant`, `agent` — **Phase 2 complete** |
-| 3 | Automation & integrations | ✅ `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `skill` — **Phase 3 complete** (`connector` retired) |
-| 4 | Memory & artifacts | ✅ `memory`, `recipe`, `artifact` — **Phase 4 complete** |
-| 5 | Observability & spend | ✅ `cost`, `budget`, `performance`, `trace`, `dashboard` — **Phase 5 complete** |
+| 0 | Foundation | `login` (chains AWS profile + Cognito API session), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
+| 1 | Work & approvals | `thread`, `message`, `label`, `inbox` |
+| 2 | Agents & workspace | `member`, `team`, `kb`, `template`, `tenant`, `agent` |
+| 3 | Automation & integrations | `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `skill` (`connector` retired) |
+| 4 | Memory & artifacts | `memory`, `recipe`, `artifact` |
+| 5 | Observability & spend | `cost`, `budget`, `performance`, `trace`, `dashboard` |
 
-Each phase ships as one PR. Mid-phase stubs keep `thinkwork --help` complete
-so the full surface is always discoverable; individual commands flip from
-stub to real implementation as their phase lands. Run any
-`thinkwork <cmd> --help` today to see the planned flags + examples.
+`skill create` and `skill update` were retired in favor of
+`thinkwork skill push <folder>` — that's the real custom-skill authoring
+surface. Invoking them prints "retired — use `skill push`" and exits 2.
+
+Auth model: the CLI's auto-fallback to the deploy-stage's
+`api_auth_secret` admits most admin-tier paths via the server's
+`requireAdminOrServiceCaller` gate. Paths that stamp a specific user
+identity onto the row (`createThread`, `sendMessage`, `core/*` member
+mutations) stay Cognito-required so service callers can't ghost-write
+as a user — sign in via `thinkwork login --stage <s>` (or the chained
+prompt from `thinkwork login`) for those.
 
 ## Interactive Init
 
