@@ -77,6 +77,7 @@ export interface PlannedSectionUpdate {
 
 export interface PlannedPageUpdate {
   pageId: string;
+  entityTypeSlug?: string | null;
   sections: PlannedSectionUpdate[];
   /** New aliases to register on the existing page. */
   aliases?: string[];
@@ -255,6 +256,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
   "pageUpdates": [
     {
       "pageId": "<existing page id from input>",
+      "entityTypeSlug": "<approved ontology entity type slug, optional when updating ontology facets>",
       "aliases": ["<new alias strings to register, optional>"],
       "sections": [
         {
@@ -610,6 +612,7 @@ export function validatePlannerResult(
     if (typeof up.pageId !== "string" || up.pageId.length === 0) {
       throw new Error("pageUpdates.pageId missing");
     }
+    validateOptionalString(up, "entityTypeSlug", "pageUpdates");
     requireArray(up, "sections");
     for (const section of up.sections as unknown[]) {
       if (!section || typeof section !== "object") {
@@ -620,6 +623,15 @@ export function validatePlannerResult(
         "facetSlug",
         "pageUpdates.sections",
       );
+      if (
+        (section as Record<string, unknown>).facetSlug !== undefined &&
+        (section as Record<string, unknown>).facetSlug !== null &&
+        (up.entityTypeSlug === undefined || up.entityTypeSlug === null)
+      ) {
+        throw new Error(
+          "pageUpdates.entityTypeSlug required when sections include facetSlug",
+        );
+      }
     }
   }
 

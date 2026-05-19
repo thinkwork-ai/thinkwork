@@ -1029,6 +1029,58 @@ describe("runCompileJob", () => {
     );
   });
 
+  it("reroutes unapproved ontology-shaped new pages before database writes", async () => {
+    scriptAdapter([
+      {
+        records: [makeRecord("r1")],
+        nextCursor: {
+          updatedAt: new Date("2026-04-18T00:00:00Z"),
+          recordId: "r1",
+        },
+      },
+      { records: [], nextCursor: null },
+    ]);
+    mockPlanner.runPlanner.mockResolvedValueOnce({
+      pageUpdates: [],
+      newPages: [
+        {
+          type: "entity",
+          entityTypeSlug: "vendor",
+          slug: "sprocket-inc",
+          title: "Sprocket Inc",
+          sections: [
+            {
+              slug: "overview",
+              facetSlug: "overview",
+              heading: "Overview",
+              body_md: "Potential vendor.",
+              source_refs: ["r1"],
+            },
+          ],
+          source_refs: ["r1"],
+        },
+      ],
+      unresolvedMentions: [],
+      promotions: [],
+      pageLinks: [],
+      usage: { inputTokens: 100, outputTokens: 40 },
+    });
+
+    const result = await runCompileJob(sampleJob);
+
+    expect(result.status).toBe("succeeded");
+    expect(mockRepo.upsertPage).not.toHaveBeenCalled();
+    expect(mockRepo.upsertUnresolvedMention).toHaveBeenCalledWith(
+      expect.objectContaining({
+        alias: "Sprocket Inc",
+        suggested_type: "entity",
+      }),
+    );
+    expect(result.metrics.ontology_gate_rejected_pages).toBe(1);
+    expect(result.metrics.ontology_gate_unresolved_observations).toBe(1);
+    expect(result.metrics.ontology_gate_suggestion_candidates).toBe(1);
+  });
+
   it("queues continuation jobs for scheduler drain instead of invoking itself", async () => {
     scriptAdapter([
       {
