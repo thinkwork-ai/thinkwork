@@ -1,136 +1,169 @@
 /**
- * Task-event webhook — the reconciler re-invoke path (D7a, Unit 8).
+ * Task-event webhook.
  *
- * When a task that was spawned by a composition gets completed, the task
- * system fires this webhook. We read `triggeredByRunId` from the event's
- * task metadata, look up the original run, and invoke the same skill with
- * the same inputs — letting the composition re-evaluate state and create
- * any remaining tasks without blocking the prior session.
- *
- * Route:
- *   POST /webhooks/task-event/{tenantId}
- *
- * Expected payload shape:
- *   {
- *     "event":  "task.completed",
- *     "taskId": "<task id>",
- *     "metadata": {
- *       "triggeredByRunId": "<run uuid>",
- *       "skillIdHint":      "<skill id>"    // optional fallback
- *     }
- *   }
- *
- * Dedup: the standard partial unique index on (tenant, invoker, skill,
- * resolved_inputs_hash) WHERE status='running' freezes out a second fire
- * that arrives while the first re-tick is still running. Once the first
- * tick completes, a subsequent fire slots cleanly as a new reconciler tick
- * — exactly the behavior required by the reconciler model.
+ * LastMile Tasks remains the source of truth. This ingress updates the
+ * ThinkWork linked-task mirror and records concise Thread milestones for
+ * important events only.
  */
 
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { eq, and } from "drizzle-orm";
-import { skillRuns } from "@thinkwork/database-pg/schema";
-import { db } from "../../lib/db.js";
 import { createWebhookHandler, type WebhookResolveResult } from "./_shared.js";
+import { syncLinkedTaskFromProviderEvent } from "../../lib/linked-tasks/sync-linked-task.js";
 
 interface TaskEventPayload {
-	event?: string;
-	taskId?: string;
-	metadata?: {
-		triggeredByRunId?: string;
-		skillIdHint?: string;
-	};
+  event?: string;
+  taskId?: string;
+  externalTaskId?: string;
+  id?: string;
+  eventId?: string;
+  externalEventId?: string;
+  status?: unknown;
+  state?: unknown;
+  taskStatus?: unknown;
+  blocked?: boolean;
+  title?: string;
+  url?: string;
+  externalTaskUrl?: string;
+  dueAt?: string;
+  dueDate?: string;
+  occurredAt?: string;
+  assignee?: {
+    id?: string | null;
+    externalId?: string | null;
+    userId?: string | null;
+    name?: string | null;
+    displayName?: string | null;
+    email?: string | null;
+  };
+  task?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
-const RELEVANT_EVENTS = new Set(["task.completed"]);
+const RELEVANT_EVENTS = new Set([
+  "task.completed",
+  "task.blocked",
+  "task.reassigned",
+  "task.assignee_changed",
+  "task.due_date_changed",
+  "task.updated",
+  "task.status_changed",
+]);
 
 export async function resolveTaskEvent(args: {
-	tenantId: string;
-	rawBody: string;
+  tenantId: string;
+  rawBody: string;
 }): Promise<WebhookResolveResult> {
-	let payload: TaskEventPayload;
-	try {
-		payload = JSON.parse(args.rawBody) as TaskEventPayload;
-	} catch {
-		return { ok: false, status: 400, message: "invalid JSON body" };
-	}
+  let payload: TaskEventPayload;
+  try {
+    payload = JSON.parse(args.rawBody) as TaskEventPayload;
+  } catch {
+    return { ok: false, status: 400, message: "invalid JSON body" };
+  }
 
-	if (!payload.event || !RELEVANT_EVENTS.has(payload.event)) {
-		return {
-			ok: true,
-			skip: true,
-			reason: `event ${payload.event ?? "<missing>"} is not a completion event`,
-		};
-	}
+  if (!payload.event || !RELEVANT_EVENTS.has(payload.event)) {
+    return {
+      ok: true,
+      skip: true,
+      reason: `event ${payload.event ?? "<missing>"} is not a linked-task sync event`,
+    };
+  }
 
-	const triggeredByRunId = payload.metadata?.triggeredByRunId;
-	if (!triggeredByRunId) {
-		// No link back to a prior run — can't safely re-tick without
-		// impersonating the wrong composition. Log + skip; returning a
-		// non-2xx here would make the vendor retry forever.
-		return {
-			ok: true,
-			skip: true,
-			reason: "task metadata missing triggeredByRunId; not a composition-spawned task",
-		};
-	}
+  const task = objectRecord(payload.task);
+  const externalTaskId =
+    stringValue(payload.externalTaskId) ??
+    stringValue(payload.taskId) ??
+    stringValue(payload.id) ??
+    stringValue(task.externalTaskId) ??
+    stringValue(task.taskId) ??
+    stringValue(task.id);
+  if (!externalTaskId) {
+    return {
+      ok: false,
+      status: 400,
+      message: "externalTaskId or taskId is required",
+    };
+  }
 
-	const [prior] = await db
-		.select({
-			id: skillRuns.id,
-			tenant_id: skillRuns.tenant_id,
-			skill_id: skillRuns.skill_id,
-			skill_version: skillRuns.skill_version,
-			resolved_inputs: skillRuns.resolved_inputs,
-			agent_id: skillRuns.agent_id,
-		})
-		.from(skillRuns)
-		.where(
-			and(
-				eq(skillRuns.id, triggeredByRunId),
-				eq(skillRuns.tenant_id, args.tenantId),
-			),
-		);
+  const result = await syncLinkedTaskFromProviderEvent({
+    tenantId: args.tenantId,
+    externalTaskId,
+    externalEventId:
+      stringValue(payload.externalEventId) ??
+      stringValue(payload.eventId) ??
+      stringValue(payload.metadata?.eventId),
+    eventName: payload.event,
+    status:
+      payload.status ?? payload.state ?? payload.taskStatus ?? task.status,
+    blocked: payload.blocked,
+    title: stringValue(payload.title) ?? stringValue(task.title),
+    externalTaskUrl:
+      stringValue(payload.externalTaskUrl) ??
+      stringValue(payload.url) ??
+      stringValue(task.externalTaskUrl) ??
+      stringValue(task.url),
+    assignee: normalizeAssignee(payload.assignee ?? task.assignee),
+    dueAt:
+      stringValue(payload.dueAt) ??
+      stringValue(payload.dueDate) ??
+      stringValue(task.dueAt) ??
+      stringValue(task.dueDate),
+    occurredAt: stringValue(payload.occurredAt),
+    raw: payload,
+  });
 
-	if (!prior) {
-		// The triggering run is either from another tenant (signature
-		// verified for URL's tenant, but the resolved entity doesn't match)
-		// or it's been retention-swept. Either way, don't re-tick.
-		return {
-			ok: false,
-			status: 403,
-			message: "triggeredByRunId does not belong to this tenant",
-		};
-	}
+  if (result.skipped) {
+    return {
+      ok: true,
+      skip: true,
+      reason: result.reason,
+    };
+  }
 
-	const skillId = prior.skill_id || payload.metadata?.skillIdHint;
-	if (!skillId) {
-		return {
-			ok: true,
-			skip: true,
-			reason: "prior run has no skill_id and no skillIdHint provided",
-		};
-	}
-
-	const resolvedInputs =
-		(prior.resolved_inputs as Record<string, unknown> | null) ?? {};
-
-	return {
-		ok: true,
-		skillId,
-		skillVersion: prior.skill_version ?? 1,
-		inputs: resolvedInputs,
-		triggeredByRunId,
-		agentId: prior.agent_id ?? null,
-	};
+  return {
+    ok: true,
+    handled: true,
+    body: {
+      linkedTaskId: result.linkedTask.id,
+      threadId: result.linkedTask.threadId,
+      status: result.linkedTask.status,
+      syncStatus: result.linkedTask.syncStatus,
+      eventType: result.eventType,
+      milestonePosted: result.milestonePosted,
+      allRequiredComplete: result.allRequiredComplete,
+    },
+  };
 }
 
 export const handler = createWebhookHandler({
-	integration: "task-event",
-	resolve: async (args) => resolveTaskEvent(args),
+  integration: "task-event",
+  resolve: async (args) => resolveTaskEvent(args),
 });
 
 export type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 };
+
+function normalizeAssignee(value: unknown) {
+  const record = objectRecord(value);
+  const externalId =
+    stringValue(record.externalId) ??
+    stringValue(record.id) ??
+    stringValue(record.userId);
+  const displayName =
+    stringValue(record.displayName) ??
+    stringValue(record.name) ??
+    stringValue(record.email);
+  if (!externalId && !displayName) return undefined;
+  return { externalId, displayName };
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
