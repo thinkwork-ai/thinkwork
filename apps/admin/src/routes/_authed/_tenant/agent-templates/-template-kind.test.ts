@@ -11,9 +11,11 @@ describe("typed template admin surface", () => {
   const sidebarSource = readSource("../../../../components/Sidebar.tsx");
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
 
-  it("labels the route as Templates and exposes kind filters", () => {
-    expect(sidebarSource).toContain('label: "Templates"');
+  it("keeps legacy template tooling hidden from sidebar while preserving kind filters", () => {
+    expect(sidebarSource).not.toContain('label: "Templates"');
+    expect(sidebarSource).not.toContain('to: "/agent-templates"');
     expect(sidebarSource).toContain('label: "Ontology"');
+    expect(listSource).toContain("Templates");
     expect(listSource).toContain("TemplateKind.Computer");
     expect(listSource).toContain("TemplateKind.Agent");
   });
