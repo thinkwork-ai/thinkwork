@@ -6,6 +6,42 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: One-Line Enterprise Deploy
+
+Plan: `docs/plans/2026-05-19-002-feat-one-line-enterprise-deploy-plan.md`
+
+Requirements: `docs/brainstorms/2026-05-18-enterprise-customer-deployment-repo-requirements.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: U1 Login Readiness for Enterprise Deploy
+- Active branch: `codex/one-line-deploy-u1`
+- Active worktree: `.Codex/worktrees/one-line-deploy-u1`
+- Started: 2026-05-19
+- PR: pending
+- CI: pending
+
+### Progress Log
+
+| Date       | Unit | Branch                     | PR      | Status           | Verification                                                                                                                                                                                                                                                                                                                                  | Notes                                                                                                                                 |
+| ---------- | ---- | -------------------------- | ------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-19 | U1   | `codex/one-line-deploy-u1` | pending | Locally verified | `pnpm --filter thinkwork-cli test -- enterprise-preflight.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm --filter thinkwork-cli test`; `pnpm -r --if-present lint`; `pnpm -r --if-present typecheck`; `pnpm test`; touched-file Prettier check; `git diff --check` | Autopilot started from the one-line enterprise deploy plan. U1 adds GitHub/git readiness preflight after the existing AWS login path. |
+
+### CI / Merge Log
+
+- 2026-05-19: Started autopilot run. Read `AGENTS.md`, the one-line enterprise deploy plan, the origin enterprise deployment repo requirements, and relevant deployment learnings from `docs/solutions/`.
+- 2026-05-19: Created worktree `.Codex/worktrees/one-line-deploy-u1` on branch `codex/one-line-deploy-u1` from `origin/main`.
+- 2026-05-19: Started U1 implementation: reusable enterprise preflight helpers plus `thinkwork login` readiness reporting.
+- 2026-05-19: U1 local verification passed: focused preflight/no-required-options tests, CLI typecheck, CLI build, full CLI test suite, workspace lint/typecheck, full `pnpm test`, touched-file Prettier check, and `git diff --check`.
+
+### Blockers
+
+- None at this time.
+
+---
+
 ## Current Run: Requester Memory Processing Stabilization
 
 Plan: `docs/plans/2026-05-18-001-feat-requester-idle-memory-learning-plan.md`
