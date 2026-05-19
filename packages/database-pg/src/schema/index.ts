@@ -60,3 +60,4 @@ export * from "./billing";
 export * from "./agent-workspace-events";
 export * from "./compliance";
 export * from "./slack";
+export * from "./spaces";

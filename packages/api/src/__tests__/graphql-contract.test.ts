@@ -71,6 +71,10 @@ describe("GraphQL Schema Contract", () => {
       "threadByNumber",
       "threadLabels",
       "unreadThreadCount",
+      // Spaces
+      "spaces",
+      "space",
+      "customerOnboardingSpace",
       // Messages
       "messages",
       // Core
@@ -129,6 +133,26 @@ describe("GraphQL Schema Contract", () => {
         expect(queryFields).toContain(q);
       });
     }
+  });
+
+  describe("Spaces contract", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("exposes space-local agent instructions separately from global agent prompt", () => {
+      const space = schema.getType("Space");
+      const assignment = schema.getType("SpaceAgentAssignment");
+      expect(space?.toString()).toBe("Space");
+      expect(assignment?.toString()).toBe("SpaceAgentAssignment");
+      expect(
+        (assignment as any).getFields().localInstructions.type.toString(),
+      ).toBe("String");
+      expect((assignment as any).getFields().localRole.type.toString()).toBe(
+        "String",
+      );
+      expect((assignment as any).getFields().agent.type.toString()).toBe(
+        "Agent",
+      );
+    });
   });
 
   describe("v1 Mutation surface", () => {

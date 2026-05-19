@@ -55,6 +55,13 @@ import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
 import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
+import {
+  spaceAgentAssignmentTypeResolvers,
+  spaceChecklistTemplateTypeResolvers,
+  spaceMemberTypeResolvers,
+  spaceQueries,
+  spaceTypeResolvers,
+} from "./spaces/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -89,6 +96,7 @@ export const queryResolvers: Record<string, any> = {
   ...complianceQueries,
   ...slackQueries,
   ...ontologyQueries,
+  ...spaceQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -141,4 +149,8 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   RoutineExecution: routineExecutionTypeResolvers,
   Computer: computerTypeResolvers,
   ComputerAssignment: computerAssignmentTypeResolvers,
+  Space: spaceTypeResolvers,
+  SpaceMember: spaceMemberTypeResolvers,
+  SpaceAgentAssignment: spaceAgentAssignmentTypeResolvers,
+  SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,
 };
