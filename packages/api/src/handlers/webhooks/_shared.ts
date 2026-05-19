@@ -99,6 +99,16 @@ export type WebhookResolveResult =
 			reason: string;
 	  }
 	| {
+			/**
+			 * Payload was handled directly. The shared ingress layer returns
+			 * this JSON without creating a skill_run.
+			 */
+			ok: true;
+			handled: true;
+			status?: number;
+			body: Record<string, unknown>;
+	  }
+	| {
 			/** Resolver-level failure — e.g. cross-tenant entity, missing fields. */
 			ok: false;
 			status: number;
@@ -330,6 +340,9 @@ export function createWebhookHandler(
 			// Still 200 — the vendor sent a valid event, we just chose not to
 			// act. Returning 4xx would make the vendor retry indefinitely.
 			return json({ skipped: true, reason: resolved.reason });
+		}
+		if ("handled" in resolved && resolved.handled) {
+			return json(resolved.body, resolved.status ?? 200);
 		}
 
 		// TypeScript narrows resolved to the dispatch branch once we've

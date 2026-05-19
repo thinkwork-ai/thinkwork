@@ -6,13 +6,38 @@
  * vendor adapter contract.
  */
 
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+const { mockStartCustomerOnboardingWorkflow } = vi.hoisted(() => ({
+	mockStartCustomerOnboardingWorkflow: vi.fn(),
+}));
+
+vi.mock("../lib/spaces/customer-onboarding-workflow.js", async () => {
+	const actual = await vi.importActual<
+		typeof import("../lib/spaces/customer-onboarding-workflow.js")
+	>("../lib/spaces/customer-onboarding-workflow.js");
+	return {
+		...actual,
+		startCustomerOnboardingWorkflow: mockStartCustomerOnboardingWorkflow,
+	};
+});
+
 import { resolveCrmOpportunity } from "../handlers/webhooks/crm-opportunity.js";
 
 const TENANT = "tenant-1";
 
 describe("resolveCrmOpportunity", () => {
-	it("routes opportunity.won to customer-onboarding-reconciler with both ids", async () => {
+	beforeEach(() => {
+		mockStartCustomerOnboardingWorkflow.mockReset();
+		mockStartCustomerOnboardingWorkflow.mockResolvedValue({
+			thread: { id: "thread-1" },
+			idempotent: false,
+			linkedTasks: [{ externalTaskId: "LM-1" }],
+			missingFields: [],
+		});
+	});
+
+	it("starts the deterministic onboarding workflow for opportunity.won", async () => {
 		const result = await resolveCrmOpportunity({
 			tenantId: TENANT,
 			rawBody: JSON.stringify({
@@ -23,8 +48,22 @@ describe("resolveCrmOpportunity", () => {
 		});
 		expect(result).toEqual({
 			ok: true,
-			skillId: "customer-onboarding-reconciler",
-			inputs: { customerId: "cust-abc", opportunityId: "opp-123" },
+			handled: true,
+			body: {
+				threadId: "thread-1",
+				idempotent: false,
+				linkedTaskCount: 1,
+				missingFields: [],
+			},
+		});
+		expect(mockStartCustomerOnboardingWorkflow).toHaveBeenCalledWith({
+			tenantId: TENANT,
+			source: "webhook",
+			opportunity: expect.objectContaining({
+				customerId: "cust-abc",
+				opportunityId: "opp-123",
+			}),
+			startedBy: { type: "system" },
 		});
 	});
 
@@ -37,7 +76,7 @@ describe("resolveCrmOpportunity", () => {
 				customerId: "cust-2",
 			}),
 		});
-		expect(result).toMatchObject({ ok: true, skillId: expect.any(String) });
+		expect(result).toMatchObject({ ok: true, handled: true });
 	});
 
 	it("skips non-close-won events without erroring", async () => {
@@ -71,7 +110,19 @@ describe("resolveCrmOpportunity", () => {
 		});
 	});
 
-	it("rejects payloads missing customerId with 400", async () => {
+	it("accepts customerName when customerId is absent", async () => {
+		const result = await resolveCrmOpportunity({
+			tenantId: TENANT,
+			rawBody: JSON.stringify({
+				event: "opportunity.won",
+				opportunityId: "opp-x",
+				customerName: "Acme Corp",
+			}),
+		});
+		expect(result).toMatchObject({ ok: true, handled: true });
+	});
+
+	it("rejects payloads missing customer identity with 400", async () => {
 		const result = await resolveCrmOpportunity({
 			tenantId: TENANT,
 			rawBody: JSON.stringify({
@@ -82,7 +133,7 @@ describe("resolveCrmOpportunity", () => {
 		expect(result).toEqual({
 			ok: false,
 			status: 400,
-			message: "customerId is required",
+			message: "customerId or customerName is required",
 		});
 	});
 

@@ -1,11 +1,9 @@
 /**
  * CRM opportunity webhook — Unit 8 anchor for the reconciler shape (D7b).
  *
- * Invoked by a CRM vendor (Salesforce, HubSpot, etc.) when a deal transitions
- * to "Closed Won". Kicks off the `customer-onboarding-reconciler` composition
- * so that — for the first tick of the loop — the composition can gather
- * existing onboarding state, identify gaps, and materialize the initial task
- * set with the right owners.
+ * Invoked by LastMile CRM when a deal transitions to "Closed Won".
+ * Deterministically creates or returns the Customer Onboarding Space Thread
+ * and checklist mirror before any coordinator agent interpretation.
  *
  * Route:
  *   POST /webhooks/crm-opportunity/{tenantId}
@@ -28,6 +26,10 @@ import type {
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { createWebhookHandler, type WebhookResolveResult } from "./_shared.js";
+import {
+	CustomerOnboardingWorkflowError,
+	startCustomerOnboardingWorkflow,
+} from "../../lib/spaces/customer-onboarding-workflow.js";
 
 export const CUSTOMER_ONBOARDING_SKILL_ID = "customer-onboarding-reconciler";
 
@@ -35,7 +37,10 @@ interface CrmOpportunityPayload {
 	event?: string;
 	opportunityId?: string;
 	customerId?: string;
+	customerName?: string;
+	companyName?: string;
 	occurredAt?: string;
+	[key: string]: unknown;
 }
 
 const RELEVANT_EVENTS = new Set([
@@ -69,22 +74,47 @@ export async function resolveCrmOpportunity(args: {
 			message: "opportunityId is required",
 		};
 	}
-	if (!payload.customerId || typeof payload.customerId !== "string") {
+	const hasCustomerId =
+		typeof payload.customerId === "string" && payload.customerId.trim();
+	const hasCustomerName =
+		(typeof payload.customerName === "string" &&
+			payload.customerName.trim()) ||
+		(typeof payload.companyName === "string" && payload.companyName.trim());
+	if (!hasCustomerId && !hasCustomerName) {
 		return {
 			ok: false,
 			status: 400,
-			message: "customerId is required",
+			message: "customerId or customerName is required",
 		};
 	}
 
-	return {
-		ok: true,
-		skillId: CUSTOMER_ONBOARDING_SKILL_ID,
-		inputs: {
-			customerId: payload.customerId,
-			opportunityId: payload.opportunityId,
-		},
-	};
+	try {
+		const result = await startCustomerOnboardingWorkflow({
+			tenantId: args.tenantId,
+			source: "webhook",
+			opportunity: payload,
+			startedBy: { type: "system" },
+		});
+		return {
+			ok: true,
+			handled: true,
+			body: {
+				threadId: result.thread.id,
+				idempotent: result.idempotent,
+				linkedTaskCount: result.linkedTasks.length,
+				missingFields: result.missingFields,
+			},
+		};
+	} catch (error) {
+		if (error instanceof CustomerOnboardingWorkflowError) {
+			return {
+				ok: false,
+				status: error.status,
+				message: error.message,
+			};
+		}
+		throw error;
+	}
 }
 
 export const handler = createWebhookHandler({

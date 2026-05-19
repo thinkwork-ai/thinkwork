@@ -63,6 +63,7 @@ import {
   spaceAgentAssignmentTypeResolvers,
   spaceChecklistTemplateTypeResolvers,
   spaceMemberTypeResolvers,
+  spaceMutations,
   spaceQueries,
   spaceTypeResolvers,
 } from "./spaces/index.js";
@@ -136,6 +137,7 @@ export const mutationResolvers: Record<string, any> = {
   ...complianceMutations,
   ...slackMutations,
   ...ontologyMutations,
+  ...spaceMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
