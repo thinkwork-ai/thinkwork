@@ -223,6 +223,39 @@ export const SpacesListQuery = graphql(`
   }
 `);
 
+export const CreateSpaceMutation = graphql(`
+  mutation CreateSpace($input: CreateSpaceInput!) {
+    createSpace(input: $input) {
+      id
+      tenantId
+      slug
+      name
+      description
+      status
+      kind
+      templateKey
+      updatedAt
+      members {
+        id
+        role
+      }
+      agentAssignments {
+        id
+        status
+      }
+      checklistTemplates {
+        id
+        items {
+          id
+        }
+      }
+      integrations {
+        id
+      }
+    }
+  }
+`);
+
 export const SpaceAdminDetailQuery = graphql(`
   query SpaceAdminDetail($id: ID!) {
     space(id: $id) {

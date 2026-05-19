@@ -161,6 +161,12 @@ input StartCustomerOnboardingInput {
   opportunity: AWSJSON!
 }
 
+input CreateSpaceInput {
+  tenantId: ID!
+  name: String!
+  description: String
+}
+
 extend type Query {
   spaces(tenantId: ID!, status: SpaceStatus): [Space!]!
   space(id: ID!): Space
@@ -168,6 +174,7 @@ extend type Query {
 }
 
 extend type Mutation {
+  createSpace(input: CreateSpaceInput!): Space!
   startCustomerOnboarding(
     input: StartCustomerOnboardingInput!
   ): StartCustomerOnboardingPayload!

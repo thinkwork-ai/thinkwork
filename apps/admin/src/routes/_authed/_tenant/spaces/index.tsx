@@ -1,19 +1,32 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { FolderKanban } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useQuery } from "urql";
+import { FolderKanban, Plus } from "lucide-react";
+import { type FormEvent, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { useMutation, useQuery } from "urql";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { FilterBarSearch } from "@/components/ui/data-table-filter-bar";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import { SpaceStatus } from "@/gql/graphql";
-import { SpacesListQuery } from "@/lib/graphql-queries";
+import { CreateSpaceMutation, SpacesListQuery } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_tenant/spaces/")({
@@ -38,12 +51,9 @@ const columns: ColumnDef<SpaceRow>[] = [
     accessorKey: "name",
     header: "Space",
     cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="truncate font-medium">{row.original.name}</div>
-        <div className="truncate text-xs text-muted-foreground">
-          {row.original.slug}
-        </div>
-      </div>
+      <span className="block min-w-0 truncate font-medium">
+        {row.original.name}
+      </span>
     ),
   },
   {
@@ -123,9 +133,10 @@ function SpacesPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   useBreadcrumbs([{ label: "Spaces" }]);
 
-  const [result] = useQuery({
+  const [result, reexecuteSpaces] = useQuery({
     query: SpacesListQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId,
@@ -162,6 +173,12 @@ function SpacesPage() {
           <PageHeader
             title="Spaces"
             description="Configure collaborative workspaces, assigned agents, checklists, members, and integration policy."
+            actions={
+              <Button size="sm" onClick={() => setNewSpaceOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New Space
+              </Button>
+            }
           />
           <div className="mt-4 flex items-center gap-2">
             <FilterBarSearch
@@ -196,6 +213,15 @@ function SpacesPage() {
           }
         />
       )}
+      <NewSpaceDialog
+        tenantId={tenantId}
+        open={newSpaceOpen}
+        onOpenChange={setNewSpaceOpen}
+        onCreated={(spaceId) => {
+          reexecuteSpaces({ requestPolicy: "network-only" });
+          void navigate({ to: "/spaces/$spaceId", params: { spaceId } });
+        }}
+      />
     </PageLayout>
   );
 }
@@ -206,4 +232,97 @@ function formatLabel(value: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function NewSpaceDialog({
+  tenantId,
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  tenantId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (spaceId: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [{ fetching }, createSpace] = useMutation(CreateSpaceMutation);
+  const canSubmit = name.trim().length > 0 && !fetching;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit) return;
+
+    const response = await createSpace({
+      input: {
+        tenantId,
+        name: name.trim(),
+        description: description.trim() || null,
+      },
+    });
+
+    if (response.error) {
+      toast.error(`Could not create Space: ${response.error.message}`);
+      return;
+    }
+
+    const spaceId = response.data?.createSpace.id;
+    if (!spaceId) {
+      toast.error("Could not create Space.");
+      return;
+    }
+
+    toast.success("Space created.");
+    setName("");
+    setDescription("");
+    onOpenChange(false);
+    onCreated(spaceId);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New Space</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <DialogBody className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="space-name">Name</Label>
+              <Input
+                id="space-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Implementation"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="space-description">Description</Label>
+              <Textarea
+                id="space-description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={fetching}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!canSubmit}>
+              Create Space
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
