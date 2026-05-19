@@ -1,6 +1,6 @@
 {
   "name": "thinkwork-cli",
-  "version": "0.12.9",
+  "version": "0.12.10",
   "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
   "license": "Apache-2.0",
   "type": "module",
