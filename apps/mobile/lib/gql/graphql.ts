@@ -1719,6 +1719,79 @@ export type KnowledgeBase = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type LinkedTask = {
+  __typename?: 'LinkedTask';
+  assigneeDisplay?: Maybe<Scalars['String']['output']>;
+  assigneeExternalId?: Maybe<Scalars['String']['output']>;
+  blocked: Scalars['Boolean']['output'];
+  checklistItemId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  events: Array<LinkedTaskEvent>;
+  externalTaskId: Scalars['String']['output'];
+  externalTaskUrl?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  lastSyncedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  provider: LinkedTaskProvider;
+  required: Scalars['Boolean']['output'];
+  roleKey?: Maybe<Scalars['String']['output']>;
+  spaceId: Scalars['ID']['output'];
+  status: LinkedTaskStatus;
+  syncStatus: LinkedTaskSyncStatus;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type LinkedTaskEvent = {
+  __typename?: 'LinkedTaskEvent';
+  createdAt: Scalars['AWSDateTime']['output'];
+  eventType: LinkedTaskEventType;
+  externalEventId?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  linkedTaskId: Scalars['ID']['output'];
+  message?: Maybe<Scalars['String']['output']>;
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  newStatus?: Maybe<LinkedTaskStatus>;
+  occurredAt: Scalars['AWSDateTime']['output'];
+  previousStatus?: Maybe<LinkedTaskStatus>;
+  provider: LinkedTaskProvider;
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+};
+
+export enum LinkedTaskEventType {
+  Blocked = 'BLOCKED',
+  Completed = 'COMPLETED',
+  Created = 'CREATED',
+  DueDateChanged = 'DUE_DATE_CHANGED',
+  Reassigned = 'REASSIGNED',
+  SyncFailed = 'SYNC_FAILED',
+  WritebackPosted = 'WRITEBACK_POSTED'
+}
+
+export enum LinkedTaskProvider {
+  Lastmile = 'LASTMILE'
+}
+
+export enum LinkedTaskStatus {
+  Blocked = 'BLOCKED',
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  InProgress = 'IN_PROGRESS',
+  Todo = 'TODO',
+  Unknown = 'UNKNOWN'
+}
+
+export enum LinkedTaskSyncStatus {
+  Error = 'ERROR',
+  Pending = 'PENDING',
+  Synced = 'SYNCED',
+  Warning = 'WARNING'
+}
+
 export type LinkedThread = {
   __typename?: 'LinkedThread';
   id: Scalars['ID']['output'];
@@ -3779,6 +3852,7 @@ export type Query = {
   threadIdleLearningRun?: Maybe<ThreadIdleLearningRun>;
   threadIdleLearningRuns: Array<ThreadIdleLearningRun>;
   threadLabels: Array<ThreadLabel>;
+  threadLinkedTasks: Array<LinkedTask>;
   threadTraces: Array<TraceEvent>;
   threadTurn?: Maybe<ThreadTurn>;
   threadTurnEvents: Array<ThreadTurnEvent>;
@@ -4535,6 +4609,12 @@ export type QueryThreadIdleLearningRunsArgs = {
 
 export type QueryThreadLabelsArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryThreadLinkedTasksArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 

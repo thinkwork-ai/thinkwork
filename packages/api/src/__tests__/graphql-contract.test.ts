@@ -75,6 +75,7 @@ describe("GraphQL Schema Contract", () => {
       "spaces",
       "space",
       "customerOnboardingSpace",
+      "threadLinkedTasks",
       // Messages
       "messages",
       // Core
@@ -151,6 +152,26 @@ describe("GraphQL Schema Contract", () => {
       );
       expect((assignment as any).getFields().agent.type.toString()).toBe(
         "Agent",
+      );
+    });
+  });
+
+  describe("Linked tasks contract", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("exposes mirrored task state and sync health without making ThinkWork the task system of record", () => {
+      const linkedTask = schema.getType("LinkedTask");
+      const event = schema.getType("LinkedTaskEvent");
+      expect(linkedTask?.toString()).toBe("LinkedTask");
+      expect(event?.toString()).toBe("LinkedTaskEvent");
+      expect(
+        (linkedTask as any).getFields().externalTaskId.type.toString(),
+      ).toBe("String!");
+      expect((linkedTask as any).getFields().syncStatus.type.toString()).toBe(
+        "LinkedTaskSyncStatus!",
+      );
+      expect((linkedTask as any).getFields().events.type.toString()).toBe(
+        "[LinkedTaskEvent!]!",
       );
     });
   });

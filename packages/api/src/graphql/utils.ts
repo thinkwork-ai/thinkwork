@@ -121,6 +121,8 @@ import {
   spaceChecklistTemplates,
   spaceChecklistItems,
   spaceIntegrations,
+  linkedTasks,
+  linkedTaskEvents,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -219,6 +221,8 @@ export {
   spaceChecklistTemplates,
   spaceChecklistItems,
   spaceIntegrations,
+  linkedTasks,
+  linkedTaskEvents,
   checkAndFireUnblockWakeups,
   generateSlug,
 };
