@@ -23,7 +23,7 @@ Target branch: `main`
 - Active worktree: `.Codex/worktrees/spaces-chat-u1`
 - Started: 2026-05-19
 - PR: [#1474](https://github.com/thinkwork-ai/thinkwork/pull/1474)
-- CI: pending; local verification passed
+- CI: retrying after dev migration drift reconciliation; local verification passed
 
 ### Progress Log
 
@@ -36,7 +36,8 @@ Target branch: `main`
 - 2026-05-19: Started autopilot run. Read `AGENTS.md`, the Compound `ce-work` and `ce-worktree` workflow docs, the plan, the prior Spaces onboarding ledger, and relevant prior docs in `docs/solutions/` / adjacent plans.
 - 2026-05-19: Created `.Codex/worktrees/spaces-chat-u1` on branch `codex/spaces-chat-u1-read-state` from `origin/main`.
 - 2026-05-19: U1 local verification passed with schema/codegen regeneration, focused resolver/schema tests, API/database/CLI typechecks, manual migration dry-run, workspace lint/typecheck/test, touched-file Prettier check, and whitespace checks. Preparing PR.
-- 2026-05-19: Opened [#1474](https://github.com/thinkwork-ai/thinkwork/pull/1474) for U1; CI pending.
+- 2026-05-19: Opened [#1474](https://github.com/thinkwork-ai/thinkwork/pull/1474) for U1; initial CI passed `cla`, `lint`, `test`, `typecheck`, and `verify`, but `Migration Drift Precheck (dev)` failed because `public.thread_participants.last_read_at` and `public.idx_thread_participants_user_unread` were missing from dev.
+- 2026-05-19: Applied the idempotent U1 manual migration to dev via the repo smoke env helper and verified scoped drift with `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0110_thread_participant_read_state.sql`.
 
 ## Current Run: Spaces Customer Onboarding V1
 
