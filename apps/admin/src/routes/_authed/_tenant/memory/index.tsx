@@ -16,7 +16,9 @@ import {
   X,
   ArrowLeft,
   RotateCcw,
+  RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   AgentsListQuery,
   TenantMembersListQuery,
@@ -27,6 +29,8 @@ import {
   UpdateMemoryRecordMutation,
   ThreadIdleLearningRunsQuery,
   RollbackThreadIdleLearningRunMutation,
+  ResetUserWikiCursorMutation,
+  CompileUserWikiNowMutation,
 } from "@/lib/graphql-queries";
 import {
   MemoryGraph,
@@ -567,6 +571,8 @@ export function MemoryPage({
   const [, rollbackIdleRun] = useMutation(
     RollbackThreadIdleLearningRunMutation,
   );
+  const [, resetUserWikiCursor] = useMutation(ResetUserWikiCursorMutation);
+  const [, compileUserWikiNow] = useMutation(CompileUserWikiNowMutation);
   const [selectedRecord, setSelectedRecord] = useState<MemoryRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -574,6 +580,7 @@ export function MemoryPage({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [rollingBackRunId, setRollingBackRunId] = useState<string | null>(null);
+  const [processingMemory, setProcessingMemory] = useState(false);
 
   useBreadcrumbs(breadcrumbs);
 
@@ -719,6 +726,48 @@ export function MemoryPage({
     }
   };
 
+  const handleProcessMemory = async () => {
+    if (!tenantId || !effectiveUserId || processingMemory) return;
+
+    const label = selectedScope?.label ?? "user";
+    setProcessingMemory(true);
+    try {
+      const resetResult = await resetUserWikiCursor({
+        tenantId,
+        userId: effectiveUserId,
+        force: true,
+        includeBrain: true,
+      });
+      if (resetResult.error) {
+        toast.error(`Couldn't reset ${label}'s compiled memory.`);
+        return;
+      }
+
+      const compileResult = await compileUserWikiNow({
+        tenantId,
+        userId: effectiveUserId,
+        forceNew: true,
+      });
+      if (compileResult.error) {
+        toast.error(`Couldn't start processing memory for ${label}.`);
+        return;
+      }
+
+      const jobId = compileResult.data?.compileWikiNow?.id;
+      toast.success(
+        jobId
+          ? `Processing memory for ${label}.`
+          : `Memory processing requested for ${label}.`,
+      );
+      refetchIdleRuns({ requestPolicy: "network-only" });
+      if (isAllAgents) fetchAllAgentRecords();
+      else refetchMemory({ requestPolicy: "network-only" });
+      graphRef.current?.refetch();
+    } finally {
+      setProcessingMemory(false);
+    }
+  };
+
   if (agentsResult.fetching && !agentsResult.data) return <PageSkeleton />;
 
   const isLoading = activeSearch
@@ -764,6 +813,44 @@ export function MemoryPage({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {!isAllAgents && effectiveUserId && tenantId && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={processingMemory}
+                  className="gap-2"
+                >
+                  {processingMemory ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Process memory
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Process user memory?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This archives the selected user&apos;s compiled Wiki and
+                    Brain pages, clears the compile cursor, and starts a fresh
+                    compile from their memory records.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleProcessMemory}
+                    disabled={processingMemory}
+                  >
+                    {processingMemory ? "Processing..." : "Process memory"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <ToggleGroup
             type="single"
             value={view}

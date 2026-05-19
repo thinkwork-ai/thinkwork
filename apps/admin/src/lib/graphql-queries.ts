@@ -2442,6 +2442,51 @@ export const UpdateMemoryRecordMutation = graphql(`
   }
 `);
 
+export const ResetUserWikiCursorMutation = graphql(`
+  mutation ResetUserWikiCursor(
+    $tenantId: ID!
+    $userId: ID!
+    $force: Boolean
+    $includeBrain: Boolean
+  ) {
+    resetWikiCursor(
+      tenantId: $tenantId
+      userId: $userId
+      force: $force
+      includeBrain: $includeBrain
+    ) {
+      tenantId
+      userId
+      cursorCleared
+      pagesArchived
+      brainIncluded
+      impact
+    }
+  }
+`);
+
+export const CompileUserWikiNowMutation = graphql(`
+  mutation CompileUserWikiNow(
+    $tenantId: ID!
+    $userId: ID!
+    $forceNew: Boolean
+  ) {
+    compileWikiNow(
+      tenantId: $tenantId
+      userId: $userId
+      forceNew: $forceNew
+    ) {
+      id
+      tenantId
+      userId
+      status
+      trigger
+      attempt
+      createdAt
+    }
+  }
+`);
+
 export const MemorySearchQuery = graphql(`
   query MemorySearch(
     $userId: ID!
