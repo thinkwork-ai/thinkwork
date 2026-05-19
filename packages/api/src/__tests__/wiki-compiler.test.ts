@@ -767,6 +767,7 @@ const {
     findPagesByFuzzyTitle: vi.fn().mockResolvedValue([]),
     findMemoryUnitPageSources: vi.fn().mockResolvedValue([]),
     bumpSectionLastSeen: vi.fn().mockResolvedValue(0),
+    archiveOntologyNonTriplePages: vi.fn().mockResolvedValue(0),
     enqueueCompileJob: vi.fn().mockResolvedValue({
       inserted: false,
       job: {
@@ -850,6 +851,8 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
       mockRepo.findPagesByFuzzyTitle(...args),
     bumpSectionLastSeen: (...args: unknown[]) =>
       mockRepo.bumpSectionLastSeen(...args),
+    archiveOntologyNonTriplePages: (...args: unknown[]) =>
+      mockRepo.archiveOntologyNonTriplePages(...args),
     enqueueCompileJob: (...args: unknown[]) =>
       mockRepo.enqueueCompileJob(...args),
     findMemoryUnitPageSources: (...args: unknown[]) =>
@@ -996,6 +999,7 @@ describe("runCompileJob", () => {
     mockRepo.findPagesByExactTitle.mockResolvedValue([]);
     mockRepo.findPagesByFuzzyTitle.mockResolvedValue([]);
     mockRepo.bumpSectionLastSeen.mockResolvedValue(0);
+    mockRepo.archiveOntologyNonTriplePages.mockResolvedValue(0);
     mockRepo.findMemoryUnitPageSources.mockResolvedValue([]);
     mockRepo.findPageBySlug.mockResolvedValue(null);
     mockRepo.countDuplicateTitleCandidates.mockResolvedValue(0);
@@ -1278,6 +1282,7 @@ describe("runCompileJob", () => {
       async (args: any) => ({ id: `brain-${args.subtype}-${args.slug}` }),
     );
     mockBrainRepo.upsertTenantEntityPageLink.mockResolvedValue(true);
+    mockRepo.archiveOntologyNonTriplePages.mockResolvedValueOnce(2);
     mockPlanner.runPlanner.mockResolvedValueOnce({
       pageUpdates: [],
       newPages: [],
@@ -1301,7 +1306,12 @@ describe("runCompileJob", () => {
     expect(result.status).toBe("succeeded");
     expect(result.metrics.ontology_gate_approved_relationships).toBe(1);
     expect(result.metrics.ontology_gate_rejected_relationships).toBe(0);
+    expect(result.metrics.ontology_gate_archived_non_triple_pages).toBe(2);
     expect(result.metrics.links_upserted).toBe(1);
+    expect(mockRepo.archiveOntologyNonTriplePages).toHaveBeenCalledWith({
+      tenantId: "t1",
+      ownerId: "a1",
+    });
     expect(mockRepo.upsertPageLink).toHaveBeenCalledWith(
       expect.objectContaining({
         fromPageId: "page-acme",
@@ -1954,6 +1964,80 @@ describe("runCompileJob", () => {
       expect(upsertCall).toBeDefined();
       expect((upsertCall![0] as { place_id?: string }).place_id).toBe(
         "place-42",
+      );
+    });
+
+    it("disables legacy place backing pages for active ontology compiles", async () => {
+      mockLoadOntologyCompileSnapshot.mockResolvedValueOnce(
+        testOntologySnapshot,
+      );
+      scriptAdapter([
+        { records: [makeRecord("r1")], nextCursor: null },
+        { records: [], nextCursor: null },
+      ]);
+      mockRepo.listPagesForScope.mockResolvedValue([
+        {
+          id: "page-eric",
+          type: "entity",
+          entityTypeSlug: "person",
+          slug: "eric-odom",
+          title: "Eric Odom",
+          summary: null,
+          body_md: null,
+          last_compiled_at: null,
+          backlink_count: 0,
+          aliases: [],
+        },
+      ]);
+      mockRepo.findPageBySlug.mockImplementation(async (args: any) => {
+        if (args.slug === "cafe") return { id: "page-cafe" };
+        if (args.slug === "eric-odom") return { id: "page-eric" };
+        return null;
+      });
+      mockPlacesService.resolveBatchPlace.mockResolvedValueOnce({
+        placeId: "place-42",
+      });
+      mockPlanner.runPlanner.mockResolvedValueOnce({
+        pageUpdates: [],
+        newPages: [
+          {
+            type: "entity",
+            entityTypeSlug: "customer",
+            slug: "cafe",
+            title: "Cafe",
+            sections: [
+              {
+                slug: "overview",
+                facetSlug: "overview",
+                heading: "Overview",
+                body_md: "body",
+                source_refs: ["r1"],
+              },
+            ],
+            source_refs: ["r1"],
+          },
+        ],
+        unresolvedMentions: [],
+        promotions: [],
+        pageLinks: [
+          {
+            fromType: "entity",
+            fromSlug: "cafe",
+            toType: "entity",
+            toSlug: "eric-odom",
+            relationshipTypeSlug: "has_stakeholder",
+            context: "Eric mentioned Cafe.",
+          },
+        ],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      });
+
+      const result = await runCompileJob(sampleJob);
+
+      expect(result.status).toBe("succeeded");
+      expect(mockPlacesService.resolveBatchPlace).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ materializeBackingPages: false }),
       );
     });
 

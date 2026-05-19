@@ -16,6 +16,7 @@ import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { getMemoryServices } from "../memory/index.js";
 import {
 	completeCompileJob,
+	archiveOntologyNonTriplePages,
 	countDuplicateTitleCandidates,
 	emptySectionAggregation,
 	findMemoryUnitPageSources,
@@ -234,6 +235,7 @@ export interface RunJobResult {
 		ontology_gate_rejected_isolated_pages?: number;
 		ontology_gate_unresolved_observations?: number;
 		ontology_gate_suggestion_candidates?: number;
+		ontology_gate_archived_non_triple_pages?: number;
 		brain_pages_upserted?: number;
 		brain_facets_written?: number;
 		brain_links_upserted?: number;
@@ -341,6 +343,7 @@ export async function runCompileJob(
 		});
 		metrics.ontology_conservative = ontologySnapshot.conservative;
 		metrics.ontology_active_version_id = ontologySnapshot.activeVersionId;
+		placesCtx.materializeBackingPages = ontologySnapshot.conservative;
 
 		while (metrics.records_read < maxRecordsThisJob) {
 			const pageSize = Math.min(
@@ -792,9 +795,11 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	}
 
 	// 2. New pages
+	let capHit: string | null = null;
 	for (const np of plan.newPages) {
 		if (metrics.pages_upserted >= MAX_NEW_PAGES_PER_JOB) {
-			return "max_new_pages";
+			capHit = "max_new_pages";
+			break;
 		}
 		const slug = slugifyTitle(np.title) || np.slug;
 		// Page-level source_refs act as a fallback for sections that don't
@@ -916,9 +921,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	}
 
 	// 4. Promotions
-	for (const pr of plan.promotions) {
+	for (const pr of capHit ? [] : plan.promotions) {
 		if (metrics.pages_upserted >= MAX_NEW_PAGES_PER_JOB) {
-			return "max_new_pages";
+			capHit = "max_new_pages";
+			break;
 		}
 		const slug = slugifyTitle(pr.title) || pr.slug;
 		const promotionSections = pr.sections.map((s, i) => {
@@ -1213,7 +1219,18 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			(metrics.parent_sections_bumped ?? 0) + parentSectionsBumped;
 	}
 
-	return null;
+	if (args.ontologySnapshot && !args.ontologySnapshot.conservative) {
+		const archived = await archiveOntologyNonTriplePages({
+			tenantId: job.tenant_id,
+			ownerId: job.owner_id,
+		});
+		if (archived > 0) {
+			metrics.ontology_gate_archived_non_triple_pages =
+				(metrics.ontology_gate_archived_non_triple_pages ?? 0) + archived;
+		}
+	}
+
+	return capHit;
 }
 
 // ---------------------------------------------------------------------------
