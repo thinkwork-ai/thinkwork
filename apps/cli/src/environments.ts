@@ -42,6 +42,11 @@ export interface EnterpriseDeploymentConfig {
   customerSlug: string;
   repository: string;
   targetDir: string;
+  checkoutDir?: string;
+  defaultStage?: string;
+  repositoryDefaultBranch?: string;
+  lastWorkflowRunId?: string;
+  lastWorkflowUrl?: string;
   accountId: string;
   region: string;
   stages: string[];

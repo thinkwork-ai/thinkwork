@@ -399,6 +399,8 @@ function recordDeploymentMetadata(
     customerSlug: plan.customerSlug,
     repository: plan.repository,
     targetDir: plan.targetDir,
+    checkoutDir: plan.targetDir,
+    defaultStage: plan.stages[0],
     accountId: plan.accountId,
     region: plan.region,
     stages: plan.stages,
