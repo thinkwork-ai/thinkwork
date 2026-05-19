@@ -73,6 +73,8 @@ export function registerDeployCommand(
     .option("--checkout-dir <path>", "Managed enterprise deployment checkout")
     .option("--wait", "Wait for enterprise CI workflow completion")
     .option("--no-wait", "Do not wait for enterprise CI workflow completion")
+    .option("--run-smokes", "Run enterprise workflow smoke checks")
+    .option("--no-run-smokes", "Skip enterprise workflow smoke checks")
     .option(
       "--local-terraform",
       "Force the local Terraform deploy path even inside an enterprise deployment repo",
@@ -190,16 +192,33 @@ export async function runLocalTerraformDeploy(
 }
 
 function printEnterpriseDeploySummary(result: EnterpriseDeployResult): void {
+  const workflow = result.workflow;
   if (result.kind === "bootstrap") {
     printSuccess(
       `Enterprise deploy bootstrap prepared ${result.request.customerSlug} ${result.request.stage}`,
     );
-    return;
+  } else {
+    printSuccess(
+      `Enterprise deploy dispatched for ${result.request.customerSlug} ${result.request.stage}`,
+    );
   }
 
-  printSuccess(
-    `Enterprise deploy routed for ${result.request.customerSlug} ${result.request.stage}`,
-  );
+  if (workflow.run) {
+    console.log(`  Run: ${workflow.run.url}`);
+  }
+  if (workflow.artifacts.length > 0) {
+    console.log(`  Artifacts: ${workflow.artifacts.join(", ")}`);
+  }
+  const urlEntries = Object.entries(workflow.urls).filter(([, value]) => value);
+  if (urlEntries.length > 0) {
+    console.log("  URLs");
+    for (const [label, value] of urlEntries) {
+      console.log(`  - ${label}: ${value}`);
+    }
+  }
+  if (workflow.discoveryWarning) {
+    printWarning(workflow.discoveryWarning);
+  }
 }
 
 async function runPostDeployProbe(stage: string): Promise<void> {

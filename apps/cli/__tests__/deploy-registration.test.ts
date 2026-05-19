@@ -23,6 +23,8 @@ describe("deploy command registration", () => {
     expect(flags).toContain("--checkout-dir <path>");
     expect(flags).toContain("--wait");
     expect(flags).toContain("--no-wait");
+    expect(flags).toContain("--run-smokes");
+    expect(flags).toContain("--no-run-smokes");
     expect(flags).toContain("--local-terraform");
     expect(flags).toContain("--release-version <version>");
     expect(flags).toContain("--manifest-url <url>");

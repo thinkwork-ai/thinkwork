@@ -48,6 +48,47 @@ export function getApiEndpoint(stage: string, region: string): string | null {
   return raw && raw !== "None" ? raw : null;
 }
 
+export interface DiscoveredThinkworkStageUrls {
+  apiEndpoint?: string;
+  adminUrl?: string;
+  appSyncUrl?: string;
+  docsUrl?: string;
+}
+
+export function discoverThinkworkStageUrls(
+  stage: string,
+  region: string,
+): DiscoveredThinkworkStageUrls {
+  const urls: DiscoveredThinkworkStageUrls = {};
+  const apiEndpoint = getApiEndpoint(stage, region);
+  if (apiEndpoint) urls.apiEndpoint = apiEndpoint;
+
+  const appSyncUrl = runAws(
+    `appsync list-graphql-apis --region ${region} --query "graphqlApis[?name=='thinkwork-${stage}-subscriptions'].uris.GRAPHQL|[0]" --output text`,
+  );
+  if (appSyncUrl && appSyncUrl !== "None") urls.appSyncUrl = appSyncUrl;
+
+  const distributions = runAws(
+    `cloudfront list-distributions --query "DistributionList.Items[?contains(Origins.Items[0].DomainName, 'thinkwork-${stage}-')].{Origin:Origins.Items[0].DomainName,Domain:DomainName}" --output json`,
+  );
+  if (distributions) {
+    const parsed = JSON.parse(distributions) as Array<{
+      Origin: string;
+      Domain: string;
+    }>;
+    for (const distribution of parsed) {
+      if (distribution.Origin.includes(`thinkwork-${stage}-admin`)) {
+        urls.adminUrl = `https://${distribution.Domain}`;
+      }
+      if (distribution.Origin.includes(`thinkwork-${stage}-docs`)) {
+        urls.docsUrl = `https://${distribution.Domain}`;
+      }
+    }
+  }
+
+  return urls;
+}
+
 /**
  * Pull the API_AUTH_SECRET from a deployed Lambda's env. Used as a fallback
  * when the user doesn't have a local terraform.tfvars. The `tenants` Lambda
@@ -62,4 +103,3 @@ export function getApiAuthSecretFromLambda(
   );
   return raw && raw !== "None" ? raw : null;
 }
-
