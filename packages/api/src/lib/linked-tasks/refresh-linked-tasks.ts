@@ -6,6 +6,7 @@ import type {
   LastMileAdapterResult,
   LastMileTaskSnapshot,
 } from "../lastmile/tasks-adapter.js";
+import type { CoordinatorAgentService } from "../spaces/coordinator-agent.js";
 import {
   markLinkedTaskSyncFailure,
   syncLinkedTaskFromProviderEvent,
@@ -43,6 +44,7 @@ export interface RefreshLinkedTasksInput {
 export interface RefreshLinkedTasksDeps {
   refreshRepository?: LinkedTaskRefreshRepository;
   syncRepository?: LinkedTaskSyncRepository;
+  coordinator?: Pick<CoordinatorAgentService, "enqueueWakeup">;
   taskAdapter: LastMileTaskRefreshAdapter;
   now?: () => Date;
 }
@@ -87,7 +89,11 @@ export async function refreshLinkedTasks(
           code: read.providerError.code,
           raw: read.providerError.detail,
         },
-        { repository: deps.syncRepository, now: deps.now },
+        {
+          repository: deps.syncRepository,
+          coordinator: deps.coordinator,
+          now: deps.now,
+        },
       );
       continue;
     }
@@ -105,7 +111,11 @@ export async function refreshLinkedTasks(
         dueAt: read.value.dueAt,
         raw: read.value.raw,
       },
-      { repository: deps.syncRepository, now: deps.now },
+      {
+        repository: deps.syncRepository,
+        coordinator: deps.coordinator,
+        now: deps.now,
+      },
     );
     if (synced.skipped) {
       result.skipped += 1;
