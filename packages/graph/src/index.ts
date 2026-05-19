@@ -15,7 +15,7 @@
 export { MemoryGraph } from "./MemoryGraph.js";
 export type { MemoryGraphHandle, MemoryGraphNode } from "./MemoryGraph.js";
 
-export { WikiGraph } from "./WikiGraph.js";
+export { WikiGraph, buildConnectedWikiGraphData } from "./WikiGraph.js";
 export type { WikiGraphHandle, WikiGraphNode } from "./WikiGraph.js";
 
 export {

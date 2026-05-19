@@ -118,6 +118,45 @@ interface WikiGraphProps {
   emptyFallback?: React.ReactNode;
 }
 
+type WikiGraphLink = {
+  source: string;
+  target: string;
+  label: string;
+  weight: number;
+};
+
+export function buildConnectedWikiGraphData(
+  allNodes: WikiGraphNode[],
+  sourceGraphs: Iterable<[string | null, any]>,
+): { nodes: WikiGraphNode[]; links: WikiGraphLink[] } {
+  const nodeIds = new Set(allNodes.map((n) => n.id));
+  const links: WikiGraphLink[] = [];
+  const connectedIds = new Set<string>();
+
+  for (const [prefix, graph] of sourceGraphs) {
+    if (!graph) continue;
+    for (const e of (graph as any).edges ?? []) {
+      const source = prefix ? `${prefix}:${e.source}` : e.source;
+      const target = prefix ? `${prefix}:${e.target}` : e.target;
+      if (!nodeIds.has(source) || !nodeIds.has(target)) continue;
+
+      links.push({
+        source,
+        target,
+        label: e.label ?? "references",
+        weight: e.weight ?? 0.5,
+      });
+      connectedIds.add(source);
+      connectedIds.add(target);
+    }
+  }
+
+  return {
+    nodes: allNodes.filter((n) => connectedIds.has(n.id)),
+    links,
+  };
+}
+
 export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
   function WikiGraph(
     {
@@ -316,48 +355,20 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     }, [allNodes, typeFilter, searchQuery, hasFilter]);
 
     // graphData rebuilds only when the raw source changes — NOT on filter.
-    // Filter mute is in-place material opacity (see effect below). This
-    // prevents simulation + camera reset on every keystroke.
+    // Filter mute is in-place material opacity (see effect below). Only
+    // pages that participate in visible links are rendered; an ontology
+    // graph is a set of triples, not a bag of isolated pages.
     const graphData = useMemo(() => {
-      const nodeIds = new Set(allNodes.map((n) => n.id));
-      const links: {
-        source: string;
-        target: string;
-        label: string;
-        weight: number;
-      }[] = [];
       if (isMultiAgent) {
-        for (const [aid, graph] of Object.entries(multiResults)) {
-          if (!graph) continue;
-          for (const e of (graph as any).edges ?? []) {
-            const src = `${aid}:${e.source}`;
-            const tgt = `${aid}:${e.target}`;
-            if (nodeIds.has(src) && nodeIds.has(tgt)) {
-              links.push({
-                source: src,
-                target: tgt,
-                label: e.label ?? "references",
-                weight: e.weight ?? 0.5,
-              });
-            }
-          }
-        }
-      } else {
-        const graph = singleResult.data?.wikiGraph;
-        if (graph) {
-          for (const e of graph.edges ?? []) {
-            if (nodeIds.has(e.source) && nodeIds.has(e.target)) {
-              links.push({
-                source: e.source,
-                target: e.target,
-                label: e.label ?? "references",
-                weight: e.weight ?? 0.5,
-              });
-            }
-          }
-        }
+        return buildConnectedWikiGraphData(
+          allNodes,
+          Object.entries(multiResults),
+        );
       }
-      return { nodes: allNodes, links };
+
+      return buildConnectedWikiGraphData(allNodes, [
+        [null, singleResult.data?.wikiGraph],
+      ]);
     }, [allNodes, isMultiAgent, multiResults, singleResult.data]);
 
     const matchedIdsRef = useRef<Set<string> | null>(null);
