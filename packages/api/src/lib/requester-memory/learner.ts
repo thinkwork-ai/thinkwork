@@ -175,21 +175,24 @@ export async function runRequesterIdleMemoryLearning(
     messages: transcript,
     attachmentCount: attachments.length,
   });
-  const workingWriteResult = await writeRequesterMemoryFileWithSnapshot({
-    tenantId: input.tenantId,
-    userId: input.requesterUserId,
-    runId: input.runId,
-    path: workingPath,
-    content: upsertThreadJournalSection({
-      existing: existingWorkingMemory,
-      section: journalSection,
-      threadId: input.threadId,
-    }),
+  const nextWorkingMemory = upsertThreadJournalSection({
+    existing: existingWorkingMemory,
+    section: journalSection,
+    threadId: input.threadId,
   });
-  changedFiles.push({
-    ...stripPreviousContent(workingWriteResult),
-    evidenceMessageIds: transcript.map((message) => message.id),
-  });
+  if (nextWorkingMemory !== existingWorkingMemory) {
+    const workingWriteResult = await writeRequesterMemoryFileWithSnapshot({
+      tenantId: input.tenantId,
+      userId: input.requesterUserId,
+      runId: input.runId,
+      path: workingPath,
+      content: nextWorkingMemory,
+    });
+    changedFiles.push({
+      ...stripPreviousContent(workingWriteResult),
+      evidenceMessageIds: transcript.map((message) => message.id),
+    });
+  }
 
   if (staged.length > 0) {
     const candidatePath = candidateFilePath(input.scheduledFor);

@@ -127,7 +127,6 @@ export function renderThreadJournalAppendSection(input: {
   const lines = [
     `## Thread ${input.threadId}`,
     "",
-    `- Run: ${input.runId}`,
     `- Captured at: ${input.scheduledFor}`,
     `- Title: ${input.thread?.title?.trim() || "Untitled thread"}`,
     `- Type: ${input.thread?.type ?? "unknown"}`,

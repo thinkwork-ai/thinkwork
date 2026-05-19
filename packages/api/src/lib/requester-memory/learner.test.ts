@@ -484,4 +484,92 @@ describe("requester idle memory learner", () => {
     expect(body).not.toContain("Stale CRM lookup");
     expect(body).not.toContain("Even older duplicate");
   });
+
+  it("does not rewrite the working journal when the rendered thread section is unchanged", async () => {
+    const db = makeDb([
+      [
+        {
+          id: "thread-1",
+          title: "CRM lookup",
+          status: "open",
+          priority: "medium",
+          type: "task",
+          channel: "manual",
+          metadata: null,
+        },
+      ],
+      [
+        {
+          id: "msg-1",
+          role: "user",
+          content: "What are the last 5 opportunities from the CRM?",
+          senderType: "user",
+          senderId: "user-1",
+          metadata: null,
+          createdAt: new Date("2026-05-18T17:00:00.000Z"),
+        },
+      ],
+      [],
+    ]);
+    const existingWorkingMemory = [
+      "# Working memory - 2026-05-18",
+      "",
+      "## Thread thread-1",
+      "",
+      "- Captured at: 2026-05-18T17:15:00.000Z",
+      "- Title: CRM lookup",
+      "- Type: task",
+      "- Channel: manual",
+      "- Status: open",
+      "- Priority: medium",
+      "- Messages: 1",
+      "- Attachments: 0",
+      "",
+      "### Requester Messages",
+      "",
+      "- msg-1: What are the last 5 opportunities from the CRM?",
+      "",
+      "### Assistant Responses",
+      "",
+      "- None",
+      "",
+    ].join("\n");
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/MEMORY.md",
+      })
+      .resolves(s3Body("# Memory\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+      })
+      .resolves(s3Body(existingWorkingMemory));
+    s3Mock.on(PutObjectCommand).resolves({});
+    const syncHindsight = vi.fn().mockResolvedValue({
+      status: "skipped",
+      files: [],
+    });
+
+    const result = await runRequesterIdleMemoryLearning(baseInput, {
+      db,
+      syncHindsight,
+    });
+
+    expect(result.status).toBe("no_change");
+    expect(result.changedFiles).toEqual([]);
+    expect(syncHindsight).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      runId: "run-1",
+      threadId: "thread-1",
+      changedFiles: [],
+    });
+    const putCalls = s3Mock.commandCalls(PutObjectCommand);
+    expect(putCalls).toHaveLength(1);
+    expect(putCalls[0].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
+    );
+  });
 });
