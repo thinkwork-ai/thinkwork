@@ -14,6 +14,12 @@ import {
   ComputerWikiSearchQuery,
   DeleteComputerMemoryRecordMutation,
   PromoteDraftAppletMutation,
+  SpaceQuery,
+  SpacesQuery,
+  SpaceThreadsQuery,
+  SpaceThreadContextQuery,
+  StartCustomerOnboardingMutation,
+  ThreadLinkedTasksQuery,
   ThreadTurnUpdatedSubscription,
 } from "./graphql-queries";
 
@@ -102,5 +108,18 @@ describe("computer GraphQL queries", () => {
     expect(mutation).toContain("appId");
     expect(mutation).toContain("persisted");
     expect(mutation).toContain("errors");
+  });
+
+  it("requests Spaces, Space threads, linked tasks, and onboarding start fields", () => {
+    expect(print(SpacesQuery)).toContain("spaces");
+    expect(print(SpaceQuery)).toContain("checklistTemplates");
+    expect(print(SpaceQuery)).toContain("agentAssignments");
+    expect(print(SpaceThreadsQuery)).toContain("spaceId: $spaceId");
+    expect(print(SpaceThreadContextQuery)).toContain("participants");
+    expect(print(ThreadLinkedTasksQuery)).toContain("threadLinkedTasks");
+    expect(print(StartCustomerOnboardingMutation)).toContain(
+      "startCustomerOnboarding",
+    );
+    expect(print(StartCustomerOnboardingMutation)).toContain("missingFields");
   });
 });

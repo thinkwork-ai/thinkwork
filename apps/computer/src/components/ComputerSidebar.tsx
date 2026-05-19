@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
   Brain,
+  GalleryVerticalEnd,
   MessagesSquare,
   PenSquare,
   Repeat,
@@ -29,6 +30,7 @@ import {
   COMPUTER_CUSTOMIZE_ROUTE,
   COMPUTER_MEMORY_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
+  COMPUTER_SPACES_ROUTE,
   COMPUTER_THREADS_ROUTE,
 } from "@/lib/computer-routes";
 import { ThreadsPagedQuery } from "@/lib/graphql-queries";
@@ -73,6 +75,11 @@ export function ComputerSidebar() {
   const navItems = useMemo<NavItem[]>(
     () => [
       {
+        href: COMPUTER_SPACES_ROUTE,
+        icon: GalleryVerticalEnd,
+        label: "Spaces",
+      },
+      {
         href: COMPUTER_THREADS_ROUTE,
         icon: MessagesSquare,
         label: "Threads",
@@ -98,7 +105,7 @@ export function ComputerSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild>
                 <Link
-                  to={COMPUTER_THREADS_ROUTE}
+                  to={COMPUTER_SPACES_ROUTE}
                   onClick={(event) => {
                     if (isCollapsed) {
                       event.preventDefault();
@@ -114,6 +121,9 @@ export function ComputerSidebar() {
                   <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
                     <span className="truncate text-base font-semibold leading-none tracking-tight">
                       ThinkWork
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      Spaces
                     </span>
                   </div>
                 </Link>
