@@ -44,6 +44,11 @@ import {
 } from "../cognito-oauth.js";
 import { getApiEndpoint, listDeployedStages } from "../aws-discovery.js";
 import { isCancellation, isInteractive } from "../lib/interactive.js";
+import {
+  checkEnterpriseDeployReadiness,
+  runGitHubLogin,
+  type EnterprisePreflightResult,
+} from "./enterprise/preflight.js";
 
 function ask(prompt: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -243,9 +248,7 @@ async function offerApiLoginChain(opts: {
   noBrowser: boolean;
 }): Promise<void> {
   const stages = listDeployedStages(opts.region);
-  const candidates = stages.filter(
-    (stage) => loadStageSession(stage) === null,
-  );
+  const candidates = stages.filter((stage) => loadStageSession(stage) === null);
 
   if (candidates.length === 0 || !isInteractive()) {
     console.log("");
@@ -305,6 +308,82 @@ async function offerApiLoginChain(opts: {
   });
 }
 
+async function reportEnterpriseDeployReadiness(): Promise<void> {
+  const result = checkEnterpriseDeployReadiness();
+
+  console.log("");
+  console.log(chalk.bold("  Enterprise deploy readiness"));
+  printEnterpriseTool("git", result.git);
+  printEnterpriseTool("gh", result.github);
+
+  if (result.ready) {
+    console.log(
+      chalk.dim(
+        `  Ready for ${chalk.cyan("thinkwork deploy --bootstrap")} when you have customer AWS admin access.`,
+      ),
+    );
+    return;
+  }
+
+  if (result.github.ok && !result.github.authenticated && isInteractive()) {
+    const answer = await select({
+      message:
+        "GitHub CLI is required for enterprise deploys. Run `gh auth login` now?",
+      choices: [
+        { name: "Yes — authenticate GitHub CLI", value: "login" },
+        { name: "No — I'll do it later", value: "skip" },
+      ],
+    });
+    if (answer === "login") {
+      runGitHubLogin();
+      const refreshed = checkEnterpriseDeployReadiness();
+      printEnterpriseTool("gh", refreshed.github);
+    }
+    return;
+  }
+
+  const remediation = firstEnterpriseRemediation(result);
+  if (remediation) {
+    console.log(chalk.dim(`  Next: ${remediation}`));
+  }
+}
+
+function printEnterpriseTool(
+  label: string,
+  check: { ok: boolean; message: string; remediation?: string },
+): void {
+  const marker = check.ok ? chalk.green("✓") : chalk.yellow("!");
+  console.log(`  ${marker} ${label}: ${check.message}`);
+  if (!check.ok && check.remediation) {
+    console.log(chalk.dim(`    ${check.remediation}`));
+  }
+}
+
+function firstEnterpriseRemediation(
+  result: EnterprisePreflightResult,
+): string | null {
+  if (!result.git.ok) return result.git.remediation ?? null;
+  if (!result.github.ok || !result.github.authenticated) {
+    return result.github.remediation ?? null;
+  }
+  return null;
+}
+
+async function finishAwsLogin(opts: {
+  profile: string;
+  mode: string;
+  port: number;
+  noBrowser: boolean;
+}): Promise<void> {
+  const { region } = finalizeAws(opts.profile, opts.mode);
+  await reportEnterpriseDeployReadiness();
+  await offerApiLoginChain({
+    region,
+    port: opts.port,
+    noBrowser: opts.noBrowser,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Stack login (Cognito OAuth or api-key)
 // ---------------------------------------------------------------------------
@@ -320,7 +399,11 @@ async function bootstrapUserAndTenant(
   stage: string,
   region: string,
   idToken: string,
-): Promise<{ tenantId: string; tenantSlug: string; tenantName: string } | null> {
+): Promise<{
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+} | null> {
   const baseUrl = getApiEndpoint(stage, region);
   if (!baseUrl) return null;
   const url = `${baseUrl.replace(/\/+$/, "")}/graphql`;
@@ -342,7 +425,9 @@ async function bootstrapUserAndTenant(
     });
     if (!res.ok) return null;
     const json = (await res.json()) as {
-      data?: { bootstrapUser?: { tenant?: { id: string; slug: string; name: string } } };
+      data?: {
+        bootstrapUser?: { tenant?: { id: string; slug: string; name: string } };
+      };
       errors?: Array<{ message: string }>;
     };
     const tenant = json.data?.bootstrapUser?.tenant;
@@ -489,7 +574,7 @@ export function registerLoginCommand(program: Command): void {
     )
     .option(
       "--profile <name>",
-      "AWS profile name to configure (used when entering new keys or SSO). Defaults to \"thinkwork\" only on the AWS-credentials branch; the Cognito branch leaves AWS_PROFILE alone.",
+      'AWS profile name to configure (used when entering new keys or SSO). Defaults to "thinkwork" only on the AWS-credentials branch; the Cognito branch leaves AWS_PROFILE alone.',
     )
     .option("--sso", "Skip the picker and go straight to SSO login")
     .option("--keys", "Skip the picker and go straight to access-key entry")
@@ -616,15 +701,21 @@ Registered callback URL:
         if (opts.sso) {
           if (!runSsoLogin(targetProfile)) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          const { region } = finalizeAws(targetProfile, "SSO");
-          await offerApiLoginChain({ region, ...chainOpts });
+          await finishAwsLogin({
+            profile: targetProfile,
+            mode: "SSO",
+            ...chainOpts,
+          });
           return;
         }
         if (opts.keys) {
           if (!(await runKeyEntry(targetProfile))) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          const { region } = finalizeAws(targetProfile, "access keys");
-          await offerApiLoginChain({ region, ...chainOpts });
+          await finishAwsLogin({
+            profile: targetProfile,
+            mode: "access keys",
+            ...chainOpts,
+          });
           return;
         }
 
@@ -634,12 +725,17 @@ Registered callback URL:
           console.log("");
           console.log(chalk.dim("  No AWS profiles found in ~/.aws/."));
           console.log(
-            chalk.dim("  Falling through to access-key entry for a new profile."),
+            chalk.dim(
+              "  Falling through to access-key entry for a new profile.",
+            ),
           );
           if (!(await runKeyEntry(targetProfile))) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          const { region } = finalizeAws(targetProfile, "access keys");
-          await offerApiLoginChain({ region, ...chainOpts });
+          await finishAwsLogin({
+            profile: targetProfile,
+            mode: "access keys",
+            ...chainOpts,
+          });
           return;
         }
 
@@ -653,16 +749,22 @@ Registered callback URL:
         if (choice.kind === "keys") {
           if (!(await runKeyEntry(targetProfile))) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          const { region } = finalizeAws(targetProfile, "access keys");
-          await offerApiLoginChain({ region, ...chainOpts });
+          await finishAwsLogin({
+            profile: targetProfile,
+            mode: "access keys",
+            ...chainOpts,
+          });
           return;
         }
 
         if (choice.kind === "sso") {
           if (!runSsoLogin(targetProfile)) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          const { region } = finalizeAws(targetProfile, "SSO");
-          await offerApiLoginChain({ region, ...chainOpts });
+          await finishAwsLogin({
+            profile: targetProfile,
+            mode: "SSO",
+            ...chainOpts,
+          });
           return;
         }
 
@@ -677,8 +779,11 @@ Registered callback URL:
           process.exit(1);
         }
         process.env.AWS_PROFILE = picked;
-        const { region } = finalizeAws(picked, "existing profile");
-        await offerApiLoginChain({ region, ...chainOpts });
+        await finishAwsLogin({
+          profile: picked,
+          mode: "existing profile",
+          ...chainOpts,
+        });
       },
     );
 }
