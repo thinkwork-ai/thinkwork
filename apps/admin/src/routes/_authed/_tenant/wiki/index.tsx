@@ -1,4 +1,11 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import {
   createFileRoute,
   Link,
@@ -88,6 +95,7 @@ type WikiPageProps = {
   routeBase?: "/wiki" | "/knowledge/wiki";
   embedded?: boolean;
   breadcrumbs?: Parameters<typeof useBreadcrumbs>[0];
+  onHeaderActionChange?: (action: ReactNode | null) => void;
 };
 
 type WikiRow = {
@@ -122,6 +130,8 @@ type CompileJobRow = {
   error?: string | null;
   metrics?: unknown;
 };
+
+const EMPTY_COMPILE_JOBS: CompileJobRow[] = [];
 
 function agentUserId(agent: any): string | null {
   return agent.humanPairId ?? agent.humanPair?.id ?? null;
@@ -291,6 +301,7 @@ export function WikiPage({
   routeBase = "/wiki",
   embedded = false,
   breadcrumbs = [{ label: "Wiki Pages" }],
+  onHeaderActionChange,
 }: WikiPageProps = {}) {
   const { tenantId } = useTenant();
   const { agent, view: viewParam } = useSearch({ strict: false }) as {
@@ -529,8 +540,23 @@ export function WikiPage({
     userLabels,
   ]);
   const compileJobs = (compileJobsResult.data?.wikiCompileJobs ??
-    []) as CompileJobRow[];
+    EMPTY_COMPILE_JOBS) as CompileJobRow[];
   const latestCompileCounts = compileJobGateCounts(compileJobs[0]?.metrics);
+
+  useEffect(() => {
+    if (!onHeaderActionChange) return;
+
+    onHeaderActionChange(
+      <LatestRunButton
+        error={compileJobsResult.error}
+        jobs={compileJobs}
+        onClick={() => setCompileSheetOpen(true)}
+      />,
+    );
+
+    return () => onHeaderActionChange(null);
+  }, [compileJobs, compileJobsResult.error, onHeaderActionChange]);
+
   const hasGateEvidenceWithoutPages =
     !activeSearch &&
     rows.length === 0 &&
@@ -637,11 +663,13 @@ export function WikiPage({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <LatestRunButton
-            error={compileJobsResult.error}
-            jobs={compileJobs}
-            onClick={() => setCompileSheetOpen(true)}
-          />
+          {!onHeaderActionChange && (
+            <LatestRunButton
+              error={compileJobsResult.error}
+              jobs={compileJobs}
+              onClick={() => setCompileSheetOpen(true)}
+            />
+          )}
           <ToggleGroup
             type="single"
             value={view}

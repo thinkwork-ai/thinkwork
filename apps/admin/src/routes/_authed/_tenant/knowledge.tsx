@@ -4,8 +4,10 @@ import {
   Outlet,
   useLocation,
 } from "@tanstack/react-router";
+import { useState, type ReactNode } from "react";
 import { PageLayout } from "@/components/PageLayout";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { KnowledgeHeaderActionProvider } from "./knowledge/-header-actions";
 
 export const Route = createFileRoute("/_authed/_tenant/knowledge")({
   component: KnowledgeLayout,
@@ -54,6 +56,7 @@ export function currentKnowledgeTab(pathname: string): KnowledgeTab {
 function KnowledgeLayout() {
   const { pathname } = useLocation();
   const currentTab = currentKnowledgeTab(pathname);
+  const [headerAction, setHeaderAction] = useState<ReactNode | null>(null);
 
   return (
     <PageLayout
@@ -80,11 +83,13 @@ function KnowledgeLayout() {
               </TabsList>
             </Tabs>
           </div>
-          <div />
+          <div className="flex justify-end">{headerAction}</div>
         </div>
       }
     >
-      <Outlet />
+      <KnowledgeHeaderActionProvider value={setHeaderAction}>
+        <Outlet />
+      </KnowledgeHeaderActionProvider>
     </PageLayout>
   );
 }
