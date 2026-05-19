@@ -9,6 +9,7 @@ import {
 import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
+  resolveTerraformRoot,
   ensureInit,
   ensureWorkspace,
   runTerraform,
@@ -141,7 +142,7 @@ export async function runLocalTerraformDestroy(
     }
   }
 
-  const terraformDir = process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
+  const terraformDir = resolveTerraformRoot();
   const tiers = expandComponent(opts.component as Component).reverse();
 
   for (let i = 0; i < tiers.length; i++) {

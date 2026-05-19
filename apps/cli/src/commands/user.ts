@@ -13,7 +13,12 @@ import { Command } from "commander";
 import { spawn } from "node:child_process";
 import { input, select } from "@inquirer/prompts";
 import { validateStage } from "../config.js";
-import { resolveTierDir, ensureInit, ensureWorkspace } from "../terraform.js";
+import {
+  resolveTierDir,
+  resolveTerraformRoot,
+  ensureInit,
+  ensureWorkspace,
+} from "../terraform.js";
 import { apiFetch, apiFetchRaw, resolveApiConfig } from "../api-client.js";
 import { listDeployedStages } from "../aws-discovery.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
@@ -253,11 +258,13 @@ Agents / scripts that pass all flags stay non-interactive.
 
           // Resolve tenant
           let tenant = opts.tenant;
-          if (!tenant) tenant = await promptTenant(api!.apiUrl, api!.authSecret);
+          if (!tenant)
+            tenant = await promptTenant(api!.apiUrl, api!.authSecret);
 
           // Optional fields
           let name = opts.name;
-          if (name === undefined && !emailArg) name = await promptOptionalName();
+          if (name === undefined && !emailArg)
+            name = await promptOptionalName();
           let role = opts.role;
           if (!role && !emailArg) role = await promptRole();
           role = role || "member";
@@ -288,8 +295,7 @@ Agents / scripts that pass all flags stay non-interactive.
           );
 
           if (!result.ok) {
-            const msg =
-              (result.body as any)?.error || `HTTP ${result.status}`;
+            const msg = (result.body as any)?.error || `HTTP ${result.status}`;
             printError(`Invite failed: ${msg}`);
             process.exit(1);
           }
@@ -370,8 +376,7 @@ FORCE_CHANGE_PASSWORD or has been disabled.
 
         printHeader("user reset-password", stage);
 
-        const terraformDir =
-          process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
+        const terraformDir = resolveTerraformRoot();
         const cwd = resolveTierDir(terraformDir, stage, "app");
         await ensureInit(cwd);
         await ensureWorkspace(cwd, stage);
