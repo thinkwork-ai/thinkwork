@@ -8,6 +8,7 @@ const {
   mockResolveCallerFromAuth,
   mockResolveThreadComputer,
   mockHasSpaceMemberAccess,
+  mockEnsureDefaultThreadSpace,
   tables,
 } = vi.hoisted(() => {
   const tables = {
@@ -124,6 +125,11 @@ const {
     mockResolveCallerFromAuth: vi.fn(async () => ({ userId: "user-1" })),
     mockResolveThreadComputer: vi.fn(async () => null),
     mockHasSpaceMemberAccess: vi.fn(async () => true),
+    mockEnsureDefaultThreadSpace: vi.fn(async () => ({
+      id: "space-default",
+      tenant_id: "tenant-1",
+      status: "active",
+    })),
     tables,
     thenableRows,
   };
@@ -180,6 +186,10 @@ vi.mock("../spaces/shared.js", () => ({
   hasSpaceMemberAccess: mockHasSpaceMemberAccess,
 }));
 
+vi.mock("../../../lib/spaces/default-space.js", () => ({
+  ensureDefaultThreadSpace: mockEnsureDefaultThreadSpace,
+}));
+
 import { createThread } from "./createThread.mutation.js";
 
 const ctx = { auth: { authType: "cognito" } } as any;
@@ -196,6 +206,12 @@ beforeEach(() => {
   mockResolveThreadComputer.mockClear();
   mockHasSpaceMemberAccess.mockReset();
   mockHasSpaceMemberAccess.mockResolvedValue(true);
+  mockEnsureDefaultThreadSpace.mockReset();
+  mockEnsureDefaultThreadSpace.mockResolvedValue({
+    id: "space-default",
+    tenant_id: "tenant-1",
+    status: "active",
+  });
 });
 
 describe("createThread Space participation", () => {
@@ -265,7 +281,7 @@ describe("createThread Space participation", () => {
     });
   });
 
-  it("keeps non-Space thread creation on the existing path without participants", async () => {
+  it("places omitted-space Threads in the default Space and adds requester participation", async () => {
     const result = await createThread(
       {},
       {
@@ -278,16 +294,30 @@ describe("createThread Space participation", () => {
       ctx,
     );
 
+    expect(mockEnsureDefaultThreadSpace).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      userId: "user-1",
+    });
     expect(mockHasSpaceMemberAccess).not.toHaveBeenCalled();
     expect(captures.insertedThreads[0]).toMatchObject({
       tenant_id: "tenant-1",
-      space_id: undefined,
+      space_id: "space-default",
       identifier: "TICK-42",
       channel: "manual",
     });
-    expect(captures.insertedParticipants).toEqual([]);
+    expect(captures.insertedParticipants[0]).toEqual([
+      expect.objectContaining({
+        tenant_id: "tenant-1",
+        thread_id: "thread-1",
+        space_id: "space-default",
+        participant_type: "user",
+        user_id: "user-1",
+        role: "requester",
+      }),
+    ]);
     expect(result).toMatchObject({
       id: "thread-1",
+      spaceId: "space-default",
       identifier: "TICK-42",
       channel: "MANUAL",
     });

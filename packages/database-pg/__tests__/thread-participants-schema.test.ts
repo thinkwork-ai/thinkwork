@@ -15,10 +15,10 @@ const migration0106 = readFileSync(
 );
 
 describe("Space thread participants schema", () => {
-  it("attaches threads to Spaces without making Space required", () => {
+  it("requires every Thread to belong to a Space", () => {
     const columns = getTableColumns(threads);
 
-    expect(columns.space_id.notNull).toBe(false);
+    expect(columns.space_id.notNull).toBe(true);
   });
 
   it("models human and agent Thread participants separately from ownership", () => {
@@ -27,7 +27,7 @@ describe("Space thread participants schema", () => {
     expect(getTableName(threadParticipants)).toBe("thread_participants");
     expect(columns.tenant_id.notNull).toBe(true);
     expect(columns.thread_id.notNull).toBe(true);
-    expect(columns.space_id.notNull).toBe(false);
+    expect(columns.space_id.notNull).toBe(true);
     expect(columns.participant_type.notNull).toBe(true);
     expect(columns.user_id.notNull).toBe(false);
     expect(columns.agent_id.notNull).toBe(false);

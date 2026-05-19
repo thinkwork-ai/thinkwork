@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Bot, ListChecks, PlugZap } from "lucide-react";
+import { Bot, ListChecks, Plus, PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useSubscription } from "urql";
-import { Badge, Separator } from "@thinkwork/ui";
+import { Badge, Button, Separator } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { NewThreadDialog } from "@/components/NewThreadDialog";
 import { SpaceThreadList } from "@/components/spaces/SpaceThreadList";
 import { StartOnboardingDialog } from "@/components/spaces/StartOnboardingDialog";
 import {
@@ -71,6 +72,7 @@ function SpaceDetailPage() {
   const { tenantId } = useTenant();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [newThreadOpen, setNewThreadOpen] = useState(false);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 250);
@@ -143,19 +145,34 @@ function SpaceDetailPage() {
     documentTitle: space?.name ? `Space · ${space.name}` : "Space",
     action:
       tenantId && space ? (
-        <StartOnboardingDialog
-          tenantId={tenantId}
-          spaceId={space.id}
-          onStarted={(threadId) => {
-            reexecuteThreads({ requestPolicy: "network-only" });
-            void navigate({
-              to: "/spaces/$spaceId/threads/$threadId",
-              params: { spaceId, threadId },
-            });
-          }}
-        />
+        space.kind === "CUSTOMER_ONBOARDING" ? (
+          <StartOnboardingDialog
+            tenantId={tenantId}
+            spaceId={space.id}
+            onStarted={(threadId) => {
+              reexecuteThreads({ requestPolicy: "network-only" });
+              void navigate({
+                to: "/spaces/$spaceId/threads/$threadId",
+                params: { spaceId, threadId },
+              });
+            }}
+          />
+        ) : (
+          <>
+            <Button size="sm" onClick={() => setNewThreadOpen(true)}>
+              <Plus className="size-4" />
+              New Thread
+            </Button>
+            <NewThreadDialog
+              open={newThreadOpen}
+              onOpenChange={setNewThreadOpen}
+              spaceId={space.id}
+              spaceName={space.name}
+            />
+          </>
+        )
       ) : null,
-    actionKey: `space-actions:${spaceId}:${tenantId ?? ""}`,
+    actionKey: `space-actions:${spaceId}:${tenantId ?? ""}:${newThreadOpen}`,
   });
 
   if (spaceError) {

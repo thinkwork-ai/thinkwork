@@ -28,13 +28,13 @@ describe("computer route helpers", () => {
     );
   });
 
-  it("keeps labels aligned with the threads route", () => {
+  it("keeps labels aligned with the space-owned thread routes", () => {
     expect(COMPUTER_THREADS_ROUTE).toBe("/threads");
     expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/new");
     expect(COMPUTER_ARTIFACTS_ROUTE).toBe("/artifacts");
     expect(COMPUTER_MEMORY_ROUTE).toBe("/memory");
     expect(COMPUTER_ROUTE_LABELS.threads).toBe("Threads");
-    expect(COMPUTER_ROUTE_LABELS.newThread).toBe("New");
+    expect(COMPUTER_ROUTE_LABELS.newThread).toBe("Spaces");
     expect(COMPUTER_ROUTE_LABELS.artifacts).toBe("Artifacts");
     expect(COMPUTER_ROUTE_LABELS.memory).toBe("Memory");
   });

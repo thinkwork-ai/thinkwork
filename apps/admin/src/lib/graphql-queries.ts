@@ -23,19 +23,6 @@ export const AgentsListQuery = graphql(`
         model
       }
       avatarUrl
-      lastHeartbeatAt
-      adapterType
-      humanPairId
-      humanPair {
-        id
-        name
-        email
-      }
-      budgetPolicy {
-        id
-        limitUsd
-        actionOnExceed
-      }
       createdAt
     }
     modelCatalog {

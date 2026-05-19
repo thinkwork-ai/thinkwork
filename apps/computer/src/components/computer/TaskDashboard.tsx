@@ -4,7 +4,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Archive, Loader2, Lock, Search } from "lucide-react";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { COMPUTER_NEW_THREAD_ROUTE } from "@/lib/computer-routes";
+import { COMPUTER_SPACES_ROUTE } from "@/lib/computer-routes";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 
 export interface TaskSummary {
@@ -101,8 +101,8 @@ export function TaskDashboard({
             <Button type="button" variant="ghost" size="sm" disabled>
               Group
             </Button>
-            <Button asChild size="sm">
-              <Link to={COMPUTER_NEW_THREAD_ROUTE}>New</Link>
+            <Button asChild size="sm" variant="outline">
+              <Link to={COMPUTER_SPACES_ROUTE}>Open Space</Link>
             </Button>
           </div>
         </header>
