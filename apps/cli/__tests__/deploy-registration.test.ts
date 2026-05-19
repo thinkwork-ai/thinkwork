@@ -28,6 +28,9 @@ describe("deploy command registration", () => {
     expect(flags).toContain("--manifest-url <url>");
     expect(flags).toContain("--manifest-sha256 <sha256>");
     expect(flags).toContain("--terraform-module-version <version>");
+    expect(flags).toContain("--db-password <value>");
+    expect(flags).toContain("--api-auth-secret <value>");
+    expect(flags).toContain("--dry-run");
     expect(deploy!.options.every((option) => option.mandatory !== true)).toBe(
       true,
     );

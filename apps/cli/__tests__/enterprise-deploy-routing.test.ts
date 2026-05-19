@@ -94,6 +94,10 @@ describe("top-level enterprise deploy routing", () => {
         createRepo: false,
       },
       bootstrap: bootstrapResult(),
+      repository: [],
+      secrets: [],
+      git: [],
+      dispatch: [],
     }));
 
     await runDeployCommand(
@@ -196,9 +200,46 @@ describe("top-level enterprise deploy routing", () => {
         releaseVersion: "v1.2.3",
         manifestUrl: "https://example.test/manifest.json",
         manifestSha256: "abc123",
+        dbPassword: "dev-db",
+        apiAuthSecret: "dev-api",
         yes: true,
       },
-      { stdinIsTty: false, cwd: root, runBootstrap },
+      {
+        stdinIsTty: false,
+        cwd: root,
+        runBootstrap,
+        repositoryClient: {
+          repositoryExists: vi.fn(async () => true),
+          createPrivateRepository: vi.fn(),
+          cloneRepository: vi.fn(async () => ({
+            target: root,
+            status: "created",
+            message: "cloned",
+          })),
+        },
+        gitClient: {
+          isGitRepository: () => true,
+          hasChanges: vi.fn(async () => true),
+          commitAll: vi.fn(async () => ({
+            target: root,
+            status: "created",
+            message: "committed",
+          })),
+          push: vi.fn(async () => ({
+            target: root,
+            status: "updated",
+            message: "pushed",
+          })),
+        },
+        secretSetter: {
+          setEnvironmentSecret: vi.fn(async () => undefined),
+        },
+        dispatchWorkflow: vi.fn(async () => ({
+          target: "acme/deploy:deploy.yml:dev",
+          status: "created",
+          message: "dispatched",
+        })),
+      },
     );
 
     expect(result.kind).toBe("bootstrap");
@@ -206,12 +247,13 @@ describe("top-level enterprise deploy routing", () => {
       targetDir: root,
       customerSlug: "acme",
       repository: "acme/deploy",
-      stages: ["dev"],
+      stages: ["dev", "prod"],
       releaseVersion: "v1.2.3",
       manifestUrl: "https://example.test/manifest.json",
       manifestSha256: "abc123",
       terraformModuleVersion: undefined,
-      dispatchWorkflow: true,
+      dispatchWorkflow: false,
+      dryRun: undefined,
     });
   });
 });
