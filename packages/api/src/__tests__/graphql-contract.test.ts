@@ -194,6 +194,9 @@ describe("GraphQL Schema Contract", () => {
       "createThread",
       "updateThread",
       "deleteThread",
+      // Spaces
+      "createSpace",
+      "startCustomerOnboarding",
       // Messages
       "sendMessage",
       "deleteMessage",

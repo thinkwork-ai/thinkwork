@@ -24,11 +24,14 @@ describe("Spaces admin routes", () => {
 
   it("renders a Spaces data table that links to Space detail", () => {
     expect(listRouteSource).toContain("SpacesListQuery");
+    expect(listRouteSource).toContain("CreateSpaceMutation");
+    expect(listRouteSource).toContain("New Space");
     expect(listRouteSource).toContain("<DataTable");
     expect(listRouteSource).toContain('header: "Space"');
     expect(listRouteSource).toContain('header: "Agents"');
     expect(listRouteSource).toContain('header: "Checklist"');
     expect(listRouteSource).toContain('to: "/spaces/$spaceId"');
+    expect(listRouteSource).not.toContain("{row.original.slug}");
   });
 
   it("keeps Threads as work records inside Space detail", () => {
@@ -52,6 +55,7 @@ describe("Spaces admin routes", () => {
 
   it("queries Space configuration needed by the admin module", () => {
     expect(queriesSource).toContain("query SpacesList");
+    expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("query SpaceAdminDetail");
     expect(queriesSource).toContain("agentAssignments");
     expect(queriesSource).toContain("localInstructions");
