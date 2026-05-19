@@ -183,7 +183,7 @@ export interface WikiPlaceRow {
 export interface WikiSectionInput {
 	section_slug: string;
 	heading: string;
-	body_md: string;
+	body_md: string | null | undefined;
 	position: number;
 	/** Source references for provenance; recorded per section on upsert. */
 	sources?: Array<{ kind: WikiSectionSourceKind; ref: string }>;
@@ -1262,7 +1262,7 @@ export async function upsertSections(
 		// literal noise on mobile (links come from wiki_page_links, not
 		// prose). Do this at the repo boundary so every write path is
 		// covered, not just the section-writer path.
-		const cleanBody = stripWikilinks(section.body_md);
+		const cleanBody = normalizeSectionBody(section.body_md);
 		const existing = await db
 			.select({ id: wikiPageSections.id })
 			.from(wikiPageSections)
@@ -2643,16 +2643,28 @@ export function normalizeSectionHeading(
 	return fromSlug.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
+export function normalizeSectionBody(rawBody: unknown): string {
+	return typeof rawBody === "string" ? stripWikilinks(rawBody) : "";
+}
+
 /**
  * Render page body markdown by concatenating sections ordered by `position`,
  * with each section prefixed by its heading. Kept deterministic so that
  * `body_md` comparisons during compile can detect drift.
  */
 export function renderBodyMarkdown(
-	sections: Array<Pick<WikiSectionInput, "heading" | "body_md" | "position">>,
+	sections: Array<
+		Pick<WikiSectionInput, "heading" | "body_md" | "position"> & {
+			section_slug?: string;
+		}
+	>,
 ): string {
 	const sorted = [...sections].sort((a, b) => a.position - b.position);
 	return sorted
-		.map((s) => `## ${s.heading}\n\n${s.body_md}`.trim())
+		.map((s) => {
+			const heading = normalizeSectionHeading(s.heading, s.section_slug ?? "");
+			const body = normalizeSectionBody(s.body_md);
+			return `## ${heading}\n\n${body}`.trim();
+		})
 		.join("\n\n");
 }

@@ -49,7 +49,7 @@ export interface WriteFacetSectionInput {
   facetType: FacetType;
   sectionSlug: string;
   heading: string;
-  content: string;
+  content: string | null | undefined;
   sources: FactCitation[];
   position?: number;
   allowPromotion?: boolean;
@@ -233,13 +233,14 @@ export async function writeFacetSection(
     facet_type: input.facetType,
     source_facet_type: sourceFacetType,
   };
+  const content = normalizeTenantEntitySectionBody(input.content);
   const [section] = await db
     .insert(tenantEntityPageSections)
     .values({
       page_id: input.pageId,
       section_slug: input.sectionSlug,
       heading: input.heading,
-      body_md: input.content,
+      body_md: content,
       position: input.position ?? 0,
       aggregation,
       last_source_at: new Date(),
@@ -251,7 +252,7 @@ export async function writeFacetSection(
       ],
       set: {
         heading: input.heading,
-        body_md: input.content,
+        body_md: content,
         position: input.position ?? 0,
         aggregation,
         status: "active",
@@ -316,6 +317,10 @@ export function composeTenantEntityPageBody(
     })
     .join("\n\n")
     .trim();
+}
+
+export function normalizeTenantEntitySectionBody(rawBody: unknown): string {
+  return typeof rawBody === "string" ? rawBody : "";
 }
 
 export async function findPageSourcesAcrossSurfaces(

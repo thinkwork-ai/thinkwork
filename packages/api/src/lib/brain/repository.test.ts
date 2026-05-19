@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTenantSubtype } from "./repository.js";
+
+import {
+  normalizeTenantEntitySectionBody,
+  normalizeTenantSubtype,
+} from "./repository.js";
 
 describe("normalizeTenantSubtype", () => {
   it("allows approved ontology-style dynamic entity type slugs", () => {
@@ -10,5 +14,19 @@ describe("normalizeTenantSubtype", () => {
   it("rejects unsafe subtype strings", () => {
     expect(() => normalizeTenantSubtype("not safe")).toThrow(/unsupported/);
     expect(() => normalizeTenantSubtype("1_customer")).toThrow(/unsupported/);
+  });
+});
+
+describe("normalizeTenantEntitySectionBody", () => {
+  it("returns an empty body for nullish or malformed facet content", () => {
+    expect(normalizeTenantEntitySectionBody(null)).toBe("");
+    expect(normalizeTenantEntitySectionBody(undefined)).toBe("");
+    expect(normalizeTenantEntitySectionBody({ body: "not markdown" })).toBe("");
+  });
+
+  it("keeps string facet content unchanged", () => {
+    expect(normalizeTenantEntitySectionBody("Known preference.")).toBe(
+      "Known preference.",
+    );
   });
 });
