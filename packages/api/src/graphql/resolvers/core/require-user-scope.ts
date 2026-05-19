@@ -117,7 +117,7 @@ async function isTenantAdmin(
 		SELECT role
 		FROM tenant_members
 		WHERE tenant_id = ${tenantId}
-		  AND principal_type = 'user'
+		  AND lower(principal_type) = 'user'
 		  AND principal_id = ${userId}
 		  AND status = 'active'
 		LIMIT 1
