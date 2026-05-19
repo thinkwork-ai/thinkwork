@@ -87,6 +87,12 @@ export function registerDeployCommand(
       "--terraform-module-version <version>",
       "Pinned Terraform Registry module version",
     )
+    .option("--db-password <value>", "Database password GitHub secret value")
+    .option("--api-auth-secret <value>", "API auth GitHub secret value")
+    .option(
+      "--dry-run",
+      "Plan enterprise bootstrap without mutating AWS, GitHub, git, or secrets",
+    )
     .option("-y, --yes", "Skip interactive confirmation (for CI)")
     .action(async (opts: DeployCommandOptions) => {
       try {

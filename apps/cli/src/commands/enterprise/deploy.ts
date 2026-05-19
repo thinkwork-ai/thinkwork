@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -12,6 +13,27 @@ import {
   type EnterpriseBootstrapOptions,
   type EnterpriseBootstrapResult,
 } from "./bootstrap.js";
+import {
+  GhCliEnterpriseBootstrapClient,
+  parseGitHubRepository,
+} from "./github.js";
+import { resolveEnterpriseReleasePin } from "./release.js";
+import {
+  commitAndPushEnterpriseRepository,
+  GhCliEnterpriseRepositoryClient,
+  GitCliEnterpriseGitClient,
+  prepareEnterpriseRepository,
+  type EnterpriseGitClient,
+  type EnterpriseRepositoryClient,
+} from "./repository.js";
+import {
+  GhCliEnterpriseSecretSetter,
+  resolveEnterpriseStageSecrets,
+  setEnterpriseStageSecrets,
+  type EnterpriseSecretName,
+  type EnterpriseSecretSetter,
+} from "./secrets.js";
+import type { BootstrapStepResult } from "./aws-bootstrap.js";
 
 export const ENTERPRISE_DEPLOY_COMPONENTS = [
   "all",
@@ -36,6 +58,9 @@ export interface EnterpriseDeployOptions {
   manifestUrl?: string;
   manifestSha256?: string;
   terraformModuleVersion?: string;
+  dbPassword?: string;
+  apiAuthSecret?: string;
+  dryRun?: boolean;
   stage?: string;
   component?: string;
   yes?: boolean;
@@ -65,6 +90,10 @@ export type EnterpriseDeployResult =
       kind: "bootstrap";
       request: EnterpriseDeployRequest;
       bootstrap: EnterpriseBootstrapResult;
+      repository: BootstrapStepResult[];
+      secrets: BootstrapStepResult[];
+      git: BootstrapStepResult[];
+      dispatch: BootstrapStepResult[];
     }
   | {
       kind: "dispatch";
@@ -79,6 +108,15 @@ export interface EnterpriseDeployDependencies {
     options: EnterpriseBootstrapOptions,
   ) => Promise<EnterpriseBootstrapResult>;
   promptInput?: (message: string) => Promise<string>;
+  repositoryClient?: EnterpriseRepositoryClient;
+  gitClient?: EnterpriseGitClient;
+  secretSetter?: EnterpriseSecretSetter;
+  promptSecret?: (stage: string, name: EnterpriseSecretName) => Promise<string>;
+  fetchManifest?: (url: string) => Promise<ArrayBuffer>;
+  dispatchWorkflow?: (
+    repository: string,
+    stage: string,
+  ) => Promise<BootstrapStepResult>;
 }
 
 export function validateEnterpriseDeployComponent(component: string): {
@@ -221,7 +259,7 @@ export async function runEnterpriseDeploy(
     );
   }
 
-  if (!options.yes) {
+  if (!options.yes && !options.dryRun) {
     const message = isProdLike(request.stage)
       ? `  Stage "${request.stage}" is production-like. Bootstrap enterprise deploy?`
       : `  Bootstrap enterprise deploy for "${request.customerSlug}" stage "${request.stage}"?`;
@@ -232,19 +270,92 @@ export async function runEnterpriseDeploy(
   }
 
   const runBootstrap = deps.runBootstrap ?? runEnterpriseBootstrap;
-  const bootstrap = await runBootstrap({
-    targetDir: request.checkoutDir,
-    customerSlug: request.customerSlug,
-    repository: request.repository,
-    stages: [request.stage],
+  const bootstrapStages = enterpriseBootstrapStages(request.stage);
+  const manifestSha256 = await resolveReleaseManifestSha256({
     releaseVersion: options.releaseVersion,
     manifestUrl: options.manifestUrl,
     manifestSha256: options.manifestSha256,
     terraformModuleVersion: options.terraformModuleVersion,
-    dispatchWorkflow: true,
+    dryRun: options.dryRun,
+    fetchManifest: deps.fetchManifest,
   });
+  const stageSecrets = await resolveEnterpriseStageSecrets({
+    stages: bootstrapStages,
+    dbPassword: options.dbPassword,
+    apiAuthSecret: options.apiAuthSecret,
+    stdinIsTty: deps.stdinIsTty,
+    promptSecret: deps.promptSecret,
+    dryRun: options.dryRun,
+  });
+  const repositoryClient =
+    deps.repositoryClient ?? new GhCliEnterpriseRepositoryClient();
+  const gitClient = deps.gitClient ?? new GitCliEnterpriseGitClient();
+  const repositorySteps = await prepareEnterpriseRepository(
+    {
+      repository: request.repository,
+      targetDir: request.checkoutDir,
+      createRepo: request.createRepo,
+      dryRun: options.dryRun,
+    },
+    repositoryClient,
+    gitClient,
+  );
+  const bootstrap = await runBootstrap({
+    targetDir: request.checkoutDir,
+    customerSlug: request.customerSlug,
+    repository: request.repository,
+    stages: bootstrapStages,
+    releaseVersion: options.releaseVersion,
+    manifestUrl: options.manifestUrl,
+    manifestSha256,
+    terraformModuleVersion: options.terraformModuleVersion,
+    dispatchWorkflow: false,
+    dryRun: options.dryRun,
+  });
+  const secrets = options.dryRun
+    ? Object.keys(stageSecrets).map((stage) => ({
+        target: `${request.repository}:${stage}:secrets`,
+        status: "planned" as const,
+        message: `Would set ${Object.keys(stageSecrets[stage]).length} GitHub Environment secret(s) for ${stage}.`,
+      }))
+    : await setEnterpriseStageSecrets(
+        request.repository,
+        stageSecrets,
+        deps.secretSetter ?? new GhCliEnterpriseSecretSetter(),
+      );
+  const git = options.dryRun
+    ? [
+        {
+          target: request.checkoutDir,
+          status: "planned" as const,
+          message: "Would commit and push deployment repository changes.",
+        },
+      ]
+    : await commitAndPushEnterpriseRepository(request.checkoutDir, gitClient);
+  const dispatch = options.dryRun
+    ? [
+        {
+          target: `${request.repository}:deploy.yml:${request.stage}`,
+          status: "planned" as const,
+          message: `Would dispatch deploy workflow for ${request.stage}.`,
+        },
+      ]
+    : [
+        await (deps.dispatchWorkflow ?? defaultDispatchWorkflow)(
+          request.repository,
+          request.stage,
+        ),
+      ];
 
-  return { kind: "bootstrap", request, bootstrap };
+  return {
+    kind: "bootstrap",
+    request,
+    bootstrap,
+    repository: repositorySteps.steps,
+    secrets,
+    git,
+    dispatch,
+  };
 }
 
 async function promptWhenInteractive(
@@ -257,4 +368,48 @@ async function promptWhenInteractive(
   if (promptInput) return promptInput(message);
   const { input } = await import("@inquirer/prompts");
   return input({ message });
+}
+
+function enterpriseBootstrapStages(requestedStage: string): string[] {
+  return [...new Set([requestedStage, "prod"])];
+}
+
+async function resolveReleaseManifestSha256(options: {
+  releaseVersion?: string;
+  manifestUrl?: string;
+  manifestSha256?: string;
+  terraformModuleVersion?: string;
+  dryRun?: boolean;
+  fetchManifest?: (url: string) => Promise<ArrayBuffer>;
+}): Promise<string | undefined> {
+  if (options.manifestSha256) return options.manifestSha256;
+  if (options.dryRun) return undefined;
+  const release = resolveEnterpriseReleasePin({
+    releaseVersion: options.releaseVersion,
+    manifestUrl: options.manifestUrl,
+    terraformModuleVersion: options.terraformModuleVersion,
+  });
+
+  const fetchManifest =
+    options.fetchManifest ??
+    (async (url: string) => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(
+          `Release manifest fetch failed (${response.status}) for ${url}.`,
+        );
+      }
+      return response.arrayBuffer();
+    });
+  const body = await fetchManifest(release.manifestUrl);
+  return createHash("sha256").update(Buffer.from(body)).digest("hex");
+}
+
+async function defaultDispatchWorkflow(
+  repository: string,
+  stage: string,
+): Promise<BootstrapStepResult> {
+  return new GhCliEnterpriseBootstrapClient(
+    parseGitHubRepository(repository),
+  ).dispatchWorkflow(stage);
 }
