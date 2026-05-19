@@ -348,14 +348,20 @@ export async function enqueueCompileJob(
 		 * bucket so the chain doesn't self-dedupe. Leave unset for the
 		 * normal post-turn path. */
 		nowEpochSeconds?: number;
+		/** Optional suffix for operator-driven reruns that must not dedupe
+		 * against an earlier job in the same 5-minute bucket. */
+		dedupeDiscriminator?: string;
 	},
 	db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
-	const dedupeKey = buildCompileDedupeKey({
+	const baseDedupeKey = buildCompileDedupeKey({
 		tenantId: args.tenantId,
 		ownerId: args.ownerId,
 		nowEpochSeconds: args.nowEpochSeconds,
 	});
+	const dedupeKey = args.dedupeDiscriminator
+		? `${baseDedupeKey}:${args.dedupeDiscriminator}`
+		: baseDedupeKey;
 
 	const [inserted] = await db
 		.insert(wikiCompileJobs)

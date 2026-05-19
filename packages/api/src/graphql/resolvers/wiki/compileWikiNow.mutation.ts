@@ -22,6 +22,7 @@ interface CompileWikiNowArgs {
   userId?: string | null;
   ownerId?: string | null;
   modelId?: string | null;
+  forceNew?: boolean | null;
 }
 
 export const compileWikiNow = async (
@@ -35,6 +36,8 @@ export const compileWikiNow = async (
     tenantId,
     ownerId: userId,
     trigger: "admin",
+    dedupeDiscriminator:
+      args.forceNew === true ? `rebuild-${Date.now()}` : undefined,
   });
 
   // Treat empty string as "not provided" — the compile pipeline's default
@@ -81,9 +84,8 @@ async function invokeWikiCompile(
       ? `thinkwork-${process.env.STAGE}-api-wiki-compile`
       : null);
   if (!fnName) return;
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const payload: { jobId: string; modelId?: string } = { jobId };
   if (modelId) payload.modelId = modelId;

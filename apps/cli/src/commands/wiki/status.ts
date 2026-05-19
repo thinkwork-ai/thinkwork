@@ -199,6 +199,13 @@ async function renderJobs(
 		duration: fmtDuration(j.startedAt, j.finishedAt),
 		records: extractMetric(j.metrics, "records_read"),
 		pages: extractMetric(j.metrics, "pages_upserted"),
+		approved: extractMetric(j.metrics, "ontology_gate_approved_pages"),
+		rejected: totalMetrics(j.metrics, [
+			"ontology_gate_rejected_pages",
+			"ontology_gate_rejected_facets",
+			"ontology_gate_rejected_relationships",
+		]),
+		brain: extractMetric(j.metrics, "brain_pages_upserted"),
 		started: fmtIso(j.startedAt ?? j.createdAt),
 	}));
 
@@ -213,6 +220,9 @@ async function renderJobs(
 		{ key: "duration", header: "DUR" },
 		{ key: "records", header: "RECS" },
 		{ key: "pages", header: "PAGES" },
+		{ key: "approved", header: "APPROVED" },
+		{ key: "rejected", header: "REJECTED" },
+		{ key: "brain", header: "BRAIN" },
 		{ key: "started", header: "STARTED" },
 	);
 
@@ -253,4 +263,18 @@ function extractMetric(metrics: unknown, key: string): string {
 	if (v == null) return "—";
 	if (typeof v === "number") return String(v);
 	return String(v);
+}
+
+function totalMetrics(metrics: unknown, keys: string[]): string {
+	if (!metrics || typeof metrics !== "object") return "—";
+	let total = 0;
+	let found = false;
+	for (const key of keys) {
+		const value = (metrics as Record<string, unknown>)[key];
+		if (typeof value === "number") {
+			total += value;
+			found = true;
+		}
+	}
+	return found ? String(total) : "—";
 }

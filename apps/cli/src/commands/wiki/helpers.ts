@@ -28,6 +28,8 @@ export interface WikiCliOptions {
 	json?: boolean;
 	watch?: boolean;
 	yes?: boolean;
+	dryRun?: boolean;
+	includeBrain?: boolean;
 	limit?: string | number;
 	timeout?: string | number;
 }

@@ -23,8 +23,13 @@ export const AllTenantAgentsForWikiDoc = graphql(`
 `);
 
 export const CompileWikiNowDoc = graphql(`
-  mutation CliCompileWikiNow($tenantId: ID!, $ownerId: ID!, $modelId: String) {
-    compileWikiNow(tenantId: $tenantId, ownerId: $ownerId, modelId: $modelId) {
+  mutation CliCompileWikiNow($tenantId: ID!, $ownerId: ID!, $modelId: String, $forceNew: Boolean) {
+    compileWikiNow(
+      tenantId: $tenantId
+      ownerId: $ownerId
+      modelId: $modelId
+      forceNew: $forceNew
+    ) {
       id
       tenantId
       ownerId
@@ -38,12 +43,27 @@ export const CompileWikiNowDoc = graphql(`
 `);
 
 export const ResetWikiCursorDoc = graphql(`
-  mutation CliResetWikiCursor($tenantId: ID!, $ownerId: ID!, $force: Boolean) {
-    resetWikiCursor(tenantId: $tenantId, ownerId: $ownerId, force: $force) {
+  mutation CliResetWikiCursor(
+    $tenantId: ID!
+    $ownerId: ID!
+    $force: Boolean
+    $dryRun: Boolean
+    $includeBrain: Boolean
+  ) {
+    resetWikiCursor(
+      tenantId: $tenantId
+      ownerId: $ownerId
+      force: $force
+      dryRun: $dryRun
+      includeBrain: $includeBrain
+    ) {
       tenantId
       ownerId
       cursorCleared
       pagesArchived
+      dryRun
+      brainIncluded
+      impact
     }
   }
 `);

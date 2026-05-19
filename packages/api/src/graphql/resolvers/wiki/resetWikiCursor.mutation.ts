@@ -10,50 +10,56 @@
  *   known-bad and you want to start over.
  */
 
-import { and, eq, sql } from "drizzle-orm";
-import { wikiPages } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
-import { db } from "../../utils.js";
+import { resetScopedWikiRebuild } from "../../../lib/wiki/rebuild-runner.js";
 import { resetCursor } from "../../../lib/wiki/repository.js";
 import { assertCanAdminWikiScope } from "./auth.js";
 
 interface ResetWikiCursorArgs {
-	tenantId: string;
-	userId?: string | null;
-	ownerId?: string | null;
-	force?: boolean | null;
+  tenantId: string;
+  userId?: string | null;
+  ownerId?: string | null;
+  force?: boolean | null;
+  dryRun?: boolean | null;
+  includeBrain?: boolean | null;
 }
 
 export const resetWikiCursor = async (
-	_parent: unknown,
-	args: ResetWikiCursorArgs,
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: ResetWikiCursorArgs,
+  ctx: GraphQLContext,
 ) => {
-	const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
+  const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
 
-	await resetCursor({ tenantId, ownerId: userId });
+  if (args.force) {
+    const reset = await resetScopedWikiRebuild({
+      tenantId,
+      ownerId: userId,
+      dryRun: args.dryRun === true,
+      includeBrain: args.includeBrain === true,
+    });
+    return {
+      tenantId: args.tenantId,
+      userId,
+      ownerId: args.ownerId ?? userId,
+      cursorCleared: reset.cursorCleared,
+      pagesArchived: reset.pagesArchived,
+      dryRun: reset.dryRun,
+      brainIncluded: reset.brainIncluded,
+      impact: reset,
+    };
+  }
 
-	let pagesArchived = 0;
-	if (args.force) {
-		const result = await db
-			.update(wikiPages)
-			.set({ status: "archived", updated_at: sql`now()` as any })
-			.where(
-				and(
-					eq(wikiPages.tenant_id, args.tenantId),
-					eq(wikiPages.owner_id, userId),
-					eq(wikiPages.status, "active"),
-				),
-			)
-			.returning({ id: wikiPages.id });
-		pagesArchived = result.length;
-	}
+  await resetCursor({ tenantId, ownerId: userId });
 
-	return {
-		tenantId: args.tenantId,
-		userId,
-		ownerId: args.ownerId ?? userId,
-		cursorCleared: true,
-		pagesArchived,
-	};
+  return {
+    tenantId: args.tenantId,
+    userId,
+    ownerId: args.ownerId ?? userId,
+    cursorCleared: true,
+    pagesArchived: 0,
+    dryRun: false,
+    brainIncluded: false,
+    impact: null,
+  };
 };

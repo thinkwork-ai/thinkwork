@@ -55,6 +55,8 @@ describe("wiki command registration", () => {
 		const help = rebuild.helpInformation();
 		expect(help).not.toMatch(/--all\b/);
 		expect(help).toMatch(/--yes/);
+		expect(help).toMatch(/--dry-run/);
+		expect(help).toMatch(/--include-brain/);
 	});
 });
 
