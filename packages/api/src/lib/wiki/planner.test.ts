@@ -79,4 +79,32 @@ describe("validatePlannerResult", () => {
       entityTypeSlug: "opportunity",
     });
   });
+
+  it("drops page update facet slugs when the entity type is missing", () => {
+    const plan = basePlan({
+      pageUpdates: [
+        {
+          pageId: "page-1",
+          sections: [
+            {
+              slug: "summary",
+              rationale: "Fresh evidence.",
+              proposed_body_md: "The opportunity was discussed.",
+              facetSlug: "overview",
+              source_refs: ["mem-1"],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => validatePlannerResult(plan)).not.toThrow();
+    expect(
+      (
+        plan.pageUpdates as Array<{
+          sections: Array<Record<string, unknown>>;
+        }>
+      )[0].sections[0],
+    ).not.toHaveProperty("facetSlug");
+  });
 });

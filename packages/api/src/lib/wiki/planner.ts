@@ -629,14 +629,13 @@ export function validatePlannerResult(
         "facetSlug",
         "pageUpdates.sections",
       );
+      const updateSection = section as Record<string, unknown>;
       if (
-        (section as Record<string, unknown>).facetSlug !== undefined &&
-        (section as Record<string, unknown>).facetSlug !== null &&
+        updateSection.facetSlug !== undefined &&
+        updateSection.facetSlug !== null &&
         (up.entityTypeSlug === undefined || up.entityTypeSlug === null)
       ) {
-        throw new Error(
-          "pageUpdates.entityTypeSlug required when sections include facetSlug",
-        );
+        delete updateSection.facetSlug;
       }
     }
   }
