@@ -16,6 +16,44 @@ bootstrap -> workflow dispatch -> CI deploy -> overlay apply -> smoke summary
 Run these commands from an operator machine with temporary customer AWS admin
 access and GitHub admin access to this repository.
 
+1. Log in and verify readiness:
+
+   ```bash
+   thinkwork login
+   ```
+
+2. Run the top-level bootstrap:
+
+   ```bash
+   thinkwork deploy --bootstrap \
+     --customer {{CUSTOMER_SLUG}} \
+     --repo <github-owner>/<github-repo> \
+     --stage dev
+   ```
+
+   The CLI creates or reuses the deployment repo checkout, bootstraps dev and
+   prod deployment authority, sets GitHub Environment secrets through `gh`,
+   commits and pushes managed files, dispatches the dev workflow, waits for the
+   run, and prints deploy evidence plus discovered URLs.
+
+3. Deploy again after repo or overlay changes:
+
+   ```bash
+   thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage dev
+   ```
+
+4. Log in to the deployed stack:
+
+   ```bash
+   thinkwork login --stage dev --region {{REGION}}
+   thinkwork me --stage dev --region {{REGION}}
+   ```
+
+## Manual Fallback
+
+Use these commands only when troubleshooting or when you need to split the
+one-line flow into explicit steps.
+
 1. Confirm access:
 
    ```bash
@@ -23,14 +61,7 @@ access and GitHub admin access to this repository.
    aws sts get-caller-identity
    ```
 
-2. Install the CLI:
-
-   ```bash
-   npm install -g thinkwork-cli
-   thinkwork --version
-   ```
-
-3. Choose the release and checksum:
+2. Choose the release and checksum:
 
    ```bash
    VERSION="$(thinkwork --version)"
@@ -39,7 +70,7 @@ access and GitHub admin access to this repository.
    MANIFEST_SHA256="$(curl -fsSL "$MANIFEST_URL" | shasum -a 256 | awk '{print $1}')"
    ```
 
-4. Bootstrap AWS trust, GitHub Environments, and managed repo files:
+3. Bootstrap AWS trust, GitHub Environments, and managed repo files:
 
    ```bash
    thinkwork enterprise bootstrap . \
@@ -54,51 +85,13 @@ access and GitHub admin access to this repository.
      --yes
    ```
 
-5. Commit and push generated files:
+4. Commit, push, and dispatch manually:
 
    ```bash
    git add .
    git commit -m "chore: bootstrap ThinkWork deployment repo"
    git push
-   ```
 
-6. Set required GitHub Environment secrets for each stage:
-
-   ```bash
-   gh secret set TF_VAR_DB_PASSWORD \
-     --repo <github-owner>/<github-repo> \
-     --env dev \
-     --body "$DEV_DB_PASSWORD"
-
-   gh secret set TF_VAR_API_AUTH_SECRET \
-     --repo <github-owner>/<github-repo> \
-     --env dev \
-     --body "$DEV_API_AUTH_SECRET"
-   ```
-
-   Repeat for `prod` before the production deploy.
-
-7. Verify GitHub Environment variables:
-
-   ```bash
-   gh variable list --repo <github-owner>/<github-repo> --env dev
-   gh variable list --repo <github-owner>/<github-repo> --env prod
-   ```
-
-   Expected variables are `AWS_REGION`, `AWS_ROLE_ARN`, and
-   `THINKWORK_ARTIFACT_BUCKET`.
-
-8. Review stage config:
-   - `terraform/stages/dev.tfvars`
-   - `terraform/stages/prod.tfvars`
-   - `customer/deployment.json`
-
-   Do not commit plaintext secrets to `terraform/stages/*.tfvars`,
-   `customer/`, `.env`, or this runbook.
-
-9. Dispatch the first deploy:
-
-   ```bash
    gh workflow run deploy.yml \
      --repo <github-owner>/<github-repo> \
      -f stage=dev \
@@ -106,39 +99,28 @@ access and GitHub admin access to this repository.
      -f run_smokes=true
    ```
 
-10. Watch the run and download evidence:
+5. Watch the run and download evidence:
 
-    ```bash
-    RUN_ID="$(gh run list --repo <github-owner>/<github-repo> --workflow deploy.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
-    gh run watch "$RUN_ID" --repo <github-owner>/<github-repo> --exit-status
+   ```bash
+   RUN_ID="$(gh run list --repo <github-owner>/<github-repo> --workflow deploy.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+   gh run watch "$RUN_ID" --repo <github-owner>/<github-repo> --exit-status
 
-    mkdir -p "deploy-artifacts/dev-${RUN_ID}"
-    gh run download "$RUN_ID" \
-      --repo <github-owner>/<github-repo> \
-      --name "thinkwork-deploy-dev-${RUN_ID}" \
-      --dir "deploy-artifacts/dev-${RUN_ID}"
+   mkdir -p "deploy-artifacts/dev-${RUN_ID}"
+   gh run download "$RUN_ID" \
+     --repo <github-owner>/<github-repo> \
+     --name "thinkwork-deploy-dev-${RUN_ID}" \
+     --dir "deploy-artifacts/dev-${RUN_ID}"
 
-    jq . "deploy-artifacts/dev-${RUN_ID}/deploy-summary.json"
-    jq . "deploy-artifacts/dev-${RUN_ID}/smoke-summary.json"
-    ```
+   jq . "deploy-artifacts/dev-${RUN_ID}/deploy-summary.json"
+   jq . "deploy-artifacts/dev-${RUN_ID}/smoke-summary.json"
+   ```
 
-11. Log in to the deployed stack:
+6. Deploy production after the `prod` GitHub Environment has required
+   approvals and secrets:
 
-    ```bash
-    thinkwork login --stage dev --region {{REGION}}
-    thinkwork me --stage dev --region {{REGION}}
-    ```
-
-12. Deploy production after the `prod` GitHub Environment has required
-    approvals and secrets:
-
-    ```bash
-    gh workflow run deploy.yml \
-      --repo <github-owner>/<github-repo> \
-      -f stage=prod \
-      -f component=all \
-      -f run_smokes=true
-    ```
+   ```bash
+   thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage prod --component all
+   ```
 
 ## Workflow Components
 
@@ -170,11 +152,7 @@ access and GitHub admin access to this repository.
 4. Dispatch:
 
    ```bash
-   gh workflow run deploy.yml \
-     --repo <github-owner>/<github-repo> \
-     -f stage=dev \
-     -f component=overlays \
-     -f run_smokes=false
+   thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage dev --component overlays --no-run-smokes
    ```
 
 ## Release Upgrades
@@ -209,11 +187,7 @@ access and GitHub admin access to this repository.
    git commit -m "chore: bump ThinkWork to ${RELEASE}"
    git push
 
-   gh workflow run deploy.yml \
-     --repo <github-owner>/<github-repo> \
-     -f stage=dev \
-     -f component=all \
-     -f run_smokes=true
+   thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage dev --component all
    ```
 
 3. Deploy to production after dev passes.

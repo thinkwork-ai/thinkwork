@@ -57,7 +57,7 @@ export function registerDeployCommand(
   program
     .command("deploy")
     .description(
-      "Deploy ThinkWork with local Terraform or a customer-owned enterprise CI repo.",
+      "Deploy ThinkWork. Defaults to local Terraform; uses enterprise CI with --bootstrap, --customer, or deployment repo context.",
     )
     .option("-p, --profile <name>", "AWS profile")
     .option("-s, --stage <name>", "Deployment stage")
@@ -66,7 +66,10 @@ export function registerDeployCommand(
       "Component (local: foundation|data|app|all; enterprise: all|foundation|artifacts|overlays|smokes)",
       "all",
     )
-    .option("--bootstrap", "Bootstrap enterprise CI deployment authority")
+    .option(
+      "--bootstrap",
+      "Run one-line enterprise bootstrap: repo, trust, secrets, push, workflow",
+    )
     .option("--customer <slug>", "Enterprise customer slug")
     .option("--repo <owner/name>", "Customer GitHub deployment repository")
     .option("--create-repo", "Create the customer deployment repository")

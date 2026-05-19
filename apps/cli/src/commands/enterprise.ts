@@ -7,7 +7,7 @@ export function registerEnterpriseCommand(program: Command): void {
   const enterprise = program
     .command("enterprise")
     .description(
-      "Bootstrap and operate customer-owned ThinkWork enterprise deployment repositories.",
+      "Low-level customer-owned enterprise deployment repo operations. Normal deploys use `thinkwork deploy --bootstrap`.",
     );
 
   registerEnterpriseBootstrapCommand(enterprise);

@@ -14,6 +14,8 @@ describe("deploy command registration", () => {
       (command) => command.name() === "deploy",
     );
     expect(deploy).toBeDefined();
+    expect(deploy!.description()).toContain("Defaults to local Terraform");
+    expect(deploy!.description()).toContain("enterprise CI");
     const flags = deploy!.options.map((option) => option.flags);
 
     expect(flags).toContain("--bootstrap");
@@ -33,6 +35,10 @@ describe("deploy command registration", () => {
     expect(flags).toContain("--db-password <value>");
     expect(flags).toContain("--api-auth-secret <value>");
     expect(flags).toContain("--dry-run");
+    expect(
+      deploy!.options.find((option) => option.flags === "--bootstrap")
+        ?.description,
+    ).toContain("one-line enterprise bootstrap");
     expect(deploy!.options.every((option) => option.mandatory !== true)).toBe(
       true,
     );
