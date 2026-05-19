@@ -330,14 +330,23 @@ describe("requester idle memory learner", () => {
       "- Channel: manual",
       "- Status: open",
       "- Priority: medium",
-      "- Messages: 1",
-      "- Attachments: 0",
+      "- Messages reviewed: 1",
+      "- Attachments reviewed: 0",
+      "- Candidates extracted: 1",
+      "- Candidates accepted: 1",
+      "- Candidates promoted: 0",
+      "- Candidates staged: 1",
+      "- Candidates rejected: 0",
       "",
-      "### Requester Messages",
+      "### Promoted Memory",
       "",
-      "- msg-1: The project customer is Acme for this prototype.",
+      "- None",
       "",
-      "### Assistant Responses",
+      "### Staged Memory Candidates",
+      "",
+      `- [project] The project customer is Acme for this prototype.\n  Evidence: msg-1; score=${candidate.score.toFixed(2)}; hash=${candidate.hash}`,
+      "",
+      "### Rejected Signals",
       "",
       "- None",
       "",
@@ -481,7 +490,13 @@ describe("requester idle memory learner", () => {
     );
     expect(String(putCalls[0].args[0].input.Body)).toContain("CRM lookup");
     expect(String(putCalls[0].args[0].input.Body)).toContain(
+      "Candidates extracted: 0",
+    );
+    expect(String(putCalls[0].args[0].input.Body)).not.toContain(
       "What are the last 5 opportunities from the CRM?",
+    );
+    expect(String(putCalls[0].args[0].input.Body)).not.toContain(
+      "### Assistant Responses",
     );
     expect(putCalls[1].args[0].input.Key).toBe(
       "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
@@ -578,7 +593,10 @@ describe("requester idle memory learner", () => {
     const body = String(putCalls[1].args[0].input.Body);
     expect(body.match(/^## Thread thread-1$/gm)).toHaveLength(1);
     expect(body).toContain("Updated CRM lookup");
-    expect(body).toContain("What are the last 5 opportunities from the CRM?");
+    expect(body).toContain("Candidates extracted: 0");
+    expect(body).not.toContain(
+      "What are the last 5 opportunities from the CRM?",
+    );
     expect(body).toContain("## Thread other-thread");
     expect(body).toContain("Keep me");
     expect(body).not.toContain("Stale CRM lookup");
@@ -622,14 +640,23 @@ describe("requester idle memory learner", () => {
       "- Channel: manual",
       "- Status: open",
       "- Priority: medium",
-      "- Messages: 1",
-      "- Attachments: 0",
+      "- Messages reviewed: 1",
+      "- Attachments reviewed: 0",
+      "- Candidates extracted: 0",
+      "- Candidates accepted: 0",
+      "- Candidates promoted: 0",
+      "- Candidates staged: 0",
+      "- Candidates rejected: 0",
       "",
-      "### Requester Messages",
+      "### Promoted Memory",
       "",
-      "- msg-1: What are the last 5 opportunities from the CRM?",
+      "- None",
       "",
-      "### Assistant Responses",
+      "### Staged Memory Candidates",
+      "",
+      "- None",
+      "",
+      "### Rejected Signals",
       "",
       "- None",
       "",

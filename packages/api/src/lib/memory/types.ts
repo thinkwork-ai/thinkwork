@@ -169,6 +169,7 @@ export type UpsertMarkdownMemoryDocumentRequest = MemoryOwnerRef & {
   content: string;
   documentId: string;
   context: string;
+  async?: boolean;
   metadata?: Record<string, unknown>;
 };
 
