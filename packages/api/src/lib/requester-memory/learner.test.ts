@@ -295,6 +295,106 @@ describe("requester idle memory learner", () => {
     });
   });
 
+  it("does not rewrite staged candidates when the rendered thread section is unchanged", async () => {
+    const projectMessage = {
+      id: "msg-1",
+      role: "user",
+      content: "The project customer is Acme for this prototype.",
+      senderType: "user",
+      senderId: "user-1",
+      metadata: null,
+      createdAt: new Date("2026-05-18T17:00:00.000Z"),
+    };
+    const candidate = extractLearningCandidates([projectMessage]).accepted[0];
+    const db = makeDb([
+      [
+        {
+          id: "thread-1",
+          title: "Memory thread",
+          status: "open",
+          priority: "medium",
+          type: "task",
+          channel: "manual",
+          metadata: null,
+        },
+      ],
+      [projectMessage],
+      [],
+    ]);
+    const existingWorkingMemory = [
+      "## Thread thread-1",
+      "",
+      "- Captured at: 2026-05-18T17:15:00.000Z",
+      "- Title: Memory thread",
+      "- Type: task",
+      "- Channel: manual",
+      "- Status: open",
+      "- Priority: medium",
+      "- Messages: 1",
+      "- Attachments: 0",
+      "",
+      "### Requester Messages",
+      "",
+      "- msg-1: The project customer is Acme for this prototype.",
+      "",
+      "### Assistant Responses",
+      "",
+      "- None",
+      "",
+    ].join("\n");
+    const existingCandidateMemory = [
+      "## Candidate thread thread-1",
+      "",
+      "- Thread: thread-1",
+      "- Scheduled for: 2026-05-18T17:15:00.000Z",
+      "",
+      `- [project] score=${candidate.score.toFixed(2)} message=msg-1 hash=${candidate.hash}`,
+      "  The project customer is Acme for this prototype.",
+      "",
+    ].join("\n");
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/MEMORY.md",
+      })
+      .resolves(s3Body("# Memory\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+      })
+      .resolves(s3Body(existingWorkingMemory));
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/candidates/2026-05-18.md",
+      })
+      .resolves(s3Body(existingCandidateMemory));
+    s3Mock.on(PutObjectCommand).resolves({});
+    const syncHindsight = vi.fn().mockResolvedValue({
+      status: "skipped",
+      files: [],
+    });
+
+    const result = await runRequesterIdleMemoryLearning(baseInput, {
+      db,
+      syncHindsight,
+    });
+
+    expect(result.status).toBe("no_change");
+    expect(result.candidateSummary).toMatchObject({
+      accepted: 1,
+      promoted: 0,
+      staged: 1,
+    });
+    expect(result.changedFiles).toEqual([]);
+    const putCalls = s3Mock.commandCalls(PutObjectCommand);
+    expect(putCalls).toHaveLength(1);
+    expect(putCalls[0].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
+    );
+  });
+
   it("writes a working thread journal when no durable candidates are extracted", async () => {
     const db = makeDb([
       [

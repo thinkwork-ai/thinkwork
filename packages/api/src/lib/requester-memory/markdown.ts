@@ -13,7 +13,7 @@ export function renderCandidateAppendSection(input: {
   candidates: LearningCandidate[];
 }): string {
   const lines = [
-    `## Thread idle run ${input.runId}`,
+    `## Candidate thread ${input.threadId}`,
     "",
     `- Thread: ${input.threadId}`,
     `- Scheduled for: ${input.scheduledFor}`,
@@ -31,6 +31,22 @@ export function renderCandidateAppendSection(input: {
   return lines.join("\n");
 }
 
+export function upsertCandidateSection(input: {
+  existing: string | null;
+  section: string;
+  threadId: string;
+}): string {
+  return upsertSecondLevelSection(input, (sectionLines) => {
+    const heading = sectionLines[0]?.trimEnd();
+    return (
+      heading === `## Candidate thread ${input.threadId}` ||
+      sectionLines.some(
+        (line) => line.trimEnd() === `- Thread: ${input.threadId}`,
+      )
+    );
+  });
+}
+
 export function appendMarkdownSection(
   existing: string | null,
   section: string,
@@ -45,26 +61,43 @@ export function upsertThreadJournalSection(input: {
   section: string;
   threadId: string;
 }): string {
+  return upsertSecondLevelSection(input, (sectionLines) => {
+    const heading = sectionLines[0]?.trimEnd();
+    return heading === `## Thread ${input.threadId}`;
+  });
+}
+
+function upsertSecondLevelSection(
+  input: {
+    existing: string | null;
+    section: string;
+  },
+  shouldRemoveSection: (sectionLines: string[]) => boolean,
+): string {
   const base = input.existing?.trimEnd();
   if (!base) return `${input.section.trimEnd()}\n`;
 
-  const heading = `## Thread ${input.threadId}`;
   const lines = base.split("\n");
   const nextLines: string[] = [];
 
   for (let index = 0; index < lines.length; ) {
-    if (lines[index]?.trimEnd() !== heading) {
+    if (!/^##\s+/.test(lines[index]?.trimEnd() ?? "")) {
       nextLines.push(lines[index] ?? "");
       index += 1;
       continue;
     }
 
+    const sectionStart = index;
     index += 1;
     while (
       index < lines.length &&
-      !/^## Thread\s+/.test(lines[index]?.trimEnd() ?? "")
+      !/^##\s+/.test(lines[index]?.trimEnd() ?? "")
     ) {
       index += 1;
+    }
+    const sectionLines = lines.slice(sectionStart, index);
+    if (!shouldRemoveSection(sectionLines)) {
+      nextLines.push(...sectionLines);
     }
   }
 
