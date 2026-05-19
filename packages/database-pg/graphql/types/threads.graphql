@@ -241,6 +241,7 @@ type ThreadParticipant {
   role: String!
   source: String!
   notificationPreference: ThreadParticipantNotificationPreference!
+  lastReadAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }

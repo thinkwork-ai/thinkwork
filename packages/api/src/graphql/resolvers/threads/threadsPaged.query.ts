@@ -6,8 +6,10 @@ import {
   and,
   desc,
   asc,
+  inArray,
   sql,
   threads,
+  threadParticipants,
   threadToCamel,
 } from "../../utils.js";
 import {
@@ -126,9 +128,48 @@ export const threadsPaged_query = async (
       .limit(limit)
       .offset(offset),
   ]);
+  const callerReadStateByThreadId = await loadCallerReadState({
+    tenantId: args.tenantId,
+    callerUserId,
+    threadIds: rows.map((row) => row.id),
+  });
 
   return {
-    items: rows.map((r) => threadToCamel(r)),
+    items: rows.map((r) => {
+      const participantReadState = callerReadStateByThreadId.get(r.id);
+      if (!participantReadState) return threadToCamel(r);
+      return threadToCamel({
+        ...r,
+        last_read_at: participantReadState.last_read_at,
+      });
+    }),
     totalCount: countResult[0]?.count ?? 0,
   };
 };
+
+async function loadCallerReadState(input: {
+  tenantId: string;
+  callerUserId: string | null;
+  threadIds: string[];
+}) {
+  if (!input.callerUserId || input.threadIds.length === 0) {
+    return new Map<string, { last_read_at: Date | null }>();
+  }
+
+  const rows = await db
+    .select({
+      thread_id: threadParticipants.thread_id,
+      last_read_at: threadParticipants.last_read_at,
+    })
+    .from(threadParticipants)
+    .where(
+      and(
+        eq(threadParticipants.tenant_id, input.tenantId),
+        eq(threadParticipants.participant_type, "user"),
+        eq(threadParticipants.user_id, input.callerUserId),
+        inArray(threadParticipants.thread_id, input.threadIds),
+      ),
+    );
+
+  return new Map(rows.map((row) => [row.thread_id, row]));
+}

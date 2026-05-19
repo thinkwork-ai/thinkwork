@@ -48,6 +48,7 @@ export const threadParticipants = pgTable(
     notification_preference: text("notification_preference")
       .notNull()
       .default("subscribed"),
+    last_read_at: timestamp("last_read_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -64,6 +65,11 @@ export const threadParticipants = pgTable(
       .where(sql`${table.agent_id} IS NOT NULL`),
     index("idx_thread_participants_thread").on(table.thread_id),
     index("idx_thread_participants_space").on(table.tenant_id, table.space_id),
+    index("idx_thread_participants_user_unread").on(
+      table.tenant_id,
+      table.user_id,
+      table.last_read_at,
+    ),
     check(
       "thread_participants_type_allowed",
       sql`${table.participant_type} IN ('user','agent')`,

@@ -6189,6 +6189,7 @@ export type ThreadParticipant = {
   agentId?: Maybe<Scalars['ID']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   id: Scalars['ID']['output'];
+  lastReadAt?: Maybe<Scalars['AWSDateTime']['output']>;
   notificationPreference: ThreadParticipantNotificationPreference;
   participantType: ThreadParticipantType;
   role: Scalars['String']['output'];
