@@ -1,0 +1,144 @@
+# Spaces are tenant-scoped collaborative rooms that own conversations,
+# checklist templates, members, local agent instructions, and integration
+# policy for a workflow such as Customer Onboarding.
+
+enum SpaceStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SpaceKind {
+  CUSTOM
+  CUSTOMER_ONBOARDING
+}
+
+enum SpaceMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum SpaceNotificationPreference {
+  SUBSCRIBED
+  MENTIONS
+  MUTED
+}
+
+enum SpaceAgentAssignmentStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum SpaceIntegrationProvider {
+  LASTMILE_TASKS
+  WEBHOOK
+}
+
+enum SpaceIntegrationStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum SpaceExternalWritebackPolicy {
+  DISABLED
+  STATUS_ONLY
+  STATUS_AND_COMMENTS
+}
+
+type Space {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  name: String!
+  description: String
+  prompt: String
+  status: SpaceStatus!
+  kind: SpaceKind!
+  templateKey: String
+  config: AWSJSON
+  members: [SpaceMember!]!
+  agentAssignments: [SpaceAgentAssignment!]!
+  checklistTemplates: [SpaceChecklistTemplate!]!
+  integrations: [SpaceIntegration!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SpaceMember {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  userId: ID!
+  user: User
+  role: SpaceMemberRole!
+  notificationPreference: SpaceNotificationPreference!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SpaceAgentAssignment {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  agentId: ID!
+  agent: Agent
+  localRole: String
+  localInstructions: String
+  autoSubscribe: Boolean!
+  allowedCapabilities: AWSJSON
+  allowedTools: AWSJSON
+  status: SpaceAgentAssignmentStatus!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SpaceChecklistTemplate {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  key: String!
+  name: String!
+  description: String
+  config: AWSJSON
+  items: [SpaceChecklistItem!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SpaceChecklistItem {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  templateId: ID!
+  key: String!
+  title: String!
+  description: String
+  roleKey: String
+  required: Boolean!
+  sortOrder: Int!
+  externalTaskTemplate: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SpaceIntegration {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  provider: SpaceIntegrationProvider!
+  status: SpaceIntegrationStatus!
+  writebackPolicy: SpaceExternalWritebackPolicy!
+  config: AWSJSON
+  webhookConfigRef: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+extend type Query {
+  spaces(tenantId: ID!, status: SpaceStatus): [Space!]!
+  space(id: ID!): Space
+  customerOnboardingSpace(tenantId: ID!): Space
+}

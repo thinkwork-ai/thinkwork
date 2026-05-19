@@ -3675,6 +3675,7 @@ export type Query = {
   costByModel: Array<ModelCostSummary>;
   costSummary: CostSummary;
   costTimeSeries: Array<DailyCostPoint>;
+  customerOnboardingSpace?: Maybe<Space>;
   customizeBindings?: Maybe<CustomizeBindings>;
   deploymentStatus: DeploymentStatus;
   evalResultSpans: Array<EvalSpan>;
@@ -3760,6 +3761,8 @@ export type Query = {
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
+  space?: Maybe<Space>;
+  spaces: Array<Space>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -4110,6 +4113,11 @@ export type QueryCostTimeSeriesArgs = {
 };
 
 
+export type QueryCustomerOnboardingSpaceArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryEvalResultSpansArgs = {
   runId: Scalars['ID']['input'];
   testCaseId: Scalars['ID']['input'];
@@ -4428,6 +4436,17 @@ export type QuerySkillRunsArgs = {
 
 
 export type QuerySlackWorkspacesArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySpaceArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySpacesArgs = {
+  status?: InputMaybe<SpaceStatus>;
   tenantId: Scalars['ID']['input'];
 };
 
@@ -5291,6 +5310,147 @@ export type SlackWorkspaceInstallStart = {
   expiresAt: Scalars['AWSDateTime']['output'];
   state: Scalars['String']['output'];
 };
+
+export type Space = {
+  __typename?: 'Space';
+  agentAssignments: Array<SpaceAgentAssignment>;
+  checklistTemplates: Array<SpaceChecklistTemplate>;
+  config?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  integrations: Array<SpaceIntegration>;
+  kind: SpaceKind;
+  members: Array<SpaceMember>;
+  name: Scalars['String']['output'];
+  prompt?: Maybe<Scalars['String']['output']>;
+  slug: Scalars['String']['output'];
+  status: SpaceStatus;
+  templateKey?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SpaceAgentAssignment = {
+  __typename?: 'SpaceAgentAssignment';
+  agent?: Maybe<Agent>;
+  agentId: Scalars['ID']['output'];
+  allowedCapabilities?: Maybe<Scalars['AWSJSON']['output']>;
+  allowedTools?: Maybe<Scalars['AWSJSON']['output']>;
+  autoSubscribe: Scalars['Boolean']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  localInstructions?: Maybe<Scalars['String']['output']>;
+  localRole?: Maybe<Scalars['String']['output']>;
+  spaceId: Scalars['ID']['output'];
+  status: SpaceAgentAssignmentStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum SpaceAgentAssignmentStatus {
+  Active = 'ACTIVE',
+  Archived = 'ARCHIVED',
+  Paused = 'PAUSED'
+}
+
+export type SpaceChecklistItem = {
+  __typename?: 'SpaceChecklistItem';
+  createdAt: Scalars['AWSDateTime']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  externalTaskTemplate?: Maybe<Scalars['AWSJSON']['output']>;
+  id: Scalars['ID']['output'];
+  key: Scalars['String']['output'];
+  required: Scalars['Boolean']['output'];
+  roleKey?: Maybe<Scalars['String']['output']>;
+  sortOrder: Scalars['Int']['output'];
+  spaceId: Scalars['ID']['output'];
+  templateId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SpaceChecklistTemplate = {
+  __typename?: 'SpaceChecklistTemplate';
+  config?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  items: Array<SpaceChecklistItem>;
+  key: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum SpaceExternalWritebackPolicy {
+  Disabled = 'DISABLED',
+  StatusAndComments = 'STATUS_AND_COMMENTS',
+  StatusOnly = 'STATUS_ONLY'
+}
+
+export type SpaceIntegration = {
+  __typename?: 'SpaceIntegration';
+  config?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  provider: SpaceIntegrationProvider;
+  spaceId: Scalars['ID']['output'];
+  status: SpaceIntegrationStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  webhookConfigRef?: Maybe<Scalars['String']['output']>;
+  writebackPolicy: SpaceExternalWritebackPolicy;
+};
+
+export enum SpaceIntegrationProvider {
+  LastmileTasks = 'LASTMILE_TASKS',
+  Webhook = 'WEBHOOK'
+}
+
+export enum SpaceIntegrationStatus {
+  Active = 'ACTIVE',
+  Archived = 'ARCHIVED',
+  Paused = 'PAUSED'
+}
+
+export enum SpaceKind {
+  Custom = 'CUSTOM',
+  CustomerOnboarding = 'CUSTOMER_ONBOARDING'
+}
+
+export type SpaceMember = {
+  __typename?: 'SpaceMember';
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  notificationPreference: SpaceNotificationPreference;
+  role: SpaceMemberRole;
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  user?: Maybe<User>;
+  userId: Scalars['ID']['output'];
+};
+
+export enum SpaceMemberRole {
+  Admin = 'ADMIN',
+  Member = 'MEMBER',
+  Owner = 'OWNER',
+  Viewer = 'VIEWER'
+}
+
+export enum SpaceNotificationPreference {
+  Mentions = 'MENTIONS',
+  Muted = 'MUTED',
+  Subscribed = 'SUBSCRIBED'
+}
+
+export enum SpaceStatus {
+  Active = 'ACTIVE',
+  Archived = 'ARCHIVED'
+}
 
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;

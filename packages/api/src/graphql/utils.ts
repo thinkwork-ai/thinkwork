@@ -114,6 +114,12 @@ import {
   tenantWorkflowCatalog,
   slackWorkspaces,
   slackUserLinks,
+  spaces,
+  spaceMembers,
+  spaceAgentAssignments,
+  spaceChecklistTemplates,
+  spaceChecklistItems,
+  spaceIntegrations,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -205,6 +211,12 @@ export {
   tenantWorkflowCatalog,
   slackWorkspaces,
   slackUserLinks,
+  spaces,
+  spaceMembers,
+  spaceAgentAssignments,
+  spaceChecklistTemplates,
+  spaceChecklistItems,
+  spaceIntegrations,
   checkAndFireUnblockWakeups,
   generateSlug,
 };
