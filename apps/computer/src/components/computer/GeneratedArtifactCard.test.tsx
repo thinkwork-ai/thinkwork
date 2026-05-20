@@ -34,7 +34,7 @@ describe("GeneratedArtifactCard", () => {
     expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
 
     const fullScreenLink = screen.getByRole("link", {
-      name: /open artifact full screen/i,
+      name: /open artifact crm pipeline risk/i,
     });
     expect(fullScreenLink.getAttribute("href")).toBe("/artifacts/artifact_123");
   });
@@ -62,7 +62,9 @@ describe("GeneratedArtifactCard", () => {
 
     expect(onOpenArtifact).toHaveBeenCalledWith("artifact_map");
     expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
-    expect(screen.getByRole("link", { name: /open artifact full screen/i }));
+    expect(
+      screen.queryByRole("link", { name: /open artifact full screen/i }),
+    ).toBeNull();
   });
 
   it("renders an applet preview for generated APPLET artifacts when explicitly requested", () => {
@@ -121,6 +123,7 @@ describe("GeneratedArtifactCard", () => {
 
     expect(screen.getByText("Plain note")).toBeTruthy();
     expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
-    expect(screen.getByText(/preview unavailable/i)).toBeTruthy();
+    expect(screen.getByText("NOTE")).toBeTruthy();
+    expect(screen.queryByText(/preview unavailable/i)).toBeNull();
   });
 });

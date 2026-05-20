@@ -362,7 +362,7 @@ function ArtifactSidePanel({
 
   return (
     <aside
-      className="relative hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex"
+      className="relative ml-3 hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex"
       style={{ width }}
       aria-label="Artifact side panel"
       data-testid="artifact-side-panel"
@@ -419,7 +419,7 @@ function ArtifactSidePanel({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-4">
-        <GeneratedArtifactPreview artifact={artifact} />
+        <GeneratedArtifactPreview artifact={artifact} bare />
       </div>
     </aside>
   );

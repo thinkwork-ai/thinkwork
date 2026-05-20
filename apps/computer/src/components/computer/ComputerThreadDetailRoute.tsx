@@ -401,6 +401,15 @@ export function ComputerThreadDetailRoute({
             {createdLabel}
           </span>
         ) : null}
+        <ThreadDetailActions
+          threadId={threadId}
+          threadTitle={threadTitle}
+          attachedArtifacts={attachedArtifacts}
+          onDeleted={() => {
+            // ChatSidebar owns post-delete navigation because it has the
+            // actual visible, filtered thread order the user is looking at.
+          }}
+        />
         {threadArtifacts.length > 0 ? (
           <Button
             type="button"
@@ -425,15 +434,6 @@ export function ComputerThreadDetailRoute({
             )}
           </Button>
         ) : null}
-        <ThreadDetailActions
-          threadId={threadId}
-          threadTitle={threadTitle}
-          attachedArtifacts={attachedArtifacts}
-          onDeleted={() => {
-            // ChatSidebar owns post-delete navigation because it has the
-            // actual visible, filtered thread order the user is looking at.
-          }}
-        />
       </div>
     ),
     actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${artifactPanelOpen ? "open" : "closed"}`,

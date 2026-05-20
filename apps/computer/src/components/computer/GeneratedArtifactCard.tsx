@@ -1,4 +1,4 @@
-import { Code2, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
 import { GeneratedAppArtifactShell } from "@/components/apps/GeneratedAppArtifactShell";
@@ -23,82 +23,56 @@ export function GeneratedArtifactCard({
   onOpenArtifact,
 }: GeneratedArtifactCardProps) {
   const appArtifact = isAppArtifact(artifact);
+  const content = (
+    <>
+      <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
+      <div className="mt-2 flex items-center">
+        <Badge variant="outline" className="rounded-md border-white/15 text-sm">
+          {appArtifact ? "App" : (artifact.type ?? "Artifact")}
+        </Badge>
+      </div>
+    </>
+  );
+
+  if (onOpenArtifact) {
+    return (
+      <button
+        type="button"
+        className="block w-full rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#333c4f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => onOpenArtifact(artifact.id)}
+        aria-label={`Open artifact ${artifact.title}`}
+      >
+        {content}
+      </button>
+    );
+  }
 
   return (
-    <article className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/70 p-3">
-      <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-        <Code2 className="size-4" aria-hidden="true" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
-          <Badge variant="outline" className="rounded-md">
-            {appArtifact ? "App" : (artifact.type ?? "Artifact")}
-          </Badge>
-        </div>
-        {artifact.summary ? (
-          <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
-            {artifact.summary}
-          </p>
-        ) : null}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {onOpenArtifact ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => onOpenArtifact(artifact.id)}
-              aria-label={`Open artifact ${artifact.title}`}
-            >
-              Open artifact
-            </Button>
-          ) : (
-            <Button
-              asChild
-              type="button"
-              variant="secondary"
-              size="sm"
-              aria-label="Open artifact full screen"
-            >
-              <Link to="/artifacts/$id" params={{ id: artifact.id }}>
-                Open full
-              </Link>
-            </Button>
-          )}
-          {onOpenArtifact ? (
-            <Button
-              asChild
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1 text-muted-foreground hover:text-foreground"
-              aria-label="Open artifact full screen"
-            >
-              <Link to="/artifacts/$id" params={{ id: artifact.id }}>
-                <ExternalLink className="size-4" />
-                <span className="hidden sm:inline">Open full</span>
-              </Link>
-            </Button>
-          ) : null}
-          {!appArtifact ? (
-            <span className="text-xs text-muted-foreground">
-              Preview unavailable
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </article>
+    <Link
+      to="/artifacts/$id"
+      params={{ id: artifact.id }}
+      className="block w-full rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#333c4f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`Open artifact ${artifact.title}`}
+    >
+      {content}
+    </Link>
   );
 }
 
 export function GeneratedArtifactPreview({
   artifact,
+  bare = false,
 }: {
   artifact: GeneratedArtifact;
+  bare?: boolean;
 }) {
   const appArtifact = isAppArtifact(artifact);
 
   if (appArtifact) {
+    if (bare) {
+      return <InlineAppletEmbed appId={artifact.id} />;
+    }
+
     return (
       <GeneratedAppArtifactShell
         title={artifact.title}
