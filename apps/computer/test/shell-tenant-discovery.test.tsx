@@ -78,7 +78,46 @@ describe("apps/computer tenant discovery", () => {
     vi.restoreAllMocks();
   });
 
-  it("discovers an invited Google-federated user's tenant through assignedComputers", async () => {
+  it("discovers an invited Google-federated user's tenant through auth/me", async () => {
+    apiFetchMock
+      .mockResolvedValueOnce({
+        tenantId: "tenant-A",
+        email: "alex@acme.example",
+        role: "member",
+      })
+      .mockResolvedValueOnce({
+        id: "tenant-A",
+        name: "Acme",
+        slug: "acme",
+        plan: "enterprise",
+      });
+
+    await renderTenantProbe();
+
+    expect(await screen.findByText("Tenant: tenant-A")).toBeTruthy();
+    expect(apiFetchMock).toHaveBeenNthCalledWith(1, "/api/auth/me");
+    expect(apiFetchMock).toHaveBeenNthCalledWith(2, "/api/tenants/tenant-A", {
+      extraHeaders: { "x-tenant-id": "tenant-A" },
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(setGraphqlTenantIdMock).toHaveBeenCalledWith("tenant-A"),
+    );
+  });
+
+  it("falls back to assignedComputers when auth/me has no tenant", async () => {
+    apiFetchMock
+      .mockResolvedValueOnce({
+        tenantId: null,
+        email: "alex@acme.example",
+        role: null,
+      })
+      .mockResolvedValueOnce({
+        id: "tenant-A",
+        name: "Acme",
+        slug: "acme",
+        plan: "enterprise",
+      });
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -97,6 +136,7 @@ describe("apps/computer tenant discovery", () => {
     await renderTenantProbe();
 
     expect(await screen.findByText("Tenant: tenant-A")).toBeTruthy();
+    expect(apiFetchMock).toHaveBeenNthCalledWith(1, "/api/auth/me");
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "https://api.example.test/graphql",
       expect.objectContaining({
@@ -108,7 +148,7 @@ describe("apps/computer tenant discovery", () => {
         body: expect.stringContaining("assignedComputers"),
       }),
     );
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/tenants/tenant-A", {
+    expect(apiFetchMock).toHaveBeenNthCalledWith(2, "/api/tenants/tenant-A", {
       extraHeaders: { "x-tenant-id": "tenant-A" },
     });
     await waitFor(() =>
@@ -117,6 +157,11 @@ describe("apps/computer tenant discovery", () => {
   });
 
   it("renders the no-tenant surface instead of bootstrapping when discovery finds nothing", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      tenantId: null,
+      email: "alex@acme.example",
+      role: null,
+    });
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -134,7 +179,7 @@ describe("apps/computer tenant discovery", () => {
     expect(
       screen.getByText(/Ask your tenant operator to invite you/),
     ).toBeTruthy();
-    expect(apiFetchMock).not.toHaveBeenCalled();
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/me");
     expect(
       setGraphqlTenantIdMock.mock.calls.map(([tenantId]) => tenantId),
     ).not.toContain("tenant-A");
