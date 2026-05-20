@@ -47,6 +47,10 @@ import {
   type SanitizationViolation,
   substitute,
 } from "./placeholder-substitution.js";
+import {
+  legacyDefaultsWorkspacePrefix,
+  legacyTemplateWorkspacePrefix,
+} from "./spaces/template-migration.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -102,14 +106,6 @@ function agentKey(tenantSlug: string, agentSlug: string, path: string): string {
   return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${path}`;
 }
 
-function templatePrefix(tenantSlug: string, templateSlug: string): string {
-  return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/`;
-}
-
-function defaultsPrefix(tenantSlug: string): string {
-  return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/`;
-}
-
 function isNotFound(err: unknown): boolean {
   if (err instanceof NoSuchKey) return true;
   const name = (err as { name?: string } | null)?.name;
@@ -125,7 +121,7 @@ interface ResolvedAgent {
   agentSlug: string;
   tenantSlug: string;
   tenantName: string;
-  templateSlug: string;
+  templateSlug: string | null;
 }
 
 async function resolveAgent(
@@ -142,7 +138,7 @@ async function resolveAgent(
     })
     .from(agents)
     .where(eq(agents.id, agentId));
-  if (!agent || !agent.slug || !agent.template_id) return null;
+  if (!agent || !agent.slug) return null;
 
   const [tenant] = await tx
     .select({ id: tenants.id, slug: tenants.slug, name: tenants.name })
@@ -150,11 +146,14 @@ async function resolveAgent(
     .where(eq(tenants.id, agent.tenant_id));
   if (!tenant?.slug) return null;
 
-  const [template] = await tx
-    .select({ slug: agentTemplates.slug })
-    .from(agentTemplates)
-    .where(eq(agentTemplates.id, agent.template_id));
-  if (!template?.slug) return null;
+  let templateSlug: string | null = null;
+  if (agent.template_id) {
+    const [template] = await tx
+      .select({ slug: agentTemplates.slug })
+      .from(agentTemplates)
+      .where(eq(agentTemplates.id, agent.template_id));
+    templateSlug = template?.slug ?? null;
+  }
 
   return {
     agentId: agent.id,
@@ -162,7 +161,7 @@ async function resolveAgent(
     agentSlug: agent.slug,
     tenantSlug: tenant.slug,
     tenantName: tenant.name,
-    templateSlug: template.slug,
+    templateSlug,
   };
 }
 
@@ -247,16 +246,27 @@ export async function bootstrapAgentWorkspace(
   if (!resolved) {
     throw new BootstrapError(
       "AGENT_UNRESOLVABLE",
-      `Could not resolve agent / tenant / template for ${agentId}`,
+      `Could not resolve agent / tenant for ${agentId}`,
     );
   }
 
-  // Source paths: template wins, defaults fills gaps.
-  const tPrefix = templatePrefix(resolved.tenantSlug, resolved.templateSlug);
-  const dPrefix = defaultsPrefix(resolved.tenantSlug);
+  // Source paths: template wins, defaults fills gaps. Template-free Agents
+  // bootstrap from defaults only so new post-Template rows can still get a
+  // workspace without requiring the legacy FK.
+  const dPrefix = legacyDefaultsWorkspacePrefix(resolved.tenantSlug);
+  const defaultsPromise = listSourceFiles(bkt, dPrefix);
+  const templatePromise = resolved.templateSlug
+    ? listSourceFiles(
+        bkt,
+        legacyTemplateWorkspacePrefix(
+          resolved.tenantSlug,
+          resolved.templateSlug,
+        ),
+      )
+    : Promise.resolve(new Map<string, string>());
   const [templateKeys, defaultsKeys] = await Promise.all([
-    listSourceFiles(bkt, tPrefix),
-    listSourceFiles(bkt, dPrefix),
+    templatePromise,
+    defaultsPromise,
   ]);
 
   const sourceByPath = new Map<string, string>();

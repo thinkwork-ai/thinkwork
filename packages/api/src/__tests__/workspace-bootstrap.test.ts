@@ -230,6 +230,28 @@ describe("bootstrapAgentWorkspace", () => {
     expect(memoryGuide!.args[0].input.Body).toBe("Guide for Acme");
   });
 
+  it("bootstraps template-free agents from tenant defaults", async () => {
+    pushDbRows([agentRow({ template_id: null })]);
+    pushDbRows([tenantRow()]);
+    stubSources({
+      defaultsFiles: {
+        "AGENTS.md": "# {{AGENT_NAME}} of {{TENANT_NAME}}",
+      },
+    });
+
+    const result = await bootstrapAgentWorkspace(AGENT_ID);
+
+    expect(result.written).toBe(1);
+    expect(result.total).toBe(1);
+    expect(
+      s3Mock.commandCalls(ListObjectsV2Command, { Prefix: TEMPLATE_PREFIX }),
+    ).toHaveLength(0);
+    const agentsMd = s3Mock
+      .commandCalls(PutObjectCommand)
+      .find((call) => call.args[0].input.Key === AGENT_PREFIX + "AGENTS.md");
+    expect(agentsMd?.args[0].input.Body).toBe("# Marco of Acme");
+  });
+
   it("template wins when both layers have the same path", async () => {
     queueAgentResolution();
     stubSources({
