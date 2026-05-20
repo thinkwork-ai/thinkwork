@@ -19,6 +19,7 @@ const {
     },
     threads: { id: { __column__: "threads.id" } },
     messages: { id: { __column__: "messages.id" } },
+    messageMentions: { __table__: "message_mentions" },
     spaces: {
       id: { __column__: "spaces.id" },
       tenant_id: { __column__: "spaces.tenant_id" },
@@ -147,6 +148,7 @@ vi.mock("../../utils.js", () => ({
   tenants: tables.tenants,
   threads: tables.threads,
   messages: tables.messages,
+  messageMentions: tables.messageMentions,
   spaces: tables.spaces,
   spaceAgentAssignments: tables.spaceAgentAssignments,
   threadParticipants: tables.threadParticipants,
@@ -188,6 +190,27 @@ vi.mock("../spaces/shared.js", () => ({
 
 vi.mock("../../../lib/spaces/default-space.js", () => ({
   ensureDefaultThreadSpace: mockEnsureDefaultThreadSpace,
+}));
+
+vi.mock("../../../lib/mentions/thread-mention-targets.js", () => ({
+  loadThreadMentionTargets: vi.fn(async () => []),
+}));
+
+vi.mock("../../../lib/mentions/parse-message-mentions.js", () => ({
+  parseMessageMentions: vi.fn(() => []),
+}));
+
+vi.mock("../../../lib/mentions/thread-participant-mentions.js", () => ({
+  insertMentionParticipants: vi.fn(async () => []),
+  toThreadParticipantInsert: vi.fn((row) => row),
+}));
+
+vi.mock("../../../lib/mentions/dispatch-agent-mentions.js", () => ({
+  dispatchAgentMentions: vi.fn(async () => []),
+}));
+
+vi.mock("../../../lib/mentions/default-agent-routing.js", () => ({
+  dispatchDefaultAgentTurn: vi.fn(async () => null),
 }));
 
 import { createThread } from "./createThread.mutation.js";

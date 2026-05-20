@@ -7,8 +7,27 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerComposer } from "./ComputerComposer";
+import { useState } from "react";
+import type { MentionTarget } from "@/components/spaces/MentionMenu";
 
 afterEach(cleanup);
+
+const mentionTargets: MentionTarget[] = [
+  {
+    id: "user:u1",
+    targetType: "USER",
+    targetId: "u1",
+    displayName: "Eric Odom",
+    role: "requester",
+  },
+  {
+    id: "agent:a1",
+    targetType: "AGENT",
+    targetId: "a1",
+    displayName: "Marco",
+    role: "agent",
+  },
+];
 
 describe("ComputerComposer focus styling", () => {
   // Plan U2: the empty-thread composer must not show a darker "well" or
@@ -70,4 +89,36 @@ describe("ComputerComposer", () => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("shows mention suggestions and inserts the selected target", () => {
+    render(<ControlledComposer />);
+
+    fireEvent.change(screen.getByLabelText("Ask your Computer"), {
+      target: { value: "@mar" },
+    });
+
+    expect(screen.getByRole("option", { name: /Marco/ })).toBeTruthy();
+    expect(screen.queryByText("@Marco")).toBeNull();
+    expect(screen.queryByText("agent")).toBeNull();
+
+    fireEvent.keyDown(screen.getByLabelText("Ask your Computer"), {
+      key: "Enter",
+    });
+
+    expect(
+      (screen.getByLabelText("Ask your Computer") as HTMLTextAreaElement).value,
+    ).toBe("@Marco ");
+  });
 });
+
+function ControlledComposer() {
+  const [value, setValue] = useState("");
+  return (
+    <ComputerComposer
+      value={value}
+      onChange={setValue}
+      onSubmit={() => {}}
+      mentionTargets={mentionTargets}
+    />
+  );
+}

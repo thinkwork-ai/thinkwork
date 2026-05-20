@@ -52,7 +52,6 @@ export const ThreadsPagedQuery = gql`
     $sortDir: String
     $limit: Int
     $offset: Int
-    $spaceId: ID
     $unreadOnly: Boolean
   ) {
     threadsPaged(
@@ -63,7 +62,6 @@ export const ThreadsPagedQuery = gql`
       sortDir: $sortDir
       limit: $limit
       offset: $offset
-      spaceId: $spaceId
       unreadOnly: $unreadOnly
     ) {
       items {
@@ -117,6 +115,35 @@ export const SpacesQuery = gql`
       unreadThreadCount
       lastActivityAt
       updatedAt
+    }
+  }
+`;
+
+export const NewThreadMentionTargetsQuery = gql`
+  query NewThreadMentionTargets($tenantId: ID!) {
+    tenantMembers(tenantId: $tenantId) {
+      id
+      principalType
+      principalId
+      role
+      status
+      user {
+        id
+        name
+        email
+        image
+      }
+    }
+    allTenantAgents(
+      tenantId: $tenantId
+      includeSystem: true
+      includeSubAgents: true
+    ) {
+      id
+      name
+      avatarUrl
+      role
+      status
     }
   }
 `;

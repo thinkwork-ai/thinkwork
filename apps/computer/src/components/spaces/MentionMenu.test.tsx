@@ -27,9 +27,26 @@ describe("MentionMenu", () => {
     render(<MentionMenu targets={targets} query="ordin" onSelect={onSelect} />);
 
     expect(screen.getByText("Coordinator")).toBeTruthy();
+    expect(screen.queryByText("coordinator")).toBeNull();
     expect(screen.queryByText("Alex Finance")).toBeNull();
 
     fireEvent.click(screen.getByRole("option", { name: /Coordinator/ }));
     expect(onSelect).toHaveBeenCalledWith(targets[0]);
+  });
+
+  it("highlights the active option with padded interior rows", () => {
+    render(
+      <MentionMenu
+        targets={targets}
+        query=""
+        activeIndex={1}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const options = screen.getAllByRole("option");
+    expect(options[1].getAttribute("aria-selected")).toBe("true");
+    expect(options[1].className).toContain("px-2.5");
+    expect(screen.getByRole("listbox").className).toContain("p-2");
   });
 });

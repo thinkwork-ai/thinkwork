@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
 import {
   Anchor,
@@ -25,15 +24,10 @@ import {
   DialogContent,
   DialogTitle,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   SidebarGroup,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import { SpacesQuery, ThreadsPagedQuery } from "@/lib/graphql-queries";
+import { ThreadsPagedQuery } from "@/lib/graphql-queries";
 import {
   clearMissingThreadDeletes,
   usePendingThreadDeletes,
@@ -46,7 +40,6 @@ import {
   sortThreadsByActivityDesc,
   threadTitle,
   type ChatThreadSummary,
-  type SpaceNavSummary,
 } from "./chat-sidebar-types";
 
 interface ThreadsPagedResult {
@@ -56,10 +49,6 @@ interface ThreadsPagedResult {
   } | null;
 }
 
-interface SpacesResult {
-  spaces?: SpaceNavSummary[] | null;
-}
-
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
 
@@ -67,11 +56,9 @@ export function ChatSidebar() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
-  const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedSpaceId, setSelectedSpaceId] = useState<string | undefined>();
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
   );
@@ -98,19 +85,6 @@ export function ChatSidebar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const [{ data: spacesData, fetching: spacesFetching, error: spacesError }] =
-    useQuery<SpacesResult>({
-      query: SpacesQuery,
-      variables: { tenantId: tenantId ?? "" },
-      pause: !tenantId,
-      requestPolicy: "cache-and-network",
-    });
-
-  const spaces = spacesData?.spaces ?? [];
-  const defaultSpaceId =
-    spaces.find((space) => isGeneralSpace(space))?.id ?? spaces[0]?.id;
-  const activeSpaceId = selectedSpaceId ?? routeSpaceId ?? defaultSpaceId;
-
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
     reexecuteRecentThreadsQuery,
@@ -121,11 +95,10 @@ export function ChatSidebar() {
       showArchived: false,
       sortField: "updated",
       sortDir: "desc",
-      spaceId: activeSpaceId,
       limit: RECENT_LIMIT,
       offset: 0,
     },
-    pause: !tenantId || !activeSpaceId,
+    pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
 
@@ -140,11 +113,10 @@ export function ChatSidebar() {
       showArchived: false,
       sortField: "updated",
       sortDir: "desc",
-      spaceId: activeSpaceId,
       limit: SEARCH_LIMIT,
       offset: 0,
     },
-    pause: !tenantId || !activeSpaceId || !searchOpen,
+    pause: !tenantId || !searchOpen,
     requestPolicy: "cache-and-network",
   });
 
@@ -205,9 +177,6 @@ export function ChatSidebar() {
       const detail = (event as CustomEvent<ThreadSelectedDetail>).detail;
       if (!detail?.threadId) return;
       setSelectedThreadId(detail.threadId);
-      if (detail.spaceId) {
-        setSelectedSpaceId(detail.spaceId);
-      }
     }
 
     window.addEventListener("thinkwork:thread-deleted", handleThreadDeleted);
@@ -267,45 +236,9 @@ export function ChatSidebar() {
           <Button asChild variant="ghost" className={navItemClassName}>
             <Link to="/new">
               <MessageCirclePlus className="size-4 shrink-0" />
-              <span>New chat</span>
+              <span>New thread</span>
             </Link>
           </Button>
-          <Select
-            value={activeSpaceId}
-            onValueChange={(value) => {
-              setSelectedSpaceId(value);
-            }}
-            disabled={!tenantId || spaces.length === 0 || spacesFetching}
-          >
-            <SelectTrigger
-              aria-label="Switch Space"
-              className={cn(
-                navItemClassName,
-                "border-0 bg-transparent shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 dark:bg-transparent dark:hover:bg-sidebar-accent [&>span]:flex [&>span]:min-w-0 [&>span]:flex-1 [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
-              )}
-            >
-              <IconPlanet className="size-4 shrink-0" />
-              <SelectValue placeholder="General" />
-            </SelectTrigger>
-            <SelectContent
-              position="popper"
-              side="bottom"
-              align="start"
-              sideOffset={4}
-              avoidCollisions={false}
-              className="w-[var(--radix-select-trigger-width)] p-2"
-            >
-              {spaces.map((space) => (
-                <SelectItem
-                  key={space.id}
-                  value={space.id}
-                  className="mx-1 h-8 w-[calc(100%-1.5rem)] px-2 [padding-right:2.75rem] text-sm [font-size:0.875rem] leading-none"
-                >
-                  {space.name ?? space.slug ?? "Space"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Button
             type="button"
             variant="ghost"
@@ -326,11 +259,6 @@ export function ChatSidebar() {
             <span>Settings</span>
           </Button>
         </nav>
-        {spacesError ? (
-          <p className="mt-2 px-2 text-xs text-destructive">
-            Spaces failed to load.
-          </p>
-        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
@@ -351,7 +279,7 @@ export function ChatSidebar() {
             <div className="space-y-3">
               {recentGroups.map((group) => (
                 <div key={group.label}>
-                  <div className="mb-1 px-2 text-xs font-semibold text-sidebar-foreground/80">
+                  <div className="mb-1 px-2 text-[13px] font-normal text-sidebar-foreground/45">
                     {group.label}
                   </div>
                   <div className="space-y-0.5">
@@ -551,18 +479,6 @@ function threadRowClass(active: boolean) {
   );
 }
 
-function isGeneralSpace(space: SpaceNavSummary) {
-  return (
-    space.slug?.toLowerCase() === "general" ||
-    space.name?.toLowerCase() === "general"
-  );
-}
-
-function spaceIdFromThreadPath(pathname: string) {
-  const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
-  return match ? decodeURIComponent(match[1]) : undefined;
-}
-
 function threadIdFromThreadPath(pathname: string) {
   const canonicalMatch = /^\/threads\/([^/]+)$/.exec(pathname);
   if (canonicalMatch) return decodeURIComponent(canonicalMatch[1]);
@@ -572,7 +488,6 @@ function threadIdFromThreadPath(pathname: string) {
 
 interface ThreadSelectedDetail {
   threadId?: string | null;
-  spaceId?: string | null;
 }
 
 interface ThreadDeletedDetail {

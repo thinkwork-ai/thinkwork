@@ -135,7 +135,7 @@ describe("computer GraphQL queries", () => {
     expect(inbox).toContain("space");
     expect(inbox).toContain("lastReadAt");
     expect(print(ThreadsPagedQuery)).toContain("unreadOnly: $unreadOnly");
-    expect(print(ThreadsPagedQuery)).toContain("spaceId: $spaceId");
+    expect(print(ThreadsPagedQuery)).not.toContain("spaceId: $spaceId");
   });
 
   it("requests collaborative Space Thread fields and mention targets", () => {

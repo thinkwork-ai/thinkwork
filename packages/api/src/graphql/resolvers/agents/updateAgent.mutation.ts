@@ -11,6 +11,10 @@ import {
 import { writeUserMdForAssignment } from "../../../lib/user-md-writer.js";
 import { writeIdentityMdForAgent } from "../../../lib/identity-md-writer.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
+import {
+  assertAgentMentionNameAvailable,
+  normalizeAgentMentionName,
+} from "./name-identity.js";
 
 export async function updateAgent(
   _parent: any,
@@ -53,15 +57,15 @@ export async function updateAgent(
 
   const i = args.input;
   const updates: Record<string, unknown> = { updated_at: new Date() };
+  let normalizedName: string | undefined;
   if (i.name !== undefined) {
-    // Reject `null` and empty-string names loudly. Without this guard,
-    // `nameProvided` would be true while `nameActuallyChanged` (string
-    // typeof check) would be false — the DB would accept `null` but the
-    // IDENTITY.md writer would skip, silently drifting S3 from the DB.
-    if (typeof i.name !== "string" || i.name.trim() === "") {
-      throw new Error("Agent name must be a non-empty string");
-    }
-    updates.name = i.name;
+    normalizedName = normalizeAgentMentionName(i.name);
+    await assertAgentMentionNameAvailable({
+      tenantId: callerTenantId,
+      name: normalizedName,
+      excludingAgentId: args.id,
+    });
+    updates.name = normalizedName;
   }
   if (i.role !== undefined) updates.role = i.role;
   if (i.type !== undefined) updates.type = i.type.toLowerCase();
@@ -118,7 +122,7 @@ export async function updateAgent(
       const newPairId = (i.humanPairId as string | null) ?? null;
       const oldName = pre.name;
       const nameActuallyChanged =
-        nameProvided && typeof i.name === "string" && i.name !== oldName;
+        normalizedName !== undefined && normalizedName !== oldName;
 
       const [updated] = await tx
         .update(agents)
@@ -161,7 +165,7 @@ export async function updateAgent(
         try {
           await writeIdentityMdForAgent(tx, args.id);
           console.log(
-            `[updateAgent] identity_md_write agentId=${args.id} oldName=${oldName} newName=${i.name} success=true`,
+            `[updateAgent] identity_md_write agentId=${args.id} oldName=${oldName} newName=${normalizedName} success=true`,
           );
           cacheInvalidations.push({
             tenantId: pre.tenant_id,

@@ -72,11 +72,6 @@ export function MentionMenu({
               <span className="block truncate text-sm">
                 {target.displayName}
               </span>
-              {target.role ? (
-                <span className="block truncate text-xs text-muted-foreground">
-                  {target.role}
-                </span>
-              ) : null}
             </span>
           </Button>
         );

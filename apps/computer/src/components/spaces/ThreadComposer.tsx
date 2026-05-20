@@ -1,13 +1,19 @@
 import {
   useMemo,
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 import { AtSign, Loader2, Paperclip, SendHorizontal, X } from "lucide-react";
 import { Button, Textarea } from "@thinkwork/ui";
-import { MentionMenu, type MentionTarget } from "./MentionMenu";
+import {
+  filterMentionTargets,
+  MentionMenu,
+  type MentionTarget,
+} from "./MentionMenu";
 
 export interface ComposerMention {
   targetType: "USER" | "AGENT";
@@ -36,7 +42,19 @@ export function ThreadComposer({
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mentionQuery = useMemo(() => currentMentionQuery(content), [content]);
+  const mentionOptions = useMemo(
+    () =>
+      mentionQuery === null
+        ? []
+        : filterMentionTargets(mentionTargets, mentionQuery),
+    [mentionQuery, mentionTargets],
+  );
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const canSend = content.trim().length > 0 || files.length > 0;
+
+  useEffect(() => {
+    setActiveMentionIndex(0);
+  }, [mentionQuery, mentionOptions.length]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -76,6 +94,31 @@ export function ThreadComposer({
     ]);
   }
 
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionQuery === null || mentionOptions.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveMentionIndex((index) => (index + 1) % mentionOptions.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveMentionIndex(
+        (index) => (index - 1 + mentionOptions.length) % mentionOptions.length,
+      );
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const target =
+        mentionOptions[
+          Math.min(activeMentionIndex, Math.max(mentionOptions.length - 1, 0))
+        ];
+      if (target) selectMention(target);
+    }
+  }
+
   return (
     <form className="border-t p-3" onSubmit={handleSubmit}>
       <div className="relative mx-auto max-w-4xl">
@@ -83,12 +126,14 @@ export function ThreadComposer({
           <MentionMenu
             targets={mentionTargets}
             query={mentionQuery}
+            activeIndex={activeMentionIndex}
             onSelect={selectMention}
           />
         ) : null}
         <Textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
+          onKeyDown={handleComposerKeyDown}
           rows={3}
           className="resize-none pr-28"
           placeholder="Message"

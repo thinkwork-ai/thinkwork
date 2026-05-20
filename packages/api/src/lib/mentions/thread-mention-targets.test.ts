@@ -19,6 +19,15 @@ describe("thread mention targets", () => {
     expect(source).toContain('ne(agents.status, "archived")');
   });
 
+  it("uses agent names, not slugs, as the mention display and alias", () => {
+    expect(source).toContain("displayName: row.agentName");
+    expect(source).toContain("aliases: [row.agentName].filter(isString)");
+    expect(source).not.toContain(
+      "aliases: [row.agentName, row.agentSlug].filter(isString)",
+    );
+    expect(source).not.toContain("row.agentName ?? row.agentSlug");
+  });
+
   it("returns no targets when the Thread is not found", async () => {
     const repository = {
       async loadThread() {

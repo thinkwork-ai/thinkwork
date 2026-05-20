@@ -6,7 +6,7 @@ import type { ParsedMention } from "./parse-message-mentions.js";
 export interface AgentMentionWakeup {
   tenantId: string;
   agentId: string;
-  source: "mention";
+  source: "chat_message";
   reason: string;
   triggerDetail: string;
   payload: Record<string, unknown>;
@@ -81,13 +81,14 @@ export function buildAgentMentionWakeups(
     .map((mention) => ({
       tenantId: input.tenantId,
       agentId: mention.targetId,
-      source: "mention",
+      source: "chat_message",
       reason: `${mention.displayName} mentioned in Thread`,
       triggerDetail: `thread:${input.threadId}:message:${input.messageId}`,
       payload: {
         threadId: input.threadId,
         spaceId: input.spaceId ?? null,
         messageId: input.messageId,
+        userMessage: input.content ?? "",
         mention: {
           displayName: mention.displayName,
           rawText: mention.rawText,
@@ -102,9 +103,7 @@ export function buildAgentMentionWakeups(
     }));
 }
 
-class DrizzleAgentMentionDispatchRepository
-  implements AgentMentionDispatchRepository
-{
+class DrizzleAgentMentionDispatchRepository implements AgentMentionDispatchRepository {
   private readonly db = getDb();
 
   async findExistingWakeup(input: {

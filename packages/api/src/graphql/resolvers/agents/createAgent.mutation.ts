@@ -15,6 +15,10 @@ import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { parseAgentRuntimeInput } from "./runtime.js";
 import { emitAuditEvent } from "../../../lib/compliance/emit.js";
+import {
+  assertAgentMentionNameAvailable,
+  normalizeAgentMentionName,
+} from "./name-identity.js";
 
 interface CreateAgentActor {
   actorId: string;
@@ -70,6 +74,12 @@ async function createAgentCore(
   i: any,
   auditActor: CreateAgentActor,
 ): Promise<ReturnType<typeof agentToCamel>> {
+  const agentName = normalizeAgentMentionName(i.name);
+  await assertAgentMentionNameAvailable({
+    tenantId: i.tenantId,
+    name: agentName,
+  });
+
   let runtime = parseAgentRuntimeInput(i.runtime);
   if (i.runtime == null && i.templateId) {
     const templateRows = await db
@@ -107,7 +117,7 @@ async function createAgentCore(
       .insert(agents)
       .values({
         tenant_id: i.tenantId,
-        name: i.name,
+        name: agentName,
         slug: generateSlug(),
         role: i.role,
         type: i.type?.toLowerCase() ?? "agent",
@@ -188,7 +198,7 @@ async function createAgentCore(
       tenantId: i.tenantId,
       jobType: "agent_heartbeat",
       agentId: row.id,
-      name: `Heartbeat: ${i.name}`,
+      name: `Heartbeat: ${agentName}`,
       scheduleType: "rate",
       scheduleExpression: String(intervalSec),
       config: runtimeConfig.heartbeat,

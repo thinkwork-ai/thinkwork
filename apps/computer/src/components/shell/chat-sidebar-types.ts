@@ -20,17 +20,6 @@ export interface ChatThreadSummary {
   updatedAt?: string | null;
 }
 
-export interface SpaceNavSummary {
-  id: string;
-  slug?: string | null;
-  name?: string | null;
-  description?: string | null;
-  kind?: string | null;
-  unreadThreadCount?: number | null;
-  lastActivityAt?: string | null;
-  updatedAt?: string | null;
-}
-
 export function formatCompactCount(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return String(value);

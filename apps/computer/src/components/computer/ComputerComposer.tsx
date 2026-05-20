@@ -12,6 +12,20 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { IconPaperclip } from "@tabler/icons-react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { AtSign } from "lucide-react";
+import {
+  filterMentionTargets,
+  MentionMenu,
+  type MentionTarget,
+} from "@/components/spaces/MentionMenu";
+
+export interface ComputerComposerMention {
+  targetType: "USER" | "AGENT";
+  targetId: string;
+  displayName: string;
+  rawText: string;
+}
 
 interface ComputerComposerProps {
   value: string;
@@ -21,7 +35,8 @@ interface ComputerComposerProps {
    * (.xlsx / .xls / .csv only — `accept` constrains the picker).
    * Empty array when no files attached.
    */
-  onSubmit: (files: File[]) => void;
+  onSubmit: (files: File[], mentions: ComputerComposerMention[]) => void;
+  mentionTargets?: MentionTarget[];
   disabled?: boolean;
   isSubmitting?: boolean;
   error?: string | null;
@@ -45,57 +60,144 @@ export function ComputerComposer({
   value,
   onChange,
   onSubmit,
+  mentionTargets = [],
   disabled = false,
   isSubmitting = false,
   error,
 }: ComputerComposerProps) {
+  const [mentions, setMentions] = useState<ComputerComposerMention[]>([]);
+  const mentionQuery = useMemo(() => currentMentionQuery(value), [value]);
+  const mentionOptions = useMemo(
+    () =>
+      mentionQuery === null
+        ? []
+        : filterMentionTargets(mentionTargets, mentionQuery),
+    [mentionQuery, mentionTargets],
+  );
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveMentionIndex(0);
+  }, [mentionQuery, mentionOptions.length]);
+
   async function handlePromptSubmit(message: PromptInputMessage) {
     if (disabled || isSubmitting) return;
     const files = await fileUiPartsToFiles(message.files);
     const hasText = value.trim().length > 0;
     if (!hasText && files.length === 0) return;
-    onSubmit(files);
+    const submittedMentions = mentions.filter((mention) =>
+      value.includes(mention.rawText),
+    );
+    onSubmit(files, submittedMentions);
+    setMentions([]);
+  }
+
+  function selectMention(target: MentionTarget) {
+    const replacement = `@${target.displayName} `;
+    const query = mentionQuery ?? "";
+    const prefix = value.slice(0, value.length - query.length - 1);
+    onChange(`${prefix}${replacement}`);
+    setMentions((current) => [
+      ...current.filter(
+        (mention) =>
+          !(
+            mention.targetType === target.targetType &&
+            mention.targetId === target.targetId
+          ),
+      ),
+      {
+        targetType: target.targetType,
+        targetId: target.targetId,
+        displayName: target.displayName,
+        rawText: replacement.trim(),
+      },
+    ]);
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionQuery === null || mentionOptions.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveMentionIndex((index) => (index + 1) % mentionOptions.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveMentionIndex(
+        (index) => (index - 1 + mentionOptions.length) % mentionOptions.length,
+      );
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const target =
+        mentionOptions[
+          Math.min(activeMentionIndex, Math.max(mentionOptions.length - 1, 0))
+        ];
+      if (target) selectMention(target);
+    }
   }
 
   return (
     <div className="grid gap-2">
-      <PromptInput
-        // Override the shared InputGroup focus styling so the empty-thread
-        // composer reads as borderless when focused — no background shift,
-        // no inner ring, no border-color flip. Border stays at
-        // border-border/80 in every state. Other PromptInput consumers
-        // (in-thread FollowUpComposer) keep the default InputGroup look.
-        className="rounded-2xl border border-border/80 bg-transparent shadow-none dark:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:border-border/80 has-[[data-slot=input-group-control]:focus-visible]:ring-0"
-        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-        maxFiles={5}
-        maxFileSize={25 * 1024 * 1024}
-        multiple
-        onSubmit={handlePromptSubmit}
-      >
-        <PromptInputBody>
-          <PromptInputAttachments>
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-          <PromptInputTextarea
-            aria-label="Ask your Computer"
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder="Type @ for connectors and sources"
-            disabled={disabled || isSubmitting}
-            autoFocus
+      <div className="relative">
+        {mentionQuery !== null ? (
+          <MentionMenu
+            targets={mentionTargets}
+            query={mentionQuery}
+            activeIndex={activeMentionIndex}
+            onSelect={selectMention}
           />
-        </PromptInputBody>
-        <PromptInputFooter className="px-2 pb-2">
-          <PromptInputTools>
-            <PromptInputAttachButton />
-          </PromptInputTools>
-          <ConditionalSubmit
-            hasText={value.trim().length > 0}
-            disabled={disabled}
-            isSubmitting={isSubmitting}
-          />
-        </PromptInputFooter>
-      </PromptInput>
+        ) : null}
+        <PromptInput
+          // Override the shared InputGroup focus styling so the empty-thread
+          // composer reads as borderless when focused — no background shift,
+          // no inner ring, no border-color flip. Border stays at
+          // border-border/80 in every state. Other PromptInput consumers
+          // (in-thread FollowUpComposer) keep the default InputGroup look.
+          className="rounded-2xl border border-border/80 bg-transparent shadow-none dark:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:border-border/80 has-[[data-slot=input-group-control]:focus-visible]:ring-0"
+          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+          maxFiles={5}
+          maxFileSize={25 * 1024 * 1024}
+          multiple
+          onSubmit={handlePromptSubmit}
+        >
+          <PromptInputBody>
+            <PromptInputAttachments>
+              {(attachment) => <PromptInputAttachment data={attachment} />}
+            </PromptInputAttachments>
+            <PromptInputTextarea
+              aria-label="Ask your Computer"
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder="Type @ to mention a person or agent"
+              disabled={disabled || isSubmitting}
+              autoFocus
+            />
+          </PromptInputBody>
+          <PromptInputFooter className="px-2 pb-2">
+            <PromptInputTools>
+              <PromptInputButton
+                type="button"
+                variant="ghost"
+                onClick={() => onChange(`${value}@`)}
+                aria-label="Mention"
+                title="Mention"
+              >
+                <AtSign className="h-4 w-4" />
+              </PromptInputButton>
+              <PromptInputAttachButton />
+            </PromptInputTools>
+            <ConditionalSubmit
+              hasText={value.trim().length > 0}
+              disabled={disabled}
+              isSubmitting={isSubmitting}
+            />
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>
   );
@@ -177,4 +279,9 @@ async function fileUiPartsToFiles(
     }
   }
   return files;
+}
+
+function currentMentionQuery(content: string) {
+  const match = /(?:^|\s)@([\w.'-]*)$/u.exec(content);
+  return match ? match[1] : null;
 }
