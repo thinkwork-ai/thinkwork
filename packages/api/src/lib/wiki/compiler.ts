@@ -582,6 +582,7 @@ export async function runCompileJob(
 					ownerId: job.owner_id,
 					trigger: job.trigger,
 					nowEpochSeconds: nextBucketSeconds,
+					dedupeDiscriminator: `continuation-${job.id}`,
 				});
 				if (inserted) {
 					metrics.continuation_enqueued =
