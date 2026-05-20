@@ -39,9 +39,18 @@ type Agent {
   adapterType: String
   adapterConfig: AWSJSON
   runtimeConfig: AWSJSON
+  model: String
+  guardrailId: ID
+  blockedTools: AWSJSON
+  sandbox: AWSJSON
+  browser: AWSJSON
+  webSearch: AWSJSON
+  sendEmail: AWSJSON
+  contextEngine: AWSJSON
+  budgetMonthlyCents: Int
   lastHeartbeatAt: AWSDateTime
   avatarUrl: String
-  templateId: ID!
+  templateId: ID
   agentTemplate: AgentTemplate
   version: Int!
   capabilities: [AgentCapability!]!
@@ -124,7 +133,6 @@ type CreateAgentApiKeyResult {
 
 input CreateAgentInput {
   tenantId: ID!
-  templateId: ID!
   name: String!
   role: String
   type: AgentType
@@ -136,6 +144,15 @@ input CreateAgentInput {
   adapterType: String
   adapterConfig: AWSJSON
   runtimeConfig: AWSJSON
+  model: String
+  guardrailId: ID
+  blockedTools: AWSJSON
+  sandbox: AWSJSON
+  browser: AWSJSON
+  webSearch: AWSJSON
+  sendEmail: AWSJSON
+  contextEngine: AWSJSON
+  budgetMonthlyCents: Int
   avatarUrl: String
   """
   Optional client-supplied idempotency key. When provided, a retry with
@@ -150,14 +167,23 @@ input UpdateAgentInput {
   name: String
   role: String
   type: AgentType
-  templateId: ID
   systemPrompt: String
   reportsTo: ID
   humanPairId: ID
   parentAgentId: ID
+  runtime: AgentRuntime
   adapterType: String
   adapterConfig: AWSJSON
   runtimeConfig: AWSJSON
+  model: String
+  guardrailId: ID
+  blockedTools: AWSJSON
+  sandbox: AWSJSON
+  browser: AWSJSON
+  webSearch: AWSJSON
+  sendEmail: AWSJSON
+  contextEngine: AWSJSON
+  budgetMonthlyCents: Int
   avatarUrl: String
 }
 

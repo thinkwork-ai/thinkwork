@@ -186,6 +186,42 @@ describe("GraphQL Schema Contract", () => {
     });
   });
 
+  describe("Agents contract", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("allows Agents to own runtime and policy fields without requiring a Template", () => {
+      const agent = schema.getType("Agent") as any;
+      const createInput = schema.getType("CreateAgentInput") as any;
+      const updateInput = schema.getType("UpdateAgentInput") as any;
+
+      expect(agent.getFields().templateId.type.toString()).toBe("ID");
+      expect(agent.getFields().model.type.toString()).toBe("String");
+      expect(agent.getFields().guardrailId.type.toString()).toBe("ID");
+      expect(agent.getFields().blockedTools.type.toString()).toBe("AWSJSON");
+      expect(agent.getFields().sandbox.type.toString()).toBe("AWSJSON");
+      expect(agent.getFields().browser.type.toString()).toBe("AWSJSON");
+      expect(agent.getFields().webSearch.type.toString()).toBe("AWSJSON");
+      expect(agent.getFields().sendEmail.type.toString()).toBe("AWSJSON");
+      expect(agent.getFields().contextEngine.type.toString()).toBe("AWSJSON");
+      expect(agent.getFields().budgetMonthlyCents.type.toString()).toBe("Int");
+
+      expect(createInput.getFields().templateId).toBeUndefined();
+      expect(createInput.getFields().model.type.toString()).toBe("String");
+      expect(createInput.getFields().guardrailId.type.toString()).toBe("ID");
+      expect(createInput.getFields().blockedTools.type.toString()).toBe(
+        "AWSJSON",
+      );
+
+      expect(updateInput.getFields().templateId).toBeUndefined();
+      expect(updateInput.getFields().runtime.type.toString()).toBe(
+        "AgentRuntime",
+      );
+      expect(updateInput.getFields().budgetMonthlyCents.type.toString()).toBe(
+        "Int",
+      );
+    });
+  });
+
   describe("Linked tasks contract", () => {
     const schema = buildSchema(loadFullSchema());
 

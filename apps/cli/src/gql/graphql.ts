@@ -99,14 +99,20 @@ export type Agent = {
   adapterType?: Maybe<Scalars['String']['output']>;
   agentTemplate?: Maybe<AgentTemplate>;
   avatarUrl?: Maybe<Scalars['String']['output']>;
+  blockedTools?: Maybe<Scalars['AWSJSON']['output']>;
+  browser?: Maybe<Scalars['AWSJSON']['output']>;
+  budgetMonthlyCents?: Maybe<Scalars['Int']['output']>;
   budgetPolicy?: Maybe<AgentBudgetPolicy>;
   capabilities: Array<AgentCapability>;
+  contextEngine?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
+  guardrailId?: Maybe<Scalars['ID']['output']>;
   humanPair?: Maybe<User>;
   humanPairId?: Maybe<Scalars['ID']['output']>;
   id: Scalars['ID']['output'];
   knowledgeBases: Array<AgentKnowledgeBase>;
   lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  model?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   parentAgentId?: Maybe<Scalars['ID']['output']>;
   reportsTo?: Maybe<Agent>;
@@ -114,17 +120,20 @@ export type Agent = {
   role?: Maybe<Scalars['String']['output']>;
   runtime: AgentRuntime;
   runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
+  sandbox?: Maybe<Scalars['AWSJSON']['output']>;
+  sendEmail?: Maybe<Scalars['AWSJSON']['output']>;
   skills: Array<AgentSkill>;
   slug?: Maybe<Scalars['String']['output']>;
   source?: Maybe<Scalars['String']['output']>;
   status: AgentStatus;
   subAgents?: Maybe<Array<Agent>>;
   systemPrompt?: Maybe<Scalars['String']['output']>;
-  templateId: Scalars['ID']['output'];
+  templateId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
   type: AgentType;
   updatedAt: Scalars['AWSDateTime']['output'];
   version: Scalars['Int']['output'];
+  webSearch?: Maybe<Scalars['AWSJSON']['output']>;
 };
 
 export type AgentApiKey = {
@@ -1118,6 +1127,11 @@ export type CreateAgentInput = {
   adapterConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   adapterType?: InputMaybe<Scalars['String']['input']>;
   avatarUrl?: InputMaybe<Scalars['String']['input']>;
+  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
+  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
+  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
+  contextEngine?: InputMaybe<Scalars['AWSJSON']['input']>;
+  guardrailId?: InputMaybe<Scalars['ID']['input']>;
   humanPairId?: InputMaybe<Scalars['ID']['input']>;
   /**
    * Optional client-supplied idempotency key. When provided, a retry with
@@ -1126,16 +1140,19 @@ export type CreateAgentInput = {
    * See packages/api/src/lib/idempotency.ts.
    */
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  model?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   parentAgentId?: InputMaybe<Scalars['ID']['input']>;
   reportsTo?: InputMaybe<Scalars['ID']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
   runtime?: InputMaybe<AgentRuntime>;
   runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
+  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
+  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
   type?: InputMaybe<AgentType>;
+  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type CreateAgentTemplateInput = {
@@ -6358,15 +6375,24 @@ export type UpdateAgentInput = {
   adapterConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   adapterType?: InputMaybe<Scalars['String']['input']>;
   avatarUrl?: InputMaybe<Scalars['String']['input']>;
+  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
+  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
+  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
+  contextEngine?: InputMaybe<Scalars['AWSJSON']['input']>;
+  guardrailId?: InputMaybe<Scalars['ID']['input']>;
   humanPairId?: InputMaybe<Scalars['ID']['input']>;
+  model?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   parentAgentId?: InputMaybe<Scalars['ID']['input']>;
   reportsTo?: InputMaybe<Scalars['ID']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
+  runtime?: InputMaybe<AgentRuntime>;
   runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
+  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
+  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
-  templateId?: InputMaybe<Scalars['ID']['input']>;
   type?: InputMaybe<AgentType>;
+  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type UpdateAgentTemplateInput = {
@@ -7043,7 +7069,7 @@ export type CliAgentsQueryVariables = Exact<{
 }>;
 
 
-export type CliAgentsQuery = { __typename?: 'Query', agents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, templateId: string, lastHeartbeatAt?: any | null }> };
+export type CliAgentsQuery = { __typename?: 'Query', agents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, templateId?: string | null, lastHeartbeatAt?: any | null }> };
 
 export type CliAllTenantAgentsQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -7052,14 +7078,14 @@ export type CliAllTenantAgentsQueryVariables = Exact<{
 }>;
 
 
-export type CliAllTenantAgentsQuery = { __typename?: 'Query', allTenantAgents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, templateId: string, lastHeartbeatAt?: any | null }> };
+export type CliAllTenantAgentsQuery = { __typename?: 'Query', allTenantAgents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, templateId?: string | null, lastHeartbeatAt?: any | null }> };
 
 export type CliAgentQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type CliAgentQuery = { __typename?: 'Query', agent?: { __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, source?: string | null, status: AgentStatus, systemPrompt?: string | null, runtime: AgentRuntime, adapterType?: string | null, templateId: string, version: number, humanPairId?: string | null, parentAgentId?: string | null, reportsToId?: string | null, lastHeartbeatAt?: any | null, createdAt: any, updatedAt: any, capabilities: Array<{ __typename?: 'AgentCapability', capability: string, enabled: boolean, config?: any | null }>, skills: Array<{ __typename?: 'AgentSkill', skillId: string, enabled: boolean, rateLimitRpm?: number | null }>, budgetPolicy?: { __typename?: 'AgentBudgetPolicy', period: string, limitUsd: number, actionOnExceed: string } | null } | null };
+export type CliAgentQuery = { __typename?: 'Query', agent?: { __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, source?: string | null, status: AgentStatus, systemPrompt?: string | null, runtime: AgentRuntime, adapterType?: string | null, templateId?: string | null, version: number, humanPairId?: string | null, parentAgentId?: string | null, reportsToId?: string | null, lastHeartbeatAt?: any | null, createdAt: any, updatedAt: any, capabilities: Array<{ __typename?: 'AgentCapability', capability: string, enabled: boolean, config?: any | null }>, skills: Array<{ __typename?: 'AgentSkill', skillId: string, enabled: boolean, rateLimitRpm?: number | null }>, budgetPolicy?: { __typename?: 'AgentBudgetPolicy', period: string, limitUsd: number, actionOnExceed: string } | null } | null };
 
 export type CliCreateAgentMutationVariables = Exact<{
   input: CreateAgentInput;

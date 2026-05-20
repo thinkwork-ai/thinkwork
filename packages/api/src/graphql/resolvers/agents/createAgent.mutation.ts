@@ -3,7 +3,6 @@ import {
   db,
   eq,
   agents,
-  agentTemplates,
   agentCapabilities,
   users,
   agentToCamel,
@@ -80,15 +79,7 @@ async function createAgentCore(
     name: agentName,
   });
 
-  let runtime = parseAgentRuntimeInput(i.runtime);
-  if (i.runtime == null && i.templateId) {
-    const templateRows = await db
-      .select({ runtime: agentTemplates.runtime })
-      .from(agentTemplates)
-      .where(eq(agentTemplates.id, i.templateId));
-    const [template] = Array.isArray(templateRows) ? templateRows : [];
-    runtime = parseAgentRuntimeInput(template?.runtime);
-  }
+  const runtime = parseAgentRuntimeInput(i.runtime);
 
   // Auto-register heartbeat config for serverless agents
   let runtimeConfig = i.runtimeConfig ? JSON.parse(i.runtimeConfig) : undefined;
@@ -121,7 +112,7 @@ async function createAgentCore(
         slug: generateSlug(),
         role: i.role,
         type: i.type?.toLowerCase() ?? "agent",
-        template_id: i.templateId,
+        template_id: i.templateId ?? null,
         runtime,
         system_prompt: i.systemPrompt,
         adapter_type: adapterType,
@@ -129,6 +120,14 @@ async function createAgentCore(
           ? JSON.parse(i.adapterConfig)
           : undefined,
         runtime_config: runtimeConfig,
+        model: i.model ?? null,
+        guardrail_id: i.guardrailId ?? null,
+        blocked_tools: parseJsonInput(i.blockedTools),
+        sandbox: parseJsonInput(i.sandbox),
+        browser: parseJsonInput(i.browser),
+        web_search: parseJsonInput(i.webSearch),
+        send_email: parseJsonInput(i.sendEmail),
+        context_engine: parseJsonInput(i.contextEngine),
         budget_monthly_cents: i.budgetMonthlyCents,
         avatar_url: i.avatarUrl,
         reports_to: i.reportsTo,
@@ -207,4 +206,10 @@ async function createAgentCore(
   }
 
   return agentToCamel(row);
+}
+
+function parseJsonInput(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "string") return value;
+  return JSON.parse(value);
 }

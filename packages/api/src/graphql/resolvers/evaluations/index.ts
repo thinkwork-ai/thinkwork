@@ -569,9 +569,8 @@ async function ensureTenantSeeded(tenantId: string): Promise<void> {
     _seededTenants.add(tenantId);
     return;
   }
-  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } = await import(
-    "../../../lib/eval-seeds.js"
-  );
+  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } =
+    await import("../../../lib/eval-seeds.js");
   if (EVAL_SEEDS.length === 0) {
     _seededTenants.add(tenantId);
     return;
@@ -693,6 +692,9 @@ async function resolveRunTarget(args: {
         ),
       );
     if (!agent) throw new Error("Agent not found for eval run");
+    if (!agent.templateId) {
+      throw new Error("Agent is not linked to an eval template");
+    }
     return { agentId: agent.id, agentTemplateId: agent.templateId };
   }
 
@@ -768,9 +770,8 @@ async function invokeEvalRunner(
       "EVAL_RUNNER_FN is not configured (set EVAL_RUNNER_FN or STAGE).",
     );
   }
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const payload: { runId: string; input?: { testCaseIds: string[] } } = {
     runId,
@@ -893,9 +894,8 @@ const seedEvalTestCases = async (
   args: { tenantId: string; categories?: string[] | null },
   _ctx: GraphQLContext,
 ) => {
-  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } = await import(
-    "../../../lib/eval-seeds.js"
-  );
+  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } =
+    await import("../../../lib/eval-seeds.js");
   const filtered =
     args.categories && args.categories.length > 0
       ? EVAL_SEEDS.filter((s) => args.categories!.includes(s.category))

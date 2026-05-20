@@ -20,6 +20,7 @@ import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
 import { agentKnowledgeBases } from "./knowledge-bases";
 import { agentTemplates } from "./agent-templates.js";
+import { guardrails } from "./guardrails.js";
 
 // ---------------------------------------------------------------------------
 // 1.1 — agents
@@ -51,6 +52,24 @@ export const agents = pgTable(
     adapter_type: text("adapter_type"),
     adapter_config: jsonb("adapter_config"),
     runtime_config: jsonb("runtime_config"),
+    /** Durable model selection for this agent. */
+    model: text("model"),
+    /** Agent-assigned guardrail (null = inherit tenant default). */
+    guardrail_id: uuid("guardrail_id").references(() => guardrails.id),
+    /** Agent-level blocked tools: string[] */
+    blocked_tools: jsonb("blocked_tools"),
+    /** Agent sandbox opt-in metadata for AgentCore Code Interpreter. */
+    sandbox: jsonb("sandbox"),
+    /** Agent Browser Automation opt-in metadata. */
+    browser: jsonb("browser"),
+    /** Agent Web Search opt-in metadata. */
+    web_search: jsonb("web_search").default(sql`'{"enabled": true}'::jsonb`),
+    /** Agent Send Email opt-in metadata. */
+    send_email: jsonb("send_email").default(sql`'{"enabled": true}'::jsonb`),
+    /** Agent Context Engine opt-in metadata. */
+    context_engine: jsonb("context_engine").default(
+      sql`'{"enabled": true}'::jsonb`,
+    ),
     budget_monthly_cents: integer("budget_monthly_cents"),
     spent_monthly_cents: integer("spent_monthly_cents").default(0),
     budget_paused: boolean("budget_paused").notNull().default(false),
@@ -62,10 +81,11 @@ export const agents = pgTable(
       withTimezone: true,
     }),
     avatar_url: text("avatar_url"),
-    /** Agent Template this agent belongs to (defines model, guardrail, tools, skills) */
-    template_id: uuid("template_id")
-      .references(() => agentTemplates.id)
-      .notNull(),
+    /**
+     * @deprecated Templates are being removed. Kept nullable during the
+     * migration so older Template-linked rows can be backfilled safely.
+     */
+    template_id: uuid("template_id").references(() => agentTemplates.id),
     version: integer("version").notNull().default(1),
     /**
      * Per-file content-hash pins for guardrail-class workspace files (GUARDRAILS.md,
@@ -406,6 +426,10 @@ export const agentsRelations = relations(agents, ({ one, many }) => ({
   agentTemplate: one(agentTemplates, {
     fields: [agents.template_id],
     references: [agentTemplates.id],
+  }),
+  guardrail: one(guardrails, {
+    fields: [agents.guardrail_id],
+    references: [guardrails.id],
   }),
 }));
 

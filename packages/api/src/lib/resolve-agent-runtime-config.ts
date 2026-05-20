@@ -13,9 +13,8 @@
  * same shape from `_call_strands_agent`.
  *
  * What this helper resolves:
- *   - agent + template + tenant metadata (name, slug, model, blocked tools,
- *     sandbox template config)
- *   - guardrail (template-assigned, else tenant default)
+ *   - agent + tenant metadata (name, slug, model, blocked tools, sandbox config)
+ *   - guardrail (agent-assigned, else tenant default)
  *   - `skillsConfig`: the full skill list the container should register,
  *     including catalog defaults (agent-thread-management, artifacts,
  *     workspace-memory), tenant-configured built-in tools, and
@@ -42,7 +41,6 @@ import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
   agentCapabilities,
-  agentTemplates,
   agentSkills,
   tenants,
   tenantSkills,
@@ -119,7 +117,7 @@ export interface AgentRuntimeConfig {
   agentSystemPrompt: string | null;
   humanName: string | undefined;
   humanPairId: string | null;
-  templateId: string;
+  templateId: string | null;
   templateModel: string | null;
   blockedTools: string[];
   sandboxTemplate: TemplateSandboxConfig | null;
@@ -145,18 +143,6 @@ export class AgentNotFoundError extends Error {
   constructor(public readonly agentId: string) {
     super(`Agent not found: ${agentId}`);
     this.name = "AgentNotFoundError";
-  }
-}
-
-export class AgentTemplateNotFoundError extends Error {
-  constructor(
-    public readonly agentId: string,
-    public readonly templateId: string,
-  ) {
-    super(
-      `Agent template not found: agentId=${agentId} templateId=${templateId}`,
-    );
-    this.name = "AgentTemplateNotFoundError";
   }
 }
 
@@ -228,30 +214,20 @@ export async function resolveAgentRuntimeConfig(
       human_pair_id: agents.human_pair_id,
       template_id: agents.template_id,
       runtime: agents.runtime,
+      model: agents.model,
+      guardrail_id: agents.guardrail_id,
+      blocked_tools: agents.blocked_tools,
+      sandbox: agents.sandbox,
+      browser: agents.browser,
+      web_search: agents.web_search,
+      send_email: agents.send_email,
+      context_engine: agents.context_engine,
     })
     .from(agents)
     .where(
       and(eq(agents.id, opts.agentId), eq(agents.tenant_id, opts.tenantId)),
     );
   if (!agent) throw new AgentNotFoundError(opts.agentId);
-
-  const [agentTemplate] = await db
-    .select({
-      model: agentTemplates.model,
-      guardrail_id: agentTemplates.guardrail_id,
-      blocked_tools: agentTemplates.blocked_tools,
-      sandbox: agentTemplates.sandbox,
-      browser: agentTemplates.browser,
-      web_search: agentTemplates.web_search,
-      send_email: agentTemplates.send_email,
-      context_engine: agentTemplates.context_engine,
-      runtime: agentTemplates.runtime,
-    })
-    .from(agentTemplates)
-    .where(eq(agentTemplates.id, agent.template_id));
-  if (!agentTemplate) {
-    throw new AgentTemplateNotFoundError(opts.agentId, agent.template_id);
-  }
 
   const [tenant] = await db
     .select({ slug: tenants.slug })
@@ -313,19 +289,19 @@ export async function resolveAgentRuntimeConfig(
     humanName = human?.name ?? undefined;
   }
 
-  // Guardrail: template-assigned → tenant default → none.
+  // Guardrail: agent-assigned → tenant default → none.
   let guardrailId: string | null = null;
   let guardrailConfig: GuardrailPayload | undefined;
-  if (agentTemplate.guardrail_id) {
+  if (agent.guardrail_id) {
     const [gr] = await db
       .select({
         bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
         bedrock_version: guardrails.bedrock_version,
       })
       .from(guardrails)
-      .where(eq(guardrails.id, agentTemplate.guardrail_id));
+      .where(eq(guardrails.id, agent.guardrail_id));
     if (gr?.bedrock_guardrail_id && gr?.bedrock_version) {
-      guardrailId = agentTemplate.guardrail_id;
+      guardrailId = agent.guardrail_id;
       guardrailConfig = {
         guardrailIdentifier: gr.bedrock_guardrail_id,
         guardrailVersion: gr.bedrock_version,
@@ -354,48 +330,43 @@ export async function resolveAgentRuntimeConfig(
     }
   }
 
-  const blockedTools: string[] =
-    (agentTemplate.blocked_tools as string[] | null) ?? [];
-  const templateBrowserResult = validateTemplateBrowser(agentTemplate.browser);
+  const blockedTools: string[] = (agent.blocked_tools as string[] | null) ?? [];
+  const templateBrowserResult = validateTemplateBrowser(agent.browser);
   const templateBrowserEnabled = templateBrowserResult.ok
     ? templateBrowserResult.value?.enabled === true
     : false;
   if (!templateBrowserResult.ok) {
     console.warn(
-      `${logPrefix} Invalid template browser config ignored for agent ${opts.agentId}: ${templateBrowserResult.error}`,
+      `${logPrefix} Invalid agent browser config ignored for agent ${opts.agentId}: ${templateBrowserResult.error}`,
     );
   }
-  const templateWebSearchResult = validateTemplateWebSearch(
-    agentTemplate.web_search,
-  );
+  const templateWebSearchResult = validateTemplateWebSearch(agent.web_search);
   const templateWebSearchEnabled = templateWebSearchResult.ok
     ? templateWebSearchResult.value?.enabled === true
     : false;
   if (!templateWebSearchResult.ok) {
     console.warn(
-      `${logPrefix} Invalid template webSearch config ignored for agent ${opts.agentId}: ${templateWebSearchResult.error}`,
+      `${logPrefix} Invalid agent webSearch config ignored for agent ${opts.agentId}: ${templateWebSearchResult.error}`,
     );
   }
-  const templateSendEmailResult = validateTemplateSendEmail(
-    agentTemplate.send_email,
-  );
+  const templateSendEmailResult = validateTemplateSendEmail(agent.send_email);
   const templateSendEmailEnabled = templateSendEmailResult.ok
     ? templateSendEmailResult.value?.enabled === true
     : false;
   if (!templateSendEmailResult.ok) {
     console.warn(
-      `${logPrefix} Invalid template sendEmail config ignored for agent ${opts.agentId}: ${templateSendEmailResult.error}`,
+      `${logPrefix} Invalid agent sendEmail config ignored for agent ${opts.agentId}: ${templateSendEmailResult.error}`,
     );
   }
   const templateContextEngineResult = validateTemplateContextEngine(
-    agentTemplate.context_engine,
+    agent.context_engine,
   );
   const templateContextEngineEnabled = templateContextEngineResult.ok
     ? templateContextEngineResult.value?.enabled === true
     : false;
   if (!templateContextEngineResult.ok) {
     console.warn(
-      `${logPrefix} Invalid template contextEngine config ignored for agent ${opts.agentId}: ${templateContextEngineResult.error}`,
+      `${logPrefix} Invalid agent contextEngine config ignored for agent ${opts.agentId}: ${templateContextEngineResult.error}`,
     );
   }
 
@@ -635,19 +606,16 @@ export async function resolveAgentRuntimeConfig(
     agentSystemPrompt: agent.system_prompt,
     humanName,
     humanPairId: agent.human_pair_id,
-    templateId: agent.template_id,
-    templateModel: agentTemplate.model ?? null,
+    templateId: agent.template_id ?? null,
+    templateModel: agent.model ?? null,
     blockedTools,
-    sandboxTemplate:
-      (agentTemplate.sandbox as TemplateSandboxConfig | null) ?? null,
+    sandboxTemplate: (agent.sandbox as TemplateSandboxConfig | null) ?? null,
     browserAutomationEnabled,
     contextEngineEnabled,
     contextEngineConfig,
     guardrailId,
     guardrailConfig,
-    runtimeType: normalizeAgentRuntimeType(
-      agent.runtime ?? agentTemplate.runtime,
-    ),
+    runtimeType: normalizeAgentRuntimeType(agent.runtime),
     skillsConfig,
     webSearchConfig,
     sendEmailConfig,

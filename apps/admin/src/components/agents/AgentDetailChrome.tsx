@@ -244,7 +244,10 @@ export function AgentDetailChrome({
               onDeleteBudget={handleDeleteBudget}
               onSaveRuntime={handleSaveRuntime}
             >
-              <Link to="/automations/schedules" search={{ type: "agent", agentId }}>
+              <Link
+                to="/automations/schedules"
+                search={{ type: "agent", agentId }}
+              >
                 <Badge
                   variant="outline"
                   className={`gap-1 cursor-pointer hover:bg-accent ${triggerCount === 0 ? "text-muted-foreground" : ""}`}
@@ -268,8 +271,8 @@ export function AgentDetailChrome({
         initial={{
           id: agentId,
           name: agent.name,
-          templateId: (agent as any).templateId ?? "",
           runtime: (agent as any).runtime ?? AgentRuntime.Strands,
+          budgetDollars: centsToDollarString((agent as any).budgetMonthlyCents),
         }}
         hasRecentActivity={hasRecentActivity}
         onSaved={refresh}
@@ -277,4 +280,9 @@ export function AgentDetailChrome({
       />
     </PageLayout>
   );
+}
+
+function centsToDollarString(cents: number | null | undefined): string {
+  if (cents == null) return "";
+  return (cents / 100).toFixed(2);
 }

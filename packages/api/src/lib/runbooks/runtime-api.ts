@@ -23,7 +23,6 @@ import {
 } from "../sandbox-preflight.js";
 import {
   AgentNotFoundError,
-  AgentTemplateNotFoundError,
   resolveAgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
 import {
@@ -57,8 +56,7 @@ const AGENTCORE_RUNTIME_SSM_STRANDS =
 const MAX_PREVIOUS_OUTPUT_TEXT_CHARS = 1_500;
 const MAX_PREVIOUS_OUTPUT_JSON_CHARS = 4_000;
 const DEFAULT_RUNBOOK_FAST_STEP_MODEL = "moonshotai.kimi-k2.5";
-const DEFAULT_RUNBOOK_ARTIFACT_STEP_MODEL =
-  "us.anthropic.claude-sonnet-4-6";
+const DEFAULT_RUNBOOK_ARTIFACT_STEP_MODEL = "us.anthropic.claude-sonnet-4-6";
 
 let cachedStrandsRuntimeId: string | null = null;
 
@@ -1240,10 +1238,7 @@ async function resolveRunbookStepRuntimeConfig(input: {
       appsyncApiKey: APPSYNC_API_KEY,
     });
   } catch (err) {
-    if (
-      err instanceof AgentNotFoundError ||
-      err instanceof AgentTemplateNotFoundError
-    ) {
+    if (err instanceof AgentNotFoundError) {
       throw new RunbookRuntimeError(err.message, 404);
     }
     throw err;
@@ -1651,7 +1646,8 @@ function numberValue(value: unknown): number | null {
 function stringArrayValue(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const values = value.filter(
-    (item): item is string => typeof item === "string" && item.trim().length > 0,
+    (item): item is string =>
+      typeof item === "string" && item.trim().length > 0,
   );
   return values.length > 0 ? values : undefined;
 }
