@@ -81,6 +81,8 @@ import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const SHIMMER_TEXT = "Processing...";
 const SHIMMER_CHAR_DURATION_MS = 120;
+const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
+const COMPOSER_TRANSCRIPT_GAP_PX = 32;
 
 export interface TaskThreadMessage {
   id: string;
@@ -169,6 +171,40 @@ export function TaskThreadView({
   onSendFollowUp,
   artifactPanelState,
 }: TaskThreadViewProps) {
+  const composerDockRef = useRef<HTMLDivElement | null>(null);
+  const [composerBottomInsetPx, setComposerBottomInsetPx] = useState(
+    DEFAULT_COMPOSER_BOTTOM_INSET_PX,
+  );
+
+  useLayoutEffect(() => {
+    const composerDock = composerDockRef.current;
+    if (!composerDock) return;
+
+    const updateComposerBottomInset = () => {
+      const nextInset =
+        Math.ceil(composerDock.getBoundingClientRect().height) +
+        COMPOSER_TRANSCRIPT_GAP_PX;
+      if (nextInset <= 0) return;
+      setComposerBottomInsetPx((currentInset) =>
+        Math.abs(currentInset - nextInset) > 1 ? nextInset : currentInset,
+      );
+    };
+
+    updateComposerBottomInset();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(updateComposerBottomInset);
+    resizeObserver.observe(composerDock);
+    window.addEventListener("resize", updateComposerBottomInset);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateComposerBottomInset);
+    };
+  }, []);
+
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
   }
@@ -211,7 +247,10 @@ export function TaskThreadView({
         className="h-full flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >
-        <ConversationContent className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-32 sm:px-6">
+        <ConversationContent
+          className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 sm:px-6"
+          style={{ paddingBottom: composerBottomInsetPx }}
+        >
           {transcriptMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
@@ -245,7 +284,10 @@ export function TaskThreadView({
         </ConversationContent>
       </Conversation>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6">
+      <div
+        ref={composerDockRef}
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6"
+      >
         <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
           <FollowUpComposer
             taskQueue={promptTaskQueue}

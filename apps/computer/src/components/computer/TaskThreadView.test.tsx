@@ -432,6 +432,67 @@ describe("TaskThreadView", () => {
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
   });
 
+  it("reserves transcript scroll space for the docked composer and task queue", async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 750,
+        height: 260,
+        top: 0,
+        right: 750,
+        bottom: 260,
+        left: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the CRM dashboard",
+            },
+          ],
+        }}
+        runbookQueues={[
+          {
+            runbookRunId: "run-1",
+            displayName: "CRM Dashboard",
+            status: "COMPLETED",
+            phases: [
+              {
+                id: "produce",
+                title: "Produce",
+                tasks: [
+                  {
+                    id: "task-1",
+                    title: "Build dashboard",
+                    status: "COMPLETED",
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      const transcriptContent = screen
+        .getByText("Run the CRM dashboard")
+        .closest('[style*="padding-bottom"]') as HTMLElement | null;
+      expect(transcriptContent?.style.paddingBottom).toBe("292px");
+    });
+
+    rectSpy.mockRestore();
+  });
+
   it("collapses and expands the prompt-area runbook queue", () => {
     render(
       <TaskThreadView
