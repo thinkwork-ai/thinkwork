@@ -6,6 +6,33 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Agent Mentions and Unread Routing
+
+Plan: `docs/plans/2026-05-20-001-fix-agent-mentions-and-unread-routing-plan.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: Agent mentions and unread routing follow-up
+- Active branch: `codex/fix-agent-mentions-unread`
+- Active worktree: `.Codex/worktrees/fix-agent-mentions-unread`
+- Started: 2026-05-20
+- PR: [#1487](https://github.com/thinkwork-ai/thinkwork/pull/1487)
+- CI: blocked on dev migration drift precheck
+
+### Progress Log
+
+| Date       | Unit | Branch                            | PR                                                           | Status  | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Notes                                                                                                                                                                                                                                                                                  |
+| ---------- | ---- | --------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-20 | U1   | `codex/fix-agent-mentions-unread` | [#1487](https://github.com/thinkwork-ai/thinkwork/pull/1487) | Blocked | Focused API mention/default routing/unread/agent-name tests; focused computer mention picker tests; focused admin Agents table test; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/computer typecheck`; `pnpm --filter @thinkwork/database-pg typecheck`; touched-file Prettier check; `git diff --check`; auth-gated local browser smoke at `http://localhost:5174/new`. GitHub CI passed `cla`, `lint`, `typecheck`, and `verify`; `test` was still pending when the blocking migration drift failure was confirmed. | Adds agent names as mention identities, removes the admin Mention column, includes agents in mention targets, sends explicit agent mentions to the mentioned agent, defaults unmentioned human messages to the subscribed/default agent, and marks the sending human participant read. |
+
+### Blockers
+
+- 2026-05-20: `Migration Drift Precheck (dev)` failed because `packages/database-pg/drizzle/0111_agents_tenant_name_unique.sql` is not applied to dev. The missing object is `public.uq_agents_tenant_name_active`. Applying this migration is a manual dev database mutation, so this run is stopped until that migration is applied through an approved path, then CI can be rerun.
+
+---
+
 ## Current Run: Spaces Collaborative Chat UI
 
 Plan: `docs/plans/2026-05-19-005-feat-spaces-collaborative-chat-ui-plan.md`
