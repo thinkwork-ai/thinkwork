@@ -690,25 +690,24 @@ export function validatePlannerResult(
     validateOptionalString(um, "entityTypeSlug", "unresolvedMentions");
   }
 
+  const validPromotions: unknown[] = [];
   for (const pr of v.promotions as unknown[]) {
-    if (!pr || typeof pr !== "object")
-      throw new Error("promotions entry not object");
+    if (!pr || typeof pr !== "object") continue;
     const p = pr as Record<string, unknown>;
     if (typeof p.mentionId !== "string" || p.mentionId.length === 0) {
-      throw new Error("promotions.mentionId missing");
+      continue;
     }
     if (!isPageType(p.type) && normalizeEntityTypePage(p, "promotions")) {
       // A model may put the ontology entity slug in `type`; normalize that
       // common shape to the wiki page taxonomy.
     } else if (!isPageType(p.type)) {
-      throw new Error(`promotions.type invalid: ${p.type}`);
+      continue;
     }
     validateOptionalString(p, "entityTypeSlug", "promotions");
     if (Array.isArray(p.sections)) {
+      const validSections: unknown[] = [];
       for (const section of p.sections as unknown[]) {
-        if (!section || typeof section !== "object") {
-          throw new Error("promotions.sections entry not object");
-        }
+        if (!section || typeof section !== "object") continue;
         const ps = section as Record<string, unknown>;
         validateOptionalString(ps, "facetSlug", "promotions.sections");
         if (
@@ -718,9 +717,13 @@ export function validatePlannerResult(
         ) {
           delete ps.facetSlug;
         }
+        validSections.push(ps);
       }
+      p.sections = validSections;
     }
+    validPromotions.push(p);
   }
+  v.promotions = validPromotions;
 }
 
 function requireArray(obj: Record<string, unknown>, key: string): void {

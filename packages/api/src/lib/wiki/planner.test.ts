@@ -120,6 +120,50 @@ describe("validatePlannerResult", () => {
     });
   });
 
+  it("drops malformed promotions instead of failing the whole plan", () => {
+    const plan = basePlan({
+      promotions: [
+        {
+          reason: "The model emitted a title but no unresolved mention id.",
+          type: "place",
+          title: "Florence",
+          slug: "florence",
+          sections: [],
+        },
+        {
+          mentionId: "mention-1",
+          reason: "Repeated trip evidence.",
+          type: "place",
+          title: "Florence",
+          slug: "florence",
+          sections: [
+            null,
+            {
+              slug: "overview",
+              heading: "Overview",
+              body_md: "Florence appears repeatedly.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => validatePlannerResult(plan)).not.toThrow();
+    expect(plan.promotions).toHaveLength(1);
+    expect((plan.promotions as Array<Record<string, unknown>>)[0]).toMatchObject({
+      mentionId: "mention-1",
+      type: "entity",
+      entityTypeSlug: "place",
+      sections: [
+        {
+          slug: "overview",
+          heading: "Overview",
+          body_md: "Florence appears repeatedly.",
+        },
+      ],
+    });
+  });
+
   it("drops page update facet slugs when the entity type is missing", () => {
     const plan = basePlan({
       pageUpdates: [
