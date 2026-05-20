@@ -5,6 +5,8 @@ topic: spaces-collaborative-user-app-ui
 
 # Spaces Collaborative User App UI
 
+> Superseded as implementation direction by `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md`. This brainstorm is still useful background for people/agent collaboration, mentions, unread grouping, and the Codex/Dust-like sidebar feel. Its Space-as-room language should be read through the newer model: a Space is a contextual workroom that can also organize user conversations, not a generic collaboration room.
+
 ## Problem Frame
 
 ThinkWork's end-user app needs to move from an operator/admin-shaped Spaces prototype toward a Dust-like collaboration surface where general users can ask agents for help and collaborate with other people in the same Thread.

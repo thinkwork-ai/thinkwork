@@ -1,13 +1,16 @@
 ---
 title: "feat: Spaces collaborative chat UI"
 type: feat
-status: active
+status: superseded
 date: 2026-05-19
 origin: docs/brainstorms/2026-05-19-spaces-collaborative-user-app-ui-requirements.md
 deepened: 2026-05-19
+superseded_by: docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md
 ---
 
 # feat: Spaces collaborative chat UI
+
+> Superseded by `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md` for future implementation direction. Keep this plan as historical design input for collaborative Threads, mentions, and unread behavior, but do not treat its room/channel-first Space model as active scope. The current model keeps Spaces in the end-user app as contextual workrooms: a Space is both where work happens and the context package an agent receives for that work.
 
 ## Overview
 
