@@ -49,6 +49,7 @@ import {
   failRunbookExecutionTask,
 } from "../lib/runbooks/runtime-api.js";
 import { failRunbookRunFromThreadTurn } from "../lib/runbooks/runs.js";
+import { renderTurnContext } from "../lib/turn-context-renderer.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -464,10 +465,66 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
 
     // MCP configs already resolved by runtimeConfig.
     const mcpConfigs = runtimeConfig.mcpConfigs;
+    let effectiveBlockedTools = runtimeConfig.blockedTools;
+    let renderedTurnContext: Awaited<ReturnType<typeof renderTurnContext>> = {
+      rendered: false,
+      reason: "not_attempted",
+    };
+    try {
+      renderedTurnContext = await renderTurnContext({
+        tenantId,
+        agentId,
+        threadId,
+        turnId,
+        agentBlockedTools: runtimeConfig.blockedTools,
+      });
+      if (renderedTurnContext.rendered) {
+        effectiveBlockedTools =
+          renderedTurnContext.effectivePolicy.blockedTools;
+        console.log(
+          `[chat-agent-invoke] rendered Space context space=${renderedTurnContext.spaceSlug} copied=${renderedTurnContext.copiedFiles.length}`,
+        );
+      } else {
+        console.log(
+          `[chat-agent-invoke] Space context render skipped: ${renderedTurnContext.reason}`,
+        );
+      }
+    } catch (err) {
+      console.error(`[chat-agent-invoke] Space context render failed:`, err);
+    }
+
+    const isEffectivelyBlocked = (toolName: string): boolean =>
+      effectiveBlockedTools.includes(toolName);
+    const isAnyEffectivelyBlocked = (...toolNames: string[]): boolean =>
+      toolNames.some((toolName) => isEffectivelyBlocked(toolName));
+    const effectiveSkillsConfig =
+      effectiveBlockedTools.length > 0
+        ? skillsConfig.filter(
+            (skill: { skillId: string }) =>
+              !effectiveBlockedTools.includes(skill.skillId),
+          )
+        : skillsConfig;
+    const effectiveMcpPolicy = renderedTurnContext.rendered
+      ? renderedTurnContext.effectivePolicy
+      : null;
+    const effectiveMcpConfigs = mcpConfigs.filter(
+      (config: { name: string }) => {
+        if (effectiveMcpPolicy?.mcpBlockedServers.includes(config.name)) {
+          return false;
+        }
+        if (
+          effectiveMcpPolicy?.mcpAllowedServers &&
+          !effectiveMcpPolicy.mcpAllowedServers.includes(config.name)
+        ) {
+          return false;
+        }
+        return true;
+      },
+    );
 
     // 2d. Call AgentCore Lambda directly via the SDK (no Function URL).
     console.log(
-      `[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${skillsConfig.length} mcp=${mcpConfigs.length}`,
+      `[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${effectiveSkillsConfig.length} mcp=${effectiveMcpConfigs.length}`,
     );
 
     const agentcoreFunctionName = resolveRuntimeFunctionName(runtimeType);
@@ -537,26 +594,44 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       computer_task_id: event.computerTaskId || undefined,
       computer_response_mode: responseOnly ? "runbook_step" : "thread_turn",
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-      web_search_config: runtimeConfig.webSearchConfig,
-      send_email_config: runtimeConfig.sendEmailConfig
-        ? { ...runtimeConfig.sendEmailConfig, threadId }
+      web_search_config: !isAnyEffectivelyBlocked("web-search", "web_search")
+        ? runtimeConfig.webSearchConfig
         : undefined,
-      context_engine_enabled: runtimeConfig.contextEngineEnabled || undefined,
-      context_engine_config: runtimeConfig.contextEngineConfig,
+      send_email_config:
+        runtimeConfig.sendEmailConfig && !isEffectivelyBlocked("send_email")
+          ? { ...runtimeConfig.sendEmailConfig, threadId }
+          : undefined,
+      context_engine_enabled:
+        runtimeConfig.contextEngineEnabled &&
+        !isAnyEffectivelyBlocked("query_context", "context_engine")
+          ? true
+          : undefined,
+      context_engine_config: !isAnyEffectivelyBlocked(
+        "query_context",
+        "context_engine",
+      )
+        ? runtimeConfig.contextEngineConfig
+        : undefined,
       runtime_type: runtimeType,
       model: agentModel,
-      skills: skillsConfig.length > 0 ? skillsConfig : undefined,
+      skills:
+        effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
       knowledge_bases: knowledgeBasesConfig,
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
-      mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
+      mcp_configs:
+        effectiveMcpConfigs.length > 0 ? effectiveMcpConfigs : undefined,
       workflow_skill: workflowSkill,
       blocked_tools:
-        runtimeConfig.blockedTools.length > 0
-          ? runtimeConfig.blockedTools
-          : undefined,
+        effectiveBlockedTools.length > 0 ? effectiveBlockedTools : undefined,
       browser_automation_enabled:
-        runtimeConfig.browserAutomationEnabled || undefined,
+        runtimeConfig.browserAutomationEnabled &&
+        !isAnyEffectivelyBlocked("browser_automation", "browser")
+          ? true
+          : undefined,
+      turn_context: renderedTurnContext.rendered
+        ? renderedTurnContext.payload
+        : undefined,
       runbook_context: event.runbookContext || undefined,
       // U3 of the finance pilot — Strands' _execute_agent_turn reads
       // payload["message_attachments"] directly off this dict (no
