@@ -218,6 +218,14 @@ export function ComputerThreadDetailRoute({
             );
             reexecuteNavigationQuery({ requestPolicy: "network-only" });
             if (nextThreadId) {
+              window.dispatchEvent(
+                new CustomEvent("thinkwork:thread-selected", {
+                  detail: {
+                    threadId: nextThreadId,
+                    spaceId: activeSpaceId ?? null,
+                  },
+                }),
+              );
               await navigate({
                 to: "/threads/$id",
                 params: { id: nextThreadId },

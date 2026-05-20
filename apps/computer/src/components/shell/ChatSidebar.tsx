@@ -66,9 +66,13 @@ export function ChatSidebar() {
   const { tenantId } = useTenant();
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
+  const routeThreadId = threadIdFromThreadPath(location.pathname);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | undefined>();
+  const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
+    routeThreadId,
+  );
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const pendingThreadDeletes = usePendingThreadDeletes();
@@ -146,13 +150,36 @@ export function ChatSidebar() {
       reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
     }
 
+    function handleThreadSelected(event: Event) {
+      const detail = (event as CustomEvent<ThreadSelectedDetail>).detail;
+      if (!detail?.threadId) return;
+      setSelectedThreadId(detail.threadId);
+      if (detail.spaceId) {
+        setSelectedSpaceId(detail.spaceId);
+      }
+    }
+
     window.addEventListener("thinkwork:thread-deleted", handleThreadDeleted);
-    return () =>
+    window.addEventListener("thinkwork:thread-selected", handleThreadSelected);
+    return () => {
       window.removeEventListener(
         "thinkwork:thread-deleted",
         handleThreadDeleted,
       );
+      window.removeEventListener(
+        "thinkwork:thread-selected",
+        handleThreadSelected,
+      );
+    };
   }, [reexecuteRecentThreadsQuery, reexecuteSearchThreadsQuery]);
+
+  useEffect(() => {
+    if (routeThreadId) {
+      setSelectedThreadId(routeThreadId);
+    } else if (location.pathname === "/new") {
+      setSelectedThreadId(undefined);
+    }
+  }, [location.pathname, routeThreadId]);
 
   useEffect(() => {
     if (!recentData?.threadsPaged?.items) return;
@@ -296,11 +323,8 @@ export function ChatSidebar() {
                       <ChatThreadRow
                         key={thread.id}
                         thread={thread}
-                        active={
-                          location.pathname === `/threads/${thread.id}` ||
-                          location.pathname ===
-                            `/spaces/${thread.spaceId}/threads/${thread.id}`
-                        }
+                        active={selectedThreadId === thread.id}
+                        onActivate={() => setSelectedThreadId(thread.id)}
                       />
                     ))}
                   </div>
@@ -448,9 +472,11 @@ function SettingsNav({ onBack }: { onBack: () => void }) {
 function ChatThreadRow({
   thread,
   active,
+  onActivate,
 }: {
   thread: ChatThreadSummary;
   active: boolean;
+  onActivate: () => void;
 }) {
   const unread = isThreadUnread(thread);
   const content = (
@@ -472,6 +498,7 @@ function ChatThreadRow({
       to="/threads/$id"
       params={{ id: thread.id }}
       className={threadRowClass(active)}
+      onClick={onActivate}
     >
       {content}
     </Link>
@@ -498,4 +525,16 @@ function isGeneralSpace(space: SpaceNavSummary) {
 function spaceIdFromThreadPath(pathname: string) {
   const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
   return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function threadIdFromThreadPath(pathname: string) {
+  const canonicalMatch = /^\/threads\/([^/]+)$/.exec(pathname);
+  if (canonicalMatch) return decodeURIComponent(canonicalMatch[1]);
+  const spaceMatch = /^\/spaces\/[^/]+\/threads\/([^/]+)$/.exec(pathname);
+  return spaceMatch ? decodeURIComponent(spaceMatch[1]) : undefined;
+}
+
+interface ThreadSelectedDetail {
+  threadId?: string | null;
+  spaceId?: string | null;
 }

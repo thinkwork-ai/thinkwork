@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { queryDocs, tenantMock, locationMock, navigateMock } = vi.hoisted(
@@ -269,5 +269,34 @@ describe("ChatSidebar", () => {
         .getByRole("link", { name: /recent space thread/i })
         .getAttribute("href"),
     ).toBe("/threads/thread-recent");
+  });
+
+  it("highlights the replacement thread selected after delete", () => {
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads/deleted-thread",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    const replacementLink = screen.getByRole("link", {
+      name: /recent space thread/i,
+    });
+    expect(replacementLink.className).not.toMatch(
+      /(?:^|\s)bg-sidebar-accent(?:\s|$)/,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:thread-selected", {
+          detail: { threadId: "thread-recent", spaceId: "space-1" },
+        }),
+      );
+    });
+
+    expect(replacementLink.className).toMatch(
+      /(?:^|\s)bg-sidebar-accent(?:\s|$)/,
+    );
   });
 });
