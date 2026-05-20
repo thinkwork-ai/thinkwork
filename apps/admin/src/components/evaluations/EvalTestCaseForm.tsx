@@ -90,7 +90,7 @@ export interface EvalTestCaseFormInitial {
   category?: string;
   query?: string;
   systemPrompt?: string | null;
-  agentTemplateId?: string | null;
+  agentId?: string | null;
   assertions?: string | Assertion[]; // JSON string from GraphQL or parsed array
   agentcoreEvaluatorIds?: string[];
   enabled?: boolean;
@@ -137,8 +137,8 @@ export function EvalTestCaseForm({
   const [category, setCategory] = useState(initial?.category ?? "smoke");
   const [query, setQuery] = useState(initial?.query ?? "");
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "");
-  const [agentTemplateId, setAgentTemplateId] = useState<string | null>(
-    initial?.agentTemplateId ?? null,
+  const [agentId, setAgentId] = useState<string | null>(
+    initial?.agentId ?? null,
   );
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
 
@@ -193,8 +193,7 @@ export function EvalTestCaseForm({
     if (initial.query !== undefined) setQuery(initial.query);
     if (initial.systemPrompt !== undefined)
       setSystemPrompt(initial.systemPrompt || "");
-    if (initial.agentTemplateId !== undefined)
-      setAgentTemplateId(initial.agentTemplateId);
+    if (initial.agentId !== undefined) setAgentId(initial.agentId);
     if (initial.enabled !== undefined) setEnabled(initial.enabled);
     if (initial.agentcoreEvaluatorIds !== undefined)
       setEvaluatorIds(initial.agentcoreEvaluatorIds);
@@ -224,7 +223,7 @@ export function EvalTestCaseForm({
         category,
         query,
         systemPrompt: systemPrompt || null,
-        agentTemplateId: agentTemplateId || null,
+        agentId: agentId || null,
         assertions: cleanedAssertions,
         agentcoreEvaluatorIds: evaluatorIds,
         enabled,
@@ -242,7 +241,7 @@ export function EvalTestCaseForm({
       setSubmitting(false);
     }
   }, [
-    agentTemplateId,
+    agentId,
     assertions,
     category,
     createCase,
@@ -379,7 +378,7 @@ export function EvalTestCaseForm({
             <Textarea
               id="system-prompt"
               rows={2}
-              placeholder="Leave empty to use the agent template's system prompt"
+              placeholder="Leave empty to use the target agent's system prompt"
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
             />

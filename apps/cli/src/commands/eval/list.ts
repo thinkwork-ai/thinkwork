@@ -27,7 +27,7 @@ export async function runEvalList(opts: ListOptions): Promise<void> {
   const rows = (data.evalRuns.items ?? []).map((r) => ({
     id: r.id,
     status: r.status,
-    template: r.agentTemplateId ?? "—",
+    agent: r.agentName ?? r.agentId ?? "—",
     categories: (r.categories ?? []).join(", ") || "—",
     tests: `${r.passed}/${r.totalTests}`,
     passRate: fmtPercent(r.passRate),
@@ -45,7 +45,7 @@ export async function runEvalList(opts: ListOptions): Promise<void> {
   printTable(rows, [
     { key: "id", header: "RUN ID" },
     { key: "status", header: "STATUS" },
-    { key: "template", header: "TEMPLATE" },
+    { key: "agent", header: "AGENT" },
     { key: "categories", header: "CATEGORIES" },
     { key: "tests", header: "PASS/TOTAL" },
     { key: "passRate", header: "PASS RATE" },

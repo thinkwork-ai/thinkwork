@@ -16,11 +16,8 @@ type EvalTestCase {
   category: String!
   query: String!
   systemPrompt: String
-  # Pin the agent under test to a specific agent template. Different
-  # templates expose different tool surfaces, so this is critical for
-  # tests like "should refuse to web-search" where the template must
-  # actually lack the tool. Null = use eval-runner's generic test agent.
-  agentTemplateId: ID
+  # Optional Agent target for this case. Null = use the run-level Agent.
+  agentId: ID
   # Deterministic checks (contains/regex/equals/json-path) evaluated by
   # our custom code-based AgentCore evaluator. Stored as JSON because
   # the shape varies per assertion type.
@@ -45,11 +42,6 @@ type EvalRun {
   agentId: ID
   agentName: String
   computerId: ID
-  # Template the eval test agent loaded for this run. Manual runs default to
-  # the tenant's default Agent template. Per-test-case
-  # eval_test_cases.agent_template_id overrides this for individual
-  # tests that need a different tool surface.
-  agentTemplateId: ID
   scheduledJobId: ID
   status: String!
   # Model used for the direct-AgentCore eval run. Manual runs default to
@@ -140,7 +132,7 @@ input CreateEvalTestCaseInput {
   category: String!
   query: String!
   systemPrompt: String
-  agentTemplateId: ID
+  agentId: ID
   assertions: [EvalAssertionInput!]
   agentcoreEvaluatorIds: [String!]
   tags: [String!]
@@ -152,7 +144,7 @@ input UpdateEvalTestCaseInput {
   category: String
   query: String
   systemPrompt: String
-  agentTemplateId: ID
+  agentId: ID
   assertions: [EvalAssertionInput!]
   agentcoreEvaluatorIds: [String!]
   tags: [String!]
@@ -163,10 +155,9 @@ input StartEvalRunInput {
   # Deprecated for this direct-AgentCore eval path. Supplying computerId is
   # rejected; Computer evals are intentionally out of this slice.
   computerId: ID
-  # Optional explicit AgentCore target. Omit both fields to use the tenant's
-  # default Agent template and the platform-managed system eval agent.
+  # Optional explicit AgentCore target. Omit to use the platform-managed system
+  # eval Agent for the tenant.
   agentId: ID
-  agentTemplateId: ID
   # Optional model override for the direct-AgentCore eval run. Omit to use
   # Kimi K2.5; non-default overrides must be available in model_catalog.
   model: String

@@ -116,7 +116,6 @@ async function createOverlayApiClient(
   }
 
   return {
-    targetAgentTemplateId: null,
     async listEvalTestCases() {
       const data = await gqlQuery(ctx.client, EvalTestCasesDoc, {
         tenantId: ctx.tenantId,
@@ -170,7 +169,7 @@ function evalInput(input: CustomerEvalSeed) {
     category: input.category,
     query: input.query,
     systemPrompt: input.systemPrompt ?? null,
-    agentTemplateId: input.agentTemplateId ?? null,
+    agentId: input.agentId ?? null,
     assertions: input.assertions,
     agentcoreEvaluatorIds: input.agentcoreEvaluatorIds ?? [],
     tags: input.tags ?? [],

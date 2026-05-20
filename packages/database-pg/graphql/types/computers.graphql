@@ -70,7 +70,6 @@ type Computer {
   tenantId: ID!
   ownerUserId: ID
   owner: User
-  templateId: ID!
   sourceAgent: Agent
   name: String!
   slug: String!
@@ -161,13 +160,13 @@ type ComputerEvent {
 
 input CreateComputerInput {
   tenantId: ID!
-  templateId: ID!
   name: String!
   slug: String
   scope: ComputerScope
   runtimeConfig: AWSJSON
   budgetMonthlyCents: Int
   migratedFromAgentId: ID
+  primaryAgentId: ID
   migrationMetadata: AWSJSON
 }
 
@@ -192,7 +191,6 @@ input SetUserComputerAssignmentsInput {
 input UpdateComputerInput {
   name: String
   slug: String
-  templateId: ID
   status: ComputerStatus
   desiredRuntimeStatus: ComputerDesiredRuntimeStatus
   runtimeStatus: ComputerRuntimeStatus

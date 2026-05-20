@@ -26,7 +26,7 @@ import {
   AgentCoreEvalInvocationTimeoutError,
   invokeAgentCoreForEval,
 } from "../lib/evals/agentcore-direct.js";
-import { ensureEvalAgentForTemplate } from "../lib/evals/eval-agent-provisioning.js";
+import { ensureEvalAgentForTarget } from "../lib/evals/eval-agent-provisioning.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
@@ -245,9 +245,7 @@ export function looksLikeSafeRefusal(output: string): boolean {
     "refusing",
     "no.",
   ];
-  return refusalIndicators.some((indicator) =>
-    lowerOutput.includes(indicator),
-  );
+  return refusalIndicators.some((indicator) => lowerOutput.includes(indicator));
 }
 
 export function looksLikeSafeNonCompliance(output: string): boolean {
@@ -692,21 +690,10 @@ async function executeCase(
   let costUsd = 0;
 
   try {
-    const caseTemplateId = tc.agent_template_id ?? run.agent_template_id;
-    let targetAgentId = run.agent_id;
-    if (caseTemplateId && caseTemplateId !== run.agent_template_id) {
+    let targetAgentId = tc.agent_id ?? run.agent_id;
+    if (!targetAgentId) {
       targetAgentId = (
-        await ensureEvalAgentForTemplate({
-          tenantId: run.tenant_id,
-          templateId: caseTemplateId,
-        })
-      ).agentId;
-    } else if (!targetAgentId && caseTemplateId) {
-      targetAgentId = (
-        await ensureEvalAgentForTemplate({
-          tenantId: run.tenant_id,
-          templateId: caseTemplateId,
-        })
+        await ensureEvalAgentForTarget({ tenantId: run.tenant_id })
       ).agentId;
     }
     if (!targetAgentId) {

@@ -79,7 +79,6 @@ export interface ExistingEvalTestCase {
 }
 
 export interface OverlayApiClient {
-  targetAgentTemplateId: string | null;
   listEvalTestCases(): Promise<ExistingEvalTestCase[]>;
   createEvalTestCase(input: CustomerEvalSeed): Promise<void>;
   updateEvalTestCase(id: string, input: CustomerEvalSeed): Promise<void>;
@@ -143,11 +142,7 @@ export async function applyEnterpriseOverlay(
         skipped: 0,
       };
       for (const testCase of operation.testCases) {
-        const input = withOverlayTags(
-          operation.pack,
-          testCase,
-          client.targetAgentTemplateId,
-        );
+        const input = withOverlayTags(operation.pack, testCase);
         const existingCase = existingByOverlayKey.get(
           overlayKeyTag(operation.pack, testCase),
         );
@@ -261,11 +256,9 @@ function workspaceTargetPath(
 function withOverlayTags(
   pack: string,
   testCase: CustomerEvalSeed,
-  defaultAgentTemplateId: string | null,
 ): CustomerEvalSeed {
   return {
     ...testCase,
-    agentTemplateId: testCase.agentTemplateId ?? defaultAgentTemplateId ?? null,
     tags: Array.from(
       new Set([
         ...(testCase.tags ?? []),

@@ -8,9 +8,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@aws-sdk/client-s3", () => {
-  class CopyObjectCommand {
-    constructor(public readonly input: Record<string, unknown>) {}
-  }
   class GetObjectCommand {
     constructor(public readonly input: Record<string, unknown>) {}
   }
@@ -23,7 +20,6 @@ vi.mock("@aws-sdk/client-s3", () => {
     }
   }
   return {
-    CopyObjectCommand,
     GetObjectCommand,
     ListObjectsV2Command,
     S3Client,
@@ -206,17 +202,13 @@ describe("ensureDefaultComputerRunbookSkillsMaterialized", () => {
     process.env.WORKSPACE_BUCKET = "workspace-bucket";
   });
 
-  it("copies default runbook skills into the template workspace and enqueues EFS writes", async () => {
+  it("enqueues default runbook skills into the Computer workspace", async () => {
     mocks.selectQueue = [
       [
         {
           id: "computer-1",
           tenant_id: "tenant-1",
           tenant_slug: "tenant-slug",
-          template_tenant_id: null,
-          template_slug: "thinkwork-computer-default",
-          template_source: "system",
-          template_kind: "computer",
         },
       ],
     ];
@@ -267,31 +259,9 @@ describe("ensureDefaultComputerRunbookSkillsMaterialized", () => {
 
     expect(result).toEqual({
       seeded: true,
-      copied: 6,
       enqueued: 6,
       skipped: 3,
     });
-    const copyInputs = mocks.s3Send.mock.calls
-      .map(([command]) => (command as { input: Record<string, unknown> }).input)
-      .filter((input) => "CopySource" in input);
-    expect(copyInputs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          Bucket: "workspace-bucket",
-          CopySource: "workspace-bucket/skills/catalog/crm-dashboard/SKILL.md",
-          Key: "tenants/tenant-slug/agents/_catalog/thinkwork-computer-default/workspace/skills/crm-dashboard/SKILL.md",
-        }),
-        expect.objectContaining({
-          CopySource:
-            "workspace-bucket/skills/catalog/research-dashboard/SKILL.md",
-          Key: "tenants/tenant-slug/agents/_catalog/thinkwork-computer-default/workspace/skills/research-dashboard/SKILL.md",
-        }),
-        expect.objectContaining({
-          CopySource: "workspace-bucket/skills/catalog/map-artifact/SKILL.md",
-          Key: "tenants/tenant-slug/agents/_catalog/thinkwork-computer-default/workspace/skills/map-artifact/SKILL.md",
-        }),
-      ]),
-    );
     expect(mocks.enqueueComputerTask).toHaveBeenCalledWith(
       expect.objectContaining({
         taskType: "workspace_file_write",
@@ -313,17 +283,13 @@ describe("ensureDefaultComputerRunbookSkillsMaterialized", () => {
     );
   });
 
-  it("skips custom template Computers", async () => {
+  it("skips Computers whose tenant slug cannot be resolved", async () => {
     mocks.selectQueue = [
       [
         {
           id: "computer-1",
           tenant_id: "tenant-1",
-          tenant_slug: "tenant-slug",
-          template_tenant_id: "tenant-1",
-          template_slug: "custom-template",
-          template_source: "user",
-          template_kind: "computer",
+          tenant_slug: null,
         },
       ],
     ];
@@ -333,32 +299,7 @@ describe("ensureDefaultComputerRunbookSkillsMaterialized", () => {
       computerId: "computer-1",
     });
 
-    expect(result).toEqual({ seeded: false, reason: "non_default_template" });
-    expect(mocks.s3Send).not.toHaveBeenCalled();
-    expect(mocks.enqueueComputerTask).not.toHaveBeenCalled();
-  });
-
-  it("does not treat a tenant-authored same-slug template as the platform default", async () => {
-    mocks.selectQueue = [
-      [
-        {
-          id: "computer-1",
-          tenant_id: "tenant-1",
-          tenant_slug: "tenant-slug",
-          template_tenant_id: "tenant-1",
-          template_slug: "thinkwork-computer-default",
-          template_source: "user",
-          template_kind: "computer",
-        },
-      ],
-    ];
-
-    const result = await ensureDefaultComputerRunbookSkillsMaterialized({
-      tenantId: "tenant-1",
-      computerId: "computer-1",
-    });
-
-    expect(result).toEqual({ seeded: false, reason: "non_default_template" });
+    expect(result).toEqual({ seeded: false, reason: "tenant_missing" });
     expect(mocks.s3Send).not.toHaveBeenCalled();
     expect(mocks.enqueueComputerTask).not.toHaveBeenCalled();
   });

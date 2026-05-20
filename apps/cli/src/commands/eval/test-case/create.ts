@@ -16,7 +16,7 @@ interface CreateOptions extends EvalCliOptions {
   category?: string;
   query?: string;
   systemPrompt?: string;
-  agentTemplate?: string;
+  agent?: string;
   evaluator?: string[];
   tag?: string[];
   enabled?: boolean;
@@ -42,7 +42,7 @@ export async function runEvalTestCaseCreate(
   let category = opts.category;
   let query = opts.query;
   let evaluators = opts.evaluator;
-  let agentTemplateId = opts.agentTemplate ?? null;
+  const agentId = opts.agent ?? null;
 
   if (!name || !category || !query) {
     if (!interactive) {
@@ -117,7 +117,7 @@ export async function runEvalTestCaseCreate(
       category: category!,
       query: query!,
       systemPrompt: opts.systemPrompt ?? null,
-      agentTemplateId,
+      agentId,
       agentcoreEvaluatorIds:
         evaluators && evaluators.length > 0 ? evaluators : null,
       tags: opts.tag && opts.tag.length > 0 ? opts.tag : null,

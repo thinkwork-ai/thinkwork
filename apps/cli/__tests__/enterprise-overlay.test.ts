@@ -114,7 +114,7 @@ describe("enterprise customer overlay", () => {
     );
     expect(client.createEvalTestCase).toHaveBeenCalledWith(
       expect.objectContaining({
-        agentTemplateId: "template-default",
+        tags: expect.arrayContaining(["source:customer-overlay"]),
       }),
     );
   });
@@ -140,7 +140,6 @@ function fakeClient(): OverlayApiClient & {
 } {
   const evals: any[] = [];
   return {
-    targetAgentTemplateId: "template-default",
     listEvalTestCases: vi.fn(async () => evals),
     createEvalTestCase: vi.fn(async (input) => {
       evals.push({ id: `eval-${evals.length + 1}`, ...input });

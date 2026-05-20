@@ -2,7 +2,6 @@ import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
-  agentTemplates,
   agentWorkspaceRuns,
   computers,
   computerEvents,
@@ -86,7 +85,6 @@ export async function applyComputerMigration(
       .values({
         tenant_id: agent.tenant_id,
         owner_user_id: agent.human_pair_id,
-        template_id: agent.template_id,
         name: agent.name,
         slug: `${agent.slug ?? generateSlug()}-computer`,
         runtime_config: agent.runtime_config,
@@ -95,14 +93,12 @@ export async function applyComputerMigration(
         last_active_at:
           agent.last_thread_at ?? agent.last_heartbeat_at ?? agent.updated_at,
         migrated_from_agent_id: agent.id,
+        primary_agent_id: agent.id,
         migration_metadata: {
           source: "agent_to_computer_phase_one",
           sourceAgentId: agent.id,
           sourceAgentIds: group.agentIds,
           delegatedAgentIds: group.agentIds.filter((id) => id !== agent.id),
-          sourceAgentTemplateId: agent.template_id,
-          sourceAgentTemplateKind: agent.template_kind,
-          sourceAgentTemplateName: agent.template_name ?? null,
         },
       })
       .returning({ id: computers.id });
@@ -114,8 +110,6 @@ export async function applyComputerMigration(
       payload: {
         sourceAgentId: agent.id,
         sourceAgentName: agent.name,
-        templateId: agent.template_id,
-        templateName: agent.template_name ?? null,
       },
     });
     created.push(row.id);
@@ -141,10 +135,6 @@ async function loadUserPairedAgents(tenantId: string) {
       human_pair_id: agents.human_pair_id,
       human_name: users.name,
       human_email: users.email,
-      template_id: agents.template_id,
-      template_kind: agentTemplates.template_kind,
-      template_name: agentTemplates.name,
-      template_slug: agentTemplates.slug,
       adapter_type: agents.adapter_type,
       workspace_run_count: sql<number>`coalesce((
         select count(*)::int
@@ -169,21 +159,13 @@ async function loadUserPairedAgents(tenantId: string) {
       created_at: agents.created_at,
     })
     .from(agents)
-    .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
     .leftJoin(users, eq(agents.human_pair_id, users.id))
     .where(
       and(
         eq(agents.tenant_id, tenantId),
         isNotNull(agents.human_pair_id),
-        isNotNull(agents.template_id),
         ne(agents.status, "archived"),
       ),
-    )
-    .then((rows) =>
-      rows.map((row) => ({
-        ...row,
-        template_id: row.template_id!,
-      })),
     );
 }
 

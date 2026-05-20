@@ -44,8 +44,8 @@ import {
 import { json, error, notFound } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import {
-  ensureEvalAgentForTemplate,
-  resolveEvalTemplateId,
+  ensureEvalAgentForTarget,
+  resolveEvalAgentId,
 } from "../lib/evals/eval-agent-provisioning.js";
 import {
   hasConnectorTriggerDefinition,
@@ -701,13 +701,11 @@ async function fireScheduledJob(
     // packages/lambda/job-trigger.ts.
     const cfg = (trig.config ?? {}) as {
       agentId?: string;
-      agentTemplateId?: string;
       computerId?: string;
       model?: string;
       categories?: string[];
     };
     let targetAgentId: string;
-    let targetTemplateId: string;
     try {
       if (cfg.computerId) {
         throw new Error(
@@ -719,32 +717,8 @@ async function fireScheduledJob(
           `Scheduled eval model overrides are no longer supported; use ${DEFAULT_EVAL_MODEL_ID}`,
         );
       }
-      if (cfg.agentId) {
-        const [agent] = await db
-          .select({ id: agents.id, templateId: agents.template_id })
-          .from(agents)
-          .where(
-            and(eq(agents.id, cfg.agentId), eq(agents.tenant_id, tenantId)),
-          )
-          .limit(1);
-        if (!agent) throw new Error("Scheduled eval Agent not found");
-        if (!agent.templateId) {
-          throw new Error("Scheduled eval Agent is not linked to a template");
-        }
-        targetAgentId = agent.id;
-        targetTemplateId = agent.templateId;
-      } else {
-        targetTemplateId = await resolveEvalTemplateId(
-          tenantId,
-          cfg.agentTemplateId,
-        );
-        targetAgentId = (
-          await ensureEvalAgentForTemplate({
-            tenantId,
-            templateId: targetTemplateId,
-          })
-        ).agentId;
-      }
+      targetAgentId = await resolveEvalAgentId(tenantId, cfg.agentId);
+      await ensureEvalAgentForTarget({ tenantId, agentId: targetAgentId });
     } catch (err) {
       return error(err instanceof Error ? err.message : String(err), 409);
     }
@@ -754,7 +728,6 @@ async function fireScheduledJob(
         tenant_id: tenantId,
         agent_id: targetAgentId,
         computer_id: null,
-        agent_template_id: targetTemplateId,
         scheduled_job_id: trig.id,
         status: "pending",
         model: DEFAULT_EVAL_MODEL_ID,

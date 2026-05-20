@@ -29,7 +29,7 @@ type ComputerAccessRow = {
   id: string;
   name: string;
   slug: string;
-  templateName: string | null;
+  sourceAgentName: string | null;
   accessSource: string | null;
   teams: string[];
 };
@@ -83,7 +83,7 @@ export function HumanComputerAssignmentsSection({
         id: computer.id,
         name: computer.name,
         slug: computer.slug,
-        templateName: computer.template?.name ?? null,
+        sourceAgentName: computer.sourceAgent?.name ?? null,
         accessSource: assignment?.accessSource ?? null,
         teams: assignment?.teams.map((team) => team.name) ?? [],
       });
@@ -95,7 +95,7 @@ export function HumanComputerAssignmentsSection({
         id: assignment.computer.id,
         name: assignment.computer.name,
         slug: assignment.computer.slug,
-        templateName: assignment.computer.template?.name ?? null,
+        sourceAgentName: assignment.computer.sourceAgent?.name ?? null,
         accessSource: assignment.accessSource,
         teams: assignment.teams.map((team) => team.name),
       });
@@ -186,7 +186,7 @@ export function HumanComputerAssignmentsSection({
                     ) : null}
                   </span>
                   <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {row.templateName ?? row.slug}
+                    {row.sourceAgentName ?? row.slug}
                   </span>
                   {row.teams.length > 0 ? (
                     <span className="mt-1 flex flex-wrap gap-1">

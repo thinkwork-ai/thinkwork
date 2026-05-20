@@ -85,14 +85,6 @@ vi.mock("@thinkwork/database-pg", () => ({
 vi.mock("@thinkwork/database-pg/schema", () => ({
   agentWakeupRequests: { id: "agent_wakeup_requests.id" },
   agents: { id: "agents.id" },
-  agentTemplates: {
-    id: "agent_templates.id",
-    name: "agent_templates.name",
-    runtime: "agent_templates.runtime",
-    slug: "agent_templates.slug",
-    tenant_id: "agent_templates.tenant_id",
-    template_kind: "agent_templates.template_kind",
-  },
   agentSkills: {
     id: "agent_skills.id",
     agent_id: "agent_skills.agent_id",
@@ -104,7 +96,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: "computers.id",
     tenant_id: "computers.tenant_id",
     owner_user_id: "computers.owner_user_id",
-    template_id: "computers.template_id",
     runtime_status: "computers.runtime_status",
     primary_agent_id: "computers.primary_agent_id",
     migrated_from_agent_id: "computers.migrated_from_agent_id",
@@ -548,11 +539,6 @@ describe("job-trigger eval_scheduled", () => {
         },
       },
     ]);
-    mockSelect.mockReturnValueOnce([
-      {
-        id: "default-template-1",
-      },
-    ]);
     mockInsert.mockReturnValueOnce([{ id: "eval-run-1" }]);
 
     await handler({
@@ -566,7 +552,6 @@ describe("job-trigger eval_scheduled", () => {
         tenant_id: "T1",
         agent_id: null,
         computer_id: null,
-        agent_template_id: "default-template-1",
         scheduled_job_id: "job-eval-1",
         status: "pending",
         model: "moonshotai.kimi-k2.5",

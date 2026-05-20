@@ -357,7 +357,6 @@ export const ComputersListQuery = graphql(`
         name
         email
       }
-      templateId
       sourceAgent {
         id
         name
@@ -397,7 +396,6 @@ export const ComputerDetailQuery = graphql(`
         name
         email
       }
-      templateId
       sourceAgent {
         id
         name
@@ -440,7 +438,6 @@ export const CreateComputerMutation = graphql(`
       runtimeStatus
       tenantId
       ownerUserId
-      templateId
       budgetMonthlyCents
       createdAt
       updatedAt
@@ -3043,7 +3040,6 @@ export const EvalRunsQuery = gql`
         costUsd
         agentId
         agentName
-        agentTemplateId
         scheduledJobId
         startedAt
         completedAt
@@ -3070,7 +3066,6 @@ export const EvalRunQuery = gql`
       errorMessage
       agentId
       agentName
-      agentTemplateId
       scheduledJobId
       startedAt
       completedAt
@@ -3122,11 +3117,6 @@ export const EvalTimeSeriesQuery = gql`
   }
 `;
 
-// agentTemplateId/Name require a backend deploy of the new evaluations
-// resolver (see follow-up PR). Until that lands, request only fields
-// the v1 graphql-http already knows. The form's agent-template Select
-// will still capture the value into local state and be persisted on
-// save once the mutation goes through against the deployed backend.
 export const EvalTestCasesQuery = gql`
   query EvalTestCases($tenantId: ID!, $category: String, $search: String) {
     evalTestCases(tenantId: $tenantId, category: $category, search: $search) {
@@ -3135,6 +3125,7 @@ export const EvalTestCasesQuery = gql`
       category
       query
       systemPrompt
+      agentId
       assertions
       agentcoreEvaluatorIds
       tags
@@ -3154,6 +3145,7 @@ export const EvalTestCaseQuery = gql`
       category
       query
       systemPrompt
+      agentId
       assertions
       agentcoreEvaluatorIds
       tags
@@ -3187,7 +3179,7 @@ export const CreateEvalTestCaseMutation = gql`
       category
       query
       systemPrompt
-      agentTemplateId
+      agentId
       assertions
       agentcoreEvaluatorIds
       enabled
@@ -3204,7 +3196,7 @@ export const UpdateEvalTestCaseMutation = gql`
       category
       query
       systemPrompt
-      agentTemplateId
+      agentId
       assertions
       agentcoreEvaluatorIds
       enabled

@@ -24,7 +24,7 @@ describe("runbook skill discovery", () => {
           displayName: "CRM Dashboard",
         }),
         skill: expect.objectContaining({
-          source: "template-workspace",
+          source: "computer-workspace",
           contractPath: "references/thinkwork-runbook.json",
         }),
       }),

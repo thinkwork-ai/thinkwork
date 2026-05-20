@@ -14,13 +14,13 @@ export async function createComputer(
   const row = await createComputerCore({
     tenantId: input.tenantId,
     ownerUserId: null,
-    templateId: input.templateId,
     name: input.name,
     slug: input.slug,
     scope: input.scope,
     runtimeConfig: input.runtimeConfig,
     budgetMonthlyCents: input.budgetMonthlyCents,
     migratedFromAgentId: input.migratedFromAgentId,
+    primaryAgentId: input.primaryAgentId,
     migrationMetadata: input.migrationMetadata,
     createdBy: callerUserId,
   });

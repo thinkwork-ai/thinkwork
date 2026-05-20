@@ -1,16 +1,10 @@
 import {
-  CopyObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { and, eq } from "drizzle-orm";
-import {
-  agents,
-  agentTemplates,
-  computers,
-  tenants,
-} from "@thinkwork/database-pg/schema";
+import { agents, computers, tenants } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 import { isBuiltinToolWorkspacePath } from "../builtin-tool-slugs.js";
 import { enqueueComputerTask } from "./tasks.js";
@@ -51,10 +45,6 @@ type DefaultRunbookSkillRow = {
   id: string;
   tenant_id: string;
   tenant_slug: string | null;
-  template_tenant_id: string | null;
-  template_slug: string | null;
-  template_source: string | null;
-  template_kind: string | null;
 };
 
 type TemplateWorkspaceSyncTarget = {
@@ -137,23 +127,15 @@ export async function ensureDefaultComputerRunbookSkillsMaterialized(input: {
     input.computerId,
   );
   if (!target) return { seeded: false, reason: "computer_missing" };
-  if (
-    target.template_slug !== PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG ||
-    target.template_tenant_id !== null ||
-    target.template_source !== "system" ||
-    target.template_kind !== "computer" ||
-    !target.tenant_slug
-  ) {
-    return { seeded: false, reason: "non_default_template" };
+  if (!target.tenant_slug) {
+    return { seeded: false, reason: "tenant_missing" };
   }
 
-  let copied = 0;
   let enqueued = 0;
   let skipped = 0;
 
   for (const skillSlug of DEFAULT_COMPUTER_RUNBOOK_SKILL_SLUGS) {
     const sourcePrefix = `${CATALOG_SKILL_PREFIX}/${skillSlug}/`;
-    const templatePrefix = `tenants/${target.tenant_slug}/agents/_catalog/${PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG}/workspace/skills/${skillSlug}/`;
     const files = await listWorkspaceFiles(sourcePrefix);
 
     for (const file of files) {
@@ -166,10 +148,6 @@ export async function ensureDefaultComputerRunbookSkillsMaterialized(input: {
         skipped++;
         continue;
       }
-
-      const destinationKey = `${templatePrefix}${file.path}`;
-      await copyWorkspaceFile(file.key, destinationKey);
-      copied++;
 
       await enqueueComputerTask({
         tenantId: input.tenantId,
@@ -191,7 +169,7 @@ export async function ensureDefaultComputerRunbookSkillsMaterialized(input: {
     }
   }
 
-  return { seeded: true, copied, enqueued, skipped };
+  return { seeded: true, enqueued, skipped };
 }
 
 export async function syncComputerTemplateSkillObjectToLiveComputers(input: {
@@ -312,14 +290,9 @@ async function loadDefaultRunbookSkillTarget(
       id: computers.id,
       tenant_id: computers.tenant_id,
       tenant_slug: tenants.slug,
-      template_tenant_id: agentTemplates.tenant_id,
-      template_slug: agentTemplates.slug,
-      template_source: agentTemplates.source,
-      template_kind: agentTemplates.template_kind,
     })
     .from(computers)
     .leftJoin(tenants, eq(tenants.id, computers.tenant_id))
-    .leftJoin(agentTemplates, eq(agentTemplates.id, computers.template_id))
     .where(and(eq(computers.tenant_id, tenantId), eq(computers.id, computerId)))
     .limit(1);
   return row;
@@ -345,6 +318,9 @@ async function loadComputerTemplateSyncTargets(input: {
   tenantSlug: string;
   templateSlug: string;
 }): Promise<TemplateWorkspaceSyncTarget[]> {
+  if (input.templateSlug !== PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG) {
+    return [];
+  }
   return db
     .select({
       computer_id: computers.id,
@@ -352,13 +328,8 @@ async function loadComputerTemplateSyncTargets(input: {
     })
     .from(computers)
     .innerJoin(tenants, eq(tenants.id, computers.tenant_id))
-    .innerJoin(agentTemplates, eq(agentTemplates.id, computers.template_id))
     .where(
-      and(
-        eq(tenants.slug, input.tenantSlug),
-        eq(agentTemplates.slug, input.templateSlug),
-        eq(agentTemplates.template_kind, "computer"),
-      ),
+      and(eq(tenants.slug, input.tenantSlug), eq(computers.status, "active")),
     );
 }
 
@@ -413,17 +384,6 @@ async function readWorkspaceFile(key: string) {
     new GetObjectCommand({ Bucket: workspaceBucket(), Key: key }),
   );
   return (await response.Body?.transformToString("utf-8")) ?? "";
-}
-
-async function copyWorkspaceFile(sourceKey: string, destinationKey: string) {
-  const bucket = workspaceBucket();
-  await s3.send(
-    new CopyObjectCommand({
-      Bucket: bucket,
-      CopySource: `${bucket}/${sourceKey}`,
-      Key: destinationKey,
-    }),
-  );
 }
 
 async function markSeeded(

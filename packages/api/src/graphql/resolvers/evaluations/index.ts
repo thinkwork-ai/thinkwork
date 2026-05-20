@@ -23,8 +23,8 @@ import {
 } from "../../../lib/agentcore-spans.js";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import {
-  ensureEvalAgentForTemplate,
-  resolveEvalTemplateId,
+  ensureEvalAgentForTarget,
+  resolveEvalAgentId,
 } from "../../../lib/evals/eval-agent-provisioning.js";
 
 // ---------------------------------------------------------------------------
@@ -40,7 +40,6 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     agentId: row.agent_id,
     agentName: agentName ?? null,
     computerId: row.computer_id ?? null,
-    agentTemplateId: row.agent_template_id ?? null,
     scheduledJobId: row.scheduled_job_id ?? null,
     status: row.status,
     model: row.model,
@@ -238,7 +237,7 @@ function testCaseToGraphql(row: Record<string, unknown>) {
     category: row.category,
     query: row.query,
     systemPrompt: row.system_prompt,
-    agentTemplateId: row.agent_template_id ?? null,
+    agentId: row.agent_id ?? null,
     assertions: JSON.stringify(row.assertions ?? []),
     agentcoreEvaluatorIds: row.agentcore_evaluator_ids ?? [],
     tags: row.tags ?? [],
@@ -611,7 +610,6 @@ const evalTestCaseHistory = async (
 interface StartEvalRunInput {
   computerId?: string | null;
   agentId?: string | null;
-  agentTemplateId?: string | null;
   model?: string | null;
   categories?: string[] | null;
   testCaseIds?: string[] | null;
@@ -646,37 +644,9 @@ async function resolveRunTarget(args: {
   input: StartEvalRunInput;
 }): Promise<{
   agentId: string;
-  agentTemplateId: string;
 }> {
-  if (args.input.agentId) {
-    const [agent] = await db
-      .select({
-        id: agents.id,
-        templateId: agents.template_id,
-      })
-      .from(agents)
-      .where(
-        and(
-          eq(agents.id, args.input.agentId),
-          eq(agents.tenant_id, args.tenantId),
-        ),
-      );
-    if (!agent) throw new Error("Agent not found for eval run");
-    if (!agent.templateId) {
-      throw new Error("Agent is not linked to an eval template");
-    }
-    return { agentId: agent.id, agentTemplateId: agent.templateId };
-  }
-
-  const templateId = await resolveEvalTemplateId(
-    args.tenantId,
-    args.input.agentTemplateId,
-  );
-  const target = await ensureEvalAgentForTemplate({
-    tenantId: args.tenantId,
-    templateId,
-  });
-  return { agentId: target.agentId, agentTemplateId: target.templateId };
+  const agentId = await resolveEvalAgentId(args.tenantId, args.input.agentId);
+  return { agentId };
 }
 
 const startEvalRun = async (
@@ -686,7 +656,7 @@ const startEvalRun = async (
 ) => {
   if (args.input.computerId) {
     throw new Error(
-      "Computer eval targets are no longer supported. Evals run directly against AgentCore Agent templates.",
+      "Computer eval targets are no longer supported. Evals run directly against AgentCore Agents.",
     );
   }
 
@@ -699,7 +669,6 @@ const startEvalRun = async (
       tenant_id: args.tenantId,
       agent_id: target.agentId,
       computer_id: null,
-      agent_template_id: target.agentTemplateId,
       status: "pending",
       model,
       categories: args.input.categories ?? [],
@@ -786,7 +755,7 @@ interface CreateTestCaseInput {
   category: string;
   query: string;
   systemPrompt?: string | null;
-  agentTemplateId?: string | null;
+  agentId?: string | null;
   assertions?: Array<{
     type: string;
     value?: string | null;
@@ -810,7 +779,7 @@ const createEvalTestCase = async (
       category: args.input.category,
       query: args.input.query,
       system_prompt: args.input.systemPrompt ?? null,
-      agent_template_id: args.input.agentTemplateId ?? null,
+      agent_id: args.input.agentId ?? null,
       assertions: args.input.assertions ?? [],
       agentcore_evaluator_ids: args.input.agentcoreEvaluatorIds ?? [],
       tags: args.input.tags ?? [],
@@ -833,8 +802,7 @@ const updateEvalTestCase = async (
   if (args.input.query !== undefined) update.query = args.input.query;
   if (args.input.systemPrompt !== undefined)
     update.system_prompt = args.input.systemPrompt;
-  if (args.input.agentTemplateId !== undefined)
-    update.agent_template_id = args.input.agentTemplateId;
+  if (args.input.agentId !== undefined) update.agent_id = args.input.agentId;
   if (args.input.assertions !== undefined)
     update.assertions = args.input.assertions;
   if (args.input.agentcoreEvaluatorIds !== undefined)

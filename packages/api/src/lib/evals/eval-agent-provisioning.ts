@@ -1,90 +1,35 @@
 import { randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import {
   agentCapabilities,
-  agentKnowledgeBases,
-  agentMcpServers,
-  agentSkills,
-  agentTemplateMcpServers,
-  agentTemplates,
   agents,
   tenants,
 } from "@thinkwork/database-pg/schema";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { db } from "../db.js";
-import { initializePinnedVersions } from "../pinned-versions.js";
 import { bootstrapAgentWorkspace } from "../workspace-bootstrap.js";
 
-export async function resolveEvalTemplateId(
+export async function resolveEvalAgentId(
   tenantId: string,
-  requestedTemplateId?: string | null,
+  requestedAgentId?: string | null,
 ): Promise<string> {
-  if (requestedTemplateId) {
-    const [template] = await db
-      .select({
-        id: agentTemplates.id,
-        templateKind: agentTemplates.template_kind,
-      })
-      .from(agentTemplates)
-      .where(
-        and(
-          eq(agentTemplates.id, requestedTemplateId),
-          eq(agentTemplates.tenant_id, tenantId),
-        ),
-      )
-      .limit(1);
-    if (!template) throw new Error("Eval Agent template not found");
-    if (template.templateKind !== "agent") {
-      throw new Error("Evals currently require an Agent template target");
-    }
-    return template.id;
+  if (requestedAgentId) {
+    await requireEvalAgentTarget(tenantId, requestedAgentId);
+    return requestedAgentId;
   }
 
-  const [defaultTemplate] = await db
-    .select({ id: agentTemplates.id })
-    .from(agentTemplates)
-    .where(
-      and(
-        eq(agentTemplates.tenant_id, tenantId),
-        eq(agentTemplates.slug, "default"),
-        eq(agentTemplates.template_kind, "agent"),
-      ),
-    )
-    .limit(1);
-  if (defaultTemplate) return defaultTemplate.id;
-
-  const [firstTemplate] = await db
-    .select({ id: agentTemplates.id })
-    .from(agentTemplates)
-    .where(
-      and(
-        eq(agentTemplates.tenant_id, tenantId),
-        eq(agentTemplates.template_kind, "agent"),
-      ),
-    )
-    .limit(1);
-  if (!firstTemplate) throw new Error("No Agent template found for eval");
-  return firstTemplate.id;
+  const target = await ensureEvalAgentForTarget({ tenantId });
+  return target.agentId;
 }
 
-export async function ensureEvalAgentForTemplate(input: {
+export async function ensureEvalAgentForTarget(input: {
   tenantId: string;
-  templateId: string;
-}): Promise<{ agentId: string; templateId: string }> {
-  const { tenantId, templateId } = input;
-  const [template] = await db
-    .select()
-    .from(agentTemplates)
-    .where(
-      and(
-        eq(agentTemplates.id, templateId),
-        eq(agentTemplates.tenant_id, tenantId),
-      ),
-    )
-    .limit(1);
-  if (!template) throw new Error("Eval Agent template not found");
-  if (template.template_kind !== "agent") {
-    throw new Error("Evals currently require an Agent template target");
+  agentId?: string | null;
+}): Promise<{ agentId: string }> {
+  const { tenantId, agentId } = input;
+  if (agentId) {
+    await requireEvalAgentTarget(tenantId, agentId);
+    return { agentId };
   }
 
   const [existing] = await db
@@ -93,12 +38,17 @@ export async function ensureEvalAgentForTemplate(input: {
     .where(
       and(
         eq(agents.tenant_id, tenantId),
-        eq(agents.template_id, templateId),
         eq(agents.source, "system"),
         eq(agents.type, "eval"),
+        ne(agents.status, "archived"),
       ),
     )
     .limit(1);
+
+  if (existing) {
+    await bootstrapAgentWorkspace(existing.id, { mode: "overwrite" });
+    return { agentId: existing.id };
+  }
 
   const [tenant] = await db
     .select({ slug: tenants.slug })
@@ -106,99 +56,24 @@ export async function ensureEvalAgentForTemplate(input: {
     .where(eq(tenants.id, tenantId))
     .limit(1);
 
-  if (existing) {
-    if (tenant?.slug && template.slug) {
-      const pinnedVersions = await initializePinnedVersions({
-        tenantSlug: tenant.slug,
-        templateSlug: template.slug,
-      });
-      if (Object.keys(pinnedVersions).length > 0) {
-        await db
-          .update(agents)
-          .set({ agent_pinned_versions: pinnedVersions })
-          .where(eq(agents.id, existing.id));
-      }
-    }
-    await bootstrapAgentWorkspace(existing.id, { mode: "overwrite" });
-    return { agentId: existing.id, templateId };
-  }
-
-  let pinnedVersions: Record<string, string> = {};
-  if (tenant?.slug && template.slug) {
-    pinnedVersions = await initializePinnedVersions({
-      tenantSlug: tenant.slug,
-      templateSlug: template.slug,
-    });
-  }
-
-  const config = (template.config as Record<string, unknown> | null) ?? {};
+  const slugBase = `eval-agent-${tenant?.slug || generateSlug()}`;
   const [agent] = await db
     .insert(agents)
     .values({
       tenant_id: tenantId,
-      name: `Eval Agent (${template.name})`,
-      slug: `eval-agent-${template.slug || generateSlug()}-${randomBytes(4).toString("hex")}`,
-      role: typeof config.role === "string" ? config.role : undefined,
+      name: "Eval Agent",
+      slug: `${slugBase}-${randomBytes(4).toString("hex")}`,
+      role: "Evaluation target",
       type: "eval",
       source: "system",
-      runtime: template.runtime,
+      runtime: "strands",
       status: "idle",
       adapter_type: "strands",
-      template_id: templateId,
+      template_id: null,
       runtime_config: { heartbeat: { enabled: false } },
-      agent_pinned_versions:
-        Object.keys(pinnedVersions).length > 0 ? pinnedVersions : null,
     })
     .returning();
   if (!agent) throw new Error("Failed to create eval AgentCore target");
-
-  const templateSkills = (template.skills as any[] | null) ?? [];
-  if (templateSkills.length > 0) {
-    await db.insert(agentSkills).values(
-      templateSkills.map((skill) => ({
-        agent_id: agent.id,
-        tenant_id: tenantId,
-        skill_id: skill.skill_id,
-        config: skill.config,
-        permissions: skill.permissions,
-        rate_limit_rpm: skill.rate_limit_rpm,
-        model_override: skill.model_override ?? null,
-        enabled: skill.enabled ?? true,
-      })),
-    );
-  }
-
-  const templateKbIds = (template.knowledge_base_ids as string[] | null) ?? [];
-  if (templateKbIds.length > 0) {
-    await db.insert(agentKnowledgeBases).values(
-      templateKbIds.map((kbId) => ({
-        agent_id: agent.id,
-        tenant_id: tenantId,
-        knowledge_base_id: kbId,
-        enabled: true,
-      })),
-    );
-  }
-
-  const templateMcpRows = await db
-    .select({
-      mcp_server_id: agentTemplateMcpServers.mcp_server_id,
-      enabled: agentTemplateMcpServers.enabled,
-      config: agentTemplateMcpServers.config,
-    })
-    .from(agentTemplateMcpServers)
-    .where(eq(agentTemplateMcpServers.template_id, templateId));
-  if (templateMcpRows.length > 0) {
-    await db.insert(agentMcpServers).values(
-      templateMcpRows.map((row) => ({
-        agent_id: agent.id,
-        tenant_id: tenantId,
-        mcp_server_id: row.mcp_server_id,
-        enabled: row.enabled ?? true,
-        config: row.config ?? null,
-      })),
-    );
-  }
 
   try {
     await db.insert(agentCapabilities).values({
@@ -231,5 +106,21 @@ export async function ensureEvalAgentForTemplate(input: {
     console.warn("[eval-agent] workspace-map-generator not available:", err);
   }
 
-  return { agentId: agent.id, templateId };
+  return { agentId: agent.id };
+}
+
+async function requireEvalAgentTarget(tenantId: string, agentId: string) {
+  const [agent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.id, agentId),
+        eq(agents.tenant_id, tenantId),
+        ne(agents.status, "archived"),
+      ),
+    )
+    .limit(1);
+
+  if (!agent) throw new Error("Eval Agent target not found");
 }

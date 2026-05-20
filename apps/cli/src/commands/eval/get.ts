@@ -45,7 +45,6 @@ export async function runEvalGet(
   printKeyValue([
     ["Run ID", run.id],
     ["Status", run.status],
-    ["Agent template", run.agentTemplateId ?? "—"],
     ["Agent", run.agentName ?? run.agentId ?? "—"],
     ["Model", run.model ?? "—"],
     ["Categories", (run.categories ?? []).join(", ") || "—"],

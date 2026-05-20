@@ -16,7 +16,6 @@ export const EvalRunsDoc = graphql(`
         categories
         agentId
         agentName
-        agentTemplateId
         totalTests
         passed
         failed
@@ -41,7 +40,6 @@ export const EvalRunDoc = graphql(`
       categories
       agentId
       agentName
-      agentTemplateId
       totalTests
       passed
       failed
@@ -86,7 +84,7 @@ export const EvalTestCasesDoc = graphql(`
       category
       query
       systemPrompt
-      agentTemplateId
+      agentId
       agentcoreEvaluatorIds
       tags
       enabled
@@ -106,7 +104,7 @@ export const EvalTestCaseDoc = graphql(`
       category
       query
       systemPrompt
-      agentTemplateId
+      agentId
       assertions
       agentcoreEvaluatorIds
       tags
@@ -146,7 +144,7 @@ export const StartEvalRunDoc = graphql(`
       status
       model
       categories
-      agentTemplateId
+      agentId
       totalTests
       createdAt
     }

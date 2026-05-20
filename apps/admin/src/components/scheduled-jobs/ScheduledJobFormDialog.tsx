@@ -44,9 +44,7 @@ export const EVAL_SCHEDULE_TRIGGER_TYPE = "eval_scheduled";
 
 export interface EvalScheduleConfig {
   agentId?: string;
-  agentTemplateId?: string;
   computerId?: string;
-  targetTemplateKind?: "agent" | "computer";
   model?: string;
   categories?: string[];
 }
@@ -79,7 +77,6 @@ interface ScheduledJobFormDialogProps {
 const triggerFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   agentId: z.string().optional(),
-  agentTemplateId: z.string().optional(),
   computerId: z.string().optional(),
   model: z.string().optional(),
   categories: z.array(z.string()).optional(),
@@ -195,7 +192,6 @@ export function ScheduledJobFormDialog({
     defaultValues: {
       name: initial?.name || "",
       agentId: initial?.agent_id || "",
-      agentTemplateId: evalConfig.agentTemplateId || "",
       computerId: evalConfig.computerId || "",
       model: evalConfig.model || DEFAULT_EVAL_MODEL_ID,
       categories: evalConfig.categories?.length
@@ -221,7 +217,6 @@ export function ScheduledJobFormDialog({
     form.reset({
       name: initial?.name || "",
       agentId: initial?.agent_id || "",
-      agentTemplateId: nextEvalConfig.agentTemplateId || "",
       computerId: nextEvalConfig.computerId || "",
       model: nextEvalConfig.model || DEFAULT_EVAL_MODEL_ID,
       categories: nextEvalConfig.categories?.length
@@ -324,7 +319,7 @@ export function ScheduledJobFormDialog({
 
                 {isEvalSchedule ? (
                   <div className="w-[220px] rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                    Default Agent template
+                    Default eval Agent
                   </div>
                 ) : (
                   <FormField

@@ -813,7 +813,6 @@ export type Computer = {
   sourceAgent?: Maybe<Agent>;
   spentMonthlyCents?: Maybe<Scalars['Int']['output']>;
   status: ComputerStatus;
-  templateId: Scalars['ID']['output'];
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
@@ -1067,15 +1066,15 @@ export type CreateComputerInput = {
   migratedFromAgentId?: InputMaybe<Scalars['ID']['input']>;
   migrationMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   name: Scalars['String']['input'];
+  primaryAgentId?: InputMaybe<Scalars['ID']['input']>;
   runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   scope?: InputMaybe<ComputerScope>;
   slug?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
 };
 
 export type CreateEvalTestCaseInput = {
-  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
   category: Scalars['String']['input'];
@@ -1384,7 +1383,6 @@ export type EvalRun = {
   __typename?: 'EvalRun';
   agentId?: Maybe<Scalars['ID']['output']>;
   agentName?: Maybe<Scalars['String']['output']>;
-  agentTemplateId?: Maybe<Scalars['ID']['output']>;
   categories: Array<Scalars['String']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   computerId?: Maybe<Scalars['ID']['output']>;
@@ -1441,7 +1439,7 @@ export type EvalSummary = {
 
 export type EvalTestCase = {
   __typename?: 'EvalTestCase';
-  agentTemplateId?: Maybe<Scalars['ID']['output']>;
+  agentId?: Maybe<Scalars['ID']['output']>;
   agentcoreEvaluatorIds: Array<Scalars['String']['output']>;
   assertions: Scalars['AWSJSON']['output'];
   category: Scalars['String']['output'];
@@ -5393,7 +5391,6 @@ export type StartCustomerOnboardingPayload = {
 
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
-  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
   computerId?: InputMaybe<Scalars['ID']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
@@ -6092,11 +6089,10 @@ export type UpdateComputerInput = {
   slug?: InputMaybe<Scalars['String']['input']>;
   spentMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ComputerStatus>;
-  templateId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 export type UpdateEvalTestCaseInput = {
-  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
   category?: InputMaybe<Scalars['String']['input']>;
