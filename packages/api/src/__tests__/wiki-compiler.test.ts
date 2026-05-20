@@ -1445,6 +1445,78 @@ describe("runCompileJob", () => {
     );
   });
 
+  it("stops at the soft time budget and queues continuation after cursor progress", async () => {
+    const previousDeadline = process.env.WIKI_COMPILE_SOFT_DEADLINE_MS;
+    process.env.WIKI_COMPILE_SOFT_DEADLINE_MS = "1";
+
+    scriptAdapter([
+      {
+        records: Array.from({ length: 25 }, (_, i) => makeRecord(`r${i + 1}`)),
+        nextCursor: {
+          updatedAt: new Date("2026-04-18T00:00:00Z"),
+          recordId: "r25",
+        },
+      },
+      {
+        records: [makeRecord("r26")],
+        nextCursor: {
+          updatedAt: new Date("2026-04-18T00:01:00Z"),
+          recordId: "r26",
+        },
+      },
+    ]);
+    mockPlanner.runPlanner.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return {
+        pageUpdates: [],
+        newPages: [],
+        unresolvedMentions: [],
+        promotions: [],
+        pageLinks: [],
+        usage: { inputTokens: 100, outputTokens: 40 },
+      };
+    });
+    mockRepo.enqueueCompileJob.mockResolvedValueOnce({
+      inserted: true,
+      job: {
+        id: "chained-job",
+        tenant_id: "t1",
+        owner_id: "a1",
+        trigger: "memory_retain",
+      },
+    });
+
+    try {
+      const result = await runCompileJob(sampleJob);
+
+      expect(result.status).toBe("succeeded");
+      expect(result.metrics.records_read).toBe(25);
+      expect(result.metrics.cap_hit).toBe("soft_time_budget");
+      expect(result.metrics.soft_time_budget_hit).toBe(true);
+      expect(result.metrics.aggregation_skipped_time_budget).toBe(true);
+      expect(result.metrics.continuation_enqueued).toBe(1);
+      expect(mockRepo.setCursor).toHaveBeenCalledWith({
+        tenantId: "t1",
+        ownerId: "a1",
+        updatedAt: new Date("2026-04-18T00:00:00Z"),
+        recordId: "r25",
+      });
+      expect(mockRepo.enqueueCompileJob).toHaveBeenCalledWith({
+        tenantId: "t1",
+        ownerId: "a1",
+        trigger: "memory_retain",
+        nowEpochSeconds: 600,
+      });
+      expect(mockAdapter.listRecordsUpdatedSince).toHaveBeenCalledTimes(1);
+    } finally {
+      if (previousDeadline === undefined) {
+        delete process.env.WIKI_COMPILE_SOFT_DEADLINE_MS;
+      } else {
+        process.env.WIKI_COMPILE_SOFT_DEADLINE_MS = previousDeadline;
+      }
+    }
+  });
+
   it("calls section-writer only for sections with meaningful changes", async () => {
     const existingPage = {
       id: "p-existing",

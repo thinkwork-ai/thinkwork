@@ -102,21 +102,32 @@ import { and, eq, sql } from "drizzle-orm";
 // Budgets / caps (from build plan PR 3 "Guardrails")
 // ---------------------------------------------------------------------------
 
-const RECORD_PAGE_SIZE = 50;
-const MAX_RECORDS_PER_JOB = 500;
+const RECORD_PAGE_SIZE = positiveIntEnv("WIKI_RECORD_PAGE_SIZE", 25);
+const MAX_RECORDS_PER_JOB = positiveIntEnv("WIKI_MAX_RECORDS_PER_JOB", 100);
 /** Higher cap for `trigger='bootstrap_import'` jobs — the one-shot import
  * that feeds the whole agent history through the planner. Paired with
  * continuation chaining so a 5,000-record bootstrap still self-completes. */
-const MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000;
+const MAX_RECORDS_PER_BOOTSTRAP_JOB = positiveIntEnv(
+	"WIKI_MAX_RECORDS_PER_BOOTSTRAP_JOB",
+	250,
+);
 const MAX_NEW_PAGES_PER_JOB = positiveIntEnv("WIKI_MAX_NEW_PAGES_PER_JOB", 25);
 const MAX_SECTIONS_REWRITTEN_PER_JOB = positiveIntEnv(
 	"WIKI_MAX_SECTIONS_REWRITTEN_PER_JOB",
 	100,
 );
+const DEFAULT_COMPILE_SOFT_DEADLINE_MS = 360_000;
 
 function positiveIntEnv(name: string, fallback: number): number {
 	const value = Number(process.env[name]);
 	return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function compileSoftDeadlineMs(): number {
+	return positiveIntEnv(
+		"WIKI_COMPILE_SOFT_DEADLINE_MS",
+		DEFAULT_COMPILE_SOFT_DEADLINE_MS,
+	);
 }
 
 // Rough cost numbers for metrics only — not billing. Claude Haiku 4.5 pricing
@@ -146,6 +157,10 @@ export interface RunJobResult {
 		cost_usd: number;
 		latency_ms: number;
 		cap_hit?: string;
+		/** True when the job stopped itself before the Lambda hard timeout.
+		 * The cursor has already advanced for completed batches, so a
+		 * continuation can safely keep draining large scopes. */
+		soft_time_budget_hit?: boolean;
 		// --- Hierarchical-aggregation metrics (PR B) --------------------
 		parent_sections_updated?: number;
 		sections_promoted?: number;
@@ -155,6 +170,9 @@ export interface RunJobResult {
 		aggregation_output_tokens?: number;
 		/** Set when the aggregation pass errored; leaf work still succeeded. */
 		aggregation_error?: string;
+		/** True when the job skipped optional aggregation to finish before
+		 * the Lambda timeout and enqueue a continuation. */
+		aggregation_skipped_time_budget?: boolean;
 		/** True when an active ontology is present and the legacy aggregation
 		 * pass is suppressed because its hub pages/links are taxonomy-shaped
 		 * rather than ontology-shaped. */
@@ -328,10 +346,12 @@ export async function runCompileJob(
 	const maxRecordsThisJob = isBootstrap
 		? MAX_RECORDS_PER_BOOTSTRAP_JOB
 		: MAX_RECORDS_PER_JOB;
+	const softDeadlineMs = compileSoftDeadlineMs();
 	// Set when the adapter returned fewer records than requested — signals
 	// we've caught up to the scope's latest memory and no continuation is
 	// needed. Stays false when the loop exits via `records_read >= cap`.
 	let cursorDrained = false;
+	let softTimeBudgetHit = false;
 
 	try {
 		let cursor = await getCursor({
@@ -346,6 +366,13 @@ export async function runCompileJob(
 		placesCtx.materializeBackingPages = ontologySnapshot.conservative;
 
 		while (metrics.records_read < maxRecordsThisJob) {
+			if (metrics.records_read > 0 && Date.now() - started >= softDeadlineMs) {
+				softTimeBudgetHit = true;
+				metrics.soft_time_budget_hit = true;
+				metrics.cap_hit ??= "soft_time_budget";
+				break;
+			}
+
 			const pageSize = Math.min(
 				RECORD_PAGE_SIZE,
 				maxRecordsThisJob - metrics.records_read,
@@ -450,6 +477,13 @@ export async function runCompileJob(
 				break;
 			}
 
+			if (Date.now() - started >= softDeadlineMs) {
+				softTimeBudgetHit = true;
+				metrics.soft_time_budget_hit = true;
+				metrics.cap_hit ??= "soft_time_budget";
+				break;
+			}
+
 			// If we got fewer records than asked for, we've drained the cursor.
 			if (records.length < pageSize) {
 				cursorDrained = true;
@@ -464,7 +498,9 @@ export async function runCompileJob(
 		// the leaf writes are already durable and the aggregation pass can
 		// retry cleanly on the next compile.
 		// ---------------------------------------------------------------
-		if (isAggregationPassEnabled() && allRecordsThisJob.length > 0) {
+		if (softTimeBudgetHit) {
+			metrics.aggregation_skipped_time_budget = true;
+		} else if (isAggregationPassEnabled() && allRecordsThisJob.length > 0) {
 			if (ontologySnapshot && !ontologySnapshot.conservative) {
 				metrics.aggregation_ontology_suppressed = true;
 			} else {
