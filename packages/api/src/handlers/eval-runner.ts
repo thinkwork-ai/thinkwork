@@ -15,7 +15,7 @@ import {
   type SQSClientConfig,
 } from "@aws-sdk/client-sqs";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
-import { ensureEvalAgentForTemplate } from "../lib/evals/eval-agent-provisioning.js";
+import { ensureEvalAgentForTarget } from "../lib/evals/eval-agent-provisioning.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const DEFAULT_QUEUE_URL = process.env.EVAL_FANOUT_QUEUE_URL || "";
@@ -190,10 +190,9 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       return { ok: true, runId, dispatched: 0, totalTests: 0 };
     }
 
-    if (!run.computer_id && !run.agent_id && run.agent_template_id) {
-      const target = await ensureEvalAgentForTemplate({
+    if (!run.computer_id && !run.agent_id) {
+      const target = await ensureEvalAgentForTarget({
         tenantId: run.tenant_id,
-        templateId: run.agent_template_id,
       });
       const [updatedRun] = await db
         .update(evalRuns)

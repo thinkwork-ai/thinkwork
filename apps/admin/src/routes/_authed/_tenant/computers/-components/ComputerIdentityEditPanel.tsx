@@ -20,7 +20,6 @@ type ComputerSlice = Pick<
   | "name"
   | "slug"
   | "scope"
-  | "templateId"
   | "budgetMonthlyCents"
   | "createdAt"
   | "updatedAt"
@@ -172,16 +171,6 @@ export function ComputerIdentityEditPanel({ computer, onUpdated }: Props) {
               {nameError && (
                 <p className="mt-1 text-xs text-destructive">{nameError}</p>
               )}
-            </div>
-
-            {/* Template */}
-            <div>
-              <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                Legacy Template ID
-              </dt>
-              <dd className="max-w-md break-all text-sm text-muted-foreground">
-                {computer.templateId}
-              </dd>
             </div>
 
             {/* Budget */}

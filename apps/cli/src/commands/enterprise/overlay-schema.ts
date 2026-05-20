@@ -28,7 +28,7 @@ export interface CustomerEvalSeed {
   category: string;
   query: string;
   systemPrompt?: string | null;
-  agentTemplateId?: string | null;
+  agentId?: string | null;
   assertions: CustomerEvalAssertion[];
   agentcoreEvaluatorIds?: string[];
   tags?: string[];
@@ -187,8 +187,7 @@ function normalizeEvalSeed(value: unknown, label: string): CustomerEvalSeed {
     query: value.query,
     systemPrompt:
       typeof value.systemPrompt === "string" ? value.systemPrompt : null,
-    agentTemplateId:
-      typeof value.agentTemplateId === "string" ? value.agentTemplateId : null,
+    agentId: typeof value.agentId === "string" ? value.agentId : null,
     assertions: assertions.map((assertion, index) =>
       normalizeAssertion(assertion, `${label}.assertions[${index}]`),
     ),

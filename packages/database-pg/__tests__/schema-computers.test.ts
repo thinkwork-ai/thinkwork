@@ -7,7 +7,6 @@ import {
   computerTasks,
   computers,
 } from "../src/schema/computers";
-import { agentTemplates } from "../src/schema/agent-templates";
 
 describe("ThinkWork Computer schema", () => {
   it("defines first-class Computer ownership columns", () => {
@@ -16,7 +15,7 @@ describe("ThinkWork Computer schema", () => {
     expect(getTableName(computers)).toBe("computers");
     expect(columns.tenant_id.notNull).toBe(true);
     expect(columns.owner_user_id.notNull).toBe(false);
-    expect(columns.template_id.notNull).toBe(true);
+    expect((columns as Record<string, unknown>).template_id).toBeUndefined();
     expect(columns.scope.notNull).toBe(true);
     expect(columns.scope.default).toBe("shared");
     expect(columns.status.notNull).toBe(true);
@@ -49,10 +48,9 @@ describe("ThinkWork Computer schema", () => {
     expect(getTableColumns(computerSnapshots).computer_id.notNull).toBe(true);
   });
 
-  it("types templates without replacing the existing template table", () => {
-    const columns = getTableColumns(agentTemplates);
+  it("tracks a primary Agent without requiring a Template", () => {
+    const columns = getTableColumns(computers);
 
-    expect(columns.template_kind.notNull).toBe(true);
-    expect(columns.template_kind.default).toBe("agent");
+    expect(columns.primary_agent_id.notNull).toBe(false);
   });
 });

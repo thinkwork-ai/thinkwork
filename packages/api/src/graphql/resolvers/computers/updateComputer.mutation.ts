@@ -8,7 +8,6 @@ import {
   parseJsonInput,
   parseOptionalDate,
   parseRuntimeStatus,
-  requireComputerTemplate,
   toGraphqlComputer,
 } from "./shared.js";
 
@@ -32,10 +31,6 @@ export async function updateComputer(
   const set: Record<string, unknown> = { updated_at: sql`now()` };
   if (input.name !== undefined) set.name = input.name;
   if (input.slug !== undefined) set.slug = input.slug;
-  if (input.templateId !== undefined) {
-    await requireComputerTemplate(existing.tenant_id, input.templateId);
-    set.template_id = input.templateId;
-  }
   if (input.status !== undefined) {
     const status = parseComputerStatus(input.status);
     if (status !== undefined) set.status = status;

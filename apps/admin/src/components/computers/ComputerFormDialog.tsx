@@ -42,7 +42,6 @@ import { ComputerScope } from "@/gql/graphql";
 
 const computerSchema = z.object({
   name: z.string().min(1, "Name is required").trim(),
-  templateId: z.string().min(1, "Base template ID is required"),
   budgetDollars: z.string().optional(),
 });
 
@@ -50,7 +49,6 @@ type ComputerFormValues = z.infer<typeof computerSchema>;
 
 const DEFAULT_VALUES: ComputerFormValues = {
   name: "",
-  templateId: "",
   budgetDollars: "",
 };
 
@@ -130,7 +128,6 @@ export function ComputerFormDialog({
       const result = await createComputer({
         input: {
           tenantId,
-          templateId: values.templateId,
           name: values.name.trim(),
           scope: ComputerScope.Shared,
           ...(budgetCents != null ? { budgetMonthlyCents: budgetCents } : {}),
@@ -205,21 +202,6 @@ export function ComputerFormDialog({
               />
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="templateId"
-                  render={({ field }) => (
-                    <FormItem className="space-y-1.5">
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Base template ID
-                      </FormLabel>
-                      <FormControl>
-                        <Input className="text-sm" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <FormField
                   control={form.control}
                   name="budgetDollars"

@@ -9,10 +9,6 @@ const BASE_AGENT = {
   human_pair_id: "user-1",
   human_name: "Eric Odom",
   human_email: "eric@example.com",
-  template_id: "template-1",
-  template_kind: "computer",
-  template_name: "Founder Computer",
-  template_slug: "founder-computer",
   adapter_type: null,
   workspace_run_count: 0,
   thread_count: 0,
@@ -26,7 +22,7 @@ const BASE_AGENT = {
 };
 
 describe("buildComputerMigrationReport", () => {
-  it("marks a single user-paired Agent with a Computer Template as ready", () => {
+  it("marks a single user-paired Agent as ready", () => {
     const report = buildComputerMigrationReport({
       tenantId: "tenant-1",
       agents: [BASE_AGENT],
@@ -49,7 +45,6 @@ describe("buildComputerMigrationReport", () => {
       primaryAgent: {
         id: "agent-1",
         name: "Eric's Agent",
-        templateName: "Founder Computer",
       },
     });
   });
@@ -110,26 +105,6 @@ describe("buildComputerMigrationReport", () => {
       recommendedAction: "skip_existing",
       applyDisposition: "skip",
       existingComputerId: "computer-1",
-    });
-  });
-
-  it("clones Agents that are still backed by legacy Agent Templates", () => {
-    const report = buildComputerMigrationReport({
-      tenantId: "tenant-1",
-      agents: [{ ...BASE_AGENT, template_kind: "agent" }],
-      existingComputers: [],
-    });
-
-    expect(report.summary.ready).toBe(1);
-    expect(report.summary.template_not_computer).toBe(0);
-    expect(report.groups[0]?.reasons).toContain(
-      "Source Agent uses a legacy Agent Template and will be cloned as a Computer",
-    );
-    expect(report.groups[0]).toMatchObject({
-      status: "ready",
-      severity: "ready",
-      recommendedAction: "create_computer",
-      applyDisposition: "create",
     });
   });
 });

@@ -17,7 +17,6 @@ import { getDb, ensureThreadForWork } from "@thinkwork/database-pg";
 import {
   agents,
   agentSkills,
-  agentTemplates,
   computers,
   computerEvents,
   computerTasks,
@@ -85,61 +84,6 @@ type ThreadIdleMemoryLearningWorkerResult = {
   budget?: unknown;
   metadata?: unknown;
 };
-
-async function resolveDefaultEvalTemplateId(
-  tenantId: string,
-  requestedTemplateId?: string | null,
-): Promise<string> {
-  if (requestedTemplateId) {
-    const [template] = await getDb()
-      .select({
-        id: agentTemplates.id,
-        templateKind: agentTemplates.template_kind,
-      })
-      .from(agentTemplates)
-      .where(
-        and(
-          eq(agentTemplates.id, requestedTemplateId),
-          eq(agentTemplates.tenant_id, tenantId),
-        ),
-      )
-      .limit(1);
-    if (!template) throw new Error("Scheduled eval Agent template not found");
-    if (template.templateKind !== "agent") {
-      throw new Error(
-        "Scheduled evals currently require an Agent template target",
-      );
-    }
-    return template.id;
-  }
-
-  const [defaultTemplate] = await getDb()
-    .select({ id: agentTemplates.id })
-    .from(agentTemplates)
-    .where(
-      and(
-        eq(agentTemplates.tenant_id, tenantId),
-        eq(agentTemplates.slug, "default"),
-        eq(agentTemplates.template_kind, "agent"),
-      ),
-    )
-    .limit(1);
-  if (defaultTemplate) return defaultTemplate.id;
-
-  const [firstTemplate] = await getDb()
-    .select({ id: agentTemplates.id })
-    .from(agentTemplates)
-    .where(
-      and(
-        eq(agentTemplates.tenant_id, tenantId),
-        eq(agentTemplates.template_kind, "agent"),
-      ),
-    )
-    .limit(1);
-  if (!firstTemplate)
-    throw new Error("No Agent template found for scheduled eval");
-  return firstTemplate.id;
-}
 
 // ---------------------------------------------------------------------------
 // skill_run branch helpers (Unit 6)
@@ -764,17 +708,15 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     } else if (triggerType === "eval_scheduled") {
       // Eval-scheduled jobs: insert a pending eval_runs row + fire the
       // eval-runner Lambda async. Evals now run directly against a
-      // platform-managed AgentCore agent for the selected/default Agent
-      // template; Computer evals are intentionally out of this slice.
+      // platform-managed AgentCore agent. Computer evals are intentionally out
+      // of this slice.
       const cfg = (job?.config ?? {}) as {
         agentId?: string;
-        agentTemplateId?: string;
         computerId?: string;
         model?: string;
         categories?: string[];
       };
       let targetAgentId: string | null = null;
-      let targetTemplateId: string;
       try {
         if (cfg.computerId) {
           throw new Error(
@@ -788,24 +730,14 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         }
         if (cfg.agentId) {
           const [agent] = await db
-            .select({ id: agents.id, templateId: agents.template_id })
+            .select({ id: agents.id })
             .from(agents)
             .where(
               and(eq(agents.id, cfg.agentId), eq(agents.tenant_id, tenantId)),
             )
             .limit(1);
           if (!agent) throw new Error("Scheduled eval Agent not found");
-          if (!agent.templateId) {
-            // Scheduled evals still execute through the legacy template eval harness.
-            throw new Error("Scheduled eval Agent is not linked to a template");
-          }
           targetAgentId = agent.id;
-          targetTemplateId = agent.templateId;
-        } else {
-          targetTemplateId = await resolveDefaultEvalTemplateId(
-            tenantId,
-            cfg.agentTemplateId,
-          );
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -828,7 +760,6 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           tenant_id: tenantId,
           agent_id: targetAgentId,
           computer_id: null,
-          agent_template_id: targetTemplateId,
           scheduled_job_id: triggerId,
           status: "pending",
           model: DEFAULT_EVAL_MODEL_ID,

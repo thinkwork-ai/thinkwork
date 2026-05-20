@@ -6,10 +6,6 @@ export interface ComputerMigrationAgentCandidate {
   human_pair_id: string | null;
   human_name?: string | null;
   human_email?: string | null;
-  template_id: string;
-  template_kind: string | null;
-  template_name?: string | null;
-  template_slug?: string | null;
   adapter_type?: string | null;
   workspace_run_count?: number | null;
   thread_count?: number | null;
@@ -35,8 +31,7 @@ export type ComputerMigrationGroupStatus =
   | "already_migrated"
   | "multiple_candidates"
   | "existing_computer_conflict"
-  | "missing_human_pair"
-  | "template_not_computer";
+  | "missing_human_pair";
 
 export interface ComputerMigrationGroup {
   tenantId: string;
@@ -59,9 +54,6 @@ export interface ComputerMigrationGroup {
     id: string;
     name: string;
     slug: string | null;
-    templateId: string;
-    templateName: string | null;
-    templateKind: string | null;
     lastHeartbeatAt: Date | string | null;
   } | null;
   agentIds: string[];
@@ -174,13 +166,8 @@ export function buildComputerMigrationReport(input: {
 }
 
 function migrationReasons(agents: ComputerMigrationAgentCandidate[]): string[] {
-  const [primary, ...delegated] = agents;
+  const [, ...delegated] = agents;
   const reasons = ["Ready to create one Computer for this user"];
-  if (primary?.template_kind !== "computer") {
-    reasons.push(
-      "Source Agent uses a legacy Agent Template and will be cloned as a Computer",
-    );
-  }
   if (delegated.length > 0) {
     reasons.push(
       `${delegated.length} additional user-paired Agent(s) remain as delegated Agents`,
@@ -203,9 +190,6 @@ function agentSummary(agent: ComputerMigrationAgentCandidate) {
     id: agent.id,
     name: agent.name,
     slug: agent.slug,
-    templateId: agent.template_id,
-    templateName: agent.template_name ?? null,
-    templateKind: agent.template_kind,
     lastHeartbeatAt: agent.last_heartbeat_at,
   };
 }
@@ -219,7 +203,6 @@ function summarize(
     multiple_candidates: 0,
     existing_computer_conflict: 0,
     missing_human_pair: 0,
-    template_not_computer: 0,
   };
   for (const group of groups) summary[group.status]++;
   return summary;

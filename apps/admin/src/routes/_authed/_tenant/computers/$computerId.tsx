@@ -217,7 +217,7 @@ function ComputerDetailPage() {
             </Badge>
             <Badge variant="outline" className="gap-1">
               <Monitor className="h-3 w-3" />
-              {computer.template?.name ?? "No template"}
+              {computer.sourceAgent?.name ?? "No source agent"}
             </Badge>
             <Badge variant="outline" className="gap-1">
               <Server className="h-3 w-3" />

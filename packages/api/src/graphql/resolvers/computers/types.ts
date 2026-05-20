@@ -21,7 +21,11 @@ export const computerTypeResolvers = {
     return row ? snakeToCamel(row) : null;
   },
   sourceAgent: async (parent: any) => {
-    const agentId = parent.migratedFromAgentId ?? parent.migrated_from_agent_id;
+    const agentId =
+      parent.primaryAgentId ??
+      parent.primary_agent_id ??
+      parent.migratedFromAgentId ??
+      parent.migrated_from_agent_id;
     if (!agentId) return null;
     const [row] = await db.select().from(agents).where(eq(agents.id, agentId));
     return row ? agentToCamel(row) : null;

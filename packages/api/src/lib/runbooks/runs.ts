@@ -89,7 +89,7 @@ export function buildRunbookDefinitionSnapshot(
   const contractJson = stableJson(contract);
   snapshot.skill = {
     slug: stringValue(skill.slug) || runbook.slug,
-    source: stringValue(skill.source) || "template-workspace",
+    source: stringValue(skill.source) || "computer-workspace",
     skillMdPath: stringValue(skill.skillMdPath) || "SKILL.md",
     skillMd,
     skillMdSha256: sha256(skillMd),

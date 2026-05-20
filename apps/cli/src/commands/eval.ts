@@ -18,7 +18,7 @@ export function registerEvalCommand(program: Command): void {
     .command("eval")
     .alias("evals")
     .description(
-      "Run evaluations against the default AgentCore agent template and manage eval test cases. Integrates with the Evaluations Studio in the admin UI.",
+      "Run evaluations against the default eval Agent and manage eval test cases. Integrates with the Evaluations Studio in the admin UI.",
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
@@ -201,7 +201,7 @@ Examples:
     .option("--category <name>", "Category label (e.g. tool-safety, red-team)")
     .option("--query <text>", "The user-facing query this agent will receive")
     .option("--system-prompt <text>", "Optional system-prompt override")
-    .option("--agent-template <id>", "Pin to a specific agent template")
+    .option("--agent <id>", "Pin to a specific agent")
     .option("--evaluator <id...>", "AgentCore evaluator IDs (repeatable)")
     .option("--tag <name...>", "Tags (repeatable)")
     .option("--enabled", "Mark enabled (default)", true)
@@ -221,7 +221,7 @@ Examples:
     .option("--category <name>")
     .option("--query <text>")
     .option("--system-prompt <text>")
-    .option("--agent-template <id>")
+    .option("--agent <id>")
     .option(
       "--evaluator <id...>",
       "Replace AgentCore evaluator IDs (repeatable)",

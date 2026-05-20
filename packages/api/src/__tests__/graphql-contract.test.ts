@@ -219,6 +219,38 @@ describe("GraphQL Schema Contract", () => {
     });
   });
 
+  describe("Computers and evals no longer expose Template wiring", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("uses primaryAgentId for Computer creation instead of templateId", () => {
+      const computer = schema.getType("Computer") as any;
+      const createInput = schema.getType("CreateComputerInput") as any;
+      const updateInput = schema.getType("UpdateComputerInput") as any;
+
+      expect(computer.getFields().templateId).toBeUndefined();
+      expect(createInput.getFields().templateId).toBeUndefined();
+      expect(updateInput.getFields().templateId).toBeUndefined();
+      expect(createInput.getFields().primaryAgentId.type.toString()).toBe("ID");
+    });
+
+    it("uses agentId for eval targets instead of agentTemplateId", () => {
+      const evalRun = schema.getType("EvalRun") as any;
+      const evalTestCase = schema.getType("EvalTestCase") as any;
+      const startInput = schema.getType("StartEvalRunInput") as any;
+      const createInput = schema.getType("CreateEvalTestCaseInput") as any;
+      const updateInput = schema.getType("UpdateEvalTestCaseInput") as any;
+
+      expect(evalRun.getFields().agentTemplateId).toBeUndefined();
+      expect(evalTestCase.getFields().agentTemplateId).toBeUndefined();
+      expect(startInput.getFields().agentTemplateId).toBeUndefined();
+      expect(createInput.getFields().agentTemplateId).toBeUndefined();
+      expect(updateInput.getFields().agentTemplateId).toBeUndefined();
+      expect(evalTestCase.getFields().agentId.type.toString()).toBe("ID");
+      expect(createInput.getFields().agentId.type.toString()).toBe("ID");
+      expect(updateInput.getFields().agentId.type.toString()).toBe("ID");
+    });
+  });
+
   describe("Linked tasks contract", () => {
     const schema = buildSchema(loadFullSchema());
 

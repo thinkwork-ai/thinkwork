@@ -61,10 +61,10 @@ describe("createComputer", () => {
       {
         input: {
           tenantId: "tenant-1",
-          templateId: "template-1",
           name: "Sales Computer",
           runtimeConfig: '{"mode":"phase-one"}',
           migratedFromAgentId: "agent-1",
+          primaryAgentId: "agent-2",
         },
       },
       {} as any,
@@ -75,10 +75,10 @@ describe("createComputer", () => {
     expect(lastCoreInputRef.value).toMatchObject({
       tenantId: "tenant-1",
       ownerUserId: null,
-      templateId: "template-1",
       name: "Sales Computer",
       runtimeConfig: '{"mode":"phase-one"}',
       migratedFromAgentId: "agent-1",
+      primaryAgentId: "agent-2",
       createdBy: "operator-1",
     });
     expect(result).toEqual({ id: "computer-1", tenantId: "tenant-1" });
@@ -93,7 +93,6 @@ describe("createComputer", () => {
         {
           input: {
             tenantId: "tenant-1",
-            templateId: "template-1",
             name: "Sales Computer",
           },
         },
@@ -110,7 +109,6 @@ describe("createComputer", () => {
       {
         input: {
           tenantId: "tenant-1",
-          templateId: "template-1",
           name: "Sales Computer",
           scope: "SHARED",
         },
@@ -121,7 +119,6 @@ describe("createComputer", () => {
     expect(lastCoreInputRef.value).toMatchObject({
       tenantId: "tenant-1",
       ownerUserId: null,
-      templateId: "template-1",
       name: "Sales Computer",
       scope: "SHARED",
       createdBy: "operator-1",
@@ -137,7 +134,6 @@ describe("createComputer", () => {
         {
           input: {
             tenantId: "tenant-1",
-            templateId: "template-1",
             name: "Sales Computer",
           },
         },

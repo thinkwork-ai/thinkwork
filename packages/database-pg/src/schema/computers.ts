@@ -20,7 +20,6 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core.js";
 import { agents } from "./agents.js";
-import { agentTemplates } from "./agent-templates.js";
 import { teams } from "./teams.js";
 
 export const computers = pgTable(
@@ -35,9 +34,6 @@ export const computers = pgTable(
     owner_user_id: uuid("owner_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    template_id: uuid("template_id")
-      .references(() => agentTemplates.id)
-      .notNull(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     scope: text("scope").notNull().default("shared"),
@@ -63,7 +59,7 @@ export const computers = pgTable(
      * Anchor agent for per-agent bindings (skills, MCP servers, routines)
      * surfaced through the Customize page. Backfilled from
      * `migrated_from_agent_id` where present and resolved from
-     * `(tenant_id, owner_user_id, template_id)` for greenfield Computers.
+     * `migrated_from_agent_id` where present for greenfield Computers.
      */
     primary_agent_id: uuid("primary_agent_id").references(() => agents.id, {
       onDelete: "set null",
@@ -86,7 +82,6 @@ export const computers = pgTable(
       table.status,
     ),
     index("idx_computers_owner").on(table.owner_user_id),
-    index("idx_computers_template").on(table.template_id),
     index("idx_computers_migrated_agent").on(table.migrated_from_agent_id),
     index("idx_computers_primary_agent").on(table.primary_agent_id),
     check(
@@ -296,12 +291,12 @@ export const computersRelations = relations(computers, ({ one, many }) => ({
     fields: [computers.owner_user_id],
     references: [users.id],
   }),
-  template: one(agentTemplates, {
-    fields: [computers.template_id],
-    references: [agentTemplates.id],
-  }),
   migratedFromAgent: one(agents, {
     fields: [computers.migrated_from_agent_id],
+    references: [agents.id],
+  }),
+  primaryAgent: one(agents, {
+    fields: [computers.primary_agent_id],
     references: [agents.id],
   }),
   assignments: many(computerAssignments),

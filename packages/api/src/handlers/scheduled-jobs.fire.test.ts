@@ -29,8 +29,8 @@ const mocks = vi.hoisted(() => ({
   insertIntoAgentWakeupRequests: vi.fn(),
   insertIntoEvalRuns: vi.fn(),
   updateAgents: vi.fn(),
-  resolveEvalTemplateId: vi.fn(),
-  ensureEvalAgentForTemplate: vi.fn(),
+  resolveEvalAgentId: vi.fn(),
+  ensureEvalAgentForTarget: vi.fn(),
   lambdaSend: vi.fn(),
 }));
 
@@ -43,8 +43,8 @@ vi.mock("../lib/thread-helpers.js", () => ({
 }));
 
 vi.mock("../lib/evals/eval-agent-provisioning.js", () => ({
-  resolveEvalTemplateId: mocks.resolveEvalTemplateId,
-  ensureEvalAgentForTemplate: mocks.ensureEvalAgentForTemplate,
+  resolveEvalAgentId: mocks.resolveEvalAgentId,
+  ensureEvalAgentForTarget: mocks.ensureEvalAgentForTarget,
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => {
@@ -204,10 +204,9 @@ beforeEach(() => {
   ]);
   mocks.selectFromAgents.mockResolvedValue([]);
   mocks.selectFromAgentTemplates.mockResolvedValue([]);
-  mocks.resolveEvalTemplateId.mockResolvedValue("default-template-1");
-  mocks.ensureEvalAgentForTemplate.mockResolvedValue({
+  mocks.resolveEvalAgentId.mockResolvedValue("eval-agent-1");
+  mocks.ensureEvalAgentForTarget.mockResolvedValue({
     agentId: "eval-agent-1",
-    templateId: "default-template-1",
   });
   mocks.insertIntoMessages.mockResolvedValue([{ id: "msg-1" }]);
   mocks.insertIntoComputerTasks.mockResolvedValue([{ id: "task-1" }]);
@@ -315,20 +314,16 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
     const response = await handler(fireEvent());
 
     expect(response.statusCode).toBe(201);
-    expect(mocks.resolveEvalTemplateId).toHaveBeenCalledWith(
-      TENANT_ID,
-      undefined,
-    );
-    expect(mocks.ensureEvalAgentForTemplate).toHaveBeenCalledWith({
+    expect(mocks.resolveEvalAgentId).toHaveBeenCalledWith(TENANT_ID, undefined);
+    expect(mocks.ensureEvalAgentForTarget).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
-      templateId: "default-template-1",
+      agentId: "eval-agent-1",
     });
     expect(mocks.insertIntoEvalRuns).toHaveBeenCalledWith({
       values: expect.objectContaining({
         tenant_id: TENANT_ID,
         agent_id: "eval-agent-1",
         computer_id: null,
-        agent_template_id: "default-template-1",
         scheduled_job_id: TRIGGER_ID,
         status: "pending",
         model: "moonshotai.kimi-k2.5",

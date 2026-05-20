@@ -105,7 +105,7 @@ type RunRow = {
   status: string;
   model: string | null;
   categories: string[];
-  agentTemplateId: string | null;
+  agentId: string | null;
   scheduledJobId: string | null;
   passed: number | null;
   failed: number | null;
@@ -506,7 +506,7 @@ function RunEvaluationButton({
         <DialogHeader>
           <DialogTitle>Run Evaluation</DialogTitle>
           <DialogDescription>
-            Run selected tests directly against the default Agent template.
+            Run selected tests directly against the selected or default Agent.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">

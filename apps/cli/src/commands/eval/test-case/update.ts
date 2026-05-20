@@ -10,14 +10,17 @@ interface UpdateOptions extends EvalCliOptions {
   category?: string;
   query?: string;
   systemPrompt?: string;
-  agentTemplate?: string;
+  agent?: string;
   evaluator?: string[];
   tag?: string[];
   enabled?: boolean;
   assertionsFile?: string;
 }
 
-export async function runEvalTestCaseUpdate(id: string, opts: UpdateOptions): Promise<void> {
+export async function runEvalTestCaseUpdate(
+  id: string,
+  opts: UpdateOptions,
+): Promise<void> {
   const ctx = await resolveEvalContext(opts);
 
   const input: Record<string, unknown> = {};
@@ -25,8 +28,9 @@ export async function runEvalTestCaseUpdate(id: string, opts: UpdateOptions): Pr
   if (opts.category !== undefined) input.category = opts.category;
   if (opts.query !== undefined) input.query = opts.query;
   if (opts.systemPrompt !== undefined) input.systemPrompt = opts.systemPrompt;
-  if (opts.agentTemplate !== undefined) input.agentTemplateId = opts.agentTemplate;
-  if (opts.evaluator !== undefined) input.agentcoreEvaluatorIds = opts.evaluator;
+  if (opts.agent !== undefined) input.agentId = opts.agent;
+  if (opts.evaluator !== undefined)
+    input.agentcoreEvaluatorIds = opts.evaluator;
   if (opts.tag !== undefined) input.tags = opts.tag;
   if (opts.enabled !== undefined) input.enabled = opts.enabled;
   if (opts.assertionsFile) {
@@ -43,7 +47,10 @@ export async function runEvalTestCaseUpdate(id: string, opts: UpdateOptions): Pr
     process.exit(1);
   }
 
-  const res = await gqlMutate(ctx.client, UpdateEvalTestCaseDoc, { id, input: input as any });
+  const res = await gqlMutate(ctx.client, UpdateEvalTestCaseDoc, {
+    id,
+    input: input as any,
+  });
   if (isJsonMode()) {
     printJson(res.updateEvalTestCase);
     return;

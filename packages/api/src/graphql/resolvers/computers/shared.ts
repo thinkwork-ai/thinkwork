@@ -4,14 +4,11 @@ import {
   db,
   and,
   eq,
-  isNull,
   ne,
-  or,
   computers,
   computerAssignments,
   teamUsers,
   agents,
-  agentTemplates,
   users,
   teams,
   computerToCamel,
@@ -24,13 +21,13 @@ import { resolveCaller } from "../core/resolve-auth-user.js";
 export type CreateComputerCoreInput = {
   tenantId: string;
   ownerUserId?: string | null;
-  templateId: string;
   name: string;
   slug?: string | null;
   scope?: string | null;
   runtimeConfig?: unknown;
   budgetMonthlyCents?: number | null;
   migratedFromAgentId?: string | null;
+  primaryAgentId?: string | null;
   migrationMetadata?: unknown;
   /**
    * The user id to record on `computers.created_by`. Pass `null` (or omit) when
@@ -40,10 +37,10 @@ export type CreateComputerCoreInput = {
 };
 
 /**
- * Insert a Computer after validating ownership, template kind, optional source
- * agent linkage, and the one-active-Computer-per-(tenant, user) invariant for
- * legacy historical-personal Computers. New admin-created Computers are shared
- * and reach users through `computer_assignments`.
+ * Insert a Computer after validating ownership, optional source/primary agent
+ * linkage, and the one-active-Computer-per-(tenant, user) invariant for legacy
+ * historical-personal Computers. New admin-created Computers are shared and
+ * reach users through `computer_assignments`.
  *
  * Throws on validation failure or on the `assertNoActiveComputer` conflict.
  * Callers that need idempotency wrap the call and catch the `CONFLICT`
@@ -61,9 +58,11 @@ export async function createComputerCore(
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
-  await requireComputerTemplate(input.tenantId, input.templateId);
   if (input.migratedFromAgentId) {
     await requireTenantAgent(input.tenantId, input.migratedFromAgentId);
+  }
+  if (input.primaryAgentId) {
+    await requireTenantAgent(input.tenantId, input.primaryAgentId);
   }
 
   const [row] = await db
@@ -71,7 +70,6 @@ export async function createComputerCore(
     .values({
       tenant_id: input.tenantId,
       owner_user_id: input.ownerUserId ?? null,
-      template_id: input.templateId,
       name: input.name,
       slug: input.slug ?? generateSlug(),
       scope,
@@ -81,6 +79,8 @@ export async function createComputerCore(
           : parseJsonInput(input.runtimeConfig),
       budget_monthly_cents: input.budgetMonthlyCents,
       migrated_from_agent_id: input.migratedFromAgentId,
+      primary_agent_id:
+        input.primaryAgentId ?? input.migratedFromAgentId ?? null,
       migration_metadata:
         input.migrationMetadata === undefined
           ? undefined
@@ -129,37 +129,6 @@ export function parseOptionalDate(value: unknown): Date | null | undefined {
     });
   }
   return parsed;
-}
-
-export async function requireComputerTemplate(
-  tenantId: string,
-  templateId: string,
-): Promise<void> {
-  const [template] = await db
-    .select({
-      id: agentTemplates.id,
-      template_kind: agentTemplates.template_kind,
-    })
-    .from(agentTemplates)
-    .where(
-      and(
-        eq(agentTemplates.id, templateId),
-        or(
-          eq(agentTemplates.tenant_id, tenantId),
-          isNull(agentTemplates.tenant_id),
-        ),
-      ),
-    );
-  if (!template) {
-    throw new GraphQLError("Computer template not found", {
-      extensions: { code: "NOT_FOUND" },
-    });
-  }
-  if (template.template_kind !== "computer") {
-    throw new GraphQLError("Computer must use a Computer Template", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
 }
 
 export async function requireTenantUser(

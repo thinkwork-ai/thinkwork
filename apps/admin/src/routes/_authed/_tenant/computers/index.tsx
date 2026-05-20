@@ -13,7 +13,6 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   FilterBarPopover,
   FilterBarSearch,
@@ -32,7 +31,7 @@ type ComputerRow = {
   name: string;
   accessLabel: string;
   historicalOwner: string | null;
-  templateName: string | null;
+  sourceAgentName: string | null;
   status: string;
   budgetMonthlyCents: number | null;
   spentMonthlyCents: number | null;
@@ -88,13 +87,13 @@ const columns: ColumnDef<ComputerRow>[] = [
     size: 110,
   },
   {
-    accessorKey: "templateName",
-    header: "Template",
+    accessorKey: "sourceAgentName",
+    header: "Source Agent",
     cell: ({ row }) =>
-      row.original.templateName ? (
-        <Badge variant="outline" className="text-xs whitespace-nowrap">
-          {row.original.templateName}
-        </Badge>
+      row.original.sourceAgentName ? (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {row.original.sourceAgentName}
+        </span>
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
       ),
@@ -164,7 +163,7 @@ function ComputersPage() {
         computer.scope === ComputerScope.HistoricalPersonal
           ? (computer.owner?.name ?? computer.owner?.email ?? null)
           : null,
-      templateName: computer.template?.name ?? null,
+      sourceAgentName: computer.sourceAgent?.name ?? null,
       status: computer.status,
       budgetMonthlyCents: computer.budgetMonthlyCents ?? null,
       spentMonthlyCents: computer.spentMonthlyCents ?? null,

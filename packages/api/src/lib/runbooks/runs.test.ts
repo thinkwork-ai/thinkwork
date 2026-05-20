@@ -67,7 +67,7 @@ describe("runbook run helpers", () => {
       ...baseRunbook,
       skill: {
         slug: "crm-dashboard",
-        source: "template-workspace",
+        source: "computer-workspace",
         skillMdPath: "skills/crm-dashboard/SKILL.md",
         skillMd:
           "---\nname: crm-dashboard\n---\n\n# CRM Dashboard\n\nFollow the dashboard skill.",
@@ -95,7 +95,7 @@ describe("runbook run helpers", () => {
     expect(snapshot.phases).toEqual(baseRunbook.phases);
     expect(snapshot.skill).toMatchObject({
       slug: "crm-dashboard",
-      source: "template-workspace",
+      source: "computer-workspace",
       skillMdPath: "skills/crm-dashboard/SKILL.md",
       skillMd: expect.stringContaining("# CRM Dashboard"),
       skillBody: expect.stringContaining("Follow the dashboard skill."),

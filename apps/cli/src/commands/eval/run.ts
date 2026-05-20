@@ -39,7 +39,7 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
 
   if (deprecatedComputerId) {
     printError(
-      "--computer is no longer supported for eval runs. Evals run directly against the default Agent template.",
+      "--computer is no longer supported for eval runs. Evals run directly against the default eval Agent.",
     );
     process.exit(1);
   }
@@ -102,7 +102,7 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
     const summaryLines: Array<[string, string]> = [
       ["Stage", ctx.stage],
       ["Tenant", ctx.tenantSlug],
-      ["Target", "Default Agent template"],
+      ["Target", "Default eval Agent"],
     ];
     if (requestedModel && requestedModel !== DEFAULT_EVAL_MODEL_ID)
       summaryLines.push(["Ignored Model", requestedModel]);

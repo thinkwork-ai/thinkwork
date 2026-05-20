@@ -4,11 +4,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { and, eq, ne } from "drizzle-orm";
-import {
-  agentTemplates,
-  computers,
-  tenants,
-} from "@thinkwork/database-pg/schema";
+import { computers } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 import {
   RunbookValidationError,
@@ -27,11 +23,13 @@ const s3 = new S3Client({
 const RUNBOOK_SKILL_KIND = "computer-runbook";
 const DEFAULT_RUNBOOK_CONTRACT_PATH = "references/thinkwork-runbook.json";
 const WORKSPACE_SKILL_MD_PATH_RE = /^skills\/([^/]+)\/SKILL\.md$/;
+const CATALOG_SKILL_MD_PATH_RE = /^([^/]+)\/SKILL\.md$/;
+const CATALOG_SKILL_PREFIX = "skills/catalog/";
 
 export type ComputerRunbookSkill = RunbookDefinition & {
   skill: {
     slug: string;
-    source: "template-workspace";
+    source: "computer-workspace";
     skillMdPath: string;
     skillMd: string;
     skillBody: string;
@@ -57,21 +55,17 @@ export async function listAssignedComputerRunbookSkills(input: {
       },
     );
   }
-  const workspace = await resolveComputerTemplateWorkspace(input);
+  const workspace = await resolveComputerRunbookWorkspace(input);
   const skillMarkers = await listWorkspaceSkillMarkers(workspace.prefix);
   const runbooks: ComputerRunbookSkill[] = [];
 
   for (const marker of skillMarkers) {
-    const skillMd = await readWorkspaceText(
-      `${workspace.prefix}${marker.path}`,
-    );
+    const skillMd = await readWorkspaceText(marker.key);
     const runbook = await buildComputerRunbookSkill({
       skillMdPath: marker.path,
       skillMd,
       readSkillFile: (relativePath) =>
-        readWorkspaceText(
-          `${workspace.prefix}skills/${marker.slug}/${relativePath}`,
-        ),
+        readWorkspaceText(`${workspace.prefix}${marker.slug}/${relativePath}`),
     });
     if (runbook) runbooks.push(runbook);
   }
@@ -125,7 +119,7 @@ export async function buildComputerRunbookSkill(input: {
     ...hydrated,
     skill: {
       slug: hydrated.slug,
-      source: "template-workspace",
+      source: "computer-workspace",
       skillMdPath: input.skillMdPath,
       skillMd: input.skillMd,
       skillBody: parsed.parsed.body,
@@ -136,18 +130,13 @@ export async function buildComputerRunbookSkill(input: {
   };
 }
 
-async function resolveComputerTemplateWorkspace(input: {
+async function resolveComputerRunbookWorkspace(input: {
   tenantId: string;
   computerId: string;
 }) {
   const [row] = await db
-    .select({
-      tenantSlug: tenants.slug,
-      templateSlug: agentTemplates.slug,
-    })
+    .select({ id: computers.id })
     .from(computers)
-    .innerJoin(tenants, eq(tenants.id, computers.tenant_id))
-    .innerJoin(agentTemplates, eq(agentTemplates.id, computers.template_id))
     .where(
       and(
         eq(computers.tenant_id, input.tenantId),
@@ -164,12 +153,12 @@ async function resolveComputerTemplateWorkspace(input: {
   }
 
   return {
-    prefix: `tenants/${row.tenantSlug}/agents/_catalog/${row.templateSlug}/workspace/`,
+    prefix: CATALOG_SKILL_PREFIX,
   };
 }
 
 async function listWorkspaceSkillMarkers(prefix: string) {
-  const markers: Array<{ slug: string; path: string }> = [];
+  const markers: Array<{ slug: string; path: string; key: string }> = [];
   let continuationToken: string | undefined;
 
   do {
@@ -183,9 +172,14 @@ async function listWorkspaceSkillMarkers(prefix: string) {
     for (const object of list.Contents ?? []) {
       if (!object.Key) continue;
       const relativePath = object.Key.slice(prefix.length);
-      const match = relativePath.match(WORKSPACE_SKILL_MD_PATH_RE);
+      const match = relativePath.match(CATALOG_SKILL_MD_PATH_RE);
       if (!match) continue;
-      markers.push({ slug: match[1], path: relativePath });
+      const slug = match[1]!;
+      markers.push({
+        slug,
+        path: `skills/${slug}/SKILL.md`,
+        key: object.Key,
+      });
     }
     continuationToken = list.IsTruncated
       ? list.NextContinuationToken

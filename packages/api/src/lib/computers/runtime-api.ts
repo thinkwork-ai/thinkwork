@@ -92,7 +92,6 @@ export async function resolveComputerRuntimeConfig(input: {
     liveWorkspaceRoot: computer.live_workspace_root,
     efsAccessPointId: computer.efs_access_point_id,
     ecsServiceName: computer.ecs_service_name,
-    templateId: computer.template_id,
   };
 }
 
