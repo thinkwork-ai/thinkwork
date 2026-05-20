@@ -5475,21 +5475,31 @@ export type SlackWorkspaceInstallStart = {
 export type Space = {
   __typename?: 'Space';
   agentAssignments: Array<SpaceAgentAssignment>;
+  agentAvailabilityPolicy?: Maybe<Scalars['AWSJSON']['output']>;
+  category?: Maybe<Scalars['String']['output']>;
   checklistTemplates: Array<SpaceChecklistTemplate>;
   config?: Maybe<Scalars['AWSJSON']['output']>;
+  connectedDataConfig?: Maybe<Scalars['AWSJSON']['output']>;
+  contextConfig?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   description?: Maybe<Scalars['String']['output']>;
+  icon?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   integrations: Array<SpaceIntegration>;
   kind: SpaceKind;
   lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  mcpPolicy?: Maybe<Scalars['AWSJSON']['output']>;
+  mcpServers: Array<SpaceMcpServer>;
   members: Array<SpaceMember>;
   name: Scalars['String']['output'];
   prompt?: Maybe<Scalars['String']['output']>;
+  renderDiagnostics?: Maybe<Scalars['AWSJSON']['output']>;
   slug: Scalars['String']['output'];
   status: SpaceStatus;
   templateKey?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
+  toolPolicy?: Maybe<Scalars['AWSJSON']['output']>;
+  triggerConfig?: Maybe<Scalars['AWSJSON']['output']>;
   unreadThreadCount: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
@@ -5584,6 +5594,19 @@ export enum SpaceKind {
   CustomerOnboarding = 'CUSTOMER_ONBOARDING'
 }
 
+export type SpaceMcpServer = {
+  __typename?: 'SpaceMcpServer';
+  config?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  mcpServer?: Maybe<SpaceTenantMcpServer>;
+  mcpServerId: Scalars['ID']['output'];
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type SpaceMember = {
   __typename?: 'SpaceMember';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -5614,6 +5637,22 @@ export enum SpaceStatus {
   Active = 'ACTIVE',
   Archived = 'ARCHIVED'
 }
+
+export type SpaceTenantMcpServer = {
+  __typename?: 'SpaceTenantMcpServer';
+  authType: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  oauthProvider?: Maybe<Scalars['String']['output']>;
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  tools?: Maybe<Scalars['AWSJSON']['output']>;
+  transport: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
 
 export type StartCustomerOnboardingInput = {
   opportunity: Scalars['AWSJSON']['input'];

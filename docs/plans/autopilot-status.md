@@ -6,6 +6,34 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Spaces as Contextual Workrooms and Template Removal
+
+Plan: `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: U3 - Recast Space schema/API as contextual workrooms
+- Active branch: `codex/spaces-workrooms-u3`
+- Active worktree: `.Codex/worktrees/spaces-workrooms-u3`
+- Started: 2026-05-20
+- PR: [#1489](https://github.com/thinkwork-ai/thinkwork/pull/1489)
+- CI: rerun pending after dev migration apply
+
+### Progress Log
+
+| Date       | Unit  | Branch                         | PR                                                           | Status   | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Notes                                                                                                                                                                                                                                                              |
+| ---------- | ----- | ------------------------------ | ------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-05-20 | U1/U2 | `codex/spaces-workrooms-u1-u2` | [#1488](https://github.com/thinkwork-ai/thinkwork/pull/1488) | Merged   | Focused API thread/Space tests; focused computer sidebar/query/route tests; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/computer typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/computer test`; `pnpm --filter @thinkwork/computer build`; touched-file Prettier; `git diff --check`; GitHub checks.                                                                                                                                                                                     | Added contextual Space workroom thread association and rebuilt the Computer sidebar/routes around global chats plus Spaces. Squash merged as `a12b38e7d99ba29220d5cd30027b218189b064ca`; deleted the remote/local branch, removed the worktree, and synced `main`. |
+| 2026-05-20 | U3    | `codex/spaces-workrooms-u3`    | [#1489](https://github.com/thinkwork-ai/thinkwork/pull/1489) | CI rerun | `pnpm install`; `pnpm schema:build`; CLI/admin/mobile codegen; focused Space schema/API contract tests; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter @thinkwork/admin build`; scoped migration dry-run; touched-file Prettier check; `git diff --check`; dev scoped drift reporter after applying `0112_recast_spaces_as_contextual_workrooms.sql`. | Initial migration precheck failed because the new U3 manual migration objects were missing from dev. Applied the idempotent dev migration, verified scoped drift locally, and reran the failed GitHub check.                                                       |
+
+### Blockers
+
+- None at this time.
+
+---
+
 ## Current Run: Agent Mentions and Unread Routing
 
 Plan: `docs/plans/2026-05-20-001-fix-agent-mentions-and-unread-routing-plan.md`

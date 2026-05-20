@@ -1,6 +1,6 @@
-# Spaces are tenant-scoped collaborative rooms that own conversations,
-# checklist templates, members, local agent instructions, and integration
-# policy for a workflow such as Customer Onboarding.
+# Spaces are tenant-scoped contextual workrooms. They organize threads while
+# carrying the context, connected data, tool policy, MCP policy, and agent
+# availability hints that shape agent turns inside the workroom.
 
 enum SpaceStatus {
   ACTIVE
@@ -57,10 +57,20 @@ type Space {
   prompt: String
   status: SpaceStatus!
   kind: SpaceKind!
+  icon: String
+  category: String
   templateKey: String
   config: AWSJSON
+  contextConfig: AWSJSON
+  connectedDataConfig: AWSJSON
+  toolPolicy: AWSJSON
+  mcpPolicy: AWSJSON
+  agentAvailabilityPolicy: AWSJSON
+  triggerConfig: AWSJSON
+  renderDiagnostics: AWSJSON
   members: [SpaceMember!]!
   agentAssignments: [SpaceAgentAssignment!]!
+  mcpServers: [SpaceMcpServer!]!
   checklistTemplates: [SpaceChecklistTemplate!]!
   integrations: [SpaceIntegration!]!
   unreadThreadCount: Int!
@@ -93,6 +103,33 @@ type SpaceAgentAssignment {
   allowedCapabilities: AWSJSON
   allowedTools: AWSJSON
   status: SpaceAgentAssignmentStatus!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SpaceMcpServer {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  mcpServerId: ID!
+  mcpServer: SpaceTenantMcpServer
+  enabled: Boolean!
+  config: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SpaceTenantMcpServer {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String!
+  transport: String!
+  authType: String!
+  oauthProvider: String
+  tools: AWSJSON
+  enabled: Boolean!
+  status: String!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }

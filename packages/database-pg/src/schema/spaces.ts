@@ -1,9 +1,9 @@
 /**
  * Spaces domain tables.
  *
- * Spaces are tenant-scoped collaboration rooms that own conversation
- * configuration, member access, local agent instructions, checklist templates,
- * and integration policy for customer-facing workflows.
+ * Spaces are tenant-scoped contextual workrooms. They organize threads while
+ * carrying the context, connected data, tool policy, MCP policy, and agent
+ * availability hints that shape agent turns inside the workroom.
  */
 
 import {
@@ -37,8 +37,17 @@ export const spaces = pgTable(
     prompt: text("prompt"),
     status: text("status").notNull().default("active"),
     kind: text("kind").notNull().default("custom"),
+    icon: text("icon"),
+    category: text("category"),
     template_key: text("template_key"),
     config: jsonb("config"),
+    context_config: jsonb("context_config"),
+    connected_data_config: jsonb("connected_data_config"),
+    tool_policy: jsonb("tool_policy"),
+    mcp_policy: jsonb("mcp_policy"),
+    agent_availability_policy: jsonb("agent_availability_policy"),
+    trigger_config: jsonb("trigger_config"),
+    render_diagnostics: jsonb("render_diagnostics"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
