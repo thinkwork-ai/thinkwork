@@ -229,14 +229,14 @@ describe("ChatSidebar", () => {
       screen
         .getByRole("link", { name: /new chat/i })
         .compareDocumentPosition(
-          screen.getByRole("button", { name: /^search/i }),
+          screen.getByRole("button", { name: /switch space/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       screen
-        .getByRole("button", { name: /^search/i })
+        .getByRole("button", { name: /switch space/i })
         .compareDocumentPosition(
-          screen.getByRole("button", { name: /switch space/i }),
+          screen.getByRole("button", { name: /^search/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();

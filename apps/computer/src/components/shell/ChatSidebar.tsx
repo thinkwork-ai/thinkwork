@@ -175,16 +175,6 @@ export function ChatSidebar() {
               <span>New chat</span>
             </Link>
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className={navItemClassName}
-            onClick={() => setSearchOpen(true)}
-          >
-            <Search className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 text-left">Search</span>
-            <span className="text-xs text-sidebar-foreground/45">⌘K</span>
-          </Button>
           <Select
             value={activeSpaceId}
             onValueChange={(value) => {
@@ -211,7 +201,7 @@ export function ChatSidebar() {
               align="start"
               sideOffset={4}
               avoidCollisions={false}
-              className="w-[var(--radix-select-trigger-width)]"
+              className="w-[var(--radix-select-trigger-width)] p-1"
             >
               {spaces.map((space) => (
                 <SelectItem key={space.id} value={space.id}>
@@ -220,6 +210,16 @@ export function ChatSidebar() {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            type="button"
+            variant="ghost"
+            className={navItemClassName}
+            onClick={() => setSearchOpen(true)}
+          >
+            <Search className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 text-left">Search</span>
+            <span className="text-xs text-sidebar-foreground/45">⌘K</span>
+          </Button>
           <Button
             type="button"
             variant="ghost"
