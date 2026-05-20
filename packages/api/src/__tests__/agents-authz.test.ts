@@ -22,14 +22,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const {
   mockAgentRows,
+  mockInsertValues,
   mockInsertReturning,
+  mockUpdateValues,
   mockSkillsRows,
   mockSkillsUpdateRows,
   mockRequireTenantAdmin,
   deleteCallRef,
 } = vi.hoisted(() => ({
   mockAgentRows: vi.fn(),
+  mockInsertValues: vi.fn(),
   mockInsertReturning: vi.fn(),
+  mockUpdateValues: vi.fn(),
   mockSkillsRows: vi.fn(),
   mockSkillsUpdateRows: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
@@ -44,10 +48,13 @@ vi.mock("../graphql/utils.js", () => {
       }),
     })),
     insert: vi.fn(() => ({
-      values: () => ({
-        returning: () => Promise.resolve(mockInsertReturning() as unknown[]),
-        onConflictDoUpdate: () => Promise.resolve(),
-      }),
+      values: (values: unknown) => {
+        mockInsertValues(values);
+        return {
+          returning: () => Promise.resolve(mockInsertReturning() as unknown[]),
+          onConflictDoUpdate: () => Promise.resolve(),
+        };
+      },
     })),
     delete: vi.fn(() => {
       deleteCallRef.value++;
@@ -56,11 +63,15 @@ vi.mock("../graphql/utils.js", () => {
       };
     }),
     update: vi.fn(() => ({
-      set: () => ({
-        where: () => ({
-          returning: () => Promise.resolve(mockSkillsUpdateRows() as unknown[]),
-        }),
-      }),
+      set: (values: unknown) => {
+        mockUpdateValues(values);
+        return {
+          where: () => ({
+            returning: () =>
+              Promise.resolve(mockSkillsUpdateRows() as unknown[]),
+          }),
+        };
+      },
     })),
   };
   // U5: createAgent + deleteAgent now wrap their writes in
@@ -70,33 +81,33 @@ vi.mock("../graphql/utils.js", () => {
   // tx.insert(auditOutbox).values(...) call (auditOutbox isn't on
   // any mock returning() so the resulting promise resolves to
   // undefined, which the helper accepts).
-  dbMock.transaction = vi.fn(
-    async (fn: (tx: unknown) => Promise<unknown>) => fn(dbMock),
+  dbMock.transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+    fn(dbMock),
   );
   return {
-  db: dbMock,
-  eq: (..._args: any[]) => ({ _eq: _args }),
-  and: (..._args: any[]) => ({ _and: _args }),
-  inArray: (..._args: any[]) => ({ _in: _args }),
-  agents: {
-    id: "agents.id",
-    tenant_id: "agents.tenant_id",
-  },
-  agentSkills: {
-    agent_id: "agentSkills.agent_id",
-    skill_id: "agentSkills.skill_id",
-    tenant_id: "agentSkills.tenant_id",
-  },
-  agentCapabilities: {
-    agent_id: "agentCapabilities.agent_id",
-    tenant_id: "agentCapabilities.tenant_id",
-  },
-  users: { id: "users.id", email: "users.email" },
-  snakeToCamel: (obj: Record<string, unknown>) => obj,
-  agentToCamel: (obj: Record<string, unknown>) => obj,
-  generateSlug: () => "test-slug",
-  invokeJobScheduleManager: vi.fn(),
-};
+    db: dbMock,
+    eq: (..._args: any[]) => ({ _eq: _args }),
+    and: (..._args: any[]) => ({ _and: _args }),
+    inArray: (..._args: any[]) => ({ _in: _args }),
+    agents: {
+      id: "agents.id",
+      tenant_id: "agents.tenant_id",
+    },
+    agentSkills: {
+      agent_id: "agentSkills.agent_id",
+      skill_id: "agentSkills.skill_id",
+      tenant_id: "agentSkills.tenant_id",
+    },
+    agentCapabilities: {
+      agent_id: "agentCapabilities.agent_id",
+      tenant_id: "agentCapabilities.tenant_id",
+    },
+    users: { id: "users.id", email: "users.email" },
+    snakeToCamel: (obj: Record<string, unknown>) => obj,
+    agentToCamel: (obj: Record<string, unknown>) => obj,
+    generateSlug: () => "test-slug",
+    invokeJobScheduleManager: vi.fn(),
+  };
 });
 
 // U5: emitAuditEvent is mocked at module scope so the in-tx audit
@@ -130,6 +141,10 @@ vi.mock("../graphql/resolvers/core/authz.js", () => ({
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
   resolveCallerUserId: vi.fn(async () => null),
   resolveCallerTenantId: vi.fn(async () => null),
+  resolveCaller: vi.fn(async () => ({
+    tenantId: "tenant-A",
+    userId: "user-1",
+  })),
 }));
 
 // Stub workspace-map-generator so setAgentSkills' dynamic import doesn't hit disk
@@ -139,6 +154,8 @@ vi.mock("../lib/workspace-map-generator.js", () => ({
 
 // eslint-disable-next-line import/first
 import { createAgent } from "../graphql/resolvers/agents/createAgent.mutation.js";
+// eslint-disable-next-line import/first
+import { updateAgent } from "../graphql/resolvers/agents/updateAgent.mutation.js";
 // eslint-disable-next-line import/first
 import { setAgentSkills } from "../graphql/resolvers/agents/setAgentSkills.mutation.js";
 // eslint-disable-next-line import/first
@@ -180,7 +197,9 @@ function mockAdminForbidden() {
 describe("agent mutations — role gate + tenant pin", () => {
   beforeEach(() => {
     mockAgentRows.mockReset();
+    mockInsertValues.mockReset();
     mockInsertReturning.mockReset();
+    mockUpdateValues.mockReset();
     mockSkillsRows.mockReset();
     mockSkillsUpdateRows.mockReset();
     mockRequireTenantAdmin.mockReset();
@@ -209,6 +228,39 @@ describe("agent mutations — role gate + tenant pin", () => {
       );
     });
 
+    it("creates self-contained Agents without requiring a Template", async () => {
+      mockAdminAllowed();
+      mockInsertReturning.mockReturnValue([
+        { id: "a1", tenant_id: "tenant-A", name: "Agent", slug: "test-slug" },
+      ]);
+
+      await createAgent(
+        null,
+        {
+          input: {
+            ...input,
+            model: "anthropic.claude-3-5-sonnet",
+            blockedTools: JSON.stringify(["dangerous-tool"]),
+            sandbox: JSON.stringify({ network: "disabled" }),
+            webSearch: { enabled: false },
+            budgetMonthlyCents: 2500,
+          },
+        },
+        cognitoCtx(),
+      );
+
+      expect(mockInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({
+          template_id: null,
+          model: "anthropic.claude-3-5-sonnet",
+          blocked_tools: ["dangerous-tool"],
+          sandbox: { network: "disabled" },
+          web_search: { enabled: false },
+          budget_monthly_cents: 2500,
+        }),
+      );
+    });
+
     it("refuses member-role caller", async () => {
       mockAdminForbidden();
       await expect(
@@ -217,6 +269,50 @@ describe("agent mutations — role gate + tenant pin", () => {
         extensions: { code: "FORBIDDEN" },
       });
       expect(mockInsertReturning).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateAgent", () => {
+    it("updates direct runtime and policy fields without Template linkage", async () => {
+      mockSkillsUpdateRows.mockReturnValue([
+        {
+          id: "a1",
+          tenant_id: "tenant-A",
+          name: "Agent",
+          slug: "test-slug",
+          template_id: null,
+        },
+      ]);
+
+      await updateAgent(
+        null,
+        {
+          id: "a1",
+          input: {
+            runtime: "STRANDS",
+            model: "anthropic.claude-3-5-sonnet",
+            blockedTools: JSON.stringify(["dangerous-tool"]),
+            browser: { enabled: false },
+            contextEngine: JSON.stringify({ enabled: false }),
+            budgetMonthlyCents: 5000,
+          },
+        },
+        cognitoCtx(),
+      );
+
+      expect(mockUpdateValues).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runtime: "strands",
+          model: "anthropic.claude-3-5-sonnet",
+          blocked_tools: ["dangerous-tool"],
+          browser: { enabled: false },
+          context_engine: { enabled: false },
+          budget_monthly_cents: 5000,
+        }),
+      );
+      expect(mockUpdateValues).not.toHaveBeenCalledWith(
+        expect.objectContaining({ template_id: expect.anything() }),
+      );
     });
   });
 
@@ -324,9 +420,7 @@ describe("agent mutations — role gate + tenant pin", () => {
         try {
           await setAgentSkills(null, skillsInput, cognitoCtx());
           const deprecationCalls = warnSpy.mock.calls.filter((args) =>
-            String(args[0] ?? "").includes(
-              "[setAgentSkills] DEPRECATED",
-            ),
+            String(args[0] ?? "").includes("[setAgentSkills] DEPRECATED"),
           );
           expect(deprecationCalls.length).toBe(1);
           expect(String(deprecationCalls[0][0])).toMatch(/agent=a1/);
@@ -349,9 +443,7 @@ describe("agent mutations — role gate + tenant pin", () => {
             ),
           ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
           const deprecationCalls = warnSpy.mock.calls.filter((args) =>
-            String(args[0] ?? "").includes(
-              "[setAgentSkills] DEPRECATED",
-            ),
+            String(args[0] ?? "").includes("[setAgentSkills] DEPRECATED"),
           );
           expect(deprecationCalls.length).toBe(0);
         } finally {
@@ -374,9 +466,7 @@ describe("agent mutations — role gate + tenant pin", () => {
             cognitoCtx(),
           );
           const deprecationCalls = warnSpy.mock.calls.filter((args) =>
-            String(args[0] ?? "").includes(
-              "[setAgentSkills] DEPRECATED",
-            ),
+            String(args[0] ?? "").includes("[setAgentSkills] DEPRECATED"),
           );
           expect(deprecationCalls.length).toBe(1);
           // The existing "Ignoring empty skills list" warning must also still fire.

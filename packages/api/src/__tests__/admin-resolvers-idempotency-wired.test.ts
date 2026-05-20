@@ -87,8 +87,8 @@ vi.mock("../graphql/utils.js", async (importOriginal) => {
   // U5: createAgent now wraps its insert in db.transaction. Pass
   // the same mock surface through so the tx-scoped insert /
   // select calls match the existing assertions.
-  dbMock.transaction = vi.fn(
-    async (cb: (tx: unknown) => Promise<unknown>) => cb(dbMock),
+  dbMock.transaction = vi.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
+    cb(dbMock),
   );
   return {
     ...actual,
@@ -183,7 +183,6 @@ const CASES: Case[] = [
         {
           input: {
             tenantId: "tenant-A",
-            templateId: "tpl-1",
             name: "Marco",
             role: "assistant",
             adapterType: "strands",

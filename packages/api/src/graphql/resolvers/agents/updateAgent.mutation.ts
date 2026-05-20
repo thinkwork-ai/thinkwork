@@ -15,6 +15,7 @@ import {
   assertAgentMentionNameAvailable,
   normalizeAgentMentionName,
 } from "./name-identity.js";
+import { parseAgentRuntimeInput } from "./runtime.js";
 
 export async function updateAgent(
   _parent: any,
@@ -69,13 +70,26 @@ export async function updateAgent(
   }
   if (i.role !== undefined) updates.role = i.role;
   if (i.type !== undefined) updates.type = i.type.toLowerCase();
-  if (i.templateId !== undefined) updates.template_id = i.templateId;
   if (i.systemPrompt !== undefined) updates.system_prompt = i.systemPrompt;
+  if (i.runtime !== undefined)
+    updates.runtime = parseAgentRuntimeInput(i.runtime);
   if (i.adapterType !== undefined) updates.adapter_type = i.adapterType;
   if (i.adapterConfig !== undefined)
     updates.adapter_config = JSON.parse(i.adapterConfig);
   if (i.runtimeConfig !== undefined)
     updates.runtime_config = JSON.parse(i.runtimeConfig);
+  if (i.model !== undefined) updates.model = i.model;
+  if (i.guardrailId !== undefined) updates.guardrail_id = i.guardrailId;
+  if (i.blockedTools !== undefined)
+    updates.blocked_tools = parseJsonInput(i.blockedTools);
+  if (i.sandbox !== undefined) updates.sandbox = parseJsonInput(i.sandbox);
+  if (i.browser !== undefined) updates.browser = parseJsonInput(i.browser);
+  if (i.webSearch !== undefined)
+    updates.web_search = parseJsonInput(i.webSearch);
+  if (i.sendEmail !== undefined)
+    updates.send_email = parseJsonInput(i.sendEmail);
+  if (i.contextEngine !== undefined)
+    updates.context_engine = parseJsonInput(i.contextEngine);
   if (i.budgetMonthlyCents !== undefined)
     updates.budget_monthly_cents = i.budgetMonthlyCents;
   if (i.avatarUrl !== undefined) updates.avatar_url = i.avatarUrl;
@@ -259,4 +273,9 @@ export async function updateAgent(
   }
 
   return agentToCamel(row);
+}
+
+function parseJsonInput(value: unknown): unknown {
+  if (value === null || typeof value !== "string") return value;
+  return JSON.parse(value);
 }

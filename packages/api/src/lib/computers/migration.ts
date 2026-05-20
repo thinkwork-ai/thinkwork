@@ -175,8 +175,15 @@ async function loadUserPairedAgents(tenantId: string) {
       and(
         eq(agents.tenant_id, tenantId),
         isNotNull(agents.human_pair_id),
+        isNotNull(agents.template_id),
         ne(agents.status, "archived"),
       ),
+    )
+    .then((rows) =>
+      rows.map((row) => ({
+        ...row,
+        template_id: row.template_id!,
+      })),
     );
 }
 
@@ -191,7 +198,10 @@ async function loadExistingComputers(tenantId: string) {
     })
     .from(computers)
     .where(
-      and(eq(computers.tenant_id, tenantId), isNotNull(computers.owner_user_id)),
+      and(
+        eq(computers.tenant_id, tenantId),
+        isNotNull(computers.owner_user_id),
+      ),
     );
 
   return rows.map((row) => ({

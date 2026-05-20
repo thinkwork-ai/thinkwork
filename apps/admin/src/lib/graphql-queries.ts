@@ -16,6 +16,7 @@ export const AgentsListQuery = graphql(`
       status
       runtime
       templateId
+      budgetMonthlyCents
       agentTemplate {
         id
         name
@@ -43,6 +44,7 @@ export const AgentDetailQuery = gql`
       type
       status
       runtime
+      budgetMonthlyCents
       templateId
       agentTemplate {
         id
@@ -111,6 +113,7 @@ export const CreateAgentMutation = graphql(`
       status
       runtime
       templateId
+      budgetMonthlyCents
       createdAt
     }
   }
@@ -146,6 +149,7 @@ export const UpdateAgentMutation = graphql(`
       runtime
       systemPrompt
       adapterType
+      budgetMonthlyCents
       updatedAt
     }
   }
@@ -2471,11 +2475,7 @@ export const CompileUserWikiNowMutation = graphql(`
     $userId: ID!
     $forceNew: Boolean
   ) {
-    compileWikiNow(
-      tenantId: $tenantId
-      userId: $userId
-      forceNew: $forceNew
-    ) {
+    compileWikiNow(tenantId: $tenantId, userId: $userId, forceNew: $forceNew) {
       id
       tenantId
       userId

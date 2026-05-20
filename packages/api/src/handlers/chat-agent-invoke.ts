@@ -38,7 +38,6 @@ import {
 } from "../lib/sandbox-preflight.js";
 import {
   AgentNotFoundError,
-  AgentTemplateNotFoundError,
   resolveAgentRuntimeConfig,
 } from "../lib/resolve-agent-runtime-config.js";
 import {
@@ -328,10 +327,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       });
     } catch (err) {
       if (err instanceof AgentNotFoundError) {
-        console.error(`[chat-agent-invoke] ${err.message}`);
-        return;
-      }
-      if (err instanceof AgentTemplateNotFoundError) {
         console.error(`[chat-agent-invoke] ${err.message}`);
         return;
       }
@@ -842,9 +837,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } = await import(
-          "../lib/hindsight-cost.js"
-        );
+        const { recordHindsightCost } =
+          await import("../lib/hindsight-cost.js");
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -1092,9 +1086,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // 4c. Send push notification to user devices
     if (!computerThreadResponse?.responseMessageId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId,
           tenantId,

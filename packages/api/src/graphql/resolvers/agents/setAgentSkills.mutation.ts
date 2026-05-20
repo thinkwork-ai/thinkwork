@@ -31,18 +31,14 @@ export async function setAgentSkills(
     ctx.auth.agentId &&
     ctx.auth.agentId === args.agentId
   ) {
-    throw new GraphQLError(
-      "An agent cannot modify its own skill permissions",
-      { extensions: { code: "FORBIDDEN" } },
-    );
+    throw new GraphQLError("An agent cannot modify its own skill permissions", {
+      extensions: { code: "FORBIDDEN" },
+    });
   }
 
-  // Resolve the target agent's tenant AND its template_id so the role
-  // gate runs against the authoritative tenantId, and the per-skill
-  // subset check (Unit 5) has the template ceiling available.
-  //
-  // template_id is notNull on the agents schema, so every agent always
-  // has a template — no null-branching needed.
+  // Resolve the target agent's tenant and any legacy template_id so the
+  // role gate runs against the authoritative tenantId, and the per-skill
+  // subset check (Unit 5) can use the template ceiling when one exists.
   const [agent] = await db
     .select({
       tenant_id: agents.tenant_id,
@@ -90,8 +86,7 @@ export async function setAgentSkills(
   // Lookup: parse skill_catalog.tier1_metadata (full parsed SKILL.md
   // frontmatter, stored as JSON-stringified jsonb by sync-catalog-db.ts)
   // for every distinct skill_id in the payload. Template permissions
-  // come from agent_templates.skills (already notNull on
-  // agent.template_id).
+  // come from agent_templates.skills for legacy template-backed Agents.
   const permissionsModelMap = new Map<
     string,
     { permissionsModel: "operations" | null; manifestOps: string[] }
@@ -119,11 +114,11 @@ export async function setAgentSkills(
     (m) => m.permissionsModel === "operations",
   );
   let templateSkillsById: Map<string, any> = new Map();
-  if (hasSubsetCheck) {
+  if (hasSubsetCheck && agent.template_id) {
     const [template] = await db
       .select({ skills: agentTemplates.skills })
       .from(agentTemplates)
-      .where(eq(agentTemplates.id, agent.template_id!));
+      .where(eq(agentTemplates.id, agent.template_id));
     if (template) {
       const rawTemplateSkills = Array.isArray(template.skills)
         ? (template.skills as any[])

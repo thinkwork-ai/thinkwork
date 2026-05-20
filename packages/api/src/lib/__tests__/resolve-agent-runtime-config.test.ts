@@ -76,6 +76,14 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: "agents.tenant_id",
     runtime: "agents.runtime",
     system_prompt: "agents.system_prompt",
+    model: "agents.model",
+    guardrail_id: "agents.guardrail_id",
+    blocked_tools: "agents.blocked_tools",
+    sandbox: "agents.sandbox",
+    browser: "agents.browser",
+    web_search: "agents.web_search",
+    send_email: "agents.send_email",
+    context_engine: "agents.context_engine",
   },
   agentCapabilities: {
     agent_id: "agentCapabilities.agent_id",
@@ -148,7 +156,6 @@ vi.mock("../../handlers/skills.js", () => ({
 
 import {
   AgentNotFoundError,
-  AgentTemplateNotFoundError,
   resolveAgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
 
@@ -166,14 +173,6 @@ function stageAgentRow(overrides?: Record<string, unknown>) {
       human_pair_id: null,
       template_id: TEMPLATE_ID,
       runtime: "strands",
-      ...overrides,
-    },
-  ]);
-}
-
-function stageTemplateRow(overrides?: Record<string, unknown>) {
-  rowsQueue.push([
-    {
       model: "us.anthropic.claude-sonnet-4-6",
       guardrail_id: null,
       blocked_tools: null,
@@ -182,10 +181,18 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
       web_search: { enabled: true },
       send_email: { enabled: true },
       context_engine: { enabled: true },
-      runtime: "strands",
       ...overrides,
     },
   ]);
+}
+
+function stageTemplateRow(overrides?: Record<string, unknown>) {
+  const stagedAgent = rowsQueue[rowsQueue.length - 1]?.[0] as
+    | Record<string, unknown>
+    | undefined;
+  if (!stagedAgent) return;
+  const { runtime: _runtime, ...agentOverrides } = overrides ?? {};
+  Object.assign(stagedAgent, agentOverrides);
 }
 
 function stageTenantSlug(slug = "acme") {
@@ -227,12 +234,20 @@ describe("resolveAgentRuntimeConfig", () => {
     ).rejects.toBeInstanceOf(AgentNotFoundError);
   });
 
-  it("throws AgentTemplateNotFoundError when the template lookup returns no rows", async () => {
-    stageAgentRow();
-    rowsQueue.push([]); // empty template lookup
-    await expect(
-      resolveAgentRuntimeConfig({ tenantId: TENANT_ID, agentId: AGENT_ID }),
-    ).rejects.toBeInstanceOf(AgentTemplateNotFoundError);
+  it("does not require a Template row when the Agent owns runtime fields", async () => {
+    stageAgentRow({ template_id: null });
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.templateId).toBeNull();
+    expect(cfg.templateModel).toBe("us.anthropic.claude-sonnet-4-6");
   });
 
   it("returns the expected shape on the happy path with no skills/KBs/MCPs", async () => {
@@ -287,7 +302,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.runtimeType).toBe("flue");
   });
 
-  it("falls back to the template runtime before defaulting to Strands", async () => {
+  it("uses the Agent runtime instead of falling back to a Template runtime", async () => {
     stageAgentRow({ runtime: null });
     stageTemplateRow({ runtime: "flue" });
     stageTenantSlug("acme");
@@ -298,7 +313,7 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("flue");
+    expect(cfg.runtimeType).toBe("strands");
   });
 
   it("defaults unknown runtime values to Strands", async () => {

@@ -254,9 +254,8 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -451,9 +450,8 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -797,6 +795,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
             )
             .limit(1);
           if (!agent) throw new Error("Scheduled eval Agent not found");
+          if (!agent.templateId) {
+            throw new Error("Scheduled eval Agent is not linked to a template");
+          }
           targetAgentId = agent.id;
           targetTemplateId = agent.templateId;
         } else {
@@ -838,9 +839,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -1181,9 +1181,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } = await import(
-          "@aws-sdk/client-scheduler"
-        );
+        const { SchedulerClient, DeleteScheduleCommand } =
+          await import("@aws-sdk/client-scheduler");
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({
