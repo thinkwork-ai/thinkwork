@@ -226,6 +226,20 @@ export const CreateSpaceMutation = graphql(`
   }
 `);
 
+export const SetSpaceAgentAvailabilityMutation = graphql(`
+  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {
+    setSpaceAgentAvailability(input: $input) {
+      id
+      agentId
+      spaceId
+      localRole
+      autoSubscribe
+      allowedTools
+      status
+    }
+  }
+`);
+
 export const SpaceAdminDetailQuery = graphql(`
   query SpaceAdminDetail($id: ID!) {
     space(id: $id) {

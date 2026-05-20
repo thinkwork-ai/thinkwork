@@ -269,6 +269,7 @@ export function AgentDetailChrome({
         initial={{
           id: agentId,
           name: agent.name,
+          role: agent.role ?? "",
           runtime: (agent as any).runtime ?? AgentRuntime.Strands,
           budgetDollars: centsToDollarString((agent as any).budgetMonthlyCents),
         }}

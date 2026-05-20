@@ -40,6 +40,7 @@ import { AgentRuntime, AgentType } from "@/gql/graphql";
 
 const agentSchema = z.object({
   name: z.string().min(1, "Agent name is required").trim(),
+  role: z.string().optional(),
   runtime: z.nativeEnum(AgentRuntime),
   budgetDollars: z.string().optional(),
 });
@@ -48,6 +49,7 @@ type AgentFormValues = z.infer<typeof agentSchema>;
 
 const DEFAULT_VALUES: AgentFormValues = {
   name: "",
+  role: "",
   runtime: AgentRuntime.Strands,
   budgetDollars: "",
 };
@@ -107,6 +109,7 @@ export function AgentFormDialog({
         input: {
           tenantId,
           name: values.name.trim(),
+          role: values.role?.trim() || null,
           type: AgentType.Agent,
           runtime: values.runtime,
           budgetMonthlyCents,
@@ -125,6 +128,7 @@ export function AgentFormDialog({
         id: initial?.id!,
         input: {
           name: values.name.trim(),
+          role: values.role?.trim() || null,
           runtime: values.runtime,
           budgetMonthlyCents,
         },
@@ -161,6 +165,26 @@ export function AgentFormDialog({
                       <Input
                         placeholder="Agent name"
                         autoFocus
+                        className="text-sm"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Role
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="SQL analyst, report writer, support triage..."
                         className="text-sm"
                         {...field}
                       />
