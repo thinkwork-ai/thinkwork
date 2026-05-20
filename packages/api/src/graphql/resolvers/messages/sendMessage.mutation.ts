@@ -5,6 +5,7 @@ import {
   eq,
   messageMentions,
   messages,
+  threadParticipants,
   threads,
   messageToCamel,
 } from "../../utils.js";
@@ -18,6 +19,10 @@ import {
 import { recordThreadActivityForIdleLearning } from "../../../lib/thread-idle-learning/activity.js";
 import { dispatchAgentMentions } from "../../../lib/mentions/dispatch-agent-mentions.js";
 import { parseMessageMentions } from "../../../lib/mentions/parse-message-mentions.js";
+import {
+  insertMentionParticipants,
+  toThreadParticipantInsert,
+} from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
 
 export const sendMessage = async (
@@ -82,38 +87,63 @@ export const sendMessage = async (
     explicitMentions: i.mentions,
   });
 
-  const [row] = await db
-    .insert(messages)
-    .values({
-      thread_id: i.threadId,
-      tenant_id: thread.tenant_id,
-      role: i.role.toLowerCase(),
-      content: i.content,
-      sender_type: senderType,
-      sender_id: senderId,
-      tool_calls: i.toolCalls ? JSON.parse(i.toolCalls) : undefined,
-      tool_results: i.toolResults ? JSON.parse(i.toolResults) : undefined,
-      metadata: parsedMetadata,
-    })
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    const [messageRow] = await tx
+      .insert(messages)
+      .values({
+        thread_id: i.threadId,
+        tenant_id: thread.tenant_id,
+        role: i.role.toLowerCase(),
+        content: i.content,
+        sender_type: senderType,
+        sender_id: senderId,
+        tool_calls: i.toolCalls ? JSON.parse(i.toolCalls) : undefined,
+        tool_results: i.toolResults ? JSON.parse(i.toolResults) : undefined,
+        metadata: parsedMetadata,
+      })
+      .returning();
+
+    if (parsedMentions.length > 0) {
+      await tx
+        .insert(messageMentions)
+        .values(
+          parsedMentions.map((mention) => ({
+            tenant_id: thread.tenant_id,
+            thread_id: i.threadId,
+            message_id: messageRow.id,
+            target_type: mention.targetType,
+            target_id: mention.targetId,
+            display_name: mention.displayName,
+            raw_text: mention.rawText,
+            start_offset: mention.startOffset,
+            end_offset: mention.endOffset,
+          })),
+        )
+        .onConflictDoNothing();
+
+      await insertMentionParticipants(
+        {
+          tenantId: thread.tenant_id,
+          threadId: i.threadId,
+          spaceId: thread.space_id,
+          mentions: parsedMentions,
+          targets: mentionTargets,
+        },
+        {
+          async insertParticipants(rows) {
+            await tx
+              .insert(threadParticipants)
+              .values(rows.map(toThreadParticipantInsert))
+              .onConflictDoNothing();
+          },
+        },
+      );
+    }
+
+    return messageRow;
+  });
 
   if (parsedMentions.length > 0) {
-    await db
-      .insert(messageMentions)
-      .values(
-        parsedMentions.map((mention) => ({
-          tenant_id: thread.tenant_id,
-          thread_id: i.threadId,
-          message_id: row.id,
-          target_type: mention.targetType,
-          target_id: mention.targetId,
-          display_name: mention.displayName,
-          raw_text: mention.rawText,
-          start_offset: mention.startOffset,
-          end_offset: mention.endOffset,
-        })),
-      )
-      .onConflictDoNothing();
     try {
       await dispatchAgentMentions({
         tenantId: thread.tenant_id,

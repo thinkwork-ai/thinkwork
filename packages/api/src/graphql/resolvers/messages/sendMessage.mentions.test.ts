@@ -11,8 +11,13 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("loadThreadMentionTargets");
     expect(source).toContain("validateExplicitMentions");
     expect(source).toContain("parseMessageMentions");
+    expect(source).toContain("db.transaction");
     expect(source).toContain("insert(messageMentions)");
+    expect(source).toContain("insertMentionParticipants");
     expect(source).toContain("dispatchAgentMentions");
+    expect(source.indexOf("await insertMentionParticipants")).toBeLessThan(
+      source.indexOf("await dispatchAgentMentions"),
+    );
   });
 
   it("publishes user messages to collaborative thread subscribers", () => {
