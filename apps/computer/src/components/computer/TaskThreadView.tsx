@@ -287,41 +287,46 @@ export function TaskThreadView({
           <ConversationContent
             data-testid="thread-conversation-content"
             className={cn(
-              "mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 sm:px-6",
-              infoPanelOpen && "md:mr-[332px]",
+              "w-full gap-0 px-4 pt-10 sm:px-6",
+              infoPanelOpen && "md:pr-[348px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
           >
-            {transcriptMessages.length === 0 ? (
-              <ThinkingRow
-                title="Thinking"
-                detail="ThinkWork is preparing this thread."
-              />
-            ) : (
-              transcriptMessages.map((message, index) => (
-                <TranscriptSegment
-                  key={message.id}
-                  message={message}
-                  turn={turnByUserMessageId.get(message.id)}
-                  isLatestUser={index === latestUserIndex}
-                  streamingChunks={
-                    index === latestUserIndex && showStreamingBuffer
-                      ? streamingChunks
-                      : []
-                  }
-                  streamState={
-                    index === latestUserIndex && showStreamingBuffer
-                      ? streamState
-                      : undefined
-                  }
-                  onOpenArtifact={artifactPanelState?.onSelectArtifact}
-                  showProcessingShimmer={
-                    index === latestUserIndex && showProcessingShimmer
-                  }
+            <div
+              data-testid="thread-conversation-column"
+              className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
+            >
+              {transcriptMessages.length === 0 ? (
+                <ThinkingRow
+                  title="Thinking"
+                  detail="ThinkWork is preparing this thread."
                 />
-              ))
-            )}
-            {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
+              ) : (
+                transcriptMessages.map((message, index) => (
+                  <TranscriptSegment
+                    key={message.id}
+                    message={message}
+                    turn={turnByUserMessageId.get(message.id)}
+                    isLatestUser={index === latestUserIndex}
+                    streamingChunks={
+                      index === latestUserIndex && showStreamingBuffer
+                        ? streamingChunks
+                        : []
+                    }
+                    streamState={
+                      index === latestUserIndex && showStreamingBuffer
+                        ? streamState
+                        : undefined
+                    }
+                    onOpenArtifact={artifactPanelState?.onSelectArtifact}
+                    showProcessingShimmer={
+                      index === latestUserIndex && showProcessingShimmer
+                    }
+                  />
+                ))
+              )}
+              {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
+            </div>
           </ConversationContent>
         </Conversation>
 
@@ -331,8 +336,8 @@ export function TaskThreadView({
           ref={composerDockRef}
           data-testid="follow-up-composer-dock"
           className={cn(
-            "pointer-events-none absolute bottom-0 left-0 z-10 px-4 sm:px-6",
-            infoPanelOpen ? "right-[332px]" : "right-0",
+            "pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6",
+            infoPanelOpen && "md:pr-[348px]",
           )}
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">

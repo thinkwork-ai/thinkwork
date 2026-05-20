@@ -333,18 +333,21 @@ describe("ChatSidebar", () => {
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Chats" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Spaces" })).toBeTruthy();
-    expect(container.querySelector(".lucide-folder-open")).toBeTruthy();
+    expect(container.querySelector(".tabler-icon-planet")).toBeTruthy();
+    expect(container.querySelector(".lucide-folder")).toBeNull();
     expect(
       screen.getByRole("link", { name: /default chat/i }).getAttribute("href"),
     ).toBe("/threads/thread-default");
     expect(
       screen.getByRole("link", { name: /general chat/i }).getAttribute("href"),
     ).toBe("/threads/thread-general");
-    expect(
-      screen
-        .getByRole("link", { name: /recent space thread/i })
-        .getAttribute("href"),
-    ).toBe("/spaces/space-1/threads/thread-recent");
+    const spaceThreadLink = screen.getByRole("link", {
+      name: /recent space thread/i,
+    });
+    expect(spaceThreadLink.getAttribute("href")).toBe(
+      "/spaces/space-1/threads/thread-recent",
+    );
+    expect(spaceThreadLink.className).not.toContain("ml-5");
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
 

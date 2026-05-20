@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { IconPlanet } from "@tabler/icons-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -7,8 +8,6 @@ import {
   Archive,
   ArrowLeft,
   ChevronDown,
-  Folder,
-  FolderOpen,
   GitBranch,
   Globe,
   Keyboard,
@@ -588,8 +587,7 @@ function SpaceThreadSection({
           )}
         >
           <button type="button" aria-label={`Toggle ${label}`}>
-            <Folder className="mr-2 h-4 w-4 shrink-0 group-data-[state=open]/space:hidden" />
-            <FolderOpen className="mr-2 hidden h-4 w-4 shrink-0 group-data-[state=open]/space:block" />
+            <IconPlanet className="mr-2 h-4 w-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {space.unreadThreadCount ? (
               <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
@@ -607,7 +605,7 @@ function SpaceThreadSection({
               to="/spaces/$spaceId"
               params={{ spaceId: space.id }}
               className={cn(
-                "ml-5 flex h-8 min-w-0 items-center rounded-md px-2 text-sm text-sidebar-foreground/55 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                "flex h-8 min-w-0 items-center rounded-md px-2 text-sm text-sidebar-foreground/55 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                 isActiveSpace &&
                   "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
@@ -615,7 +613,7 @@ function SpaceThreadSection({
               <span className="truncate">{label}</span>
             </Link>
           ) : (
-            <div className="ml-5 space-y-0.5">
+            <div className="space-y-0.5">
               {visibleThreads.map((thread) => (
                 <ChatThreadRow
                   key={thread.id}

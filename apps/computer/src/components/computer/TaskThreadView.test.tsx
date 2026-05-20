@@ -236,9 +236,15 @@ describe("TaskThreadView", () => {
 
     expect(
       screen.getByTestId("thread-conversation-content").className,
-    ).toContain("md:mr-[332px]");
+    ).toContain("md:pr-[348px]");
+    expect(
+      screen.getByTestId("thread-conversation-column").className,
+    ).toContain("max-w-[750px]");
+    expect(
+      screen.getByTestId("thread-conversation-column").className,
+    ).toContain("px-3");
     expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
-      "right-[332px]",
+      "md:pr-[348px]",
     );
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
