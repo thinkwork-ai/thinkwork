@@ -1,13 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import {
-  and,
-  db,
-  eq,
-  sql,
-  spaces as spacesTable,
-  spaceMembers,
-} from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { and, db, eq, sql, spaces as spacesTable } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
   canReadTenantSpaces,
@@ -29,27 +21,8 @@ export async function spaces(
   if (status) conditions.push(eq(spacesTable.status, status));
 
   let callerUserId: string | null = null;
-  let isTenantAdminCaller = ctx.auth.authType !== "cognito";
   if (ctx.auth.authType === "cognito") {
     callerUserId = await resolveCallerUserId(ctx);
-    try {
-      await requireTenantAdmin(ctx, args.tenantId);
-      isTenantAdminCaller = true;
-    } catch {
-      isTenantAdminCaller = false;
-    }
-    if (!isTenantAdminCaller) {
-      if (!callerUserId) return [];
-      conditions.push(
-        sql`EXISTS (
-          SELECT 1
-            FROM ${spaceMembers} caller_sm
-           WHERE caller_sm.tenant_id = ${args.tenantId}
-             AND caller_sm.space_id = ${spacesTable.id}
-             AND caller_sm.user_id = ${callerUserId}
-        )`,
-      );
-    }
   }
 
   const rows = await db

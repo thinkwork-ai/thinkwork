@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
   Anchor,
   Archive,
   ArrowLeft,
+  ChevronDown,
+  Folder,
   GitBranch,
   Globe,
   Keyboard,
@@ -20,14 +23,19 @@ import {
 } from "lucide-react";
 import {
   Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   Dialog,
   DialogContent,
   DialogTitle,
   Input,
   SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import { ThreadsPagedQuery } from "@/lib/graphql-queries";
+import { SpacesQuery, ThreadsPagedQuery } from "@/lib/graphql-queries";
 import {
   clearMissingThreadDeletes,
   usePendingThreadDeletes,
@@ -49,6 +57,17 @@ interface ThreadsPagedResult {
   } | null;
 }
 
+interface SpaceNavSummary {
+  id: string;
+  slug?: string | null;
+  name?: string | null;
+  unreadThreadCount?: number | null;
+}
+
+interface SpacesResult {
+  spaces?: SpaceNavSummary[] | null;
+}
+
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
 
@@ -56,6 +75,7 @@ export function ChatSidebar() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
+  const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -84,6 +104,18 @@ export function ChatSidebar() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  const [{ data: spacesData, fetching: spacesFetching, error: spacesError }] =
+    useQuery<SpacesResult>({
+      query: SpacesQuery,
+      variables: { tenantId: tenantId ?? "" },
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
+
+  const spaces = spacesData?.spaces ?? [];
+  const defaultSpace = spaces.find((space) => isGeneralSpace(space));
+  const defaultSpaceId = defaultSpace?.id;
 
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
@@ -169,7 +201,11 @@ export function ChatSidebar() {
         });
       } else {
         setSelectedThreadId(undefined);
-        void navigate({ to: "/new", replace: true });
+        void navigate({
+          to: "/new",
+          search: { spaceId: undefined },
+          replace: true,
+        });
       }
     }
 
@@ -200,10 +236,27 @@ export function ChatSidebar() {
       ),
     [orderedRecentThreads, pendingThreadDeletes],
   );
-  const recentGroups = useMemo(
-    () => groupThreadsByRecency(recentThreads),
-    [recentThreads],
+  const genericThreads = useMemo(
+    () =>
+      recentThreads.filter(
+        (thread) => !thread.spaceId || thread.spaceId === defaultSpaceId,
+      ),
+    [defaultSpaceId, recentThreads],
   );
+  const contextualSpaces = useMemo(
+    () => spaces.filter((space) => space.id !== defaultSpaceId),
+    [defaultSpaceId, spaces],
+  );
+  const spaceThreadsById = useMemo(() => {
+    const grouped = new Map<string, ChatThreadSummary[]>();
+    for (const thread of recentThreads) {
+      if (!thread.spaceId || thread.spaceId === defaultSpaceId) continue;
+      const list = grouped.get(thread.spaceId) ?? [];
+      list.push(thread);
+      grouped.set(thread.spaceId, list);
+    }
+    return grouped;
+  }, [defaultSpaceId, recentThreads]);
   const searchThreads = useMemo(
     () =>
       sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
@@ -234,7 +287,7 @@ export function ChatSidebar() {
       <div className="shrink-0 px-3 pb-3 group-data-[collapsible=icon]:hidden">
         <nav className="space-y-1" aria-label="Chat actions">
           <Button asChild variant="ghost" className={navItemClassName}>
-            <Link to="/new">
+            <Link to="/new" search={{ spaceId: undefined }}>
               <MessageCirclePlus className="size-4 shrink-0" />
               <span>New thread</span>
             </Link>
@@ -271,29 +324,59 @@ export function ChatSidebar() {
             <p className="px-2 py-2 text-xs text-sidebar-foreground/60">
               Loading threads...
             </p>
-          ) : recentThreads.length === 0 ? (
+          ) : recentThreads.length === 0 &&
+            contextualSpaces.length === 0 &&
+            !spacesFetching ? (
             <p className="px-2 py-2 text-xs text-sidebar-foreground/55">
               No threads yet
             </p>
           ) : (
             <div className="space-y-3">
-              {recentGroups.map((group) => (
-                <div key={group.label}>
-                  <div className="mb-1 px-2 text-[13px] font-normal text-sidebar-foreground/45">
-                    {group.label}
-                  </div>
-                  <div className="space-y-0.5">
-                    {group.threads.map((thread) => (
-                      <ChatThreadRow
-                        key={thread.id}
-                        thread={thread}
-                        active={selectedThreadId === thread.id}
-                        onActivate={() => setSelectedThreadId(thread.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
+              <ThreadListSection
+                label="Pinned"
+                threads={[]}
+                selectedThreadId={selectedThreadId}
+                defaultOpen={false}
+                emptyBehavior="hidden"
+                onActivate={setSelectedThreadId}
+              />
+              <ThreadListSection
+                label="Chats"
+                threads={genericThreads}
+                selectedThreadId={selectedThreadId}
+                defaultOpen
+                emptyBehavior="message"
+                onActivate={setSelectedThreadId}
+              />
+              <div className="space-y-1">
+                <SidebarGroupLabel className="px-2 text-xs font-medium text-sidebar-foreground/50">
+                  Spaces
+                </SidebarGroupLabel>
+                {spacesError ? (
+                  <p className="px-2 py-1 text-xs text-destructive">
+                    {spacesError.message}
+                  </p>
+                ) : spacesFetching && spaces.length === 0 ? (
+                  <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
+                    Loading Spaces...
+                  </p>
+                ) : contextualSpaces.length === 0 ? (
+                  <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
+                    No Spaces yet
+                  </p>
+                ) : (
+                  contextualSpaces.map((space) => (
+                    <SpaceThreadSection
+                      key={space.id}
+                      space={space}
+                      threads={spaceThreadsById.get(space.id) ?? []}
+                      selectedThreadId={selectedThreadId}
+                      activeSpaceId={routeSpaceId}
+                      onActivate={setSelectedThreadId}
+                    />
+                  ))
+                )}
+              </div>
             </div>
           )}
         </SidebarGroup>
@@ -386,6 +469,146 @@ function ThreadSearchDialog({
   );
 }
 
+function ThreadListSection({
+  label,
+  threads,
+  selectedThreadId,
+  defaultOpen = true,
+  emptyBehavior,
+  onActivate,
+}: {
+  label: string;
+  threads: ChatThreadSummary[];
+  selectedThreadId?: string;
+  defaultOpen?: boolean;
+  emptyBehavior: "hidden" | "message";
+  onActivate: (threadId: string) => void;
+}) {
+  if (threads.length === 0 && emptyBehavior === "hidden") return null;
+  const groups = groupThreadsByRecency(threads);
+
+  return (
+    <Collapsible defaultOpen={defaultOpen} className="group/thread-section">
+      <CollapsibleTrigger asChild>
+        <SidebarGroupLabel
+          asChild
+          className="cursor-pointer select-none px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
+        >
+          <button type="button" aria-label={`Toggle ${label}`}>
+            <span>{label}</span>
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=closed]/thread-section:-rotate-90" />
+          </button>
+        </SidebarGroupLabel>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <SidebarGroupContent>
+          {threads.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
+              No threads yet
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {groups.map((group) => (
+                <div key={group.label}>
+                  {groups.length > 1 ? (
+                    <div className="mb-1 px-2 text-[11px] font-medium text-sidebar-foreground/45">
+                      {group.label}
+                    </div>
+                  ) : null}
+                  <div className="space-y-0.5">
+                    {group.threads.map((thread) => (
+                      <ChatThreadRow
+                        key={thread.id}
+                        thread={thread}
+                        active={selectedThreadId === thread.id}
+                        onActivate={() => onActivate(thread.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SidebarGroupContent>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function SpaceThreadSection({
+  space,
+  threads,
+  selectedThreadId,
+  activeSpaceId,
+  onActivate,
+}: {
+  space: SpaceNavSummary;
+  threads: ChatThreadSummary[];
+  selectedThreadId?: string;
+  activeSpaceId?: string;
+  onActivate: (threadId: string) => void;
+}) {
+  const label = space.name ?? space.slug ?? "Space";
+  const isActiveSpace = activeSpaceId === space.id;
+
+  return (
+    <Collapsible
+      defaultOpen={isActiveSpace || threads.length > 0}
+      className="group/space"
+    >
+      <CollapsibleTrigger asChild>
+        <SidebarGroupLabel
+          asChild
+          className={cn(
+            "cursor-pointer select-none px-2 text-xs font-medium text-sidebar-foreground/60 data-[state=open]:text-sidebar-foreground/80",
+            isActiveSpace && "text-sidebar-foreground",
+          )}
+        >
+          <button type="button" aria-label={`Toggle ${label}`}>
+            <Folder className="mr-2 h-4 w-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+            {space.unreadThreadCount ? (
+              <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
+                {space.unreadThreadCount}
+              </span>
+            ) : null}
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=closed]/space:-rotate-90" />
+          </button>
+        </SidebarGroupLabel>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <SidebarGroupContent>
+          {threads.length === 0 ? (
+            <Link
+              to="/spaces/$spaceId"
+              params={{ spaceId: space.id }}
+              className={cn(
+                "ml-5 flex h-8 min-w-0 items-center rounded-md px-2 text-sm text-sidebar-foreground/55 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                isActiveSpace &&
+                  "bg-sidebar-accent text-sidebar-accent-foreground",
+              )}
+            >
+              <span className="truncate">{label}</span>
+            </Link>
+          ) : (
+            <div className="ml-5 space-y-0.5">
+              {threads.slice(0, 6).map((thread) => (
+                <ChatThreadRow
+                  key={thread.id}
+                  thread={thread}
+                  active={selectedThreadId === thread.id}
+                  spaceRouteId={space.id}
+                  onActivate={() => onActivate(thread.id)}
+                />
+              ))}
+            </div>
+          )}
+        </SidebarGroupContent>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function SettingsNav({ onBack }: { onBack: () => void }) {
   const items = [
     { label: "General", icon: Settings, active: true },
@@ -436,10 +659,12 @@ function SettingsNav({ onBack }: { onBack: () => void }) {
 function ChatThreadRow({
   thread,
   active,
+  spaceRouteId,
   onActivate,
 }: {
   thread: ChatThreadSummary;
   active: boolean;
+  spaceRouteId?: string;
   onActivate: () => void;
 }) {
   const unread = isThreadUnread(thread);
@@ -458,13 +683,51 @@ function ChatThreadRow({
   );
 
   return (
+    <ThreadRowLink
+      thread={thread}
+      active={active}
+      spaceRouteId={spaceRouteId}
+      onActivate={onActivate}
+    >
+      {content}
+    </ThreadRowLink>
+  );
+}
+
+function ThreadRowLink({
+  thread,
+  active,
+  spaceRouteId,
+  onActivate,
+  children,
+}: {
+  thread: ChatThreadSummary;
+  active: boolean;
+  spaceRouteId?: string;
+  onActivate: () => void;
+  children: ReactNode;
+}) {
+  if (spaceRouteId) {
+    return (
+      <Link
+        to="/spaces/$spaceId/threads/$threadId"
+        params={{ spaceId: spaceRouteId, threadId: thread.id }}
+        className={threadRowClass(active)}
+        onClick={onActivate}
+      >
+        {children}
+      </Link>
+    );
+  }
+
+  return (
     <Link
       to="/threads/$id"
       params={{ id: thread.id }}
       className={threadRowClass(active)}
       onClick={onActivate}
     >
-      {content}
+      {children}
     </Link>
   );
 }
@@ -484,6 +747,18 @@ function threadIdFromThreadPath(pathname: string) {
   if (canonicalMatch) return decodeURIComponent(canonicalMatch[1]);
   const spaceMatch = /^\/spaces\/[^/]+\/threads\/([^/]+)$/.exec(pathname);
   return spaceMatch ? decodeURIComponent(spaceMatch[1]) : undefined;
+}
+
+function spaceIdFromThreadPath(pathname: string) {
+  const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function isGeneralSpace(space: SpaceNavSummary) {
+  return (
+    space.slug?.toLowerCase() === "general" ||
+    space.name?.toLowerCase() === "general"
+  );
 }
 
 interface ThreadSelectedDetail {

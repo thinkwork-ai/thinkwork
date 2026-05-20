@@ -32,6 +32,7 @@ interface CreateThreadVars {
   input: {
     tenantId: string;
     computerId: string;
+    spaceId?: string;
     title: string;
     channel: "CHAT";
     firstMessage?: string;
@@ -75,7 +76,11 @@ interface NewThreadMentionTargetsData {
   }>;
 }
 
-export function ComputerWorkbench() {
+interface ComputerWorkbenchProps {
+  spaceId?: string;
+}
+
+export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
   const navigate = useNavigate();
   const { tenantId } = useTenant();
   const [prompt, setPrompt] = useState("");
@@ -145,6 +150,7 @@ export function ComputerWorkbench() {
           input: {
             tenantId,
             computerId,
+            spaceId,
             title: titleFromPrompt(trimmed),
             channel: "CHAT",
             firstMessage: trimmed,
@@ -159,7 +165,7 @@ export function ComputerWorkbench() {
           setError("Thread created but no id returned");
           return;
         }
-        navigate({ to: "/threads/$id", params: { id: threadId } });
+        navigateToCreatedThread(navigate, threadId, spaceId);
         return;
       }
 
@@ -168,6 +174,7 @@ export function ComputerWorkbench() {
         input: {
           tenantId,
           computerId,
+          spaceId,
           title: titleFromPromptWithAttachments(trimmed, files),
           channel: "CHAT",
         },
@@ -225,7 +232,7 @@ export function ComputerWorkbench() {
         return;
       }
 
-      navigate({ to: "/threads/$id", params: { id: threadId } });
+      navigateToCreatedThread(navigate, threadId, spaceId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start work");
     } finally {
@@ -282,6 +289,21 @@ export function ComputerWorkbench() {
       </div>
     </section>
   );
+}
+
+function navigateToCreatedThread(
+  navigate: ReturnType<typeof useNavigate>,
+  threadId: string,
+  spaceId?: string,
+) {
+  if (spaceId) {
+    navigate({
+      to: "/spaces/$spaceId/threads/$threadId",
+      params: { spaceId, threadId },
+    });
+    return;
+  }
+  navigate({ to: "/threads/$id", params: { id: threadId } });
 }
 
 function titleFromPrompt(prompt: string): string {

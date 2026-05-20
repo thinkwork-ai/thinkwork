@@ -16,7 +16,7 @@ function SignInPage() {
   // If the user is already signed in, send them to the new-thread workspace.
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate({ to: "/new", replace: true });
+      navigate({ to: "/new", search: { spaceId: undefined }, replace: true });
     }
   }, [isAuthenticated, isLoading, navigate]);
 

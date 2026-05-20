@@ -242,17 +242,13 @@ describe("threadsPaged filter assembly", () => {
     expect(hasSpace).toBe(true);
   });
 
-  it("lets non-admin Space members list collaborative Space threads without a user_id filter", async () => {
+  it("lets non-admin tenant members list contextual workroom threads without a user_id filter", async () => {
     await threadsPaged_query(
       {},
       { tenantId: TENANT, spaceId: "space-onboarding" },
       { auth: { authType: "cognito" } } as any,
     );
-    expect(mockHasSpaceMemberAccess).toHaveBeenCalledWith(
-      { auth: { authType: "cognito" } },
-      TENANT,
-      "space-onboarding",
-    );
+    expect(mockHasSpaceMemberAccess).not.toHaveBeenCalled();
     const allConditions = capturedConditions.flat();
     const hasSpace = allConditions.some(
       (c: any) =>
@@ -264,23 +260,6 @@ describe("threadsPaged filter assembly", () => {
     );
     expect(hasSpace).toBe(true);
     expect(hasUser).toBe(false);
-  });
-
-  it("returns an empty page when a Cognito caller lacks Space access", async () => {
-    mockHasSpaceMemberAccess.mockResolvedValue(false);
-
-    const result = await threadsPaged_query(
-      {},
-      { tenantId: TENANT, spaceId: "space-locked" },
-      { auth: { authType: "cognito" } } as any,
-    );
-
-    expect(result).toEqual({ items: [], totalCount: 0 });
-    const allConditions = capturedConditions.flat();
-    const hasSpace = allConditions.some(
-      (c: any) => c?.__eq?.field === threadsTable.space_id,
-    );
-    expect(hasSpace).toBe(false);
   });
 
   it("adds a participant unread predicate for global Inbox filters", async () => {

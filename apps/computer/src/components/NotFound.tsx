@@ -11,7 +11,9 @@ export function NotFound() {
         admin.thinkwork.ai.
       </p>
       <Button asChild variant="outline" size="sm">
-        <Link to="/new">Back to ThinkWork</Link>
+        <Link to="/new" search={{ spaceId: undefined }}>
+          Back to ThinkWork
+        </Link>
       </Button>
     </div>
   );

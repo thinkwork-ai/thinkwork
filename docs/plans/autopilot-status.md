@@ -1038,6 +1038,58 @@ Target branch: `main`
 
 None.
 
+# Spaces Contextual Workrooms + Template Removal Autopilot - 2026-05-20
+
+## Status
+
+- Mode: Compound Engineering autopilot.
+- Target branch: `main`.
+- Plan: `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md`.
+- Requirements: `docs/brainstorms/2026-05-20-spaces-as-agent-context-modules-template-removal-requirements.md`.
+- Started: `2026-05-20T12:50:42Z`.
+- Current unit: U1 + U2 grouped because the plan recommends establishing the contextual workroom thread model and sidebar together.
+- Current branch: `codex/spaces-workrooms-u1-u2`.
+- Current worktree: `.Codex/worktrees/spaces-workrooms-u1-u2`.
+
+## Progress Log
+
+- `2026-05-20T12:50:42Z` - Read `AGENTS.md`, `ce-work` workflow, and the plan. Created isolated U1/U2 worktree from `origin/main`.
+- `2026-05-20T13:05:00Z` - Implemented U1/U2 locally: tenant members can use Spaces as contextual workrooms without per-Space membership gating, Computer `/new` can create a turn inside a selected Space, `/spaces` routes render workroom index/detail views, and the Chat sidebar now uses Codex-style global actions plus Chats/Spaces sections.
+- `2026-05-20T13:06:00Z` - Opened PR #1488 for U1/U2.
+- `2026-05-20T13:15:00Z` - Rebased #1488 onto `origin/main` after PR reported conflicts with the agent-mention routing hotfix, preserving the newer mention-routing behavior and reapplying contextual Space workrooms.
+
+## PRs
+
+- [#1488](https://github.com/thinkwork-ai/thinkwork/pull/1488) - U1/U2 contextual Space workrooms.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/threads/createThread.space.test.ts src/graphql/resolvers/threads/threadsPaged.query.test.ts src/graphql/resolvers/spaces/spaces.query.test.ts` - passed.
+- `pnpm --filter @thinkwork/computer test -- src/components/shell/ChatSidebar.test.tsx src/lib/graphql-queries.test.ts src/routes/_authed/_shell/-spaces-route.test.tsx` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/computer typecheck` - passed.
+- `pnpm --filter @thinkwork/api test` - passed, 349 files / 3,115 tests.
+- `pnpm --filter @thinkwork/computer test` - passed, 71 files / 480 tests.
+- `pnpm --filter @thinkwork/computer build` - passed.
+- Post-rebase: `pnpm --filter @thinkwork/api typecheck` - passed.
+- Post-rebase: `pnpm --filter @thinkwork/computer typecheck` - passed.
+- Post-rebase: `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/threads/createThread.space.test.ts src/graphql/resolvers/threads/createThread.mentions.test.ts src/graphql/resolvers/threads/threadsPaged.query.test.ts src/graphql/resolvers/spaces/spaces.query.test.ts` - passed.
+- Post-rebase: `pnpm --filter @thinkwork/computer test -- src/components/shell/ChatSidebar.test.tsx src/components/computer/ComputerWorkbench.test.tsx src/lib/graphql-queries.test.ts src/routes/_authed/_shell/-spaces-route.test.tsx` - passed.
+- Post-rebase: `pnpm --filter @thinkwork/api test` - passed, 353 files / 3,127 tests.
+- Post-rebase: `pnpm --filter @thinkwork/computer test` - passed, 71 files / 483 tests.
+- Post-rebase: `pnpm --filter @thinkwork/computer build` - passed.
+- `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --check <changed files>` - passed.
+- `git diff --check` - passed.
+- `pnpm format:check` - blocked locally because the root package does not expose a `prettier` binary (`sh: prettier: command not found`); used the locked Prettier package directly for changed-file formatting/checking.
+
+## CI / PR
+
+- [#1488](https://github.com/thinkwork-ai/thinkwork/pull/1488) - CI pending.
+
+## Blockers
+
+- None.
+
 # Amy Wiki Rebuild Resilience Hotfix - 2026-05-19
 
 ## Status

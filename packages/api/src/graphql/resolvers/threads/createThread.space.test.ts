@@ -238,7 +238,7 @@ beforeEach(() => {
 });
 
 describe("createThread Space participation", () => {
-  it("validates Space membership and inserts requester plus auto-subscribed agent participants", async () => {
+  it("uses an active tenant Space as turn context and inserts requester plus auto-subscribed agent participants", async () => {
     captures.spaceRows.push({
       id: "space-1",
       tenant_id: "tenant-1",
@@ -263,11 +263,7 @@ describe("createThread Space participation", () => {
     );
 
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
-    expect(mockHasSpaceMemberAccess).toHaveBeenCalledWith(
-      ctx,
-      "tenant-1",
-      "space-1",
-    );
+    expect(mockHasSpaceMemberAccess).not.toHaveBeenCalled();
     expect(captures.insertedThreads[0]).toMatchObject({
       tenant_id: "tenant-1",
       space_id: "space-1",
