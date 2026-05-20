@@ -40,13 +40,14 @@ describe("dispatchAgentMentions", () => {
       {
         tenantId: "tenant-1",
         agentId: "11111111-1111-4111-8111-111111111111",
-        source: "mention",
+        source: "chat_message",
         reason: "Coordinator mentioned in Thread",
         triggerDetail: "thread:thread-1:message:message-1",
         payload: {
           threadId: "thread-1",
           spaceId: "space-1",
           messageId: "message-1",
+          userMessage: "@Coordinator can you help?",
           mention: {
             displayName: "Coordinator",
             rawText: "@Coordinator",

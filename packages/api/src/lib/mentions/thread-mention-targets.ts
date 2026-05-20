@@ -152,7 +152,7 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
           targetType: "agent",
           targetId: row.agentId,
           displayName: row.agentName,
-          aliases: [row.agentName, row.agentSlug].filter(isString),
+          aliases: [row.agentName].filter(isString),
           avatarUrl: row.agentAvatarUrl,
           role: row.role,
         });
@@ -209,7 +209,7 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         targetType: "agent",
         targetId: row.agentId,
         displayName: row.agentName,
-        aliases: [row.agentName, row.agentSlug].filter(isString),
+        aliases: [row.agentName].filter(isString),
         avatarUrl: row.agentAvatarUrl,
         role: row.role,
       });
@@ -236,8 +236,8 @@ function targetFromRow(row: {
       id: `agent:${row.agentId}`,
       targetType: "agent",
       targetId: row.agentId,
-      displayName: row.agentName ?? row.agentSlug ?? "Agent",
-      aliases: [row.agentName, row.agentSlug].filter(isString),
+      displayName: row.agentName ?? "Agent",
+      aliases: [row.agentName].filter(isString),
       avatarUrl: row.agentAvatarUrl,
       role: row.role,
     };

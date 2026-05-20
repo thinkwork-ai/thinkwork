@@ -85,6 +85,9 @@ export const agents = pgTable(
       .default(sql`now()`),
   },
   (table) => [
+    uniqueIndex("uq_agents_tenant_name_active")
+      .on(table.tenant_id, sql`lower(trim(${table.name}))`)
+      .where(sql`${table.status} <> 'archived'`),
     index("idx_agents_tenant_id").on(table.tenant_id),
     index("idx_agents_type").on(table.type),
     index("idx_agents_status").on(table.status),

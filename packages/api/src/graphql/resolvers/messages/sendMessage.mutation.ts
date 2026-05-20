@@ -2,6 +2,7 @@ import type { GraphQLContext } from "../../context.js";
 import { GraphQLError } from "graphql";
 import {
   db,
+  and,
   eq,
   messageMentions,
   messages,
@@ -24,6 +25,8 @@ import {
   toThreadParticipantInsert,
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
+import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-routing.js";
+import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -86,6 +89,7 @@ export const sendMessage = async (
     targets: mentionTargets,
     explicitMentions: i.mentions,
   });
+  const messageActivityAt = new Date();
 
   const row = await db.transaction(async (tx) => {
     const [messageRow] = await tx
@@ -100,6 +104,7 @@ export const sendMessage = async (
         tool_calls: i.toolCalls ? JSON.parse(i.toolCalls) : undefined,
         tool_results: i.toolResults ? JSON.parse(i.toolResults) : undefined,
         metadata: parsedMetadata,
+        created_at: messageActivityAt,
       })
       .returning();
 
@@ -140,10 +145,38 @@ export const sendMessage = async (
       );
     }
 
+    await markSenderParticipantRead(
+      {
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        senderType,
+        senderId,
+        readAt: messageActivityAt,
+      },
+      {
+        async markUserParticipantRead(input) {
+          await tx
+            .update(threadParticipants)
+            .set({ last_read_at: input.readAt, updated_at: new Date() })
+            .where(
+              and(
+                eq(threadParticipants.tenant_id, input.tenantId),
+                eq(threadParticipants.thread_id, input.threadId),
+                eq(threadParticipants.participant_type, "user"),
+                eq(threadParticipants.user_id, input.userId),
+              ),
+            );
+        },
+      },
+    );
+
     return messageRow;
   });
 
-  if (parsedMentions.length > 0) {
+  const hasAgentMentions = parsedMentions.some(
+    (mention) => mention.targetType === "agent",
+  );
+  if (hasAgentMentions) {
     try {
       await dispatchAgentMentions({
         tenantId: thread.tenant_id,
@@ -156,6 +189,25 @@ export const sendMessage = async (
       });
     } catch (err) {
       console.warn("[sendMessage] agent mention dispatch failed:", err);
+    }
+  }
+  if (
+    isUserMessage &&
+    senderType === "user" &&
+    parsedMentions.length === 0 &&
+    !thread.computer_id
+  ) {
+    try {
+      await dispatchDefaultAgentTurn({
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        spaceId: thread.space_id,
+        messageId: row.id,
+        content: i.content,
+        sender: { type: senderType, id: senderId },
+      });
+    } catch (err) {
+      console.warn("[sendMessage] default agent dispatch failed:", err);
     }
   }
 
@@ -222,7 +274,7 @@ export const sendMessage = async (
   if (!isUserMessage || !thread.computer_id) {
     await db
       .update(threads)
-      .set({ updated_at: new Date() })
+      .set({ updated_at: messageActivityAt })
       .where(eq(threads.id, i.threadId));
     notifyThreadUpdate({
       threadId: i.threadId,
@@ -234,7 +286,11 @@ export const sendMessage = async (
 
   // Computer-owned Threads are picked up exclusively through the durable
   // Computer work queue. Agent fallback is intentionally disabled.
-  if (i.role.toLowerCase() === "user" && thread.computer_id) {
+  if (
+    i.role.toLowerCase() === "user" &&
+    thread.computer_id &&
+    parsedMentions.length === 0
+  ) {
     const handledByRunbook = await routeRunbookForComputerMessage({
       tenantId: thread.tenant_id,
       computerId: thread.computer_id,

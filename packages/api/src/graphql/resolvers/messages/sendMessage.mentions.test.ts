@@ -14,10 +14,19 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("db.transaction");
     expect(source).toContain("insert(messageMentions)");
     expect(source).toContain("insertMentionParticipants");
+    expect(source).toContain("markSenderParticipantRead");
     expect(source).toContain("dispatchAgentMentions");
     expect(source.indexOf("await insertMentionParticipants")).toBeLessThan(
       source.indexOf("await dispatchAgentMentions"),
     );
+  });
+
+  it("routes no-mention messages to the default agent without double-dispatching mentioned messages", () => {
+    expect(source).toContain("dispatchDefaultAgentTurn");
+    expect(source).toContain("parsedMentions.length === 0");
+    expect(source).toContain("hasAgentMentions");
+    expect(source).toContain("thread.computer_id &&");
+    expect(source).toContain("parsedMentions.length === 0");
   });
 
   it("publishes user messages to collaborative thread subscribers", () => {
@@ -28,6 +37,10 @@ describe("sendMessage mention collaboration path", () => {
   });
 
   it("refreshes activity for non-Computer Space collaboration user messages", () => {
+    expect(source).toContain("const messageActivityAt = new Date()");
+    expect(source).toContain("created_at: messageActivityAt");
+    expect(source).toContain("readAt: messageActivityAt");
+    expect(source).toContain("updated_at: messageActivityAt");
     expect(source).toContain("!isUserMessage || !thread.computer_id");
     expect(source).toContain(
       "collaboration without a Computer needs human messages",

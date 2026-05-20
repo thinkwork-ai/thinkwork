@@ -1889,10 +1889,10 @@ describe("TaskThreadView", () => {
     const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "@cot" } });
 
-    expect(screen.getByText("Scott Odom")).toBeTruthy();
+    expect(screen.getByText("@Scott Odom")).toBeTruthy();
     expect(screen.queryByText("Marco")).toBeNull();
 
-    fireEvent.click(screen.getByRole("option", { name: /Scott Odom/ }));
+    fireEvent.click(screen.getByRole("option", { name: /@Scott Odom/ }));
     expect(input.value).toBe("@Scott Odom ");
 
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));

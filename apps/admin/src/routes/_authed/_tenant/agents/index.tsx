@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useSubscription } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { AtSign, Bot, Plus } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -36,7 +36,6 @@ type AgentRow = {
   type: string;
   status: string;
   runtime: AgentRuntime | null;
-  mentionHandle: string | null;
   assignedSpaces: string[];
 };
 
@@ -51,24 +50,10 @@ const columns: ColumnDef<AgentRow>[] = [
     header: "Name",
     cell: ({ row }) => (
       <span className="flex items-center gap-1.5 font-medium whitespace-nowrap">
-        <Bot className="h-3.5 w-3.5 shrink-0 text-primary" />
+        <Bot className="h-3.5 w-3.5 shrink-0 text-primary" />@
         {row.original.name}
       </span>
     ),
-  },
-  {
-    accessorKey: "mentionHandle",
-    header: "Mention",
-    cell: ({ row }) =>
-      row.original.mentionHandle ? (
-        <Badge variant="outline" className="gap-1 text-xs whitespace-nowrap">
-          <AtSign className="h-3 w-3" />
-          {row.original.mentionHandle}
-        </Badge>
-      ) : (
-        <span className="text-xs text-muted-foreground">—</span>
-      ),
-    size: 140,
   },
   {
     accessorKey: "role",
@@ -192,7 +177,6 @@ function AgentsPage() {
       type: a.type,
       status: a.status,
       runtime: (a as any).runtime ?? null,
-      mentionHandle: a.slug ?? null,
       assignedSpaces: spacesByAgent.get(a.id) ?? [],
     }));
     const dir = sortDir === "asc" ? 1 : -1;
