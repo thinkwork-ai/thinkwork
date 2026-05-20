@@ -1434,6 +1434,7 @@ describe("runCompileJob", () => {
       ownerId: "a1",
       trigger: "memory_retain",
       nowEpochSeconds: 600,
+      dedupeDiscriminator: "continuation-job-1",
     });
     expect(mockRepo.completeCompileJob).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1506,6 +1507,7 @@ describe("runCompileJob", () => {
         ownerId: "a1",
         trigger: "memory_retain",
         nowEpochSeconds: 600,
+        dedupeDiscriminator: "continuation-job-1",
       });
       expect(mockAdapter.listRecordsUpdatedSince).toHaveBeenCalledTimes(1);
     } finally {
