@@ -325,6 +325,31 @@ describe("GraphQL Schema Contract", () => {
       const argNames = field.args.map((a) => a.name).sort();
       expect(argNames).toEqual(["agentId", "tenantId"]);
     });
+
+    it("collaborative Thread contracts expose mention targets and participant read state", () => {
+      const queryType = schema.getQueryType();
+      const mentionTargets = queryType!.getFields().threadMentionTargets;
+      expect(mentionTargets).toBeDefined();
+      expect(String(mentionTargets.type)).toBe("[ThreadMentionTarget!]!");
+      expect(mentionTargets.args.map((a) => a.name)).toEqual(["threadId"]);
+
+      const mentionTarget = schema.getType("ThreadMentionTarget") as any;
+      expect(mentionTarget).toBeDefined();
+      expect(Object.keys(mentionTarget.getFields())).toEqual([
+        "id",
+        "targetType",
+        "targetId",
+        "displayName",
+        "avatarUrl",
+        "role",
+      ]);
+
+      const participant = schema.getType("ThreadParticipant") as any;
+      expect(participant).toBeDefined();
+      expect(String(participant.getFields().lastReadAt.type)).toBe(
+        "AWSDateTime",
+      );
+    });
   });
 
   describe("terraform schema is subscription-only subset", () => {

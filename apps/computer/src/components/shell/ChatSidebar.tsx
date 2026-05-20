@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
 import {
@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import {
   groupThreadsByRecency,
   isThreadUnread,
+  selectNextThreadBelowDeleted,
   sortThreadsByActivityDesc,
   threadTitle,
   type ChatThreadSummary,
@@ -64,6 +65,7 @@ const SEARCH_LIMIT = 30;
 
 export function ChatSidebar() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
@@ -76,6 +78,8 @@ export function ChatSidebar() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const pendingThreadDeletes = usePendingThreadDeletes();
+  const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
+  const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
@@ -145,9 +149,56 @@ export function ChatSidebar() {
   });
 
   useEffect(() => {
-    function handleThreadDeleted() {
+    if (routeThreadId) {
+      setSelectedThreadId(routeThreadId);
+    } else if (location.pathname === "/new") {
+      setSelectedThreadId(undefined);
+    }
+  }, [location.pathname, routeThreadId]);
+
+  useEffect(() => {
+    if (!recentData?.threadsPaged?.items) return;
+    clearMissingThreadDeletes(
+      recentData.threadsPaged.items.map((thread) => thread.id),
+    );
+  }, [recentData?.threadsPaged?.items]);
+
+  const orderedRecentThreads = useMemo(
+    () => sortThreadsByActivityDesc(recentData?.threadsPaged?.items ?? []),
+    [recentData?.threadsPaged?.items],
+  );
+
+  useEffect(() => {
+    recentThreadOrderRef.current = orderedRecentThreads;
+    pendingThreadDeletesRef.current = pendingThreadDeletes;
+  }, [orderedRecentThreads, pendingThreadDeletes]);
+
+  useEffect(() => {
+    function handleThreadDeleted(event: Event) {
+      const detail = (event as CustomEvent<ThreadDeletedDetail>).detail;
+      const deletedThreadId = detail?.threadId;
+      const nextThreadId = deletedThreadId
+        ? selectNextThreadBelowDeleted(
+            recentThreadOrderRef.current,
+            deletedThreadId,
+            pendingThreadDeletesRef.current,
+          )
+        : null;
+
       reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
       reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+
+      if (nextThreadId) {
+        setSelectedThreadId(nextThreadId);
+        void navigate({
+          to: "/threads/$id",
+          params: { id: nextThreadId },
+          replace: true,
+        });
+      } else {
+        setSelectedThreadId(undefined);
+        void navigate({ to: "/new", replace: true });
+      }
     }
 
     function handleThreadSelected(event: Event) {
@@ -171,29 +222,14 @@ export function ChatSidebar() {
         handleThreadSelected,
       );
     };
-  }, [reexecuteRecentThreadsQuery, reexecuteSearchThreadsQuery]);
-
-  useEffect(() => {
-    if (routeThreadId) {
-      setSelectedThreadId(routeThreadId);
-    } else if (location.pathname === "/new") {
-      setSelectedThreadId(undefined);
-    }
-  }, [location.pathname, routeThreadId]);
-
-  useEffect(() => {
-    if (!recentData?.threadsPaged?.items) return;
-    clearMissingThreadDeletes(
-      recentData.threadsPaged.items.map((thread) => thread.id),
-    );
-  }, [recentData?.threadsPaged?.items]);
+  }, [navigate, reexecuteRecentThreadsQuery, reexecuteSearchThreadsQuery]);
 
   const recentThreads = useMemo(
     () =>
-      sortThreadsByActivityDesc(recentData?.threadsPaged?.items ?? []).filter(
+      orderedRecentThreads.filter(
         (thread) => !pendingThreadDeletes.has(thread.id),
       ),
-    [pendingThreadDeletes, recentData?.threadsPaged?.items],
+    [orderedRecentThreads, pendingThreadDeletes],
   );
   const recentGroups = useMemo(
     () => groupThreadsByRecency(recentThreads),
@@ -263,7 +299,7 @@ export function ChatSidebar() {
                 <SelectItem
                   key={space.id}
                   value={space.id}
-                  className="h-8 px-2 pr-10 text-sm leading-none"
+                  className="mx-1 h-8 w-[calc(100%-0.5rem)] px-2 [padding-right:2.75rem] text-sm [font-size:0.875rem] leading-none"
                 >
                   {space.name ?? space.slug ?? "Space"}
                 </SelectItem>
@@ -537,4 +573,8 @@ function threadIdFromThreadPath(pathname: string) {
 interface ThreadSelectedDetail {
   threadId?: string | null;
   spaceId?: string | null;
+}
+
+interface ThreadDeletedDetail {
+  threadId?: string | null;
 }
