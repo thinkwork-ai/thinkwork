@@ -39,6 +39,7 @@ interface ThreadResult {
     status?: string | null;
     lifecycleStatus?: string | null;
     costSummary?: number | null;
+    createdAt?: string | null;
     messages?: {
       edges?: Array<{
         node: {
@@ -149,6 +150,7 @@ export function ComputerThreadDetailRoute({
       })),
     [attachedData?.artifacts],
   );
+  const createdLabel = formatThreadCreatedAt(data?.thread?.createdAt);
 
   usePageHeaderActions({
     backHref,
@@ -159,13 +161,20 @@ export function ComputerThreadDetailRoute({
     // "Thread" inside the page the user is already on.
     documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
     action: (
-      <ThreadDetailActions
-        threadId={threadId}
-        threadTitle={threadTitle}
-        attachedArtifacts={attachedArtifacts}
-      />
+      <div className="flex items-center gap-2">
+        {createdLabel ? (
+          <span className="hidden whitespace-nowrap text-xs text-muted-foreground tabular-nums sm:inline">
+            {createdLabel}
+          </span>
+        ) : null}
+        <ThreadDetailActions
+          threadId={threadId}
+          threadTitle={threadTitle}
+          attachedArtifacts={attachedArtifacts}
+        />
+      </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}`,
   });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
@@ -423,6 +432,19 @@ export function ComputerThreadDetailRoute({
       runbookQueues={runbookQueues}
     />
   );
+}
+
+function formatThreadCreatedAt(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function withOptimisticUserTurn(

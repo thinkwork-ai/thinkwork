@@ -22,7 +22,6 @@ interface SpaceThreadListProps {
 }
 
 export function SpaceThreadList({
-  spaceId,
   threads,
   selectedThreadId,
   totalCount,
@@ -63,7 +62,6 @@ export function SpaceThreadList({
           {threads.map((thread) => (
             <ThreadRow
               key={thread.id}
-              spaceId={spaceId}
               thread={thread}
               selected={thread.id === selectedThreadId}
             />
@@ -75,11 +73,9 @@ export function SpaceThreadList({
 }
 
 function ThreadRow({
-  spaceId,
   thread,
   selected,
 }: {
-  spaceId: string;
   thread: SpaceThreadSummary;
   selected: boolean;
 }) {
@@ -89,8 +85,8 @@ function ThreadRow({
 
   return (
     <Link
-      to="/spaces/$spaceId/threads/$threadId"
-      params={{ spaceId, threadId: thread.id }}
+      to="/threads/$id"
+      params={{ id: thread.id }}
       className={cn(
         "block border-b px-3 py-3 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted",
         selected && "bg-muted",

@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { ComputerWorkbench } from "@/components/computer/ComputerWorkbench";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 
 export const Route = createFileRoute("/_authed/_shell/new")({
@@ -7,10 +7,6 @@ export const Route = createFileRoute("/_authed/_shell/new")({
 });
 
 function NewThreadPage() {
-  const navigate = useNavigate();
-  usePageHeaderActions({ title: "Spaces", hideTopBar: true });
-  useEffect(() => {
-    void navigate({ to: "/spaces", replace: true });
-  }, [navigate]);
-  return null;
+  usePageHeaderActions({ title: "New thread", hideTopBar: true });
+  return <ComputerWorkbench />;
 }

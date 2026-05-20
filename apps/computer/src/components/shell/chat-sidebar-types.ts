@@ -50,11 +50,29 @@ export function threadActivityAt(thread: ChatThreadSummary): string | null {
   );
 }
 
+export function sortThreadsByActivityDesc(
+  threads: ChatThreadSummary[],
+): ChatThreadSummary[] {
+  return [...threads].sort((left, right) => {
+    const leftTime = groupTime(left);
+    const rightTime = groupTime(right);
+    if (leftTime !== rightTime) return rightTime - leftTime;
+    return threadTitle(left).localeCompare(threadTitle(right));
+  });
+}
+
 export function isThreadUnread(thread: ChatThreadSummary): boolean {
   const activity = threadActivityAt(thread);
   if (!activity) return false;
   if (!thread.lastReadAt) return true;
   return new Date(thread.lastReadAt).getTime() < new Date(activity).getTime();
+}
+
+function activityTime(thread: ChatThreadSummary): number {
+  const activity = threadActivityAt(thread);
+  if (!activity) return 0;
+  const time = new Date(activity).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 export function formatRelativeDate(value?: string | null): string {
@@ -113,7 +131,6 @@ export function recencyGroupLabel(value?: string | null): string {
   );
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return "Last Week";
   return "Older";
 }
 
@@ -129,4 +146,8 @@ export function groupThreadsByRecency(threads: ChatThreadSummary[]) {
     group.threads.push(thread);
   }
   return groups;
+}
+
+function groupTime(thread: ChatThreadSummary): number {
+  return activityTime(thread);
 }

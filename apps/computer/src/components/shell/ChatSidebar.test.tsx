@@ -1,15 +1,18 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { queryDocs, tenantMock, locationMock } = vi.hoisted(() => ({
-  tenantMock: vi.fn(),
-  locationMock: vi.fn(),
-  queryDocs: {
-    ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
-    SpacesQuery: Symbol("SpacesQuery"),
-    ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
-  },
-}));
+const { queryDocs, tenantMock, locationMock, navigateMock } = vi.hoisted(
+  () => ({
+    tenantMock: vi.fn(),
+    locationMock: vi.fn(),
+    navigateMock: vi.fn(),
+    queryDocs: {
+      ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
+      SpacesQuery: Symbol("SpacesQuery"),
+      ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
+    },
+  }),
+);
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMock(),
@@ -21,22 +24,31 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
     to,
+    params,
     search,
     ...props
   }: {
     children: React.ReactNode;
     to: string;
+    params?: Record<string, string>;
     search?: Record<string, string>;
-  }) => (
-    <a
-      href={`${to}${search?.spaceId ? `?spaceId=${search.spaceId}` : ""}`}
-      {...props}
-    >
-      {children}
-    </a>
-  ),
+  }) => {
+    const href = to
+      .replace("$spaceId", params?.spaceId ?? "$spaceId")
+      .replace("$threadId", params?.threadId ?? "$threadId")
+      .replace("$id", params?.id ?? "$id");
+    return (
+      <a
+        href={`${href}${search?.spaceId ? `?spaceId=${search.spaceId}` : ""}`}
+        {...props}
+      >
+        {children}
+      </a>
+    );
+  },
   useRouterState: ({ select }: { select: (state: unknown) => unknown }) =>
     select({ location: locationMock() }),
+  useNavigate: () => navigateMock,
 }));
 
 vi.mock("urql", () => ({
@@ -47,6 +59,13 @@ vi.mock("urql", () => ({
           fetching: false,
           data: {
             spaces: [
+              {
+                id: "space-general",
+                slug: "general",
+                name: "General",
+                unreadThreadCount: 0,
+                lastActivityAt: "2026-05-19T19:00:00Z",
+              },
               {
                 id: "space-1",
                 slug: "customer-onboarding",
@@ -121,7 +140,47 @@ vi.mock("@thinkwork/ui", () => ({
     children: React.ReactNode;
     asChild?: boolean;
   }) => (asChild ? children : <button {...props}>{children}</button>),
+  Dialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode;
+    open?: boolean;
+  }) => (open ? <div>{children}</div> : null),
+  DialogContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
+  ),
   Input: (props: React.ComponentProps<"input">) => <input {...props} />,
+  Select: ({
+    children,
+    value,
+  }: {
+    children: React.ReactNode;
+    value?: string;
+  }) => <div data-value={value}>{children}</div>,
+  SelectContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectItem: ({
+    children,
+    value,
+  }: {
+    children: React.ReactNode;
+    value: string;
+  }) => (
+    <div role="option" data-value={value}>
+      {children}
+    </div>
+  ),
+  SelectTrigger: ({ children, ...props }: React.ComponentProps<"button">) => (
+    <button {...props}>{children}</button>
+  ),
+  SelectValue: ({ placeholder }: { placeholder?: string }) => (
+    <span>{placeholder}</span>
+  ),
   SidebarGroup: ({ children }: { children: React.ReactNode }) => (
     <section>{children}</section>
   ),
@@ -143,42 +202,39 @@ afterEach(() => {
   cleanup();
   tenantMock.mockReset();
   locationMock.mockReset();
+  navigateMock.mockReset();
 });
 
 describe("ChatSidebar", () => {
-  it("renders global Inbox above Space nav and recency groups", () => {
+  it("renders Codex-style action nav and recency groups without Inbox", () => {
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
       pathname: "/threads",
-      search: { spaceId: "space-1" },
+      search: { spaceId: "space-general" },
     });
 
     render(<ChatSidebar />);
 
+    expect(screen.getByRole("button", { name: /switch space/i })).toBeTruthy();
+    expect(screen.queryByText("Inbox")).toBeNull();
+    expect(screen.queryByRole("option", { name: /all spaces/i })).toBeNull();
+    expect(screen.getByRole("option", { name: /general/i })).toBeTruthy();
     expect(
-      screen.getByRole("textbox", { name: /search chat threads/i }),
+      screen.getByRole("option", { name: /customer onboarding/i }),
     ).toBeTruthy();
-    expect(screen.getByText("Inbox (1)")).toBeTruthy();
-    expect(screen.getByText("Inbox mention")).toBeTruthy();
-    expect(screen.getByText("Spaces")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /new chat/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
     expect(
       screen
-        .getAllByRole("link", { name: /customer onboarding/i })
-        .find(
-          (link) => link.getAttribute("href") === "/threads?spaceId=space-1",
-        )
-        ?.getAttribute("href"),
-    ).toBe("/threads?spaceId=space-1");
-    const activeSpaceLink = screen
-      .getAllByRole("link", { name: /customer onboarding/i })
-      .find((link) => link.getAttribute("aria-current") === "page");
-    expect(activeSpaceLink?.getAttribute("href")).toBe(
-      "/threads?spaceId=space-1",
-    );
+        .getByRole("link", { name: /recent space thread/i })
+        .getAttribute("href"),
+    ).toBe("/threads/thread-recent");
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
 
-  it("uses Space thread route params as the active Space context", () => {
+  it("uses Space thread route params without showing a list title above Today", () => {
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
       pathname: "/spaces/space-1/threads/thread-recent",
@@ -187,12 +243,14 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
-    expect(screen.getByText("Space:")).toBeTruthy();
-    const activeSpaceLink = screen
-      .getAllByRole("link", { name: /customer onboarding/i })
-      .find((link) => link.getAttribute("aria-current") === "page");
-    expect(activeSpaceLink?.getAttribute("href")).toBe(
-      "/threads?spaceId=space-1",
-    );
+    expect(
+      screen.queryByRole("heading", { name: "Customer Onboarding" }),
+    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Conversations" })).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: /recent space thread/i })
+        .getAttribute("href"),
+    ).toBe("/threads/thread-recent");
   });
 });

@@ -1,11 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Brain,
-  CircleHelp,
   GalleryVerticalEnd,
+  Moon,
   Repeat,
   SlidersHorizontal,
   Shapes,
+  Sun,
 } from "lucide-react";
 import {
   Button,
@@ -21,6 +22,7 @@ import {
   SidebarTrigger,
   UserMenu,
   useSidebar,
+  useTheme,
 } from "@thinkwork/ui";
 import type { FileRouteTypes } from "@/routeTree.gen";
 import { useAuth } from "@/context/AuthContext";
@@ -30,7 +32,6 @@ import {
   COMPUTER_MEMORY_ROUTE,
   COMPUTER_SPACES_ROUTE,
 } from "@/lib/computer-routes";
-import { AppModeTabs } from "@/components/shell/AppModeTabs";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
 
 interface NavItem {
@@ -58,8 +59,10 @@ const secondaryNavItems: NavItem[] = [
 export function ComputerSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { state, setOpen } = useSidebar();
+  const { theme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
   const isCollapsed = state === "collapsed";
+  const nextTheme = theme === "dark" ? "light" : "dark";
   const isChatMode =
     pathname === "/threads" ||
     pathname.startsWith("/threads/") ||
@@ -68,7 +71,7 @@ export function ComputerSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="space-y-3 pb-3">
+      <SidebarHeader className="pb-3">
         <div className="flex items-center gap-2 px-1">
           <Link
             to="/threads"
@@ -96,7 +99,6 @@ export function ComputerSidebar() {
           </Link>
           <SidebarTrigger className="mt-0.5 shrink-0 self-start group-data-[collapsible=icon]:hidden" />
         </div>
-        <AppModeTabs />
       </SidebarHeader>
 
       <SidebarContent className="min-h-0">
@@ -106,23 +108,38 @@ export function ComputerSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-2 group-data-[collapsible=icon]:p-1">
         <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
           {user ? (
-            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+            <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[collapsible=icon]:hidden">
               <UserMenu
                 name={user.name}
                 email={user.email}
                 onSignOut={signOut}
               />
+              <div className="min-w-0">
+                <div className="truncate text-xs font-medium leading-tight">
+                  {user.name ?? user.email ?? "Account"}
+                </div>
+                {user.email ? (
+                  <div className="truncate text-xs leading-tight text-sidebar-foreground/55">
+                    {user.email}
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 shrink-0 gap-1.5 rounded-full border-sidebar-border bg-sidebar"
-            disabled
+            variant="ghost"
+            size="icon-sm"
+            className="ml-auto shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:ml-0"
+            aria-label={`Switch to ${nextTheme} mode`}
+            title={`Switch to ${nextTheme} mode`}
+            onClick={toggleTheme}
           >
-            <CircleHelp className="size-4" />
-            <span className="group-data-[collapsible=icon]:sr-only">Help</span>
+            {theme === "dark" ? (
+              <Sun className="size-4" />
+            ) : (
+              <Moon className="size-4" />
+            )}
           </Button>
         </div>
       </SidebarFooter>

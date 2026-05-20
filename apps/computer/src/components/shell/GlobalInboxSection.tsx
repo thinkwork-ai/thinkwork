@@ -1,12 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { Circle } from "lucide-react";
 import { SidebarGroup, SidebarGroupLabel } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
 import {
   formatCompactCount,
-  formatRelativeDate,
   isThreadUnread,
-  threadActivityAt,
   threadTitle,
   type ChatThreadSummary,
 } from "./chat-sidebar-types";
@@ -64,30 +61,17 @@ export function GlobalInboxSection({
 
 function InboxThreadRow({ thread }: { thread: ChatThreadSummary }) {
   const unread = isThreadUnread(thread);
-  const activity = threadActivityAt(thread);
-  const spaceName = thread.space?.name ?? thread.space?.slug ?? "No Space";
 
   const content = (
     <>
       <span
         className={cn(
-          "mt-1 size-2 shrink-0 rounded-full",
+          "size-2 shrink-0 rounded-full",
           unread ? "bg-blue-500" : "bg-sidebar-foreground/20",
         )}
       />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium leading-5">
-          {threadTitle(thread)}
-        </span>
-        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-sidebar-foreground/55">
-          <span className="truncate">{spaceName}</span>
-          {activity ? (
-            <>
-              <Circle className="size-1 fill-current" />
-              <span className="shrink-0">{formatRelativeDate(activity)}</span>
-            </>
-          ) : null}
-        </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        {threadTitle(thread)}
       </span>
     </>
   );
@@ -95,9 +79,9 @@ function InboxThreadRow({ thread }: { thread: ChatThreadSummary }) {
   if (thread.spaceId) {
     return (
       <Link
-        to="/spaces/$spaceId/threads/$threadId"
-        params={{ spaceId: thread.spaceId, threadId: thread.id }}
-        className="flex min-w-0 items-start gap-2 rounded-md px-2 py-2 text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        to="/threads/$id"
+        params={{ id: thread.id }}
+        className="flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
       >
         {content}
       </Link>
@@ -108,7 +92,7 @@ function InboxThreadRow({ thread }: { thread: ChatThreadSummary }) {
     <Link
       to="/threads/$id"
       params={{ id: thread.id }}
-      className="flex min-w-0 items-start gap-2 rounded-md px-2 py-2 text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+      className="flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
     >
       {content}
     </Link>
