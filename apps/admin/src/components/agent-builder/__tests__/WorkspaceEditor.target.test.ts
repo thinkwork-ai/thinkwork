@@ -52,6 +52,12 @@ describe("workspace editor target capabilities", () => {
     );
   });
 
+  it("keys Space source targets by durable id", () => {
+    expect(workspaceEditorTargetKey({ spaceId: "space-eng" })).toBe(
+      "space:space-eng",
+    );
+  });
+
   it("has no toolbar entry points to gutted flows", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),

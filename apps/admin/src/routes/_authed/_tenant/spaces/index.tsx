@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { FolderKanban, Plus } from "lucide-react";
+import { Boxes, Plus } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
@@ -39,10 +39,10 @@ type SpaceRow = {
   slug: string;
   kind: string;
   status: string;
-  memberCount: number;
   agentCount: number;
-  checklistItemCount: number;
-  integrationCount: number;
+  mcpServerCount: number;
+  toolPolicyCount: number;
+  connectedDataCount: number;
   updatedAt: string;
 };
 
@@ -75,32 +75,34 @@ const columns: ColumnDef<SpaceRow>[] = [
     size: 90,
   },
   {
-    accessorKey: "checklistItemCount",
-    header: "Checklist",
+    accessorKey: "mcpServerCount",
+    header: "MCP",
     cell: ({ row }) => (
       <span className="text-sm tabular-nums">
-        {row.original.checklistItemCount}
+        {row.original.mcpServerCount}
       </span>
     ),
     size: 100,
   },
   {
-    accessorKey: "memberCount",
-    header: "Members",
+    accessorKey: "toolPolicyCount",
+    header: "Tools",
     cell: ({ row }) => (
-      <span className="text-sm tabular-nums">{row.original.memberCount}</span>
+      <span className="text-sm tabular-nums">
+        {row.original.toolPolicyCount}
+      </span>
     ),
     size: 100,
   },
   {
-    accessorKey: "integrationCount",
-    header: "Integrations",
+    accessorKey: "connectedDataCount",
+    header: "Connected Data",
     cell: ({ row }) => (
       <span className="text-sm tabular-nums">
-        {row.original.integrationCount}
+        {row.original.connectedDataCount}
       </span>
     ),
-    size: 110,
+    size: 140,
   },
   {
     accessorKey: "status",
@@ -150,15 +152,13 @@ function SpacesPage() {
       slug: space.slug,
       kind: space.kind,
       status: space.status,
-      memberCount: space.members.length,
       agentCount: space.agentAssignments.filter(
         (assignment) => assignment.status === "ACTIVE",
       ).length,
-      checklistItemCount: space.checklistTemplates.reduce(
-        (count, template) => count + template.items.length,
-        0,
-      ),
-      integrationCount: space.integrations.length,
+      mcpServerCount: space.mcpServers.filter((server) => server.enabled)
+        .length,
+      toolPolicyCount: countPolicyItems(space.toolPolicy),
+      connectedDataCount: countPolicyItems(space.connectedDataConfig),
       updatedAt: space.updatedAt,
     }));
   }, [result.data?.spaces]);
@@ -172,7 +172,7 @@ function SpacesPage() {
         <>
           <PageHeader
             title="Spaces"
-            description="Configure collaborative workspaces, assigned agents, checklists, members, and integration policy."
+            description="Configure contextual workrooms: workspace files, connected data, tools, MCP servers, and agent availability."
             actions={
               <Button size="sm" onClick={() => setNewSpaceOpen(true)}>
                 <Plus className="h-4 w-4" />
@@ -197,9 +197,9 @@ function SpacesPage() {
         </div>
       ) : rows.length === 0 && !isLoading ? (
         <EmptyState
-          icon={FolderKanban}
+          icon={Boxes}
           title="No Spaces yet"
-          description="Spaces will appear here as tenant workspace configuration is seeded."
+          description="Spaces will appear here as contextual workrooms are seeded."
         />
       ) : (
         <DataTable
@@ -232,6 +232,22 @@ function formatLabel(value: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function countPolicyItems(value: unknown) {
+  if (!value || typeof value !== "object") return 0;
+  if (Array.isArray(value)) return value.length;
+  return Object.values(value as Record<string, unknown>).reduce(
+    (count, item) => {
+      if (Array.isArray(item)) return count + item.length;
+      if (item && typeof item === "object") return count + 1;
+      if (item !== null && item !== undefined && item !== false) {
+        return count + 1;
+      }
+      return count;
+    },
+    0,
+  );
 }
 
 function NewSpaceDialog({

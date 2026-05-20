@@ -97,6 +97,11 @@ vi.mock("../graphql/utils.js", () => {
       slug: tableCol("agent_templates.slug"),
       tenant_id: tableCol("agent_templates.tenant_id"),
     },
+    spaces: {
+      id: tableCol("spaces.id"),
+      slug: tableCol("spaces.slug"),
+      tenant_id: tableCol("spaces.tenant_id"),
+    },
     tenants: {
       id: tableCol("tenants.id"),
       slug: tableCol("tenants.slug"),
@@ -215,6 +220,7 @@ const TENANT_A = "tenant-a-id";
 const TENANT_B = "tenant-b-id";
 const AGENT_ID = "agent-marco-id";
 const TEMPLATE_ID = "template-exec-id";
+const SPACE_ID = "space-eng-id";
 const COMPUTER_ID = "computer-marco-id";
 const USER_ID = "user-eric-id";
 const EMAIL = "eric@acme.com";
@@ -262,6 +268,10 @@ function agentRow(overrides: Record<string, unknown> = {}) {
 
 function templateRowTenantA() {
   return { id: TEMPLATE_ID, slug: "exec-assistant", tenant_id: TENANT_A };
+}
+
+function spaceRowTenantA() {
+  return { id: SPACE_ID, slug: "engineering", tenant_id: TENANT_A };
 }
 
 function tenantRow(id = TENANT_A, slug = "acme", name = "Acme") {
@@ -477,6 +487,29 @@ describe("target selection", () => {
       ),
     );
     expect(res.statusCode).toBe(400);
+  });
+
+  it("reads Space source files from the contextual workroom prefix", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([spaceRowTenantA()]);
+    pushDbRows([tenantRow()]);
+
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/spaces/engineering/source/AGENTS.md",
+      })
+      .resolves(body("# Engineering Space"));
+
+    const res = await parse(
+      await handler(
+        event({ action: "get", spaceId: SPACE_ID, path: "AGENTS.md" }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.source).toBe("space");
+    expect(res.body.content).toBe("# Engineering Space");
   });
 });
 

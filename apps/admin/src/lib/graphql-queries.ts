@@ -164,18 +164,13 @@ export const SpacesListQuery = graphql(`
       description
       status
       kind
-      templateKey
+      contextConfig
+      connectedDataConfig
+      toolPolicy
+      mcpPolicy
+      agentAvailabilityPolicy
+      triggerConfig
       updatedAt
-      members {
-        id
-        role
-        user {
-          id
-          name
-          email
-          image
-        }
-      }
       agentAssignments {
         id
         localRole
@@ -188,19 +183,15 @@ export const SpacesListQuery = graphql(`
           avatarUrl
         }
       }
-      checklistTemplates {
+      mcpServers {
         id
-        name
-        items {
+        enabled
+        mcpServer {
           id
-          required
+          name
+          slug
+          status
         }
-      }
-      integrations {
-        id
-        provider
-        status
-        writebackPolicy
       }
     }
   }
@@ -216,24 +207,20 @@ export const CreateSpaceMutation = graphql(`
       description
       status
       kind
-      templateKey
+      contextConfig
+      connectedDataConfig
+      toolPolicy
+      mcpPolicy
+      agentAvailabilityPolicy
+      triggerConfig
       updatedAt
-      members {
-        id
-        role
-      }
       agentAssignments {
         id
         status
       }
-      checklistTemplates {
+      mcpServers {
         id
-        items {
-          id
-        }
-      }
-      integrations {
-        id
+        enabled
       }
     }
   }
@@ -250,21 +237,16 @@ export const SpaceAdminDetailQuery = graphql(`
       prompt
       status
       kind
-      templateKey
+      contextConfig
+      connectedDataConfig
+      toolPolicy
+      mcpPolicy
+      agentAvailabilityPolicy
+      triggerConfig
+      renderDiagnostics
       config
       createdAt
       updatedAt
-      members {
-        id
-        role
-        notificationPreference
-        user {
-          id
-          name
-          email
-          image
-        }
-      }
       agentAssignments {
         id
         agentId
@@ -282,30 +264,22 @@ export const SpaceAdminDetailQuery = graphql(`
           status
         }
       }
-      checklistTemplates {
+      mcpServers {
         id
-        key
-        name
-        description
+        mcpServerId
+        enabled
         config
-        items {
+        mcpServer {
           id
-          key
-          title
-          description
-          roleKey
-          required
-          sortOrder
-          externalTaskTemplate
+          name
+          slug
+          transport
+          authType
+          oauthProvider
+          tools
+          enabled
+          status
         }
-      }
-      integrations {
-        id
-        provider
-        status
-        writebackPolicy
-        config
-        webhookConfigRef
       }
     }
   }
