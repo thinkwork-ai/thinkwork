@@ -59,6 +59,9 @@ export const spaces = pgTable(
     uniqueIndex("uq_spaces_tenant_slug").on(table.tenant_id, table.slug),
     index("idx_spaces_tenant_status").on(table.tenant_id, table.status),
     index("idx_spaces_tenant_template").on(table.tenant_id, table.template_key),
+    index("idx_spaces_migrated_template")
+      .on(table.tenant_id, table.template_key)
+      .where(sql`${table.template_key} LIKE 'agent-template:%'`),
     check(
       "spaces_status_allowed",
       sql`${table.status} IN ('active','archived')`,
