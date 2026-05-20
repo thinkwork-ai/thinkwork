@@ -50,7 +50,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatTinyRelativeDate,
-  groupThreadsByRecency,
   isThreadUnread,
   selectNextThreadBelowDeleted,
   sortThreadsByActivityDesc,
@@ -507,7 +506,6 @@ function ThreadListSection({
     ? threads
     : threads.slice(0, SECTION_THREAD_LIMIT);
   const hiddenCount = threads.length - visibleThreads.length;
-  const groups = groupThreadsByRecency(visibleThreads);
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/thread-section">
@@ -529,25 +527,14 @@ function ThreadListSection({
               No threads yet
             </p>
           ) : (
-            <div className="space-y-2">
-              {groups.map((group) => (
-                <div key={group.label}>
-                  {groups.length > 1 ? (
-                    <div className="mb-1 px-2 text-[11px] font-medium text-sidebar-foreground/45">
-                      {group.label}
-                    </div>
-                  ) : null}
-                  <div className="space-y-0.5">
-                    {group.threads.map((thread) => (
-                      <ChatThreadRow
-                        key={thread.id}
-                        thread={thread}
-                        active={selectedThreadId === thread.id}
-                        onActivate={() => onActivate(thread.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
+            <div className="space-y-0.5">
+              {visibleThreads.map((thread) => (
+                <ChatThreadRow
+                  key={thread.id}
+                  thread={thread}
+                  active={selectedThreadId === thread.id}
+                  onActivate={() => onActivate(thread.id)}
+                />
               ))}
               {hiddenCount > 0 ? (
                 <button
@@ -801,7 +788,7 @@ function ChatThreadRow({
           ) : null}
           <button
             type="button"
-            className="absolute right-1 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-destructive group-hover/thread-row:flex"
+            className="absolute right-1 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
             aria-label={`Delete ${title}`}
             onClick={(event) => {
               event.preventDefault();

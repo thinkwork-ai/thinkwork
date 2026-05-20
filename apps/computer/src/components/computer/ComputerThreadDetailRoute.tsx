@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { Info, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Info, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
 import {
@@ -482,14 +482,12 @@ export function ComputerThreadDetailRoute({
                 ? "Close artifact side panel"
                 : "Open artifact side panel"
             }
-            className={artifactPanelOpen ? undefined : "text-muted-foreground"}
+            className={
+              artifactPanelOpen ? "text-primary" : "text-muted-foreground"
+            }
             onClick={() => setArtifactPanelOpen((open) => !open)}
           >
-            {artifactPanelOpen ? (
-              <PanelRightClose className="size-4" />
-            ) : (
-              <PanelRightOpen className="size-4" />
-            )}
+            <PanelRight className="size-4" />
           </Button>
         ) : null}
       </div>

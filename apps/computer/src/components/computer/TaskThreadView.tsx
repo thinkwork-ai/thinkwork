@@ -320,8 +320,6 @@ export function TaskThreadView({
           </ConversationContent>
         </Conversation>
 
-        <ThreadInfoPanel state={infoPanelState} />
-
         <div
           ref={composerDockRef}
           className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6"
@@ -337,6 +335,8 @@ export function TaskThreadView({
           </div>
         </div>
       </section>
+
+      <ThreadInfoPanel state={infoPanelState} />
 
       <ArtifactSidePanel
         artifact={selectedArtifact}
@@ -459,7 +459,7 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
 
   return (
     <aside
-      className="absolute right-4 top-4 z-20 w-[300px] rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl"
+      className="mr-4 mt-4 hidden w-[300px] shrink-0 self-start rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >

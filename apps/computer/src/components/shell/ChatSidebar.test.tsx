@@ -348,7 +348,7 @@ describe("ChatSidebar", () => {
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
 
-  it("uses Space thread route params without showing a list title above Today", () => {
+  it("uses Space thread route params without showing a list title above thread rows", () => {
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
       pathname: "/spaces/space-1/threads/thread-recent",
@@ -361,6 +361,9 @@ describe("ChatSidebar", () => {
       screen.queryByRole("heading", { name: "Customer Onboarding" }),
     ).toBeNull();
     expect(screen.queryByRole("heading", { name: "Conversations" })).toBeNull();
+    expect(screen.queryByText("Today")).toBeNull();
+    expect(screen.queryByText("Yesterday")).toBeNull();
+    expect(screen.queryByText("Older")).toBeNull();
     expect(
       screen
         .getByRole("link", { name: /recent space thread/i })
@@ -386,6 +389,9 @@ describe("ChatSidebar", () => {
     expect(screen.getByText("Chat 1")).toBeTruthy();
     expect(screen.getByText("Chat 5")).toBeTruthy();
     expect(screen.queryByText("Chat 6")).toBeNull();
+    expect(screen.queryByText("Today")).toBeNull();
+    expect(screen.queryByText("Yesterday")).toBeNull();
+    expect(screen.queryByText("Older")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Show more (2)" }));
 

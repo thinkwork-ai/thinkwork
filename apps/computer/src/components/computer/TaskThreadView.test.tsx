@@ -196,7 +196,7 @@ describe("TaskThreadView", () => {
     expect(within(panel).getByTestId("inline-applet-embed-stub")).toBeTruthy();
   });
 
-  it("renders a floating thread info panel with details and downloadable attachments", () => {
+  it("renders an inline thread info panel with details and downloadable attachments", () => {
     const onDownloadAttachment = vi.fn();
 
     render(
@@ -235,6 +235,8 @@ describe("TaskThreadView", () => {
     );
 
     const panel = screen.getByTestId("thread-info-panel");
+    expect(panel.className).toContain("w-[300px]");
+    expect(panel.className).not.toContain("absolute");
     expect(within(panel).getByText("Date started")).toBeTruthy();
     expect(within(panel).getByText("Eric Odom")).toBeTruthy();
     expect(within(panel).getByText("Executive")).toBeTruthy();
