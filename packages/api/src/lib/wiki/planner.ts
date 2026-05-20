@@ -697,8 +697,12 @@ export function validatePlannerResult(
     if (typeof p.mentionId !== "string" || p.mentionId.length === 0) {
       throw new Error("promotions.mentionId missing");
     }
-    if (!isPageType(p.type))
+    if (!isPageType(p.type) && normalizeEntityTypePage(p, "promotions")) {
+      // A model may put the ontology entity slug in `type`; normalize that
+      // common shape to the wiki page taxonomy.
+    } else if (!isPageType(p.type)) {
       throw new Error(`promotions.type invalid: ${p.type}`);
+    }
     validateOptionalString(p, "entityTypeSlug", "promotions");
     if (Array.isArray(p.sections)) {
       for (const section of p.sections as unknown[]) {

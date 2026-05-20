@@ -99,6 +99,27 @@ describe("validatePlannerResult", () => {
     });
   });
 
+  it("normalizes ontology entity slugs on promoted mentions", () => {
+    const plan = basePlan({
+      promotions: [
+        {
+          mentionId: "mention-1",
+          reason: "Repeated trip evidence.",
+          type: "place",
+          title: "Florence",
+          slug: "florence",
+          sections: [],
+        },
+      ],
+    });
+
+    expect(() => validatePlannerResult(plan)).not.toThrow();
+    expect((plan.promotions as Array<Record<string, unknown>>)[0]).toMatchObject({
+      type: "entity",
+      entityTypeSlug: "place",
+    });
+  });
+
   it("drops page update facet slugs when the entity type is missing", () => {
     const plan = basePlan({
       pageUpdates: [
