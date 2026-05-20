@@ -257,13 +257,13 @@ export function ChatSidebar() {
               align="start"
               sideOffset={4}
               avoidCollisions={false}
-              className="w-[var(--radix-select-trigger-width)] p-3"
+              className="w-[var(--radix-select-trigger-width)] p-2"
             >
               {spaces.map((space) => (
                 <SelectItem
                   key={space.id}
                   value={space.id}
-                  className="mx-1 w-auto px-3 py-2 text-base"
+                  className="h-8 px-2 pr-10 text-sm leading-none"
                 >
                   {space.name ?? space.slug ?? "Space"}
                 </SelectItem>
