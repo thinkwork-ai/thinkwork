@@ -19,5 +19,6 @@ export {
   spaceAgentAssignmentTypeResolvers,
   spaceChecklistTemplateTypeResolvers,
   spaceMemberTypeResolvers,
+  spaceMcpServerTypeResolvers,
   spaceTypeResolvers,
 } from "./types.js";

@@ -1,8 +1,10 @@
 /**
- * MCP Server tables: tenant_mcp_servers, agent_mcp_servers.
+ * MCP Server tables: tenant_mcp_servers, agent_mcp_servers, space_mcp_servers.
  *
  * MCP servers are registered at the tenant level (shared catalog), then
- * assigned to agent templates and synced to individual agents.
+ * assigned to agents for baseline access or Spaces for contextual workroom
+ * access. Template assignment remains until the template-removal migration
+ * units cut over existing data.
  *
  * Auth patterns:
  *   - 'none': no auth headers
@@ -25,6 +27,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core.js";
 import { agents } from "./agents.js";
+import { spaces } from "./spaces.js";
 
 // ---------------------------------------------------------------------------
 // tenant_mcp_servers — tenant-level registry of available MCP servers
@@ -124,6 +127,45 @@ export const agentMcpServers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// space_mcp_servers — per-Space contextual MCP enablement
+// ---------------------------------------------------------------------------
+
+export const spaceMcpServers = pgTable(
+  "space_mcp_servers",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    space_id: uuid("space_id")
+      .references(() => spaces.id, { onDelete: "cascade" })
+      .notNull(),
+    mcp_server_id: uuid("mcp_server_id")
+      .references(() => tenantMcpServers.id)
+      .notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    /** Space-level overrides: { toolAllowlist?: string[], ... } */
+    config: jsonb("config"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_space_mcp_servers").on(table.space_id, table.mcp_server_id),
+    index("idx_space_mcp_servers_space").on(table.tenant_id, table.space_id),
+    index("idx_space_mcp_servers_server").on(
+      table.tenant_id,
+      table.mcp_server_id,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // agent_template_mcp_servers — template-level MCP assignment (replaces JSONB)
 // ---------------------------------------------------------------------------
 
@@ -177,7 +219,9 @@ export const tenantMcpContextTools = pgTable(
     tool_name: text("tool_name").notNull(),
     display_name: text("display_name"),
     declared_read_only: boolean("declared_read_only").notNull().default(false),
-    declared_search_safe: boolean("declared_search_safe").notNull().default(false),
+    declared_search_safe: boolean("declared_search_safe")
+      .notNull()
+      .default(false),
     approved: boolean("approved").notNull().default(false),
     default_enabled: boolean("default_enabled").notNull().default(false),
     approved_by: uuid("approved_by"),
@@ -249,6 +293,7 @@ export const tenantMcpServersRelations = relations(
       references: [tenants.id],
     }),
     agentAssignments: many(agentMcpServers),
+    spaceAssignments: many(spaceMcpServers),
   }),
 );
 
@@ -265,6 +310,24 @@ export const agentMcpServersRelations = relations(
     }),
     mcpServer: one(tenantMcpServers, {
       fields: [agentMcpServers.mcp_server_id],
+      references: [tenantMcpServers.id],
+    }),
+  }),
+);
+
+export const spaceMcpServersRelations = relations(
+  spaceMcpServers,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [spaceMcpServers.tenant_id],
+      references: [tenants.id],
+    }),
+    space: one(spaces, {
+      fields: [spaceMcpServers.space_id],
+      references: [spaces.id],
+    }),
+    mcpServer: one(tenantMcpServers, {
+      fields: [spaceMcpServers.mcp_server_id],
       references: [tenantMcpServers.id],
     }),
   }),

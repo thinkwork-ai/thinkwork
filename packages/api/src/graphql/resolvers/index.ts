@@ -67,6 +67,7 @@ import {
   spaceAgentAssignmentTypeResolvers,
   spaceChecklistTemplateTypeResolvers,
   spaceMemberTypeResolvers,
+  spaceMcpServerTypeResolvers,
   spaceMutations,
   spaceQueries,
   spaceTypeResolvers,
@@ -170,5 +171,6 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   SpaceMember: spaceMemberTypeResolvers,
   SpaceAgentAssignment: spaceAgentAssignmentTypeResolvers,
   SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,
+  SpaceMcpServer: spaceMcpServerTypeResolvers,
   LinkedTask: linkedTaskTypeResolvers,
 };

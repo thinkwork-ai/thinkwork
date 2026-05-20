@@ -54,10 +54,18 @@ vi.mock("../../utils.js", () => ({
     tenant_id: "space_members.tenant_id",
     space_id: "space_members.space_id",
   },
+  spaceMcpServers: {
+    tenant_id: "space_mcp_servers.tenant_id",
+    space_id: "space_mcp_servers.space_id",
+  },
   spaces: {
     tenant_id: "spaces.tenant_id",
     template_key: "spaces.template_key",
     status: "spaces.status",
+  },
+  tenantMcpServers: {
+    tenant_id: "tenant_mcp_servers.tenant_id",
+    id: "tenant_mcp_servers.id",
   },
   users: { id: "users.id" },
 }));
@@ -150,6 +158,70 @@ describe("customerOnboardingSpace", () => {
         status: "ACTIVE",
       }),
     ]);
+  });
+
+  it("exposes Space-level MCP bindings as contextual workroom tools", async () => {
+    mockSelect.mockReturnValueOnce(
+      queryRows([
+        {
+          id: "space-mcp-1",
+          tenant_id: "tenant-1",
+          space_id: "space-1",
+          mcp_server_id: "mcp-1",
+          enabled: true,
+          config: { toolAllowlist: ["query"] },
+        },
+      ]),
+    );
+
+    const mcpServers = await types.spaceTypeResolvers.mcpServers({
+      id: "space-1",
+      tenantId: "tenant-1",
+    });
+
+    expect(mcpServers).toEqual([
+      expect.objectContaining({
+        id: "space-mcp-1",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        mcpServerId: "mcp-1",
+        enabled: true,
+        config: { toolAllowlist: ["query"] },
+      }),
+    ]);
+  });
+
+  it("resolves a Space MCP binding through the tenant MCP catalog", async () => {
+    mockSelect.mockReturnValueOnce(
+      queryRows([
+        {
+          id: "mcp-1",
+          tenant_id: "tenant-1",
+          name: "Warehouse",
+          slug: "warehouse",
+          url: "https://mcp.example.com",
+          transport: "streamable-http",
+          auth_type: "oauth",
+          tools: [{ name: "query" }],
+          enabled: true,
+          status: "approved",
+        },
+      ]),
+    );
+
+    const mcpServer = await types.spaceMcpServerTypeResolvers.mcpServer({
+      tenantId: "tenant-1",
+      mcpServerId: "mcp-1",
+    });
+
+    expect(mcpServer).toMatchObject({
+      id: "mcp-1",
+      tenantId: "tenant-1",
+      name: "Warehouse",
+      slug: "warehouse",
+      authType: "oauth",
+      tools: [{ name: "query" }],
+    });
   });
 
   it("returns null rather than leaking the seeded Space across tenants", async () => {
