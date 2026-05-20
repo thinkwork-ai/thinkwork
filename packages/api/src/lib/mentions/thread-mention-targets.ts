@@ -188,31 +188,33 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       });
     }
 
-    const tenantAgentRows = await this.db
-      .select({
-        role: agents.role,
-        agentId: agents.id,
-        agentName: agents.name,
-        agentSlug: agents.slug,
-        agentAvatarUrl: agents.avatar_url,
-      })
-      .from(agents)
-      .where(
-        and(
-          eq(agents.tenant_id, input.tenantId),
-          ne(agents.status, "archived"),
-        ),
-      );
-    for (const row of tenantAgentRows) {
-      addTarget(byKey, {
-        id: `agent:${row.agentId}`,
-        targetType: "agent",
-        targetId: row.agentId,
-        displayName: row.agentName,
-        aliases: [row.agentName].filter(isString),
-        avatarUrl: row.agentAvatarUrl,
-        role: row.role,
-      });
+    if (!input.spaceId) {
+      const tenantAgentRows = await this.db
+        .select({
+          role: agents.role,
+          agentId: agents.id,
+          agentName: agents.name,
+          agentSlug: agents.slug,
+          agentAvatarUrl: agents.avatar_url,
+        })
+        .from(agents)
+        .where(
+          and(
+            eq(agents.tenant_id, input.tenantId),
+            ne(agents.status, "archived"),
+          ),
+        );
+      for (const row of tenantAgentRows) {
+        addTarget(byKey, {
+          id: `agent:${row.agentId}`,
+          targetType: "agent",
+          targetId: row.agentId,
+          displayName: row.agentName,
+          aliases: [row.agentName].filter(isString),
+          avatarUrl: row.agentAvatarUrl,
+          role: row.role,
+        });
+      }
     }
 
     return [...byKey.values()].filter((target) => target.targetId);

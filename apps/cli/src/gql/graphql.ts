@@ -2121,6 +2121,7 @@ export type Mutation = {
   setAgentSkills: Array<AgentSkill>;
   setComputerAssignments: Array<ComputerAssignment>;
   setRoutineTrigger: RoutineTrigger;
+  setSpaceAgentAvailability: SpaceAgentAssignment;
   setUserComputerAssignments: Array<ComputerAssignment>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startEvalRun: EvalRun;
@@ -2924,6 +2925,11 @@ export type MutationSetComputerAssignmentsArgs = {
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationSetSpaceAgentAvailabilityArgs = {
+  input: SetSpaceAgentAvailabilityInput;
 };
 
 
@@ -5090,6 +5096,18 @@ export type SendMessageMentionInput = {
 export type SetComputerAssignmentsInput = {
   assignments: Array<ComputerAssignmentTargetInput>;
   computerId: Scalars['ID']['input'];
+};
+
+export type SetSpaceAgentAvailabilityInput = {
+  agentId: Scalars['ID']['input'];
+  allowedCapabilities?: InputMaybe<Scalars['AWSJSON']['input']>;
+  allowedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
+  autoSubscribe?: InputMaybe<Scalars['Boolean']['input']>;
+  enabled: Scalars['Boolean']['input'];
+  localInstructions?: InputMaybe<Scalars['String']['input']>;
+  localRole?: InputMaybe<Scalars['String']['input']>;
+  spaceId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 export type SetUserComputerAssignmentsInput = {

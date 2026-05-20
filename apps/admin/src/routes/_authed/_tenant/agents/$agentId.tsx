@@ -14,6 +14,7 @@ import { mapRuns, mapThreads, type ActivityItem } from "@/lib/activity-utils";
 import { AgentMetrics } from "@/components/agents/AgentMetrics";
 import { AgentActivity } from "@/components/agents/AgentActivity";
 import { AgentDetailChrome } from "@/components/agents/AgentDetailChrome";
+import { AgentSpacesPanel } from "@/components/agents/AgentSpacesPanel";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId")({
   component: AgentDetailPage,
@@ -128,6 +129,10 @@ function AgentDetailPage() {
             runs={agentRuns}
             chats={agentChats}
           />
+
+          {tenantId ? (
+            <AgentSpacesPanel tenantId={tenantId} agentId={agentId} />
+          ) : null}
 
           <AgentActivity
             items={agentActivityItems}

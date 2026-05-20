@@ -32,6 +32,7 @@ describe("agent detail dashboard/editor routes", () => {
   it("keeps the dashboard route focused on metrics and activity", () => {
     expect(dashboardRouteSource).toContain('activeTab="dashboard"');
     expect(dashboardRouteSource).toContain("AgentMetrics");
+    expect(dashboardRouteSource).toContain("AgentSpacesPanel");
     expect(dashboardRouteSource).toContain("AgentActivity");
   });
 
