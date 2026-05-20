@@ -1,7 +1,7 @@
 import { GraphQLError } from "graphql";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { agents } from "@thinkwork/database-pg/schema";
-import { getDb } from "@thinkwork/database-pg";
+import { db } from "../../utils.js";
 
 export function normalizeAgentMentionName(value: unknown) {
   if (typeof value !== "string") {
@@ -33,11 +33,14 @@ export async function assertAgentMentionNameAvailable(input: {
     conditions.push(ne(agents.id, input.excludingAgentId));
   }
 
-  const [existing] = await getDb()
+  const query = db
     .select({ id: agents.id })
     .from(agents)
-    .where(and(...conditions))
-    .limit(1);
+    .where(and(...conditions));
+  const rows = await (typeof query.limit === "function"
+    ? query.limit(1)
+    : query);
+  const existing = Array.isArray(rows) ? rows[0] : undefined;
 
   if (existing) {
     throw new GraphQLError("Agent name must be unique in this tenant", {
