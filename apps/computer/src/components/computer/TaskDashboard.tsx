@@ -57,7 +57,7 @@ export function TaskDashboard({
   onSearchChange,
 }: TaskDashboardProps) {
   usePageHeaderActions({
-    title: "Threads",
+    title: "Chat",
     subtitle: isLoading
       ? "Loading..."
       : `${totalCount} thread${totalCount === 1 ? "" : "s"}`,

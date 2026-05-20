@@ -17,6 +17,12 @@ import {
 } from "@/lib/pending-thread-deletes";
 
 export const Route = createFileRoute("/_authed/_shell/threads/")({
+  validateSearch: (search: Record<string, unknown>): { spaceId?: string } => ({
+    spaceId:
+      typeof search.spaceId === "string" && search.spaceId.trim()
+        ? search.spaceId
+        : undefined,
+  }),
   component: ThreadsPage,
 });
 
@@ -56,6 +62,7 @@ const DEFAULT_PAGE_SIZE = 50;
 
 function ThreadsPage() {
   const { tenantId } = useTenant();
+  const { spaceId } = Route.useSearch();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
@@ -79,6 +86,7 @@ function ThreadsPage() {
         showArchived: false,
         sortField: "updated",
         sortDir: "desc",
+        spaceId,
         limit: pageSize,
         offset: pageIndex * pageSize,
       },

@@ -1,18 +1,10 @@
 import { ArrowLeft, Moon, Sun } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  Button,
-  ToggleGroup,
-  ToggleGroupItem,
-  UserMenu,
-  useTheme,
-} from "@thinkwork/ui";
-import { useAuth } from "@/context/AuthContext";
+import { Button, ToggleGroup, ToggleGroupItem, useTheme } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 
 export function AppTopBar() {
   const { theme, toggleTheme } = useTheme();
-  const { user, signOut } = useAuth();
   const { actions } = usePageHeader();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -26,7 +18,8 @@ export function AppTopBar() {
   const activeTab =
     [...tabs]
       .reverse()
-      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ?? "";
+      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
+    "";
   const handleHistoryBack = () => {
     if (window.history.length > 1) {
       window.history.back();
@@ -54,7 +47,12 @@ export function AppTopBar() {
                 <span className="sr-only">Back</span>
               </Button>
             ) : (
-              <Button asChild variant="ghost" size="icon-sm" className="shrink-0">
+              <Button
+                asChild
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0"
+              >
                 <Link to={actions.backHref}>
                   <ArrowLeft className="h-4 w-4" />
                   <span className="sr-only">Back</span>
@@ -105,11 +103,12 @@ export function AppTopBar() {
           onClick={toggleTheme}
           className="text-muted-foreground"
         >
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {theme === "dark" ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
         </Button>
-        {user ? (
-          <UserMenu name={user.name} email={user.email} onSignOut={signOut} />
-        ) : null}
       </div>
     </header>
   );
