@@ -8,7 +8,7 @@ superseded_by: docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-te
 
 # fix: Decouple threads / messages / linked_tasks from spaces and remove user app dropdown
 
-> Superseded by `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md`. This plan remains useful as an inventory of thread-side coupling, but it should not be implemented literally under the new product direction: Spaces intentionally remain in the end-user app as contextual workrooms.
+> Superseded by `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md`. This plan remains useful as an inventory of thread-side coupling, but it should not be implemented literally under the new product direction: Spaces intentionally remain in the end-user app as contextual workrooms. Use it only to understand what coupling was considered, not as an implementation backlog.
 
 ## Summary
 
@@ -513,16 +513,19 @@ The admin edit is one query, two-line surgical. Run codegen in all three apps af
 End-to-end verification before merge:
 
 1. **Migration applied to dev:**
+
    - `psql "$DATABASE_URL" -f packages/database-pg/drizzle/NNNN_*.sql` runs cleanly
    - `pnpm db:migrate-manual` against dev reports every declared object as ABSENT
 
 2. **Monorepo-wide build/typecheck/test:**
+
    - `pnpm -r --if-present typecheck` passes
    - `pnpm -r --if-present test` passes
    - `pnpm -r --if-present build` passes
    - `pnpm format:check` passes
 
 3. **Manual smoke in the user app:**
+
    - Dev server `pnpm --filter @thinkwork/computer dev --host localhost --port 5180`
    - Open chat sidebar → dropdown gone
    - Click a recent thread → opens at `/threads/$id`
@@ -530,6 +533,7 @@ End-to-end verification before merge:
    - Send a message → no console errors, wakeup dispatches successfully
 
 4. **CI gate:**
+
    - `migration-precheck` workflow passes (marker block matches reality in dev)
    - Standard PR checks (cla, verify, lint, typecheck, test) pass
 

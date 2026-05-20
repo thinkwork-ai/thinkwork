@@ -1,13 +1,16 @@
 ---
 title: "feat: Spaces customer onboarding v1"
 type: feat
-status: active
+status: superseded
 date: 2026-05-19
 origin: docs/brainstorms/2026-05-19-spaces-customer-onboarding-v1-requirements.md
 secondary_origin: docs/brainstorms/2026-05-19-computer-to-app-rename-and-light-mode-polish-requirements.md
+superseded_by: docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md
 ---
 
 # feat: Spaces customer onboarding v1
+
+> Superseded by `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md` for future implementation direction. This plan remains useful as a historical record of the Customer Onboarding workflow slice, but its older "Space as collaboration room/workflow template" framing should not be used to extend the current product model. Spaces are now contextual workrooms that can organize user conversations and inject files, tools, MCP/data policy, and source context into agent turns.
 
 ## Overview
 
