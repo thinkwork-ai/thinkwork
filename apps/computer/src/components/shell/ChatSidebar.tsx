@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
 import {
   Anchor,
   Archive,
   ArrowLeft,
-  GalleryVerticalEnd,
   GitBranch,
   Globe,
   Keyboard,
@@ -169,6 +169,22 @@ export function ChatSidebar() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 px-3 pb-3 group-data-[collapsible=icon]:hidden">
         <nav className="space-y-1" aria-label="Chat actions">
+          <Button asChild variant="ghost" className={navItemClassName}>
+            <Link to="/new">
+              <MessageCirclePlus className="size-4 shrink-0" />
+              <span>New chat</span>
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className={navItemClassName}
+            onClick={() => setSearchOpen(true)}
+          >
+            <Search className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 text-left">Search</span>
+            <span className="text-xs text-sidebar-foreground/45">⌘K</span>
+          </Button>
           <Select
             value={activeSpaceId}
             onValueChange={(value) => {
@@ -181,9 +197,12 @@ export function ChatSidebar() {
           >
             <SelectTrigger
               aria-label="Switch Space"
-              className={navItemClassName}
+              className={cn(
+                navItemClassName,
+                "border-0 bg-transparent shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 dark:bg-transparent dark:hover:bg-sidebar-accent [&>span]:flex [&>span]:min-w-0 [&>span]:flex-1 [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
+              )}
             >
-              <GalleryVerticalEnd className="size-4 shrink-0" />
+              <IconPlanet className="size-4 shrink-0" />
               <SelectValue placeholder="General" />
             </SelectTrigger>
             <SelectContent
@@ -201,22 +220,6 @@ export function ChatSidebar() {
               ))}
             </SelectContent>
           </Select>
-          <Button asChild variant="ghost" className={navItemClassName}>
-            <Link to="/new">
-              <MessageCirclePlus className="size-4 shrink-0" />
-              <span>New chat</span>
-            </Link>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className={navItemClassName}
-            onClick={() => setSearchOpen(true)}
-          >
-            <Search className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 text-left">Search</span>
-            <span className="text-xs text-sidebar-foreground/45">⌘K</span>
-          </Button>
           <Button
             type="button"
             variant="ghost"

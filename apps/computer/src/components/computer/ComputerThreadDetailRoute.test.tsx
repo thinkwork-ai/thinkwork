@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { ComputerThreadDetailRoute } from "./ComputerThreadDetailRoute";
 
@@ -53,6 +54,7 @@ let eventData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
+  vi.mocked(usePageHeaderActions).mockReset();
   reexecuteThreadQuery.mockReset();
   reexecuteTasksQuery.mockReset();
   sendMessage.mockReset();
@@ -128,6 +130,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ComputerThreadDetailRoute", () => {
+  it("does not register a header back button by default", () => {
+    render(<ComputerThreadDetailRoute threadId="thread-1" />);
+
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ backHref: expect.any(String) }),
+    );
+  });
+
   it("does not refetch the full thread for turn-only status updates", () => {
     let subscriptionCall = 0;
     vi.mocked(useSubscription).mockImplementation(() => {

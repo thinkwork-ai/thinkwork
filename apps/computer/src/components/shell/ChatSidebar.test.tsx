@@ -225,6 +225,20 @@ describe("ChatSidebar", () => {
     expect(screen.getByRole("link", { name: /new chat/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /new chat/i })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: /^search/i }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: /^search/i })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: /switch space/i }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
     expect(
       screen

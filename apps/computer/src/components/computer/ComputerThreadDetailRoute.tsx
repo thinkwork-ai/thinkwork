@@ -115,7 +115,7 @@ interface RunbookRunsResult {
 
 export function ComputerThreadDetailRoute({
   threadId,
-  backHref = "/threads",
+  backHref,
   documentTitlePrefix = "Thread",
 }: ComputerThreadDetailRouteProps) {
   const { tenantId } = useTenant();
