@@ -63,6 +63,8 @@ type Space {
   agentAssignments: [SpaceAgentAssignment!]!
   checklistTemplates: [SpaceChecklistTemplate!]!
   integrations: [SpaceIntegration!]!
+  unreadThreadCount: Int!
+  lastActivityAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }

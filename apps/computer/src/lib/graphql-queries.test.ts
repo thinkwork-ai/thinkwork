@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AppletQuery,
   AppletsQuery,
+  ChatGlobalInboxQuery,
   ComputerKnowledgeBaseDetailQuery,
   ComputerKnowledgeBasesQuery,
   ComputerMemoryRecordsQuery,
@@ -22,6 +23,7 @@ import {
   StartCustomerOnboardingMutation,
   ThreadLinkedTasksQuery,
   ThreadMentionTargetsQuery,
+  ThreadsPagedQuery,
   ThreadTurnUpdatedSubscription,
 } from "./graphql-queries";
 
@@ -114,6 +116,8 @@ describe("computer GraphQL queries", () => {
 
   it("requests Spaces, Space threads, linked tasks, and onboarding start fields", () => {
     expect(print(SpacesQuery)).toContain("spaces");
+    expect(print(SpacesQuery)).toContain("unreadThreadCount");
+    expect(print(SpacesQuery)).toContain("lastActivityAt");
     expect(print(SpaceQuery)).toContain("checklistTemplates");
     expect(print(SpaceQuery)).toContain("agentAssignments");
     expect(print(SpaceThreadsQuery)).toContain("spaceId: $spaceId");
@@ -123,6 +127,14 @@ describe("computer GraphQL queries", () => {
       "startCustomerOnboarding",
     );
     expect(print(StartCustomerOnboardingMutation)).toContain("missingFields");
+  });
+
+  it("requests global Inbox rows with Space identity and unread filter", () => {
+    const inbox = print(ChatGlobalInboxQuery);
+    expect(inbox).toContain("unreadOnly: true");
+    expect(inbox).toContain("space");
+    expect(inbox).toContain("lastReadAt");
+    expect(print(ThreadsPagedQuery)).toContain("unreadOnly: $unreadOnly");
   });
 
   it("requests collaborative Space Thread fields and mention targets", () => {

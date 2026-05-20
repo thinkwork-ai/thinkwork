@@ -6,6 +6,8 @@ export interface SpaceSummary {
   kind?: string | null;
   templateKey?: string | null;
   status?: string | null;
+  unreadThreadCount?: number | null;
+  lastActivityAt?: string | null;
   updatedAt?: string | null;
 }
 
@@ -17,7 +19,14 @@ export interface SpaceThreadSummary {
   status?: string | null;
   channel?: string | null;
   spaceId?: string | null;
+  space?: {
+    id: string;
+    slug?: string | null;
+    name: string;
+    kind?: string | null;
+  } | null;
   metadata?: unknown;
+  lastReadAt?: string | null;
   lastActivityAt?: string | null;
   lastTurnCompletedAt?: string | null;
   archivedAt?: string | null;
