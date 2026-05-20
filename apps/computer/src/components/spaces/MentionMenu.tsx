@@ -1,5 +1,6 @@
 import { Bot, UserRound } from "lucide-react";
 import { Button } from "@thinkwork/ui";
+import { cn } from "@/lib/utils";
 
 export interface MentionTarget {
   id: string;
@@ -13,12 +14,13 @@ export interface MentionTarget {
 interface MentionMenuProps {
   targets: MentionTarget[];
   query: string;
+  activeIndex?: number;
   onSelect: (target: MentionTarget) => void;
 }
 
-export function MentionMenu({ targets, query, onSelect }: MentionMenuProps) {
+export function filterMentionTargets(targets: MentionTarget[], query: string) {
   const normalized = query.trim().toLowerCase();
-  const filtered = targets
+  return targets
     .filter((target) =>
       normalized
         ? target.displayName.toLowerCase().includes(normalized) ||
@@ -26,22 +28,46 @@ export function MentionMenu({ targets, query, onSelect }: MentionMenuProps) {
         : true,
     )
     .slice(0, 8);
+}
+
+export function MentionMenu({
+  targets,
+  query,
+  activeIndex = 0,
+  onSelect,
+}: MentionMenuProps) {
+  const filtered = filterMentionTargets(targets, query);
 
   if (filtered.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 z-20 mb-2 w-full max-w-md rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-      {filtered.map((target) => {
+    <div
+      className="absolute bottom-full left-0 z-20 mb-2 w-full max-w-md rounded-md border bg-popover p-2 text-popover-foreground shadow-md"
+      role="listbox"
+      aria-label="Mention suggestions"
+    >
+      {filtered.map((target, index) => {
         const Icon = target.targetType === "AGENT" ? Bot : UserRound;
+        const isActive = index === activeIndex;
         return (
           <Button
             key={target.id}
             type="button"
             variant="ghost"
-            className="h-auto w-full justify-start gap-2 px-2 py-2 text-left"
+            role="option"
+            aria-selected={isActive}
+            className={cn(
+              "h-auto w-full justify-start gap-2 rounded-sm px-2.5 py-2 text-left",
+              isActive && "bg-accent text-accent-foreground",
+            )}
             onClick={() => onSelect(target)}
           >
-            <Icon className="size-4 shrink-0 text-muted-foreground" />
+            <Icon
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground",
+                isActive && "text-accent-foreground",
+              )}
+            />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm">
                 {target.displayName}

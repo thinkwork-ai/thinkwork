@@ -1846,8 +1846,120 @@ describe("TaskThreadView", () => {
       // (empty when no attachments) alongside the text. The route
       // uploads files before sendMessage and embeds attachmentId refs
       // in metadata.attachments.
-      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", []);
+      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", [], []);
     });
+  });
+
+  it("shows a contains-filtered mention picker and submits the selected mention", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Mention thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Start",
+            },
+          ],
+        }}
+        mentionTargets={[
+          {
+            id: "user:u1",
+            targetType: "USER",
+            targetId: "u1",
+            displayName: "Scott Odom",
+            role: "eric@thinkwork.ai",
+          },
+          {
+            id: "agent:a1",
+            targetType: "AGENT",
+            targetId: "a1",
+            displayName: "Marco",
+            role: "agent",
+          },
+        ]}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "@cot" } });
+
+    expect(screen.getByText("Scott Odom")).toBeTruthy();
+    expect(screen.queryByText("Marco")).toBeNull();
+
+    fireEvent.click(screen.getByRole("option", { name: /Scott Odom/ }));
+    expect(input.value).toBe("@Scott Odom ");
+
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "@Scott Odom",
+        [],
+        [
+          {
+            targetType: "USER",
+            targetId: "u1",
+            displayName: "Scott Odom",
+            rawText: "@Scott Odom",
+          },
+        ],
+      );
+    });
+  });
+
+  it("supports keyboard selection in the mention picker", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Mention thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Start",
+            },
+          ],
+        }}
+        mentionTargets={[
+          {
+            id: "user:u1",
+            targetType: "USER",
+            targetId: "u1",
+            displayName: "Scott Odom",
+            role: "member",
+          },
+          {
+            id: "agent:a1",
+            targetType: "AGENT",
+            targetId: "a1",
+            displayName: "Marco",
+            role: "agent",
+          },
+        ]}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "@o" } });
+
+    let options = screen.getAllByRole("option");
+    expect(options[0].getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    options = screen.getAllByRole("option");
+    expect(options[1].getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(input.value).toBe("@Marco ");
   });
 
   describe("collapsible user message body", () => {

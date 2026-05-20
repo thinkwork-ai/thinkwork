@@ -31,6 +31,16 @@ vi.mock("@/components/apps/InlineAppletEmbed", () => ({
   ),
 }));
 
+vi.mock("@tanstack/react-router", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+  };
+});
+
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-1" }),
 }));
@@ -51,6 +61,7 @@ const resetStreamingChunks = vi.fn();
 let threadData: unknown;
 let taskData: unknown;
 let eventData: unknown;
+let mentionTargetsData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
@@ -64,6 +75,7 @@ beforeEach(() => {
     thread: {
       id: "thread-1",
       computerId: "computer-1",
+      spaceId: "space-1",
       title: "Route streaming thread",
       lifecycleStatus: "RUNNING",
       messages: {
@@ -94,6 +106,7 @@ beforeEach(() => {
     ],
   };
   eventData = { computerEvents: [] };
+  mentionTargetsData = { threadMentionTargets: [] };
 
   vi.mocked(useMutation).mockReturnValue([
     { fetching: false, stale: false, hasNext: false },
@@ -121,6 +134,9 @@ beforeEach(() => {
     }
     if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
+    }
+    if (variables?.threadId) {
+      return [queryState(mentionTargetsData), vi.fn()];
     }
     if (variables?.limit) return [queryState(eventData), vi.fn()];
     return [queryState(null), vi.fn()];

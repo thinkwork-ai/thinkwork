@@ -24,12 +24,12 @@ const targets: MentionTarget[] = [
 describe("MentionMenu", () => {
   it("filters mention targets and returns the selected target", () => {
     const onSelect = vi.fn();
-    render(<MentionMenu targets={targets} query="coord" onSelect={onSelect} />);
+    render(<MentionMenu targets={targets} query="ordin" onSelect={onSelect} />);
 
     expect(screen.getByText("Coordinator")).toBeTruthy();
     expect(screen.queryByText("Alex Finance")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Coordinator/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Coordinator/ }));
     expect(onSelect).toHaveBeenCalledWith(targets[0]);
   });
 });

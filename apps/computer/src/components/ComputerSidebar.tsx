@@ -74,7 +74,7 @@ export function ComputerSidebar() {
       <SidebarHeader className="pb-3">
         <div className="flex items-center gap-2 px-1">
           <Link
-            to="/threads"
+            to="/new"
             onClick={(event) => {
               if (isCollapsed) {
                 event.preventDefault();

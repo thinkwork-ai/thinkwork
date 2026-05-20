@@ -328,6 +328,7 @@ export const ComputerThreadQuery = gql`
       identifier
       title
       status
+      spaceId
       channel
       computerId
       lifecycleStatus

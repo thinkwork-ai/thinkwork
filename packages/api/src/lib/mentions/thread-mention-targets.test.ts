@@ -8,11 +8,15 @@ const source = readFileSync(
 );
 
 describe("thread mention targets", () => {
-  it("loads existing participants plus Space members and active Space agents", () => {
+  it("loads existing participants, Space targets, tenant users, and active tenant agents", () => {
     expect(source).toContain("from(threadParticipants)");
     expect(source).toContain("from(spaceMembers)");
     expect(source).toContain("from(spaceAgentAssignments)");
     expect(source).toContain('eq(spaceAgentAssignments.status, "active")');
+    expect(source).toContain("from(tenantMembers)");
+    expect(source).toContain('eq(tenantMembers.status, "active")');
+    expect(source).toContain("from(agents)");
+    expect(source).toContain('ne(agents.status, "archived")');
   });
 
   it("returns no targets when the Thread is not found", async () => {

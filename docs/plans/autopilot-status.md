@@ -1034,6 +1034,36 @@ None.
 
 - Pending.
 
+# Spaces Collaborative Chat UI U5 - 2026-05-19
+
+## Status
+
+- Branch: `codex/spaces-chat-u5-context`
+- PR: [#1480](https://github.com/thinkwork-ai/thinkwork/pull/1480)
+- Current pass:
+  - Added canonical thread composer `@` mention suggestions for users and agents.
+  - Expanded mention target loading to all active tenant users and non-archived tenant agents, while preserving existing thread/Space targets.
+  - Added contains-style mention filtering, first-item highlight, ArrowUp/ArrowDown/Enter keyboard selection, and more breathing room in mention + Space dropdown menus.
+  - Changed thread delete success flow so the sidebar hides the deleted thread immediately, refreshes the nav list, and the detail route selects the next thread in the list or `/new` when no replacement exists. The delete flow no longer navigates to `/threads`.
+  - Changed default/legacy landing routes (`/`, signed-in `/sign-in`, bare `/threads`, and legacy `/spaces`) to land on `/new`.
+  - Increased Space dropdown content/item padding so selected/hover backgrounds no longer touch the dropdown border.
+  - Added explicit post-delete replacement-thread selection so the sidebar highlights the thread that the detail route navigates to after deletion.
+  - Started local dev server from this worktree at `http://localhost:5174/` for user validation.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/computer test -- src/components/spaces/MentionMenu.test.tsx src/components/computer/TaskThreadView.test.tsx src/components/computer/ComputerThreadDetailRoute.test.tsx src/components/computer/ThreadDetailActions.test.tsx src/components/shell/ChatSidebar.test.tsx src/routes/_authed/_shell/-spaces-route.test.tsx src/lib/graphql-queries.test.ts` - passed.
+- `pnpm --filter @thinkwork/computer test -- src/components/spaces/ThreadComposer.test.tsx src/components/spaces/MentionMenu.test.tsx src/components/computer/TaskThreadView.test.tsx src/components/computer/ComputerThreadDetailRoute.test.tsx src/components/computer/ThreadDetailActions.test.tsx src/components/shell/ChatSidebar.test.tsx` - passed.
+- `pnpm --filter @thinkwork/api test -- src/lib/mentions/thread-mention-targets.test.ts src/graphql/resolvers/threads/threadMentionTargets.query.test.ts` - passed.
+- `pnpm --filter @thinkwork/computer typecheck` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `node_modules/.pnpm/node_modules/.bin/prettier --check ...` - passed for touched files.
+- `git diff --check` - passed.
+
+## CI Notes
+
+- Initial PR test check failed because `ThreadComposer.test.tsx` still expected mention suggestions as `button` rows after the menu moved to accessible `listbox`/`option` semantics. Updated the test expectation locally; awaiting rerun after push.
+
 ## Blockers
 
 None.

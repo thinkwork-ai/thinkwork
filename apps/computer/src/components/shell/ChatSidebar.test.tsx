@@ -76,6 +76,7 @@ vi.mock("urql", () => ({
             ],
           },
         },
+        vi.fn(),
       ];
     }
     if (query === queryDocs.ChatGlobalInboxQuery) {
@@ -98,6 +99,7 @@ vi.mock("urql", () => ({
             },
           },
         },
+        vi.fn(),
       ];
     }
     if (query === queryDocs.ThreadsPagedQuery) {
@@ -120,9 +122,10 @@ vi.mock("urql", () => ({
             },
           },
         },
+        vi.fn(),
       ];
     }
-    return [{ fetching: false, data: null }];
+    return [{ fetching: false, data: null }, vi.fn()];
   },
 }));
 

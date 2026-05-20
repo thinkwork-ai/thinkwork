@@ -1,10 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/_shell/spaces/$spaceId")({
-  beforeLoad: ({ params }) => {
+  beforeLoad: () => {
     throw redirect({
-      to: "/threads",
-      search: { spaceId: params.spaceId },
+      to: "/new",
       replace: true,
     });
   },

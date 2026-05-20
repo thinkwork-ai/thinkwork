@@ -13,7 +13,7 @@ import { Route as SpaceDetailRoute } from "./spaces.$spaceId";
 import { Route as SpacesIndexRoute } from "./spaces.index";
 
 describe("Spaces routes", () => {
-  it("redirects the legacy Spaces index to Chat", () => {
+  it("redirects the legacy Spaces index to the new-thread page", () => {
     let thrown: unknown;
 
     try {
@@ -27,11 +27,11 @@ describe("Spaces routes", () => {
     }
 
     expect(thrown).toEqual({
-      redirect: { to: "/threads", replace: true },
+      redirect: { to: "/new", replace: true },
     });
   });
 
-  it("redirects a legacy Space detail page into filtered Chat", () => {
+  it("redirects a legacy Space detail page to the new-thread page", () => {
     let thrown: unknown;
 
     try {
@@ -46,8 +46,7 @@ describe("Spaces routes", () => {
 
     expect(thrown).toEqual({
       redirect: {
-        to: "/threads",
-        search: { spaceId: "space-1" },
+        to: "/new",
         replace: true,
       },
     });

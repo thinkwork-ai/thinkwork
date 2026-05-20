@@ -32,10 +32,9 @@ const {
 }));
 
 vi.mock("@tanstack/react-router", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-router")>(
-      "@tanstack/react-router",
-    );
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -64,10 +63,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-import {
-  ThreadDeleteDialog,
-  ThreadDetailActions,
-} from "./ThreadDetailActions";
+import { ThreadDeleteDialog, ThreadDetailActions } from "./ThreadDetailActions";
 
 beforeEach(() => {
   navigateMock.mockReset();
@@ -167,8 +163,29 @@ describe("ThreadDeleteDialog cascade flow", () => {
       expect(deleteThreadMock).toHaveBeenCalledWith({ id: "t1" });
     });
     expect(deleteArtifactMock).not.toHaveBeenCalled();
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/threads" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/new" });
     expect(toastSuccessMock).toHaveBeenCalledWith("Thread deleted.");
+  });
+
+  it("delegates post-delete selection without navigating to the threads index", async () => {
+    const onDeleted = vi.fn();
+    render(
+      <ThreadDeleteDialog
+        open
+        onOpenChange={() => {}}
+        threadId="t1"
+        threadTitle="Busy"
+        attachedArtifacts={[]}
+        onDeleted={onDeleted}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("thread-delete-confirm"));
+
+    await waitFor(() => {
+      expect(onDeleted).toHaveBeenCalledWith("t1");
+    });
+    expect(navigateMock).not.toHaveBeenCalledWith({ to: "/threads" });
   });
 
   it("deletes thread + each attached artifact when cascade is set", async () => {

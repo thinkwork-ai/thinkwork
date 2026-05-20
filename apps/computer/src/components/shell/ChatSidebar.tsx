@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
 import {
@@ -34,6 +34,10 @@ import {
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { SpacesQuery, ThreadsPagedQuery } from "@/lib/graphql-queries";
+import {
+  clearMissingThreadDeletes,
+  usePendingThreadDeletes,
+} from "@/lib/pending-thread-deletes";
 import { cn } from "@/lib/utils";
 import {
   groupThreadsByRecency,
@@ -60,17 +64,14 @@ const SEARCH_LIMIT = 30;
 
 export function ChatSidebar() {
   const { tenantId } = useTenant();
-  const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
-  const querySpaceId =
-    typeof location.search?.spaceId === "string"
-      ? location.search.spaceId
-      : undefined;
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | undefined>();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const pendingThreadDeletes = usePendingThreadDeletes();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
@@ -100,52 +101,83 @@ export function ChatSidebar() {
   const spaces = spacesData?.spaces ?? [];
   const defaultSpaceId =
     spaces.find((space) => isGeneralSpace(space))?.id ?? spaces[0]?.id;
-  const activeSpaceId = querySpaceId ?? routeSpaceId ?? defaultSpaceId;
+  const activeSpaceId = selectedSpaceId ?? routeSpaceId ?? defaultSpaceId;
 
-  const [{ data: recentData, fetching: recentFetching, error: recentError }] =
-    useQuery<ThreadsPagedResult>({
-      query: ThreadsPagedQuery,
-      variables: {
-        tenantId: tenantId ?? "",
-        showArchived: false,
-        sortField: "updated",
-        sortDir: "desc",
-        spaceId: activeSpaceId,
-        limit: RECENT_LIMIT,
-        offset: 0,
-      },
-      pause: !tenantId || !activeSpaceId,
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: recentData, fetching: recentFetching, error: recentError },
+    reexecuteRecentThreadsQuery,
+  ] = useQuery<ThreadsPagedResult>({
+    query: ThreadsPagedQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      showArchived: false,
+      sortField: "updated",
+      sortDir: "desc",
+      spaceId: activeSpaceId,
+      limit: RECENT_LIMIT,
+      offset: 0,
+    },
+    pause: !tenantId || !activeSpaceId,
+    requestPolicy: "cache-and-network",
+  });
 
-  const [{ data: searchData, fetching: searchFetching, error: searchError }] =
-    useQuery<ThreadsPagedResult>({
-      query: ThreadsPagedQuery,
-      variables: {
-        tenantId: tenantId ?? "",
-        search: debouncedSearch.trim() || undefined,
-        showArchived: false,
-        sortField: "updated",
-        sortDir: "desc",
-        spaceId: activeSpaceId,
-        limit: SEARCH_LIMIT,
-        offset: 0,
-      },
-      pause: !tenantId || !activeSpaceId || !searchOpen,
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: searchData, fetching: searchFetching, error: searchError },
+    reexecuteSearchThreadsQuery,
+  ] = useQuery<ThreadsPagedResult>({
+    query: ThreadsPagedQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      search: debouncedSearch.trim() || undefined,
+      showArchived: false,
+      sortField: "updated",
+      sortDir: "desc",
+      spaceId: activeSpaceId,
+      limit: SEARCH_LIMIT,
+      offset: 0,
+    },
+    pause: !tenantId || !activeSpaceId || !searchOpen,
+    requestPolicy: "cache-and-network",
+  });
+
+  useEffect(() => {
+    function handleThreadDeleted() {
+      reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+      reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+    }
+
+    window.addEventListener("thinkwork:thread-deleted", handleThreadDeleted);
+    return () =>
+      window.removeEventListener(
+        "thinkwork:thread-deleted",
+        handleThreadDeleted,
+      );
+  }, [reexecuteRecentThreadsQuery, reexecuteSearchThreadsQuery]);
+
+  useEffect(() => {
+    if (!recentData?.threadsPaged?.items) return;
+    clearMissingThreadDeletes(
+      recentData.threadsPaged.items.map((thread) => thread.id),
+    );
+  }, [recentData?.threadsPaged?.items]);
 
   const recentThreads = useMemo(
-    () => sortThreadsByActivityDesc(recentData?.threadsPaged?.items ?? []),
-    [recentData?.threadsPaged?.items],
+    () =>
+      sortThreadsByActivityDesc(recentData?.threadsPaged?.items ?? []).filter(
+        (thread) => !pendingThreadDeletes.has(thread.id),
+      ),
+    [pendingThreadDeletes, recentData?.threadsPaged?.items],
   );
   const recentGroups = useMemo(
     () => groupThreadsByRecency(recentThreads),
     [recentThreads],
   );
   const searchThreads = useMemo(
-    () => sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []),
-    [searchData?.threadsPaged?.items],
+    () =>
+      sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
+        (thread) => !pendingThreadDeletes.has(thread.id),
+      ),
+    [pendingThreadDeletes, searchData?.threadsPaged?.items],
   );
 
   if (settingsOpen) {
@@ -178,10 +210,7 @@ export function ChatSidebar() {
           <Select
             value={activeSpaceId}
             onValueChange={(value) => {
-              void navigate({
-                to: "/threads",
-                search: { spaceId: value },
-              });
+              setSelectedSpaceId(value);
             }}
             disabled={!tenantId || spaces.length === 0 || spacesFetching}
           >
@@ -201,10 +230,14 @@ export function ChatSidebar() {
               align="start"
               sideOffset={4}
               avoidCollisions={false}
-              className="w-[var(--radix-select-trigger-width)] p-1"
+              className="w-[var(--radix-select-trigger-width)] p-3"
             >
               {spaces.map((space) => (
-                <SelectItem key={space.id} value={space.id}>
+                <SelectItem
+                  key={space.id}
+                  value={space.id}
+                  className="mx-1 w-auto px-3 py-2 text-base"
+                >
                   {space.name ?? space.slug ?? "Space"}
                 </SelectItem>
               ))}

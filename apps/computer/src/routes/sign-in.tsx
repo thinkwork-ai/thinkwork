@@ -13,10 +13,10 @@ function SignInPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  // If the user is already signed in, send them to /threads.
+  // If the user is already signed in, send them to the new-thread workspace.
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate({ to: "/threads", replace: true });
+      navigate({ to: "/new", replace: true });
     }
   }, [isAuthenticated, isLoading, navigate]);
 
