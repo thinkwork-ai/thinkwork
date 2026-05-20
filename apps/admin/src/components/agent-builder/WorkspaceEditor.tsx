@@ -1,4 +1,3 @@
-import { gql, useQuery } from "urql";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FilePlus,
@@ -8,7 +7,6 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,32 +42,6 @@ import { FileEditorPane } from "./FileEditorPane";
 import { FolderTree, buildWorkspaceTree } from "./FolderTree";
 import { parseRoutingTable, type RoutingRow } from "./routing-table";
 
-const AgentPinStatusQuery = gql`
-  query AgentPinStatus($agentId: ID!) {
-    agentPinStatus(agentId: $agentId, includeNested: true) {
-      path
-      folderPath
-      filename
-      pinnedSha
-      latestSha
-      updateAvailable
-      pinnedContent
-      latestContent
-    }
-  }
-`;
-
-type PinStatusEntry = {
-  path: string;
-  folderPath: string | null;
-  filename: string;
-  pinnedSha: string | null;
-  latestSha: string | null;
-  updateAvailable: boolean;
-  pinnedContent: string | null;
-  latestContent: string | null;
-};
-
 export type WorkspaceEditorMode =
   | "agent"
   | "template"
@@ -87,7 +59,7 @@ export function workspaceEditorCapabilities(
   mode: WorkspaceEditorMode,
 ): WorkspaceEditorCapabilities {
   return {
-    canReviewTemplateUpdates: mode === "agent",
+    canReviewTemplateUpdates: false,
   };
 }
 
@@ -122,11 +94,9 @@ export function workspaceEditorTargetKey(target: Target): string {
 export function WorkspaceEditor({
   target,
   mode,
-  agentId,
   initialFolder,
   className,
 }: WorkspaceEditorProps) {
-  const capabilities = workspaceEditorCapabilities(mode);
   const key = workspaceEditorTargetKey(target);
   const stableTarget = useMemo(() => target, [key]);
   const [files, setFiles] = useState<string[]>([]);
@@ -158,7 +128,6 @@ export function WorkspaceEditor({
     isFolder: boolean;
   } | null>(null);
   const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
-  const [acceptDialogPath, setAcceptDialogPath] = useState<string | null>(null);
   const loadRequestId = useRef(0);
   const fileListRequestId = useRef(0);
   const openFileRef = useRef<string | null>(null);
@@ -248,23 +217,6 @@ export function WorkspaceEditor({
       }),
     [files, mode, routingRows],
   );
-
-  const [pinStatusResult, refetchPinStatus] = useQuery({
-    query: AgentPinStatusQuery,
-    variables: { agentId: agentId ?? "" },
-    pause: !capabilities.canReviewTemplateUpdates || !agentId,
-  });
-
-  const pinStatus = useMemo(() => {
-    const out: Record<string, PinStatusEntry> = {};
-    const list = (
-      pinStatusResult.data as { agentPinStatus?: PinStatusEntry[] } | undefined
-    )?.agentPinStatus;
-    if (list) {
-      for (const entry of list) out[entry.path] = entry;
-    }
-    return out;
-  }, [pinStatusResult.data]);
 
   const openWorkspaceFile = useCallback(
     async (filePath: string) => {
@@ -448,26 +400,11 @@ export function WorkspaceEditor({
     setConfirmingDeletePath((current) => (current === path ? null : current));
   };
 
-  const handleAccepted = useCallback(async () => {
-    const acceptedPath = acceptDialogPath;
-    setAcceptDialogPath(null);
-    refetchPinStatus({ requestPolicy: "network-only" });
-    await fetchFiles();
-    if (acceptedPath && openFileRef.current === acceptedPath) {
-      await openWorkspaceFile(acceptedPath);
-    }
-  }, [acceptDialogPath, fetchFiles, openWorkspaceFile, refetchPinStatus]);
-
   const sourceFor = useCallback(
     (path: string) => fileSources[path],
     [fileSources],
   );
-  const updateAvailableFor = useCallback(
-    (path: string) =>
-      capabilities.canReviewTemplateUpdates &&
-      Boolean(pinStatus[path]?.updateAvailable),
-    [capabilities.canReviewTemplateUpdates, pinStatus],
-  );
+  const updateAvailableFor = useCallback((_path: string) => false, []);
 
   const addMenu = (
     <DropdownMenu>
@@ -529,11 +466,7 @@ export function WorkspaceEditor({
                 updateAvailableFor={updateAvailableFor}
                 onSelect={openWorkspaceFile}
                 onToggle={toggleFolder}
-                onAcceptUpdate={
-                  capabilities.canReviewTemplateUpdates
-                    ? setAcceptDialogPath
-                    : () => {}
-                }
+                onAcceptUpdate={() => {}}
                 onNewFile={openNewFileDialog}
                 onNewFolder={openNewFolderDialog}
                 onDelete={(path, isFolder) =>
@@ -668,21 +601,6 @@ export function WorkspaceEditor({
           setDeleteConfirmTarget(null);
         }}
       />
-
-      {acceptDialogPath && agentId && (
-        <AcceptTemplateUpdateDialog
-          open={Boolean(acceptDialogPath)}
-          onOpenChange={(open) => {
-            if (!open) setAcceptDialogPath(null);
-          }}
-          agentId={agentId}
-          filename={acceptDialogPath}
-          folderPath={pinStatus[acceptDialogPath]?.folderPath ?? null}
-          pinnedContent={pinStatus[acceptDialogPath]?.pinnedContent ?? null}
-          latestContent={pinStatus[acceptDialogPath]?.latestContent ?? null}
-          onAccepted={handleAccepted}
-        />
-      )}
     </>
   );
 }

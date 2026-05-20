@@ -73,8 +73,7 @@ export const Route = createFileRoute("/_authed/_tenant/evaluations/$runId")({
   component: EvalRunDetailPage,
 });
 
-const EVAL_RESULT_SHEET_WIDTH_CLASS =
-  "data-[side=right]:max-w-none";
+const EVAL_RESULT_SHEET_WIDTH_CLASS = "data-[side=right]:max-w-none";
 const EVAL_RESULT_SHEET_STYLE = {
   width: "min(750px, calc(100vw - 2rem))",
   maxWidth: "none",
@@ -313,7 +312,7 @@ function EvalRunDetailPage() {
         <PageHeader
           title="Run Results"
           description={[
-            runDetail.agentTemplateName ?? runDetail.agentName,
+            runDetail.agentName,
             `${runDetail.passed ?? 0} passed, ${runDetail.failed ?? 0} failed of ${runDetail.totalTests ?? 0} tests`,
           ]
             .filter(Boolean)

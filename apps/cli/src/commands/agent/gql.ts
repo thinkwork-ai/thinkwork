@@ -20,7 +20,6 @@ export const AgentsDoc = graphql(`
       type
       status
       runtime
-      templateId
       lastHeartbeatAt
     }
   }
@@ -44,7 +43,6 @@ export const AllTenantAgentsDoc = graphql(`
       type
       status
       runtime
-      templateId
       lastHeartbeatAt
     }
   }
@@ -63,7 +61,6 @@ export const AgentDoc = graphql(`
       systemPrompt
       runtime
       adapterType
-      templateId
       version
       humanPairId
       parentAgentId
@@ -238,31 +235,12 @@ export const UpdateAgentEmailAllowlistDoc = graphql(`
     $agentId: ID!
     $allowedSenders: [String!]!
   ) {
-    updateAgentEmailAllowlist(agentId: $agentId, allowedSenders: $allowedSenders) {
+    updateAgentEmailAllowlist(
+      agentId: $agentId
+      allowedSenders: $allowedSenders
+    ) {
       capability
       config
-    }
-  }
-`);
-
-export const AgentVersionsDoc = graphql(`
-  query CliAgentVersions($agentId: ID!, $limit: Int) {
-    agentVersions(agentId: $agentId, limit: $limit) {
-      id
-      versionNumber
-      createdBy
-      createdAt
-      agentId
-    }
-  }
-`);
-
-export const RollbackAgentVersionDoc = graphql(`
-  mutation CliRollbackAgentVersion($agentId: ID!, $versionId: ID!) {
-    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {
-      id
-      name
-      version
     }
   }
 `);

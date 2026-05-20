@@ -15,7 +15,6 @@ import {
   evalResults,
   evalTestCases,
   agents,
-  agentTemplates,
   modelCatalog,
 } from "@thinkwork/database-pg/schema";
 import {
@@ -34,11 +33,7 @@ import {
 
 // Convert PG row → GraphQL camelCase. Drizzle returns snake_case columns;
 // GraphQL schema uses camelCase. Keep this surgical (not a generic util).
-function runToGraphql(
-  row: Record<string, unknown>,
-  agentName?: string | null,
-  agentTemplateName?: string | null,
-) {
+function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -46,7 +41,6 @@ function runToGraphql(
     agentName: agentName ?? null,
     computerId: row.computer_id ?? null,
     agentTemplateId: row.agent_template_id ?? null,
-    agentTemplateName: agentTemplateName ?? null,
     scheduledJobId: row.scheduled_job_id ?? null,
     status: row.status,
     model: row.model,
@@ -236,10 +230,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function testCaseToGraphql(
-  row: Record<string, unknown>,
-  agentTemplateName?: string | null,
-) {
+function testCaseToGraphql(row: Record<string, unknown>) {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -248,7 +239,6 @@ function testCaseToGraphql(
     query: row.query,
     systemPrompt: row.system_prompt,
     agentTemplateId: row.agent_template_id ?? null,
-    agentTemplateName: agentTemplateName ?? null,
     assertions: JSON.stringify(row.assertions ?? []),
     agentcoreEvaluatorIds: row.agentcore_evaluator_ids ?? [],
     tags: row.tags ?? [],
@@ -312,11 +302,9 @@ const evalRunsQuery = async (
     .select({
       run: evalRuns,
       agentName: agents.name,
-      agentTemplateName: agentTemplates.name,
     })
     .from(evalRuns)
     .leftJoin(agents, eq(evalRuns.agent_id, agents.id))
-    .leftJoin(agentTemplates, eq(evalRuns.agent_template_id, agentTemplates.id))
     .where(where)
     .orderBy(desc(evalRuns.created_at))
     .limit(limit)
@@ -332,7 +320,6 @@ const evalRunsQuery = async (
           progressByRunId.get(r.run.id),
         ),
         r.agentName,
-        r.agentTemplateName,
       ),
     ),
     totalCount,
@@ -344,11 +331,9 @@ const evalRun = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
     .select({
       run: evalRuns,
       agentName: agents.name,
-      agentTemplateName: agentTemplates.name,
     })
     .from(evalRuns)
     .leftJoin(agents, eq(evalRuns.agent_id, agents.id))
-    .leftJoin(agentTemplates, eq(evalRuns.agent_template_id, agentTemplates.id))
     .where(eq(evalRuns.id, args.id));
   if (!row) return null;
   const progressByRunId = await loadEvalRunProgress([args.id]);
@@ -358,7 +343,6 @@ const evalRun = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
       progressByRunId.get(args.id),
     ),
     row.agentName,
-    row.agentTemplateName,
   );
 };
 
@@ -535,19 +519,12 @@ const evalTestCasesQuery = async (
       sql`${evalTestCases.name} ILIKE ${"%" + args.search + "%"}`,
     );
   const rows = await db
-    .select({ tc: evalTestCases, agentTemplateName: agentTemplates.name })
+    .select({ tc: evalTestCases })
     .from(evalTestCases)
-    .leftJoin(
-      agentTemplates,
-      eq(evalTestCases.agent_template_id, agentTemplates.id),
-    )
     .where(and(...conditions))
     .orderBy(desc(evalTestCases.updated_at));
   return rows.map((r) =>
-    testCaseToGraphql(
-      r.tc as unknown as Record<string, unknown>,
-      r.agentTemplateName,
-    ),
+    testCaseToGraphql(r.tc as unknown as Record<string, unknown>),
   );
 };
 
@@ -602,18 +579,11 @@ const evalTestCase = async (
   _ctx: GraphQLContext,
 ) => {
   const [row] = await db
-    .select({ tc: evalTestCases, agentTemplateName: agentTemplates.name })
+    .select({ tc: evalTestCases })
     .from(evalTestCases)
-    .leftJoin(
-      agentTemplates,
-      eq(evalTestCases.agent_template_id, agentTemplates.id),
-    )
     .where(eq(evalTestCases.id, args.id));
   return row
-    ? testCaseToGraphql(
-        row.tc as unknown as Record<string, unknown>,
-        row.agentTemplateName,
-      )
+    ? testCaseToGraphql(row.tc as unknown as Record<string, unknown>)
     : null;
 };
 

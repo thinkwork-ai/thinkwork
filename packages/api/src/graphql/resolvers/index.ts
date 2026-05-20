@@ -13,7 +13,6 @@ import { messageQueries } from "./messages/index.js";
 import { webhookQueries } from "./webhooks/index.js";
 import { memoryQueries, memoryMutations } from "./memory/index.js";
 import { recipeQueries, recipeMutations } from "./recipes/index.js";
-import { templateQueries, templateMutations } from "./templates/index.js";
 import { agentMutations } from "./agents/index.js";
 import { coreMutations } from "./core/index.js";
 import { messageMutations } from "./messages/index.js";
@@ -90,7 +89,6 @@ export const queryResolvers: Record<string, any> = {
   ...webhookQueries,
   ...memoryQueries,
   ...recipeQueries,
-  ...templateQueries,
   ...evaluationsQueries,
   ...wikiQueries,
   ...skillRunsQueries,
@@ -127,7 +125,6 @@ export const mutationResolvers: Record<string, any> = {
   ...webhookMutations,
   ...memoryMutations,
   ...recipeMutations,
-  ...templateMutations,
   ...evaluationsMutations,
   ...wikiMutations,
   ...skillRunsMutations,

@@ -9,7 +9,6 @@ import { registerLabelCommand } from "../src/commands/label.js";
 import { registerInboxCommand } from "../src/commands/inbox.js";
 import { registerAgentCommand } from "../src/commands/agent.js";
 import { registerComputerCommand } from "../src/commands/computer.js";
-import { registerTemplateCommand } from "../src/commands/template.js";
 import { registerTenantCommand } from "../src/commands/tenant.js";
 import { registerMemberCommand } from "../src/commands/member.js";
 import { registerTeamCommand } from "../src/commands/team.js";
@@ -75,12 +74,6 @@ const DOMAINS: DomainCase[] = [
     phase: 2,
     register: registerComputerCommand,
     expectedSubcommand: "migration",
-  },
-  {
-    domain: "template",
-    phase: 2,
-    register: registerTemplateCommand,
-    expectedSubcommand: "sync-all",
   },
   {
     domain: "tenant",
@@ -222,12 +215,7 @@ describe("stub registration (taxonomy smoke test)", () => {
 
     expect(evals.aliases()).toContain("evals");
     expect(evals.options.map((option) => option.long)).toEqual(
-      expect.arrayContaining([
-        "--category",
-        "--test-case",
-        "--all",
-        "--watch",
-      ]),
+      expect.arrayContaining(["--category", "--test-case", "--all", "--watch"]),
     );
     expect(
       typeof (evals as unknown as { _actionHandler?: unknown })._actionHandler,
@@ -262,9 +250,7 @@ describe("stub registration (taxonomy smoke test)", () => {
     const errSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    const logSpy = vi
-      .spyOn(console, "log")
-      .mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const exitSpy = vi
       .spyOn(process, "exit")
       .mockImplementation(() => undefined as never);
@@ -277,10 +263,7 @@ describe("stub registration (taxonomy smoke test)", () => {
 
     expect(exitSpy).toHaveBeenCalledWith(2);
 
-    const combinedLog = [
-      ...errSpy.mock.calls,
-      ...logSpy.mock.calls,
-    ]
+    const combinedLog = [...errSpy.mock.calls, ...logSpy.mock.calls]
       .map((c) => c.map(String).join(" "))
       .join("\n");
     expect(combinedLog).toContain("retired");
@@ -289,9 +272,9 @@ describe("stub registration (taxonomy smoke test)", () => {
     vi.restoreAllMocks();
   });
 
-  it("covers 24 domain groups and 1 leaf command for a total of 25 Phase-0 scaffolds", () => {
+  it("covers 23 domain groups after retiring template commands", () => {
     // Guards against accidental drops when someone deletes a register() import.
-    expect(DOMAINS.length).toBe(24);
+    expect(DOMAINS.length).toBe(23);
   });
 });
 

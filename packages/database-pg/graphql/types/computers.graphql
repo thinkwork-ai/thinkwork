@@ -71,7 +71,6 @@ type Computer {
   ownerUserId: ID
   owner: User
   templateId: ID!
-  template: AgentTemplate
   sourceAgent: Agent
   name: String!
   slug: String!

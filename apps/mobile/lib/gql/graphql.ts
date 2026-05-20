@@ -19,20 +19,6 @@ export type Scalars = {
   AWSURL: { input: any; output: any; }
 };
 
-export type AcceptTemplateUpdateBulkResult = {
-  __typename?: 'AcceptTemplateUpdateBulkResult';
-  accepted: Scalars['Int']['output'];
-  failed: Scalars['Int']['output'];
-  results: Array<AcceptTemplateUpdateBulkResultEntry>;
-};
-
-export type AcceptTemplateUpdateBulkResultEntry = {
-  __typename?: 'AcceptTemplateUpdateBulkResultEntry';
-  agentId: Scalars['ID']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  success: Scalars['Boolean']['output'];
-};
-
 export type ActivityLogEntry = {
   __typename?: 'ActivityLogEntry';
   action: Scalars['String']['output'];
@@ -97,7 +83,6 @@ export type Agent = {
   __typename?: 'Agent';
   adapterConfig?: Maybe<Scalars['AWSJSON']['output']>;
   adapterType?: Maybe<Scalars['String']['output']>;
-  agentTemplate?: Maybe<AgentTemplate>;
   avatarUrl?: Maybe<Scalars['String']['output']>;
   blockedTools?: Maybe<Scalars['AWSJSON']['output']>;
   browser?: Maybe<Scalars['AWSJSON']['output']>;
@@ -128,7 +113,6 @@ export type Agent = {
   status: AgentStatus;
   subAgents?: Maybe<Array<Agent>>;
   systemPrompt?: Maybe<Scalars['String']['output']>;
-  templateId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
   type: AgentType;
   updatedAt: Scalars['AWSDateTime']['output'];
@@ -288,92 +272,11 @@ export type AgentStatusEvent = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
-export type AgentTemplate = {
-  __typename?: 'AgentTemplate';
-  blockedTools?: Maybe<Scalars['AWSJSON']['output']>;
-  /**
-   * Browser Automation opt-in metadata for the AgentCore Browser + Nova Act
-   * built-in tool. Shape validated at create/update time by
-   * packages/api/src/lib/templates/browser-config.ts:
-   *   { enabled: true }
-   * Null means the template does not use Browser Automation unless an agent-level
-   * capability override enables it.
-   */
-  browser?: Maybe<Scalars['AWSJSON']['output']>;
-  category?: Maybe<Scalars['String']['output']>;
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  /**
-   * Context Engine opt-in metadata for the query_context built-in tool.
-   * Shape validated at create/update time by
-   * packages/api/src/lib/templates/context-engine-config.ts:
-   *   { enabled: true }
-   * Null means the template does not inject Context Engine.
-   */
-  contextEngine?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  guardrailId?: Maybe<Scalars['ID']['output']>;
-  icon?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  isPublished: Scalars['Boolean']['output'];
-  knowledgeBaseIds?: Maybe<Scalars['AWSJSON']['output']>;
-  model?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  runtime: AgentRuntime;
-  /**
-   * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
-   * (plan Unit 3). Shape validated at create/update time by
-   * packages/api/src/lib/templates/sandbox-config.ts:
-   *   { environment: "default-public" | "internal-only" }
-   * Null means the template does not use the sandbox.
-   */
-  sandbox?: Maybe<Scalars['AWSJSON']['output']>;
-  /**
-   * Send Email opt-in metadata for the platform email-sending built-in tool.
-   * Shape validated at create/update time by
-   * packages/api/src/lib/templates/send-email-config.ts:
-   *   { enabled: true }
-   * Null means the template does not inject Send Email.
-   */
-  sendEmail?: Maybe<Scalars['AWSJSON']['output']>;
-  skills?: Maybe<Scalars['AWSJSON']['output']>;
-  slug: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  templateKind: TemplateKind;
-  tenantId?: Maybe<Scalars['ID']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-  /**
-   * Web Search opt-in metadata for the tenant-configured web-search built-in
-   * tool. Shape validated at create/update time by
-   * packages/api/src/lib/templates/web-search-config.ts:
-   *   { enabled: true }
-   * Null means the template does not inject Web Search.
-   */
-  webSearch?: Maybe<Scalars['AWSJSON']['output']>;
-};
-
 export enum AgentType {
   Agent = 'AGENT',
   Gateway = 'GATEWAY',
   Supervisor = 'SUPERVISOR'
 }
-
-export type AgentVersion = {
-  __typename?: 'AgentVersion';
-  agentId: Scalars['ID']['output'];
-  configSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdBy?: Maybe<Scalars['ID']['output']>;
-  guardrailSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  isActive: Scalars['Boolean']['output'];
-  knowledgeBasesSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  label?: Maybe<Scalars['String']['output']>;
-  skillsSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  tenantId: Scalars['ID']['output'];
-  versionNumber: Scalars['Int']['output'];
-  workspaceSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-};
 
 export type AgentWakeupRequest = {
   __typename?: 'AgentWakeupRequest';
@@ -910,7 +813,6 @@ export type Computer = {
   sourceAgent?: Maybe<Agent>;
   spentMonthlyCents?: Maybe<Scalars['Int']['output']>;
   status: ComputerStatus;
-  template?: Maybe<AgentTemplate>;
   templateId: Scalars['ID']['output'];
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
@@ -1114,15 +1016,6 @@ export type CreateAgentApiKeyResult = {
   plainTextKey: Scalars['String']['output'];
 };
 
-export type CreateAgentFromTemplateInput = {
-  /** Optional idempotency key. See CreateAgentInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  slug: Scalars['String']['input'];
-  teamId?: InputMaybe<Scalars['ID']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
 export type CreateAgentInput = {
   adapterConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   adapterType?: InputMaybe<Scalars['String']['input']>;
@@ -1152,55 +1045,6 @@ export type CreateAgentInput = {
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
   type?: InputMaybe<AgentType>;
-  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
-
-export type CreateAgentTemplateInput = {
-  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Browser Automation opt-in metadata; see AgentTemplate.browser. Omit
-   * (or pass null) for templates that do not opt into Browser Automation.
-   */
-  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
-  category?: InputMaybe<Scalars['String']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Context Engine opt-in metadata; see AgentTemplate.contextEngine. Omit
-   * (or pass null) for templates that do not opt into query_context.
-   */
-  contextEngine?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guardrailId?: InputMaybe<Scalars['ID']['input']>;
-  icon?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Optional client-supplied idempotency key. See
-   * CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
-   */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  isPublished?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
-  model?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  runtime?: InputMaybe<AgentRuntime>;
-  /**
-   * Sandbox opt-in metadata; see AgentTemplate.sandbox. Validated at
-   * resolver boundary. Omit (or pass null) for templates that do not
-   * opt into the sandbox.
-   */
-  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Send Email opt-in metadata; see AgentTemplate.sendEmail. Omit
-   * (or pass null) for templates that do not opt into Send Email.
-   */
-  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
-  skills?: InputMaybe<Scalars['AWSJSON']['input']>;
-  slug: Scalars['String']['input'];
-  templateKind?: InputMaybe<TemplateKind>;
-  tenantId: Scalars['ID']['input'];
-  /**
-   * Web Search opt-in metadata; see AgentTemplate.webSearch. Omit
-   * (or pass null) for templates that do not opt into Web Search.
-   */
   webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
@@ -1541,7 +1385,6 @@ export type EvalRun = {
   agentId?: Maybe<Scalars['ID']['output']>;
   agentName?: Maybe<Scalars['String']['output']>;
   agentTemplateId?: Maybe<Scalars['ID']['output']>;
-  agentTemplateName?: Maybe<Scalars['String']['output']>;
   categories: Array<Scalars['String']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   computerId?: Maybe<Scalars['ID']['output']>;
@@ -1599,7 +1442,6 @@ export type EvalSummary = {
 export type EvalTestCase = {
   __typename?: 'EvalTestCase';
   agentTemplateId?: Maybe<Scalars['ID']['output']>;
-  agentTemplateName?: Maybe<Scalars['String']['output']>;
   agentcoreEvaluatorIds: Array<Scalars['String']['output']>;
   assertions: Scalars['AWSJSON']['output'];
   category: Scalars['String']['output'];
@@ -2108,9 +1950,6 @@ export type Mutation = {
   __typename?: 'Mutation';
   _empty?: Maybe<Scalars['String']['output']>;
   acceptAgentWorkspaceReview: AgentWorkspaceRun;
-  /** Advance an agent's pinned hash for a guardrail-class file. idempotencyKey optional. */
-  acceptTemplateUpdate: Agent;
-  acceptTemplateUpdateBulk: AcceptTemplateUpdateBulkResult;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addTeamAgent: TeamAgent;
@@ -2153,8 +1992,6 @@ export type Mutation = {
   confirmRunbookRun: RunbookRun;
   createAgent: Agent;
   createAgentApiKey: CreateAgentApiKeyResult;
-  createAgentFromTemplate: Agent;
-  createAgentTemplate: AgentTemplate;
   createArtifact: Artifact;
   /**
    * Queue an async export of audit events matching the filter. Validates:
@@ -2191,7 +2028,6 @@ export type Mutation = {
   delegateThread: Thread;
   deleteAgent: Scalars['Boolean']['output'];
   deleteAgentBudgetPolicy: Scalars['Boolean']['output'];
-  deleteAgentTemplate: Scalars['Boolean']['output'];
   deleteArtifact: Scalars['Boolean']['output'];
   deleteBudgetPolicy: Scalars['Boolean']['output'];
   deleteEvalRun: Scalars['Boolean']['output'];
@@ -2269,7 +2105,6 @@ export type Mutation = {
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   revokeAgentApiKey: AgentApiKey;
-  rollbackAgentVersion: Agent;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
@@ -2294,10 +2129,6 @@ export type Mutation = {
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
   submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
-  /** Sync template config + workspace files to a linked agent. idempotencyKey optional. */
-  syncTemplateToAgent: Agent;
-  /** Sync template to every linked agent in a tenant. idempotencyKey optional. */
-  syncTemplateToAllAgents: SyncSummary;
   /**
    * Inserts a synthetic delivery row for the webhook so an operator can
    * confirm the config exists and the delivery-log pipeline is reachable.
@@ -2324,7 +2155,6 @@ export type Mutation = {
   updateAgentEmailAllowlist: AgentCapability;
   updateAgentRuntime: Agent;
   updateAgentStatus: Agent;
-  updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
   updateComputer: Computer;
   updateEvalTestCase: EvalTestCase;
@@ -2361,20 +2191,6 @@ export type Mutation = {
 export type MutationAcceptAgentWorkspaceReviewArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars['ID']['input'];
-};
-
-
-export type MutationAcceptTemplateUpdateArgs = {
-  agentId: Scalars['ID']['input'];
-  filename: Scalars['String']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationAcceptTemplateUpdateBulkArgs = {
-  filename: Scalars['String']['input'];
-  templateId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -2521,16 +2337,6 @@ export type MutationCreateAgentApiKeyArgs = {
 };
 
 
-export type MutationCreateAgentFromTemplateArgs = {
-  input: CreateAgentFromTemplateInput;
-};
-
-
-export type MutationCreateAgentTemplateArgs = {
-  input: CreateAgentTemplateInput;
-};
-
-
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
 };
@@ -2646,11 +2452,6 @@ export type MutationDeleteAgentArgs = {
 
 export type MutationDeleteAgentBudgetPolicyArgs = {
   agentId: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -3046,12 +2847,6 @@ export type MutationRevokeAgentApiKeyArgs = {
 };
 
 
-export type MutationRollbackAgentVersionArgs = {
-  agentId: Scalars['ID']['input'];
-  versionId: Scalars['ID']['input'];
-};
-
-
 export type MutationRollbackThreadIdleLearningRunArgs = {
   runId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -3173,19 +2968,6 @@ export type MutationSyncKnowledgeBaseArgs = {
 };
 
 
-export type MutationSyncTemplateToAgentArgs = {
-  agentId: Scalars['ID']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
-
-export type MutationSyncTemplateToAllAgentsArgs = {
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
-
 export type MutationTestWebhookArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3250,12 +3032,6 @@ export type MutationUpdateAgentRuntimeArgs = {
 export type MutationUpdateAgentStatusArgs = {
   id: Scalars['ID']['input'];
   status: AgentStatus;
-};
-
-
-export type MutationUpdateAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateAgentTemplateInput;
 };
 
 
@@ -3682,18 +3458,6 @@ export type PerformanceTimeSeries = {
   totalCostUsd: Scalars['Float']['output'];
 };
 
-export type PinStatusFile = {
-  __typename?: 'PinStatusFile';
-  filename: Scalars['String']['output'];
-  folderPath?: Maybe<Scalars['String']['output']>;
-  latestContent?: Maybe<Scalars['String']['output']>;
-  latestSha?: Maybe<Scalars['String']['output']>;
-  path: Scalars['String']['output'];
-  pinnedContent?: Maybe<Scalars['String']['output']>;
-  pinnedSha?: Maybe<Scalars['String']['output']>;
-  updateAvailable: Scalars['Boolean']['output'];
-};
-
 export type PlanRoutineDraftInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
@@ -3743,10 +3507,6 @@ export type Query = {
   agentCostBreakdown: CostSummary;
   agentEmailCapability?: Maybe<AgentEmailCapability>;
   agentPerformance: Array<AgentPerformance>;
-  agentPinStatus: Array<PinStatusFile>;
-  agentTemplate?: Maybe<AgentTemplate>;
-  agentTemplates: Array<AgentTemplate>;
-  agentVersions: Array<AgentVersion>;
   agentWorkspaceEvents: Array<AgentWorkspaceEvent>;
   agentWorkspaceReview?: Maybe<AgentWorkspaceReview>;
   agentWorkspaceReviews: Array<AgentWorkspaceReview>;
@@ -3812,16 +3572,6 @@ export type Query = {
   computerAssignments: Array<ComputerAssignment>;
   computerEvents: Array<ComputerEvent>;
   computerTasks: Array<ComputerTask>;
-  /**
-   * Computer templates available to a tenant. Returns the union of
-   * tenant-scoped templates (tenant_id = $tenantId) and platform-shipped
-   * templates (tenant_id IS NULL), both filtered to template_kind = 'computer'.
-   * Used by admin's Computer create-dialog template picker so the
-   * platform-default template is visible alongside any tenant-authored
-   * Computer templates. The existing `agentTemplates` query filters
-   * strictly by tenant_id and never returns NULL-tenant rows.
-   */
-  computerTemplates: Array<AgentTemplate>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
@@ -3844,7 +3594,6 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
   knowledgeBases: Array<KnowledgeBase>;
-  linkedAgentsForTemplate: Array<Agent>;
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
@@ -3906,7 +3655,6 @@ export type Query = {
   runbookRun?: Maybe<RunbookRun>;
   runbookRuns: Array<RunbookRun>;
   runtimeManifestsByAgent: Array<RuntimeManifest>;
-  runtimeManifestsByTemplate: Array<RuntimeManifest>;
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
@@ -3918,7 +3666,6 @@ export type Query = {
   spaces: Array<Space>;
   team?: Maybe<Team>;
   teams: Array<Team>;
-  templateSyncDiff: TemplateSyncDiff;
   tenant?: Maybe<Tenant>;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
@@ -4047,28 +3794,6 @@ export type QueryAgentPerformanceArgs = {
   from?: InputMaybe<Scalars['AWSDateTime']['input']>;
   tenantId: Scalars['ID']['input'];
   to?: InputMaybe<Scalars['AWSDateTime']['input']>;
-};
-
-
-export type QueryAgentPinStatusArgs = {
-  agentId: Scalars['ID']['input'];
-  includeNested?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type QueryAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryAgentTemplatesArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryAgentVersionsArgs = {
-  agentId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -4225,11 +3950,6 @@ export type QueryComputerTasksArgs = {
 };
 
 
-export type QueryComputerTemplatesArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
 export type QueryComputersArgs = {
   status?: InputMaybe<ComputerStatus>;
   tenantId: Scalars['ID']['input'];
@@ -4347,11 +4067,6 @@ export type QueryKnowledgeBaseArgs = {
 
 export type QueryKnowledgeBasesArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryLinkedAgentsForTemplateArgs = {
-  templateId: Scalars['ID']['input'];
 };
 
 
@@ -4545,12 +4260,6 @@ export type QueryRuntimeManifestsByAgentArgs = {
 };
 
 
-export type QueryRuntimeManifestsByTemplateArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
-
 export type QueryScheduledJobArgs = {
   id: Scalars['ID']['input'];
 };
@@ -4613,12 +4322,6 @@ export type QueryTeamArgs = {
 
 export type QueryTeamsArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTemplateSyncDiffArgs = {
-  agentId: Scalars['ID']['input'];
-  templateId: Scalars['ID']['input'];
 };
 
 
@@ -4913,12 +4616,6 @@ export type ResubmitInboxItemInput = {
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type RoleChange = {
-  __typename?: 'RoleChange';
-  current?: Maybe<Scalars['String']['output']>;
-  target?: Maybe<Scalars['String']['output']>;
 };
 
 export type RotateTenantCredentialInput = {
@@ -5315,7 +5012,6 @@ export type RuntimeManifest = {
   id: Scalars['ID']['output'];
   manifestJson: Scalars['AWSJSON']['output'];
   sessionId: Scalars['String']['output'];
-  templateId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
   userId?: Maybe<Scalars['ID']['output']>;
 };
@@ -5413,15 +5109,6 @@ export type SkillCatalogItem = {
   skillId: Scalars['String']['output'];
   source: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
-};
-
-export type SkillPermissionsDelta = {
-  __typename?: 'SkillPermissionsDelta';
-  /** Ops the agent will gain after sync (typically empty — intersection narrows). */
-  added: Array<Scalars['String']['output']>;
-  /** Ops the agent currently has but will lose after sync. */
-  removed: Array<Scalars['String']['output']>;
-  skillId: Scalars['String']['output'];
 };
 
 export type SkillRun = {
@@ -5794,13 +5481,6 @@ export type SubscriptionOnThreadUpdatedArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
-export type SyncSummary = {
-  __typename?: 'SyncSummary';
-  agentsFailed: Scalars['Int']['output'];
-  agentsSynced: Scalars['Int']['output'];
-  errors: Array<Scalars['String']['output']>;
-};
-
 export type Team = {
   __typename?: 'Team';
   agents: Array<TeamAgent>;
@@ -5840,33 +5520,6 @@ export type TeamUser = {
   tenantId: Scalars['ID']['output'];
   user?: Maybe<User>;
   userId: Scalars['ID']['output'];
-};
-
-export enum TemplateKind {
-  Agent = 'AGENT',
-  Computer = 'COMPUTER'
-}
-
-export type TemplateSyncDiff = {
-  __typename?: 'TemplateSyncDiff';
-  filesAdded: Array<Scalars['String']['output']>;
-  filesModified: Array<Scalars['String']['output']>;
-  filesSame: Array<Scalars['String']['output']>;
-  kbsAdded: Array<Scalars['String']['output']>;
-  kbsRemoved: Array<Scalars['String']['output']>;
-  /**
-   * Per-skill preview of the operations the agent will lose (or gain) if
-   * Push is applied now. Only includes entries for skills whose manifest
-   * declares `permissions_model: operations` AND where the agent's
-   * current state would diverge from the post-sync state. Empty array
-   * when no permission change is pending. Surfaces in the sync dialog
-   * so operators can see revocations before confirming.
-   */
-  permissionsChanges: Array<SkillPermissionsDelta>;
-  roleChange?: Maybe<RoleChange>;
-  skillsAdded: Array<Scalars['String']['output']>;
-  skillsChanged: Array<Scalars['String']['output']>;
-  skillsRemoved: Array<Scalars['String']['output']>;
 };
 
 export type Tenant = {
@@ -6392,48 +6045,6 @@ export type UpdateAgentInput = {
   sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<AgentType>;
-  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
-
-export type UpdateAgentTemplateInput = {
-  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Browser Automation opt-in metadata; see AgentTemplate.browser. Pass
-   * null to clear; omit to leave unchanged.
-   */
-  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
-  category?: InputMaybe<Scalars['String']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Context Engine opt-in metadata; see AgentTemplate.contextEngine. Pass
-   * null to clear; omit to leave unchanged.
-   */
-  contextEngine?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guardrailId?: InputMaybe<Scalars['ID']['input']>;
-  icon?: InputMaybe<Scalars['String']['input']>;
-  isPublished?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
-  model?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  runtime?: InputMaybe<AgentRuntime>;
-  /**
-   * Sandbox opt-in metadata; see AgentTemplate.sandbox. Pass null to
-   * clear; omit to leave unchanged.
-   */
-  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Send Email opt-in metadata; see AgentTemplate.sendEmail. Pass
-   * null to clear; omit to leave unchanged.
-   */
-  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
-  skills?: InputMaybe<Scalars['AWSJSON']['input']>;
-  slug?: InputMaybe<Scalars['String']['input']>;
-  templateKind?: InputMaybe<TemplateKind>;
-  /**
-   * Web Search opt-in metadata; see AgentTemplate.webSearch. Pass
-   * null to clear; omit to leave unchanged.
-   */
   webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
@@ -7075,14 +6686,14 @@ export type AgentsQueryVariables = Exact<{
 }>;
 
 
-export type AgentsQuery = { __typename?: 'Query', agents: Array<{ __typename?: 'Agent', id: string, tenantId: string, name: string, role?: string | null, type: AgentType, status: AgentStatus, templateId?: string | null, systemPrompt?: string | null, adapterType?: string | null, adapterConfig?: any | null, runtimeConfig?: any | null, lastHeartbeatAt?: any | null, avatarUrl?: string | null, reportsToId?: string | null, humanPairId?: string | null, version: number, createdAt: any, updatedAt: any }> };
+export type AgentsQuery = { __typename?: 'Query', agents: Array<{ __typename?: 'Agent', id: string, tenantId: string, name: string, role?: string | null, type: AgentType, status: AgentStatus, systemPrompt?: string | null, adapterType?: string | null, adapterConfig?: any | null, runtimeConfig?: any | null, lastHeartbeatAt?: any | null, avatarUrl?: string | null, reportsToId?: string | null, humanPairId?: string | null, version: number, createdAt: any, updatedAt: any }> };
 
 export type AgentQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type AgentQuery = { __typename?: 'Query', agent?: { __typename?: 'Agent', id: string, tenantId: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, templateId?: string | null, systemPrompt?: string | null, adapterType?: string | null, adapterConfig?: any | null, runtimeConfig?: any | null, lastHeartbeatAt?: any | null, avatarUrl?: string | null, reportsToId?: string | null, humanPairId?: string | null, version: number, createdAt: any, updatedAt: any, capabilities: Array<{ __typename?: 'AgentCapability', id: string, capability: string, config?: any | null, enabled: boolean }>, skills: Array<{ __typename?: 'AgentSkill', id: string, skillId: string, config?: any | null, permissions?: any | null, rateLimitRpm?: number | null, enabled: boolean }>, budgetPolicy?: { __typename?: 'AgentBudgetPolicy', id: string, period: string, limitUsd: number, actionOnExceed: string } | null } | null };
+export type AgentQuery = { __typename?: 'Query', agent?: { __typename?: 'Agent', id: string, tenantId: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, systemPrompt?: string | null, adapterType?: string | null, adapterConfig?: any | null, runtimeConfig?: any | null, lastHeartbeatAt?: any | null, avatarUrl?: string | null, reportsToId?: string | null, humanPairId?: string | null, version: number, createdAt: any, updatedAt: any, capabilities: Array<{ __typename?: 'AgentCapability', id: string, capability: string, config?: any | null, enabled: boolean }>, skills: Array<{ __typename?: 'AgentSkill', id: string, skillId: string, config?: any | null, permissions?: any | null, rateLimitRpm?: number | null, enabled: boolean }>, budgetPolicy?: { __typename?: 'AgentBudgetPolicy', id: string, period: string, limitUsd: number, actionOnExceed: string } | null } | null };
 
 export type CreateAgentMutationVariables = Exact<{
   input: CreateAgentInput;
@@ -7097,7 +6708,7 @@ export type UpdateAgentMutationVariables = Exact<{
 }>;
 
 
-export type UpdateAgentMutation = { __typename?: 'Mutation', updateAgent: { __typename?: 'Agent', id: string, name: string, role?: string | null, type: AgentType, status: AgentStatus, templateId?: string | null, systemPrompt?: string | null, updatedAt: any } };
+export type UpdateAgentMutation = { __typename?: 'Mutation', updateAgent: { __typename?: 'Agent', id: string, name: string, role?: string | null, type: AgentType, status: AgentStatus, systemPrompt?: string | null, updatedAt: any } };
 
 export type DeleteAgentMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -7757,10 +7368,10 @@ export type CreateRecipeMutation = { __typename?: 'Mutation', createRecipe: { __
 
 
 export const TenantUsersForFormPickerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TenantUsersForFormPicker"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"principalType"}},{"kind":"Field","name":{"kind":"Name","value":"principalId"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<TenantUsersForFormPickerQuery, TenantUsersForFormPickerQueryVariables>;
-export const AgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Agents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"type"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"type"},"value":{"kind":"Variable","name":{"kind":"Name","value":"type"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"templateId"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"adapterType"}},{"kind":"Field","name":{"kind":"Name","value":"adapterConfig"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeConfig"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"reportsToId"}},{"kind":"Field","name":{"kind":"Name","value":"humanPairId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AgentsQuery, AgentsQueryVariables>;
-export const AgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Agent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"templateId"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"adapterType"}},{"kind":"Field","name":{"kind":"Name","value":"adapterConfig"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeConfig"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"reportsToId"}},{"kind":"Field","name":{"kind":"Name","value":"humanPairId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"capabilities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"skills"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"rateLimitRpm"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"budgetPolicy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"limitUsd"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AgentQuery, AgentQueryVariables>;
+export const AgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Agents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"type"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"type"},"value":{"kind":"Variable","name":{"kind":"Name","value":"type"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"adapterType"}},{"kind":"Field","name":{"kind":"Name","value":"adapterConfig"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeConfig"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"reportsToId"}},{"kind":"Field","name":{"kind":"Name","value":"humanPairId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AgentsQuery, AgentsQueryVariables>;
+export const AgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Agent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"adapterType"}},{"kind":"Field","name":{"kind":"Name","value":"adapterConfig"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeConfig"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"reportsToId"}},{"kind":"Field","name":{"kind":"Name","value":"humanPairId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"capabilities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"skills"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"rateLimitRpm"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"budgetPolicy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"limitUsd"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AgentQuery, AgentQueryVariables>;
 export const CreateAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateAgentMutation, CreateAgentMutationVariables>;
-export const UpdateAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"templateId"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAgentMutation, UpdateAgentMutationVariables>;
+export const UpdateAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAgentMutation, UpdateAgentMutationVariables>;
 export const DeleteAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteAgentMutation, DeleteAgentMutationVariables>;
 export const UpdateAgentStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAgentStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentStatus"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgentStatus"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateAgentStatusMutation, UpdateAgentStatusMutationVariables>;
 export const SetAgentCapabilitiesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAgentCapabilities"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"capabilities"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentCapabilityInput"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAgentCapabilities"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"capabilities"},"value":{"kind":"Variable","name":{"kind":"Name","value":"capabilities"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<SetAgentCapabilitiesMutation, SetAgentCapabilitiesMutationVariables>;

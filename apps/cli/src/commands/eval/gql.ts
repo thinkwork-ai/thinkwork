@@ -17,7 +17,6 @@ export const EvalRunsDoc = graphql(`
         agentId
         agentName
         agentTemplateId
-        agentTemplateName
         totalTests
         passed
         failed
@@ -43,7 +42,6 @@ export const EvalRunDoc = graphql(`
       agentId
       agentName
       agentTemplateId
-      agentTemplateName
       totalTests
       passed
       failed
@@ -89,7 +87,6 @@ export const EvalTestCasesDoc = graphql(`
       query
       systemPrompt
       agentTemplateId
-      agentTemplateName
       agentcoreEvaluatorIds
       tags
       enabled
@@ -110,7 +107,6 @@ export const EvalTestCaseDoc = graphql(`
       query
       systemPrompt
       agentTemplateId
-      agentTemplateName
       assertions
       agentcoreEvaluatorIds
       tags
@@ -133,18 +129,6 @@ export const ComputersForEvalDoc = graphql(`
   }
 `);
 
-export const AgentTemplatesForEvalDoc = graphql(`
-  query CliAgentTemplatesForEval($tenantId: ID!) {
-    agentTemplates(tenantId: $tenantId) {
-      id
-      name
-      slug
-      model
-      isPublished
-    }
-  }
-`);
-
 export const TenantBySlugDoc = graphql(`
   query CliTenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {
@@ -163,7 +147,6 @@ export const StartEvalRunDoc = graphql(`
       model
       categories
       agentTemplateId
-      agentTemplateName
       totalTests
       createdAt
     }

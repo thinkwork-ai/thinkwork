@@ -26,7 +26,7 @@ describe("agent detail dashboard/editor routes", () => {
     expect(chromeSource).toContain('to="/agents/$agentId"');
     expect(chromeSource).toContain('to="/agents/$agentId/editor"');
     expect(chromeSource).toContain("AgentHeaderBadges");
-    expect(chromeSource).toContain("AgentRollbackButton");
+    expect(chromeSource).not.toContain("AgentRollbackButton");
   });
 
   it("keeps the dashboard route focused on metrics and activity", () => {

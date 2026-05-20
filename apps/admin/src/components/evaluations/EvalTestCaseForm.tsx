@@ -1,5 +1,11 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useMutation, useQuery } from "urql";
 import { Plus, Save, Trash2 } from "lucide-react";
 
@@ -17,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AgentTemplatesListQuery,
   CreateEvalTestCaseMutation,
   EvalTestCasesQuery,
   UpdateEvalTestCaseMutation,
@@ -164,12 +169,6 @@ export function EvalTestCaseForm({
 
   const [submitting, setSubmitting] = useState(false);
 
-  const [templates] = useQuery({
-    query: AgentTemplatesListQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
-  });
-
   // Pull existing tenant categories to mix with the seed list.
   const [allCases] = useQuery({
     query: EvalTestCasesQuery,
@@ -261,11 +260,6 @@ export function EvalTestCaseForm({
     updateCase,
   ]);
 
-  const templateOptions = (templates.data?.agentTemplates ?? []) as Array<{
-    id: string;
-    name: string;
-  }>;
-
   // Lift Cancel/Save into the parent's PageHeader.actions slot.
   useEffect(() => {
     if (!onActions) return;
@@ -342,33 +336,6 @@ export function EvalTestCaseForm({
               <p className="text-xs text-muted-foreground">
                 Pick a built-in category or type your own — categories group
                 tests for filtering and per-category pass rates.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="agent-template">Agent template</Label>
-              <Select
-                value={agentTemplateId ?? "_none"}
-                onValueChange={(v) =>
-                  setAgentTemplateId(v === "_none" ? null : v)
-                }
-              >
-                <SelectTrigger id="agent-template">
-                  <SelectValue placeholder="Default test agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Default test agent</SelectItem>
-                  {templateOptions.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Pin which agent template the test runs against — important when
-                verifying tool-surface behavior (e.g. "should not web-search if
-                the template lacks that skill").
               </p>
             </div>
           </div>

@@ -49,7 +49,6 @@ import { Route as AuthedTenantArtifactsIndexRouteImport } from "./routes/_authed
 import { Route as AuthedTenantAppletsIndexRouteImport } from "./routes/_authed/_tenant/applets/index";
 import { Route as AuthedTenantAnalyticsIndexRouteImport } from "./routes/_authed/_tenant/analytics/index";
 import { Route as AuthedTenantAgentsIndexRouteImport } from "./routes/_authed/_tenant/agents/index";
-import { Route as AuthedTenantAgentTemplatesIndexRouteImport } from "./routes/_authed/_tenant/agent-templates/index";
 import { Route as AuthedTenantWebhooksWebhookIdRouteImport } from "./routes/_authed/_tenant/webhooks/$webhookId";
 import { Route as AuthedTenantThreadsThreadIdRouteImport } from "./routes/_authed/_tenant/threads/$threadId";
 import { Route as AuthedTenantSpacesSpaceIdRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId";
@@ -75,7 +74,6 @@ import { Route as AuthedTenantAnalyticsActivityRouteImport } from "./routes/_aut
 import { Route as AuthedTenantAgentsNewRouteImport } from "./routes/_authed/_tenant/agents/new";
 import { Route as AuthedTenantAgentsInvitesRouteImport } from "./routes/_authed/_tenant/agents/invites";
 import { Route as AuthedTenantAgentsAgentIdRouteImport } from "./routes/_authed/_tenant/agents/$agentId";
-import { Route as AuthedTenantAgentTemplatesDefaultsRouteImport } from "./routes/_authed/_tenant/agent-templates/defaults";
 import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from "./routes/_authed/_tenant/evaluations/studio/index";
 import { Route as AuthedTenantComplianceExportsIndexRouteImport } from "./routes/_authed/_tenant/compliance/exports/index";
 import { Route as AuthedTenantCapabilitiesSkillsIndexRouteImport } from "./routes/_authed/_tenant/capabilities/skills/index";
@@ -84,7 +82,6 @@ import { Route as AuthedTenantAutomationsWebhooksIndexRouteImport } from "./rout
 import { Route as AuthedTenantAutomationsSchedulesIndexRouteImport } from "./routes/_authed/_tenant/automations/schedules/index";
 import { Route as AuthedTenantAutomationsRoutinesIndexRouteImport } from "./routes/_authed/_tenant/automations/routines/index";
 import { Route as AuthedTenantAutomationsCredentialsIndexRouteImport } from "./routes/_authed/_tenant/automations/credentials/index";
-import { Route as AuthedTenantAgentTemplatesTemplateIdIndexRouteImport } from "./routes/_authed/_tenant/agent-templates/$templateId.index";
 import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from "./routes/_authed/_tenant/knowledge/knowledge-bases/$kbId";
 import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from "./routes/_authed/_tenant/evaluations/studio/new";
 import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/$testCaseId";
@@ -104,8 +101,6 @@ import { Route as AuthedTenantAgentsAgentIdSkillsRouteImport } from "./routes/_a
 import { Route as AuthedTenantAgentsAgentIdMemoryRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.memory";
 import { Route as AuthedTenantAgentsAgentIdKnowledgeRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.knowledge";
 import { Route as AuthedTenantAgentsAgentIdEditorRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.editor";
-import { Route as AuthedTenantAgentTemplatesTemplateIdSyncRouteImport } from "./routes/_authed/_tenant/agent-templates/$templateId_.sync";
-import { Route as AuthedTenantAgentTemplatesTemplateIdTabRouteImport } from "./routes/_authed/_tenant/agent-templates/$templateId.$tab";
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index";
 import { Route as AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/edit.$testCaseId";
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.$scheduledJobId";
@@ -327,12 +322,6 @@ const AuthedTenantAgentsIndexRoute = AuthedTenantAgentsIndexRouteImport.update({
   path: "/agents/",
   getParentRoute: () => AuthedTenantRoute,
 } as any);
-const AuthedTenantAgentTemplatesIndexRoute =
-  AuthedTenantAgentTemplatesIndexRouteImport.update({
-    id: "/agent-templates/",
-    path: "/agent-templates/",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
 const AuthedTenantWebhooksWebhookIdRoute =
   AuthedTenantWebhooksWebhookIdRouteImport.update({
     id: "/webhooks/$webhookId",
@@ -482,12 +471,6 @@ const AuthedTenantAgentsAgentIdRoute =
     path: "/agents/$agentId",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantAgentTemplatesDefaultsRoute =
-  AuthedTenantAgentTemplatesDefaultsRouteImport.update({
-    id: "/agent-templates/defaults",
-    path: "/agent-templates/defaults",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
 const AuthedTenantEvaluationsStudioIndexRoute =
   AuthedTenantEvaluationsStudioIndexRouteImport.update({
     id: "/evaluations/studio/",
@@ -534,12 +517,6 @@ const AuthedTenantAutomationsCredentialsIndexRoute =
   AuthedTenantAutomationsCredentialsIndexRouteImport.update({
     id: "/automations/credentials/",
     path: "/automations/credentials/",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
-const AuthedTenantAgentTemplatesTemplateIdIndexRoute =
-  AuthedTenantAgentTemplatesTemplateIdIndexRouteImport.update({
-    id: "/agent-templates/$templateId/",
-    path: "/agent-templates/$templateId/",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
 const AuthedTenantKnowledgeKnowledgeBasesKbIdRoute =
@@ -656,18 +633,6 @@ const AuthedTenantAgentsAgentIdEditorRoute =
     path: "/agents/$agentId/editor",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantAgentTemplatesTemplateIdSyncRoute =
-  AuthedTenantAgentTemplatesTemplateIdSyncRouteImport.update({
-    id: "/agent-templates/$templateId_/sync",
-    path: "/agent-templates/$templateId/sync",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
-const AuthedTenantAgentTemplatesTemplateIdTabRoute =
-  AuthedTenantAgentTemplatesTemplateIdTabRouteImport.update({
-    id: "/agent-templates/$templateId/$tab",
-    path: "/agent-templates/$templateId/$tab",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
 const AuthedTenantAgentsAgentIdScheduledJobsIndexRoute =
   AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport.update({
     id: "/agents/$agentId_/scheduled-jobs/",
@@ -711,7 +676,6 @@ export interface FileRoutesByFullPath {
   "/ontology": typeof AuthedTenantOntologyRoute;
   "/org": typeof AuthedTenantOrgRoute;
   "/settings": typeof AuthedTenantSettingsRoute;
-  "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
   "/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
   "/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
   "/agents/new": typeof AuthedTenantAgentsNewRoute;
@@ -737,7 +701,6 @@ export interface FileRoutesByFullPath {
   "/spaces/$spaceId": typeof AuthedTenantSpacesSpaceIdRoute;
   "/threads/$threadId": typeof AuthedTenantThreadsThreadIdRoute;
   "/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
-  "/agent-templates/": typeof AuthedTenantAgentTemplatesIndexRoute;
   "/agents/": typeof AuthedTenantAgentsIndexRoute;
   "/analytics/": typeof AuthedTenantAnalyticsIndexRoute;
   "/applets/": typeof AuthedTenantAppletsIndexRoute;
@@ -761,8 +724,6 @@ export interface FileRoutesByFullPath {
   "/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
   "/wiki/": typeof AuthedTenantWikiIndexRoute;
   "/workspace-reviews/": typeof AuthedTenantWorkspaceReviewsIndexRoute;
-  "/agent-templates/$templateId/$tab": typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
-  "/agent-templates/$templateId/sync": typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
   "/agents/$agentId/editor": typeof AuthedTenantAgentsAgentIdEditorRoute;
   "/agents/$agentId/knowledge": typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
   "/agents/$agentId/memory": typeof AuthedTenantAgentsAgentIdMemoryRoute;
@@ -782,7 +743,6 @@ export interface FileRoutesByFullPath {
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
-  "/agent-templates/$templateId/": typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
   "/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/automations/schedules/": typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -808,7 +768,6 @@ export interface FileRoutesByTo {
   "/ontology": typeof AuthedTenantOntologyRoute;
   "/org": typeof AuthedTenantOrgRoute;
   "/settings": typeof AuthedTenantSettingsRoute;
-  "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
   "/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
   "/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
   "/agents/new": typeof AuthedTenantAgentsNewRoute;
@@ -834,7 +793,6 @@ export interface FileRoutesByTo {
   "/spaces/$spaceId": typeof AuthedTenantSpacesSpaceIdRoute;
   "/threads/$threadId": typeof AuthedTenantThreadsThreadIdRoute;
   "/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
-  "/agent-templates": typeof AuthedTenantAgentTemplatesIndexRoute;
   "/agents": typeof AuthedTenantAgentsIndexRoute;
   "/analytics": typeof AuthedTenantAnalyticsIndexRoute;
   "/applets": typeof AuthedTenantAppletsIndexRoute;
@@ -858,8 +816,6 @@ export interface FileRoutesByTo {
   "/webhooks": typeof AuthedTenantWebhooksIndexRoute;
   "/wiki": typeof AuthedTenantWikiIndexRoute;
   "/workspace-reviews": typeof AuthedTenantWorkspaceReviewsIndexRoute;
-  "/agent-templates/$templateId/$tab": typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
-  "/agent-templates/$templateId/sync": typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
   "/agents/$agentId/editor": typeof AuthedTenantAgentsAgentIdEditorRoute;
   "/agents/$agentId/knowledge": typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
   "/agents/$agentId/memory": typeof AuthedTenantAgentsAgentIdMemoryRoute;
@@ -879,7 +835,6 @@ export interface FileRoutesByTo {
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
-  "/agent-templates/$templateId": typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
   "/automations/credentials": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/automations/routines": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/automations/schedules": typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -912,7 +867,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/ontology": typeof AuthedTenantOntologyRoute;
   "/_authed/_tenant/org": typeof AuthedTenantOrgRoute;
   "/_authed/_tenant/settings": typeof AuthedTenantSettingsRoute;
-  "/_authed/_tenant/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
   "/_authed/_tenant/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
   "/_authed/_tenant/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
   "/_authed/_tenant/agents/new": typeof AuthedTenantAgentsNewRoute;
@@ -938,7 +892,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/spaces/$spaceId": typeof AuthedTenantSpacesSpaceIdRoute;
   "/_authed/_tenant/threads/$threadId": typeof AuthedTenantThreadsThreadIdRoute;
   "/_authed/_tenant/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
-  "/_authed/_tenant/agent-templates/": typeof AuthedTenantAgentTemplatesIndexRoute;
   "/_authed/_tenant/agents/": typeof AuthedTenantAgentsIndexRoute;
   "/_authed/_tenant/analytics/": typeof AuthedTenantAnalyticsIndexRoute;
   "/_authed/_tenant/applets/": typeof AuthedTenantAppletsIndexRoute;
@@ -962,8 +915,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
   "/_authed/_tenant/wiki/": typeof AuthedTenantWikiIndexRoute;
   "/_authed/_tenant/workspace-reviews/": typeof AuthedTenantWorkspaceReviewsIndexRoute;
-  "/_authed/_tenant/agent-templates/$templateId/$tab": typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
-  "/_authed/_tenant/agent-templates/$templateId_/sync": typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
   "/_authed/_tenant/agents/$agentId_/editor": typeof AuthedTenantAgentsAgentIdEditorRoute;
   "/_authed/_tenant/agents/$agentId_/knowledge": typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
   "/_authed/_tenant/agents/$agentId_/memory": typeof AuthedTenantAgentsAgentIdMemoryRoute;
@@ -983,7 +934,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/_authed/_tenant/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/_authed/_tenant/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
-  "/_authed/_tenant/agent-templates/$templateId/": typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
   "/_authed/_tenant/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/_authed/_tenant/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/_authed/_tenant/automations/schedules/": typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -1015,7 +965,6 @@ export interface FileRouteTypes {
     | "/ontology"
     | "/org"
     | "/settings"
-    | "/agent-templates/defaults"
     | "/agents/$agentId"
     | "/agents/invites"
     | "/agents/new"
@@ -1041,7 +990,6 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId"
     | "/threads/$threadId"
     | "/webhooks/$webhookId"
-    | "/agent-templates/"
     | "/agents/"
     | "/analytics/"
     | "/applets/"
@@ -1065,8 +1013,6 @@ export interface FileRouteTypes {
     | "/webhooks/"
     | "/wiki/"
     | "/workspace-reviews/"
-    | "/agent-templates/$templateId/$tab"
-    | "/agent-templates/$templateId/sync"
     | "/agents/$agentId/editor"
     | "/agents/$agentId/knowledge"
     | "/agents/$agentId/memory"
@@ -1086,7 +1032,6 @@ export interface FileRouteTypes {
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
     | "/knowledge/knowledge-bases/$kbId"
-    | "/agent-templates/$templateId/"
     | "/automations/credentials/"
     | "/automations/routines/"
     | "/automations/schedules/"
@@ -1112,7 +1057,6 @@ export interface FileRouteTypes {
     | "/ontology"
     | "/org"
     | "/settings"
-    | "/agent-templates/defaults"
     | "/agents/$agentId"
     | "/agents/invites"
     | "/agents/new"
@@ -1138,7 +1082,6 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId"
     | "/threads/$threadId"
     | "/webhooks/$webhookId"
-    | "/agent-templates"
     | "/agents"
     | "/analytics"
     | "/applets"
@@ -1162,8 +1105,6 @@ export interface FileRouteTypes {
     | "/webhooks"
     | "/wiki"
     | "/workspace-reviews"
-    | "/agent-templates/$templateId/$tab"
-    | "/agent-templates/$templateId/sync"
     | "/agents/$agentId/editor"
     | "/agents/$agentId/knowledge"
     | "/agents/$agentId/memory"
@@ -1183,7 +1124,6 @@ export interface FileRouteTypes {
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
     | "/knowledge/knowledge-bases/$kbId"
-    | "/agent-templates/$templateId"
     | "/automations/credentials"
     | "/automations/routines"
     | "/automations/schedules"
@@ -1215,7 +1155,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/ontology"
     | "/_authed/_tenant/org"
     | "/_authed/_tenant/settings"
-    | "/_authed/_tenant/agent-templates/defaults"
     | "/_authed/_tenant/agents/$agentId"
     | "/_authed/_tenant/agents/invites"
     | "/_authed/_tenant/agents/new"
@@ -1241,7 +1180,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/spaces/$spaceId"
     | "/_authed/_tenant/threads/$threadId"
     | "/_authed/_tenant/webhooks/$webhookId"
-    | "/_authed/_tenant/agent-templates/"
     | "/_authed/_tenant/agents/"
     | "/_authed/_tenant/analytics/"
     | "/_authed/_tenant/applets/"
@@ -1265,8 +1203,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/webhooks/"
     | "/_authed/_tenant/wiki/"
     | "/_authed/_tenant/workspace-reviews/"
-    | "/_authed/_tenant/agent-templates/$templateId/$tab"
-    | "/_authed/_tenant/agent-templates/$templateId_/sync"
     | "/_authed/_tenant/agents/$agentId_/editor"
     | "/_authed/_tenant/agents/$agentId_/knowledge"
     | "/_authed/_tenant/agents/$agentId_/memory"
@@ -1286,7 +1222,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/evaluations/studio/$testCaseId"
     | "/_authed/_tenant/evaluations/studio/new"
     | "/_authed/_tenant/knowledge/knowledge-bases/$kbId"
-    | "/_authed/_tenant/agent-templates/$templateId/"
     | "/_authed/_tenant/automations/credentials/"
     | "/_authed/_tenant/automations/routines/"
     | "/_authed/_tenant/automations/schedules/"
@@ -1593,13 +1528,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantAgentsIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/agent-templates/": {
-      id: "/_authed/_tenant/agent-templates/";
-      path: "/agent-templates";
-      fullPath: "/agent-templates/";
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesIndexRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
     "/_authed/_tenant/webhooks/$webhookId": {
       id: "/_authed/_tenant/webhooks/$webhookId";
       path: "/webhooks/$webhookId";
@@ -1775,13 +1703,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantAgentsAgentIdRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/agent-templates/defaults": {
-      id: "/_authed/_tenant/agent-templates/defaults";
-      path: "/agent-templates/defaults";
-      fullPath: "/agent-templates/defaults";
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesDefaultsRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
     "/_authed/_tenant/evaluations/studio/": {
       id: "/_authed/_tenant/evaluations/studio/";
       path: "/evaluations/studio";
@@ -1836,13 +1757,6 @@ declare module "@tanstack/react-router" {
       path: "/automations/credentials";
       fullPath: "/automations/credentials/";
       preLoaderRoute: typeof AuthedTenantAutomationsCredentialsIndexRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
-    "/_authed/_tenant/agent-templates/$templateId/": {
-      id: "/_authed/_tenant/agent-templates/$templateId/";
-      path: "/agent-templates/$templateId";
-      fullPath: "/agent-templates/$templateId/";
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/knowledge/knowledge-bases/$kbId": {
@@ -1976,20 +1890,6 @@ declare module "@tanstack/react-router" {
       path: "/agents/$agentId/editor";
       fullPath: "/agents/$agentId/editor";
       preLoaderRoute: typeof AuthedTenantAgentsAgentIdEditorRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
-    "/_authed/_tenant/agent-templates/$templateId_/sync": {
-      id: "/_authed/_tenant/agent-templates/$templateId_/sync";
-      path: "/agent-templates/$templateId/sync";
-      fullPath: "/agent-templates/$templateId/sync";
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
-    "/_authed/_tenant/agent-templates/$templateId/$tab": {
-      id: "/_authed/_tenant/agent-templates/$templateId/$tab";
-      path: "/agent-templates/$templateId/$tab";
-      fullPath: "/agent-templates/$templateId/$tab";
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/agents/$agentId_/scheduled-jobs/": {
@@ -2147,7 +2047,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantOntologyRoute: typeof AuthedTenantOntologyRoute;
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute;
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute;
-  AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute;
   AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute;
   AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute;
   AuthedTenantAgentsNewRoute: typeof AuthedTenantAgentsNewRoute;
@@ -2163,7 +2062,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantSpacesSpaceIdRoute: typeof AuthedTenantSpacesSpaceIdRoute;
   AuthedTenantThreadsThreadIdRoute: typeof AuthedTenantThreadsThreadIdRoute;
   AuthedTenantWebhooksWebhookIdRoute: typeof AuthedTenantWebhooksWebhookIdRoute;
-  AuthedTenantAgentTemplatesIndexRoute: typeof AuthedTenantAgentTemplatesIndexRoute;
   AuthedTenantAgentsIndexRoute: typeof AuthedTenantAgentsIndexRoute;
   AuthedTenantAppletsIndexRoute: typeof AuthedTenantAppletsIndexRoute;
   AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute;
@@ -2183,8 +2081,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute;
   AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute;
   AuthedTenantWorkspaceReviewsIndexRoute: typeof AuthedTenantWorkspaceReviewsIndexRoute;
-  AuthedTenantAgentTemplatesTemplateIdTabRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
-  AuthedTenantAgentTemplatesTemplateIdSyncRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
   AuthedTenantAgentsAgentIdEditorRoute: typeof AuthedTenantAgentsAgentIdEditorRoute;
   AuthedTenantAgentsAgentIdKnowledgeRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
   AuthedTenantAgentsAgentIdMemoryRoute: typeof AuthedTenantAgentsAgentIdMemoryRoute;
@@ -2199,7 +2095,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAutomationsWebhooksWebhookIdRoute: typeof AuthedTenantAutomationsWebhooksWebhookIdRoute;
   AuthedTenantEvaluationsStudioTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute;
-  AuthedTenantAgentTemplatesTemplateIdIndexRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
   AuthedTenantAutomationsCredentialsIndexRoute: typeof AuthedTenantAutomationsCredentialsIndexRoute;
   AuthedTenantAutomationsRoutinesIndexRoute: typeof AuthedTenantAutomationsRoutinesIndexRoute;
   AuthedTenantAutomationsSchedulesIndexRoute: typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -2222,8 +2117,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantOntologyRoute: AuthedTenantOntologyRoute,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,
-  AuthedTenantAgentTemplatesDefaultsRoute:
-    AuthedTenantAgentTemplatesDefaultsRoute,
   AuthedTenantAgentsAgentIdRoute: AuthedTenantAgentsAgentIdRoute,
   AuthedTenantAgentsInvitesRoute: AuthedTenantAgentsInvitesRoute,
   AuthedTenantAgentsNewRoute: AuthedTenantAgentsNewRoute,
@@ -2241,7 +2134,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantSpacesSpaceIdRoute: AuthedTenantSpacesSpaceIdRoute,
   AuthedTenantThreadsThreadIdRoute: AuthedTenantThreadsThreadIdRoute,
   AuthedTenantWebhooksWebhookIdRoute: AuthedTenantWebhooksWebhookIdRoute,
-  AuthedTenantAgentTemplatesIndexRoute: AuthedTenantAgentTemplatesIndexRoute,
   AuthedTenantAgentsIndexRoute: AuthedTenantAgentsIndexRoute,
   AuthedTenantAppletsIndexRoute: AuthedTenantAppletsIndexRoute,
   AuthedTenantArtifactsIndexRoute: AuthedTenantArtifactsIndexRoute,
@@ -2262,10 +2154,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,
   AuthedTenantWorkspaceReviewsIndexRoute:
     AuthedTenantWorkspaceReviewsIndexRoute,
-  AuthedTenantAgentTemplatesTemplateIdTabRoute:
-    AuthedTenantAgentTemplatesTemplateIdTabRoute,
-  AuthedTenantAgentTemplatesTemplateIdSyncRoute:
-    AuthedTenantAgentTemplatesTemplateIdSyncRoute,
   AuthedTenantAgentsAgentIdEditorRoute: AuthedTenantAgentsAgentIdEditorRoute,
   AuthedTenantAgentsAgentIdKnowledgeRoute:
     AuthedTenantAgentsAgentIdKnowledgeRoute,
@@ -2290,8 +2178,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantEvaluationsStudioTestCaseIdRoute:
     AuthedTenantEvaluationsStudioTestCaseIdRoute,
   AuthedTenantEvaluationsStudioNewRoute: AuthedTenantEvaluationsStudioNewRoute,
-  AuthedTenantAgentTemplatesTemplateIdIndexRoute:
-    AuthedTenantAgentTemplatesTemplateIdIndexRoute,
   AuthedTenantAutomationsCredentialsIndexRoute:
     AuthedTenantAutomationsCredentialsIndexRoute,
   AuthedTenantAutomationsRoutinesIndexRoute:

@@ -1,6 +1,6 @@
 /**
  * `thinkwork agent ...` — agent lifecycle, capabilities, skills, budgets,
- * API keys, email addresses, and version history. Implementations land
+ * API keys and email addresses. Implementations land
  * in apps/cli/src/commands/agent/.
  */
 
@@ -27,24 +27,33 @@ import {
   runAgentEmailDisable,
   runAgentEmailEnable,
 } from "./agent/email.js";
-import { runAgentVersionList, runAgentVersionRollback } from "./agent/version.js";
 
 export function registerAgentCommand(program: Command): void {
   const agent = program
     .command("agent")
     .alias("agents")
-    .description("Manage agents — create, configure, inspect, budget, and key-rotate.");
+    .description(
+      "Manage agents — create, configure, inspect, budget, and key-rotate.",
+    );
 
   agent
     .command("list")
     .alias("ls")
-    .description("List agents in a tenant. Cognito users see paired agents; admins see all.")
+    .description(
+      "List agents in a tenant. Cognito users see paired agents; admins see all.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--status <s>", "IDLE | BUSY | OFFLINE | ERROR")
-    .option("--type <t>", "Filter by agent type (HUMAN_PAIR, TEAM_AGENT, SUB_AGENT, …)")
+    .option(
+      "--type <t>",
+      "Filter by agent type (HUMAN_PAIR, TEAM_AGENT, SUB_AGENT, …)",
+    )
     .option("--include-system", "Include internal system agents")
-    .option("--all", "Admin-only: list every agent in the tenant (not just paired ones)")
+    .option(
+      "--all",
+      "Admin-only: list every agent in the tenant (not just paired ones)",
+    )
     .addHelpText(
       "after",
       `
@@ -58,24 +67,36 @@ Examples:
 
   agent
     .command("get <id>")
-    .description("Fetch one agent with its skills, capabilities, budget, and recent activity.")
+    .description(
+      "Fetch one agent with its skills, capabilities, budget, and recent activity.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runAgentGet);
 
   agent
     .command("create [name]")
-    .description("Create a new agent. Prompts walkthrough for missing fields in TTY.")
+    .description(
+      "Create a new agent. Prompts walkthrough for missing fields in TTY.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--template <id>", "Clone from an existing template (REQUIRED)")
     .option("--role <role>", "Role description shown to users")
     .option("--type <type>", "TEAM_AGENT | SUB_AGENT | HUMAN_PAIR")
     .option("--parent <agentId>", "Parent agent (for SUB_AGENT)")
-    .option("--reports-to <agentId>", "Reporting manager (for org-chart display)")
-    .option("--system-prompt <text>", "Raw system-prompt override (use with care)")
+    .option(
+      "--reports-to <agentId>",
+      "Reporting manager (for org-chart display)",
+    )
+    .option(
+      "--system-prompt <text>",
+      "Raw system-prompt override (use with care)",
+    )
     .option("--system-prompt-file <path>", "Load the system prompt from a file")
-    .option("--model <id>", "Model ID override (carried in runtimeConfig.model)")
+    .option(
+      "--model <id>",
+      "Model ID override (carried in runtimeConfig.model)",
+    )
     .addHelpText(
       "after",
       `
@@ -107,7 +128,9 @@ Examples:
 
   agent
     .command("delete <id>")
-    .description("Archive (soft-delete) an agent. Existing threads stay; no new work routed.")
+    .description(
+      "Archive (soft-delete) an agent. Existing threads stay; no new work routed.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
@@ -130,7 +153,9 @@ Examples:
 
   agent
     .command("unpause <id>")
-    .description("Resume an agent paused by a budget policy trigger (sets status: IDLE).")
+    .description(
+      "Resume an agent paused by a budget policy trigger (sets status: IDLE).",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runAgentUnpause);
@@ -139,11 +164,18 @@ Examples:
   const capabilities = agent
     .command("capabilities")
     .alias("cap")
-    .description("Toggle built-in capabilities (email inbox, web search, etc.).");
+    .description(
+      "Toggle built-in capabilities (email inbox, web search, etc.).",
+    );
   capabilities
     .command("set <agentId>")
-    .description("Enable/disable capabilities on an agent (read-modify-write the full list).")
-    .option("--capability <name>", "Capability name (email, web-search, file-upload, …)")
+    .description(
+      "Enable/disable capabilities on an agent (read-modify-write the full list).",
+    )
+    .option(
+      "--capability <name>",
+      "Capability name (email, web-search, file-upload, …)",
+    )
     .option("--enabled", "Enable")
     .option("--disabled", "Disable")
     .option("-s, --stage <name>", "Deployment stage")
@@ -189,18 +221,27 @@ Examples:
   // ----- API keys -----------------------------------------------------------
   const apiKey = agent
     .command("api-key")
-    .description("Agent API keys — service-to-service credentials tied to one agent.");
+    .description(
+      "Agent API keys — service-to-service credentials tied to one agent.",
+    );
   apiKey
     .command("list <agentId>")
-    .description("List API keys for an agent (metadata only; plaintext shown on create).")
+    .description(
+      "List API keys for an agent (metadata only; plaintext shown on create).",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runAgentApiKeyList);
   apiKey
     .command("create <agentId>")
-    .description("Generate a new API key. The plaintext is printed once — save it.")
+    .description(
+      "Generate a new API key. The plaintext is printed once — save it.",
+    )
     .option("--name <n>", "Human label for the key (e.g. 'GitHub Actions')")
-    .option("--expires <iso>", "Expiration (currently a no-op; AgentApiKey has no expiry field)")
+    .option(
+      "--expires <iso>",
+      "Expiration (currently a no-op; AgentApiKey has no expiry field)",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .addHelpText(
@@ -223,23 +264,31 @@ Examples:
   // ----- Email --------------------------------------------------------------
   const email = agent
     .command("email")
-    .description("Inbound email addresses — let an agent receive email + optionally reply.");
+    .description(
+      "Inbound email addresses — let an agent receive email + optionally reply.",
+    );
   email
     .command("enable <agentId>")
-    .description("Enable inbound email for an agent. With --local-part, also claims a vanity address.")
+    .description(
+      "Enable inbound email for an agent. With --local-part, also claims a vanity address.",
+    )
     .option("--local-part <x>", "Custom localpart (e.g. ops@)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runAgentEmailEnable);
   email
     .command("disable <agentId>")
-    .description("Disable inbound email for an agent (releases vanity address if claimed).")
+    .description(
+      "Disable inbound email for an agent (releases vanity address if claimed).",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runAgentEmailDisable);
   email
     .command("allowlist <agentId> <senders...>")
-    .description("Replace the allowlist of sender email addresses for an agent.")
+    .description(
+      "Replace the allowlist of sender email addresses for an agent.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .addHelpText(
@@ -250,23 +299,4 @@ Examples:
 `,
     )
     .action(runAgentEmailAllowlist);
-
-  // ----- Versions -----------------------------------------------------------
-  const version = agent
-    .command("version")
-    .description("Agent configuration version history.");
-  version
-    .command("list <agentId>")
-    .description("List version snapshots of an agent's config.")
-    .option("-s, --stage <name>", "Deployment stage")
-    .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--limit <n>", "Max versions", "20")
-    .action(runAgentVersionList);
-  version
-    .command("rollback <agentId> <versionId>")
-    .description("Restore an agent to a prior version. Creates a new version pointing at the old config.")
-    .option("-s, --stage <name>", "Deployment stage")
-    .option("-t, --tenant <slug>", "Tenant slug")
-    .option("-y, --yes", "Skip confirmation")
-    .action(runAgentVersionRollback);
 }

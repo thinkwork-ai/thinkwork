@@ -11,7 +11,6 @@
     "./admin-keys": "./src/admin-keys.ts",
     "./teams": "./src/teams.ts",
     "./agents": "./src/agents.ts",
-    "./templates": "./src/templates.ts",
     "./users": "./src/users.ts",
     "./artifacts": "./src/artifacts.ts"
   },

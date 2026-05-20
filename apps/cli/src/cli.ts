@@ -28,7 +28,6 @@ import { registerInboxCommand } from "./commands/inbox.js";
 // Phase-2 (agents / templates / tenancy / teams / kb).
 import { registerAgentCommand } from "./commands/agent.js";
 import { registerComputerCommand } from "./commands/computer.js";
-import { registerTemplateCommand } from "./commands/template.js";
 import { registerTenantCommand } from "./commands/tenant.js";
 import { registerMemberCommand } from "./commands/member.js";
 import { registerTeamCommand } from "./commands/team.js";
@@ -122,7 +121,6 @@ registerInboxCommand(program);
 // Phase-2 stubs
 registerAgentCommand(program);
 registerComputerCommand(program);
-registerTemplateCommand(program);
 registerTenantCommand(program);
 registerMemberCommand(program);
 registerTeamCommand(program);

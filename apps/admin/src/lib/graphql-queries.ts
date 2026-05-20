@@ -15,14 +15,7 @@ export const AgentsListQuery = graphql(`
       type
       status
       runtime
-      templateId
       budgetMonthlyCents
-      agentTemplate {
-        id
-        name
-        slug
-        model
-      }
       avatarUrl
       createdAt
     }
@@ -45,18 +38,6 @@ export const AgentDetailQuery = gql`
       status
       runtime
       budgetMonthlyCents
-      templateId
-      agentTemplate {
-        id
-        name
-        slug
-        model
-        runtime
-        guardrailId
-        blockedTools
-        skills
-        browser
-      }
       systemPrompt
       avatarUrl
       lastHeartbeatAt
@@ -112,7 +93,6 @@ export const CreateAgentMutation = graphql(`
       type
       status
       runtime
-      templateId
       budgetMonthlyCents
       createdAt
     }
@@ -145,7 +125,6 @@ export const UpdateAgentMutation = graphql(`
       name
       role
       type
-      templateId
       runtime
       systemPrompt
       adapterType
@@ -391,13 +370,6 @@ export const ComputersListQuery = graphql(`
         email
       }
       templateId
-      template {
-        id
-        name
-        slug
-        templateKind
-        model
-      }
       sourceAgent {
         id
         name
@@ -438,13 +410,6 @@ export const ComputerDetailQuery = graphql(`
         email
       }
       templateId
-      template {
-        id
-        name
-        slug
-        templateKind
-        model
-      }
       sourceAgent {
         id
         name
@@ -578,10 +543,6 @@ export const UserComputerAssignmentsQuery = graphql(`
         scope
         status
         runtimeStatus
-        template {
-          id
-          name
-        }
       }
       accessSource
       directAssignment {
@@ -2891,134 +2852,6 @@ export const RejectOntologyChangeSetMutation = graphql(`
   }
 `);
 
-// ---------------------------------------------------------------------------
-// Agent Templates
-// ---------------------------------------------------------------------------
-
-export const AgentTemplatesListQuery = graphql(`
-  query AgentTemplatesList($tenantId: ID!) {
-    agentTemplates(tenantId: $tenantId) {
-      id
-      tenantId
-      name
-      slug
-      description
-      category
-      icon
-      templateKind
-      source
-      runtime
-      model
-      guardrailId
-      blockedTools
-      config
-      skills
-      knowledgeBaseIds
-      isPublished
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-// Returns tenant-scoped + platform-shipped (tenant_id IS NULL) Computer
-// templates so the admin Computer create-dialog can surface the platform
-// default alongside any tenant-authored templates. Distinct from
-// AgentTemplatesListQuery which filters strictly by tenant_id.
-export const ComputerTemplatesListQuery = graphql(`
-  query ComputerTemplatesList($tenantId: ID!) {
-    computerTemplates(tenantId: $tenantId) {
-      id
-      tenantId
-      name
-      slug
-      description
-      category
-      icon
-      templateKind
-      source
-      runtime
-      model
-      isPublished
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const AgentTemplateDetailQuery = graphql(`
-  query AgentTemplateDetail($id: ID!) {
-    agentTemplate(id: $id) {
-      id
-      tenantId
-      name
-      slug
-      description
-      category
-      icon
-      templateKind
-      source
-      runtime
-      model
-      guardrailId
-      blockedTools
-      config
-      skills
-      sandbox
-      browser
-      webSearch
-      sendEmail
-      contextEngine
-      knowledgeBaseIds
-      isPublished
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const CreateAgentTemplateMutation = graphql(`
-  mutation CreateAgentTemplate($input: CreateAgentTemplateInput!) {
-    createAgentTemplate(input: $input) {
-      id
-      name
-      slug
-      templateKind
-      runtime
-    }
-  }
-`);
-
-export const UpdateAgentTemplateMutation = graphql(`
-  mutation UpdateAgentTemplate($id: ID!, $input: UpdateAgentTemplateInput!) {
-    updateAgentTemplate(id: $id, input: $input) {
-      id
-      name
-      slug
-      templateKind
-      runtime
-      model
-      guardrailId
-      blockedTools
-      config
-      skills
-      sandbox
-      browser
-      webSearch
-      sendEmail
-      contextEngine
-      knowledgeBaseIds
-      updatedAt
-    }
-  }
-`);
-
-export const DeleteAgentTemplateMutation = graphql(`
-  mutation DeleteAgentTemplate($id: ID!) {
-    deleteAgentTemplate(id: $id)
-  }
-`);
-
 // Minimal tenant read for surfaces that need to show sandbox policy
 // state (Built-in Tools page, policy audit panels). Not the full tenant
 // — just the sandbox-adjacent fields.
@@ -3030,102 +2863,6 @@ export const TenantSandboxStatusQuery = graphql(`
       complianceTier
       sandboxInterpreterPublicId
       sandboxInterpreterInternalId
-    }
-  }
-`);
-
-export const CreateAgentFromTemplateMutation = graphql(`
-  mutation CreateAgentFromTemplate($input: CreateAgentFromTemplateInput!) {
-    createAgentFromTemplate(input: $input) {
-      id
-      name
-      slug
-    }
-  }
-`);
-
-// ---------------------------------------------------------------------------
-// Template → Agent sync + rollback
-// ---------------------------------------------------------------------------
-
-export const LinkedAgentsForTemplateQuery = graphql(`
-  query LinkedAgentsForTemplate($templateId: ID!) {
-    linkedAgentsForTemplate(templateId: $templateId) {
-      id
-      name
-      slug
-      role
-      status
-      updatedAt
-    }
-  }
-`);
-
-export const TemplateSyncDiffQuery = graphql(`
-  query TemplateSyncDiff($templateId: ID!, $agentId: ID!) {
-    templateSyncDiff(templateId: $templateId, agentId: $agentId) {
-      roleChange {
-        current
-        target
-      }
-      skillsAdded
-      skillsRemoved
-      skillsChanged
-      permissionsChanges {
-        skillId
-        added
-        removed
-      }
-      kbsAdded
-      kbsRemoved
-      filesAdded
-      filesModified
-      filesSame
-    }
-  }
-`);
-
-export const AgentVersionsQuery = graphql(`
-  query AgentVersionsList($agentId: ID!, $limit: Int) {
-    agentVersions(agentId: $agentId, limit: $limit) {
-      id
-      agentId
-      versionNumber
-      label
-      createdBy
-      createdAt
-    }
-  }
-`);
-
-export const SyncTemplateToAgentMutation = graphql(`
-  mutation SyncTemplateToAgent($templateId: ID!, $agentId: ID!) {
-    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {
-      id
-      name
-      role
-      updatedAt
-    }
-  }
-`);
-
-export const SyncTemplateToAllAgentsMutation = graphql(`
-  mutation SyncTemplateToAllAgents($templateId: ID!) {
-    syncTemplateToAllAgents(templateId: $templateId) {
-      agentsSynced
-      agentsFailed
-      errors
-    }
-  }
-`);
-
-export const RollbackAgentVersionMutation = graphql(`
-  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {
-    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {
-      id
-      name
-      role
-      updatedAt
     }
   }
 `);
@@ -3319,7 +3056,6 @@ export const EvalRunsQuery = gql`
         agentId
         agentName
         agentTemplateId
-        agentTemplateName
         scheduledJobId
         startedAt
         completedAt
@@ -3347,7 +3083,6 @@ export const EvalRunQuery = gql`
       agentId
       agentName
       agentTemplateId
-      agentTemplateName
       scheduledJobId
       startedAt
       completedAt

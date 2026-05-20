@@ -22,7 +22,6 @@ import { apiFetch } from "@/lib/api-fetch";
 import { AgentRuntime } from "@/gql/graphql";
 import { AgentFormDialog } from "./AgentFormDialog";
 import { AgentHeaderBadges } from "./AgentHeaderBadges";
-import { AgentRollbackButton } from "./AgentRollbackButton";
 
 type AgentDetailTab = "dashboard" | "editor";
 
@@ -256,7 +255,6 @@ export function AgentDetailChrome({
                   {triggerCount > 0 && <>{triggerCount} </>}Automations
                 </Badge>
               </Link>
-              <AgentRollbackButton agentId={agentId} onRollback={refresh} />
             </AgentHeaderBadges>
           </div>
         </div>

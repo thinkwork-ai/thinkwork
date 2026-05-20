@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useMutation } from "urql";
 import { Check, Loader2, X } from "lucide-react";
-import { useTenant } from "@/context/TenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -12,26 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  ComputerTemplatesListQuery,
-  UpdateComputerMutation,
-} from "@/lib/graphql-queries";
+import { UpdateComputerMutation } from "@/lib/graphql-queries";
 import { formatDateTime } from "@/lib/utils";
 import { ComputerScope, type Computer } from "@/gql/graphql";
 
@@ -46,7 +25,6 @@ type ComputerSlice = Pick<
   | "createdAt"
   | "updatedAt"
 > & {
-  template?: { id: string; name: string; slug: string } | null;
   owner?: { id: string; name?: string | null; email?: string | null } | null;
 };
 
@@ -56,18 +34,9 @@ interface Props {
 }
 
 export function ComputerIdentityEditPanel({ computer, onUpdated }: Props) {
-  const { tenantId } = useTenant();
   const [{ fetching: saving }, updateComputer] = useMutation(
     UpdateComputerMutation,
   );
-
-  const [templatesResult] = useQuery({
-    query: ComputerTemplatesListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId,
-    requestPolicy: "cache-and-network",
-  });
-  const templates = templatesResult.data?.computerTemplates ?? [];
 
   const ownerLabel = computer.owner?.name ?? computer.owner?.email ?? "—";
   const isHistoricalPersonal =
@@ -105,39 +74,6 @@ export function ComputerIdentityEditPanel({ computer, onUpdated }: Props) {
   function cancelName() {
     setNameDraft(computer.name);
     setNameError(null);
-  }
-
-  // Template edit state — resync with server truth on prop change.
-  const [templateDraft, setTemplateDraft] = useState(computer.templateId);
-  const [confirmingTemplate, setConfirmingTemplate] = useState(false);
-  const [templateError, setTemplateError] = useState<string | null>(null);
-  useEffect(() => {
-    setTemplateDraft(computer.templateId);
-    setTemplateError(null);
-  }, [computer.templateId]);
-  const templateChanged = templateDraft !== computer.templateId;
-
-  function openTemplateConfirm() {
-    setTemplateError(null);
-    setConfirmingTemplate(true);
-  }
-
-  async function confirmTemplateChange() {
-    const result = await updateComputer({
-      id: computer.id,
-      input: { templateId: templateDraft },
-    });
-    if (result.error) {
-      setTemplateError(result.error.message);
-      return;
-    }
-    setConfirmingTemplate(false);
-    onUpdated?.();
-  }
-
-  function cancelTemplate() {
-    setTemplateDraft(computer.templateId);
-    setTemplateError(null);
   }
 
   // Budget edit state — resync with server truth on prop change.
@@ -193,8 +129,8 @@ export function ComputerIdentityEditPanel({ computer, onUpdated }: Props) {
         <CardHeader>
           <CardTitle>Identity</CardTitle>
           <CardDescription>
-            Rename, change the base template, or set the monthly budget. Slug
-            and creation metadata are read-only.
+            Rename or set the monthly budget. Slug and creation metadata are
+            read-only.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -241,50 +177,11 @@ export function ComputerIdentityEditPanel({ computer, onUpdated }: Props) {
             {/* Template */}
             <div>
               <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                Base Template
+                Legacy Template ID
               </dt>
-              <dd className="flex items-center gap-2">
-                <Select
-                  value={templateDraft}
-                  onValueChange={(v) => setTemplateDraft(v)}
-                  disabled={templates.length === 0}
-                >
-                  <SelectTrigger className="max-w-md text-sm">
-                    <SelectValue placeholder="Select template..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map((t) => (
-                      <SelectItem key={t.id} value={t.id} className="text-sm">
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {templateChanged && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={openTemplateConfirm}
-                      disabled={saving}
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      Save
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={cancelTemplate}
-                      disabled={saving}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Cancel
-                    </Button>
-                  </>
-                )}
+              <dd className="max-w-md break-all text-sm text-muted-foreground">
+                {computer.templateId}
               </dd>
-              {templateError && (
-                <p className="mt-1 text-xs text-destructive">{templateError}</p>
-              )}
             </div>
 
             {/* Budget */}
@@ -377,67 +274,6 @@ export function ComputerIdentityEditPanel({ computer, onUpdated }: Props) {
           </dl>
         </CardContent>
       </Card>
-
-      <Dialog
-        open={confirmingTemplate}
-        onOpenChange={(open) => {
-          if (!open) {
-            setConfirmingTemplate(false);
-            setTemplateError(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Change base template?</DialogTitle>
-            <DialogDescription>
-              This will update this Computer's template association. Re-deriving
-              the workspace's skills and MCP configuration from the new template
-              is <Badge variant="outline">not yet implemented</Badge> — you'll
-              need to re-seed manually for now.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">From:</span>
-              <Badge variant="outline">{computer.template?.name ?? "—"}</Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">To:</span>
-              <Badge variant="outline">
-                {templates.find((t) => t.id === templateDraft)?.name ?? "—"}
-              </Badge>
-            </div>
-          </DialogBody>
-          {templateError && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {templateError}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setConfirmingTemplate(false);
-                setTemplateError(null);
-              }}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmTemplateChange} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Change template"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
