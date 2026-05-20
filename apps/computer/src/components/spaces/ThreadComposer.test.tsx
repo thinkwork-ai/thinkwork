@@ -29,9 +29,7 @@ describe("ThreadComposer", () => {
     fireEvent.change(screen.getByPlaceholderText("Message"), {
       target: { value: "@coor" },
     });
-    fireEvent.click(
-      await screen.findByRole("option", { name: /@Coordinator/ }),
-    );
+    fireEvent.click(await screen.findByRole("option", { name: /Coordinator/ }));
     fireEvent.change(screen.getByPlaceholderText("Message"), {
       target: { value: "@Coordinator please check credit" },
     });
@@ -71,15 +69,15 @@ describe("ThreadComposer", () => {
     fireEvent.change(textarea, { target: { value: "@" } });
 
     expect(
-      (
-        await screen.findByRole("option", { name: /@Coordinator/ })
-      ).getAttribute("aria-selected"),
+      (await screen.findByRole("option", { name: /Coordinator/ })).getAttribute(
+        "aria-selected",
+      ),
     ).toBe("true");
 
     fireEvent.keyDown(textarea, { key: "ArrowDown" });
     expect(
       screen
-        .getByRole("option", { name: /@Alex Finance/ })
+        .getByRole("option", { name: /Alex Finance/ })
         .getAttribute("aria-selected"),
     ).toBe("true");
 
