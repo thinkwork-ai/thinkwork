@@ -121,6 +121,35 @@ export const SpacesQuery = gql`
   }
 `;
 
+export const NewThreadMentionTargetsQuery = gql`
+  query NewThreadMentionTargets($tenantId: ID!) {
+    tenantMembers(tenantId: $tenantId) {
+      id
+      principalType
+      principalId
+      role
+      status
+      user {
+        id
+        name
+        email
+        image
+      }
+    }
+    allTenantAgents(
+      tenantId: $tenantId
+      includeSystem: true
+      includeSubAgents: true
+    ) {
+      id
+      name
+      avatarUrl
+      role
+      status
+    }
+  }
+`;
+
 export const ChatGlobalInboxQuery = gql`
   query ChatGlobalInbox($tenantId: ID!, $limit: Int) {
     threadsPaged(

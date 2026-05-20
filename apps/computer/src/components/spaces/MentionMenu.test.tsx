@@ -26,10 +26,11 @@ describe("MentionMenu", () => {
     const onSelect = vi.fn();
     render(<MentionMenu targets={targets} query="ordin" onSelect={onSelect} />);
 
-    expect(screen.getByText("@Coordinator")).toBeTruthy();
+    expect(screen.getByText("Coordinator")).toBeTruthy();
+    expect(screen.queryByText("coordinator")).toBeNull();
     expect(screen.queryByText("Alex Finance")).toBeNull();
 
-    fireEvent.click(screen.getByRole("option", { name: /@Coordinator/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Coordinator/ }));
     expect(onSelect).toHaveBeenCalledWith(targets[0]);
   });
 

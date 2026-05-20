@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useMutation } from "urql";
+import { useMutation, useQuery } from "urql";
 import {
   Select,
   SelectContent,
@@ -8,11 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@thinkwork/ui";
-import { ComputerComposer } from "@/components/computer/ComputerComposer";
+import {
+  ComputerComposer,
+  type ComputerComposerMention,
+} from "@/components/computer/ComputerComposer";
 import { StarterCardGrid } from "@/components/computer/StarterCardGrid";
+import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
+  NewThreadMentionTargetsQuery,
   SendMessageMutation,
 } from "@/lib/graphql-queries";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
@@ -43,7 +48,31 @@ interface SendMessageVars {
     role: "USER";
     content: string;
     metadata?: string;
+    mentions?: ComputerComposerMention[];
   };
+}
+
+interface NewThreadMentionTargetsData {
+  tenantMembers?: Array<{
+    id: string;
+    principalType: string;
+    principalId: string;
+    role: string;
+    status: string;
+    user?: {
+      id: string;
+      name?: string | null;
+      email: string;
+      image?: string | null;
+    } | null;
+  }>;
+  allTenantAgents?: Array<{
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    role?: string | null;
+    status: string;
+  }>;
 }
 
 export function ComputerWorkbench() {
@@ -67,10 +96,25 @@ export function ComputerWorkbench() {
   const [, sendMessage] = useMutation<SendMessageResult, SendMessageVars>(
     SendMessageMutation,
   );
+  const [{ data: mentionTargetData }] = useQuery<
+    NewThreadMentionTargetsData,
+    { tenantId: string }
+  >({
+    query: NewThreadMentionTargetsQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
 
   const computerId = selectedComputer?.id ?? null;
+  const mentionTargets = useMemo(
+    () => buildNewThreadMentionTargets(mentionTargetData),
+    [mentionTargetData],
+  );
 
-  async function handleSubmit(files: File[]) {
+  async function handleSubmit(
+    files: File[],
+    mentions: ComputerComposerMention[],
+  ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
     if (!tenantId || !computerId) {
@@ -173,6 +217,7 @@ export function ComputerWorkbench() {
           role: "USER",
           content: trimmed,
           metadata: JSON.stringify({ attachments: attachmentRefs }),
+          mentions,
         },
       });
       if (sent.error) {
@@ -226,6 +271,7 @@ export function ComputerWorkbench() {
           value={prompt}
           onChange={setPrompt}
           onSubmit={handleSubmit}
+          mentionTargets={mentionTargets}
           isSubmitting={fetching || busy || computersFetching}
           error={error}
         />
@@ -250,4 +296,49 @@ function titleFromPromptWithAttachments(prompt: string, files: File[]): string {
   const first = files[0]?.name ?? "attachment";
   const suffix = files.length > 1 ? ` (+${files.length - 1})` : "";
   return `Analyze ${first}${suffix}`;
+}
+
+function buildNewThreadMentionTargets(
+  data: NewThreadMentionTargetsData | undefined,
+): MentionTarget[] {
+  if (!data) return [];
+  const byKey = new Map<string, MentionTarget>();
+
+  for (const member of data.tenantMembers ?? []) {
+    if (
+      member.status.toLowerCase() !== "active" ||
+      member.principalType.toLowerCase() !== "user" ||
+      !member.user
+    ) {
+      continue;
+    }
+    const displayName = member.user.name || member.user.email || "User";
+    byKey.set(`USER:${member.user.id}`, {
+      id: `user:${member.user.id}`,
+      targetType: "USER",
+      targetId: member.user.id,
+      displayName,
+      avatarUrl: member.user.image,
+      role: member.role,
+    });
+  }
+
+  for (const agent of data.allTenantAgents ?? []) {
+    if (agent.status.toLowerCase() === "archived") continue;
+    byKey.set(`AGENT:${agent.id}`, {
+      id: `agent:${agent.id}`,
+      targetType: "AGENT",
+      targetId: agent.id,
+      displayName: agent.name,
+      avatarUrl: agent.avatarUrl,
+      role: agent.role,
+    });
+  }
+
+  return [...byKey.values()].sort((a, b) => {
+    const typeOrder =
+      a.targetType === b.targetType ? 0 : a.targetType === "USER" ? -1 : 1;
+    if (typeOrder !== 0) return typeOrder;
+    return a.displayName.localeCompare(b.displayName);
+  });
 }
