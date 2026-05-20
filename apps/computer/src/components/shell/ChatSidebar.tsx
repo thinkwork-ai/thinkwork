@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
+import { toast } from "sonner";
 import {
   Anchor,
   Archive,
@@ -20,6 +20,7 @@ import {
   Shield,
   SlidersHorizontal,
   Sun,
+  Trash2,
   User,
 } from "lucide-react";
 import {
@@ -36,17 +37,24 @@ import {
   SidebarGroupLabel,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import { SpacesQuery, ThreadsPagedQuery } from "@/lib/graphql-queries";
+import {
+  DeleteThreadMutation,
+  SpacesQuery,
+  ThreadsPagedQuery,
+} from "@/lib/graphql-queries";
 import {
   clearMissingThreadDeletes,
+  setThreadDeletePending,
   usePendingThreadDeletes,
 } from "@/lib/pending-thread-deletes";
 import { cn } from "@/lib/utils";
 import {
+  formatTinyRelativeDate,
   groupThreadsByRecency,
   isThreadUnread,
   selectNextThreadBelowDeleted,
   sortThreadsByActivityDesc,
+  threadActivityAt,
   threadTitle,
   type ChatThreadSummary,
 } from "./chat-sidebar-types";
@@ -71,6 +79,7 @@ interface SpacesResult {
 
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
+const SECTION_THREAD_LIMIT = 5;
 
 export function ChatSidebar() {
   const { tenantId } = useTenant();
@@ -246,10 +255,6 @@ export function ChatSidebar() {
       ),
     [defaultSpaceIds, recentThreads],
   );
-  const contextualSpaces = useMemo(
-    () => spaces.filter((space) => !defaultSpaceIds.has(space.id)),
-    [defaultSpaceIds, spaces],
-  );
   const spaceThreadsById = useMemo(() => {
     const grouped = new Map<string, ChatThreadSummary[]>();
     for (const thread of recentThreads) {
@@ -260,6 +265,15 @@ export function ChatSidebar() {
     }
     return grouped;
   }, [defaultSpaceIds, recentThreads]);
+  const contextualSpaces = useMemo(
+    () =>
+      spaces.filter(
+        (space) =>
+          !defaultSpaceIds.has(space.id) &&
+          (spaceThreadsById.get(space.id)?.length ?? 0) > 0,
+      ),
+    [defaultSpaceIds, spaceThreadsById, spaces],
+  );
   const searchThreads = useMemo(
     () =>
       sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
@@ -317,7 +331,7 @@ export function ChatSidebar() {
         </nav>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
+      <div className="scrollbar-auto-hide min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
           {recentError ? (
             <p className="rounded-md border border-destructive/40 px-2 py-2 text-xs text-destructive">
@@ -432,7 +446,7 @@ function ThreadSearchDialog({
             />
           </label>
         </div>
-        <div className="max-h-[420px] overflow-y-auto p-2">
+        <div className="scrollbar-auto-hide max-h-[420px] overflow-y-auto p-2">
           {error ? (
             <p className="px-2 py-3 text-sm text-destructive">{error}</p>
           ) : isLoading ? (
@@ -487,8 +501,13 @@ function ThreadListSection({
   emptyBehavior: "hidden" | "message";
   onActivate: (threadId: string) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
   if (threads.length === 0 && emptyBehavior === "hidden") return null;
-  const groups = groupThreadsByRecency(threads);
+  const visibleThreads = showAll
+    ? threads
+    : threads.slice(0, SECTION_THREAD_LIMIT);
+  const hiddenCount = threads.length - visibleThreads.length;
+  const groups = groupThreadsByRecency(visibleThreads);
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/thread-section">
@@ -530,6 +549,15 @@ function ThreadListSection({
                   </div>
                 </div>
               ))}
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+                  onClick={() => setShowAll(true)}
+                >
+                  Show more ({hiddenCount})
+                </button>
+              ) : null}
             </div>
           )}
         </SidebarGroupContent>
@@ -553,6 +581,11 @@ function SpaceThreadSection({
 }) {
   const label = space.name ?? space.slug ?? "Space";
   const isActiveSpace = activeSpaceId === space.id;
+  const [showAll, setShowAll] = useState(false);
+  const visibleThreads = showAll
+    ? threads
+    : threads.slice(0, SECTION_THREAD_LIMIT);
+  const hiddenCount = threads.length - visibleThreads.length;
 
   return (
     <Collapsible
@@ -596,7 +629,7 @@ function SpaceThreadSection({
             </Link>
           ) : (
             <div className="ml-5 space-y-0.5">
-              {threads.slice(0, 6).map((thread) => (
+              {visibleThreads.map((thread) => (
                 <ChatThreadRow
                   key={thread.id}
                   thread={thread}
@@ -605,6 +638,15 @@ function SpaceThreadSection({
                   onActivate={() => onActivate(thread.id)}
                 />
               ))}
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+                  onClick={() => setShowAll(true)}
+                >
+                  Show more ({hiddenCount})
+                </button>
+              ) : null}
             </div>
           )}
         </SidebarGroupContent>
@@ -632,7 +674,7 @@ function SettingsNav({ onBack }: { onBack: () => void }) {
   ];
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 group-data-[collapsible=icon]:hidden">
+    <div className="scrollbar-auto-hide min-h-0 flex-1 overflow-y-auto px-3 pb-3 group-data-[collapsible=icon]:hidden">
       <button
         type="button"
         className="mb-3 flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground/65 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -672,79 +714,111 @@ function ChatThreadRow({
   onActivate: () => void;
 }) {
   const unread = isThreadUnread(thread);
-  const content = (
-    <>
-      <span
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          unread ? "bg-blue-500" : "bg-transparent",
-        )}
-      />
-      <span className="min-w-0 flex-1 truncate text-sm">
-        {threadTitle(thread)}
-      </span>
-    </>
-  );
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [{ fetching: deleting }, deleteThread] =
+    useMutation(DeleteThreadMutation);
+  const activity = threadActivityAt(thread);
+  const relativeDate = formatTinyRelativeDate(activity);
+  const title = threadTitle(thread);
+  const linkProps = spaceRouteId
+    ? ({
+        to: "/spaces/$spaceId/threads/$threadId",
+        params: { spaceId: spaceRouteId, threadId: thread.id },
+      } as const)
+    : ({ to: "/threads/$id", params: { id: thread.id } } as const);
 
-  return (
-    <ThreadRowLink
-      thread={thread}
-      active={active}
-      spaceRouteId={spaceRouteId}
-      onActivate={onActivate}
-    >
-      {content}
-    </ThreadRowLink>
-  );
-}
+  async function handleConfirmDelete() {
+    setThreadDeletePending(thread.id, true);
+    try {
+      const result = await deleteThread({ id: thread.id });
+      if (result.error) {
+        setThreadDeletePending(thread.id, false);
+        toast.error(`Could not delete thread: ${result.error.message}`);
+        return;
+      }
 
-function ThreadRowLink({
-  thread,
-  active,
-  spaceRouteId,
-  onActivate,
-  children,
-}: {
-  thread: ChatThreadSummary;
-  active: boolean;
-  spaceRouteId?: string;
-  onActivate: () => void;
-  children: ReactNode;
-}) {
-  if (spaceRouteId) {
-    return (
-      <Link
-        to="/spaces/$spaceId/threads/$threadId"
-        params={{ spaceId: spaceRouteId, threadId: thread.id }}
-        className={threadRowClass(active)}
-        onClick={onActivate}
-      >
-        {children}
-      </Link>
-    );
+      toast.success("Thread deleted.");
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:thread-deleted", {
+          detail: { threadId: thread.id },
+        }),
+      );
+    } catch (err) {
+      setThreadDeletePending(thread.id, false);
+      toast.error(
+        `Could not delete thread: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    } finally {
+      setConfirmingDelete(false);
+    }
   }
 
   return (
-    <Link
-      to="/threads/$id"
-      params={{ id: thread.id }}
-      className={threadRowClass(active)}
-      onClick={onActivate}
+    <div
+      className={cn(
+        "group/thread-row relative flex h-8 min-w-0 items-center rounded-md outline-none transition-colors hover:bg-sidebar-accent",
+        active && "bg-sidebar-accent",
+      )}
     >
-      {children}
-    </Link>
+      <Link
+        {...linkProps}
+        className={cn(
+          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 pr-14 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+          active && "bg-sidebar-accent text-sidebar-accent-foreground",
+        )}
+        onClick={onActivate}
+      >
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            unread ? "bg-blue-500" : "bg-transparent",
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate text-sm">{title}</span>
+      </Link>
+      {confirmingDelete ? (
+        <button
+          type="button"
+          className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/25 disabled:opacity-60"
+          disabled={deleting}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void handleConfirmDelete();
+          }}
+        >
+          Confirm
+        </button>
+      ) : (
+        <>
+          {relativeDate ? (
+            <span
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs tabular-nums text-sidebar-foreground/45 group-hover/thread-row:hidden"
+              title={activity ?? undefined}
+            >
+              {relativeDate}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="absolute right-1 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-destructive group-hover/thread-row:flex"
+            aria-label={`Delete ${title}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setConfirmingDelete(true);
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
 const navItemClassName =
   "flex h-8 w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 text-sm font-normal text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
-
-function threadRowClass(active: boolean) {
-  return cn(
-    "flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-    active && "bg-sidebar-accent text-sidebar-accent-foreground",
-  );
-}
 
 function threadIdFromThreadPath(pathname: string) {
   const canonicalMatch = /^\/threads\/([^/]+)$/.exec(pathname);

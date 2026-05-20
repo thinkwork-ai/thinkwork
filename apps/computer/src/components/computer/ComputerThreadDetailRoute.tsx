@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Info, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
 import {
   TaskThreadView,
   normalizePersistedParts,
   type ComposerMention,
   type TaskThread,
+  type TaskThreadInfoPanelState,
 } from "@/components/computer/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/computer/GeneratedArtifactCard";
 import { ThreadDetailActions } from "@/components/computer/ThreadDetailActions";
@@ -41,6 +43,16 @@ interface ThreadResult {
     id: string;
     userId?: string | null;
     computerId?: string | null;
+    user?: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+    } | null;
+    computer?: {
+      id: string;
+      name?: string | null;
+      slug?: string | null;
+    } | null;
     title?: string | null;
     status?: string | null;
     spaceId?: string | null;
@@ -58,6 +70,18 @@ interface ThreadResult {
           metadata?: unknown;
           toolCalls?: unknown;
           toolResults?: unknown;
+          sender?: {
+            type?: string | null;
+            id?: string | null;
+            displayName?: string | null;
+            avatarUrl?: string | null;
+          } | null;
+          mentions?: Array<{
+            id: string;
+            targetType?: string | null;
+            targetId?: string | null;
+            displayName?: string | null;
+          }> | null;
           durableArtifact?: {
             id: string;
             title: string;
@@ -68,6 +92,14 @@ interface ThreadResult {
         };
       }>;
     } | null;
+    attachments?: Array<{
+      id: string;
+      name?: string | null;
+      mimeType?: string | null;
+      sizeBytes?: number | null;
+      uploadedBy?: string | null;
+      createdAt?: string | null;
+    }> | null;
   } | null;
 }
 
@@ -134,6 +166,7 @@ export function ComputerThreadDetailRoute({
     null,
   );
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
+  const [threadInfoOpen, setThreadInfoOpen] = useState(false);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
   );
@@ -385,6 +418,19 @@ export function ComputerThreadDetailRoute({
     }),
     [artifactPanelOpen, effectiveSelectedArtifactId, threadArtifacts],
   );
+  const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
+    () => ({
+      isOpen: threadInfoOpen,
+      onOpenChange: setThreadInfoOpen,
+      startedAt: data?.thread?.createdAt ?? null,
+      startedBy: resolveStartedBy(data?.thread),
+      agents: resolveAgentsInvolved(data?.thread),
+      attachments: data?.thread?.attachments ?? [],
+      onDownloadAttachment: (attachmentId: string) =>
+        downloadThreadAttachment(threadId, attachmentId),
+    }),
+    [data?.thread, threadId, threadInfoOpen],
+  );
 
   usePageHeaderActions({
     backHref,
@@ -410,6 +456,17 @@ export function ComputerThreadDetailRoute({
             // actual visible, filtered thread order the user is looking at.
           }}
         />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={threadInfoOpen ? "Close thread info" : "Open thread info"}
+          title={threadInfoOpen ? "Close thread info" : "Open thread info"}
+          className={threadInfoOpen ? undefined : "text-muted-foreground"}
+          onClick={() => setThreadInfoOpen((open) => !open)}
+        >
+          <Info className="size-4" />
+        </Button>
         {threadArtifacts.length > 0 ? (
           <Button
             type="button"
@@ -425,6 +482,7 @@ export function ComputerThreadDetailRoute({
                 ? "Close artifact side panel"
                 : "Open artifact side panel"
             }
+            className={artifactPanelOpen ? undefined : "text-muted-foreground"}
             onClick={() => setArtifactPanelOpen((open) => !open)}
           >
             {artifactPanelOpen ? (
@@ -436,7 +494,7 @@ export function ComputerThreadDetailRoute({
         ) : null}
       </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${artifactPanelOpen ? "open" : "closed"}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}`,
   });
 
   useEffect(() => {
@@ -465,6 +523,7 @@ export function ComputerThreadDetailRoute({
       isSending={sending}
       mentionTargets={mentionTargetsData?.threadMentionTargets ?? []}
       artifactPanelState={artifactPanelState}
+      infoPanelState={threadInfoPanelState}
       onSendFollowUp={async (content, files, mentions = []) => {
         setOptimisticMessage(content);
         resetStreamingChunks();
@@ -584,6 +643,78 @@ function formatThreadCreatedAt(value?: string | null): string | null {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function resolveStartedBy(thread?: ThreadResult["thread"]) {
+  if (!thread) return null;
+  const firstUserMessage = thread.messages?.edges?.find(
+    ({ node }) => node.role.toUpperCase() === "USER",
+  )?.node;
+  return (
+    firstUserMessage?.sender?.displayName?.trim() ||
+    thread.user?.name?.trim() ||
+    thread.user?.email?.trim() ||
+    thread.userId ||
+    null
+  );
+}
+
+function resolveAgentsInvolved(thread?: ThreadResult["thread"]) {
+  if (!thread) return [];
+  const agents = new Set<string>();
+  for (const { node } of thread.messages?.edges ?? []) {
+    for (const mention of node.mentions ?? []) {
+      if (mention.targetType?.toUpperCase() !== "AGENT") continue;
+      const label = mention.displayName?.trim();
+      if (label) agents.add(label);
+    }
+    if (node.role.toUpperCase() !== "USER") {
+      const label = node.sender?.displayName?.trim();
+      if (label) agents.add(label);
+    }
+  }
+  const computerName = thread.computer?.name?.trim() || thread.computer?.slug;
+  if (computerName) agents.add(computerName);
+  return Array.from(agents);
+}
+
+async function downloadThreadAttachment(
+  threadId: string,
+  attachmentId: string,
+) {
+  const apiUrl = import.meta.env.VITE_API_URL || "";
+  const token = await getIdToken();
+  if (!apiUrl || !token) {
+    toast.error("Sign-in required to download attachments.");
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `${apiUrl}/api/threads/${threadId}/attachments/${attachmentId}/download`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/json",
+        },
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`download endpoint returned ${res.status}`);
+    }
+    const body = (await res.json()) as { url?: string };
+    if (!body.url) {
+      throw new Error("download endpoint returned no url");
+    }
+    window.open(body.url, "_blank", "noopener,noreferrer");
+  } catch (err) {
+    toast.error(
+      `Could not download attachment: ${
+        err instanceof Error ? err.message : "unknown error"
+      }`,
+    );
+  }
 }
 
 function withOptimisticUserTurn(

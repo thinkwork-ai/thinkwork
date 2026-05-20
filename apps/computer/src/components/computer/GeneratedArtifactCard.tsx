@@ -23,12 +23,22 @@ export function GeneratedArtifactCard({
   onOpenArtifact,
 }: GeneratedArtifactCardProps) {
   const appArtifact = isAppArtifact(artifact);
+  const label = appArtifact ? "App" : (artifact.type ?? "Artifact");
+  const description =
+    artifact.summary?.trim() ||
+    (appArtifact ? "Open in side panel" : "Open artifact");
   const content = (
     <>
-      <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
-      <div className="mt-2 flex items-center">
-        <Badge variant="outline" className="rounded-md border-white/15 text-sm">
-          {appArtifact ? "App" : (artifact.type ?? "Artifact")}
+      <div className="flex min-w-0 items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
+          <p className="mt-1 truncate text-sm text-[#b4bdcc]">{description}</p>
+        </div>
+        <Badge
+          variant="outline"
+          className="shrink-0 rounded-md border-white/10 bg-white/5 text-xs text-[#aeb7c6]"
+        >
+          {label}
         </Badge>
       </div>
     </>
@@ -38,7 +48,7 @@ export function GeneratedArtifactCard({
     return (
       <button
         type="button"
-        className="block w-full rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#333c4f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => onOpenArtifact(artifact.id)}
         aria-label={`Open artifact ${artifact.title}`}
       >
@@ -51,7 +61,7 @@ export function GeneratedArtifactCard({
     <Link
       to="/artifacts/$id"
       params={{ id: artifact.id }}
-      className="block w-full rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#333c4f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={`Open artifact ${artifact.title}`}
     >
       {content}

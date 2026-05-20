@@ -63,11 +63,7 @@ export function ComputerSidebar() {
   const { user, signOut } = useAuth();
   const isCollapsed = state === "collapsed";
   const nextTheme = theme === "dark" ? "light" : "dark";
-  const isChatMode =
-    pathname === "/threads" ||
-    pathname.startsWith("/threads/") ||
-    /^\/spaces\/[^/]+\/threads\/[^/]+/.test(pathname) ||
-    pathname === "/new";
+  const isChatMode = isChatSidebarPath(pathname);
 
   return (
     <Sidebar collapsible="icon">
@@ -145,6 +141,16 @@ export function ComputerSidebar() {
         </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+export function isChatSidebarPath(pathname: string) {
+  return (
+    pathname === "/threads" ||
+    pathname.startsWith("/threads/") ||
+    /^\/spaces\/[^/]+\/threads\/[^/]+/.test(pathname) ||
+    /^\/artifacts\/[^/]+$/.test(pathname) ||
+    pathname === "/new"
   );
 }
 

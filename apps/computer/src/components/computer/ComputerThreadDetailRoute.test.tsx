@@ -270,7 +270,9 @@ describe("ComputerThreadDetailRoute", () => {
     expect(usePageHeaderActions).toHaveBeenLastCalledWith(
       expect.objectContaining({
         action: expect.anything(),
-        actionKey: expect.stringContaining(":1:artifact_123:closed"),
+        actionKey: expect.stringContaining(
+          ":1:artifact_123:info-closed:closed",
+        ),
       }),
     );
   });

@@ -29,6 +29,11 @@ export const ComputerThreadsQuery = gql`
     threads(tenantId: $tenantId, computerId: $computerId, limit: $limit) {
       id
       userId
+      user {
+        id
+        name
+        email
+      }
       number
       identifier
       spaceId
@@ -358,11 +363,24 @@ export const ComputerThreadQuery = gql`
       spaceId
       channel
       computerId
+      computer {
+        id
+        name
+        slug
+      }
       lifecycleStatus
       lastResponsePreview
       costSummary
       createdAt
       updatedAt
+      attachments {
+        id
+        name
+        mimeType
+        sizeBytes
+        uploadedBy
+        createdAt
+      }
       messages(limit: $messageLimit) {
         edges {
           node {

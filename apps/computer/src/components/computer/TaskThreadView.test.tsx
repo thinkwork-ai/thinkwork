@@ -196,6 +196,54 @@ describe("TaskThreadView", () => {
     expect(within(panel).getByTestId("inline-applet-embed-stub")).toBeTruthy();
   });
 
+  it("renders a floating thread info panel with details and downloadable attachments", () => {
+    const onDownloadAttachment = vi.fn();
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Analyze this file",
+            },
+          ],
+        }}
+        infoPanelState={{
+          isOpen: true,
+          onOpenChange: vi.fn(),
+          startedAt: "2026-05-18T20:50:00.000Z",
+          startedBy: "Eric Odom",
+          agents: ["Executive"],
+          attachments: [
+            {
+              id: "attachment-1",
+              name: "general-ledger.xlsx",
+              sizeBytes: 2_048,
+              mimeType:
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              createdAt: "2026-05-18T20:51:00.000Z",
+            },
+          ],
+          onDownloadAttachment,
+        }}
+      />,
+    );
+
+    const panel = screen.getByTestId("thread-info-panel");
+    expect(within(panel).getByText("Date started")).toBeTruthy();
+    expect(within(panel).getByText("Eric Odom")).toBeTruthy();
+    expect(within(panel).getByText("Executive")).toBeTruthy();
+    fireEvent.click(
+      within(panel).getByRole("button", { name: /general-ledger/i }),
+    );
+    expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
+  });
+
   it("renders exactly one Thinking row when an assistant message has no tool calls and a turn is running", () => {
     // Regression: before C-01 the per-message fallback ThinkingRow ('Reasoning
     // complete.') fired here on top of the turn-level ThinkingRow, producing

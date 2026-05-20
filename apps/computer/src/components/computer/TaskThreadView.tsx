@@ -2,17 +2,21 @@ import {
   AtSign,
   ArrowUp,
   Bot,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Code2,
   Database,
+  Download,
   ExternalLink,
+  FileText,
   ListChecks,
   Mic,
   Plus,
   Search,
   Sparkles,
+  Users,
   X,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -146,6 +150,7 @@ interface TaskThreadViewProps {
     mentions?: ComposerMention[],
   ) => Promise<void> | void;
   artifactPanelState?: TaskThreadArtifactPanelState;
+  infoPanelState?: TaskThreadInfoPanelState;
 }
 
 export interface TaskThreadArtifactPanelState {
@@ -154,6 +159,24 @@ export interface TaskThreadArtifactPanelState {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectArtifact: (artifactId: string) => void;
+}
+
+export interface TaskThreadInfoPanelState {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  startedAt?: string | null;
+  startedBy?: string | null;
+  agents: string[];
+  attachments: ThreadInfoAttachment[];
+  onDownloadAttachment: (attachmentId: string) => void | Promise<void>;
+}
+
+export interface ThreadInfoAttachment {
+  id: string;
+  name?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  createdAt?: string | null;
 }
 
 export interface ComposerMention {
@@ -174,6 +197,7 @@ export function TaskThreadView({
   mentionTargets = [],
   onSendFollowUp,
   artifactPanelState,
+  infoPanelState,
 }: TaskThreadViewProps) {
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const [composerBottomInsetPx, setComposerBottomInsetPx] = useState(
@@ -256,7 +280,7 @@ export function TaskThreadView({
         aria-label="Thread conversation"
       >
         <Conversation
-          className="h-full flex-1 overflow-y-auto overscroll-contain"
+          className="scrollbar-auto-hide h-full flex-1 overflow-y-auto overscroll-contain"
           aria-label="Thread transcript"
         >
           <ConversationContent
@@ -295,6 +319,8 @@ export function TaskThreadView({
             {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
           </ConversationContent>
         </Conversation>
+
+        <ThreadInfoPanel state={infoPanelState} />
 
         <div
           ref={composerDockRef}
@@ -362,7 +388,7 @@ function ArtifactSidePanel({
 
   return (
     <aside
-      className="relative ml-3 hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex"
+      className="relative hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex"
       style={{ width }}
       aria-label="Artifact side panel"
       data-testid="artifact-side-panel"
@@ -418,15 +444,143 @@ function ArtifactSidePanel({
           <X className="size-4" />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="scrollbar-auto-hide min-h-0 flex-1 overflow-auto p-4">
         <GeneratedArtifactPreview artifact={artifact} bare />
       </div>
     </aside>
   );
 }
 
+function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
+  if (!state?.isOpen) return null;
+
+  const startedAt = formatInfoDate(state.startedAt);
+  const startedBy = state.startedBy?.trim() || "Unknown";
+
+  return (
+    <aside
+      className="absolute right-4 top-4 z-20 w-[300px] rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl"
+      aria-label="Thread info"
+      data-testid="thread-info-panel"
+    >
+      <div className="space-y-5">
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-white/55">Thread</h2>
+          <InfoPanelRow
+            icon={<CalendarDays className="size-4" />}
+            label="Date started"
+            value={startedAt || "Unknown"}
+          />
+          <InfoPanelRow
+            icon={<Users className="size-4" />}
+            label="Started by"
+            value={startedBy}
+          />
+          <div className="grid gap-1.5">
+            <div className="flex items-center gap-2 text-sm text-white/45">
+              <Bot className="size-4" />
+              <span>Agents involved</span>
+            </div>
+            {state.agents.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {state.agents.map((agent) => (
+                  <span
+                    key={agent}
+                    className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75"
+                  >
+                    {agent}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-white/70">No agents yet</p>
+            )}
+          </div>
+        </section>
+
+        {state.attachments.length > 0 ? (
+          <section className="border-t border-white/10 pt-4">
+            <h2 className="mb-2 text-sm font-medium text-white/55">
+              Attachments
+            </h2>
+            <div className="scrollbar-auto-hide max-h-56 space-y-1 overflow-y-auto">
+              {state.attachments.map((attachment) => (
+                <button
+                  key={attachment.id}
+                  type="button"
+                  className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm text-white/75 hover:bg-white/8 hover:text-white"
+                  onClick={() => void state.onDownloadAttachment(attachment.id)}
+                >
+                  <FileText className="size-4 shrink-0 text-white/45" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">
+                      {attachment.name || "Attachment"}
+                    </span>
+                    {attachment.sizeBytes ? (
+                      <span className="block text-xs text-white/40">
+                        {formatFileSize(attachment.sizeBytes)}
+                      </span>
+                    ) : null}
+                  </span>
+                  <Download className="size-3.5 shrink-0 text-white/45" />
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
+function InfoPanelRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="grid gap-1">
+      <div className="flex items-center gap-2 text-sm text-white/45">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <p className="truncate text-sm text-white/75">{value}</p>
+    </div>
+  );
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function formatInfoDate(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatFileSize(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB"];
+  let size = value / 1024;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function isTaskQueueAssistantMessage(message: TaskThreadMessage) {

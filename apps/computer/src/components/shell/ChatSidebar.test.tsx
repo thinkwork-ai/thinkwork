@@ -1,4 +1,11 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -6,6 +13,7 @@ const {
   tenantMock,
   locationMock,
   navigateMock,
+  deleteThreadMock,
   recentThreadItemsMock,
   recentReexecuteMock,
   searchReexecuteMock,
@@ -13,6 +21,7 @@ const {
   tenantMock: vi.fn(),
   locationMock: vi.fn(),
   navigateMock: vi.fn(),
+  deleteThreadMock: vi.fn(),
   recentThreadItemsMock: [] as Array<{
     id: string;
     title: string;
@@ -25,6 +34,7 @@ const {
   searchReexecuteMock: vi.fn(),
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
+    DeleteThreadMutation: Symbol("DeleteThreadMutation"),
     SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
   },
@@ -35,6 +45,13 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("@/lib/graphql-queries", () => queryDocs);
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -68,6 +85,12 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("urql", () => ({
+  useMutation: (mutation: unknown) => {
+    if (mutation === queryDocs.DeleteThreadMutation) {
+      return [{ fetching: false }, deleteThreadMock];
+    }
+    return [{ fetching: false }, vi.fn()];
+  },
   useQuery: ({ query }: { query: unknown }) => {
     if (query === queryDocs.SpacesQuery) {
       return [
@@ -212,6 +235,7 @@ afterEach(() => {
   tenantMock.mockReset();
   locationMock.mockReset();
   navigateMock.mockReset();
+  deleteThreadMock.mockReset();
   recentReexecuteMock.mockReset();
   searchReexecuteMock.mockReset();
   recentThreadItemsMock.length = 0;
@@ -219,6 +243,7 @@ afterEach(() => {
 
 describe("ChatSidebar", () => {
   beforeEach(() => {
+    deleteThreadMock.mockResolvedValue({ data: { deleteThread: true } });
     recentThreadItemsMock.push({
       id: "thread-recent",
       title: "Recent Space thread",
@@ -341,6 +366,66 @@ describe("ChatSidebar", () => {
         .getByRole("link", { name: /recent space thread/i })
         .getAttribute("href"),
     ).toBe("/spaces/space-1/threads/thread-recent");
+  });
+
+  it("limits chat sections to five rows until Show more is clicked", () => {
+    recentThreadItemsMock.length = 0;
+    for (let index = 1; index <= 7; index += 1) {
+      recentThreadItemsMock.push({
+        id: `thread-${index}`,
+        title: `Chat ${index}`,
+        lastActivityAt: new Date(Date.now() - index * 60_000).toISOString(),
+        lastReadAt: new Date().toISOString(),
+      });
+    }
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    expect(screen.getByText("Chat 1")).toBeTruthy();
+    expect(screen.getByText("Chat 5")).toBeTruthy();
+    expect(screen.queryByText("Chat 6")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more (2)" }));
+
+    expect(screen.getByText("Chat 6")).toBeTruthy();
+    expect(screen.getByText("Chat 7")).toBeTruthy();
+  });
+
+  it("shows compact relative dates and deletes after inline confirmation", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "delete-me",
+      title: "Delete me",
+      lastActivityAt: new Date(
+        Date.now() - 4 * 60 * 60_000 - 5 * 60_000,
+      ).toISOString(),
+      lastReadAt: new Date().toISOString(),
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads/delete-me",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    expect(screen.getByText("4h")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /delete delete me/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(deleteThreadMock).toHaveBeenCalledWith({ id: "delete-me" }),
+    );
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/new",
+        search: { spaceId: undefined },
+        replace: true,
+      }),
+    );
   });
 
   it("highlights the replacement thread selected after delete", () => {
