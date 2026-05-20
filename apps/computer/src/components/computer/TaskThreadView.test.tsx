@@ -236,6 +236,7 @@ describe("TaskThreadView", () => {
 
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
+    expect(panel.className).toContain("ml-4");
     expect(panel.className).not.toContain("absolute");
     expect(within(panel).getByText("Date started")).toBeTruthy();
     expect(within(panel).getByText("Eric Odom")).toBeTruthy();
