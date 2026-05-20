@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { Code2, ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
 import { GeneratedAppArtifactShell } from "@/components/apps/GeneratedAppArtifactShell";
@@ -15,19 +15,90 @@ export interface GeneratedArtifact {
 
 interface GeneratedArtifactCardProps {
   artifact: GeneratedArtifact;
+  onOpenArtifact?: (artifactId: string) => void;
 }
 
 export function GeneratedArtifactCard({
   artifact,
+  onOpenArtifact,
 }: GeneratedArtifactCardProps) {
-  const isAppArtifact =
-    artifact.type === "APPLET" ||
-    artifact.type === "DATA_VIEW" ||
-    artifact.metadata?.kind === "computer_applet" ||
-    artifact.metadata?.kind === "research_dashboard" ||
-    artifact.metadata?.uiSurface === "app";
+  const appArtifact = isAppArtifact(artifact);
 
-  if (isAppArtifact) {
+  return (
+    <article className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/70 p-3">
+      <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <Code2 className="size-4" aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
+          <Badge variant="outline" className="rounded-md">
+            {appArtifact ? "App" : (artifact.type ?? "Artifact")}
+          </Badge>
+        </div>
+        {artifact.summary ? (
+          <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
+            {artifact.summary}
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {onOpenArtifact ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onOpenArtifact(artifact.id)}
+              aria-label={`Open artifact ${artifact.title}`}
+            >
+              Open artifact
+            </Button>
+          ) : (
+            <Button
+              asChild
+              type="button"
+              variant="secondary"
+              size="sm"
+              aria-label="Open artifact full screen"
+            >
+              <Link to="/artifacts/$id" params={{ id: artifact.id }}>
+                Open full
+              </Link>
+            </Button>
+          )}
+          {onOpenArtifact ? (
+            <Button
+              asChild
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-muted-foreground hover:text-foreground"
+              aria-label="Open artifact full screen"
+            >
+              <Link to="/artifacts/$id" params={{ id: artifact.id }}>
+                <ExternalLink className="size-4" />
+                <span className="hidden sm:inline">Open full</span>
+              </Link>
+            </Button>
+          ) : null}
+          {!appArtifact ? (
+            <span className="text-xs text-muted-foreground">
+              Preview unavailable
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function GeneratedArtifactPreview({
+  artifact,
+}: {
+  artifact: GeneratedArtifact;
+}) {
+  const appArtifact = isAppArtifact(artifact);
+
+  if (appArtifact) {
     return (
       <GeneratedAppArtifactShell
         title={artifact.title}
@@ -62,9 +133,7 @@ export function GeneratedArtifactCard({
       <div className="flex items-center gap-3 px-1">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-semibold">
-              {artifact.title}
-            </h3>
+            <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
             <Badge variant="outline" className="rounded-md">
               {artifact.type ?? "Artifact"}
             </Badge>
@@ -86,5 +155,15 @@ export function GeneratedArtifactCard({
         Preview unavailable
       </Button>
     </article>
+  );
+}
+
+export function isAppArtifact(artifact: GeneratedArtifact) {
+  return (
+    artifact.type === "APPLET" ||
+    artifact.type === "DATA_VIEW" ||
+    artifact.metadata?.kind === "computer_applet" ||
+    artifact.metadata?.kind === "research_dashboard" ||
+    artifact.metadata?.uiSurface === "app"
   );
 }

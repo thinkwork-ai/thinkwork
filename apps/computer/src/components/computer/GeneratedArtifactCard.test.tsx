@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/apps/InlineAppletEmbed", () => ({
@@ -7,13 +7,16 @@ vi.mock("@/components/apps/InlineAppletEmbed", () => ({
   ),
 }));
 
-import { GeneratedArtifactCard } from "./GeneratedArtifactCard";
+import {
+  GeneratedArtifactCard,
+  GeneratedArtifactPreview,
+} from "./GeneratedArtifactCard";
 
 afterEach(cleanup);
 
 describe("GeneratedArtifactCard", () => {
-  it("renders an inline applet embed for app artifacts and routes the full-screen link", () => {
-    const { container } = render(
+  it("renders a compact card for app artifacts without mounting the applet inline", () => {
+    render(
       <GeneratedArtifactCard
         artifact={{
           id: "artifact_123",
@@ -28,12 +31,7 @@ describe("GeneratedArtifactCard", () => {
     expect(screen.getByText("CRM pipeline risk")).toBeTruthy();
     expect(screen.getByText("App")).toBeTruthy();
     expect(screen.queryByText("DATA_VIEW")).toBeNull();
-    expect(
-      container.querySelector('[data-runtime-mode="sandboxedGenerated"]'),
-    ).toBeTruthy();
-
-    const stub = screen.getByTestId("inline-applet-embed-stub");
-    expect(stub.getAttribute("data-app-id")).toBe("artifact_123");
+    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
 
     const fullScreenLink = screen.getByRole("link", {
       name: /open artifact full screen/i,
@@ -41,9 +39,35 @@ describe("GeneratedArtifactCard", () => {
     expect(fullScreenLink.getAttribute("href")).toBe("/artifacts/artifact_123");
   });
 
-  it("renders an inline applet embed for generated APPLET artifacts", () => {
+  it("opens the artifact panel when a panel callback is provided", () => {
+    const onOpenArtifact = vi.fn();
     render(
       <GeneratedArtifactCard
+        artifact={{
+          id: "artifact_map",
+          title: "Austin Interesting Places Map",
+          type: "APPLET",
+          summary: "Austin map",
+          metadata: { kind: "computer_applet" },
+        }}
+        onOpenArtifact={onOpenArtifact}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open artifact austin interesting places map/i,
+      }),
+    );
+
+    expect(onOpenArtifact).toHaveBeenCalledWith("artifact_map");
+    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
+    expect(screen.getByRole("link", { name: /open artifact full screen/i }));
+  });
+
+  it("renders an applet preview for generated APPLET artifacts when explicitly requested", () => {
+    render(
+      <GeneratedArtifactPreview
         artifact={{
           id: "artifact_map",
           title: "Austin Interesting Places Map",
@@ -63,7 +87,7 @@ describe("GeneratedArtifactCard", () => {
 
   it("does not let generated artifact metadata select the trusted native runtime", () => {
     const { container } = render(
-      <GeneratedArtifactCard
+      <GeneratedArtifactPreview
         artifact={{
           id: "artifact_native_claim",
           title: "Native claim",

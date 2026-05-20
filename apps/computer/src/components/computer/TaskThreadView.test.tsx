@@ -78,12 +78,70 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
     expect(screen.getByText("Using data_visualization")).toBeTruthy();
     expect(screen.getByText("CRM pipeline risk app")).toBeTruthy();
+    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
     // No turn → no turn-level Thinking; tool calls present → no fallback Thinking;
     // per-message Thinking row was removed because it was a duplicate of the
     // authoritative turn-level row.
     expect(screen.queryByText("Thinking")).toBeNull();
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
+  });
+
+  it("opens a transcript artifact through the artifact panel callback", () => {
+    const onSelectArtifact = vi.fn();
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Build a CRM pipeline dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "I created a dashboard app.",
+              durableArtifact: {
+                id: "artifact_123",
+                title: "CRM pipeline risk app",
+                type: "DATA_VIEW",
+                summary: "Stale opportunity analysis",
+                metadata: { kind: "research_dashboard" },
+              },
+            },
+          ],
+        }}
+        artifactPanelState={{
+          artifacts: [
+            {
+              id: "artifact_123",
+              title: "CRM pipeline risk app",
+              type: "DATA_VIEW",
+              summary: "Stale opportunity analysis",
+              metadata: { kind: "research_dashboard" },
+            },
+          ],
+          selectedArtifactId: "artifact_123",
+          isOpen: false,
+          onOpenChange: vi.fn(),
+          onSelectArtifact,
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open artifact crm pipeline risk app/i,
+      }),
+    );
+
+    expect(onSelectArtifact).toHaveBeenCalledWith("artifact_123");
+    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
   });
 
   it("renders exactly one Thinking row when an assistant message has no tool calls and a turn is running", () => {

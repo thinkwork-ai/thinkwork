@@ -167,6 +167,7 @@ export function TaskThreadView({
   isSending = false,
   mentionTargets = [],
   onSendFollowUp,
+  artifactPanelState,
 }: TaskThreadViewProps) {
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
@@ -233,6 +234,7 @@ export function TaskThreadView({
                     ? streamState
                     : undefined
                 }
+                onOpenArtifact={artifactPanelState?.onSelectArtifact}
                 showProcessingShimmer={
                   index === latestUserIndex && showProcessingShimmer
                 }
@@ -279,6 +281,7 @@ function TranscriptSegment({
   isLatestUser,
   streamingChunks,
   streamState,
+  onOpenArtifact,
   showProcessingShimmer,
 }: {
   message: TaskThreadMessage;
@@ -286,6 +289,7 @@ function TranscriptSegment({
   isLatestUser: boolean;
   streamingChunks: ComputerThreadChunk[];
   streamState?: UIMessageStreamState;
+  onOpenArtifact?: (artifactId: string) => void;
   showProcessingShimmer: boolean;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
@@ -296,7 +300,7 @@ function TranscriptSegment({
   const hasTypedParts = streamState != null && streamState.parts.length > 0;
   return (
     <>
-      <TranscriptMessage message={message} />
+      <TranscriptMessage message={message} onOpenArtifact={onOpenArtifact} />
       {turn ? <ThreadTurnActivity turn={turn} /> : null}
       {isLatestUser ? (
         <>
@@ -591,7 +595,13 @@ function CollapsibleUserMessageBody({ body }: { body: string }) {
   );
 }
 
-function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
+function TranscriptMessage({
+  message,
+  onOpenArtifact,
+}: {
+  message: TaskThreadMessage;
+  onOpenArtifact?: (artifactId: string) => void;
+}) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
   const actions = actionRowsForMessage(message);
@@ -641,7 +651,10 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
               </p>
             )}
             {message.durableArtifact ? (
-              <GeneratedArtifactCard artifact={message.durableArtifact} />
+              <GeneratedArtifactCard
+                artifact={message.durableArtifact}
+                onOpenArtifact={onOpenArtifact}
+              />
             ) : null}
           </>
         )}
