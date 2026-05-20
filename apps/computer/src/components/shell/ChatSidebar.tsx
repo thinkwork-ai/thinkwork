@@ -236,7 +236,7 @@ export function ChatSidebar() {
           <Button asChild variant="ghost" className={navItemClassName}>
             <Link to="/new">
               <MessageCirclePlus className="size-4 shrink-0" />
-              <span>New chat</span>
+              <span>New thread</span>
             </Link>
           </Button>
           <Button

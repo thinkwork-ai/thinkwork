@@ -217,12 +217,12 @@ describe("ChatSidebar", () => {
     expect(screen.queryByText("Inbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /switch space/i })).toBeNull();
     expect(screen.queryByText("General")).toBeNull();
-    expect(screen.getByRole("link", { name: /new chat/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /new thread/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: /new chat/i })
+        .getByRole("link", { name: /new thread/i })
         .compareDocumentPosition(
           screen.getByRole("button", { name: /^search/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
