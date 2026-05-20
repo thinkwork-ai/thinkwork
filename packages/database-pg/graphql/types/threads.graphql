@@ -201,6 +201,7 @@ extend type Query {
     sortDir: String
     limit: Int
     offset: Int
+    unreadOnly: Boolean
     """
     Optional scope to a single Computer. When set, results are filtered to
     threads where `computer_id = $computerId`. Tenant scoping still applies

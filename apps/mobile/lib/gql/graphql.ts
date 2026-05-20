@@ -4739,6 +4739,7 @@ export type QueryThreadsPagedArgs = {
   spaceId?: InputMaybe<Scalars['ID']['input']>;
   statuses?: InputMaybe<Array<Scalars['String']['input']>>;
   tenantId: Scalars['ID']['input'];
+  unreadOnly?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 
@@ -5481,6 +5482,7 @@ export type Space = {
   id: Scalars['ID']['output'];
   integrations: Array<SpaceIntegration>;
   kind: SpaceKind;
+  lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
   members: Array<SpaceMember>;
   name: Scalars['String']['output'];
   prompt?: Maybe<Scalars['String']['output']>;
@@ -5488,6 +5490,7 @@ export type Space = {
   status: SpaceStatus;
   templateKey?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
+  unreadThreadCount: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 

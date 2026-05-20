@@ -20,6 +20,7 @@ const {
   mockRequireTenantAdmin,
   mockHasSpaceMemberAccess,
   threadsTable,
+  threadParticipantsTable,
 } = vi.hoisted(() => {
   const captured: unknown[][] = [];
 
@@ -41,6 +42,7 @@ const {
 
   const tableCol = (label: string) => ({ __col: label });
   const threads = {
+    id: tableCol("threads.id"),
     tenant_id: tableCol("threads.tenant_id"),
     computer_id: tableCol("threads.computer_id"),
     space_id: tableCol("threads.space_id"),
@@ -49,7 +51,15 @@ const {
     title: tableCol("threads.title"),
     created_at: tableCol("threads.created_at"),
     updated_at: tableCol("threads.updated_at"),
+    last_turn_completed_at: tableCol("threads.last_turn_completed_at"),
     archived_at: tableCol("threads.archived_at"),
+  };
+  const threadParticipants = {
+    tenant_id: tableCol("thread_participants.tenant_id"),
+    participant_type: tableCol("thread_participants.participant_type"),
+    user_id: tableCol("thread_participants.user_id"),
+    thread_id: tableCol("thread_participants.thread_id"),
+    last_read_at: tableCol("thread_participants.last_read_at"),
   };
 
   // db.select().from(threads).where(...).orderBy(...).limit(...).offset(...)
@@ -92,6 +102,7 @@ const {
     mockAsc: asc,
     mockDesc: desc,
     threadsTable: threads,
+    threadParticipantsTable: threadParticipants,
   };
 });
 
@@ -102,7 +113,11 @@ vi.mock("../../utils.js", () => ({
   desc: vi.fn(),
   asc: vi.fn(),
   sql: mockSql,
+  inArray: vi.fn((field: unknown, values: unknown[]) => ({
+    __inArray: { field, values },
+  })),
   threads: threadsTable,
+  threadParticipants: threadParticipantsTable,
   threadToCamel: (row: unknown) => row,
 }));
 
@@ -188,7 +203,7 @@ describe("threadsPaged filter assembly", () => {
     expect(hasComputer).toBe(false);
   });
 
-  it("adds a user_id condition for non-admin Cognito callers", async () => {
+  it("does not rely on owner user_id for non-admin Cognito global lists", async () => {
     await threadsPaged_query({}, { tenantId: TENANT }, {
       auth: { authType: "cognito" },
     } as any);
@@ -197,7 +212,7 @@ describe("threadsPaged filter assembly", () => {
       (c: any) =>
         c?.__eq?.field === threadsTable.user_id && c?.__eq?.value === "user-a",
     );
-    expect(hasUser).toBe(true);
+    expect(hasUser).toBe(false);
   });
 
   it("does not add a user_id condition for tenant admins", async () => {
@@ -266,5 +281,15 @@ describe("threadsPaged filter assembly", () => {
       (c: any) => c?.__eq?.field === threadsTable.space_id,
     );
     expect(hasSpace).toBe(false);
+  });
+
+  it("adds a participant unread predicate for global Inbox filters", async () => {
+    await threadsPaged_query({}, { tenantId: TENANT, unreadOnly: true }, {
+      auth: { authType: "cognito" },
+    } as any);
+
+    const allConditions = capturedConditions.flat();
+    const sqlConditions = allConditions.filter((c: any) => c?.__sql);
+    expect(sqlConditions.length).toBeGreaterThanOrEqual(3);
   });
 });

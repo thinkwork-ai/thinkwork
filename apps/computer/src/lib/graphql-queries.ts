@@ -52,6 +52,7 @@ export const ThreadsPagedQuery = gql`
     $sortDir: String
     $limit: Int
     $offset: Int
+    $unreadOnly: Boolean
   ) {
     threadsPaged(
       tenantId: $tenantId
@@ -61,18 +62,26 @@ export const ThreadsPagedQuery = gql`
       sortDir: $sortDir
       limit: $limit
       offset: $offset
+      unreadOnly: $unreadOnly
     ) {
       items {
         id
         userId
         number
         identifier
+        spaceId
         title
         status
         assigneeType
         assigneeId
         agentId
         computerId
+        space {
+          id
+          slug
+          name
+          kind
+        }
         agent {
           id
           name
@@ -103,7 +112,45 @@ export const SpacesQuery = gql`
       kind
       templateKey
       status
+      unreadThreadCount
+      lastActivityAt
       updatedAt
+    }
+  }
+`;
+
+export const ChatGlobalInboxQuery = gql`
+  query ChatGlobalInbox($tenantId: ID!, $limit: Int) {
+    threadsPaged(
+      tenantId: $tenantId
+      showArchived: false
+      sortField: "updated"
+      sortDir: "desc"
+      unreadOnly: true
+      limit: $limit
+    ) {
+      items {
+        id
+        number
+        identifier
+        title
+        status
+        channel
+        spaceId
+        space {
+          id
+          slug
+          name
+          kind
+        }
+        lastReadAt
+        lastActivityAt
+        lastTurnCompletedAt
+        archivedAt
+        createdAt
+        updatedAt
+      }
+      totalCount
     }
   }
 `;
@@ -183,6 +230,7 @@ export const SpaceThreadsQuery = gql`
         channel
         spaceId
         metadata
+        lastReadAt
         lastActivityAt
         lastTurnCompletedAt
         archivedAt

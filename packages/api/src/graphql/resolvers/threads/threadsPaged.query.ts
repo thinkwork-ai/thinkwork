@@ -56,7 +56,7 @@ export const threadsPaged_query = async (
 
   if (authType === "cognito" && !isTenantAdminCaller && !args.spaceId) {
     if (!callerUserId) return { items: [], totalCount: 0 };
-    conditions.push(eq(threads.user_id, callerUserId));
+    conditions.push(callerParticipantExists(args.tenantId, callerUserId));
   }
 
   // Filter: scope to a single Computer when the caller passes one. Plan
@@ -73,6 +73,19 @@ export const threadsPaged_query = async (
     conditions.push(sql`${threads.archived_at} IS NOT NULL`);
   } else {
     conditions.push(sql`${threads.archived_at} IS NULL`);
+  }
+
+  if (args.unreadOnly) {
+    if (authType === "cognito" && !callerUserId) {
+      return { items: [], totalCount: 0 };
+    }
+    if (!callerUserId) {
+      conditions.push(sql`FALSE`);
+    } else {
+      conditions.push(
+        callerUnreadParticipantExists(args.tenantId, callerUserId),
+      );
+    }
   }
 
   // Filter: statuses (array)
@@ -146,6 +159,32 @@ export const threadsPaged_query = async (
     totalCount: countResult[0]?.count ?? 0,
   };
 };
+
+function callerParticipantExists(tenantId: string, callerUserId: string) {
+  return sql`EXISTS (
+    SELECT 1
+      FROM ${threadParticipants} caller_tp
+     WHERE caller_tp.tenant_id = ${tenantId}
+       AND caller_tp.thread_id = ${threads.id}
+       AND caller_tp.participant_type = 'user'
+       AND caller_tp.user_id = ${callerUserId}
+  )`;
+}
+
+function callerUnreadParticipantExists(tenantId: string, callerUserId: string) {
+  return sql`EXISTS (
+    SELECT 1
+      FROM ${threadParticipants} caller_tp
+     WHERE caller_tp.tenant_id = ${tenantId}
+       AND caller_tp.thread_id = ${threads.id}
+       AND caller_tp.participant_type = 'user'
+       AND caller_tp.user_id = ${callerUserId}
+       AND (
+         caller_tp.last_read_at IS NULL
+         OR COALESCE(${threads.last_turn_completed_at}, ${threads.updated_at}, ${threads.created_at}) > caller_tp.last_read_at
+       )
+  )`;
+}
 
 async function loadCallerReadState(input: {
   tenantId: string;
