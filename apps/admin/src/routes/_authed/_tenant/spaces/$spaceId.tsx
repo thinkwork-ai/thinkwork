@@ -2,61 +2,62 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   Bot,
-  CheckSquare,
-  FolderKanban,
+  Boxes,
+  Database,
+  FolderTree,
   Plug,
   Settings2,
-  Users,
+  Wrench,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useQuery } from "urql";
+import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import {
-  ThreadsTable,
-  computeThreadInboxStatus,
-  type ThreadsTableItem,
-} from "@/components/threads/ThreadsTable";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import { type SpaceAdminDetailQuery as SpaceAdminDetailQueryResult } from "@/gql/graphql";
-import {
-  AgentsListQuery,
-  SpaceAdminDetailQuery,
-  ThreadsPagedQuery,
-  UpdateThreadMutation,
-} from "@/lib/graphql-queries";
+import { SpaceAdminDetailQuery } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
-import { useActiveTurnsStore } from "@/stores/active-turns-store";
 
 export const Route = createFileRoute("/_authed/_tenant/spaces/$spaceId")({
   component: SpaceDetailPage,
 });
 
 type TabValue =
-  | "threads"
+  | "overview"
+  | "workspace"
+  | "connected-data"
+  | "tools"
+  | "mcp"
   | "agents"
-  | "checklist"
-  | "members"
-  | "integrations"
   | "settings";
 type Space = NonNullable<SpaceAdminDetailQueryResult["space"]>;
 type SpaceAgentAssignment = Space["agentAssignments"][number];
-type SpaceChecklistItem = Space["checklistTemplates"][number]["items"][number];
-type SpaceMember = Space["members"][number];
-type SpaceIntegration = Space["integrations"][number];
+type SpaceMcpAssignment = Space["mcpServers"][number];
+
+type ToolPolicyRow = {
+  id: string;
+  scope: string;
+  policy: string;
+  values: string;
+};
+
+type ConnectedDataRow = {
+  id: string;
+  source: string;
+  summary: string;
+};
 
 function SpaceDetailPage() {
   const { spaceId } = Route.useParams();
   const { tenantId } = useTenant();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<TabValue>("threads");
-  const PAGE_SIZE = 25;
-  const [pageIndex, setPageIndex] = useState(0);
+  const [tab, setTab] = useState<TabValue>("overview");
 
   const [spaceResult] = useQuery({
     query: SpaceAdminDetailQuery,
@@ -71,35 +72,21 @@ function SpaceDetailPage() {
     { label: space?.name ?? "Space" },
   ]);
 
-  const [threadsResult] = useQuery({
-    query: ThreadsPagedQuery,
-    variables: {
-      tenantId: tenantId!,
-      spaceId,
-      limit: PAGE_SIZE,
-      offset: pageIndex * PAGE_SIZE,
-      sortField: "updated",
-      sortDir: "desc",
-    },
-    pause: !tenantId || !spaceId,
-    requestPolicy: "cache-and-network",
-  });
-  const [agentsResult] = useQuery({
-    query: AgentsListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId,
-    requestPolicy: "cache-and-network",
-  });
-  const [, updateThread] = useMutation(UpdateThreadMutation);
-
-  const activeThreadIds = useActiveTurnsStore((s) => s._activeThreadIds);
-  const threads = useMemo<ThreadsTableItem[]>(
+  const activeAssignments = useMemo(
     () =>
-      (threadsResult.data?.threadsPaged?.items ?? []).map((thread: any) => ({
-        ...thread,
-        status: String(thread.status).toLowerCase(),
-      })),
-    [threadsResult.data?.threadsPaged?.items],
+      (space?.agentAssignments ?? []).filter(
+        (assignment) => assignment.status === "ACTIVE",
+      ),
+    [space?.agentAssignments],
+  );
+  const enabledMcpServers = useMemo(
+    () => (space?.mcpServers ?? []).filter((assignment) => assignment.enabled),
+    [space?.mcpServers],
+  );
+  const toolRows = useMemo(() => buildToolPolicyRows(space), [space]);
+  const connectedDataRows = useMemo(
+    () => buildConnectedDataRows(space),
+    [space],
   );
 
   if (!tenantId || (spaceResult.fetching && !spaceResult.data)) {
@@ -123,13 +110,6 @@ function SpaceDetailPage() {
     );
   }
 
-  const activeAssignments = space.agentAssignments.filter(
-    (assignment) => assignment.status === "ACTIVE",
-  );
-  const requiredChecklistItems = space.checklistTemplates.flatMap((template) =>
-    template.items.filter((item) => item.required),
-  );
-
   return (
     <PageLayout
       header={
@@ -137,7 +117,8 @@ function SpaceDetailPage() {
           <PageHeader
             title={space.name}
             description={
-              space.description ?? `${formatLabel(space.kind)} Space`
+              space.description ??
+              `${formatLabel(space.kind)} contextual workroom`
             }
           />
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
@@ -154,63 +135,110 @@ function SpaceDetailPage() {
     >
       <Tabs value={tab} onValueChange={(value) => setTab(value as TabValue)}>
         <TabsList variant="line" className="mb-4">
-          <TabsTrigger value="threads">
-            <FolderKanban className="h-4 w-4" />
-            Threads
+          <TabsTrigger value="overview">
+            <Boxes className="h-4 w-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="workspace">
+            <FolderTree className="h-4 w-4" />
+            Workspace
+          </TabsTrigger>
+          <TabsTrigger value="connected-data">
+            <Database className="h-4 w-4" />
+            Connected Data
+          </TabsTrigger>
+          <TabsTrigger value="tools">
+            <Wrench className="h-4 w-4" />
+            Tools
+          </TabsTrigger>
+          <TabsTrigger value="mcp">
+            <Plug className="h-4 w-4" />
+            MCP Servers
           </TabsTrigger>
           <TabsTrigger value="agents">
             <Bot className="h-4 w-4" />
             Agents
           </TabsTrigger>
-          <TabsTrigger value="checklist">
-            <CheckSquare className="h-4 w-4" />
-            Checklist
-          </TabsTrigger>
-          <TabsTrigger value="members">
-            <Users className="h-4 w-4" />
-            Members
-          </TabsTrigger>
-          <TabsTrigger value="integrations">
-            <Plug className="h-4 w-4" />
-            Integrations
-          </TabsTrigger>
           <TabsTrigger value="settings">
             <Settings2 className="h-4 w-4" />
-            Config
+            Settings
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="threads">
-          <ThreadsTable
-            items={threads}
-            agents={agentsResult.data?.agents ?? []}
-            inboxStatusFor={(thread) =>
-              computeThreadInboxStatus(
-                thread.id,
-                thread.lastTurnCompletedAt,
-                thread.lastReadAt,
-                activeThreadIds,
-              )
-            }
-            onUpdateThread={(id, data) => {
-              const input: Record<string, unknown> = {};
-              if (data.status) input.status = String(data.status).toUpperCase();
-              if (data.agentId !== undefined) {
-                input.assigneeType = data.agentId ? "AGENT" : null;
-                input.assigneeId = data.agentId || null;
-              }
-              updateThread({ id, input });
-            }}
-            onRowClick={(threadId) =>
-              navigate({ to: "/threads/$threadId", params: { threadId } })
-            }
-            pagination={{
-              totalCount: threadsResult.data?.threadsPaged?.totalCount ?? 0,
-              pageSize: PAGE_SIZE,
-              pageIndex,
-              onPageChange: setPageIndex,
-            }}
+        <TabsContent value="overview">
+          <div className="grid gap-4 lg:grid-cols-4">
+            <MetricPanel
+              label="Agents"
+              value={activeAssignments.length}
+              caption="available in this Space"
+            />
+            <MetricPanel
+              label="MCP Servers"
+              value={enabledMcpServers.length}
+              caption="enabled for context"
+            />
+            <MetricPanel
+              label="Tool Policies"
+              value={toolRows.length}
+              caption="explicit rules"
+            />
+            <MetricPanel
+              label="Connected Data"
+              value={connectedDataRows.length}
+              caption="configured sources"
+            />
+            <InfoPanel title="Space Prompt" value={space.prompt} wide />
+            <InfoPanel
+              title="Render Diagnostics"
+              value={formatJson(space.renderDiagnostics)}
+              wide
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="workspace">
+          <WorkspaceEditor
+            target={{ spaceId: space.id }}
+            mode="context"
+            className="min-h-[620px]"
           />
+        </TabsContent>
+
+        <TabsContent value="connected-data">
+          <div className="space-y-4">
+            <DataTable
+              columns={connectedDataColumns}
+              data={connectedDataRows}
+              pageSize={20}
+            />
+            <JsonPanel title="Context Config" value={space.contextConfig} />
+            <JsonPanel
+              title="Connected Data Config"
+              value={space.connectedDataConfig}
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="tools">
+          <div className="space-y-4">
+            <DataTable
+              columns={toolPolicyColumns}
+              data={toolRows}
+              pageSize={20}
+            />
+            <JsonPanel title="Tool Policy" value={space.toolPolicy} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="mcp">
+          <div className="space-y-4">
+            <DataTable
+              columns={mcpColumns}
+              data={space.mcpServers}
+              pageSize={20}
+            />
+            <JsonPanel title="MCP Policy" value={space.mcpPolicy} />
+          </div>
         </TabsContent>
 
         <TabsContent value="agents">
@@ -229,64 +257,21 @@ function SpaceDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value="checklist">
-          <div className="space-y-4">
-            {space.checklistTemplates.map((template) => (
-              <section key={template.id} className="rounded-md border">
-                <div className="border-b px-3 py-2">
-                  <div className="font-medium">{template.name}</div>
-                  {template.description && (
-                    <div className="text-xs text-muted-foreground">
-                      {template.description}
-                    </div>
-                  )}
-                </div>
-                <DataTable
-                  columns={checklistColumns}
-                  data={[...template.items].sort(
-                    (a, b) => a.sortOrder - b.sortOrder,
-                  )}
-                  pageSize={0}
-                  hideHeader={false}
-                />
-              </section>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="members">
-          <DataTable
-            columns={memberColumns}
-            data={space.members}
-            pageSize={20}
-          />
-        </TabsContent>
-
-        <TabsContent value="integrations">
-          <DataTable
-            columns={integrationColumns}
-            data={space.integrations}
-            pageSize={20}
-          />
-        </TabsContent>
-
         <TabsContent value="settings">
           <div className="grid gap-4 lg:grid-cols-2">
-            <InfoPanel title="Space Prompt" value={space.prompt} />
-            <InfoPanel title="Template Key" value={space.templateKey} />
+            <InfoPanel title="Slug" value={space.slug} />
+            <InfoPanel title="Category" value={space.kind} />
+            <InfoPanel title="Status" value={formatLabel(space.status)} />
             <InfoPanel
-              title="Configured Agents"
-              value={`${activeAssignments.length} active assignment${activeAssignments.length === 1 ? "" : "s"}`}
+              title="Created"
+              value={new Date(space.createdAt).toLocaleString()}
             />
-            <InfoPanel
-              title="Required Checklist Items"
-              value={`${requiredChecklistItems.length} required item${requiredChecklistItems.length === 1 ? "" : "s"}`}
+            <JsonPanel
+              title="Agent Availability"
+              value={space.agentAvailabilityPolicy}
             />
-            <InfoPanel
-              title="Raw Config"
-              value={formatJson(space.config)}
-              wide
-            />
+            <JsonPanel title="Trigger Config" value={space.triggerConfig} />
+            <JsonPanel title="Raw Config" value={space.config} wide />
           </div>
         </TabsContent>
       </Tabs>
@@ -315,6 +300,11 @@ const agentColumns: ColumnDef<SpaceAgentAssignment>[] = [
     cell: ({ row }) => row.original.localRole ?? "Member",
   },
   {
+    accessorKey: "allowedTools",
+    header: "Allowed Tools",
+    cell: ({ row }) => summarizeJson(row.original.allowedTools),
+  },
+  {
     accessorKey: "autoSubscribe",
     header: "Subscribe",
     cell: ({ row }) => (row.original.autoSubscribe ? "Auto" : "Manual"),
@@ -330,86 +320,99 @@ const agentColumns: ColumnDef<SpaceAgentAssignment>[] = [
   },
 ];
 
-const checklistColumns: ColumnDef<SpaceChecklistItem>[] = [
+const mcpColumns: ColumnDef<SpaceMcpAssignment>[] = [
   {
-    accessorKey: "title",
-    header: "Task",
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="truncate font-medium">{row.original.title}</div>
-        {row.original.description && (
-          <div className="truncate text-xs text-muted-foreground">
-            {row.original.description}
-          </div>
-        )}
-      </div>
-    ),
-  },
-  {
-    accessorKey: "roleKey",
-    header: "Owner Role",
-    cell: ({ row }) => row.original.roleKey ?? "Unassigned",
-    size: 150,
-  },
-  {
-    accessorKey: "required",
-    header: "Required",
-    cell: ({ row }) => (row.original.required ? "Yes" : "No"),
-    size: 110,
-  },
-];
-
-const memberColumns: ColumnDef<SpaceMember>[] = [
-  {
-    accessorKey: "user",
-    header: "Member",
+    accessorKey: "mcpServer",
+    header: "Server",
     cell: ({ row }) => (
       <div className="min-w-0">
         <div className="truncate font-medium">
-          {row.original.user?.name ?? row.original.user?.email ?? "User"}
+          {row.original.mcpServer?.name ?? row.original.mcpServerId}
         </div>
         <div className="truncate text-xs text-muted-foreground">
-          {row.original.user?.email ?? row.original.userId}
+          {row.original.mcpServer?.slug ?? row.original.mcpServerId}
         </div>
       </div>
     ),
   },
   {
-    accessorKey: "role",
-    header: "Role",
-    cell: ({ row }) => formatLabel(row.original.role),
+    accessorKey: "authType",
+    header: "Auth",
+    cell: ({ row }) => row.original.mcpServer?.authType ?? "-",
+    size: 130,
   },
   {
-    accessorKey: "notificationPreference",
-    header: "Notifications",
-    cell: ({ row }) => formatLabel(row.original.notificationPreference),
-  },
-];
-
-const integrationColumns: ColumnDef<SpaceIntegration>[] = [
-  {
-    accessorKey: "provider",
-    header: "Provider",
-    cell: ({ row }) => formatLabel(row.original.provider),
-  },
-  {
-    accessorKey: "writebackPolicy",
-    header: "Writeback",
-    cell: ({ row }) => formatLabel(row.original.writebackPolicy),
+    accessorKey: "enabled",
+    header: "Enabled",
+    cell: ({ row }) => (row.original.enabled ? "Yes" : "No"),
+    size: 100,
   },
   {
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => (
-      <Badge variant="outline">{formatLabel(row.original.status)}</Badge>
+      <Badge variant="outline">
+        {formatLabel(row.original.mcpServer?.status ?? "unknown")}
+      </Badge>
     ),
-  },
-  {
-    accessorKey: "webhookConfigRef",
-    header: "Webhook Ref",
-    cell: ({ row }) => row.original.webhookConfigRef ?? "-",
+    size: 130,
   },
 ];
+
+const toolPolicyColumns: ColumnDef<ToolPolicyRow>[] = [
+  {
+    accessorKey: "scope",
+    header: "Scope",
+    cell: ({ row }) => row.original.scope,
+  },
+  {
+    accessorKey: "policy",
+    header: "Policy",
+    cell: ({ row }) => row.original.policy,
+  },
+  {
+    accessorKey: "values",
+    header: "Values",
+    cell: ({ row }) => (
+      <span className="block max-w-xl truncate">{row.original.values}</span>
+    ),
+  },
+];
+
+const connectedDataColumns: ColumnDef<ConnectedDataRow>[] = [
+  {
+    accessorKey: "source",
+    header: "Source",
+    cell: ({ row }) => row.original.source,
+  },
+  {
+    accessorKey: "summary",
+    header: "Configuration",
+    cell: ({ row }) => (
+      <span className="block max-w-2xl truncate">{row.original.summary}</span>
+    ),
+  },
+];
+
+function MetricPanel({
+  label,
+  value,
+  caption,
+}: {
+  label: string;
+  value: number;
+  caption: string;
+}) {
+  return (
+    <section className="rounded-md border p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{caption}</div>
+    </section>
+  );
+}
 
 function InfoPanel({
   title,
@@ -436,10 +439,94 @@ function InfoPanel({
   );
 }
 
+function JsonPanel({
+  title,
+  value,
+  wide = false,
+}: {
+  title: string;
+  value: unknown;
+  wide?: boolean;
+}) {
+  return <InfoPanel title={title} value={formatJson(value)} wide={wide} />;
+}
+
+function buildToolPolicyRows(space: Space | null): ToolPolicyRow[] {
+  if (!space) return [];
+  const rows: ToolPolicyRow[] = [];
+  appendPolicyRows(rows, "Space", space.toolPolicy);
+  for (const assignment of space.agentAssignments) {
+    appendPolicyRows(
+      rows,
+      assignment.agent?.name ?? assignment.agentId,
+      assignment.allowedTools,
+    );
+  }
+  return rows;
+}
+
+function appendPolicyRows(
+  rows: ToolPolicyRow[],
+  scope: string,
+  policy: unknown,
+) {
+  const object = objectValue(policy);
+  if (!object) return;
+  for (const [key, value] of Object.entries(object)) {
+    rows.push({
+      id: `${scope}:${key}`,
+      scope,
+      policy: formatLabel(key),
+      values: summarizeJson(value),
+    });
+  }
+}
+
+function buildConnectedDataRows(space: Space | null): ConnectedDataRow[] {
+  if (!space) return [];
+  const rows: ConnectedDataRow[] = [];
+  appendConnectedDataRows(rows, "Context", space.contextConfig);
+  appendConnectedDataRows(rows, "Connected Data", space.connectedDataConfig);
+  return rows;
+}
+
+function appendConnectedDataRows(
+  rows: ConnectedDataRow[],
+  source: string,
+  config: unknown,
+) {
+  const object = objectValue(config);
+  if (!object) return;
+  for (const [key, value] of Object.entries(object)) {
+    rows.push({
+      id: `${source}:${key}`,
+      source: `${source} / ${formatLabel(key)}`,
+      summary: summarizeJson(value),
+    });
+  }
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function summarizeJson(value: unknown) {
+  if (value == null) return "-";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "-";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
 function formatLabel(value: string) {
   return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .toLowerCase()
-    .split("_")
+    .split(/[_\s-]+/)
+    .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }

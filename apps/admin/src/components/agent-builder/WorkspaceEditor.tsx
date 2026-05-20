@@ -86,6 +86,7 @@ function isAgentOverride(source: ComposeSource | undefined): boolean {
 export function workspaceEditorTargetKey(target: Target): string {
   if ("agentId" in target) return `agent:${target.agentId}`;
   if ("templateId" in target) return `template:${target.templateId}`;
+  if ("spaceId" in target) return `space:${target.spaceId}`;
   if ("computerId" in target) return `computer:${target.computerId}`;
   if ("userId" in target) return `user:${target.userId}`;
   return "defaults";

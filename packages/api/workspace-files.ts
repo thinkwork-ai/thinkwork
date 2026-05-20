@@ -7,10 +7,10 @@
  *
  * Request shape (Unit 5):
  *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "update-identity-field",
- *     agentId?: string, templateId?: string, computerId?: string, userId?: string, defaults?: true,
+ *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
- *   Exactly one of agentId / templateId / computerId / userId / defaults:true
+ *   Exactly one of agentId / templateId / spaceId / computerId / userId / defaults:true
  *   identifies the target surface. Tenant identity is derived from the
  *   caller's JWT via `resolveCallerFromAuth` — the handler NEVER trusts a
  *   tenantSlug body field. Requests that still include one are rejected
@@ -49,6 +49,7 @@ import { authenticate, type AuthResult } from "./src/lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
 import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
 import { appendRoutingRowIfMissing } from "./src/lib/workspace-map-generator.js";
+import { spaceSourcePrefix } from "./src/lib/spaces/template-migration.js";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
 import {
   isPinnedWorkspacePath,
@@ -66,6 +67,7 @@ import {
   computers,
   db,
   eq,
+  spaces,
   tenantMembers,
   tenants,
 } from "./src/graphql/utils.js";
@@ -199,6 +201,15 @@ interface TemplateTarget {
   key: (path: string) => string;
 }
 
+interface SpaceTarget {
+  kind: "space";
+  tenantSlug: string;
+  spaceSlug: string;
+  spaceId: string;
+  prefix: string;
+  key: (path: string) => string;
+}
+
 interface DefaultsTarget {
   kind: "defaults";
   tenantSlug: string;
@@ -223,6 +234,7 @@ interface UserContextTarget {
 type Target =
   | AgentTarget
   | TemplateTarget
+  | SpaceTarget
   | DefaultsTarget
   | ComputerTarget
   | UserContextTarget;
@@ -288,6 +300,38 @@ async function resolveTemplateTarget(
     templateSlug: tmplSlug,
     prefix: templatePrefix(tSlug, tmplSlug),
     key: (path) => templateKey(tSlug, tmplSlug, path),
+  };
+}
+
+async function resolveSpaceTarget(
+  tenantId: string,
+  spaceId: string,
+): Promise<SpaceTarget | null> {
+  const [space] = await db
+    .select({
+      id: spaces.id,
+      slug: spaces.slug,
+      tenant_id: spaces.tenant_id,
+    })
+    .from(spaces)
+    .where(eq(spaces.id, spaceId));
+  if (!space || space.tenant_id !== tenantId || !space.slug) return null;
+
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  if (!tenant?.slug) return null;
+
+  const tSlug = tenant.slug;
+  const prefix = spaceSourcePrefix(tSlug, space.slug);
+  return {
+    kind: "space",
+    tenantSlug: tSlug,
+    spaceSlug: space.slug,
+    spaceId: space.id,
+    prefix,
+    key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
   };
 }
 
@@ -1438,6 +1482,7 @@ interface RequestBody {
   action?: string;
   agentId?: string;
   templateId?: string;
+  spaceId?: string;
   computerId?: string;
   userId?: string;
   defaults?: boolean;
@@ -1495,7 +1540,7 @@ export async function handler(
     return json(400, {
       ok: false,
       error:
-        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, computerId, userId, or defaults: true. Tenant is derived from the caller's token.",
+        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, spaceId, computerId, userId, or defaults: true. Tenant is derived from the caller's token.",
     });
   }
 
@@ -1512,6 +1557,7 @@ export async function handler(
   const targetCount =
     (body.agentId ? 1 : 0) +
     (body.templateId ? 1 : 0) +
+    (body.spaceId ? 1 : 0) +
     (body.computerId ? 1 : 0) +
     (body.userId ? 1 : 0) +
     (body.defaults ? 1 : 0);
@@ -1519,7 +1565,7 @@ export async function handler(
     return json(400, {
       ok: false,
       error:
-        "Exactly one of agentId, templateId, computerId, userId, defaults is required",
+        "Exactly one of agentId, templateId, spaceId, computerId, userId, defaults is required",
     });
   }
 
@@ -1528,6 +1574,8 @@ export async function handler(
     target = await resolveAgentTarget(tenantId, body.agentId);
   } else if (body.templateId) {
     target = await resolveTemplateTarget(tenantId, body.templateId);
+  } else if (body.spaceId) {
+    target = await resolveSpaceTarget(tenantId, body.spaceId);
   } else if (body.computerId) {
     target = await resolveComputerTarget(tenantId, body.computerId);
   } else if (body.userId) {

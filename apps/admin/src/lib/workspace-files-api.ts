@@ -4,7 +4,7 @@
  * Supersedes the per-route `workspaceApi` fetch wrappers that used the
  * VITE_API_AUTH_SECRET bearer token. The new handler validates Cognito
  * JWTs and derives the caller's tenant server-side — callers must send
- * agentId / templateId / defaults:true, never tenantSlug.
+ * agentId / templateId / spaceId / defaults:true, never tenantSlug.
  */
 
 import { getIdToken } from "@/lib/auth";
@@ -14,6 +14,7 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 export type Target =
   | { agentId: string }
   | { templateId: string }
+  | { spaceId: string }
   | { computerId: string }
   | { userId: string }
   | { defaults: true };
@@ -23,6 +24,7 @@ export type ComposeSource =
   | "agent-override-pinned"
   | "template"
   | "template-pinned"
+  | "space"
   | "computer"
   | "user"
   | "defaults";
