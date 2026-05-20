@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Button } from "@thinkwork/ui";
 import {
   TaskThreadView,
   normalizePersistedParts,
@@ -172,34 +174,6 @@ export function ComputerThreadDetailRoute({
       requestPolicy: "cache-and-network",
     });
 
-  usePageHeaderActions({
-    backHref,
-    title: threadTitle,
-    // Tab title gets the "Thread · " prefix to match the section pattern
-    // used by Memory and other pages ("Memory · ThinkWork", etc.). The
-    // in-page header keeps the bare thread title — no need to repeat
-    // "Thread" inside the page the user is already on.
-    documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
-    action: (
-      <div className="flex items-center gap-2">
-        {createdLabel ? (
-          <span className="hidden whitespace-nowrap text-xs text-muted-foreground tabular-nums sm:inline">
-            {createdLabel}
-          </span>
-        ) : null}
-        <ThreadDetailActions
-          threadId={threadId}
-          threadTitle={threadTitle}
-          attachedArtifacts={attachedArtifacts}
-          onDeleted={() => {
-            // ChatSidebar owns post-delete navigation because it has the
-            // actual visible, filtered thread order the user is looking at.
-          }}
-        />
-      </div>
-    ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}`,
-  });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
     useQuery<ThreadTasksResult>({
@@ -411,6 +385,59 @@ export function ComputerThreadDetailRoute({
     }),
     [artifactPanelOpen, effectiveSelectedArtifactId, threadArtifacts],
   );
+
+  usePageHeaderActions({
+    backHref,
+    title: threadTitle,
+    // Tab title gets the "Thread · " prefix to match the section pattern
+    // used by Memory and other pages ("Memory · ThinkWork", etc.). The
+    // in-page header keeps the bare thread title — no need to repeat
+    // "Thread" inside the page the user is already on.
+    documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
+    action: (
+      <div className="flex items-center gap-2">
+        {createdLabel ? (
+          <span className="hidden whitespace-nowrap text-xs text-muted-foreground tabular-nums sm:inline">
+            {createdLabel}
+          </span>
+        ) : null}
+        {threadArtifacts.length > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={
+              artifactPanelOpen
+                ? "Close artifact side panel"
+                : "Open artifact side panel"
+            }
+            title={
+              artifactPanelOpen
+                ? "Close artifact side panel"
+                : "Open artifact side panel"
+            }
+            onClick={() => setArtifactPanelOpen((open) => !open)}
+          >
+            {artifactPanelOpen ? (
+              <PanelRightClose className="size-4" />
+            ) : (
+              <PanelRightOpen className="size-4" />
+            )}
+          </Button>
+        ) : null}
+        <ThreadDetailActions
+          threadId={threadId}
+          threadTitle={threadTitle}
+          attachedArtifacts={attachedArtifacts}
+          onDeleted={() => {
+            // ChatSidebar owns post-delete navigation because it has the
+            // actual visible, filtered thread order the user is looking at.
+          }}
+        />
+      </div>
+    ),
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${artifactPanelOpen ? "open" : "closed"}`,
+  });
 
   useEffect(() => {
     if (!computerId || !hasActiveRunbookQueue) return;

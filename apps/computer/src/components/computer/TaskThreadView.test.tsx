@@ -144,6 +144,58 @@ describe("TaskThreadView", () => {
     expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
   });
 
+  it("renders the selected artifact in the side panel when artifact panel state is open", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Build a CRM pipeline dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "I created a dashboard app.",
+              durableArtifact: {
+                id: "artifact_123",
+                title: "CRM pipeline risk app",
+                type: "DATA_VIEW",
+                summary: "Stale opportunity analysis",
+                metadata: { kind: "research_dashboard" },
+              },
+            },
+          ],
+        }}
+        artifactPanelState={{
+          artifacts: [
+            {
+              id: "artifact_123",
+              title: "CRM pipeline risk app",
+              type: "DATA_VIEW",
+              summary: "Stale opportunity analysis",
+              metadata: { kind: "research_dashboard" },
+            },
+          ],
+          selectedArtifactId: "artifact_123",
+          isOpen: true,
+          onOpenChange: vi.fn(),
+          onSelectArtifact: vi.fn(),
+        }}
+      />,
+    );
+
+    const panel = screen.getByTestId("artifact-side-panel");
+    expect(
+      within(panel).getAllByText("CRM pipeline risk app").length,
+    ).toBeGreaterThan(0);
+    expect(within(panel).getByTestId("inline-applet-embed-stub")).toBeTruthy();
+  });
+
   it("renders exactly one Thinking row when an assistant message has no tool calls and a turn is running", () => {
     // Regression: before C-01 the per-message fallback ThinkingRow ('Reasoning
     // complete.') fired here on top of the turn-level ThinkingRow, producing

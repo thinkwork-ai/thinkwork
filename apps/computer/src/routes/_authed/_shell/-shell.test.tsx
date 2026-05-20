@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const tenantMock = vi.fn();
+let pathname = "/new";
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMock(),
 }));
@@ -17,9 +18,8 @@ vi.mock("@/components/NoTenantAssigned", () => ({
 }));
 
 vi.mock("@thinkwork/ui", async () => {
-  const actual = await vi.importActual<typeof import("@thinkwork/ui")>(
-    "@thinkwork/ui",
-  );
+  const actual =
+    await vi.importActual<typeof import("@thinkwork/ui")>("@thinkwork/ui");
   return {
     ...actual,
     SidebarProvider: ({ children }: { children: React.ReactNode }) => (
@@ -32,15 +32,16 @@ vi.mock("@thinkwork/ui", async () => {
 });
 
 vi.mock("@tanstack/react-router", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-router")>(
-      "@tanstack/react-router",
-    );
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
   return {
     ...actual,
     createFileRoute: () => (config: { component: React.ComponentType }) =>
       config,
     Outlet: () => <div data-testid="outlet" />,
+    useRouterState: ({ select }: { select: (state: unknown) => unknown }) =>
+      select({ location: { pathname } }),
   };
 });
 
@@ -52,6 +53,7 @@ const ShellLayout = (Route as unknown as { component: React.ComponentType })
 afterEach(() => {
   cleanup();
   tenantMock.mockReset();
+  pathname = "/new";
 });
 
 describe("_authed/_shell layout", () => {
@@ -83,6 +85,15 @@ describe("_authed/_shell layout", () => {
     tenantMock.mockReturnValue({ noTenantAssigned: false, isLoading: false });
     render(<ShellLayout />);
     expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
+    expect(screen.getByTestId("app-top-bar")).toBeTruthy();
+    expect(screen.getByTestId("outlet")).toBeTruthy();
+  });
+
+  it("renders artifact detail pages without the legacy sidebar nav", () => {
+    pathname = "/artifacts/artifact-1";
+    tenantMock.mockReturnValue({ noTenantAssigned: false, isLoading: false });
+    render(<ShellLayout />);
+    expect(screen.queryByTestId("computer-sidebar")).toBeNull();
     expect(screen.getByTestId("app-top-bar")).toBeTruthy();
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });

@@ -41,6 +41,17 @@ vi.mock("@tanstack/react-router", async () => {
   );
   return {
     ...actual,
+    Link: ({
+      children,
+      to,
+      params,
+    }: {
+      children: React.ReactNode;
+      to: string;
+      params?: Record<string, string>;
+    }) => (
+      <a href={params?.id ? to.replace("$id", params.id) : to}>{children}</a>
+    ),
     useNavigate: () => vi.fn(),
   };
 });
@@ -217,6 +228,50 @@ describe("ComputerThreadDetailRoute", () => {
 
     expect(usePageHeaderActions).toHaveBeenLastCalledWith(
       expect.not.objectContaining({ backHref: expect.any(String) }),
+    );
+  });
+
+  it("registers an artifact side-panel header action when the thread has artifacts", () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Artifact thread",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content: "Build a dashboard",
+              },
+            },
+            {
+              node: {
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "I created a dashboard app.",
+                durableArtifact: {
+                  id: "artifact_123",
+                  title: "CRM pipeline risk app",
+                  type: "DATA_VIEW",
+                  summary: "Stale opportunity analysis",
+                  metadata: { kind: "research_dashboard" },
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    render(<ComputerThreadDetailRoute threadId="thread-1" />);
+
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: expect.anything(),
+        actionKey: expect.stringContaining(":1:artifact_123:closed"),
+      }),
     );
   });
 

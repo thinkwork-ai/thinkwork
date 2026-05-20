@@ -7,12 +7,15 @@ import {
   ChevronUp,
   Code2,
   Database,
+  ExternalLink,
   ListChecks,
   Mic,
   Plus,
   Search,
   Sparkles,
+  X,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import {
   Children,
   useEffect,
@@ -69,6 +72,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@thinkwork/ui";
 import {
   GeneratedArtifactCard,
+  GeneratedArtifactPreview,
   type GeneratedArtifact,
 } from "@/components/computer/GeneratedArtifactCard";
 import { StreamingMessageBuffer } from "@/components/computer/StreamingMessageBuffer";
@@ -240,66 +244,189 @@ export function TaskThreadView({
     transcriptMessages,
     thread.turns ?? [],
   );
+  const selectedArtifact =
+    artifactPanelState?.artifacts.find(
+      (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
+    ) ?? null;
 
   return (
-    <main className="relative flex h-full w-full flex-col overflow-hidden bg-background">
-      <Conversation
-        className="h-full flex-1 overflow-y-auto overscroll-contain"
-        aria-label="Thread transcript"
+    <main className="flex h-full w-full overflow-hidden bg-background">
+      <section
+        className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background"
+        aria-label="Thread conversation"
       >
-        <ConversationContent
-          className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 sm:px-6"
-          style={{ paddingBottom: composerBottomInsetPx }}
+        <Conversation
+          className="h-full flex-1 overflow-y-auto overscroll-contain"
+          aria-label="Thread transcript"
         >
-          {transcriptMessages.length === 0 ? (
-            <ThinkingRow
-              title="Thinking"
-              detail="ThinkWork is preparing this thread."
-            />
-          ) : (
-            transcriptMessages.map((message, index) => (
-              <TranscriptSegment
-                key={message.id}
-                message={message}
-                turn={turnByUserMessageId.get(message.id)}
-                isLatestUser={index === latestUserIndex}
-                streamingChunks={
-                  index === latestUserIndex && showStreamingBuffer
-                    ? streamingChunks
-                    : []
-                }
-                streamState={
-                  index === latestUserIndex && showStreamingBuffer
-                    ? streamState
-                    : undefined
-                }
-                onOpenArtifact={artifactPanelState?.onSelectArtifact}
-                showProcessingShimmer={
-                  index === latestUserIndex && showProcessingShimmer
-                }
+          <ConversationContent
+            className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 sm:px-6"
+            style={{ paddingBottom: composerBottomInsetPx }}
+          >
+            {transcriptMessages.length === 0 ? (
+              <ThinkingRow
+                title="Thinking"
+                detail="ThinkWork is preparing this thread."
               />
-            ))
-          )}
-          {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
-        </ConversationContent>
-      </Conversation>
+            ) : (
+              transcriptMessages.map((message, index) => (
+                <TranscriptSegment
+                  key={message.id}
+                  message={message}
+                  turn={turnByUserMessageId.get(message.id)}
+                  isLatestUser={index === latestUserIndex}
+                  streamingChunks={
+                    index === latestUserIndex && showStreamingBuffer
+                      ? streamingChunks
+                      : []
+                  }
+                  streamState={
+                    index === latestUserIndex && showStreamingBuffer
+                      ? streamState
+                      : undefined
+                  }
+                  onOpenArtifact={artifactPanelState?.onSelectArtifact}
+                  showProcessingShimmer={
+                    index === latestUserIndex && showProcessingShimmer
+                  }
+                />
+              ))
+            )}
+            {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
+          </ConversationContent>
+        </Conversation>
 
-      <div
-        ref={composerDockRef}
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6"
-      >
-        <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
-          <FollowUpComposer
-            taskQueue={promptTaskQueue}
-            disabled={!onSendFollowUp || isSending}
-            isSending={isSending}
-            mentionTargets={mentionTargets}
-            onSubmit={onSendFollowUp}
-          />
+        <div
+          ref={composerDockRef}
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6"
+        >
+          <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
+            <FollowUpComposer
+              taskQueue={promptTaskQueue}
+              disabled={!onSendFollowUp || isSending}
+              isSending={isSending}
+              mentionTargets={mentionTargets}
+              onSubmit={onSendFollowUp}
+            />
+          </div>
         </div>
-      </div>
+      </section>
+
+      <ArtifactSidePanel
+        artifact={selectedArtifact}
+        open={artifactPanelState?.isOpen ?? false}
+        onOpenChange={artifactPanelState?.onOpenChange}
+      />
     </main>
   );
+}
+
+function ArtifactSidePanel({
+  artifact,
+  open,
+  onOpenChange,
+}: {
+  artifact: GeneratedArtifact | null;
+  open: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [width, setWidth] = useState(500);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    function handlePointerMove(event: PointerEvent) {
+      const maxWidth = Math.max(420, window.innerWidth - 360);
+      const nextWidth = clamp(window.innerWidth - event.clientX, 360, maxWidth);
+      setWidth(nextWidth);
+    }
+
+    function handlePointerUp() {
+      setIsDragging(false);
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isDragging]);
+
+  if (!open || !artifact) return null;
+
+  return (
+    <aside
+      className="relative hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex"
+      style={{ width }}
+      aria-label="Artifact side panel"
+      data-testid="artifact-side-panel"
+    >
+      <div
+        role="separator"
+        aria-label="Resize artifact panel"
+        aria-orientation="vertical"
+        aria-valuemin={360}
+        aria-valuemax={Math.max(420, window.innerWidth - 360)}
+        aria-valuenow={width}
+        tabIndex={0}
+        className="absolute inset-y-0 left-0 z-20 flex w-2 -translate-x-1 cursor-col-resize items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            setWidth((current) => current + 24);
+          }
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            setWidth((current) => Math.max(360, current - 24));
+          }
+        }}
+      >
+        <div className="h-10 w-1 rounded-full bg-border transition-colors hover:bg-muted-foreground" />
+      </div>
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{artifact.title}</p>
+        </div>
+        <Button
+          asChild
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Open artifact full screen"
+        >
+          <Link to="/artifacts/$id" params={{ id: artifact.id }}>
+            <ExternalLink className="size-4" />
+          </Link>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close artifact panel"
+          onClick={() => onOpenChange?.(false)}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <GeneratedArtifactPreview artifact={artifact} />
+      </div>
+    </aside>
+  );
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function isTaskQueueAssistantMessage(message: TaskThreadMessage) {
