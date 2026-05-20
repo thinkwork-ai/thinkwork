@@ -27,7 +27,7 @@ const DEFAULT_MODEL_ID =
 	process.env.BEDROCK_MODEL_ID || "openai.gpt-oss-120b-1:0";
 const DEFAULT_CALL_TIMEOUT_MS = positiveIntEnv(
 	"WIKI_BEDROCK_CALL_TIMEOUT_MS",
-	120_000,
+	45_000,
 );
 
 /**
@@ -238,7 +238,7 @@ export class BedrockRetryExhaustedError extends Error {
 	}
 }
 
-const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_ATTEMPTS = positiveIntEnv("WIKI_BEDROCK_MAX_ATTEMPTS", 3);
 const BASE_BACKOFF_MS = 1000;
 
 // SDK exception names that indicate a transient condition worth retrying.

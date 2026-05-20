@@ -997,6 +997,38 @@ Target branch: `main`
 
 None.
 
+# Amy Wiki Rebuild Resilience Hotfix - 2026-05-19
+
+## Status
+
+- Branch: `codex/fix-wiki-timeout-budget`
+- Started: `2026-05-19T22:00:00-05:00`
+- Root cause:
+  - Amy's ontology-gated wiki rebuild was making progress, but large bootstrap slices could still overrun the Lambda window when Bedrock Converse calls timed out and retried.
+  - The compiler counted records as read before a clean planner/apply cycle, making retry-exhausted batches look processed even though the cursor had not advanced.
+- Implemented:
+  - Reduced default wiki compile slice sizes and soft deadline so continuation jobs hand off earlier.
+  - Reduced the default wiki Bedrock call timeout while preserving the `openai.gpt-oss-120b-1:0` model.
+  - Added an env-tunable Bedrock max-attempts setting.
+  - Treat Bedrock retry exhaustion as a resumable continuation stop: completed batches remain committed, the cursor stays at the last successfully applied batch, and the chain queues another job instead of dying.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api exec vitest run src/__tests__/wiki-compiler.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api exec vitest run src/__tests__/wiki-compiler.test.ts src/lib/wiki/planner.test.ts` - passed.
+- `git diff --check` - passed.
+- `pnpm exec prettier --write ...` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+- Live Amy rebuild observed at 94 active wiki pages and 97 active links, with continuation job `24b0179c-2d8e-418a-9b8f-9e00ad32b534` running.
+
+## CI / PR
+
+- Pending.
+
+## Blockers
+
+None.
+
 # Requester Memory Dreaming - 2026-05-18
 
 ## Status

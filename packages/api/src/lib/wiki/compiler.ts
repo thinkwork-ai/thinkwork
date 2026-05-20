@@ -102,21 +102,21 @@ import { and, eq, sql } from "drizzle-orm";
 // Budgets / caps (from build plan PR 3 "Guardrails")
 // ---------------------------------------------------------------------------
 
-const RECORD_PAGE_SIZE = positiveIntEnv("WIKI_RECORD_PAGE_SIZE", 25);
-const MAX_RECORDS_PER_JOB = positiveIntEnv("WIKI_MAX_RECORDS_PER_JOB", 100);
+const RECORD_PAGE_SIZE = positiveIntEnv("WIKI_RECORD_PAGE_SIZE", 10);
+const MAX_RECORDS_PER_JOB = positiveIntEnv("WIKI_MAX_RECORDS_PER_JOB", 50);
 /** Higher cap for `trigger='bootstrap_import'` jobs — the one-shot import
  * that feeds the whole agent history through the planner. Paired with
  * continuation chaining so a 5,000-record bootstrap still self-completes. */
 const MAX_RECORDS_PER_BOOTSTRAP_JOB = positiveIntEnv(
 	"WIKI_MAX_RECORDS_PER_BOOTSTRAP_JOB",
-	250,
+	100,
 );
 const MAX_NEW_PAGES_PER_JOB = positiveIntEnv("WIKI_MAX_NEW_PAGES_PER_JOB", 25);
 const MAX_SECTIONS_REWRITTEN_PER_JOB = positiveIntEnv(
 	"WIKI_MAX_SECTIONS_REWRITTEN_PER_JOB",
 	100,
 );
-const DEFAULT_COMPILE_SOFT_DEADLINE_MS = 360_000;
+const DEFAULT_COMPILE_SOFT_DEADLINE_MS = 240_000;
 
 function positiveIntEnv(name: string, fallback: number): number {
 	const value = Number(process.env[name]);
@@ -173,6 +173,10 @@ export interface RunJobResult {
 		/** True when the job skipped optional aggregation to finish before
 		 * the Lambda timeout and enqueue a continuation. */
 		aggregation_skipped_time_budget?: boolean;
+		/** True when a model call exhausted its bounded retry budget; completed
+		 * batches stay committed and a continuation resumes from the last
+		 * successfully advanced cursor. */
+		model_budget_hit?: boolean;
 		/** True when an active ontology is present and the legacy aggregation
 		 * pass is suppressed because its hub pages/links are taxonomy-shaped
 		 * rather than ontology-shaped. */
@@ -389,9 +393,6 @@ export async function runCompileJob(
 				cursorDrained = true;
 				break;
 			}
-			metrics.records_read += records.length;
-			allRecordsThisJob.push(...records);
-
 			const [candidatePages, openMentions] = await Promise.all([
 				listPagesForScope({
 					tenantId: job.tenant_id,
@@ -405,61 +406,79 @@ export async function runCompileJob(
 				}),
 			]);
 
-			const plan = await runPlanner(
-				{
-					tenantId: job.tenant_id,
-					ownerId: job.owner_id,
-					records,
-					candidatePages,
-					ontologySnapshot,
-					openMentions: openMentions.map((m) => ({
-						id: m.id,
-						alias: m.alias,
-						aliasNormalized: m.alias_normalized,
-						mentionCount: m.mention_count,
-						suggestedType: m.suggested_type,
-					})),
-				},
-				{ modelId: opts.modelId },
-			);
-			metrics.planner_calls += 1;
-			metrics.input_tokens += plan.usage.inputTokens;
-			metrics.output_tokens += plan.usage.outputTokens;
-			metrics.bedrock_retries =
-				(metrics.bedrock_retries ?? 0) + (plan.usage.bedrockRetries ?? 0);
+			let capHit: string | null = null;
+			try {
+				const plan = await runPlanner(
+					{
+						tenantId: job.tenant_id,
+						ownerId: job.owner_id,
+						records,
+						candidatePages,
+						ontologySnapshot,
+						openMentions: openMentions.map((m) => ({
+							id: m.id,
+							alias: m.alias,
+							aliasNormalized: m.alias_normalized,
+							mentionCount: m.mention_count,
+							suggestedType: m.suggested_type,
+						})),
+					},
+					{ modelId: opts.modelId },
+				);
+				metrics.planner_calls += 1;
+				metrics.input_tokens += plan.usage.inputTokens;
+				metrics.output_tokens += plan.usage.outputTokens;
+				metrics.bedrock_retries =
+					(metrics.bedrock_retries ?? 0) + (plan.usage.bedrockRetries ?? 0);
 
-			// Pre-compute title + type + slug for every page that could be
-			// referenced in a newPage / updated section's body. Two consumers:
-			//   1. knownPageTitles — titles only, fed to the section writer.
-			//   2. knownPageRefs — full (type, slug, title) triples, used by
-			//      linkifyKnownEntities to wrap `**Title**` mentions in real
-			//      markdown links so leaf-planner topic bodies are navigable,
-			//      not dumb lists.
-			const knownPageRefs = [
-				...candidatePages.map((p) => ({
-					type: p.type,
-					slug: p.slug,
-					title: p.title,
-				})),
-				...plan.newPages.map((p) => ({
-					type: p.type,
-					slug: p.slug,
-					title: p.title,
-				})),
-			];
-			const knownPageTitles = knownPageRefs.map((r) => r.title);
-			const capHit = await applyPlan({
-				job,
-				records,
-				plan,
-				metrics,
-				modelId: opts.modelId,
-				knownPageTitles,
-				knownPageRefs,
-				candidatePages,
-				placesCtx,
-				ontologySnapshot,
-			});
+				// Pre-compute title + type + slug for every page that could be
+				// referenced in a newPage / updated section's body. Two consumers:
+				//   1. knownPageTitles — titles only, fed to the section writer.
+				//   2. knownPageRefs — full (type, slug, title) triples, used by
+				//      linkifyKnownEntities to wrap `**Title**` mentions in real
+				//      markdown links so leaf-planner topic bodies are navigable,
+				//      not dumb lists.
+				const knownPageRefs = [
+					...candidatePages.map((p) => ({
+						type: p.type,
+						slug: p.slug,
+						title: p.title,
+					})),
+					...plan.newPages.map((p) => ({
+						type: p.type,
+						slug: p.slug,
+						title: p.title,
+					})),
+				];
+				const knownPageTitles = knownPageRefs.map((r) => r.title);
+				capHit = await applyPlan({
+					job,
+					records,
+					plan,
+					metrics,
+					modelId: opts.modelId,
+					knownPageTitles,
+					knownPageRefs,
+					candidatePages,
+					placesCtx,
+					ontologySnapshot,
+				});
+			} catch (err) {
+				if (
+					err instanceof BedrockRetryExhaustedError ||
+					(err as Error | undefined)?.name === "BedrockRetryExhaustedError"
+				) {
+					metrics.bedrock_retry_exhausted =
+						(metrics.bedrock_retry_exhausted ?? 0) + 1;
+					metrics.model_budget_hit = true;
+					metrics.cap_hit ??= "bedrock_retry_exhausted";
+					break;
+				}
+				throw err;
+			}
+
+			metrics.records_read += records.length;
+			allRecordsThisJob.push(...records);
 
 			// Advance cursor only after a clean apply.
 			if (nextCursor) {
@@ -498,7 +517,7 @@ export async function runCompileJob(
 		// the leaf writes are already durable and the aggregation pass can
 		// retry cleanly on the next compile.
 		// ---------------------------------------------------------------
-		if (softTimeBudgetHit) {
+		if (softTimeBudgetHit || metrics.model_budget_hit) {
 			metrics.aggregation_skipped_time_budget = true;
 		} else if (isAggregationPassEnabled() && allRecordsThisJob.length > 0) {
 			if (ontologySnapshot && !ontologySnapshot.conservative) {
