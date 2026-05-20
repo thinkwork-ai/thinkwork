@@ -24,7 +24,6 @@ import {
   routeRunbookForComputerMessage,
 } from "../../../lib/computers/thread-cutover.js";
 import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
-import { hasSpaceMemberAccess } from "../spaces/shared.js";
 import { dispatchAgentMentions } from "../../../lib/mentions/dispatch-agent-mentions.js";
 import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-routing.js";
 import { parseMessageMentions } from "../../../lib/mentions/parse-message-mentions.js";
@@ -84,14 +83,6 @@ export const createThread = async (
     ) {
       throw new GraphQLError("Space not found", {
         extensions: { code: "NOT_FOUND" },
-      });
-    }
-    if (
-      ctx.auth.authType === "cognito" &&
-      !(await hasSpaceMemberAccess(ctx, i.tenantId, i.spaceId))
-    ) {
-      throw new GraphQLError("Space membership required", {
-        extensions: { code: "FORBIDDEN" },
       });
     }
     threadSpace = spaceRow;

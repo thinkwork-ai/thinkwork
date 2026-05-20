@@ -25,6 +25,7 @@ const {
   searchReexecuteMock: vi.fn(),
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
+    SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
   },
 }));
@@ -68,6 +69,32 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("urql", () => ({
   useQuery: ({ query }: { query: unknown }) => {
+    if (query === queryDocs.SpacesQuery) {
+      return [
+        {
+          fetching: false,
+          data: {
+            spaces: [
+              {
+                id: "space-general",
+                slug: "general",
+                name: "General",
+                unreadThreadCount: 0,
+                lastActivityAt: "2026-05-19T19:00:00Z",
+              },
+              {
+                id: "space-1",
+                slug: "customer-onboarding",
+                name: "Customer Onboarding",
+                unreadThreadCount: 2,
+                lastActivityAt: "2026-05-19T18:00:00Z",
+              },
+            ],
+          },
+        },
+        vi.fn(),
+      ];
+    }
     if (query === queryDocs.ChatGlobalInboxQuery) {
       return [
         {
@@ -139,6 +166,22 @@ vi.mock("@thinkwork/ui", () => ({
     <h2>{children}</h2>
   ),
   Input: (props: React.ComponentProps<"input">) => <input {...props} />,
+  Collapsible: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CollapsibleContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CollapsibleTrigger: ({
+    children,
+    asChild,
+  }: {
+    children: React.ReactNode;
+    asChild?: boolean;
+  }) => (asChild ? children : <button>{children}</button>),
+  SidebarGroupContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   SidebarGroup: ({ children }: { children: React.ReactNode }) => (
     <section>{children}</section>
   ),
@@ -205,7 +248,7 @@ describe("ChatSidebar", () => {
     ).toBe("below");
   });
 
-  it("renders Codex-style action nav and global recency groups without Inbox or Space filters", () => {
+  it("renders Codex-style action nav and Space sections without Inbox or Space filters", () => {
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
       pathname: "/threads",
@@ -216,8 +259,13 @@ describe("ChatSidebar", () => {
 
     expect(screen.queryByText("Inbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /switch space/i })).toBeNull();
+    expect(screen.queryByRole("option", { name: /all spaces/i })).toBeNull();
     expect(screen.queryByText("General")).toBeNull();
     expect(screen.getByRole("link", { name: /new thread/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /toggle chats/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /toggle customer onboarding/i }),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy();
     expect(
@@ -227,16 +275,21 @@ describe("ChatSidebar", () => {
           screen.getByRole("button", { name: /^search/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: /^search/i })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: /settings/i }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Chats" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Spaces" })).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: /recent space thread/i })
         .getAttribute("href"),
-    ).toBe("/threads/thread-recent");
+    ).toBe("/spaces/space-1/threads/thread-recent");
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
-    expect(screen.getByText("Today").className).toContain(
-      "text-sidebar-foreground/45",
-    );
   });
 
   it("uses Space thread route params without showing a list title above Today", () => {
@@ -256,7 +309,7 @@ describe("ChatSidebar", () => {
       screen
         .getByRole("link", { name: /recent space thread/i })
         .getAttribute("href"),
-    ).toBe("/threads/thread-recent");
+    ).toBe("/spaces/space-1/threads/thread-recent");
   });
 
   it("highlights the replacement thread selected after delete", () => {

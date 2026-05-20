@@ -75,6 +75,7 @@ export function ComputerSidebar() {
         <div className="flex items-center gap-2 px-1">
           <Link
             to="/new"
+            search={{ spaceId: undefined }}
             onClick={(event) => {
               if (isCollapsed) {
                 event.preventDefault();
