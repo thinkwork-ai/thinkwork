@@ -1,18 +1,34 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { queryDocs, tenantMock, locationMock, navigateMock } = vi.hoisted(
-  () => ({
-    tenantMock: vi.fn(),
-    locationMock: vi.fn(),
-    navigateMock: vi.fn(),
-    queryDocs: {
-      ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
-      SpacesQuery: Symbol("SpacesQuery"),
-      ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
-    },
-  }),
-);
+const {
+  queryDocs,
+  tenantMock,
+  locationMock,
+  navigateMock,
+  recentThreadItemsMock,
+  recentReexecuteMock,
+  searchReexecuteMock,
+} = vi.hoisted(() => ({
+  tenantMock: vi.fn(),
+  locationMock: vi.fn(),
+  navigateMock: vi.fn(),
+  recentThreadItemsMock: [] as Array<{
+    id: string;
+    title: string;
+    spaceId?: string;
+    space?: { id: string; name: string };
+    lastActivityAt?: string;
+    lastReadAt?: string | null;
+  }>,
+  recentReexecuteMock: vi.fn(),
+  searchReexecuteMock: vi.fn(),
+  queryDocs: {
+    ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
+    SpacesQuery: Symbol("SpacesQuery"),
+    ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
+  },
+}));
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMock(),
@@ -108,21 +124,14 @@ vi.mock("urql", () => ({
           fetching: false,
           data: {
             threadsPaged: {
-              totalCount: 1,
-              items: [
-                {
-                  id: "thread-recent",
-                  title: "Recent Space thread",
-                  spaceId: "space-1",
-                  space: { id: "space-1", name: "Customer Onboarding" },
-                  lastActivityAt: new Date().toISOString(),
-                  lastReadAt: new Date().toISOString(),
-                },
-              ],
+              totalCount: recentThreadItemsMock.length,
+              items: recentThreadItemsMock,
             },
           },
         },
-        vi.fn(),
+        recentThreadItemsMock.length > 1
+          ? recentReexecuteMock
+          : searchReexecuteMock,
       ];
     }
     return [{ fetching: false, data: null }, vi.fn()];
@@ -199,6 +208,7 @@ vi.mock("@thinkwork/ui", () => ({
   ),
 }));
 
+import { selectNextThreadBelowDeleted } from "./chat-sidebar-types";
 import { ChatSidebar } from "./ChatSidebar";
 
 afterEach(() => {
@@ -206,9 +216,49 @@ afterEach(() => {
   tenantMock.mockReset();
   locationMock.mockReset();
   navigateMock.mockReset();
+  recentReexecuteMock.mockReset();
+  searchReexecuteMock.mockReset();
+  recentThreadItemsMock.length = 0;
 });
 
 describe("ChatSidebar", () => {
+  beforeEach(() => {
+    recentThreadItemsMock.push({
+      id: "thread-recent",
+      title: "Recent Space thread",
+      spaceId: "space-1",
+      space: { id: "space-1", name: "Customer Onboarding" },
+      lastActivityAt: new Date().toISOString(),
+      lastReadAt: new Date().toISOString(),
+    });
+  });
+
+  it("selects the visible row below a deleted thread", () => {
+    expect(
+      selectNextThreadBelowDeleted(
+        [
+          {
+            id: "above",
+            title: "Above",
+            lastActivityAt: "2026-05-10T12:00:00Z",
+          },
+          {
+            id: "deleted",
+            title: "Deleted",
+            lastActivityAt: "2026-05-10T11:00:00Z",
+          },
+          {
+            id: "below",
+            title: "Below",
+            lastActivityAt: "2026-05-10T10:00:00Z",
+          },
+        ],
+        "deleted",
+        new Set(["deleted"]),
+      ),
+    ).toBe("below");
+  });
+
   it("renders Codex-style action nav and recency groups without Inbox", () => {
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
@@ -298,5 +348,53 @@ describe("ChatSidebar", () => {
     expect(replacementLink.className).toMatch(
       /(?:^|\s)bg-sidebar-accent(?:\s|$)/,
     );
+  });
+
+  it("navigates to the row directly below the deleted thread and marks it active", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "above-thread",
+        title: "Computer deterministic streaming",
+        lastActivityAt: "2026-05-10T12:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "deleted-thread",
+        title: "Computer streaming smoke",
+        lastActivityAt: "2026-05-10T11:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "below-thread",
+        title: "E2E after force Strands",
+        lastActivityAt: "2026-05-10T10:00:00Z",
+        lastReadAt: null,
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads/deleted-thread",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:thread-deleted", {
+          detail: { threadId: "deleted-thread" },
+        }),
+      );
+    });
+
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/threads/$id",
+      params: { id: "below-thread" },
+      replace: true,
+    });
+    expect(
+      screen.getByRole("link", { name: /e2e after force strands/i }).className,
+    ).toMatch(/(?:^|\s)bg-sidebar-accent(?:\s|$)/);
   });
 });

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import {
   TaskThreadView,
@@ -20,14 +19,9 @@ import {
   SendMessageMutation,
   ThreadArtifactsQuery,
   ThreadMentionTargetsQuery,
-  ThreadsPagedQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
-import {
-  sortThreadsByActivityDesc,
-  type ChatThreadSummary,
-} from "@/components/shell/chat-sidebar-types";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
@@ -127,19 +121,12 @@ interface MentionTargetsResult {
   threadMentionTargets?: MentionTarget[] | null;
 }
 
-interface ThreadNavigationResult {
-  threadsPaged?: {
-    items?: ChatThreadSummary[] | null;
-  } | null;
-}
-
 export function ComputerThreadDetailRoute({
   threadId,
   backHref,
   documentTitlePrefix = "Thread",
 }: ComputerThreadDetailRouteProps) {
   const { tenantId } = useTenant();
-  const navigate = useNavigate();
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(
     null,
   );
@@ -179,22 +166,6 @@ export function ComputerThreadDetailRoute({
       pause: !threadId,
       requestPolicy: "cache-and-network",
     });
-  const activeSpaceId = data?.thread?.spaceId ?? undefined;
-  const [{ data: navigationData }, reexecuteNavigationQuery] =
-    useQuery<ThreadNavigationResult>({
-      query: ThreadsPagedQuery,
-      variables: {
-        tenantId: tenantId ?? "",
-        showArchived: false,
-        sortField: "updated",
-        sortDir: "desc",
-        spaceId: activeSpaceId,
-        limit: 60,
-        offset: 0,
-      },
-      pause: !tenantId || !data?.thread,
-      requestPolicy: "cache-and-network",
-    });
 
   usePageHeaderActions({
     backHref,
@@ -215,29 +186,9 @@ export function ComputerThreadDetailRoute({
           threadId={threadId}
           threadTitle={threadTitle}
           attachedArtifacts={attachedArtifacts}
-          onDeleted={async (deletedThreadId) => {
-            const nextThreadId = selectReplacementThreadId(
-              navigationData?.threadsPaged?.items ?? [],
-              deletedThreadId,
-            );
-            reexecuteNavigationQuery({ requestPolicy: "network-only" });
-            if (nextThreadId) {
-              window.dispatchEvent(
-                new CustomEvent("thinkwork:thread-selected", {
-                  detail: {
-                    threadId: nextThreadId,
-                    spaceId: activeSpaceId ?? null,
-                  },
-                }),
-              );
-              await navigate({
-                to: "/threads/$id",
-                params: { id: nextThreadId },
-                replace: true,
-              });
-            } else {
-              await navigate({ to: "/new", replace: true });
-            }
+          onDeleted={() => {
+            // ChatSidebar owns post-delete navigation because it has the
+            // actual visible, filtered thread order the user is looking at.
           }}
         />
       </div>
@@ -521,22 +472,6 @@ function toSendMention(mention: ComposerMention) {
     displayName: mention.displayName,
     rawText: mention.rawText,
   };
-}
-
-export function selectReplacementThreadId(
-  threads: ChatThreadSummary[],
-  deletedThreadId: string,
-) {
-  const orderedThreads = sortThreadsByActivityDesc(threads);
-  const index = orderedThreads.findIndex(
-    (thread) => thread.id === deletedThreadId,
-  );
-  const remaining = orderedThreads.filter(
-    (thread) => thread.id !== deletedThreadId,
-  );
-  if (remaining.length === 0) return null;
-  if (index < 0) return remaining[0]?.id ?? null;
-  return remaining[Math.min(index, remaining.length - 1)]?.id ?? null;
 }
 
 function formatThreadCreatedAt(value?: string | null): string | null {

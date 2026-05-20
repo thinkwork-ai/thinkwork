@@ -61,6 +61,26 @@ export function sortThreadsByActivityDesc(
   });
 }
 
+export function selectNextThreadBelowDeleted(
+  orderedThreads: ChatThreadSummary[],
+  deletedThreadId: string,
+  pendingDeletes: ReadonlySet<string> = new Set(),
+) {
+  const deletedIndex = orderedThreads.findIndex(
+    (thread) => thread.id === deletedThreadId,
+  );
+  const remainingThreads = orderedThreads.filter(
+    (thread) => thread.id !== deletedThreadId && !pendingDeletes.has(thread.id),
+  );
+
+  if (remainingThreads.length === 0) return null;
+  if (deletedIndex < 0) return remainingThreads[0]?.id ?? null;
+  return (
+    remainingThreads[Math.min(deletedIndex, remainingThreads.length - 1)]?.id ??
+    null
+  );
+}
+
 export function isThreadUnread(thread: ChatThreadSummary): boolean {
   const activity = threadActivityAt(thread);
   if (!activity) return false;

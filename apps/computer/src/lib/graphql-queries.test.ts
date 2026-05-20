@@ -140,9 +140,16 @@ describe("computer GraphQL queries", () => {
 
   it("requests collaborative Space Thread fields and mention targets", () => {
     const thread = print(SpaceThreadCollaborationQuery);
+    const mentionTargets = print(ThreadMentionTargetsQuery);
+
     expect(thread).toContain("sender");
     expect(thread).toContain("mentions");
     expect(thread).toContain("participants");
-    expect(print(ThreadMentionTargetsQuery)).toContain("threadMentionTargets");
+    expect(mentionTargets).toContain("threadMentionTargets");
+    expect(mentionTargets).toContain("targetType");
+    expect(mentionTargets).toContain("targetId");
+    expect(mentionTargets).toContain("displayName");
+    expect(mentionTargets).toContain("avatarUrl");
+    expect(mentionTargets).toContain("role");
   });
 });
