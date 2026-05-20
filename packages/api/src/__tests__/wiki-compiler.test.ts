@@ -1663,6 +1663,48 @@ describe("runCompileJob", () => {
     expect(mockRepo.setCursor).not.toHaveBeenCalled();
   });
 
+  it("treats Bedrock retry exhaustion as a resumable continuation stop", async () => {
+    scriptAdapter([
+      {
+        records: [makeRecord("r1")],
+        nextCursor: {
+          updatedAt: new Date("2026-04-18T00:00:00Z"),
+          recordId: "r1",
+        },
+      },
+      { records: [], nextCursor: null },
+    ]);
+    mockPlanner.runPlanner.mockRejectedValueOnce(
+      new BedrockRetryExhaustedError(3, new Error("timeout")),
+    );
+    mockRepo.enqueueCompileJob.mockResolvedValueOnce({
+      inserted: true,
+      job: {
+        id: "chained-job",
+        tenant_id: "t1",
+        owner_id: "a1",
+        trigger: "memory_retain",
+      },
+    });
+
+    const result = await runCompileJob(sampleJob);
+
+    expect(result.status).toBe("succeeded");
+    expect(result.metrics.records_read).toBe(0);
+    expect(result.metrics.cap_hit).toBe("bedrock_retry_exhausted");
+    expect(result.metrics.model_budget_hit).toBe(true);
+    expect(result.metrics.bedrock_retry_exhausted).toBe(1);
+    expect(result.metrics.continuation_enqueued).toBe(1);
+    expect(mockRepo.setCursor).not.toHaveBeenCalled();
+    expect(mockRepo.enqueueCompileJob).toHaveBeenCalledWith({
+      tenantId: "t1",
+      ownerId: "a1",
+      trigger: "memory_retain",
+      nowEpochSeconds: 600,
+      dedupeDiscriminator: "continuation-job-1",
+    });
+  });
+
   it("fails cleanly when the adapter lacks listRecordsUpdatedSince", async () => {
     const brokenAdapter = { kind: "agentcore" } as any;
     const result = await runCompileJob(sampleJob, { adapter: brokenAdapter });
