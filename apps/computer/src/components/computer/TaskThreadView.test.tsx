@@ -196,7 +196,7 @@ describe("TaskThreadView", () => {
     expect(within(panel).getByTestId("inline-applet-embed-stub")).toBeTruthy();
   });
 
-  it("renders an inline thread info panel with details and downloadable attachments", () => {
+  it("reserves thread width for the info panel with details and downloadable attachments", () => {
     const onDownloadAttachment = vi.fn();
 
     render(
@@ -234,10 +234,15 @@ describe("TaskThreadView", () => {
       />,
     );
 
+    expect(
+      screen.getByTestId("thread-conversation-content").className,
+    ).toContain("md:mr-[332px]");
+    expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
+      "right-[332px]",
+    );
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
-    expect(panel.className).toContain("ml-4");
-    expect(panel.className).not.toContain("absolute");
+    expect(panel.className).toContain("absolute");
     expect(within(panel).getByText("Date started")).toBeTruthy();
     expect(within(panel).getByText("Eric Odom")).toBeTruthy();
     expect(within(panel).getByText("Executive")).toBeTruthy();

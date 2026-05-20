@@ -373,7 +373,7 @@ describe("ChatSidebar", () => {
 
   it("limits chat sections to five rows until Show more is clicked", () => {
     recentThreadItemsMock.length = 0;
-    for (let index = 1; index <= 7; index += 1) {
+    for (let index = 1; index <= 12; index += 1) {
       recentThreadItemsMock.push({
         id: `thread-${index}`,
         title: `Chat ${index}`,
@@ -393,10 +393,16 @@ describe("ChatSidebar", () => {
     expect(screen.queryByText("Yesterday")).toBeNull();
     expect(screen.queryByText("Older")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show more (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show more (7)" }));
 
     expect(screen.getByText("Chat 6")).toBeTruthy();
-    expect(screen.getByText("Chat 7")).toBeTruthy();
+    expect(screen.getByText("Chat 10")).toBeTruthy();
+    expect(screen.queryByText("Chat 11")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more (2)" }));
+
+    expect(screen.getByText("Chat 11")).toBeTruthy();
+    expect(screen.getByText("Chat 12")).toBeTruthy();
   });
 
   it("shows compact relative dates and deletes after inline confirmation", async () => {

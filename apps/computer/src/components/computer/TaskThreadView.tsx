@@ -22,7 +22,6 @@ import {
 import { Link } from "@tanstack/react-router";
 import {
   Children,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -31,7 +30,6 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
-  type UIEvent,
 } from "react";
 import {
   Conversation,
@@ -274,7 +272,7 @@ export function TaskThreadView({
     artifactPanelState?.artifacts.find(
       (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
     ) ?? null;
-  const transcriptScrollbarProps = useAutoHideScrollbar<HTMLDivElement>();
+  const infoPanelOpen = infoPanelState?.isOpen ?? false;
 
   return (
     <main className="flex h-full w-full overflow-hidden bg-background">
@@ -283,12 +281,15 @@ export function TaskThreadView({
         aria-label="Thread conversation"
       >
         <Conversation
-          {...transcriptScrollbarProps}
-          className="scrollbar-auto-hide h-full flex-1 overflow-y-auto overscroll-contain"
+          className="h-full flex-1 overflow-y-auto overscroll-contain"
           aria-label="Thread transcript"
         >
           <ConversationContent
-            className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 sm:px-6"
+            data-testid="thread-conversation-content"
+            className={cn(
+              "mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 sm:px-6",
+              infoPanelOpen && "md:mr-[332px]",
+            )}
             style={{ paddingBottom: composerBottomInsetPx }}
           >
             {transcriptMessages.length === 0 ? (
@@ -324,9 +325,15 @@ export function TaskThreadView({
           </ConversationContent>
         </Conversation>
 
+        <ThreadInfoPanel state={infoPanelState} />
+
         <div
           ref={composerDockRef}
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6"
+          data-testid="follow-up-composer-dock"
+          className={cn(
+            "pointer-events-none absolute bottom-0 left-0 z-10 px-4 sm:px-6",
+            infoPanelOpen ? "right-[332px]" : "right-0",
+          )}
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
             <FollowUpComposer
@@ -339,8 +346,6 @@ export function TaskThreadView({
           </div>
         </div>
       </section>
-
-      <ThreadInfoPanel state={infoPanelState} />
 
       <ArtifactSidePanel
         artifact={selectedArtifact}
@@ -362,7 +367,6 @@ function ArtifactSidePanel({
 }) {
   const [width, setWidth] = useState(500);
   const [isDragging, setIsDragging] = useState(false);
-  const artifactScrollbarProps = useAutoHideScrollbar<HTMLDivElement>();
 
   useEffect(() => {
     if (!isDragging) return;
@@ -449,10 +453,7 @@ function ArtifactSidePanel({
           <X className="size-4" />
         </Button>
       </div>
-      <div
-        {...artifactScrollbarProps}
-        className="scrollbar-auto-hide min-h-0 flex-1 overflow-auto p-4"
-      >
+      <div className="min-h-0 flex-1 overflow-auto p-4">
         <GeneratedArtifactPreview artifact={artifact} bare />
       </div>
     </aside>
@@ -460,8 +461,6 @@ function ArtifactSidePanel({
 }
 
 function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
-  const attachmentScrollbarProps = useAutoHideScrollbar<HTMLDivElement>();
-
   if (!state?.isOpen) return null;
 
   const startedAt = formatInfoDate(state.startedAt);
@@ -469,7 +468,7 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
 
   return (
     <aside
-      className="ml-4 mr-4 mt-4 hidden w-[300px] shrink-0 self-start rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
+      className="absolute right-4 top-4 z-20 hidden w-[300px] rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >
@@ -513,10 +512,7 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
             <h2 className="mb-2 text-sm font-medium text-white/55">
               Attachments
             </h2>
-            <div
-              {...attachmentScrollbarProps}
-              className="scrollbar-auto-hide max-h-56 space-y-1 overflow-y-auto"
-            >
+            <div className="max-h-56 space-y-1 overflow-y-auto">
               {state.attachments.map((attachment) => (
                 <button
                   key={attachment.id}
@@ -544,36 +540,6 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
       </div>
     </aside>
   );
-}
-
-function useAutoHideScrollbar<T extends HTMLElement>() {
-  const [active, setActive] = useState(false);
-  const timeoutRef = useRef<number | null>(null);
-
-  const showScrollbar = useCallback((_event: UIEvent<T>) => {
-    setActive(true);
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
-    }
-    timeoutRef.current = window.setTimeout(() => {
-      setActive(false);
-      timeoutRef.current = null;
-    }, 700);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (timeoutRef.current !== null) {
-        window.clearTimeout(timeoutRef.current);
-      }
-    },
-    [],
-  );
-
-  return {
-    "data-scrollbar-active": active ? "true" : undefined,
-    onScroll: showScrollbar,
-  };
 }
 
 function InfoPanelRow({

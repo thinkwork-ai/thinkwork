@@ -407,13 +407,19 @@ export function ComputerThreadDetailRoute({
       artifacts: threadArtifacts,
       selectedArtifactId: effectiveSelectedArtifactId,
       isOpen: artifactPanelOpen,
-      onOpenChange: setArtifactPanelOpen,
+      onOpenChange: (open: boolean) => {
+        setArtifactPanelOpen(open);
+        if (open) {
+          setThreadInfoOpen(false);
+        }
+      },
       onSelectArtifact: (artifactId: string) => {
         if (!threadArtifacts.some((artifact) => artifact.id === artifactId)) {
           return;
         }
         setSelectedArtifactId(artifactId);
         setArtifactPanelOpen(true);
+        setThreadInfoOpen(false);
       },
     }),
     [artifactPanelOpen, effectiveSelectedArtifactId, threadArtifacts],
@@ -421,7 +427,12 @@ export function ComputerThreadDetailRoute({
   const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
     () => ({
       isOpen: threadInfoOpen,
-      onOpenChange: setThreadInfoOpen,
+      onOpenChange: (open: boolean) => {
+        setThreadInfoOpen(open);
+        if (open) {
+          setArtifactPanelOpen(false);
+        }
+      },
       startedAt: data?.thread?.createdAt ?? null,
       startedBy: resolveStartedBy(data?.thread),
       agents: resolveAgentsInvolved(data?.thread),
@@ -463,7 +474,13 @@ export function ComputerThreadDetailRoute({
           aria-label={threadInfoOpen ? "Close thread info" : "Open thread info"}
           title={threadInfoOpen ? "Close thread info" : "Open thread info"}
           className={threadInfoOpen ? undefined : "text-muted-foreground"}
-          onClick={() => setThreadInfoOpen((open) => !open)}
+          onClick={() => {
+            const nextOpen = !threadInfoOpen;
+            setThreadInfoOpen(nextOpen);
+            if (nextOpen) {
+              setArtifactPanelOpen(false);
+            }
+          }}
         >
           <Info className="size-4" />
         </Button>
@@ -485,7 +502,13 @@ export function ComputerThreadDetailRoute({
             className={
               artifactPanelOpen ? "text-primary" : "text-muted-foreground"
             }
-            onClick={() => setArtifactPanelOpen((open) => !open)}
+            onClick={() => {
+              const nextOpen = !artifactPanelOpen;
+              setArtifactPanelOpen(nextOpen);
+              if (nextOpen) {
+                setThreadInfoOpen(false);
+              }
+            }}
           >
             <PanelRight className="size-4" />
           </Button>

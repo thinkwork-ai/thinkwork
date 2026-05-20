@@ -500,11 +500,9 @@ function ThreadListSection({
   emptyBehavior: "hidden" | "message";
   onActivate: (threadId: string) => void;
 }) {
-  const [showAll, setShowAll] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
   if (threads.length === 0 && emptyBehavior === "hidden") return null;
-  const visibleThreads = showAll
-    ? threads
-    : threads.slice(0, SECTION_THREAD_LIMIT);
+  const visibleThreads = threads.slice(0, visibleCount);
   const hiddenCount = threads.length - visibleThreads.length;
 
   return (
@@ -540,7 +538,11 @@ function ThreadListSection({
                 <button
                   type="button"
                   className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
-                  onClick={() => setShowAll(true)}
+                  onClick={() =>
+                    setVisibleCount((count) =>
+                      Math.min(count + SECTION_THREAD_LIMIT, threads.length),
+                    )
+                  }
                 >
                   Show more ({hiddenCount})
                 </button>
@@ -568,10 +570,8 @@ function SpaceThreadSection({
 }) {
   const label = space.name ?? space.slug ?? "Space";
   const isActiveSpace = activeSpaceId === space.id;
-  const [showAll, setShowAll] = useState(false);
-  const visibleThreads = showAll
-    ? threads
-    : threads.slice(0, SECTION_THREAD_LIMIT);
+  const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
+  const visibleThreads = threads.slice(0, visibleCount);
   const hiddenCount = threads.length - visibleThreads.length;
 
   return (
@@ -629,7 +629,11 @@ function SpaceThreadSection({
                 <button
                   type="button"
                   className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
-                  onClick={() => setShowAll(true)}
+                  onClick={() =>
+                    setVisibleCount((count) =>
+                      Math.min(count + SECTION_THREAD_LIMIT, threads.length),
+                    )
+                  }
                 >
                   Show more ({hiddenCount})
                 </button>
