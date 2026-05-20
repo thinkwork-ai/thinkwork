@@ -52,7 +52,6 @@ export const ThreadsPagedQuery = gql`
     $sortDir: String
     $limit: Int
     $offset: Int
-    $spaceId: ID
     $unreadOnly: Boolean
   ) {
     threadsPaged(
@@ -63,7 +62,6 @@ export const ThreadsPagedQuery = gql`
       sortDir: $sortDir
       limit: $limit
       offset: $offset
-      spaceId: $spaceId
       unreadOnly: $unreadOnly
     ) {
       items {
