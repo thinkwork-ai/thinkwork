@@ -6,6 +6,7 @@ import {
   type ComposerMention,
   type TaskThread,
 } from "@/components/computer/TaskThreadView";
+import type { GeneratedArtifact } from "@/components/computer/GeneratedArtifactCard";
 import { ThreadDetailActions } from "@/components/computer/ThreadDetailActions";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -128,6 +129,10 @@ export function ComputerThreadDetailRoute({
 }: ComputerThreadDetailRouteProps) {
   const { tenantId } = useTenant();
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(
+    null,
+  );
+  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
   );
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<ThreadResult>({
@@ -353,6 +358,14 @@ export function ComputerThreadDetailRoute({
   const visibleThread = optimisticMessage
     ? withOptimisticUserTurn(thread, optimisticMessage)
     : thread;
+  const threadArtifacts = useMemo(
+    () => deriveThreadArtifacts(visibleThread),
+    [visibleThread],
+  );
+  const effectiveSelectedArtifactId = resolveThreadArtifactSelection(
+    threadArtifacts,
+    selectedArtifactId,
+  );
   const runbookQueues = useMemo(
     () => toRunbookQueues(runbookRunsData?.runbookRuns),
     [runbookRunsData?.runbookRuns],
@@ -367,6 +380,37 @@ export function ComputerThreadDetailRoute({
       resetStreamingChunks();
     }
   }, [hasDurableAssistant, resetStreamingChunks]);
+
+  useEffect(() => {
+    if (selectedArtifactId !== effectiveSelectedArtifactId) {
+      setSelectedArtifactId(effectiveSelectedArtifactId);
+    }
+    if (threadArtifacts.length === 0 && artifactPanelOpen) {
+      setArtifactPanelOpen(false);
+    }
+  }, [
+    artifactPanelOpen,
+    effectiveSelectedArtifactId,
+    selectedArtifactId,
+    threadArtifacts.length,
+  ]);
+
+  const artifactPanelState = useMemo(
+    () => ({
+      artifacts: threadArtifacts,
+      selectedArtifactId: effectiveSelectedArtifactId,
+      isOpen: artifactPanelOpen,
+      onOpenChange: setArtifactPanelOpen,
+      onSelectArtifact: (artifactId: string) => {
+        if (!threadArtifacts.some((artifact) => artifact.id === artifactId)) {
+          return;
+        }
+        setSelectedArtifactId(artifactId);
+        setArtifactPanelOpen(true);
+      },
+    }),
+    [artifactPanelOpen, effectiveSelectedArtifactId, threadArtifacts],
+  );
 
   useEffect(() => {
     if (!computerId || !hasActiveRunbookQueue) return;
@@ -393,6 +437,7 @@ export function ComputerThreadDetailRoute({
       streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
       mentionTargets={mentionTargetsData?.threadMentionTargets ?? []}
+      artifactPanelState={artifactPanelState}
       onSendFollowUp={async (content, files, mentions = []) => {
         setOptimisticMessage(content);
         resetStreamingChunks();
@@ -463,6 +508,33 @@ export function ComputerThreadDetailRoute({
       runbookQueues={runbookQueues}
     />
   );
+}
+
+export function deriveThreadArtifacts(
+  thread: TaskThread | null,
+): GeneratedArtifact[] {
+  const artifacts: GeneratedArtifact[] = [];
+  const seen = new Set<string>();
+  for (const message of thread?.messages ?? []) {
+    const artifact = message.durableArtifact;
+    if (!artifact || seen.has(artifact.id)) continue;
+    seen.add(artifact.id);
+    artifacts.push(artifact);
+  }
+  return artifacts;
+}
+
+export function resolveThreadArtifactSelection(
+  artifacts: GeneratedArtifact[],
+  currentArtifactId: string | null,
+) {
+  if (
+    currentArtifactId &&
+    artifacts.some((artifact) => artifact.id === currentArtifactId)
+  ) {
+    return currentArtifactId;
+  }
+  return artifacts.at(-1)?.id ?? null;
 }
 
 function toSendMention(mention: ComposerMention) {
@@ -679,9 +751,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

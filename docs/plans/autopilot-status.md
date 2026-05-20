@@ -6,6 +6,33 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Computer Artifact Side Panel
+
+Plan: `docs/plans/2026-05-20-004-feat-computer-artifact-side-panel-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: Active
+- Active unit: U1 - Derive Thread Artifact State
+- Active branch: `codex/computer-artifact-side-panel`
+- Active worktree: `.Codex/worktrees/computer-artifact-side-panel`
+- Started: 2026-05-20
+- CI: pending for [#1500](https://github.com/thinkwork-ai/thinkwork/pull/1500)
+
+### Progress Log
+
+| Date       | Unit | Branch                               | PR                                                           | Status     | Verification                                                                                                                                                                                                                                                                            | Notes                                                                                                                                                                          |
+| ---------- | ---- | ------------------------------------ | ------------------------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-05-20 | U1   | `codex/computer-artifact-side-panel` | [#1500](https://github.com/thinkwork-ai/thinkwork/pull/1500) | CI pending | Focused `ComputerThreadDetailRoute` and `TaskThreadView` tests; `pnpm --filter @thinkwork/computer typecheck`; touched-file Prettier check via `pnpm dlx prettier@3.5.3`; `git diff --check`; full `pnpm --filter @thinkwork/computer test`; `pnpm --filter @thinkwork/computer build`. | Added the artifact side-panel plan doc, started the autopilot ledger, and implemented the preparatory thread artifact derivation/selection state passed into `TaskThreadView`. |
+
+### Blockers
+
+- None at this time.
+
+---
+
 ## Current Run: Spaces as Contextual Workrooms and Template Removal
 
 Plan: `docs/plans/2026-05-20-003-spaces-as-agent-contextual-workrooms-template-removal-plan.md`

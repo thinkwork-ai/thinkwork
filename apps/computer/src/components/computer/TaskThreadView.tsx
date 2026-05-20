@@ -139,6 +139,15 @@ interface TaskThreadViewProps {
     files?: File[],
     mentions?: ComposerMention[],
   ) => Promise<void> | void;
+  artifactPanelState?: TaskThreadArtifactPanelState;
+}
+
+export interface TaskThreadArtifactPanelState {
+  artifacts: GeneratedArtifact[];
+  selectedArtifactId: string | null;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelectArtifact: (artifactId: string) => void;
 }
 
 export interface ComposerMention {
@@ -182,9 +191,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-    !showStreamingBuffer &&
-    !showProcessingShimmer,
+      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+      !showStreamingBuffer &&
+      !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,

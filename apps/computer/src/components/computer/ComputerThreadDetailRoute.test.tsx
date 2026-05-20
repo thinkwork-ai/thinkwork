@@ -9,7 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
-import { ComputerThreadDetailRoute } from "./ComputerThreadDetailRoute";
+import {
+  ComputerThreadDetailRoute,
+  deriveThreadArtifacts,
+  resolveThreadArtifactSelection,
+} from "./ComputerThreadDetailRoute";
 
 vi.mock("urql", async (importOriginal) => {
   const actual = await importOriginal<typeof import("urql")>();
@@ -146,6 +150,68 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ComputerThreadDetailRoute", () => {
+  it("derives thread artifacts in message order and deduplicates repeated ids", () => {
+    const artifacts = deriveThreadArtifacts({
+      id: "thread-1",
+      messages: [
+        {
+          id: "message-1",
+          role: "USER",
+          content: "Build the first app",
+        },
+        {
+          id: "message-2",
+          role: "ASSISTANT",
+          durableArtifact: {
+            id: "artifact-a",
+            title: "First artifact",
+            type: "DATA_VIEW",
+          },
+        },
+        {
+          id: "message-3",
+          role: "ASSISTANT",
+          durableArtifact: {
+            id: "artifact-b",
+            title: "Second artifact",
+            type: "APPLET",
+          },
+        },
+        {
+          id: "message-4",
+          role: "ASSISTANT",
+          durableArtifact: {
+            id: "artifact-a",
+            title: "First artifact duplicate",
+            type: "DATA_VIEW",
+          },
+        },
+      ],
+    });
+
+    expect(artifacts.map((artifact) => artifact.id)).toEqual([
+      "artifact-a",
+      "artifact-b",
+    ]);
+    expect(artifacts[0].title).toBe("First artifact");
+  });
+
+  it("keeps a valid selected artifact and otherwise falls back to the latest artifact", () => {
+    const artifacts = [
+      { id: "artifact-a", title: "First artifact" },
+      { id: "artifact-b", title: "Second artifact" },
+    ];
+
+    expect(resolveThreadArtifactSelection(artifacts, "artifact-a")).toBe(
+      "artifact-a",
+    );
+    expect(resolveThreadArtifactSelection(artifacts, "missing")).toBe(
+      "artifact-b",
+    );
+    expect(resolveThreadArtifactSelection(artifacts, null)).toBe("artifact-b");
+    expect(resolveThreadArtifactSelection([], "artifact-a")).toBeNull();
+  });
+
   it("does not register a header back button by default", () => {
     render(<ComputerThreadDetailRoute threadId="thread-1" />);
 
