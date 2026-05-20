@@ -76,11 +76,18 @@ vi.mock("urql", () => ({
           data: {
             spaces: [
               {
+                id: "space-default",
+                slug: "default",
+                name: "Default",
+                unreadThreadCount: 0,
+                lastActivityAt: "2026-05-19T19:00:00Z",
+              },
+              {
                 id: "space-general",
                 slug: "general",
                 name: "General",
                 unreadThreadCount: 0,
-                lastActivityAt: "2026-05-19T19:00:00Z",
+                lastActivityAt: "2026-05-19T18:30:00Z",
               },
               {
                 id: "space-1",
@@ -249,17 +256,34 @@ describe("ChatSidebar", () => {
   });
 
   it("renders Codex-style action nav and Space sections without Inbox or Space filters", () => {
+    recentThreadItemsMock.push({
+      id: "thread-default",
+      title: "Default chat",
+      spaceId: "space-default",
+      space: { id: "space-default", name: "Default" },
+      lastActivityAt: "2026-05-19T19:30:00Z",
+      lastReadAt: new Date().toISOString(),
+    });
+    recentThreadItemsMock.push({
+      id: "thread-general",
+      title: "General chat",
+      spaceId: "space-general",
+      space: { id: "space-general", name: "General" },
+      lastActivityAt: "2026-05-19T19:15:00Z",
+      lastReadAt: new Date().toISOString(),
+    });
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
       pathname: "/threads",
-      search: { spaceId: "space-general" },
+      search: { spaceId: "space-default" },
     });
 
-    render(<ChatSidebar />);
+    const { container } = render(<ChatSidebar />);
 
     expect(screen.queryByText("Inbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /switch space/i })).toBeNull();
     expect(screen.queryByRole("option", { name: /all spaces/i })).toBeNull();
+    expect(screen.queryByText("Default")).toBeNull();
     expect(screen.queryByText("General")).toBeNull();
     expect(screen.getByRole("link", { name: /new thread/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /toggle chats/i })).toBeTruthy();
@@ -284,6 +308,13 @@ describe("ChatSidebar", () => {
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Chats" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Spaces" })).toBeTruthy();
+    expect(container.querySelector(".lucide-folder-open")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /default chat/i }).getAttribute("href"),
+    ).toBe("/threads/thread-default");
+    expect(
+      screen.getByRole("link", { name: /general chat/i }).getAttribute("href"),
+    ).toBe("/threads/thread-general");
     expect(
       screen
         .getByRole("link", { name: /recent space thread/i })

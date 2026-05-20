@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   ChevronDown,
   Folder,
+  FolderOpen,
   GitBranch,
   Globe,
   Keyboard,
@@ -114,8 +115,10 @@ export function ChatSidebar() {
     });
 
   const spaces = spacesData?.spaces ?? [];
-  const defaultSpace = spaces.find((space) => isGeneralSpace(space));
-  const defaultSpaceId = defaultSpace?.id;
+  const defaultSpaceIds = useMemo(
+    () => new Set(spaces.filter(isDefaultSpace).map((space) => space.id)),
+    [spaces],
+  );
 
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
@@ -239,24 +242,24 @@ export function ChatSidebar() {
   const genericThreads = useMemo(
     () =>
       recentThreads.filter(
-        (thread) => !thread.spaceId || thread.spaceId === defaultSpaceId,
+        (thread) => !thread.spaceId || defaultSpaceIds.has(thread.spaceId),
       ),
-    [defaultSpaceId, recentThreads],
+    [defaultSpaceIds, recentThreads],
   );
   const contextualSpaces = useMemo(
-    () => spaces.filter((space) => space.id !== defaultSpaceId),
-    [defaultSpaceId, spaces],
+    () => spaces.filter((space) => !defaultSpaceIds.has(space.id)),
+    [defaultSpaceIds, spaces],
   );
   const spaceThreadsById = useMemo(() => {
     const grouped = new Map<string, ChatThreadSummary[]>();
     for (const thread of recentThreads) {
-      if (!thread.spaceId || thread.spaceId === defaultSpaceId) continue;
+      if (!thread.spaceId || defaultSpaceIds.has(thread.spaceId)) continue;
       const list = grouped.get(thread.spaceId) ?? [];
       list.push(thread);
       grouped.set(thread.spaceId, list);
     }
     return grouped;
-  }, [defaultSpaceId, recentThreads]);
+  }, [defaultSpaceIds, recentThreads]);
   const searchThreads = useMemo(
     () =>
       sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
@@ -565,7 +568,8 @@ function SpaceThreadSection({
           )}
         >
           <button type="button" aria-label={`Toggle ${label}`}>
-            <Folder className="mr-2 h-4 w-4 shrink-0" />
+            <Folder className="mr-2 h-4 w-4 shrink-0 group-data-[state=open]/space:hidden" />
+            <FolderOpen className="mr-2 hidden h-4 w-4 shrink-0 group-data-[state=open]/space:block" />
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {space.unreadThreadCount ? (
               <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
@@ -754,10 +758,14 @@ function spaceIdFromThreadPath(pathname: string) {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
-function isGeneralSpace(space: SpaceNavSummary) {
+function isDefaultSpace(space: SpaceNavSummary) {
+  const slug = space.slug?.toLowerCase();
+  const name = space.name?.toLowerCase();
   return (
-    space.slug?.toLowerCase() === "general" ||
-    space.name?.toLowerCase() === "general"
+    slug === "default" ||
+    slug === "general" ||
+    name === "default" ||
+    name === "general"
   );
 }
 

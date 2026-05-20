@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import {
@@ -13,12 +13,14 @@ import {
   type ComputerComposerMention,
 } from "@/components/computer/ComputerComposer";
 import { StarterCardGrid } from "@/components/computer/StarterCardGrid";
+import type { SpaceSummary } from "@/components/spaces/space-types";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
   NewThreadMentionTargetsQuery,
   SendMessageMutation,
+  SpacesQuery,
 } from "@/lib/graphql-queries";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
@@ -76,6 +78,10 @@ interface NewThreadMentionTargetsData {
   }>;
 }
 
+interface SpacesResult {
+  spaces?: SpaceSummary[] | null;
+}
+
 interface ComputerWorkbenchProps {
   spaceId?: string;
 }
@@ -86,6 +92,9 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(
+    spaceId ?? null,
+  );
   const {
     computers,
     fetching: computersFetching,
@@ -109,12 +118,63 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [{ data: spacesData, fetching: spacesFetching }] = useQuery<
+    SpacesResult,
+    { tenantId: string }
+  >({
+    query: SpacesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
 
   const computerId = selectedComputer?.id ?? null;
+  const spaces = useMemo(
+    () =>
+      (spacesData?.spaces ?? []).filter((space) => space.status !== "archived"),
+    [spacesData?.spaces],
+  );
+  const defaultSpace = useMemo(
+    () =>
+      spaces.find((space) => isPrimaryDefaultSpace(space)) ??
+      spaces.find((space) => isDefaultSpace(space)) ??
+      spaces[0] ??
+      null,
+    [spaces],
+  );
+  const defaultSpaceId = defaultSpace?.id;
+  const selectedSpace = useMemo(
+    () => spaces.find((space) => space.id === selectedSpaceId) ?? null,
+    [selectedSpaceId, spaces],
+  );
+  const composerSpaces = useMemo(
+    () =>
+      spaces.map((space) => ({
+        id: space.id,
+        name: space.name || space.slug || "Space",
+      })),
+    [spaces],
+  );
   const mentionTargets = useMemo(
     () => buildNewThreadMentionTargets(mentionTargetData),
     [mentionTargetData],
   );
+
+  useEffect(() => {
+    if (spaceId && spaces.some((space) => space.id === spaceId)) {
+      setSelectedSpaceId(spaceId);
+      return;
+    }
+    if (
+      selectedSpaceId &&
+      spaces.some((space) => space.id === selectedSpaceId)
+    ) {
+      return;
+    }
+    if (defaultSpaceId) {
+      setSelectedSpaceId(defaultSpaceId);
+    }
+  }, [defaultSpaceId, selectedSpaceId, spaceId, spaces]);
 
   async function handleSubmit(
     files: File[],
@@ -133,6 +193,7 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
 
     setError(null);
     setBusy(true);
+    const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? undefined;
     try {
       // File-attached path: createThread WITHOUT firstMessage (so the
       // thread starts empty), upload each file via the U2 presign +
@@ -150,7 +211,7 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
           input: {
             tenantId,
             computerId,
-            spaceId,
+            spaceId: targetSpaceId,
             title: titleFromPrompt(trimmed),
             channel: "CHAT",
             firstMessage: trimmed,
@@ -165,7 +226,12 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
           setError("Thread created but no id returned");
           return;
         }
-        navigateToCreatedThread(navigate, threadId, spaceId);
+        navigateToCreatedThread(
+          navigate,
+          threadId,
+          targetSpaceId,
+          defaultSpaceId,
+        );
         return;
       }
 
@@ -174,7 +240,7 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
         input: {
           tenantId,
           computerId,
-          spaceId,
+          spaceId: targetSpaceId,
           title: titleFromPromptWithAttachments(trimmed, files),
           channel: "CHAT",
         },
@@ -232,7 +298,12 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
         return;
       }
 
-      navigateToCreatedThread(navigate, threadId, spaceId);
+      navigateToCreatedThread(
+        navigate,
+        threadId,
+        targetSpaceId,
+        defaultSpaceId,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start work");
     } finally {
@@ -279,7 +350,10 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
           onChange={setPrompt}
           onSubmit={handleSubmit}
           mentionTargets={mentionTargets}
-          isSubmitting={fetching || busy || computersFetching}
+          spaces={composerSpaces}
+          selectedSpaceId={selectedSpace?.id ?? defaultSpaceId ?? null}
+          onSelectedSpaceChange={setSelectedSpaceId}
+          isSubmitting={fetching || busy || computersFetching || spacesFetching}
           error={error}
         />
 
@@ -295,8 +369,9 @@ function navigateToCreatedThread(
   navigate: ReturnType<typeof useNavigate>,
   threadId: string,
   spaceId?: string,
+  defaultSpaceId?: string,
 ) {
-  if (spaceId) {
+  if (spaceId && spaceId !== defaultSpaceId) {
     navigate({
       to: "/spaces/$spaceId/threads/$threadId",
       params: { spaceId, threadId },
@@ -318,6 +393,27 @@ function titleFromPromptWithAttachments(prompt: string, files: File[]): string {
   const first = files[0]?.name ?? "attachment";
   const suffix = files.length > 1 ? ` (+${files.length - 1})` : "";
   return `Analyze ${first}${suffix}`;
+}
+
+function isDefaultSpace(space: SpaceSummary) {
+  const slug = space.slug?.toLowerCase();
+  const name = space.name?.toLowerCase();
+  const templateKey = space.templateKey?.toLowerCase();
+  return (
+    slug === "default" ||
+    slug === "general" ||
+    name === "default" ||
+    name === "general" ||
+    templateKey === "default" ||
+    templateKey === "general"
+  );
+}
+
+function isPrimaryDefaultSpace(space: SpaceSummary) {
+  const slug = space.slug?.toLowerCase();
+  const name = space.name?.toLowerCase();
+  const templateKey = space.templateKey?.toLowerCase();
+  return slug === "default" || name === "default" || templateKey === "default";
 }
 
 function buildNewThreadMentionTargets(

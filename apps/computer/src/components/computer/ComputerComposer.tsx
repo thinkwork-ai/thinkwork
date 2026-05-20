@@ -13,7 +13,14 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { IconPaperclip } from "@tabler/icons-react";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { AtSign } from "lucide-react";
+import { AtSign, Folder } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@thinkwork/ui";
 import {
   filterMentionTargets,
   MentionMenu,
@@ -27,6 +34,11 @@ export interface ComputerComposerMention {
   rawText: string;
 }
 
+export interface ComputerComposerSpaceOption {
+  id: string;
+  name: string;
+}
+
 interface ComputerComposerProps {
   value: string;
   onChange: (value: string) => void;
@@ -37,6 +49,9 @@ interface ComputerComposerProps {
    */
   onSubmit: (files: File[], mentions: ComputerComposerMention[]) => void;
   mentionTargets?: MentionTarget[];
+  spaces?: ComputerComposerSpaceOption[];
+  selectedSpaceId?: string | null;
+  onSelectedSpaceChange?: (spaceId: string) => void;
   disabled?: boolean;
   isSubmitting?: boolean;
   error?: string | null;
@@ -61,6 +76,9 @@ export function ComputerComposer({
   onChange,
   onSubmit,
   mentionTargets = [],
+  spaces = [],
+  selectedSpaceId,
+  onSelectedSpaceChange,
   disabled = false,
   isSubmitting = false,
   error,
@@ -179,6 +197,28 @@ export function ComputerComposer({
           </PromptInputBody>
           <PromptInputFooter className="px-2 pb-2">
             <PromptInputTools>
+              {spaces.length > 0 && selectedSpaceId && onSelectedSpaceChange ? (
+                <Select
+                  value={selectedSpaceId}
+                  onValueChange={onSelectedSpaceChange}
+                  disabled={disabled || isSubmitting}
+                >
+                  <SelectTrigger
+                    aria-label="Select Space"
+                    className="h-8 max-w-[190px] gap-1.5 rounded-md border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground focus:ring-0"
+                  >
+                    <Folder className="size-4 shrink-0" />
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    {spaces.map((space) => (
+                      <SelectItem key={space.id} value={space.id}>
+                        {space.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               <PromptInputButton
                 type="button"
                 variant="ghost"
