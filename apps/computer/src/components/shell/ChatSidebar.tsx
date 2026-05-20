@@ -299,7 +299,7 @@ export function ChatSidebar() {
                 <SelectItem
                   key={space.id}
                   value={space.id}
-                  className="mx-1 h-8 w-[calc(100%-0.5rem)] px-2 [padding-right:2.75rem] text-sm [font-size:0.875rem] leading-none"
+                  className="mx-1 h-8 w-[calc(100%-1.5rem)] px-2 [padding-right:2.75rem] text-sm [font-size:0.875rem] leading-none"
                 >
                   {space.name ?? space.slug ?? "Space"}
                 </SelectItem>
