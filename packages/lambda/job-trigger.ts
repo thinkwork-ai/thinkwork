@@ -796,6 +796,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
             .limit(1);
           if (!agent) throw new Error("Scheduled eval Agent not found");
           if (!agent.templateId) {
+            // Scheduled evals still execute through the legacy template eval harness.
             throw new Error("Scheduled eval Agent is not linked to a template");
           }
           targetAgentId = agent.id;
