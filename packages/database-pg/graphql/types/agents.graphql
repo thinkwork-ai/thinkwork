@@ -50,8 +50,6 @@ type Agent {
   budgetMonthlyCents: Int
   lastHeartbeatAt: AWSDateTime
   avatarUrl: String
-  templateId: ID
-  agentTemplate: AgentTemplate
   version: Int!
   capabilities: [AgentCapability!]!
   skills: [AgentSkill!]!

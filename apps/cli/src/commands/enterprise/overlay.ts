@@ -6,7 +6,6 @@ import { getApiEndpoint } from "../../aws-discovery.js";
 import { isJsonMode, printJson } from "../../lib/output.js";
 import { printError, printSuccess } from "../../ui.js";
 import {
-  AgentTemplatesForEvalDoc,
   CreateEvalTestCaseDoc,
   EvalTestCasesDoc,
   UpdateEvalTestCaseDoc,
@@ -107,11 +106,6 @@ async function createOverlayApiClient(
     region,
     tenant: opts.tenant ?? plan.tenantSlug,
   });
-  const templateId = await resolveTemplateId(
-    ctx.client,
-    ctx.tenantId,
-    plan.targetTemplateSlug,
-  );
   const auth = await resolveAuth({ stage: plan.stage, region });
   const apiUrl = getApiEndpoint(plan.stage, region);
   if (!apiUrl) {
@@ -122,7 +116,7 @@ async function createOverlayApiClient(
   }
 
   return {
-    targetAgentTemplateId: templateId,
+    targetAgentTemplateId: null,
     async listEvalTestCases() {
       const data = await gqlQuery(ctx.client, EvalTestCasesDoc, {
         tenantId: ctx.tenantId,
@@ -155,7 +149,6 @@ async function createOverlayApiClient(
           },
           body: JSON.stringify({
             action: "put",
-            templateId,
             path: input.path,
             content: input.content,
           }),
@@ -169,23 +162,6 @@ async function createOverlayApiClient(
       }
     },
   };
-}
-
-async function resolveTemplateId(
-  client: Parameters<typeof gqlQuery>[0],
-  tenantId: string,
-  templateSlug: string,
-): Promise<string> {
-  const data = await gqlQuery(client, AgentTemplatesForEvalDoc, { tenantId });
-  const template = data.agentTemplates.find(
-    (item) => item.slug === templateSlug,
-  );
-  if (!template) {
-    throw new Error(
-      `Agent template "${templateSlug}" not found for tenant ${tenantId}`,
-    );
-  }
-  return template.id;
 }
 
 function evalInput(input: CustomerEvalSeed) {

@@ -106,7 +106,6 @@ type RunRow = {
   model: string | null;
   categories: string[];
   agentTemplateId: string | null;
-  agentTemplateName: string | null;
   scheduledJobId: string | null;
   passed: number | null;
   failed: number | null;
@@ -144,16 +143,6 @@ const runsColumns: ColumnDef<RunRow>[] = [
           {names.length} Categories
         </span>
       );
-    },
-  },
-  {
-    accessorKey: "agentTemplateName",
-    header: "Template",
-    cell: ({ row }) => {
-      const name = row.original.agentTemplateName;
-      if (!name)
-        return <span className="text-xs text-muted-foreground">—</span>;
-      return <span className="text-sm whitespace-nowrap">{name}</span>;
     },
   },
   {

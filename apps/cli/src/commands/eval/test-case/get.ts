@@ -4,7 +4,10 @@ import { printError } from "../../../ui.js";
 import { EvalTestCaseDoc } from "../gql.js";
 import { resolveEvalContext, fmtIso, type EvalCliOptions } from "../helpers.js";
 
-export async function runEvalTestCaseGet(id: string, opts: EvalCliOptions): Promise<void> {
+export async function runEvalTestCaseGet(
+  id: string,
+  opts: EvalCliOptions,
+): Promise<void> {
   const ctx = await resolveEvalContext(opts);
   const data = await gqlQuery(ctx.client, EvalTestCaseDoc, { id });
   if (!data.evalTestCase) {
@@ -22,7 +25,7 @@ export async function runEvalTestCaseGet(id: string, opts: EvalCliOptions): Prom
     ["ID", tc.id],
     ["Name", tc.name],
     ["Category", tc.category],
-    ["Agent template", tc.agentTemplateName ?? tc.agentTemplateId ?? "—"],
+    ["Agent template", tc.agentTemplateId ?? "—"],
     ["Source", tc.source],
     ["Enabled", tc.enabled ? "yes" : "no"],
     ["Evaluators", (tc.agentcoreEvaluatorIds ?? []).join(", ") || "—"],

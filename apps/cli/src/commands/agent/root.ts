@@ -1,12 +1,19 @@
 import { readFile } from "node:fs/promises";
 import { confirm, input } from "@inquirer/prompts";
-import {
-  AgentStatus,
-  AgentType,
-} from "../../gql/graphql.js";
+import { AgentStatus, AgentType } from "../../gql/graphql.js";
 import { gqlMutate, gqlQuery } from "../../lib/gql-client.js";
-import { isInteractive, promptOrExit, requireTty } from "../../lib/interactive.js";
-import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../../lib/output.js";
+import {
+  isInteractive,
+  promptOrExit,
+  requireTty,
+} from "../../lib/interactive.js";
+import {
+  isJsonMode,
+  logStderr,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../../lib/output.js";
 import { printError, printSuccess } from "../../ui.js";
 import {
   AgentDoc,
@@ -17,7 +24,11 @@ import {
   UpdateAgentDoc,
   UpdateAgentStatusDoc,
 } from "./gql.js";
-import { resolveAgentContext, fmtIso, type AgentCliOptions } from "./helpers.js";
+import {
+  resolveAgentContext,
+  fmtIso,
+  type AgentCliOptions,
+} from "./helpers.js";
 
 const STATUS_BY_NAME: Record<string, AgentStatus> = {
   IDLE: AgentStatus.Idle,
@@ -39,7 +50,9 @@ function parseEnum<E extends string>(
 ): E {
   const v = table[raw.toUpperCase()];
   if (!v) {
-    printError(`Invalid ${label} "${raw}". Expected one of: ${Object.keys(table).join(", ")}.`);
+    printError(
+      `Invalid ${label} "${raw}". Expected one of: ${Object.keys(table).join(", ")}.`,
+    );
     process.exit(1);
   }
   return v;
@@ -54,7 +67,9 @@ interface ListOptions extends AgentCliOptions {
 
 export async function runAgentList(opts: ListOptions): Promise<void> {
   const ctx = await resolveAgentContext(opts);
-  const status = opts.status ? parseEnum(opts.status, STATUS_BY_NAME, "--status") : null;
+  const status = opts.status
+    ? parseEnum(opts.status, STATUS_BY_NAME, "--status")
+    : null;
   const type = opts.type ? parseEnum(opts.type, TYPE_BY_NAME, "--type") : null;
 
   const agents = opts.all
@@ -99,7 +114,10 @@ export async function runAgentList(opts: ListOptions): Promise<void> {
   );
 }
 
-export async function runAgentGet(id: string, opts: AgentCliOptions): Promise<void> {
+export async function runAgentGet(
+  id: string,
+  opts: AgentCliOptions,
+): Promise<void> {
   const ctx = await resolveAgentContext(opts);
   const data = await gqlQuery(ctx.client, AgentDoc, { id });
   const a = data.agent;
@@ -121,7 +139,6 @@ export async function runAgentGet(id: string, opts: AgentCliOptions): Promise<vo
     ["Status", a.status],
     ["Runtime", a.runtime],
     ["Adapter", a.adapterType ?? undefined],
-    ["Template ID", a.templateId],
     ["Version", String(a.version)],
     ["Human pair", a.humanPairId ?? undefined],
     ["Parent agent", a.parentAgentId ?? undefined],
@@ -170,7 +187,6 @@ export async function runAgentGet(id: string, opts: AgentCliOptions): Promise<vo
 }
 
 interface CreateOptions extends AgentCliOptions {
-  template?: string;
   role?: string;
   type?: string;
   parent?: string;
@@ -186,13 +202,6 @@ export async function runAgentCreate(
 ): Promise<void> {
   const ctx = await resolveAgentContext(opts);
   const interactive = isInteractive();
-
-  if (!opts.template) {
-    printError(
-      "--template <id> is required (CreateAgentInput.templateId is non-null). Pass a template ID — see `thinkwork template list`.",
-    );
-    process.exit(1);
-  }
 
   let resolvedName = name;
   if (!resolvedName) {
@@ -216,7 +225,6 @@ export async function runAgentCreate(
   // top-level field, so --model is carried there.
   const createInput = {
     tenantId: ctx.tenantId,
-    templateId: opts.template,
     name: resolvedName!,
     role: opts.role ?? null,
     type,
@@ -226,7 +234,9 @@ export async function runAgentCreate(
     runtimeConfig: opts.model ? { model: opts.model } : null,
   };
 
-  const data = await gqlMutate(ctx.client, CreateAgentDoc, { input: createInput });
+  const data = await gqlMutate(ctx.client, CreateAgentDoc, {
+    input: createInput,
+  });
   if (isJsonMode()) {
     printJson(data.createAgent);
     return;
@@ -247,7 +257,10 @@ interface UpdateOptions extends AgentCliOptions {
   model?: string;
 }
 
-export async function runAgentUpdate(id: string, opts: UpdateOptions): Promise<void> {
+export async function runAgentUpdate(
+  id: string,
+  opts: UpdateOptions,
+): Promise<void> {
   const ctx = await resolveAgentContext(opts);
 
   let systemPrompt = opts.systemPrompt;
@@ -258,7 +271,8 @@ export async function runAgentUpdate(id: string, opts: UpdateOptions): Promise<v
   const input: Record<string, unknown> = {};
   if (opts.name !== undefined) input.name = opts.name;
   if (opts.role !== undefined) input.role = opts.role;
-  if (opts.type !== undefined) input.type = parseEnum(opts.type, TYPE_BY_NAME, "--type");
+  if (opts.type !== undefined)
+    input.type = parseEnum(opts.type, TYPE_BY_NAME, "--type");
   if (opts.parent !== undefined) input.parentAgentId = opts.parent;
   if (opts.reportsTo !== undefined) input.reportsTo = opts.reportsTo;
   if (systemPrompt !== undefined) input.systemPrompt = systemPrompt;
@@ -281,11 +295,16 @@ interface DeleteOptions extends AgentCliOptions {
   yes?: boolean;
 }
 
-export async function runAgentDelete(id: string, opts: DeleteOptions): Promise<void> {
+export async function runAgentDelete(
+  id: string,
+  opts: DeleteOptions,
+): Promise<void> {
   const ctx = await resolveAgentContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to archive without --yes in a non-interactive session.");
+      printError(
+        "Refusing to archive without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
@@ -316,15 +335,23 @@ export async function runAgentStatus(
 ): Promise<void> {
   const ctx = await resolveAgentContext(opts);
   const status = parseEnum(statusRaw, STATUS_BY_NAME, "status");
-  const data = await gqlMutate(ctx.client, UpdateAgentStatusDoc, { id, status });
+  const data = await gqlMutate(ctx.client, UpdateAgentStatusDoc, {
+    id,
+    status,
+  });
   if (isJsonMode()) {
     printJson(data.updateAgentStatus);
     return;
   }
-  printSuccess(`Set agent ${data.updateAgentStatus.id} status: ${data.updateAgentStatus.status}.`);
+  printSuccess(
+    `Set agent ${data.updateAgentStatus.id} status: ${data.updateAgentStatus.status}.`,
+  );
 }
 
-export async function runAgentUnpause(id: string, opts: AgentCliOptions): Promise<void> {
+export async function runAgentUnpause(
+  id: string,
+  opts: AgentCliOptions,
+): Promise<void> {
   const ctx = await resolveAgentContext(opts);
   const data = await gqlMutate(ctx.client, UpdateAgentStatusDoc, {
     id,
@@ -334,5 +361,7 @@ export async function runAgentUnpause(id: string, opts: AgentCliOptions): Promis
     printJson(data.updateAgentStatus);
     return;
   }
-  printSuccess(`Unpaused agent ${data.updateAgentStatus.id} (status now IDLE).`);
+  printSuccess(
+    `Unpaused agent ${data.updateAgentStatus.id} (status now IDLE).`,
+  );
 }

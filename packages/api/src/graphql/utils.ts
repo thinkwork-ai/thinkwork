@@ -556,12 +556,10 @@ async function resolveSkillRunRuntimeType(
   const [row] = await db
     .select({
       runtime: agents.runtime,
-      templateRuntime: agentTemplates.runtime,
     })
     .from(agents)
-    .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
     .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)));
-  return normalizeAgentRuntimeType(row?.runtime ?? row?.templateRuntime);
+  return normalizeAgentRuntimeType(row?.runtime);
 }
 
 export type SkillRunInvokePayload = {

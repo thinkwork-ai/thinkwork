@@ -19,7 +19,7 @@ export async function runEvalTestCaseList(opts: ListOptions): Promise<void> {
     id: tc.id,
     name: tc.name,
     category: tc.category,
-    template: tc.agentTemplateName ?? "—",
+    template: tc.agentTemplateId ?? "—",
     evaluators: (tc.agentcoreEvaluatorIds ?? []).join(", ") || "—",
     enabled: tc.enabled ? "yes" : "no",
     updated: fmtIso(tc.updatedAt),

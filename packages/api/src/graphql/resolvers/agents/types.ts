@@ -1,13 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import {
-  db,
-  agents,
-  agentTemplates,
-  eq,
-  agentToCamel,
-  snakeToCamel,
-} from "../../utils.js";
-import { withGraphqlAgentRuntime } from "./runtime.js";
+import { db, agents, eq, agentToCamel } from "../../utils.js";
 
 export const agentTypeResolvers = {
   humanPair: (agent: any, _args: any, ctx: GraphQLContext) => {
@@ -25,13 +17,5 @@ export const agentTypeResolvers = {
       .from(agents)
       .where(eq(agents.parent_agent_id, agent.id));
     return rows.map(agentToCamel);
-  },
-  agentTemplate: async (agent: any) => {
-    if (!agent.templateId) return null;
-    const [row] = await db
-      .select()
-      .from(agentTemplates)
-      .where(eq(agentTemplates.id, agent.templateId));
-    return row ? withGraphqlAgentRuntime(snakeToCamel(row)) : null;
   },
 };

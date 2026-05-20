@@ -117,10 +117,6 @@ describe("GraphQL Schema Contract", () => {
       "inboxItems",
       "inboxItem",
       "activityLog",
-      // Templates
-      "agentTemplates",
-      "agentTemplate",
-      "agentVersions",
       // Webhooks
       "webhooks",
       "webhook",
@@ -194,7 +190,8 @@ describe("GraphQL Schema Contract", () => {
       const createInput = schema.getType("CreateAgentInput") as any;
       const updateInput = schema.getType("UpdateAgentInput") as any;
 
-      expect(agent.getFields().templateId.type.toString()).toBe("ID");
+      expect(agent.getFields().templateId).toBeUndefined();
+      expect(agent.getFields().agentTemplate).toBeUndefined();
       expect(agent.getFields().model.type.toString()).toBe("String");
       expect(agent.getFields().guardrailId.type.toString()).toBe("ID");
       expect(agent.getFields().blockedTools.type.toString()).toBe("AWSJSON");
@@ -266,11 +263,6 @@ describe("GraphQL Schema Contract", () => {
       // Messages
       "sendMessage",
       "deleteMessage",
-      // Templates
-      "createAgentTemplate",
-      "updateAgentTemplate",
-      "deleteAgentTemplate",
-      "createAgentFromTemplate",
       // Knowledge
       "createKnowledgeBase",
       "deleteKnowledgeBase",

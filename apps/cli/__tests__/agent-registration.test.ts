@@ -26,12 +26,11 @@ describe("agent command registration", () => {
         "budget",
         "api-key",
         "email",
-        "version",
       ]),
     );
   });
 
-  it("agent capabilities + skills + budget + api-key + email + version all have their subcommands", () => {
+  it("agent capabilities + skills + budget + api-key + email all have their subcommands", () => {
     const program = new Command();
     registerAgentCommand(program);
     const agent = program.commands.find((c) => c.name() === "agent")!;
@@ -41,29 +40,30 @@ describe("agent command registration", () => {
       ["budget", ["set", "clear"]],
       ["api-key", ["list", "create", "revoke"]],
       ["email", ["enable", "disable", "allowlist"]],
-      ["version", ["list", "rollback"]],
     ];
     for (const [group, subs] of groups) {
       const g = agent.commands.find((c) => c.name() === group);
       expect(g, `subgroup ${group} exists`).toBeTruthy();
       const have = g!.commands.map((c) => c.name());
-      expect(have, `${group} has ${subs.join("/")}`).toEqual(expect.arrayContaining(subs));
+      expect(have, `${group} has ${subs.join("/")}`).toEqual(
+        expect.arrayContaining(subs),
+      );
     }
   });
 
-  it("agent create carries --template and --type", () => {
+  it("agent create carries --type and prompt overrides", () => {
     const program = new Command();
     registerAgentCommand(program);
     const create = program.commands
       .find((c) => c.name() === "agent")!
       .commands.find((c) => c.name() === "create")!;
     const help = create.helpInformation();
-    expect(help).toMatch(/--template/);
+    expect(help).not.toMatch(/--template/);
     expect(help).toMatch(/--type/);
     expect(help).toMatch(/--system-prompt/);
   });
 
-  it("destructive verbs (delete, api-key revoke, version rollback) all carry --yes", () => {
+  it("destructive verbs (delete, api-key revoke) all carry --yes", () => {
     const program = new Command();
     registerAgentCommand(program);
     const agent = program.commands.find((c) => c.name() === "agent")!;
@@ -74,10 +74,6 @@ describe("agent command registration", () => {
     const apiKey = agent.commands.find((c) => c.name() === "api-key")!;
     const revoke = apiKey.commands.find((c) => c.name() === "revoke")!;
     expect(revoke.helpInformation()).toMatch(/--yes/);
-
-    const version = agent.commands.find((c) => c.name() === "version")!;
-    const rollback = version.commands.find((c) => c.name() === "rollback")!;
-    expect(rollback.helpInformation()).toMatch(/--yes/);
   });
 
   it("budget set has --limit-usd, --window, --action with sane defaults", () => {

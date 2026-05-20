@@ -19,20 +19,6 @@ export type Scalars = {
   AWSURL: { input: any; output: any; }
 };
 
-export type AcceptTemplateUpdateBulkResult = {
-  __typename?: 'AcceptTemplateUpdateBulkResult';
-  accepted: Scalars['Int']['output'];
-  failed: Scalars['Int']['output'];
-  results: Array<AcceptTemplateUpdateBulkResultEntry>;
-};
-
-export type AcceptTemplateUpdateBulkResultEntry = {
-  __typename?: 'AcceptTemplateUpdateBulkResultEntry';
-  agentId: Scalars['ID']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  success: Scalars['Boolean']['output'];
-};
-
 export type ActivityLogEntry = {
   __typename?: 'ActivityLogEntry';
   action: Scalars['String']['output'];
@@ -97,7 +83,6 @@ export type Agent = {
   __typename?: 'Agent';
   adapterConfig?: Maybe<Scalars['AWSJSON']['output']>;
   adapterType?: Maybe<Scalars['String']['output']>;
-  agentTemplate?: Maybe<AgentTemplate>;
   avatarUrl?: Maybe<Scalars['String']['output']>;
   blockedTools?: Maybe<Scalars['AWSJSON']['output']>;
   browser?: Maybe<Scalars['AWSJSON']['output']>;
@@ -128,7 +113,6 @@ export type Agent = {
   status: AgentStatus;
   subAgents?: Maybe<Array<Agent>>;
   systemPrompt?: Maybe<Scalars['String']['output']>;
-  templateId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
   type: AgentType;
   updatedAt: Scalars['AWSDateTime']['output'];
@@ -288,92 +272,11 @@ export type AgentStatusEvent = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
-export type AgentTemplate = {
-  __typename?: 'AgentTemplate';
-  blockedTools?: Maybe<Scalars['AWSJSON']['output']>;
-  /**
-   * Browser Automation opt-in metadata for the AgentCore Browser + Nova Act
-   * built-in tool. Shape validated at create/update time by
-   * packages/api/src/lib/templates/browser-config.ts:
-   *   { enabled: true }
-   * Null means the template does not use Browser Automation unless an agent-level
-   * capability override enables it.
-   */
-  browser?: Maybe<Scalars['AWSJSON']['output']>;
-  category?: Maybe<Scalars['String']['output']>;
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  /**
-   * Context Engine opt-in metadata for the query_context built-in tool.
-   * Shape validated at create/update time by
-   * packages/api/src/lib/templates/context-engine-config.ts:
-   *   { enabled: true }
-   * Null means the template does not inject Context Engine.
-   */
-  contextEngine?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  guardrailId?: Maybe<Scalars['ID']['output']>;
-  icon?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  isPublished: Scalars['Boolean']['output'];
-  knowledgeBaseIds?: Maybe<Scalars['AWSJSON']['output']>;
-  model?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  runtime: AgentRuntime;
-  /**
-   * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
-   * (plan Unit 3). Shape validated at create/update time by
-   * packages/api/src/lib/templates/sandbox-config.ts:
-   *   { environment: "default-public" | "internal-only" }
-   * Null means the template does not use the sandbox.
-   */
-  sandbox?: Maybe<Scalars['AWSJSON']['output']>;
-  /**
-   * Send Email opt-in metadata for the platform email-sending built-in tool.
-   * Shape validated at create/update time by
-   * packages/api/src/lib/templates/send-email-config.ts:
-   *   { enabled: true }
-   * Null means the template does not inject Send Email.
-   */
-  sendEmail?: Maybe<Scalars['AWSJSON']['output']>;
-  skills?: Maybe<Scalars['AWSJSON']['output']>;
-  slug: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  templateKind: TemplateKind;
-  tenantId?: Maybe<Scalars['ID']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-  /**
-   * Web Search opt-in metadata for the tenant-configured web-search built-in
-   * tool. Shape validated at create/update time by
-   * packages/api/src/lib/templates/web-search-config.ts:
-   *   { enabled: true }
-   * Null means the template does not inject Web Search.
-   */
-  webSearch?: Maybe<Scalars['AWSJSON']['output']>;
-};
-
 export enum AgentType {
   Agent = 'AGENT',
   Gateway = 'GATEWAY',
   Supervisor = 'SUPERVISOR'
 }
-
-export type AgentVersion = {
-  __typename?: 'AgentVersion';
-  agentId: Scalars['ID']['output'];
-  configSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdBy?: Maybe<Scalars['ID']['output']>;
-  guardrailSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  isActive: Scalars['Boolean']['output'];
-  knowledgeBasesSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  label?: Maybe<Scalars['String']['output']>;
-  skillsSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  tenantId: Scalars['ID']['output'];
-  versionNumber: Scalars['Int']['output'];
-  workspaceSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-};
 
 export type AgentWakeupRequest = {
   __typename?: 'AgentWakeupRequest';
@@ -910,7 +813,6 @@ export type Computer = {
   sourceAgent?: Maybe<Agent>;
   spentMonthlyCents?: Maybe<Scalars['Int']['output']>;
   status: ComputerStatus;
-  template?: Maybe<AgentTemplate>;
   templateId: Scalars['ID']['output'];
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
@@ -1114,15 +1016,6 @@ export type CreateAgentApiKeyResult = {
   plainTextKey: Scalars['String']['output'];
 };
 
-export type CreateAgentFromTemplateInput = {
-  /** Optional idempotency key. See CreateAgentInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  slug: Scalars['String']['input'];
-  teamId?: InputMaybe<Scalars['ID']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
 export type CreateAgentInput = {
   adapterConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   adapterType?: InputMaybe<Scalars['String']['input']>;
@@ -1152,55 +1045,6 @@ export type CreateAgentInput = {
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
   type?: InputMaybe<AgentType>;
-  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
-
-export type CreateAgentTemplateInput = {
-  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Browser Automation opt-in metadata; see AgentTemplate.browser. Omit
-   * (or pass null) for templates that do not opt into Browser Automation.
-   */
-  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
-  category?: InputMaybe<Scalars['String']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Context Engine opt-in metadata; see AgentTemplate.contextEngine. Omit
-   * (or pass null) for templates that do not opt into query_context.
-   */
-  contextEngine?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guardrailId?: InputMaybe<Scalars['ID']['input']>;
-  icon?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Optional client-supplied idempotency key. See
-   * CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
-   */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  isPublished?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
-  model?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  runtime?: InputMaybe<AgentRuntime>;
-  /**
-   * Sandbox opt-in metadata; see AgentTemplate.sandbox. Validated at
-   * resolver boundary. Omit (or pass null) for templates that do not
-   * opt into the sandbox.
-   */
-  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Send Email opt-in metadata; see AgentTemplate.sendEmail. Omit
-   * (or pass null) for templates that do not opt into Send Email.
-   */
-  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
-  skills?: InputMaybe<Scalars['AWSJSON']['input']>;
-  slug: Scalars['String']['input'];
-  templateKind?: InputMaybe<TemplateKind>;
-  tenantId: Scalars['ID']['input'];
-  /**
-   * Web Search opt-in metadata; see AgentTemplate.webSearch. Omit
-   * (or pass null) for templates that do not opt into Web Search.
-   */
   webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
@@ -1541,7 +1385,6 @@ export type EvalRun = {
   agentId?: Maybe<Scalars['ID']['output']>;
   agentName?: Maybe<Scalars['String']['output']>;
   agentTemplateId?: Maybe<Scalars['ID']['output']>;
-  agentTemplateName?: Maybe<Scalars['String']['output']>;
   categories: Array<Scalars['String']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   computerId?: Maybe<Scalars['ID']['output']>;
@@ -1599,7 +1442,6 @@ export type EvalSummary = {
 export type EvalTestCase = {
   __typename?: 'EvalTestCase';
   agentTemplateId?: Maybe<Scalars['ID']['output']>;
-  agentTemplateName?: Maybe<Scalars['String']['output']>;
   agentcoreEvaluatorIds: Array<Scalars['String']['output']>;
   assertions: Scalars['AWSJSON']['output'];
   category: Scalars['String']['output'];
@@ -2108,9 +1950,6 @@ export type Mutation = {
   __typename?: 'Mutation';
   _empty?: Maybe<Scalars['String']['output']>;
   acceptAgentWorkspaceReview: AgentWorkspaceRun;
-  /** Advance an agent's pinned hash for a guardrail-class file. idempotencyKey optional. */
-  acceptTemplateUpdate: Agent;
-  acceptTemplateUpdateBulk: AcceptTemplateUpdateBulkResult;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addTeamAgent: TeamAgent;
@@ -2153,8 +1992,6 @@ export type Mutation = {
   confirmRunbookRun: RunbookRun;
   createAgent: Agent;
   createAgentApiKey: CreateAgentApiKeyResult;
-  createAgentFromTemplate: Agent;
-  createAgentTemplate: AgentTemplate;
   createArtifact: Artifact;
   /**
    * Queue an async export of audit events matching the filter. Validates:
@@ -2191,7 +2028,6 @@ export type Mutation = {
   delegateThread: Thread;
   deleteAgent: Scalars['Boolean']['output'];
   deleteAgentBudgetPolicy: Scalars['Boolean']['output'];
-  deleteAgentTemplate: Scalars['Boolean']['output'];
   deleteArtifact: Scalars['Boolean']['output'];
   deleteBudgetPolicy: Scalars['Boolean']['output'];
   deleteEvalRun: Scalars['Boolean']['output'];
@@ -2269,7 +2105,6 @@ export type Mutation = {
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   revokeAgentApiKey: AgentApiKey;
-  rollbackAgentVersion: Agent;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
@@ -2294,10 +2129,6 @@ export type Mutation = {
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
   submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
-  /** Sync template config + workspace files to a linked agent. idempotencyKey optional. */
-  syncTemplateToAgent: Agent;
-  /** Sync template to every linked agent in a tenant. idempotencyKey optional. */
-  syncTemplateToAllAgents: SyncSummary;
   /**
    * Inserts a synthetic delivery row for the webhook so an operator can
    * confirm the config exists and the delivery-log pipeline is reachable.
@@ -2324,7 +2155,6 @@ export type Mutation = {
   updateAgentEmailAllowlist: AgentCapability;
   updateAgentRuntime: Agent;
   updateAgentStatus: Agent;
-  updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
   updateComputer: Computer;
   updateEvalTestCase: EvalTestCase;
@@ -2361,20 +2191,6 @@ export type Mutation = {
 export type MutationAcceptAgentWorkspaceReviewArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars['ID']['input'];
-};
-
-
-export type MutationAcceptTemplateUpdateArgs = {
-  agentId: Scalars['ID']['input'];
-  filename: Scalars['String']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type MutationAcceptTemplateUpdateBulkArgs = {
-  filename: Scalars['String']['input'];
-  templateId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -2521,16 +2337,6 @@ export type MutationCreateAgentApiKeyArgs = {
 };
 
 
-export type MutationCreateAgentFromTemplateArgs = {
-  input: CreateAgentFromTemplateInput;
-};
-
-
-export type MutationCreateAgentTemplateArgs = {
-  input: CreateAgentTemplateInput;
-};
-
-
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
 };
@@ -2646,11 +2452,6 @@ export type MutationDeleteAgentArgs = {
 
 export type MutationDeleteAgentBudgetPolicyArgs = {
   agentId: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -3046,12 +2847,6 @@ export type MutationRevokeAgentApiKeyArgs = {
 };
 
 
-export type MutationRollbackAgentVersionArgs = {
-  agentId: Scalars['ID']['input'];
-  versionId: Scalars['ID']['input'];
-};
-
-
 export type MutationRollbackThreadIdleLearningRunArgs = {
   runId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -3173,19 +2968,6 @@ export type MutationSyncKnowledgeBaseArgs = {
 };
 
 
-export type MutationSyncTemplateToAgentArgs = {
-  agentId: Scalars['ID']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
-
-export type MutationSyncTemplateToAllAgentsArgs = {
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
-
 export type MutationTestWebhookArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3250,12 +3032,6 @@ export type MutationUpdateAgentRuntimeArgs = {
 export type MutationUpdateAgentStatusArgs = {
   id: Scalars['ID']['input'];
   status: AgentStatus;
-};
-
-
-export type MutationUpdateAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateAgentTemplateInput;
 };
 
 
@@ -3682,18 +3458,6 @@ export type PerformanceTimeSeries = {
   totalCostUsd: Scalars['Float']['output'];
 };
 
-export type PinStatusFile = {
-  __typename?: 'PinStatusFile';
-  filename: Scalars['String']['output'];
-  folderPath?: Maybe<Scalars['String']['output']>;
-  latestContent?: Maybe<Scalars['String']['output']>;
-  latestSha?: Maybe<Scalars['String']['output']>;
-  path: Scalars['String']['output'];
-  pinnedContent?: Maybe<Scalars['String']['output']>;
-  pinnedSha?: Maybe<Scalars['String']['output']>;
-  updateAvailable: Scalars['Boolean']['output'];
-};
-
 export type PlanRoutineDraftInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
@@ -3743,10 +3507,6 @@ export type Query = {
   agentCostBreakdown: CostSummary;
   agentEmailCapability?: Maybe<AgentEmailCapability>;
   agentPerformance: Array<AgentPerformance>;
-  agentPinStatus: Array<PinStatusFile>;
-  agentTemplate?: Maybe<AgentTemplate>;
-  agentTemplates: Array<AgentTemplate>;
-  agentVersions: Array<AgentVersion>;
   agentWorkspaceEvents: Array<AgentWorkspaceEvent>;
   agentWorkspaceReview?: Maybe<AgentWorkspaceReview>;
   agentWorkspaceReviews: Array<AgentWorkspaceReview>;
@@ -3812,16 +3572,6 @@ export type Query = {
   computerAssignments: Array<ComputerAssignment>;
   computerEvents: Array<ComputerEvent>;
   computerTasks: Array<ComputerTask>;
-  /**
-   * Computer templates available to a tenant. Returns the union of
-   * tenant-scoped templates (tenant_id = $tenantId) and platform-shipped
-   * templates (tenant_id IS NULL), both filtered to template_kind = 'computer'.
-   * Used by admin's Computer create-dialog template picker so the
-   * platform-default template is visible alongside any tenant-authored
-   * Computer templates. The existing `agentTemplates` query filters
-   * strictly by tenant_id and never returns NULL-tenant rows.
-   */
-  computerTemplates: Array<AgentTemplate>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
@@ -3844,7 +3594,6 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
   knowledgeBases: Array<KnowledgeBase>;
-  linkedAgentsForTemplate: Array<Agent>;
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
@@ -3906,7 +3655,6 @@ export type Query = {
   runbookRun?: Maybe<RunbookRun>;
   runbookRuns: Array<RunbookRun>;
   runtimeManifestsByAgent: Array<RuntimeManifest>;
-  runtimeManifestsByTemplate: Array<RuntimeManifest>;
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
@@ -3918,7 +3666,6 @@ export type Query = {
   spaces: Array<Space>;
   team?: Maybe<Team>;
   teams: Array<Team>;
-  templateSyncDiff: TemplateSyncDiff;
   tenant?: Maybe<Tenant>;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
@@ -4047,28 +3794,6 @@ export type QueryAgentPerformanceArgs = {
   from?: InputMaybe<Scalars['AWSDateTime']['input']>;
   tenantId: Scalars['ID']['input'];
   to?: InputMaybe<Scalars['AWSDateTime']['input']>;
-};
-
-
-export type QueryAgentPinStatusArgs = {
-  agentId: Scalars['ID']['input'];
-  includeNested?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type QueryAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryAgentTemplatesArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryAgentVersionsArgs = {
-  agentId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -4225,11 +3950,6 @@ export type QueryComputerTasksArgs = {
 };
 
 
-export type QueryComputerTemplatesArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
 export type QueryComputersArgs = {
   status?: InputMaybe<ComputerStatus>;
   tenantId: Scalars['ID']['input'];
@@ -4347,11 +4067,6 @@ export type QueryKnowledgeBaseArgs = {
 
 export type QueryKnowledgeBasesArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryLinkedAgentsForTemplateArgs = {
-  templateId: Scalars['ID']['input'];
 };
 
 
@@ -4545,12 +4260,6 @@ export type QueryRuntimeManifestsByAgentArgs = {
 };
 
 
-export type QueryRuntimeManifestsByTemplateArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  templateId: Scalars['ID']['input'];
-};
-
-
 export type QueryScheduledJobArgs = {
   id: Scalars['ID']['input'];
 };
@@ -4613,12 +4322,6 @@ export type QueryTeamArgs = {
 
 export type QueryTeamsArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTemplateSyncDiffArgs = {
-  agentId: Scalars['ID']['input'];
-  templateId: Scalars['ID']['input'];
 };
 
 
@@ -4913,12 +4616,6 @@ export type ResubmitInboxItemInput = {
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type RoleChange = {
-  __typename?: 'RoleChange';
-  current?: Maybe<Scalars['String']['output']>;
-  target?: Maybe<Scalars['String']['output']>;
 };
 
 export type RotateTenantCredentialInput = {
@@ -5315,7 +5012,6 @@ export type RuntimeManifest = {
   id: Scalars['ID']['output'];
   manifestJson: Scalars['AWSJSON']['output'];
   sessionId: Scalars['String']['output'];
-  templateId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
   userId?: Maybe<Scalars['ID']['output']>;
 };
@@ -5413,15 +5109,6 @@ export type SkillCatalogItem = {
   skillId: Scalars['String']['output'];
   source: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
-};
-
-export type SkillPermissionsDelta = {
-  __typename?: 'SkillPermissionsDelta';
-  /** Ops the agent will gain after sync (typically empty — intersection narrows). */
-  added: Array<Scalars['String']['output']>;
-  /** Ops the agent currently has but will lose after sync. */
-  removed: Array<Scalars['String']['output']>;
-  skillId: Scalars['String']['output'];
 };
 
 export type SkillRun = {
@@ -5794,13 +5481,6 @@ export type SubscriptionOnThreadUpdatedArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
-export type SyncSummary = {
-  __typename?: 'SyncSummary';
-  agentsFailed: Scalars['Int']['output'];
-  agentsSynced: Scalars['Int']['output'];
-  errors: Array<Scalars['String']['output']>;
-};
-
 export type Team = {
   __typename?: 'Team';
   agents: Array<TeamAgent>;
@@ -5840,33 +5520,6 @@ export type TeamUser = {
   tenantId: Scalars['ID']['output'];
   user?: Maybe<User>;
   userId: Scalars['ID']['output'];
-};
-
-export enum TemplateKind {
-  Agent = 'AGENT',
-  Computer = 'COMPUTER'
-}
-
-export type TemplateSyncDiff = {
-  __typename?: 'TemplateSyncDiff';
-  filesAdded: Array<Scalars['String']['output']>;
-  filesModified: Array<Scalars['String']['output']>;
-  filesSame: Array<Scalars['String']['output']>;
-  kbsAdded: Array<Scalars['String']['output']>;
-  kbsRemoved: Array<Scalars['String']['output']>;
-  /**
-   * Per-skill preview of the operations the agent will lose (or gain) if
-   * Push is applied now. Only includes entries for skills whose manifest
-   * declares `permissions_model: operations` AND where the agent's
-   * current state would diverge from the post-sync state. Empty array
-   * when no permission change is pending. Surfaces in the sync dialog
-   * so operators can see revocations before confirming.
-   */
-  permissionsChanges: Array<SkillPermissionsDelta>;
-  roleChange?: Maybe<RoleChange>;
-  skillsAdded: Array<Scalars['String']['output']>;
-  skillsChanged: Array<Scalars['String']['output']>;
-  skillsRemoved: Array<Scalars['String']['output']>;
 };
 
 export type Tenant = {
@@ -6392,48 +6045,6 @@ export type UpdateAgentInput = {
   sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<AgentType>;
-  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
-
-export type UpdateAgentTemplateInput = {
-  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Browser Automation opt-in metadata; see AgentTemplate.browser. Pass
-   * null to clear; omit to leave unchanged.
-   */
-  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
-  category?: InputMaybe<Scalars['String']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Context Engine opt-in metadata; see AgentTemplate.contextEngine. Pass
-   * null to clear; omit to leave unchanged.
-   */
-  contextEngine?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guardrailId?: InputMaybe<Scalars['ID']['input']>;
-  icon?: InputMaybe<Scalars['String']['input']>;
-  isPublished?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
-  model?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  runtime?: InputMaybe<AgentRuntime>;
-  /**
-   * Sandbox opt-in metadata; see AgentTemplate.sandbox. Pass null to
-   * clear; omit to leave unchanged.
-   */
-  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Send Email opt-in metadata; see AgentTemplate.sendEmail. Pass
-   * null to clear; omit to leave unchanged.
-   */
-  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
-  skills?: InputMaybe<Scalars['AWSJSON']['input']>;
-  slug?: InputMaybe<Scalars['String']['input']>;
-  templateKind?: InputMaybe<TemplateKind>;
-  /**
-   * Web Search opt-in metadata; see AgentTemplate.webSearch. Pass
-   * null to clear; omit to leave unchanged.
-   */
   webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
@@ -7069,7 +6680,7 @@ export type CliAgentsQueryVariables = Exact<{
 }>;
 
 
-export type CliAgentsQuery = { __typename?: 'Query', agents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, templateId?: string | null, lastHeartbeatAt?: any | null }> };
+export type CliAgentsQuery = { __typename?: 'Query', agents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, lastHeartbeatAt?: any | null }> };
 
 export type CliAllTenantAgentsQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -7078,14 +6689,14 @@ export type CliAllTenantAgentsQueryVariables = Exact<{
 }>;
 
 
-export type CliAllTenantAgentsQuery = { __typename?: 'Query', allTenantAgents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, templateId?: string | null, lastHeartbeatAt?: any | null }> };
+export type CliAllTenantAgentsQuery = { __typename?: 'Query', allTenantAgents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, status: AgentStatus, runtime: AgentRuntime, lastHeartbeatAt?: any | null }> };
 
 export type CliAgentQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type CliAgentQuery = { __typename?: 'Query', agent?: { __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, source?: string | null, status: AgentStatus, systemPrompt?: string | null, runtime: AgentRuntime, adapterType?: string | null, templateId?: string | null, version: number, humanPairId?: string | null, parentAgentId?: string | null, reportsToId?: string | null, lastHeartbeatAt?: any | null, createdAt: any, updatedAt: any, capabilities: Array<{ __typename?: 'AgentCapability', capability: string, enabled: boolean, config?: any | null }>, skills: Array<{ __typename?: 'AgentSkill', skillId: string, enabled: boolean, rateLimitRpm?: number | null }>, budgetPolicy?: { __typename?: 'AgentBudgetPolicy', period: string, limitUsd: number, actionOnExceed: string } | null } | null };
+export type CliAgentQuery = { __typename?: 'Query', agent?: { __typename?: 'Agent', id: string, name: string, slug?: string | null, role?: string | null, type: AgentType, source?: string | null, status: AgentStatus, systemPrompt?: string | null, runtime: AgentRuntime, adapterType?: string | null, version: number, humanPairId?: string | null, parentAgentId?: string | null, reportsToId?: string | null, lastHeartbeatAt?: any | null, createdAt: any, updatedAt: any, capabilities: Array<{ __typename?: 'AgentCapability', capability: string, enabled: boolean, config?: any | null }>, skills: Array<{ __typename?: 'AgentSkill', skillId: string, enabled: boolean, rateLimitRpm?: number | null }>, budgetPolicy?: { __typename?: 'AgentBudgetPolicy', period: string, limitUsd: number, actionOnExceed: string } | null } | null };
 
 export type CliCreateAgentMutationVariables = Exact<{
   input: CreateAgentInput;
@@ -7200,22 +6811,6 @@ export type CliUpdateAgentEmailAllowlistMutationVariables = Exact<{
 
 export type CliUpdateAgentEmailAllowlistMutation = { __typename?: 'Mutation', updateAgentEmailAllowlist: { __typename?: 'AgentCapability', capability: string, config?: any | null } };
 
-export type CliAgentVersionsQueryVariables = Exact<{
-  agentId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type CliAgentVersionsQuery = { __typename?: 'Query', agentVersions: Array<{ __typename?: 'AgentVersion', id: string, versionNumber: number, createdBy?: string | null, createdAt: any, agentId: string }> };
-
-export type CliRollbackAgentVersionMutationVariables = Exact<{
-  agentId: Scalars['ID']['input'];
-  versionId: Scalars['ID']['input'];
-}>;
-
-
-export type CliRollbackAgentVersionMutation = { __typename?: 'Mutation', rollbackAgentVersion: { __typename?: 'Agent', id: string, name: string, version: number } };
-
 export type CliAgentTenantBySlugQueryVariables = Exact<{
   slug: Scalars['String']['input'];
 }>;
@@ -7329,14 +6924,14 @@ export type CliEvalRunsQueryVariables = Exact<{
 }>;
 
 
-export type CliEvalRunsQuery = { __typename?: 'Query', evalRuns: { __typename?: 'EvalRunsPage', totalCount: number, items: Array<{ __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentId?: string | null, agentName?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, totalTests: number, passed: number, failed: number, passRate?: number | null, regression: boolean, costUsd?: number | null, errorMessage?: string | null, startedAt?: any | null, completedAt?: any | null, createdAt: any }> } };
+export type CliEvalRunsQuery = { __typename?: 'Query', evalRuns: { __typename?: 'EvalRunsPage', totalCount: number, items: Array<{ __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentId?: string | null, agentName?: string | null, agentTemplateId?: string | null, totalTests: number, passed: number, failed: number, passRate?: number | null, regression: boolean, costUsd?: number | null, errorMessage?: string | null, startedAt?: any | null, completedAt?: any | null, createdAt: any }> } };
 
 export type CliEvalRunQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type CliEvalRunQuery = { __typename?: 'Query', evalRun?: { __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentId?: string | null, agentName?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, totalTests: number, passed: number, failed: number, passRate?: number | null, regression: boolean, costUsd?: number | null, errorMessage?: string | null, startedAt?: any | null, completedAt?: any | null, createdAt: any } | null };
+export type CliEvalRunQuery = { __typename?: 'Query', evalRun?: { __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentId?: string | null, agentName?: string | null, agentTemplateId?: string | null, totalTests: number, passed: number, failed: number, passRate?: number | null, regression: boolean, costUsd?: number | null, errorMessage?: string | null, startedAt?: any | null, completedAt?: any | null, createdAt: any } | null };
 
 export type CliEvalRunResultsQueryVariables = Exact<{
   runId: Scalars['ID']['input'];
@@ -7352,14 +6947,14 @@ export type CliEvalTestCasesQueryVariables = Exact<{
 }>;
 
 
-export type CliEvalTestCasesQuery = { __typename?: 'Query', evalTestCases: Array<{ __typename?: 'EvalTestCase', id: string, name: string, category: string, query: string, systemPrompt?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, agentcoreEvaluatorIds: Array<string>, tags: Array<string>, enabled: boolean, source: string, createdAt: any, updatedAt: any }> };
+export type CliEvalTestCasesQuery = { __typename?: 'Query', evalTestCases: Array<{ __typename?: 'EvalTestCase', id: string, name: string, category: string, query: string, systemPrompt?: string | null, agentTemplateId?: string | null, agentcoreEvaluatorIds: Array<string>, tags: Array<string>, enabled: boolean, source: string, createdAt: any, updatedAt: any }> };
 
 export type CliEvalTestCaseQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type CliEvalTestCaseQuery = { __typename?: 'Query', evalTestCase?: { __typename?: 'EvalTestCase', id: string, tenantId: string, name: string, category: string, query: string, systemPrompt?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, assertions: any, agentcoreEvaluatorIds: Array<string>, tags: Array<string>, enabled: boolean, source: string, createdAt: any, updatedAt: any } | null };
+export type CliEvalTestCaseQuery = { __typename?: 'Query', evalTestCase?: { __typename?: 'EvalTestCase', id: string, tenantId: string, name: string, category: string, query: string, systemPrompt?: string | null, agentTemplateId?: string | null, assertions: any, agentcoreEvaluatorIds: Array<string>, tags: Array<string>, enabled: boolean, source: string, createdAt: any, updatedAt: any } | null };
 
 export type CliComputersForEvalQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -7367,13 +6962,6 @@ export type CliComputersForEvalQueryVariables = Exact<{
 
 
 export type CliComputersForEvalQuery = { __typename?: 'Query', computers: Array<{ __typename?: 'Computer', id: string, name: string, slug: string, runtimeStatus: ComputerRuntimeStatus }> };
-
-export type CliAgentTemplatesForEvalQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type CliAgentTemplatesForEvalQuery = { __typename?: 'Query', agentTemplates: Array<{ __typename?: 'AgentTemplate', id: string, name: string, slug: string, model?: string | null, isPublished: boolean }> };
 
 export type CliTenantBySlugQueryVariables = Exact<{
   slug: Scalars['String']['input'];
@@ -7388,7 +6976,7 @@ export type CliStartEvalRunMutationVariables = Exact<{
 }>;
 
 
-export type CliStartEvalRunMutation = { __typename?: 'Mutation', startEvalRun: { __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentTemplateId?: string | null, agentTemplateName?: string | null, totalTests: number, createdAt: any } };
+export type CliStartEvalRunMutation = { __typename?: 'Mutation', startEvalRun: { __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentTemplateId?: string | null, totalTests: number, createdAt: any } };
 
 export type CliCancelEvalRunMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -8026,71 +7614,6 @@ export type CliTeamTenantBySlugQueryVariables = Exact<{
 
 export type CliTeamTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string, slug: string } | null };
 
-export type CliAgentTemplatesQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type CliAgentTemplatesQuery = { __typename?: 'Query', agentTemplates: Array<{ __typename?: 'AgentTemplate', id: string, name: string, slug: string, category?: string | null, runtime: AgentRuntime, templateKind: TemplateKind, model?: string | null, isPublished: boolean, createdAt: any }> };
-
-export type CliAgentTemplateQueryVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type CliAgentTemplateQuery = { __typename?: 'Query', agentTemplate?: { __typename?: 'AgentTemplate', id: string, tenantId?: string | null, name: string, slug: string, description?: string | null, category?: string | null, icon?: string | null, runtime: AgentRuntime, templateKind: TemplateKind, model?: string | null, guardrailId?: string | null, isPublished: boolean, createdAt: any, updatedAt: any } | null };
-
-export type CliCreateAgentTemplateMutationVariables = Exact<{
-  input: CreateAgentTemplateInput;
-}>;
-
-
-export type CliCreateAgentTemplateMutation = { __typename?: 'Mutation', createAgentTemplate: { __typename?: 'AgentTemplate', id: string, name: string, slug: string, isPublished: boolean } };
-
-export type CliUpdateAgentTemplateMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-  input: UpdateAgentTemplateInput;
-}>;
-
-
-export type CliUpdateAgentTemplateMutation = { __typename?: 'Mutation', updateAgentTemplate: { __typename?: 'AgentTemplate', id: string, name: string, slug: string, model?: string | null, description?: string | null } };
-
-export type CliDeleteAgentTemplateMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type CliDeleteAgentTemplateMutation = { __typename?: 'Mutation', deleteAgentTemplate: boolean };
-
-export type CliSyncTemplateToAgentMutationVariables = Exact<{
-  templateId: Scalars['ID']['input'];
-  agentId: Scalars['ID']['input'];
-}>;
-
-
-export type CliSyncTemplateToAgentMutation = { __typename?: 'Mutation', syncTemplateToAgent: { __typename?: 'Agent', id: string, name: string, status: AgentStatus } };
-
-export type CliSyncTemplateToAllAgentsMutationVariables = Exact<{
-  templateId: Scalars['ID']['input'];
-}>;
-
-
-export type CliSyncTemplateToAllAgentsMutation = { __typename?: 'Mutation', syncTemplateToAllAgents: { __typename?: 'SyncSummary', agentsSynced: number, agentsFailed: number, errors: Array<string> } };
-
-export type CliAgentForCloneQueryVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type CliAgentForCloneQuery = { __typename?: 'Query', agent?: { __typename?: 'Agent', id: string, name: string, role?: string | null, systemPrompt?: string | null, runtime: AgentRuntime, agentTemplate?: { __typename?: 'AgentTemplate', id: string, model?: string | null } | null } | null };
-
-export type CliTemplateTenantBySlugQueryVariables = Exact<{
-  slug: Scalars['String']['input'];
-}>;
-
-
-export type CliTemplateTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string } | null };
-
 export type CliCreateTenantMutationVariables = Exact<{
   input: CreateTenantInput;
 }>;
@@ -8451,9 +7974,9 @@ export type CliCmdTenantBySlugQueryVariables = Exact<{
 export type CliCmdTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string } | null };
 
 
-export const CliAgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"type"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentType"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"type"},"value":{"kind":"Variable","name":{"kind":"Name","value":"type"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSystem"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"templateId"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}}]}}]}}]} as unknown as DocumentNode<CliAgentsQuery, CliAgentsQueryVariables>;
-export const CliAllTenantAgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAllTenantAgents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeSubAgents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"allTenantAgents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSystem"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSubAgents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeSubAgents"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"templateId"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}}]}}]}}]} as unknown as DocumentNode<CliAllTenantAgentsQuery, CliAllTenantAgentsQueryVariables>;
-export const CliAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"adapterType"}},{"kind":"Field","name":{"kind":"Name","value":"templateId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"humanPairId"}},{"kind":"Field","name":{"kind":"Name","value":"parentAgentId"}},{"kind":"Field","name":{"kind":"Name","value":"reportsToId"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"capabilities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"config"}}]}},{"kind":"Field","name":{"kind":"Name","value":"skills"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"rateLimitRpm"}}]}},{"kind":"Field","name":{"kind":"Name","value":"budgetPolicy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"limitUsd"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}}]}}]}}]} as unknown as DocumentNode<CliAgentQuery, CliAgentQueryVariables>;
+export const CliAgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"type"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentType"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"type"},"value":{"kind":"Variable","name":{"kind":"Name","value":"type"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSystem"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}}]}}]}}]} as unknown as DocumentNode<CliAgentsQuery, CliAgentsQueryVariables>;
+export const CliAllTenantAgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAllTenantAgents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeSubAgents"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"allTenantAgents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSystem"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeSystem"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSubAgents"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeSubAgents"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}}]}}]}}]} as unknown as DocumentNode<CliAllTenantAgentsQuery, CliAllTenantAgentsQueryVariables>;
+export const CliAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"adapterType"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"humanPairId"}},{"kind":"Field","name":{"kind":"Name","value":"parentAgentId"}},{"kind":"Field","name":{"kind":"Name","value":"reportsToId"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"capabilities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"config"}}]}},{"kind":"Field","name":{"kind":"Name","value":"skills"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"rateLimitRpm"}}]}},{"kind":"Field","name":{"kind":"Name","value":"budgetPolicy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"limitUsd"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}}]}}]}}]} as unknown as DocumentNode<CliAgentQuery, CliAgentQueryVariables>;
 export const CliCreateAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCreateAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliCreateAgentMutation, CliCreateAgentMutationVariables>;
 export const CliUpdateAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliUpdateAgentMutation, CliUpdateAgentMutationVariables>;
 export const CliDeleteAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteAgentMutation, CliDeleteAgentMutationVariables>;
@@ -8469,8 +7992,6 @@ export const CliToggleAgentEmailDocument = {"kind":"Document","definitions":[{"k
 export const CliClaimVanityEmailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliClaimVanityEmail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"localPart"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"claimVanityEmailAddress"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"localPart"},"value":{"kind":"Variable","name":{"kind":"Name","value":"localPart"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"config"}}]}}]}}]} as unknown as DocumentNode<CliClaimVanityEmailMutation, CliClaimVanityEmailMutationVariables>;
 export const CliReleaseVanityEmailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliReleaseVanityEmail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"releaseVanityEmailAddress"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<CliReleaseVanityEmailMutation, CliReleaseVanityEmailMutationVariables>;
 export const CliUpdateAgentEmailAllowlistDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateAgentEmailAllowlist"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"allowedSenders"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgentEmailAllowlist"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"allowedSenders"},"value":{"kind":"Variable","name":{"kind":"Name","value":"allowedSenders"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capability"}},{"kind":"Field","name":{"kind":"Name","value":"config"}}]}}]}}]} as unknown as DocumentNode<CliUpdateAgentEmailAllowlistMutation, CliUpdateAgentEmailAllowlistMutationVariables>;
-export const CliAgentVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"versionNumber"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}}]}}]}}]} as unknown as DocumentNode<CliAgentVersionsQuery, CliAgentVersionsQueryVariables>;
-export const CliRollbackAgentVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliRollbackAgentVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"versionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rollbackAgentVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"versionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"versionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}}]}}]}}]} as unknown as DocumentNode<CliRollbackAgentVersionMutation, CliRollbackAgentVersionMutationVariables>;
 export const CliAgentTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<CliAgentTenantBySlugQuery, CliAgentTenantBySlugQueryVariables>;
 export const CliArtifactsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliArtifacts"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"type"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ArtifactType"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ArtifactStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"artifacts"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"type"},"value":{"kind":"Variable","name":{"kind":"Name","value":"type"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliArtifactsQuery, CliArtifactsQueryVariables>;
 export const CliArtifactDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliArtifact"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"artifact"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"s3Key"}},{"kind":"Field","name":{"kind":"Name","value":"sourceMessageId"}},{"kind":"Field","name":{"kind":"Name","value":"favoritedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliArtifactQuery, CliArtifactQueryVariables>;
@@ -8484,15 +8005,14 @@ export const CliCostByAgentDocument = {"kind":"Document","definitions":[{"kind":
 export const CliCostByModelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliCostByModel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"from"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AWSDateTime"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"to"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AWSDateTime"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"costByModel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"from"},"value":{"kind":"Variable","name":{"kind":"Name","value":"from"}}},{"kind":"Argument","name":{"kind":"Name","value":"to"},"value":{"kind":"Variable","name":{"kind":"Name","value":"to"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"totalUsd"}},{"kind":"Field","name":{"kind":"Name","value":"inputTokens"}},{"kind":"Field","name":{"kind":"Name","value":"outputTokens"}}]}}]}}]} as unknown as DocumentNode<CliCostByModelQuery, CliCostByModelQueryVariables>;
 export const CliCostSeriesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliCostSeries"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"days"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"costTimeSeries"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"days"},"value":{"kind":"Variable","name":{"kind":"Name","value":"days"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"day"}},{"kind":"Field","name":{"kind":"Name","value":"totalUsd"}},{"kind":"Field","name":{"kind":"Name","value":"llmUsd"}},{"kind":"Field","name":{"kind":"Name","value":"computeUsd"}},{"kind":"Field","name":{"kind":"Name","value":"toolsUsd"}},{"kind":"Field","name":{"kind":"Name","value":"eventCount"}}]}}]}}]} as unknown as DocumentNode<CliCostSeriesQuery, CliCostSeriesQueryVariables>;
 export const CliDashboardDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliDashboard"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}},{"kind":"Field","name":{"kind":"Name","value":"threads"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"IntValue","value":"200"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"archivedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"inboxItems"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"EnumValue","value":"PENDING"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"Field","name":{"kind":"Name","value":"costSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalUsd"}},{"kind":"Field","name":{"kind":"Name","value":"llmUsd"}},{"kind":"Field","name":{"kind":"Name","value":"computeUsd"}},{"kind":"Field","name":{"kind":"Name","value":"eventCount"}}]}}]}}]} as unknown as DocumentNode<CliDashboardQuery, CliDashboardQueryVariables>;
-export const CliEvalRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CliEvalRunsQuery, CliEvalRunsQueryVariables>;
-export const CliEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalRunQuery, CliEvalRunQueryVariables>;
+export const CliEvalRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CliEvalRunsQuery, CliEvalRunsQueryVariables>;
+export const CliEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalRunQuery, CliEvalRunQueryVariables>;
 export const CliEvalRunResultsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRunResults"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"runId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRunResults"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"runId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"runId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"testCaseId"}},{"kind":"Field","name":{"kind":"Name","value":"testCaseName"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"score"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}},{"kind":"Field","name":{"kind":"Name","value":"agentSessionId"}},{"kind":"Field","name":{"kind":"Name","value":"input"}},{"kind":"Field","name":{"kind":"Name","value":"expected"}},{"kind":"Field","name":{"kind":"Name","value":"actualOutput"}},{"kind":"Field","name":{"kind":"Name","value":"evaluatorResults"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalRunResultsQuery, CliEvalRunResultsQueryVariables>;
-export const CliEvalTestCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"category"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"search"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"category"},"value":{"kind":"Variable","name":{"kind":"Name","value":"category"}}},{"kind":"Argument","name":{"kind":"Name","value":"search"},"value":{"kind":"Variable","name":{"kind":"Name","value":"search"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCasesQuery, CliEvalTestCasesQueryVariables>;
-export const CliEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCaseQuery, CliEvalTestCaseQueryVariables>;
+export const CliEvalTestCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"category"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"search"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"category"},"value":{"kind":"Variable","name":{"kind":"Name","value":"category"}}},{"kind":"Argument","name":{"kind":"Name","value":"search"},"value":{"kind":"Variable","name":{"kind":"Name","value":"search"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCasesQuery, CliEvalTestCasesQueryVariables>;
+export const CliEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCaseQuery, CliEvalTestCaseQueryVariables>;
 export const CliComputersForEvalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliComputersForEval"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}}]}}]}}]} as unknown as DocumentNode<CliComputersForEvalQuery, CliComputersForEvalQueryVariables>;
-export const CliAgentTemplatesForEvalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentTemplatesForEval"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentTemplates"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"isPublished"}}]}}]}}]} as unknown as DocumentNode<CliAgentTemplatesForEvalQuery, CliAgentTemplatesForEvalQueryVariables>;
 export const CliTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliTenantBySlugQuery, CliTenantBySlugQueryVariables>;
-export const CliStartEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliStartEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"StartEvalRunInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"startEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliStartEvalRunMutation, CliStartEvalRunMutationVariables>;
+export const CliStartEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliStartEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"StartEvalRunInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"startEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliStartEvalRunMutation, CliStartEvalRunMutationVariables>;
 export const CliCancelEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCancelEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cancelEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]}}]} as unknown as DocumentNode<CliCancelEvalRunMutation, CliCancelEvalRunMutationVariables>;
 export const CliDeleteEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteEvalRunMutation, CliDeleteEvalRunMutationVariables>;
 export const CliCreateEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCreateEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateEvalTestCaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createEvalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}}]}}]}}]} as unknown as DocumentNode<CliCreateEvalTestCaseMutation, CliCreateEvalTestCaseMutationVariables>;
@@ -8576,15 +8096,6 @@ export const CliRemoveTeamAgentDocument = {"kind":"Document","definitions":[{"ki
 export const CliAddTeamUserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliAddTeamUser"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AddTeamUserInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addTeamUser"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}}]}}]}}]} as unknown as DocumentNode<CliAddTeamUserMutation, CliAddTeamUserMutationVariables>;
 export const CliRemoveTeamUserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliRemoveTeamUser"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeTeamUser"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}]}]}}]} as unknown as DocumentNode<CliRemoveTeamUserMutation, CliRemoveTeamUserMutationVariables>;
 export const CliTeamTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTeamTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}}]}}]}}]} as unknown as DocumentNode<CliTeamTenantBySlugQuery, CliTeamTenantBySlugQueryVariables>;
-export const CliAgentTemplatesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentTemplates"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentTemplates"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"templateKind"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"isPublished"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliAgentTemplatesQuery, CliAgentTemplatesQueryVariables>;
-export const CliAgentTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"templateKind"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"guardrailId"}},{"kind":"Field","name":{"kind":"Name","value":"isPublished"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliAgentTemplateQuery, CliAgentTemplateQueryVariables>;
-export const CliCreateAgentTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCreateAgentTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentTemplateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgentTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"isPublished"}}]}}]}}]} as unknown as DocumentNode<CliCreateAgentTemplateMutation, CliCreateAgentTemplateMutationVariables>;
-export const CliUpdateAgentTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateAgentTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAgentTemplateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgentTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CliUpdateAgentTemplateMutation, CliUpdateAgentTemplateMutationVariables>;
-export const CliDeleteAgentTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteAgentTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgentTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteAgentTemplateMutation, CliDeleteAgentTemplateMutationVariables>;
-export const CliSyncTemplateToAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliSyncTemplateToAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"syncTemplateToAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"templateId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliSyncTemplateToAgentMutation, CliSyncTemplateToAgentMutationVariables>;
-export const CliSyncTemplateToAllAgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliSyncTemplateToAllAgents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"syncTemplateToAllAgents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"templateId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentsSynced"}},{"kind":"Field","name":{"kind":"Name","value":"agentsFailed"}},{"kind":"Field","name":{"kind":"Name","value":"errors"}}]}}]}}]} as unknown as DocumentNode<CliSyncTemplateToAllAgentsMutation, CliSyncTemplateToAllAgentsMutationVariables>;
-export const CliAgentForCloneDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentForClone"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplate"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"model"}}]}}]}}]}}]} as unknown as DocumentNode<CliAgentForCloneQuery, CliAgentForCloneQueryVariables>;
-export const CliTemplateTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTemplateTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<CliTemplateTenantBySlugQuery, CliTemplateTenantBySlugQueryVariables>;
 export const CliCreateTenantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCreateTenant"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateTenantInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createTenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"plan"}},{"kind":"Field","name":{"kind":"Name","value":"issuePrefix"}}]}}]}}]} as unknown as DocumentNode<CliCreateTenantMutation, CliCreateTenantMutationVariables>;
 export const CliUpdateTenantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateTenant"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTenantInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"plan"}},{"kind":"Field","name":{"kind":"Name","value":"issuePrefix"}}]}}]}}]} as unknown as DocumentNode<CliUpdateTenantMutation, CliUpdateTenantMutationVariables>;
 export const CliTenantSettingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTenantSettings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"settings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"defaultModel"}},{"kind":"Field","name":{"kind":"Name","value":"budgetMonthlyCents"}},{"kind":"Field","name":{"kind":"Name","value":"autoCloseThreadMinutes"}},{"kind":"Field","name":{"kind":"Name","value":"maxAgents"}},{"kind":"Field","name":{"kind":"Name","value":"features"}}]}}]}}]}}]} as unknown as DocumentNode<CliTenantSettingsQuery, CliTenantSettingsQueryVariables>;

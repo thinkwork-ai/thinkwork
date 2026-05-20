@@ -7,9 +7,9 @@ import {
 } from "../WorkspaceEditor";
 
 describe("workspace editor target capabilities", () => {
-  it("exposes only the inheritance-review flag in capabilities", () => {
+  it("does not expose retired template inheritance review capabilities", () => {
     expect(workspaceEditorCapabilities("agent")).toEqual({
-      canReviewTemplateUpdates: true,
+      canReviewTemplateUpdates: false,
     });
     expect(workspaceEditorCapabilities("template")).toEqual({
       canReviewTemplateUpdates: false,
@@ -49,21 +49,6 @@ describe("workspace editor target capabilities", () => {
   it("keys requester context targets by user id", () => {
     expect(workspaceEditorTargetKey({ userId: "user-eric" })).toBe(
       "user:user-eric",
-    );
-  });
-
-  it("keeps template workspace routes on the shared editor", () => {
-    const routeFiles = [
-      "../../../routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx",
-      "../../../routes/_authed/_tenant/agent-templates/defaults.tsx",
-    ];
-    const routeSource = routeFiles
-      .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
-      .join("\n");
-
-    expect(routeSource).toContain("WorkspaceEditor");
-    expect(routeSource).not.toMatch(
-      /CodeMirror|WsTreeItem|buildTree|wsSelectedFile|wsContent|markdownLanguage|vscodeDark/,
     );
   });
 

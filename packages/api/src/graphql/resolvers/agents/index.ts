@@ -6,7 +6,6 @@ import { agentApiKeys } from "./agentApiKeys.query.js";
 import { agentEmailCapability } from "./agentEmailCapability.query.js";
 import { modelCatalog } from "./modelCatalog.query.js";
 import { agentWorkspaces } from "./agentWorkspaces.query.js";
-import { agentPinStatus } from "./agentPinStatus.query.js";
 
 // Mutations
 import { createAgent } from "./createAgent.mutation.js";
@@ -24,7 +23,6 @@ import { updateAgentEmailAllowlist } from "./updateAgentEmailAllowlist.mutation.
 import { toggleAgentEmailChannel } from "./toggleAgentEmailChannel.mutation.js";
 import { claimVanityEmailAddress } from "./claimVanityEmailAddress.mutation.js";
 import { releaseVanityEmailAddress } from "./releaseVanityEmailAddress.mutation.js";
-import { acceptTemplateUpdate } from "./acceptTemplateUpdate.mutation.js";
 
 export const agentQueries = {
   agents,
@@ -34,7 +32,6 @@ export const agentQueries = {
   agentApiKeys,
   agentEmailCapability,
   modelCatalog,
-  agentPinStatus,
 };
 
 export const agentMutations = {
@@ -53,5 +50,4 @@ export const agentMutations = {
   toggleAgentEmailChannel,
   claimVanityEmailAddress,
   releaseVanityEmailAddress,
-  acceptTemplateUpdate,
 };

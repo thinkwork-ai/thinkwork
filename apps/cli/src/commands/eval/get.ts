@@ -1,5 +1,10 @@
 import { gqlQuery } from "../../lib/gql-client.js";
-import { isJsonMode, printJson, printKeyValue, printTable } from "../../lib/output.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../../lib/output.js";
 import { printError } from "../../ui.js";
 import { EvalRunDoc, EvalRunResultsDoc } from "./gql.js";
 import {
@@ -14,7 +19,10 @@ interface GetOptions extends EvalCliOptions {
   results?: boolean;
 }
 
-export async function runEvalGet(runId: string, opts: GetOptions): Promise<void> {
+export async function runEvalGet(
+  runId: string,
+  opts: GetOptions,
+): Promise<void> {
   const ctx = await resolveEvalContext(opts);
   const data = await gqlQuery(ctx.client, EvalRunDoc, { id: runId });
   if (!data.evalRun) {
@@ -26,7 +34,8 @@ export async function runEvalGet(runId: string, opts: GetOptions): Promise<void>
   const results =
     opts.results === false
       ? []
-      : (await gqlQuery(ctx.client, EvalRunResultsDoc, { runId })).evalRunResults ?? [];
+      : ((await gqlQuery(ctx.client, EvalRunResultsDoc, { runId }))
+          .evalRunResults ?? []);
 
   if (isJsonMode()) {
     printJson({ run, results });
@@ -36,7 +45,7 @@ export async function runEvalGet(runId: string, opts: GetOptions): Promise<void>
   printKeyValue([
     ["Run ID", run.id],
     ["Status", run.status],
-    ["Agent template", run.agentTemplateName ?? run.agentTemplateId ?? "—"],
+    ["Agent template", run.agentTemplateId ?? "—"],
     ["Agent", run.agentName ?? run.agentId ?? "—"],
     ["Model", run.model ?? "—"],
     ["Categories", (run.categories ?? []).join(", ") || "—"],

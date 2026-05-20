@@ -79,7 +79,7 @@ export interface ExistingEvalTestCase {
 }
 
 export interface OverlayApiClient {
-  targetAgentTemplateId: string;
+  targetAgentTemplateId: string | null;
   listEvalTestCases(): Promise<ExistingEvalTestCase[]>;
   createEvalTestCase(input: CustomerEvalSeed): Promise<void>;
   updateEvalTestCase(id: string, input: CustomerEvalSeed): Promise<void>;
@@ -261,11 +261,11 @@ function workspaceTargetPath(
 function withOverlayTags(
   pack: string,
   testCase: CustomerEvalSeed,
-  defaultAgentTemplateId: string,
+  defaultAgentTemplateId: string | null,
 ): CustomerEvalSeed {
   return {
     ...testCase,
-    agentTemplateId: testCase.agentTemplateId ?? defaultAgentTemplateId,
+    agentTemplateId: testCase.agentTemplateId ?? defaultAgentTemplateId ?? null,
     tags: Array.from(
       new Set([
         ...(testCase.tags ?? []),

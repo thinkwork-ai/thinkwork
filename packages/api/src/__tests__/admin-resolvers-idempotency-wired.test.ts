@@ -1,7 +1,7 @@
 /**
  * Integration test — every admin-skill-key resolver wires through
  * `runWithIdempotency` (Unit 8c closes the set at 4 resolvers:
- * createAgent, createTeam, createAgentTemplate, inviteMember).
+ * createAgent, createTeam, inviteMember).
  *
  * Invariants per resolver, parametrically:
  *
@@ -135,16 +135,10 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   },
 }));
 
-vi.mock("../lib/workspace-copy.js", () => ({
-  copyDefaultsToTemplate: () => Promise.resolve(),
-}));
-
 // eslint-disable-next-line import/first
 import { createAgent } from "../graphql/resolvers/agents/createAgent.mutation.js";
 // eslint-disable-next-line import/first
 import { createTeam } from "../graphql/resolvers/teams/createTeam.mutation.js";
-// eslint-disable-next-line import/first
-import { createAgentTemplate } from "../graphql/resolvers/templates/createAgentTemplate.mutation.js";
 // eslint-disable-next-line import/first
 import { inviteMember } from "../graphql/resolvers/core/inviteMember.mutation.js";
 
@@ -204,24 +198,6 @@ const CASES: Case[] = [
             tenantId: "tenant-A",
             name: "Core",
             idempotencyKey: "onboard-foo:team",
-          },
-        },
-        apikeyAdminCtx(),
-      ),
-  },
-  {
-    label: "createAgentTemplate",
-    mutationName: "createAgentTemplate",
-    primaryRow: { id: "tpl-1", tenant_id: "tenant-A", name: "Onboarder" },
-    run: () =>
-      createAgentTemplate(
-        null,
-        {
-          input: {
-            tenantId: "tenant-A",
-            name: "Onboarder",
-            slug: "onboarder",
-            idempotencyKey: "onboard-foo:template",
           },
         },
         apikeyAdminCtx(),

@@ -14,7 +14,6 @@ export const AgentsQuery = graphql(`
       role
       type
       status
-      templateId
       systemPrompt
       adapterType
       adapterConfig
@@ -40,7 +39,6 @@ export const AgentQuery = graphql(`
       role
       type
       status
-      templateId
       systemPrompt
       adapterType
       adapterConfig
@@ -97,7 +95,6 @@ export const UpdateAgentMutation = graphql(`
       role
       type
       status
-      templateId
       systemPrompt
       updatedAt
     }

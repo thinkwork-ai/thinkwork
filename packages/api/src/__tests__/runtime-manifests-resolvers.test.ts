@@ -4,7 +4,6 @@
  * Covers:
  *   - runtimeManifestsByAgent: requireTenantAdmin gate, tenant scoping
  *     (cross-tenant agent → empty list), limit clamp.
- *   - runtimeManifestsByTemplate: same pattern against agent_templates.
  *   - Admin-role gate and tenant resolution are mocked at the module
  *     boundary — no DB.
  */
@@ -44,14 +43,9 @@ vi.mock("../graphql/utils.js", () => ({
   and: (...args: unknown[]) => ({ _and: args }),
   desc: (col: unknown) => ({ _desc: col }),
   agents: { id: "agents.id", tenant_id: "agents.tenant_id" },
-  agentTemplates: {
-    id: "agent_templates.id",
-    tenant_id: "agent_templates.tenant_id",
-  },
   resolvedCapabilityManifests: {
     id: "rcm.id",
     agent_id: "rcm.agent_id",
-    template_id: "rcm.template_id",
     tenant_id: "rcm.tenant_id",
     created_at: "rcm.created_at",
   },
@@ -72,13 +66,10 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 
 // eslint-disable-next-line import/first
 import { runtimeManifestsByAgent } from "../graphql/resolvers/runtime/runtimeManifestsByAgent.query.js";
-// eslint-disable-next-line import/first
-import { runtimeManifestsByTemplate } from "../graphql/resolvers/runtime/runtimeManifestsByTemplate.query.js";
 
 const TENANT_A = "tenant-a";
 const TENANT_B = "tenant-b";
 const AGENT_A = "agent-a";
-const TEMPLATE_A = "template-a";
 const CTX = { auth: {} } as any;
 
 beforeEach(() => {
@@ -140,44 +131,5 @@ describe("runtimeManifestsByAgent", () => {
       CTX,
     );
     expect(Array.isArray(out)).toBe(true);
-  });
-});
-
-describe("runtimeManifestsByTemplate", () => {
-  it("returns rows for a same-tenant template", async () => {
-    mockSelectRows
-      .mockReturnValueOnce([{ id: TEMPLATE_A, tenant_id: TENANT_A }])
-      .mockReturnValueOnce([
-        { id: "m1", template_id: TEMPLATE_A, manifest_json: {} },
-      ]);
-    const result = await runtimeManifestsByTemplate(
-      {},
-      { templateId: TEMPLATE_A },
-      CTX,
-    );
-    expect(result).toHaveLength(1);
-    expect(mockRequireTenantAdmin).toHaveBeenCalled();
-  });
-
-  it("returns [] on cross-tenant template", async () => {
-    mockSelectRows.mockReturnValueOnce([
-      { id: TEMPLATE_A, tenant_id: TENANT_B },
-    ]);
-    const result = await runtimeManifestsByTemplate(
-      {},
-      { templateId: TEMPLATE_A },
-      CTX,
-    );
-    expect(result).toEqual([]);
-  });
-
-  it("returns [] when template does not exist", async () => {
-    mockSelectRows.mockReturnValueOnce([]);
-    const result = await runtimeManifestsByTemplate(
-      {},
-      { templateId: TEMPLATE_A },
-      CTX,
-    );
-    expect(result).toEqual([]);
   });
 });

@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
-import { input, select, checkbox } from "@inquirer/prompts";
-import { gqlMutate, gqlQuery } from "../../../lib/gql-client.js";
-import { isInteractive, promptOrExit, requireTty } from "../../../lib/interactive.js";
+import { input, checkbox } from "@inquirer/prompts";
+import { gqlMutate } from "../../../lib/gql-client.js";
+import {
+  isInteractive,
+  promptOrExit,
+  requireTty,
+} from "../../../lib/interactive.js";
 import { isJsonMode, printJson } from "../../../lib/output.js";
 import { printError, printSuccess } from "../../../ui.js";
-import { AgentTemplatesForEvalDoc, CreateEvalTestCaseDoc } from "../gql.js";
+import { CreateEvalTestCaseDoc } from "../gql.js";
 import { resolveEvalContext, type EvalCliOptions } from "../helpers.js";
 
 interface CreateOptions extends EvalCliOptions {
@@ -28,7 +32,9 @@ const DEFAULT_EVALUATORS = [
   "Builtin.GoalSuccessRate",
 ];
 
-export async function runEvalTestCaseCreate(opts: CreateOptions): Promise<void> {
+export async function runEvalTestCaseCreate(
+  opts: CreateOptions,
+): Promise<void> {
   const ctx = await resolveEvalContext(opts);
   const interactive = isInteractive();
 
@@ -52,50 +58,49 @@ export async function runEvalTestCaseCreate(opts: CreateOptions): Promise<void> 
   if (!name) {
     requireTty("Name");
     name = await promptOrExit(() =>
-      input({ message: "Test case name?", validate: (v) => v.trim().length > 0 || "Required" }),
+      input({
+        message: "Test case name?",
+        validate: (v) => v.trim().length > 0 || "Required",
+      }),
     );
   }
   if (!category) {
     category = await promptOrExit(() =>
-      input({ message: "Category (free-form label)?", validate: (v) => v.trim().length > 0 || "Required" }),
+      input({
+        message: "Category (free-form label)?",
+        validate: (v) => v.trim().length > 0 || "Required",
+      }),
     );
   }
   if (!query) {
     query = await promptOrExit(() =>
-      input({ message: "Query the agent under test will receive?", validate: (v) => v.trim().length > 0 || "Required" }),
+      input({
+        message: "Query the agent under test will receive?",
+        validate: (v) => v.trim().length > 0 || "Required",
+      }),
     );
-  }
-
-  if (interactive && agentTemplateId === null) {
-    const tpls = await gqlQuery(ctx.client, AgentTemplatesForEvalDoc, { tenantId: ctx.tenantId });
-    const templates = tpls.agentTemplates ?? [];
-    if (templates.length > 0) {
-      const choice = await promptOrExit(() =>
-        select({
-          message: "Pin to an agent template? (Enter for none)",
-          choices: [
-            { name: "— none — (runner picks)", value: "" },
-            ...templates.map((t) => ({ name: `${t.name}${t.model ? `  (${t.model})` : ""}`, value: t.id })),
-          ],
-          loop: false,
-        }),
-      );
-      agentTemplateId = choice === "" ? null : choice;
-    }
   }
 
   if (interactive && (!evaluators || evaluators.length === 0)) {
     const picked = await promptOrExit(() =>
       checkbox({
         message: "Evaluators to run for this test case?",
-        choices: DEFAULT_EVALUATORS.map((e) => ({ name: e, value: e, checked: e === "Builtin.Helpfulness" })),
+        choices: DEFAULT_EVALUATORS.map((e) => ({
+          name: e,
+          value: e,
+          checked: e === "Builtin.Helpfulness",
+        })),
         loop: false,
       }),
     );
     evaluators = picked;
   }
 
-  let assertions: Array<{ type: string; value?: string | null; path?: string | null }> | null = null;
+  let assertions: Array<{
+    type: string;
+    value?: string | null;
+    path?: string | null;
+  }> | null = null;
   if (opts.assertionsFile) {
     const parsed = JSON.parse(readFileSync(opts.assertionsFile, "utf8"));
     if (!Array.isArray(parsed)) {
@@ -113,7 +118,8 @@ export async function runEvalTestCaseCreate(opts: CreateOptions): Promise<void> 
       query: query!,
       systemPrompt: opts.systemPrompt ?? null,
       agentTemplateId,
-      agentcoreEvaluatorIds: evaluators && evaluators.length > 0 ? evaluators : null,
+      agentcoreEvaluatorIds:
+        evaluators && evaluators.length > 0 ? evaluators : null,
       tags: opts.tag && opts.tag.length > 0 ? opts.tag : null,
       enabled: opts.enabled ?? true,
       assertions,

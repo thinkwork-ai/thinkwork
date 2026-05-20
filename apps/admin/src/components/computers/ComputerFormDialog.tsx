@@ -10,7 +10,7 @@ import { useMutation, useQuery } from "urql";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { toast } from "sonner";
 import { useTenant } from "@/context/TenantContext";
 import { Button } from "@/components/ui/button";
@@ -25,13 +25,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Form,
   FormControl,
   FormField,
@@ -40,7 +33,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import {
-  ComputerTemplatesListQuery,
   CreateComputerMutation,
   SetComputerAssignmentsMutation,
   TenantMembersListQuery,
@@ -48,11 +40,9 @@ import {
 import { buildComputerAssignmentTargets } from "@/lib/computer-assignment-utils";
 import { ComputerScope } from "@/gql/graphql";
 
-const PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG = "thinkwork-computer-default";
-
 const computerSchema = z.object({
   name: z.string().min(1, "Name is required").trim(),
-  templateId: z.string().min(1, "Template is required"),
+  templateId: z.string().min(1, "Base template ID is required"),
   budgetDollars: z.string().optional(),
 });
 
@@ -97,17 +87,7 @@ export function ComputerFormDialog({
     variables: { tenantId: tenantId! },
     pause: !tenantId || !open,
   });
-  const [templatesResult] = useQuery({
-    query: ComputerTemplatesListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId || !open,
-  });
-
-  const queriesFetching = membersResult.fetching || templatesResult.fetching;
-  const queriesReady =
-    !queriesFetching &&
-    membersResult.data != null &&
-    templatesResult.data != null;
+  const queriesReady = !membersResult.fetching && membersResult.data != null;
 
   const users = useMemo(
     () =>
@@ -121,8 +101,6 @@ export function ComputerFormDialog({
         })),
     [membersResult.data],
   );
-  const computerTemplates = templatesResult.data?.computerTemplates ?? [];
-
   const form = useForm<ComputerFormValues>({
     resolver: zodResolver(computerSchema),
     defaultValues: DEFAULT_VALUES,
@@ -140,21 +118,6 @@ export function ComputerFormDialog({
     wasOpenRef.current = open;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (computerTemplates.length === 0) return;
-    if (form.getValues("templateId")) return;
-    const platformDefault = computerTemplates.find(
-      (template) => template.slug === PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG,
-    );
-    const presetTemplate =
-      platformDefault?.id ?? computerTemplates[0]?.id ?? "";
-    if (presetTemplate) {
-      form.setValue("templateId", presetTemplate, { shouldDirty: false });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, computerTemplates]);
 
   const submittingRef = useRef(false);
 
@@ -248,49 +211,11 @@ export function ComputerFormDialog({
                   render={({ field }) => (
                     <FormItem className="space-y-1.5">
                       <FormLabel className="text-xs text-muted-foreground">
-                        Template
+                        Base template ID
                       </FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={
-                          !queriesReady || computerTemplates.length === 0
-                        }
-                      >
-                        <FormControl>
-                          <SelectTrigger className="text-sm">
-                            {queriesFetching ? (
-                              <span className="flex items-center gap-2 text-muted-foreground">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Loading templates...
-                              </span>
-                            ) : computerTemplates.length === 0 ? (
-                              <span className="text-muted-foreground">
-                                No Computer templates available
-                              </span>
-                            ) : (
-                              <SelectValue placeholder="Select template..." />
-                            )}
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {computerTemplates.map((template) => (
-                            <SelectItem
-                              key={template.id}
-                              value={template.id}
-                              className="text-sm"
-                            >
-                              {template.name}
-                              {template.slug ===
-                                PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG && (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                  default
-                                </span>
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Input className="text-sm" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
