@@ -29,7 +29,7 @@ describe("ThreadComposer", () => {
     fireEvent.change(screen.getByPlaceholderText("Message"), {
       target: { value: "@coor" },
     });
-    fireEvent.click(await screen.findByRole("button", { name: /Coordinator/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /Coordinator/ }));
     fireEvent.change(screen.getByPlaceholderText("Message"), {
       target: { value: "@Coordinator please check credit" },
     });

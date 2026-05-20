@@ -1,14 +1,12 @@
-import { ArrowLeft, Moon, Sun } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Button, ToggleGroup, ToggleGroupItem, useTheme } from "@thinkwork/ui";
+import { Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 
 export function AppTopBar() {
-  const { theme, toggleTheme } = useTheme();
   const { actions } = usePageHeader();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const next = theme === "dark" ? "light" : "dark";
 
   if (actions?.hideTopBar) return null;
 
@@ -95,20 +93,6 @@ export function AppTopBar() {
         {actions?.action ? (
           <div className="flex shrink-0 items-center">{actions.action}</div>
         ) : null}
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={`Switch to ${next} mode`}
-          title={`Switch to ${next} mode`}
-          onClick={toggleTheme}
-          className="text-muted-foreground"
-        >
-          {theme === "dark" ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
-        </Button>
       </div>
     </header>
   );

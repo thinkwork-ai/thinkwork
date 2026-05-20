@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
   spaceAgentAssignments,
   spaceMembers,
+  tenantMembers,
   threadParticipants,
   threads,
   users,
@@ -44,9 +45,7 @@ export async function loadThreadMentionTargets(
   });
 }
 
-class DrizzleThreadMentionTargetsRepository
-  implements ThreadMentionTargetsRepository
-{
+class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepository {
   private readonly db = getDb();
 
   async loadThread(input: { tenantId: string; threadId: string }) {
@@ -160,6 +159,62 @@ class DrizzleThreadMentionTargetsRepository
       }
     }
 
+    const tenantMemberRows = await this.db
+      .select({
+        role: tenantMembers.role,
+        userId: users.id,
+        userName: users.name,
+        userEmail: users.email,
+        userImage: users.image,
+      })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.principal_id))
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, input.tenantId),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
+    for (const row of tenantMemberRows) {
+      addTarget(byKey, {
+        id: `user:${row.userId}`,
+        targetType: "user",
+        targetId: row.userId,
+        displayName: row.userName ?? row.userEmail ?? "User",
+        aliases: [row.userName, row.userEmail].filter(isString),
+        avatarUrl: row.userImage,
+        role: row.role,
+      });
+    }
+
+    const tenantAgentRows = await this.db
+      .select({
+        role: agents.role,
+        agentId: agents.id,
+        agentName: agents.name,
+        agentSlug: agents.slug,
+        agentAvatarUrl: agents.avatar_url,
+      })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.tenant_id, input.tenantId),
+          ne(agents.status, "archived"),
+        ),
+      );
+    for (const row of tenantAgentRows) {
+      addTarget(byKey, {
+        id: `agent:${row.agentId}`,
+        targetType: "agent",
+        targetId: row.agentId,
+        displayName: row.agentName,
+        aliases: [row.agentName, row.agentSlug].filter(isString),
+        avatarUrl: row.agentAvatarUrl,
+        role: row.role,
+      });
+    }
+
     return [...byKey.values()].filter((target) => target.targetId);
   }
 }
@@ -206,7 +261,8 @@ function addTarget(
   target: ThreadMentionTarget | null,
 ) {
   if (!target?.targetId) return;
-  byKey.set(`${target.targetType}:${target.targetId}`, target);
+  const key = `${target.targetType}:${target.targetId}`;
+  if (!byKey.has(key)) byKey.set(key, target);
 }
 
 function isString(value: unknown): value is string {

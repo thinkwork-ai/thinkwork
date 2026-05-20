@@ -37,8 +37,9 @@ export interface ThreadDetailActionsProps {
   threadId: string;
   threadTitle: string;
   attachedArtifacts: AttachedArtifactSummary[];
-  /** Test seam: override the navigate destination after destructive actions. */
+  /** Test seam: override the navigate destination after archive/delete fallbacks. */
   onDoneNavigateTo?: string;
+  onDeleted?: (threadId: string) => Promise<void> | void;
 }
 
 export function ThreadDetailActions(props: ThreadDetailActionsProps) {
@@ -59,7 +60,7 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
         return;
       }
       toast.success("Thread archived.");
-      void navigate({ to: props.onDoneNavigateTo ?? "/threads" });
+      void navigate({ to: props.onDoneNavigateTo ?? "/new" });
     } catch (err) {
       console.error("[ThreadDetailActions] archive failed", err);
       toast.error(
@@ -141,7 +142,8 @@ export function ThreadDeleteDialog({
   threadId,
   threadTitle,
   attachedArtifacts,
-  onDoneNavigateTo = "/threads",
+  onDoneNavigateTo = "/new",
+  onDeleted,
   open,
   onOpenChange,
 }: ThreadDeleteDialogProps) {
@@ -165,8 +167,7 @@ export function ThreadDeleteDialog({
         );
         deletedArtifactCount = results.filter(
           (r) =>
-            r.status === "fulfilled" &&
-            !(r.value as { error?: unknown }).error,
+            r.status === "fulfilled" && !(r.value as { error?: unknown }).error,
         ).length;
       }
 
@@ -193,7 +194,16 @@ export function ThreadDeleteDialog({
         toast.success("Thread deleted.");
       }
       onOpenChange(false);
-      void navigate({ to: onDoneNavigateTo });
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:thread-deleted", {
+          detail: { threadId },
+        }),
+      );
+      if (onDeleted) {
+        await onDeleted(threadId);
+      } else {
+        void navigate({ to: onDoneNavigateTo });
+      }
     } catch (err) {
       setThreadDeletePending(threadId, false);
       console.error("[ThreadDetailActions] delete failed", err);

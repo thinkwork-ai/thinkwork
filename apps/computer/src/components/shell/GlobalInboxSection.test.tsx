@@ -2,9 +2,15 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
+  Link: ({
+    children,
+    to,
+    params,
+  }: {
+    children: React.ReactNode;
+    to: string;
+    params?: Record<string, string>;
+  }) => <a href={to.replace("$id", params?.id ?? "$id")}>{children}</a>,
 }));
 
 vi.mock("@thinkwork/ui", () => ({
@@ -23,7 +29,7 @@ import { GlobalInboxSection } from "./GlobalInboxSection";
 afterEach(cleanup);
 
 describe("GlobalInboxSection", () => {
-  it("renders unread inbox rows with Space labels", () => {
+  it("renders unread inbox rows as compact title-only items", () => {
     render(
       <GlobalInboxSection
         totalCount={1}
@@ -42,7 +48,12 @@ describe("GlobalInboxSection", () => {
 
     expect(screen.getByText("Inbox (1)")).toBeTruthy();
     expect(screen.getByText("Blog Post on Mentions V2 Project")).toBeTruthy();
-    expect(screen.getByText("Marketing")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /blog post on mentions v2 project/i })
+        .getAttribute("href"),
+    ).toBe("/threads/thread-1");
+    expect(screen.queryByText("Marketing")).toBeNull();
     expect(screen.getByRole("button", { name: /mark as read/i })).toBeTruthy();
   });
 

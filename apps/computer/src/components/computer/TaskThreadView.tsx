@@ -1,4 +1,5 @@
 import {
+  AtSign,
   ArrowUp,
   Bot,
   ChevronDown,
@@ -16,9 +17,11 @@ import {
   Children,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import {
@@ -69,6 +72,11 @@ import {
   type GeneratedArtifact,
 } from "@/components/computer/GeneratedArtifactCard";
 import { StreamingMessageBuffer } from "@/components/computer/StreamingMessageBuffer";
+import {
+  filterMentionTargets,
+  MentionMenu,
+  type MentionTarget,
+} from "@/components/spaces/MentionMenu";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const SHIMMER_TEXT = "Processing...";
@@ -125,7 +133,19 @@ interface TaskThreadViewProps {
   streamState?: UIMessageStreamState;
   runbookQueues?: RunbookQueueData[];
   isSending?: boolean;
-  onSendFollowUp?: (content: string, files?: File[]) => Promise<void> | void;
+  mentionTargets?: MentionTarget[];
+  onSendFollowUp?: (
+    content: string,
+    files?: File[],
+    mentions?: ComposerMention[],
+  ) => Promise<void> | void;
+}
+
+export interface ComposerMention {
+  targetType: "USER" | "AGENT";
+  targetId: string;
+  displayName: string;
+  rawText: string;
 }
 
 export function TaskThreadView({
@@ -136,6 +156,7 @@ export function TaskThreadView({
   streamState,
   runbookQueues = [],
   isSending = false,
+  mentionTargets = [],
   onSendFollowUp,
 }: TaskThreadViewProps) {
   if (isLoading) {
@@ -161,9 +182,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-      !showStreamingBuffer &&
-      !showProcessingShimmer,
+    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+    !showStreamingBuffer &&
+    !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -219,6 +240,7 @@ export function TaskThreadView({
             taskQueue={promptTaskQueue}
             disabled={!onSendFollowUp || isSending}
             isSending={isSending}
+            mentionTargets={mentionTargets}
             onSubmit={onSendFollowUp}
           />
         </div>
@@ -688,18 +710,41 @@ function FollowUpComposer({
   taskQueue,
   disabled,
   isSending,
+  mentionTargets,
   onSubmit,
 }: {
   taskQueue?: ActiveTaskQueue | null;
   disabled?: boolean;
   isSending?: boolean;
-  onSubmit?: (content: string, files?: File[]) => Promise<void> | void;
+  mentionTargets: MentionTarget[];
+  onSubmit?: (
+    content: string,
+    files?: File[],
+    mentions?: ComposerMention[],
+  ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
+  const [mentions, setMentions] = useState<ComposerMention[]>([]);
+  const mentionQuery = useMemo(
+    () => currentMentionQuery(composer.text),
+    [composer.text],
+  );
+  const mentionOptions = useMemo(
+    () =>
+      mentionQuery === null
+        ? []
+        : filterMentionTargets(mentionTargets, mentionQuery),
+    [mentionQuery, mentionTargets],
+  );
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const canSubmit =
     (composer.text.trim().length > 0 || composer.files.length > 0) &&
     !disabled &&
     !isSending;
+
+  useEffect(() => {
+    setActiveMentionIndex(0);
+  }, [mentionQuery, mentionOptions.length]);
 
   // Plan-012 U13: in-thread composer migrated to AI Elements
   // <PromptInput>. Shares useComposerState with the empty-thread
@@ -721,8 +766,13 @@ function FollowUpComposer({
       // blob and rebuild File objects so the route's upload helper can
       // POST the bytes through presign + PUT + finalize.
       const files = await fileUiPartsToFiles(message.files);
-      await onSubmit(composer.text.trim(), files);
+      const content = composer.text.trim();
+      const submittedMentions = mentions.filter((mention) =>
+        content.includes(mention.rawText),
+      );
+      await onSubmit(content, files, submittedMentions);
       composer.clear();
+      setMentions([]);
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
     } finally {
@@ -731,6 +781,56 @@ function FollowUpComposer({
   }
 
   const hasTaskQueue = Boolean(taskQueue);
+
+  function selectMention(target: MentionTarget) {
+    const replacement = `@${target.displayName} `;
+    const query = mentionQuery ?? "";
+    const prefix = composer.text.slice(
+      0,
+      composer.text.length - query.length - 1,
+    );
+    composer.setText(`${prefix}${replacement}`);
+    setMentions((current) => [
+      ...current.filter(
+        (mention) =>
+          !(
+            mention.targetType === target.targetType &&
+            mention.targetId === target.targetId
+          ),
+      ),
+      {
+        targetType: target.targetType,
+        targetId: target.targetId,
+        displayName: target.displayName,
+        rawText: replacement.trim(),
+      },
+    ]);
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionQuery === null || mentionOptions.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveMentionIndex((index) => (index + 1) % mentionOptions.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveMentionIndex(
+        (index) => (index - 1 + mentionOptions.length) % mentionOptions.length,
+      );
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const target =
+        mentionOptions[
+          Math.min(activeMentionIndex, Math.max(mentionOptions.length - 1, 0))
+        ];
+      if (target) selectMention(target);
+    }
+  }
 
   return (
     <div
@@ -743,50 +843,76 @@ function FollowUpComposer({
       {taskQueue ? (
         <PromptTaskQueue key={taskQueue.id} queue={taskQueue.data} />
       ) : null}
-      <PromptInput
-        className={cn(
-          "text-white transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
-          hasTaskQueue
-            ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
-            : "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:shadow-lg",
-        )}
-        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-        maxFiles={5}
-        maxFileSize={25 * 1024 * 1024}
-        multiple
-        onError={(err) => composer.setError(err.message)}
-        onSubmit={handlePromptSubmit}
-      >
-        <PromptInputBody>
-          <PromptInputAttachments>
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-          <PromptInputTextarea
-            aria-label="Follow up"
-            className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
-            value={composer.text}
-            onChange={(event) => composer.setText(event.target.value)}
-            placeholder="Type a command, attach an .xlsx / .csv..."
-            disabled={disabled}
+      <div className="relative">
+        {mentionQuery !== null ? (
+          <MentionMenu
+            targets={mentionTargets}
+            query={mentionQuery}
+            activeIndex={activeMentionIndex}
+            onSelect={selectMention}
           />
-        </PromptInputBody>
-        <PromptInputFooter className="px-2 pb-2">
-          <PromptInputTools>
-            <PromptInputAttachButton />
-          </PromptInputTools>
-          <PromptInputSubmit
-            className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
-            disabled={!canSubmit}
-            status={isSending ? "submitted" : undefined}
-            aria-label={isSending ? "Sending" : "Send"}
-          />
-        </PromptInputFooter>
-      </PromptInput>
+        ) : null}
+        <PromptInput
+          className={cn(
+            "text-white transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
+            hasTaskQueue
+              ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
+              : "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:shadow-lg",
+          )}
+          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+          maxFiles={5}
+          maxFileSize={25 * 1024 * 1024}
+          multiple
+          onError={(err) => composer.setError(err.message)}
+          onSubmit={handlePromptSubmit}
+        >
+          <PromptInputBody>
+            <PromptInputAttachments>
+              {(attachment) => <PromptInputAttachment data={attachment} />}
+            </PromptInputAttachments>
+            <PromptInputTextarea
+              aria-label="Follow up"
+              className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
+              value={composer.text}
+              onChange={(event) => composer.setText(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder="Type a command, attach an .xlsx / .csv..."
+              disabled={disabled}
+            />
+          </PromptInputBody>
+          <PromptInputFooter className="px-2 pb-2">
+            <PromptInputTools>
+              <PromptInputButton
+                type="button"
+                variant="ghost"
+                onClick={() => composer.setText(`${composer.text}@`)}
+                aria-label="Mention"
+                title="Mention"
+                className="text-white hover:bg-white/10"
+              >
+                <AtSign className="h-4 w-4" />
+              </PromptInputButton>
+              <PromptInputAttachButton />
+            </PromptInputTools>
+            <PromptInputSubmit
+              className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
+              disabled={!canSubmit}
+              status={isSending ? "submitted" : undefined}
+              aria-label={isSending ? "Sending" : "Send"}
+            />
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
       {composer.error ? (
         <p className="text-sm text-destructive">{composer.error}</p>
       ) : null}
     </div>
   );
+}
+
+function currentMentionQuery(content: string): string | null {
+  const match = content.match(/(?:^|\s)@([\w.'-]*)$/u);
+  return match ? match[1] : null;
 }
 
 function PromptTaskQueue({ queue }: { queue: TaskQueueData }) {

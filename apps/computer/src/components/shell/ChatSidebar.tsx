@@ -1,22 +1,48 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
-import { Ellipsis, MessageCircle, Plus, Search } from "lucide-react";
-import { Button, Input, SidebarGroup, SidebarGroupLabel } from "@thinkwork/ui";
+import {
+  Anchor,
+  Archive,
+  ArrowLeft,
+  GitBranch,
+  Globe,
+  Keyboard,
+  MessageCirclePlus,
+  Monitor,
+  Paperclip,
+  Search,
+  Settings,
+  Shield,
+  SlidersHorizontal,
+  Sun,
+  User,
+} from "lucide-react";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SidebarGroup,
+} from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { SpacesQuery, ThreadsPagedQuery } from "@/lib/graphql-queries";
 import {
-  ChatGlobalInboxQuery,
-  SpacesQuery,
-  ThreadsPagedQuery,
-} from "@/lib/graphql-queries";
+  clearMissingThreadDeletes,
+  usePendingThreadDeletes,
+} from "@/lib/pending-thread-deletes";
 import { cn } from "@/lib/utils";
-import { GlobalInboxSection } from "./GlobalInboxSection";
-import { SpaceNavSection } from "./SpaceNavSection";
 import {
-  formatRelativeDate,
   groupThreadsByRecency,
   isThreadUnread,
-  threadActivityAt,
+  sortThreadsByActivityDesc,
   threadTitle,
   type ChatThreadSummary,
   type SpaceNavSummary,
@@ -33,24 +59,40 @@ interface SpacesResult {
   spaces?: SpaceNavSummary[] | null;
 }
 
-const INBOX_LIMIT = 8;
-const RECENT_LIMIT = 30;
+const RECENT_LIMIT = 60;
+const SEARCH_LIMIT = 30;
 
 export function ChatSidebar() {
   const { tenantId } = useTenant();
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
-  const activeSpaceId =
-    typeof location.search?.spaceId === "string"
-      ? location.search.spaceId
-      : routeSpaceId;
+  const routeThreadId = threadIdFromThreadPath(location.pathname);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | undefined>();
+  const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
+    routeThreadId,
+  );
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const pendingThreadDeletes = usePendingThreadDeletes();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
     return () => window.clearTimeout(timeout);
   }, [search]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const [{ data: spacesData, fetching: spacesFetching, error: spacesError }] =
     useQuery<SpacesResult>({
@@ -60,123 +102,214 @@ export function ChatSidebar() {
       requestPolicy: "cache-and-network",
     });
 
-  const [{ data: inboxData, fetching: inboxFetching, error: inboxError }] =
-    useQuery<ThreadsPagedResult>({
-      query: ChatGlobalInboxQuery,
-      variables: {
-        tenantId: tenantId ?? "",
-        limit: INBOX_LIMIT,
-      },
-      pause: !tenantId,
-      requestPolicy: "cache-and-network",
-    });
-
-  const [{ data: recentData, fetching: recentFetching, error: recentError }] =
-    useQuery<ThreadsPagedResult>({
-      query: ThreadsPagedQuery,
-      variables: {
-        tenantId: tenantId ?? "",
-        search: debouncedSearch.trim() || undefined,
-        showArchived: false,
-        sortField: "updated",
-        sortDir: "desc",
-        spaceId: activeSpaceId,
-        limit: RECENT_LIMIT,
-        offset: 0,
-      },
-      pause: !tenantId,
-      requestPolicy: "cache-and-network",
-    });
-
   const spaces = spacesData?.spaces ?? [];
-  const inboxThreads = inboxData?.threadsPaged?.items ?? [];
-  const recentThreads = recentData?.threadsPaged?.items ?? [];
-  const activeSpace = activeSpaceId
-    ? spaces.find((space) => space.id === activeSpaceId)
-    : null;
+  const defaultSpaceId =
+    spaces.find((space) => isGeneralSpace(space))?.id ?? spaces[0]?.id;
+  const activeSpaceId = selectedSpaceId ?? routeSpaceId ?? defaultSpaceId;
+
+  const [
+    { data: recentData, fetching: recentFetching, error: recentError },
+    reexecuteRecentThreadsQuery,
+  ] = useQuery<ThreadsPagedResult>({
+    query: ThreadsPagedQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      showArchived: false,
+      sortField: "updated",
+      sortDir: "desc",
+      spaceId: activeSpaceId,
+      limit: RECENT_LIMIT,
+      offset: 0,
+    },
+    pause: !tenantId || !activeSpaceId,
+    requestPolicy: "cache-and-network",
+  });
+
+  const [
+    { data: searchData, fetching: searchFetching, error: searchError },
+    reexecuteSearchThreadsQuery,
+  ] = useQuery<ThreadsPagedResult>({
+    query: ThreadsPagedQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      search: debouncedSearch.trim() || undefined,
+      showArchived: false,
+      sortField: "updated",
+      sortDir: "desc",
+      spaceId: activeSpaceId,
+      limit: SEARCH_LIMIT,
+      offset: 0,
+    },
+    pause: !tenantId || !activeSpaceId || !searchOpen,
+    requestPolicy: "cache-and-network",
+  });
+
+  useEffect(() => {
+    function handleThreadDeleted() {
+      reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+      reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+    }
+
+    function handleThreadSelected(event: Event) {
+      const detail = (event as CustomEvent<ThreadSelectedDetail>).detail;
+      if (!detail?.threadId) return;
+      setSelectedThreadId(detail.threadId);
+      if (detail.spaceId) {
+        setSelectedSpaceId(detail.spaceId);
+      }
+    }
+
+    window.addEventListener("thinkwork:thread-deleted", handleThreadDeleted);
+    window.addEventListener("thinkwork:thread-selected", handleThreadSelected);
+    return () => {
+      window.removeEventListener(
+        "thinkwork:thread-deleted",
+        handleThreadDeleted,
+      );
+      window.removeEventListener(
+        "thinkwork:thread-selected",
+        handleThreadSelected,
+      );
+    };
+  }, [reexecuteRecentThreadsQuery, reexecuteSearchThreadsQuery]);
+
+  useEffect(() => {
+    if (routeThreadId) {
+      setSelectedThreadId(routeThreadId);
+    } else if (location.pathname === "/new") {
+      setSelectedThreadId(undefined);
+    }
+  }, [location.pathname, routeThreadId]);
+
+  useEffect(() => {
+    if (!recentData?.threadsPaged?.items) return;
+    clearMissingThreadDeletes(
+      recentData.threadsPaged.items.map((thread) => thread.id),
+    );
+  }, [recentData?.threadsPaged?.items]);
+
+  const recentThreads = useMemo(
+    () =>
+      sortThreadsByActivityDesc(recentData?.threadsPaged?.items ?? []).filter(
+        (thread) => !pendingThreadDeletes.has(thread.id),
+      ),
+    [pendingThreadDeletes, recentData?.threadsPaged?.items],
+  );
   const recentGroups = useMemo(
     () => groupThreadsByRecency(recentThreads),
     [recentThreads],
   );
+  const searchThreads = useMemo(
+    () =>
+      sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
+        (thread) => !pendingThreadDeletes.has(thread.id),
+      ),
+    [pendingThreadDeletes, searchData?.threadsPaged?.items],
+  );
+
+  if (settingsOpen) {
+    return (
+      <>
+        <SettingsNav onBack={() => setSettingsOpen(false)} />
+        <ThreadSearchDialog
+          open={searchOpen}
+          onOpenChange={setSearchOpen}
+          search={search}
+          onSearchChange={setSearch}
+          threads={searchThreads}
+          isLoading={searchFetching && !searchData}
+          error={searchError?.message ?? null}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 space-y-2 px-3 pb-3 group-data-[collapsible=icon]:hidden">
-        <div className="flex items-center gap-2">
-          <label className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/55" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="h-9 rounded-md border-sidebar-border bg-sidebar-accent/45 pl-9 text-sidebar-foreground placeholder:text-sidebar-foreground/55"
-              placeholder="Search"
-              aria-label="Search Chat threads"
-            />
-          </label>
-          <Button asChild size="sm" className="h-9 shrink-0 gap-1.5">
+      <div className="shrink-0 px-3 pb-3 group-data-[collapsible=icon]:hidden">
+        <nav className="space-y-1" aria-label="Chat actions">
+          <Button asChild variant="ghost" className={navItemClassName}>
             <Link to="/new">
-              <MessageCircle className="size-4" />
-              New
+              <MessageCirclePlus className="size-4 shrink-0" />
+              <span>New chat</span>
             </Link>
+          </Button>
+          <Select
+            value={activeSpaceId}
+            onValueChange={(value) => {
+              setSelectedSpaceId(value);
+            }}
+            disabled={!tenantId || spaces.length === 0 || spacesFetching}
+          >
+            <SelectTrigger
+              aria-label="Switch Space"
+              className={cn(
+                navItemClassName,
+                "border-0 bg-transparent shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 dark:bg-transparent dark:hover:bg-sidebar-accent [&>span]:flex [&>span]:min-w-0 [&>span]:flex-1 [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
+              )}
+            >
+              <IconPlanet className="size-4 shrink-0" />
+              <SelectValue placeholder="General" />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              side="bottom"
+              align="start"
+              sideOffset={4}
+              avoidCollisions={false}
+              className="w-[var(--radix-select-trigger-width)] p-2"
+            >
+              {spaces.map((space) => (
+                <SelectItem
+                  key={space.id}
+                  value={space.id}
+                  className="h-8 px-2 pr-10 text-sm leading-none"
+                >
+                  {space.name ?? space.slug ?? "Space"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="ghost"
+            className={navItemClassName}
+            onClick={() => setSearchOpen(true)}
+          >
+            <Search className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 text-left">Search</span>
+            <span className="text-xs text-sidebar-foreground/45">⌘K</span>
           </Button>
           <Button
             type="button"
-            variant="outline"
-            size="icon-sm"
-            className="h-9 w-9 shrink-0 border-sidebar-border bg-sidebar"
-            aria-label="Chat options"
-            disabled
+            variant="ghost"
+            className={navItemClassName}
+            onClick={() => setSettingsOpen(true)}
           >
-            <Ellipsis className="size-4" />
+            <Settings className="size-4 shrink-0" />
+            <span>Settings</span>
           </Button>
-        </div>
-        {activeSpace ? (
-          <div className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/30 px-2 py-1.5 text-xs text-sidebar-foreground/70">
-            <span className="min-w-0 flex-1 truncate">
-              Space:{" "}
-              <span className="font-medium text-sidebar-foreground">
-                {activeSpace.name ?? activeSpace.slug}
-              </span>
-            </span>
-            <Link
-              to="/threads"
-              search={{}}
-              className="shrink-0 font-medium text-sidebar-foreground hover:underline"
-            >
-              All
-            </Link>
-          </div>
+        </nav>
+        {spacesError ? (
+          <p className="mt-2 px-2 text-xs text-destructive">
+            Spaces failed to load.
+          </p>
         ) : null}
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
-        <GlobalInboxSection
-          threads={inboxThreads}
-          totalCount={inboxData?.threadsPaged?.totalCount ?? 0}
-          isLoading={inboxFetching && !inboxData}
-          error={inboxError?.message ?? null}
-        />
-        <SpaceNavSection
-          spaces={spaces}
-          activeSpaceId={activeSpaceId}
-          isLoading={spacesFetching && !spacesData}
-          error={spacesError?.message ?? null}
-        />
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
-          <SidebarGroupLabel className="h-auto px-0 text-[0.78rem] font-semibold text-sidebar-foreground">
-            {activeSpace ? activeSpace.name : "Conversations"}
-          </SidebarGroupLabel>
           {recentError ? (
             <p className="rounded-md border border-destructive/40 px-2 py-2 text-xs text-destructive">
               {recentError.message}
             </p>
           ) : recentFetching && !recentData ? (
             <p className="px-2 py-2 text-xs text-sidebar-foreground/60">
-              Loading conversations...
+              Loading threads...
             </p>
           ) : recentThreads.length === 0 ? (
             <p className="px-2 py-2 text-xs text-sidebar-foreground/55">
-              No conversations yet
+              No threads yet
             </p>
           ) : (
             <div className="space-y-3">
@@ -190,11 +323,8 @@ export function ChatSidebar() {
                       <ChatThreadRow
                         key={thread.id}
                         thread={thread}
-                        active={
-                          location.pathname === `/threads/${thread.id}` ||
-                          location.pathname ===
-                            `/spaces/${thread.spaceId}/threads/${thread.id}`
-                        }
+                        active={selectedThreadId === thread.id}
+                        onActivate={() => setSelectedThreadId(thread.id)}
                       />
                     ))}
                   </div>
@@ -204,6 +334,137 @@ export function ChatSidebar() {
           )}
         </SidebarGroup>
       </div>
+
+      <ThreadSearchDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        search={search}
+        onSearchChange={setSearch}
+        threads={searchThreads}
+        isLoading={searchFetching && !searchData}
+        error={searchError?.message ?? null}
+      />
+    </div>
+  );
+}
+
+function ThreadSearchDialog({
+  open,
+  onOpenChange,
+  search,
+  onSearchChange,
+  threads,
+  isLoading,
+  error,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  search: string;
+  onSearchChange: (value: string) => void;
+  threads: ChatThreadSummary[];
+  isLoading: boolean;
+  error: string | null;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <DialogTitle className="sr-only">Search threads</DialogTitle>
+        <div className="border-b p-3">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              className="h-10 border-0 bg-transparent pl-9 text-base shadow-none focus-visible:ring-0"
+              placeholder="Search threads"
+              aria-label="Search threads"
+            />
+          </label>
+        </div>
+        <div className="max-h-[420px] overflow-y-auto p-2">
+          {error ? (
+            <p className="px-2 py-3 text-sm text-destructive">{error}</p>
+          ) : isLoading ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">
+              Searching...
+            </p>
+          ) : threads.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">
+              No threads found
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {threads.map((thread) => (
+                <Link
+                  key={thread.id}
+                  to="/threads/$id"
+                  params={{ id: thread.id }}
+                  className="flex h-9 items-center gap-2 rounded-md px-2 text-sm outline-none hover:bg-accent focus-visible:bg-accent"
+                  onClick={() => onOpenChange(false)}
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      isThreadUnread(thread) ? "bg-blue-500" : "bg-transparent",
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    {threadTitle(thread)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SettingsNav({ onBack }: { onBack: () => void }) {
+  const items = [
+    { label: "General", icon: Settings, active: true },
+    { label: "Appearance", icon: Sun },
+    { label: "Configuration", icon: Shield },
+    { label: "Personalization", icon: User },
+    { label: "Keyboard shortcuts", icon: Keyboard },
+    { label: "MCP servers", icon: Paperclip },
+    { label: "Hooks", icon: Anchor },
+    { label: "Connections", icon: Globe },
+    { label: "Git", icon: GitBranch },
+    { label: "Environments", icon: Monitor },
+    { label: "Worktrees", icon: SlidersHorizontal },
+    { label: "Browser", icon: Monitor },
+    { label: "Computer use", icon: SlidersHorizontal },
+    { label: "Archived chats", icon: Archive },
+  ];
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 group-data-[collapsible=icon]:hidden">
+      <button
+        type="button"
+        className="mb-3 flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground/65 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        onClick={onBack}
+      >
+        <ArrowLeft className="size-4" />
+        <span>Back to app</span>
+      </button>
+      <nav className="space-y-1" aria-label="Settings">
+        {items.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            className={cn(
+              navItemClassName,
+              item.active && "bg-sidebar-accent text-sidebar-accent-foreground",
+            )}
+          >
+            <item.icon className="size-4 shrink-0" />
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
@@ -211,63 +472,69 @@ export function ChatSidebar() {
 function ChatThreadRow({
   thread,
   active,
+  onActivate,
 }: {
   thread: ChatThreadSummary;
   active: boolean;
+  onActivate: () => void;
 }) {
   const unread = isThreadUnread(thread);
-  const activity = threadActivityAt(thread);
   const content = (
     <>
       <span
         className={cn(
-          "mt-1.5 size-1.5 shrink-0 rounded-full",
+          "size-1.5 shrink-0 rounded-full",
           unread ? "bg-blue-500" : "bg-transparent",
         )}
       />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">{threadTitle(thread)}</span>
-        <span className="mt-0.5 flex min-w-0 items-center justify-between gap-2 text-xs text-sidebar-foreground/50">
-          <span className="truncate">
-            {thread.space?.name ?? thread.identifier ?? "General"}
-          </span>
-          <span className="shrink-0">{formatRelativeDate(activity)}</span>
-        </span>
+      <span className="min-w-0 flex-1 truncate text-sm">
+        {threadTitle(thread)}
       </span>
     </>
   );
-
-  if (thread.spaceId) {
-    return (
-      <Link
-        to="/spaces/$spaceId/threads/$threadId"
-        params={{ spaceId: thread.spaceId, threadId: thread.id }}
-        className={threadRowClass(active)}
-      >
-        {content}
-      </Link>
-    );
-  }
 
   return (
     <Link
       to="/threads/$id"
       params={{ id: thread.id }}
       className={threadRowClass(active)}
+      onClick={onActivate}
     >
       {content}
     </Link>
   );
 }
 
+const navItemClassName =
+  "flex h-8 w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 text-sm font-normal text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+
 function threadRowClass(active: boolean) {
   return cn(
-    "flex min-w-0 items-start gap-2 rounded-md px-2 py-2 text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+    "flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
     active && "bg-sidebar-accent text-sidebar-accent-foreground",
+  );
+}
+
+function isGeneralSpace(space: SpaceNavSummary) {
+  return (
+    space.slug?.toLowerCase() === "general" ||
+    space.name?.toLowerCase() === "general"
   );
 }
 
 function spaceIdFromThreadPath(pathname: string) {
   const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
   return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function threadIdFromThreadPath(pathname: string) {
+  const canonicalMatch = /^\/threads\/([^/]+)$/.exec(pathname);
+  if (canonicalMatch) return decodeURIComponent(canonicalMatch[1]);
+  const spaceMatch = /^\/spaces\/[^/]+\/threads\/([^/]+)$/.exec(pathname);
+  return spaceMatch ? decodeURIComponent(spaceMatch[1]) : undefined;
+}
+
+interface ThreadSelectedDetail {
+  threadId?: string | null;
+  spaceId?: string | null;
 }

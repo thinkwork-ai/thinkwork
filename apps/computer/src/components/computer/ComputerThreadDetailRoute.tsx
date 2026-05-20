@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import {
   TaskThreadView,
   normalizePersistedParts,
+  type ComposerMention,
   type TaskThread,
 } from "@/components/computer/TaskThreadView";
 import { ThreadDetailActions } from "@/components/computer/ThreadDetailActions";
+import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -16,9 +19,15 @@ import {
   RunbookRunsQuery,
   SendMessageMutation,
   ThreadArtifactsQuery,
+  ThreadMentionTargetsQuery,
+  ThreadsPagedQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
+import {
+  sortThreadsByActivityDesc,
+  type ChatThreadSummary,
+} from "@/components/shell/chat-sidebar-types";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
@@ -37,8 +46,10 @@ interface ThreadResult {
     computerId?: string | null;
     title?: string | null;
     status?: string | null;
+    spaceId?: string | null;
     lifecycleStatus?: string | null;
     costSummary?: number | null;
+    createdAt?: string | null;
     messages?: {
       edges?: Array<{
         node: {
@@ -112,12 +123,23 @@ interface RunbookRunsResult {
   }> | null;
 }
 
+interface MentionTargetsResult {
+  threadMentionTargets?: MentionTarget[] | null;
+}
+
+interface ThreadNavigationResult {
+  threadsPaged?: {
+    items?: ChatThreadSummary[] | null;
+  } | null;
+}
+
 export function ComputerThreadDetailRoute({
   threadId,
-  backHref = "/threads",
+  backHref,
   documentTitlePrefix = "Thread",
 }: ComputerThreadDetailRouteProps) {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(
     null,
   );
@@ -149,6 +171,30 @@ export function ComputerThreadDetailRoute({
       })),
     [attachedData?.artifacts],
   );
+  const createdLabel = formatThreadCreatedAt(data?.thread?.createdAt);
+  const [{ data: mentionTargetsData }, reexecuteMentionTargetsQuery] =
+    useQuery<MentionTargetsResult>({
+      query: ThreadMentionTargetsQuery,
+      variables: { threadId },
+      pause: !threadId,
+      requestPolicy: "cache-and-network",
+    });
+  const activeSpaceId = data?.thread?.spaceId ?? undefined;
+  const [{ data: navigationData }, reexecuteNavigationQuery] =
+    useQuery<ThreadNavigationResult>({
+      query: ThreadsPagedQuery,
+      variables: {
+        tenantId: tenantId ?? "",
+        showArchived: false,
+        sortField: "updated",
+        sortDir: "desc",
+        spaceId: activeSpaceId,
+        limit: 60,
+        offset: 0,
+      },
+      pause: !tenantId || !data?.thread,
+      requestPolicy: "cache-and-network",
+    });
 
   usePageHeaderActions({
     backHref,
@@ -159,13 +205,44 @@ export function ComputerThreadDetailRoute({
     // "Thread" inside the page the user is already on.
     documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
     action: (
-      <ThreadDetailActions
-        threadId={threadId}
-        threadTitle={threadTitle}
-        attachedArtifacts={attachedArtifacts}
-      />
+      <div className="flex items-center gap-2">
+        {createdLabel ? (
+          <span className="hidden whitespace-nowrap text-xs text-muted-foreground tabular-nums sm:inline">
+            {createdLabel}
+          </span>
+        ) : null}
+        <ThreadDetailActions
+          threadId={threadId}
+          threadTitle={threadTitle}
+          attachedArtifacts={attachedArtifacts}
+          onDeleted={async (deletedThreadId) => {
+            const nextThreadId = selectReplacementThreadId(
+              navigationData?.threadsPaged?.items ?? [],
+              deletedThreadId,
+            );
+            reexecuteNavigationQuery({ requestPolicy: "network-only" });
+            if (nextThreadId) {
+              window.dispatchEvent(
+                new CustomEvent("thinkwork:thread-selected", {
+                  detail: {
+                    threadId: nextThreadId,
+                    spaceId: activeSpaceId ?? null,
+                  },
+                }),
+              );
+              await navigate({
+                to: "/threads/$id",
+                params: { id: nextThreadId },
+                replace: true,
+              });
+            } else {
+              await navigate({ to: "/new", replace: true });
+            }
+          }}
+        />
+      </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}`,
   });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
@@ -269,11 +346,13 @@ export function ComputerThreadDetailRoute({
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+      reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
     messageUpdate?.onNewMessage?.threadId,
     reexecuteEventsQuery,
+    reexecuteMentionTargetsQuery,
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
@@ -362,7 +441,8 @@ export function ComputerThreadDetailRoute({
       streamingChunks={hasDurableAssistant ? [] : chunks}
       streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
-      onSendFollowUp={async (content, files) => {
+      mentionTargets={mentionTargetsData?.threadMentionTargets ?? []}
+      onSendFollowUp={async (content, files, mentions = []) => {
         setOptimisticMessage(content);
         resetStreamingChunks();
 
@@ -402,6 +482,12 @@ export function ComputerThreadDetailRoute({
           role: "USER";
           content: string;
           metadata?: string;
+          mentions?: Array<{
+            targetType: "USER" | "AGENT";
+            targetId: string;
+            displayName: string;
+            rawText: string;
+          }>;
         } = {
           threadId,
           role: "USER",
@@ -409,6 +495,9 @@ export function ComputerThreadDetailRoute({
         };
         if (attachmentRefs.length > 0) {
           sendInput.metadata = JSON.stringify({ attachments: attachmentRefs });
+        }
+        if (mentions.length > 0) {
+          sendInput.mentions = mentions.map(toSendMention);
         }
         const result = await sendMessage({ input: sendInput });
         if (result.error) {
@@ -423,6 +512,44 @@ export function ComputerThreadDetailRoute({
       runbookQueues={runbookQueues}
     />
   );
+}
+
+function toSendMention(mention: ComposerMention) {
+  return {
+    targetType: mention.targetType,
+    targetId: mention.targetId,
+    displayName: mention.displayName,
+    rawText: mention.rawText,
+  };
+}
+
+export function selectReplacementThreadId(
+  threads: ChatThreadSummary[],
+  deletedThreadId: string,
+) {
+  const orderedThreads = sortThreadsByActivityDesc(threads);
+  const index = orderedThreads.findIndex(
+    (thread) => thread.id === deletedThreadId,
+  );
+  const remaining = orderedThreads.filter(
+    (thread) => thread.id !== deletedThreadId,
+  );
+  if (remaining.length === 0) return null;
+  if (index < 0) return remaining[0]?.id ?? null;
+  return remaining[Math.min(index, remaining.length - 1)]?.id ?? null;
+}
+
+function formatThreadCreatedAt(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function withOptimisticUserTurn(
@@ -617,9 +744,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 

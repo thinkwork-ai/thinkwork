@@ -7,8 +7,12 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
-import { ComputerThreadDetailRoute } from "./ComputerThreadDetailRoute";
+import {
+  ComputerThreadDetailRoute,
+  selectReplacementThreadId,
+} from "./ComputerThreadDetailRoute";
 
 vi.mock("urql", async (importOriginal) => {
   const actual = await importOriginal<typeof import("urql")>();
@@ -30,6 +34,16 @@ vi.mock("@/components/apps/InlineAppletEmbed", () => ({
   ),
 }));
 
+vi.mock("@tanstack/react-router", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+  };
+});
+
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-1" }),
 }));
@@ -50,9 +64,11 @@ const resetStreamingChunks = vi.fn();
 let threadData: unknown;
 let taskData: unknown;
 let eventData: unknown;
+let mentionTargetsData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
+  vi.mocked(usePageHeaderActions).mockReset();
   reexecuteThreadQuery.mockReset();
   reexecuteTasksQuery.mockReset();
   sendMessage.mockReset();
@@ -62,6 +78,7 @@ beforeEach(() => {
     thread: {
       id: "thread-1",
       computerId: "computer-1",
+      spaceId: "space-1",
       title: "Route streaming thread",
       lifecycleStatus: "RUNNING",
       messages: {
@@ -92,6 +109,7 @@ beforeEach(() => {
     ],
   };
   eventData = { computerEvents: [] };
+  mentionTargetsData = { threadMentionTargets: [] };
 
   vi.mocked(useMutation).mockReturnValue([
     { fetching: false, stale: false, hasNext: false },
@@ -120,6 +138,9 @@ beforeEach(() => {
     if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
     }
+    if (variables?.threadId) {
+      return [queryState(mentionTargetsData), vi.fn()];
+    }
     if (variables?.limit) return [queryState(eventData), vi.fn()];
     return [queryState(null), vi.fn()];
   });
@@ -128,6 +149,39 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ComputerThreadDetailRoute", () => {
+  it("selects the visible thread below the deleted thread after sorting by activity", () => {
+    expect(
+      selectReplacementThreadId(
+        [
+          {
+            id: "above",
+            title: "Above",
+            lastActivityAt: "2026-05-10T12:00:00Z",
+          },
+          {
+            id: "below",
+            title: "Below",
+            lastActivityAt: "2026-05-10T10:00:00Z",
+          },
+          {
+            id: "deleted",
+            title: "Deleted",
+            lastActivityAt: "2026-05-10T11:00:00Z",
+          },
+        ],
+        "deleted",
+      ),
+    ).toBe("below");
+  });
+
+  it("does not register a header back button by default", () => {
+    render(<ComputerThreadDetailRoute threadId="thread-1" />);
+
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ backHref: expect.any(String) }),
+    );
+  });
+
   it("does not refetch the full thread for turn-only status updates", () => {
     let subscriptionCall = 0;
     vi.mocked(useSubscription).mockImplementation(() => {

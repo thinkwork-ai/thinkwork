@@ -31,7 +31,9 @@ function ShellLayout() {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={{ "--sidebar-width": "300px" } as React.CSSProperties}
+    >
       <ComputerSidebar />
       <SidebarInset className="min-h-0 min-w-0 h-svh flex flex-col">
         <AppTopBar />
