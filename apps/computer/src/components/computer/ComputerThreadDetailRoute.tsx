@@ -24,6 +24,10 @@ import {
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
+import {
+  sortThreadsByActivityDesc,
+  type ChatThreadSummary,
+} from "@/components/shell/chat-sidebar-types";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
@@ -125,7 +129,7 @@ interface MentionTargetsResult {
 
 interface ThreadNavigationResult {
   threadsPaged?: {
-    items?: Array<{ id: string }> | null;
+    items?: ChatThreadSummary[] | null;
   } | null;
 }
 
@@ -519,12 +523,17 @@ function toSendMention(mention: ComposerMention) {
   };
 }
 
-function selectReplacementThreadId(
-  threads: Array<{ id: string }>,
+export function selectReplacementThreadId(
+  threads: ChatThreadSummary[],
   deletedThreadId: string,
 ) {
-  const index = threads.findIndex((thread) => thread.id === deletedThreadId);
-  const remaining = threads.filter((thread) => thread.id !== deletedThreadId);
+  const orderedThreads = sortThreadsByActivityDesc(threads);
+  const index = orderedThreads.findIndex(
+    (thread) => thread.id === deletedThreadId,
+  );
+  const remaining = orderedThreads.filter(
+    (thread) => thread.id !== deletedThreadId,
+  );
   if (remaining.length === 0) return null;
   if (index < 0) return remaining[0]?.id ?? null;
   return remaining[Math.min(index, remaining.length - 1)]?.id ?? null;

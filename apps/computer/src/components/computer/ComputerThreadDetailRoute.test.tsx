@@ -9,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
-import { ComputerThreadDetailRoute } from "./ComputerThreadDetailRoute";
+import {
+  ComputerThreadDetailRoute,
+  selectReplacementThreadId,
+} from "./ComputerThreadDetailRoute";
 
 vi.mock("urql", async (importOriginal) => {
   const actual = await importOriginal<typeof import("urql")>();
@@ -146,6 +149,31 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ComputerThreadDetailRoute", () => {
+  it("selects the visible thread below the deleted thread after sorting by activity", () => {
+    expect(
+      selectReplacementThreadId(
+        [
+          {
+            id: "above",
+            title: "Above",
+            lastActivityAt: "2026-05-10T12:00:00Z",
+          },
+          {
+            id: "below",
+            title: "Below",
+            lastActivityAt: "2026-05-10T10:00:00Z",
+          },
+          {
+            id: "deleted",
+            title: "Deleted",
+            lastActivityAt: "2026-05-10T11:00:00Z",
+          },
+        ],
+        "deleted",
+      ),
+    ).toBe("below");
+  });
+
   it("does not register a header back button by default", () => {
     render(<ComputerThreadDetailRoute threadId="thread-1" />);
 
