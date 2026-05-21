@@ -159,14 +159,25 @@ export function confirmForgotPassword(
 // ---------------------------------------------------------------------------
 // Sign out
 // ---------------------------------------------------------------------------
+// Clears local Cognito tokens AND the Cognito hosted-UI session cookie by
+// redirecting through `/logout`. Without the hosted-UI logout, a subsequent
+// "Continue with Google" silently re-uses the existing Cognito session and
+// never reaches Google's account chooser.
 export function signOut(): void {
   const pool = getUserPool();
-  if (!pool) return;
+  pool?.getCurrentUser()?.signOut();
 
-  const user = pool.getCurrentUser();
-  if (user) {
-    user.signOut();
+  if (!CLIENT_ID) {
+    window.location.href = "/sign-in";
+    return;
   }
+
+  const logoutUri = `${window.location.origin}/sign-in`;
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    logout_uri: logoutUri,
+  });
+  window.location.href = `${getCognitoDomainBase()}/logout?${params.toString()}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -296,12 +307,16 @@ function getCognitoDomainBase(): string {
 
 export function getGoogleSignInUrl(): string {
   const redirectUri = `${window.location.origin}/auth/callback`;
+  // `prompt=select_account` is forwarded to Google so the account chooser is
+  // shown every time. Without it, Google silently re-uses its session cookie
+  // and the user can never switch identities by signing back in.
   const params = new URLSearchParams({
     identity_provider: "Google",
     response_type: "code",
     client_id: CLIENT_ID,
     redirect_uri: redirectUri,
     scope: "openid email profile",
+    prompt: "select_account",
   });
   return `${getCognitoDomainBase()}/oauth2/authorize?${params.toString()}`;
 }

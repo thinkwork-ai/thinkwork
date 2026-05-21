@@ -89,10 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleSignOut = useCallback(() => {
     stopTokenRefresh();
     setTokenProvider(null);
-    auth.signOut();
     setAuthToken(null);
     setUser(null);
-    window.location.href = "/sign-in";
+    // `auth.signOut()` redirects through Cognito's hosted-UI `/logout` so the
+    // Cognito session cookie is cleared on its way back to `/sign-in`.
+    auth.signOut();
   }, []);
 
   const getToken = useCallback(() => auth.getIdToken(), []);
