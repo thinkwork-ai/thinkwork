@@ -316,7 +316,8 @@ describe("ChatSidebar", () => {
       screen.getByRole("button", { name: /toggle customer onboarding/i }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /settings/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /automations/i })).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: /new thread/i })
@@ -328,7 +329,7 @@ describe("ChatSidebar", () => {
       screen
         .getByRole("button", { name: /^search/i })
         .compareDocumentPosition(
-          screen.getByRole("button", { name: /settings/i }),
+          screen.getByRole("link", { name: /automations/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Chats" })).toBeTruthy();

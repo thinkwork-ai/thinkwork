@@ -14,6 +14,7 @@ import {
   MessageCirclePlus,
   Monitor,
   Paperclip,
+  Repeat,
   Search,
   Settings,
   Shield,
@@ -79,14 +80,22 @@ const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
 const SECTION_THREAD_LIMIT = 5;
 
-export function ChatSidebar() {
+interface ChatSidebarProps {
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
+}
+
+export function ChatSidebar({
+  settingsOpen: controlledSettingsOpen,
+  onSettingsOpenChange,
+}: ChatSidebarProps = {}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [localSettingsOpen, setLocalSettingsOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
   );
@@ -280,6 +289,9 @@ export function ChatSidebar() {
     [pendingThreadDeletes, searchData?.threadsPaged?.items],
   );
 
+  const settingsOpen = controlledSettingsOpen ?? localSettingsOpen;
+  const setSettingsOpen = onSettingsOpenChange ?? setLocalSettingsOpen;
+
   if (settingsOpen) {
     return (
       <>
@@ -317,14 +329,11 @@ export function ChatSidebar() {
             <span className="min-w-0 flex-1 text-left">Search</span>
             <span className="text-xs text-sidebar-foreground/45">⌘K</span>
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className={navItemClassName}
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings className="size-4 shrink-0" />
-            <span>Settings</span>
+          <Button asChild variant="ghost" className={navItemClassName}>
+            <Link to="/automations">
+              <Repeat className="size-4 shrink-0" />
+              <span>Automations</span>
+            </Link>
           </Button>
         </nav>
       </div>
@@ -787,7 +796,7 @@ function ChatThreadRow({
           ) : null}
           <button
             type="button"
-            className="absolute right-0 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
+            className="absolute right-0 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1.5 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
             aria-label={`Delete ${title}`}
             onClick={(event) => {
               event.preventDefault();
