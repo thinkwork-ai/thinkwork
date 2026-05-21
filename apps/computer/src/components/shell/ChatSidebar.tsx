@@ -587,7 +587,7 @@ function SpaceThreadSection({
           )}
         >
           <button type="button" aria-label={`Toggle ${label}`}>
-            <IconPlanet className="mr-2 h-4 w-4 shrink-0" />
+            <IconPlanet className="-ml-1 mr-2 h-4 w-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {space.unreadThreadCount ? (
               <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">

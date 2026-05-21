@@ -90,7 +90,7 @@ export function ComputerSidebar() {
                 ThinkWork
               </span>
               <span className="truncate text-xs text-sidebar-foreground/55">
-                Collaborative app
+                Spaces
               </span>
             </div>
           </Link>

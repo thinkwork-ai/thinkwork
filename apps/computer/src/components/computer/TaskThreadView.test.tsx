@@ -236,7 +236,7 @@ describe("TaskThreadView", () => {
 
     expect(
       screen.getByTestId("thread-conversation-content").className,
-    ).toContain("md:pr-[348px]");
+    ).toContain("md:pr-[316px]");
     expect(
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("max-w-[750px]");
@@ -244,7 +244,7 @@ describe("TaskThreadView", () => {
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("px-3");
     expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
-      "md:pr-[348px]",
+      "md:pr-[316px]",
     );
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");

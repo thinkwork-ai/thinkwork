@@ -288,7 +288,7 @@ export function TaskThreadView({
             data-testid="thread-conversation-content"
             className={cn(
               "w-full gap-0 px-4 pt-10 sm:px-6",
-              infoPanelOpen && "md:pr-[348px]",
+              infoPanelOpen && "md:pr-[316px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
           >
@@ -337,7 +337,7 @@ export function TaskThreadView({
           data-testid="follow-up-composer-dock"
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6",
-            infoPanelOpen && "md:pr-[348px]",
+            infoPanelOpen && "md:pr-[316px]",
           )}
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
