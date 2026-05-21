@@ -82,7 +82,11 @@ def _context():
 def test_format_runbook_context_includes_task_handoff_and_output_contract():
     rendered = format_runbook_context(_context())
 
-    assert "## Runbook Execution Context" in rendered
+    # The ``## Runbook Execution Context`` heading + behavioral preamble
+    # moved to the runbook-execution-contract skill (U4 of plan
+    # 2026-05-21-004). The data renderer now starts with the bullet list.
+    assert "## Runbook Execution Context" not in rendered
+    assert rendered.startswith("- **Runbook:**")
     assert "Research Dashboard" in rendered
     assert "skills/research-dashboard/SKILL.md" in rendered
     assert "`" + "a" * 64 + "`" in rendered

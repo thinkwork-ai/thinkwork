@@ -2924,9 +2924,10 @@ def _execute_agent_turn(payload: dict) -> dict:
         if workflow_block:
             system_prompt += "\n\n---\n\n" + workflow_block
 
-        runbook_block = format_runbook_context(runbook_context)
-        if runbook_block:
-            system_prompt += "\n\n---\n\n" + runbook_block
+        # Runbook DATA block moved to AFTER the system-contract loader call
+        # below (U4 of plan 2026-05-21-004) so the loader-emitted
+        # ``## Runbook Execution Context`` skill heading immediately precedes
+        # the data rows. The data renderer no longer emits the heading.
 
         if knowledge_bases_config and not has_workspace_map:
             try:
@@ -2963,6 +2964,13 @@ def _execute_agent_turn(payload: dict) -> dict:
             variables=contract_variables,
         ):
             system_prompt += "\n\n---\n\n" + contract_body
+
+        # Runbook DATA block (task list, phase metadata, prior outputs). Lives
+        # AFTER the loader so the runbook-execution-contract skill's heading
+        # immediately precedes the data rows.
+        runbook_block = format_runbook_context(runbook_context)
+        if runbook_block:
+            system_prompt += "\n\n---\n\n" + runbook_block
 
         start_ms = int(time.time() * 1000)
         response_text, strands_usage = _call_strands_agent(
