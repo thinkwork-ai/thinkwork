@@ -338,7 +338,10 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
               </SelectContent>
             </Select>
           </div>
-        ) : noAssignedComputers && !computersFetching ? (
+        ) : noAssignedComputers &&
+          spaces.length === 0 &&
+          !computersFetching &&
+          !spacesFetching ? (
           <p className="mx-auto max-w-md text-center text-sm text-muted-foreground">
             You do not have access to a workspace yet. Ask your tenant operator
             to assign one before starting work.

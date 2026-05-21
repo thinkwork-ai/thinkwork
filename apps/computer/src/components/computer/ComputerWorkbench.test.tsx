@@ -161,6 +161,20 @@ describe("ComputerWorkbench", () => {
     });
   });
 
+  it("hides the 'no workspace' banner when the user has Spaces but no Computers", () => {
+    // Regression: the banner used to fire on noAssignedComputers alone,
+    // so an invited user with public Spaces still saw "ask your tenant
+    // operator" even though they could submit. Spaces are now the
+    // primary workspace concept; the banner only makes sense when both
+    // computers AND spaces are empty.
+    assignedComputers.splice(0, assignedComputers.length);
+    render(<ComputerWorkbench />);
+
+    expect(
+      screen.queryByText(/You do not have access to a workspace yet/i),
+    ).toBeNull();
+  });
+
   it("creates a Space-first thread when no Computer is assigned", async () => {
     assignedComputers.splice(0, assignedComputers.length);
     createThreadMock.mockResolvedValueOnce({
