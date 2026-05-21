@@ -2903,8 +2903,9 @@ def _execute_agent_turn(payload: dict) -> dict:
         requester_overlay_block = _format_requester_context_overlay(requester_context_overlay)
         if requester_overlay_block:
             system_prompt += "\n\n---\n\n" + requester_overlay_block
-        if eval_mode:
-            system_prompt += "\n\n---\n\n" + _eval_runtime_prompt(eval_tools_enabled)
+        # Eval runtime constraints moved to the eval-runtime-constraints skill
+        # in packages/skill-catalog/ (U3 of plan 2026-05-21-004); appended via
+        # the system_contract_loader call further down.
 
         # U3 of finance pilot — splice the attachment preamble in early so
         # the model sees it before runbook / external / workflow blocks. The
@@ -2950,6 +2951,11 @@ def _execute_agent_turn(payload: dict) -> dict:
         contract_variables: dict[str, str] = {
             "thread_id": ticket_id,
             "prompt": message,
+            "tool_guidance": (
+                "Runtime tools are available only if required by the prompt. "
+                if eval_tools_enabled
+                else "Runtime tools are disabled for this run; answer from the prompt only. "
+            ),
         }
         for contract_body in load_system_contracts(
             SKILL_CATALOG_DIR,
