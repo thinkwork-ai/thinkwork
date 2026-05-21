@@ -131,12 +131,16 @@ async function inviteMemberCore(
     return snakeToCamel(existingMember[0]);
   }
 
-  // 4. Add tenant member
+  // 4. Add tenant member.
+  // principal_type must be lowercase 'user' — every reader gate
+  // (canReadTenantSpaces, requester-context, auth-me role lookup, etc.)
+  // filters on the lowercase value, and a CHECK constraint enforces
+  // lower(principal_type) in drizzle/0118_normalize_tenant_member_principal_type.sql.
   const [row] = await db
     .insert(tenantMembers)
     .values({
       tenant_id: tenantId,
-      principal_type: "USER",
+      principal_type: "user",
       principal_id: cognitoSub,
       role: role ?? "member",
       status: "active",
