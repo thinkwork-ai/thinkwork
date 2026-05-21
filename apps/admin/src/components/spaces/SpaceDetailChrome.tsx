@@ -2,10 +2,18 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Bot, Pause, Play, Repeat, Webhook as WebhookIcon } from "lucide-react";
+import {
+  Bot,
+  Pause,
+  Play,
+  Plus,
+  Repeat,
+  Webhook as WebhookIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
+import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/PageHeader";
@@ -24,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { WebhookFormDialog } from "@/components/webhooks/WebhookFormDialog";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import { type SpaceAdminDetailQuery as SpaceAdminDetailQueryResult } from "@/gql/graphql";
@@ -932,6 +941,8 @@ export function SpaceAutomationsPanel({ space }: { space: Space }) {
   const navigate = useNavigate();
   const [scheduledJobs, setScheduledJobs] = useState<ScheduledJobRow[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [webhookDialogOpen, setWebhookDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -1013,6 +1024,20 @@ export function SpaceAutomationsPanel({ space }: { space: Space }) {
 
   return (
     <section className="space-y-3">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setWebhookDialogOpen(true)}
+        >
+          <Plus className="mr-1 h-4 w-4" />
+          Add Webhook
+        </Button>
+        <Button size="sm" onClick={() => setScheduleDialogOpen(true)}>
+          <Plus className="mr-1 h-4 w-4" />
+          Add Schedule
+        </Button>
+      </div>
       <DataTable
         columns={automationColumns()}
         data={rows}
@@ -1031,6 +1056,38 @@ export function SpaceAutomationsPanel({ space }: { space: Space }) {
           }
         }}
       />
+      {tenantId ? (
+        <>
+          <ScheduledJobFormDialog
+            open={scheduleDialogOpen}
+            onOpenChange={setScheduleDialogOpen}
+            mode="create"
+            tenantId={tenantId}
+            onSubmit={async (data) => {
+              await spaceApiFetch("/api/scheduled-jobs", tenantId, {
+                method: "POST",
+                body: JSON.stringify({ ...data, spaceId: space.id }),
+              });
+              toast.success("Schedule added");
+              await fetchAutomations();
+            }}
+          />
+          <WebhookFormDialog
+            open={webhookDialogOpen}
+            onOpenChange={setWebhookDialogOpen}
+            mode="create"
+            tenantId={tenantId}
+            onSubmit={async (data) => {
+              await spaceApiFetch("/api/webhooks", tenantId, {
+                method: "POST",
+                body: JSON.stringify({ ...data, spaceId: space.id }),
+              });
+              toast.success("Webhook added");
+              await fetchAutomations();
+            }}
+          />
+        </>
+      ) : null}
     </section>
   );
 }
