@@ -24,6 +24,10 @@ const migration0112 = readFileSync(
   join(HERE, "..", "drizzle", "0112_recast_spaces_as_contextual_workrooms.sql"),
   "utf-8",
 );
+const migration0117 = readFileSync(
+  join(HERE, "..", "drizzle", "0117_space_access_mode.sql"),
+  "utf-8",
+);
 
 describe("Spaces schema", () => {
   it("models tenant-scoped Spaces with contextual workroom metadata", () => {
@@ -35,6 +39,8 @@ describe("Spaces schema", () => {
     expect(columns.prompt.notNull).toBe(false);
     expect(columns.status.default).toBe("active");
     expect(columns.kind.default).toBe("custom");
+    expect(columns.access_mode.notNull).toBe(true);
+    expect(columns.access_mode.default).toBe("public");
     expect(columns.icon.notNull).toBe(false);
     expect(columns.category.notNull).toBe(false);
     expect(columns.template_key.notNull).toBe(false);
@@ -125,6 +131,23 @@ describe("Spaces schema", () => {
       "CREATE TRIGGER space_mcp_servers_tenant_guard",
     );
     expect(migration0112).toContain("space MCP server tenant mismatch");
+  });
+
+  it("declares manual migration drift markers for Space access mode", () => {
+    expect(migration0117).toMatch(
+      /--\s*creates-column:\s*public\.spaces\.access_mode\b/,
+    );
+    expect(migration0117).toMatch(
+      /--\s*creates-constraint:\s*public\.spaces\.spaces_access_mode_allowed\b/,
+    );
+    expect(migration0117).toMatch(/ADD COLUMN IF NOT EXISTS access_mode text/);
+    expect(migration0117).toContain(
+      "ALTER COLUMN access_mode SET DEFAULT 'public'",
+    );
+    expect(migration0117).toContain("ALTER COLUMN access_mode SET NOT NULL");
+    expect(migration0117).toContain(
+      "CHECK (access_mode IN ('public','private'))",
+    );
   });
 
   it("guards Space child rows against cross-tenant references", () => {

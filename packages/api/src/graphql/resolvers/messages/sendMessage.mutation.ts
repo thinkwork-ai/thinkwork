@@ -27,6 +27,7 @@ import {
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
 import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-routing.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
+import { callerVisibleThreadPredicate } from "../threads/access.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -53,6 +54,16 @@ export const sendMessage = async (
   if (!thread) throw new Error("Thread not found");
 
   const isUserMessage = i.role.toLowerCase() === "user";
+  if (
+    isUserMessage &&
+    senderType === "user" &&
+    ctx.auth.authType === "cognito" &&
+    !senderId
+  ) {
+    throw new GraphQLError("Requester user identity required", {
+      extensions: { code: "UNAUTHENTICATED" },
+    });
+  }
   if (isUserMessage && thread.computer_id && senderType === "user") {
     if (!senderId) {
       throw new GraphQLError("Requester user identity required", {
@@ -69,6 +80,33 @@ export const sendMessage = async (
       requesterUserId: senderId,
       requestedComputerId: thread.computer_id,
     });
+  }
+  const isClaimingLegacyComputerThread =
+    isUserMessage &&
+    senderType === "user" &&
+    Boolean(thread.computer_id) &&
+    !thread.user_id;
+  if (
+    isUserMessage &&
+    senderType === "user" &&
+    ctx.auth.authType === "cognito" &&
+    !isClaimingLegacyComputerThread
+  ) {
+    const [visibleThread] = await db
+      .select({ id: threads.id })
+      .from(threads)
+      .where(
+        and(
+          eq(threads.id, i.threadId),
+          eq(threads.tenant_id, thread.tenant_id),
+          callerVisibleThreadPredicate(thread.tenant_id, senderId),
+        ),
+      );
+    if (!visibleThread) {
+      throw new GraphQLError("Thread does not belong to requester", {
+        extensions: { code: "FORBIDDEN" },
+      });
+    }
   }
 
   // metadata.attachments is the message ↔ thread_attachments link for the
