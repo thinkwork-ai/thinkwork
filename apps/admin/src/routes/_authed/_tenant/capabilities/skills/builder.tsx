@@ -62,7 +62,7 @@ function SkillBuilderPage() {
   const tenantSlug = tenant?.slug;
   const navigate = useNavigate();
   useBreadcrumbs([
-    { label: "Skills and Tools", href: "/capabilities" },
+    { label: "Tools", href: "/capabilities" },
     { label: "Skills", href: "/capabilities/skills" },
     { label: "Build New Skill" },
   ]);

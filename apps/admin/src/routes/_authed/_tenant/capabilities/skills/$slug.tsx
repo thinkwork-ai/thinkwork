@@ -237,7 +237,7 @@ function SkillDetailPage() {
   >([]);
 
   useBreadcrumbs([
-    { label: "Skills and Tools", href: "/capabilities" },
+    { label: "Tools", href: "/capabilities" },
     { label: "Skills", href: "/capabilities/skills" },
     { label: skill?.name || slug },
   ]);

@@ -13,6 +13,11 @@ describe("capabilities layout", () => {
     expect(indexSource).toContain('to: "/capabilities/builtin-tools"');
   });
 
+  it("labels the capabilities studio as Tools", () => {
+    expect(layoutSource).toMatch(/<h1[^>]*>\s*Tools\s*<\/h1>/s);
+    expect(layoutSource).not.toContain("Skills and Tools");
+  });
+
   it("puts built-in tools first and hides unsupported plugins", () => {
     const builtinIndex = layoutSource.indexOf('value="builtin-tools"');
     const skillsIndex = layoutSource.indexOf('value="skills"');

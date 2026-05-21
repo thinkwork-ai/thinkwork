@@ -13,7 +13,11 @@ describe("ontology studio route", () => {
   it("registers Ontology under the agentic OS navigation group", () => {
     expect(sidebarSource).toContain('label: "Ontology"');
     expect(sidebarSource).toContain('to: "/ontology"');
-    expect(sidebarSource.indexOf('label: "Skills and Tools"')).toBeLessThan(
+    expect(sidebarSource).toContain("PocketKnife");
+    expect(sidebarSource).toContain(
+      '{ to: "/capabilities", icon: PocketKnife, label: "Tools" }',
+    );
+    expect(sidebarSource.indexOf('label: "Tools"')).toBeLessThan(
       sidebarSource.indexOf('label: "Memory"'),
     );
     expect(sidebarSource.indexOf('label: "Memory"')).toBeLessThan(

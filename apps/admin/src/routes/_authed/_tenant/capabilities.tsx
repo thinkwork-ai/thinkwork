@@ -25,7 +25,7 @@ function CapabilitiesLayout() {
         <div className="grid grid-cols-3 items-center">
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight leading-tight text-foreground">
-              Skills and Tools
+              Tools
             </h1>
           </div>
           <div className="flex justify-center">

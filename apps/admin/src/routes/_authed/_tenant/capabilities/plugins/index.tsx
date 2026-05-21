@@ -84,7 +84,7 @@ const columns: ColumnDef<PluginUploadRow>[] = [
 
 function PluginsPage() {
   useBreadcrumbs([
-    { label: "Skills and Tools", href: "/capabilities" },
+    { label: "Tools", href: "/capabilities" },
     { label: "Plugins" },
   ]);
 
