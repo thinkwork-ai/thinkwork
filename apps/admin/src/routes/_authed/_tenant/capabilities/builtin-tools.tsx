@@ -265,7 +265,7 @@ function BuiltinToolsPage() {
   const tenantSlug = tenant?.slug;
   const tenantId = tenant?.id;
   useBreadcrumbs([
-    { label: "Skills and Tools", href: "/capabilities" },
+    { label: "Tools", href: "/capabilities" },
     { label: "Built-in Tools" },
   ]);
 

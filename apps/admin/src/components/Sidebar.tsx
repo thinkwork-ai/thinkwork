@@ -11,6 +11,7 @@ import {
   Settings,
   CreditCard,
   Puzzle,
+  PocketKnife,
   Brain,
   Network,
   Webhook,
@@ -251,7 +252,7 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agents", icon: Bot, label: "Agents" },
     { to: "/spaces", icon: IconPlanet, label: "Spaces" },
-    { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
+    { to: "/capabilities", icon: PocketKnife, label: "Tools" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/ontology", icon: Network, label: "Ontology" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
