@@ -1,4 +1,11 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -6,6 +13,8 @@ const {
   tenantMock,
   locationMock,
   navigateMock,
+  deleteThreadMock,
+  updateThreadMock,
   recentThreadItemsMock,
   recentReexecuteMock,
   searchReexecuteMock,
@@ -13,6 +22,8 @@ const {
   tenantMock: vi.fn(),
   locationMock: vi.fn(),
   navigateMock: vi.fn(),
+  deleteThreadMock: vi.fn(),
+  updateThreadMock: vi.fn(),
   recentThreadItemsMock: [] as Array<{
     id: string;
     title: string;
@@ -25,8 +36,10 @@ const {
   searchReexecuteMock: vi.fn(),
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
+    DeleteThreadMutation: Symbol("DeleteThreadMutation"),
     SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
+    UpdateThreadMutation: Symbol("UpdateThreadMutation"),
   },
 }));
 
@@ -35,6 +48,13 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("@/lib/graphql-queries", () => queryDocs);
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -68,6 +88,15 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("urql", () => ({
+  useMutation: (mutation: unknown) => {
+    if (mutation === queryDocs.DeleteThreadMutation) {
+      return [{ fetching: false }, deleteThreadMock];
+    }
+    if (mutation === queryDocs.UpdateThreadMutation) {
+      return [{ fetching: false }, updateThreadMock];
+    }
+    return [{ fetching: false }, vi.fn()];
+  },
   useQuery: ({ query }: { query: unknown }) => {
     if (query === queryDocs.SpacesQuery) {
       return [
@@ -212,6 +241,8 @@ afterEach(() => {
   tenantMock.mockReset();
   locationMock.mockReset();
   navigateMock.mockReset();
+  deleteThreadMock.mockReset();
+  updateThreadMock.mockReset();
   recentReexecuteMock.mockReset();
   searchReexecuteMock.mockReset();
   recentThreadItemsMock.length = 0;
@@ -219,6 +250,8 @@ afterEach(() => {
 
 describe("ChatSidebar", () => {
   beforeEach(() => {
+    deleteThreadMock.mockResolvedValue({ data: { deleteThread: true } });
+    updateThreadMock.mockResolvedValue({ data: { updateThread: { id: "t" } } });
     recentThreadItemsMock.push({
       id: "thread-recent",
       title: "Recent Space thread",
@@ -291,7 +324,8 @@ describe("ChatSidebar", () => {
       screen.getByRole("button", { name: /toggle customer onboarding/i }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /settings/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /automations/i })).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: /new thread/i })
@@ -303,27 +337,30 @@ describe("ChatSidebar", () => {
       screen
         .getByRole("button", { name: /^search/i })
         .compareDocumentPosition(
-          screen.getByRole("button", { name: /settings/i }),
+          screen.getByRole("link", { name: /automations/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Chats" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Spaces" })).toBeTruthy();
-    expect(container.querySelector(".lucide-folder-open")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
+    expect(container.querySelector(".tabler-icon-planet")).toBeTruthy();
+    expect(container.querySelector(".lucide-folder")).toBeNull();
     expect(
       screen.getByRole("link", { name: /default chat/i }).getAttribute("href"),
     ).toBe("/threads/thread-default");
     expect(
       screen.getByRole("link", { name: /general chat/i }).getAttribute("href"),
     ).toBe("/threads/thread-general");
-    expect(
-      screen
-        .getByRole("link", { name: /recent space thread/i })
-        .getAttribute("href"),
-    ).toBe("/spaces/space-1/threads/thread-recent");
+    const spaceThreadLink = screen.getByRole("link", {
+      name: /recent space thread/i,
+    });
+    expect(spaceThreadLink.getAttribute("href")).toBe(
+      "/spaces/space-1/threads/thread-recent",
+    );
+    expect(spaceThreadLink.className).not.toContain("ml-5");
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
 
-  it("uses Space thread route params without showing a list title above Today", () => {
+  it("uses Space thread route params without showing a list title above thread rows", () => {
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
       pathname: "/spaces/space-1/threads/thread-recent",
@@ -336,11 +373,94 @@ describe("ChatSidebar", () => {
       screen.queryByRole("heading", { name: "Customer Onboarding" }),
     ).toBeNull();
     expect(screen.queryByRole("heading", { name: "Conversations" })).toBeNull();
+    expect(screen.queryByText("Today")).toBeNull();
+    expect(screen.queryByText("Yesterday")).toBeNull();
+    expect(screen.queryByText("Older")).toBeNull();
     expect(
       screen
         .getByRole("link", { name: /recent space thread/i })
         .getAttribute("href"),
     ).toBe("/spaces/space-1/threads/thread-recent");
+  });
+
+  it("limits chat sections to five rows until Show more is clicked", () => {
+    recentThreadItemsMock.length = 0;
+    for (let index = 1; index <= 12; index += 1) {
+      recentThreadItemsMock.push({
+        id: `thread-${index}`,
+        title: `Chat ${index}`,
+        lastActivityAt: new Date(Date.now() - index * 60_000).toISOString(),
+        lastReadAt: new Date().toISOString(),
+      });
+    }
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    expect(screen.getByText("Chat 1")).toBeTruthy();
+    expect(screen.getByText("Chat 5")).toBeTruthy();
+    expect(screen.queryByText("Chat 6")).toBeNull();
+    expect(screen.queryByText("Today")).toBeNull();
+    expect(screen.queryByText("Yesterday")).toBeNull();
+    expect(screen.queryByText("Older")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more (7)" }));
+
+    expect(screen.getByText("Chat 6")).toBeTruthy();
+    expect(screen.getByText("Chat 10")).toBeTruthy();
+    expect(screen.queryByText("Chat 11")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more (2)" }));
+
+    expect(screen.getByText("Chat 11")).toBeTruthy();
+    expect(screen.getByText("Chat 12")).toBeTruthy();
+  });
+
+  it("shows compact relative dates and deletes after inline confirmation", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "delete-me",
+      title: "Delete me",
+      lastActivityAt: new Date(
+        Date.now() - 4 * 60 * 60_000 - 5 * 60_000,
+      ).toISOString(),
+      lastReadAt: new Date().toISOString(),
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads/delete-me",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    expect(screen.getByText("4h")).toBeTruthy();
+
+    const deleteButton = () =>
+      screen.getByRole("button", { name: /delete delete me/i });
+
+    fireEvent.click(deleteButton());
+    const confirmButton = screen.getByRole("button", { name: "Confirm" });
+    fireEvent.mouseLeave(confirmButton);
+
+    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+    expect(deleteButton()).toBeTruthy();
+    expect(deleteThreadMock).not.toHaveBeenCalled();
+
+    fireEvent.click(deleteButton());
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(deleteThreadMock).toHaveBeenCalledWith({ id: "delete-me" }),
+    );
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/new",
+        search: { spaceId: undefined },
+        replace: true,
+      }),
+    );
   });
 
   it("highlights the replacement thread selected after delete", () => {
@@ -369,6 +489,42 @@ describe("ChatSidebar", () => {
 
     expect(replacementLink.className).toMatch(
       /(?:^|\s)bg-sidebar-accent(?:\s|$)/,
+    );
+  });
+
+  it("clears the unread dot immediately and persists read state when a thread is viewed", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "unread-thread",
+      title: "Unread thread",
+      lastActivityAt: "2026-05-10T12:00:00Z",
+      lastReadAt: null,
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    const unreadLink = screen.getByRole("link", { name: /unread thread/i });
+    expect(unreadLink.innerHTML).toContain("bg-blue-500");
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:thread-selected", {
+          detail: { threadId: "unread-thread" },
+        }),
+      );
+    });
+
+    expect(unreadLink.innerHTML).not.toContain("bg-blue-500");
+    await waitFor(() =>
+      expect(updateThreadMock).toHaveBeenCalledWith({
+        id: "unread-thread",
+        input: { lastReadAt: expect.any(String) },
+      }),
     );
   });
 

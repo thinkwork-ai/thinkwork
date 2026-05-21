@@ -15,19 +15,74 @@ export interface GeneratedArtifact {
 
 interface GeneratedArtifactCardProps {
   artifact: GeneratedArtifact;
+  onOpenArtifact?: (artifactId: string) => void;
 }
 
 export function GeneratedArtifactCard({
   artifact,
+  onOpenArtifact,
 }: GeneratedArtifactCardProps) {
-  const isAppArtifact =
-    artifact.type === "APPLET" ||
-    artifact.type === "DATA_VIEW" ||
-    artifact.metadata?.kind === "computer_applet" ||
-    artifact.metadata?.kind === "research_dashboard" ||
-    artifact.metadata?.uiSurface === "app";
+  const appArtifact = isAppArtifact(artifact);
+  const label = appArtifact ? "App" : (artifact.type ?? "Artifact");
+  const description =
+    artifact.summary?.trim() ||
+    (appArtifact ? "Open in side panel" : "Open artifact");
+  const content = (
+    <>
+      <div className="flex min-w-0 items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
+          <p className="mt-1 truncate text-sm text-[#b4bdcc]">{description}</p>
+        </div>
+        <Badge
+          variant="outline"
+          className="shrink-0 rounded-md border-white/10 bg-white/5 text-xs text-[#aeb7c6]"
+        >
+          {label}
+        </Badge>
+      </div>
+    </>
+  );
 
-  if (isAppArtifact) {
+  if (onOpenArtifact) {
+    return (
+      <button
+        type="button"
+        className="block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => onOpenArtifact(artifact.id)}
+        aria-label={`Open artifact ${artifact.title}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      to="/artifacts/$id"
+      params={{ id: artifact.id }}
+      className="block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`Open artifact ${artifact.title}`}
+    >
+      {content}
+    </Link>
+  );
+}
+
+export function GeneratedArtifactPreview({
+  artifact,
+  bare = false,
+}: {
+  artifact: GeneratedArtifact;
+  bare?: boolean;
+}) {
+  const appArtifact = isAppArtifact(artifact);
+
+  if (appArtifact) {
+    if (bare) {
+      return <InlineAppletEmbed appId={artifact.id} />;
+    }
+
     return (
       <GeneratedAppArtifactShell
         title={artifact.title}
@@ -62,9 +117,7 @@ export function GeneratedArtifactCard({
       <div className="flex items-center gap-3 px-1">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-semibold">
-              {artifact.title}
-            </h3>
+            <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
             <Badge variant="outline" className="rounded-md">
               {artifact.type ?? "Artifact"}
             </Badge>
@@ -86,5 +139,15 @@ export function GeneratedArtifactCard({
         Preview unavailable
       </Button>
     </article>
+  );
+}
+
+export function isAppArtifact(artifact: GeneratedArtifact) {
+  return (
+    artifact.type === "APPLET" ||
+    artifact.type === "DATA_VIEW" ||
+    artifact.metadata?.kind === "computer_applet" ||
+    artifact.metadata?.kind === "research_dashboard" ||
+    artifact.metadata?.uiSurface === "app"
   );
 }

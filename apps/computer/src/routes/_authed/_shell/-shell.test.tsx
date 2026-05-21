@@ -17,9 +17,8 @@ vi.mock("@/components/NoTenantAssigned", () => ({
 }));
 
 vi.mock("@thinkwork/ui", async () => {
-  const actual = await vi.importActual<typeof import("@thinkwork/ui")>(
-    "@thinkwork/ui",
-  );
+  const actual =
+    await vi.importActual<typeof import("@thinkwork/ui")>("@thinkwork/ui");
   return {
     ...actual,
     SidebarProvider: ({ children }: { children: React.ReactNode }) => (
@@ -32,10 +31,9 @@ vi.mock("@thinkwork/ui", async () => {
 });
 
 vi.mock("@tanstack/react-router", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-router")>(
-      "@tanstack/react-router",
-    );
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
   return {
     ...actual,
     createFileRoute: () => (config: { component: React.ComponentType }) =>

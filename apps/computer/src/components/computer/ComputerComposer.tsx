@@ -26,6 +26,7 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import { COMPUTER_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 
 export interface ComputerComposerMention {
   targetType: "USER" | "AGENT";
@@ -97,6 +98,28 @@ export function ComputerComposer({
   useEffect(() => {
     setActiveMentionIndex(0);
   }, [mentionQuery, mentionOptions.length]);
+
+  useEffect(() => {
+    function focusComposerInput() {
+      const input = document.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Ask your Computer"]',
+      );
+      input?.focus();
+    }
+
+    focusComposerInput();
+    const animationFrame = window.requestAnimationFrame(focusComposerInput);
+    const timeout = window.setTimeout(focusComposerInput, 0);
+    window.addEventListener(COMPUTER_COMPOSER_FOCUS_EVENT, focusComposerInput);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeout);
+      window.removeEventListener(
+        COMPUTER_COMPOSER_FOCUS_EVENT,
+        focusComposerInput,
+      );
+    };
+  }, []);
 
   async function handlePromptSubmit(message: PromptInputMessage) {
     if (disabled || isSubmitting) return;

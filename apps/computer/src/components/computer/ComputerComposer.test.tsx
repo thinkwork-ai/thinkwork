@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerComposer } from "./ComputerComposer";
 import { useState } from "react";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
+import { COMPUTER_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 
 afterEach(cleanup);
 
@@ -59,6 +60,33 @@ describe("ComputerComposer focus styling", () => {
 });
 
 describe("ComputerComposer", () => {
+  it("focuses the input when it mounts", async () => {
+    render(
+      <ComputerComposer value="" onChange={() => {}} onSubmit={() => {}} />,
+    );
+
+    const input = screen.getByLabelText("Ask your Computer");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
+  it("refocuses the input when the New thread nav requests focus", async () => {
+    render(
+      <>
+        <button type="button">Other focus target</button>
+        <ComputerComposer value="" onChange={() => {}} onSubmit={() => {}} />
+      </>,
+    );
+
+    const other = screen.getByRole("button", { name: /other focus target/i });
+    const input = screen.getByLabelText("Ask your Computer");
+    other.focus();
+    expect(document.activeElement).toBe(other);
+
+    window.dispatchEvent(new CustomEvent(COMPUTER_COMPOSER_FOCUS_EVENT));
+
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
   it("disables submit for empty prompts", () => {
     render(
       <ComputerComposer value="" onChange={() => {}} onSubmit={() => {}} />,
@@ -84,6 +112,25 @@ describe("ComputerComposer", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("submits a non-empty prompt when Enter is pressed", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <ComputerComposer
+        value="Build a CRM dashboard"
+        onChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByLabelText("Ask your Computer"), {
+      key: "Enter",
+    });
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);

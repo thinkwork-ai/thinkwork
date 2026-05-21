@@ -78,12 +78,223 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
     expect(screen.getByText("Using data_visualization")).toBeTruthy();
     expect(screen.getByText("CRM pipeline risk app")).toBeTruthy();
+    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
     // No turn → no turn-level Thinking; tool calls present → no fallback Thinking;
     // per-message Thinking row was removed because it was a duplicate of the
     // authoritative turn-level row.
     expect(screen.queryByText("Thinking")).toBeNull();
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
+  });
+
+  it("opens a transcript artifact through the artifact panel callback", () => {
+    const onSelectArtifact = vi.fn();
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Build a CRM pipeline dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "I created a dashboard app.",
+              durableArtifact: {
+                id: "artifact_123",
+                title: "CRM pipeline risk app",
+                type: "DATA_VIEW",
+                summary: "Stale opportunity analysis",
+                metadata: { kind: "research_dashboard" },
+              },
+            },
+          ],
+        }}
+        artifactPanelState={{
+          artifacts: [
+            {
+              id: "artifact_123",
+              title: "CRM pipeline risk app",
+              type: "DATA_VIEW",
+              summary: "Stale opportunity analysis",
+              metadata: { kind: "research_dashboard" },
+            },
+          ],
+          selectedArtifactId: "artifact_123",
+          isOpen: false,
+          onOpenChange: vi.fn(),
+          onSelectArtifact,
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open artifact crm pipeline risk app/i,
+      }),
+    );
+
+    expect(onSelectArtifact).toHaveBeenCalledWith("artifact_123");
+    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
+  });
+
+  it("submits the follow-up composer when Enter is pressed", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Build a CRM pipeline dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "I created a dashboard app.",
+            },
+          ],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const input = screen.getByLabelText("Follow up");
+    fireEvent.change(input, { target: { value: "Please continue" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(onSendFollowUp).toHaveBeenCalledWith("Please continue", [], []),
+    );
+  });
+
+  it("renders the selected artifact in the side panel when artifact panel state is open", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Build a CRM pipeline dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "I created a dashboard app.",
+              durableArtifact: {
+                id: "artifact_123",
+                title: "CRM pipeline risk app",
+                type: "DATA_VIEW",
+                summary: "Stale opportunity analysis",
+                metadata: { kind: "research_dashboard" },
+              },
+            },
+          ],
+        }}
+        artifactPanelState={{
+          artifacts: [
+            {
+              id: "artifact_123",
+              title: "CRM pipeline risk app",
+              type: "DATA_VIEW",
+              summary: "Stale opportunity analysis",
+              metadata: { kind: "research_dashboard" },
+            },
+          ],
+          selectedArtifactId: "artifact_123",
+          isOpen: true,
+          onOpenChange: vi.fn(),
+          onSelectArtifact: vi.fn(),
+        }}
+      />,
+    );
+
+    const panel = screen.getByTestId("artifact-side-panel");
+    expect(within(panel).queryByText("CRM pipeline risk app")).toBeNull();
+    expect(within(panel).getByTestId("inline-applet-embed-stub")).toBeTruthy();
+    expect(
+      within(panel).queryByRole("button", { name: /maximize artifact panel/i }),
+    ).toBeNull();
+    expect(
+      within(panel).getByRole("separator", { name: /resize artifact panel/i }),
+    ).toBeTruthy();
+  });
+
+  it("reserves thread width for the info panel with details and downloadable attachments", () => {
+    const onDownloadAttachment = vi.fn();
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Analyze this file",
+            },
+          ],
+        }}
+        infoPanelState={{
+          isOpen: true,
+          onOpenChange: vi.fn(),
+          startedAt: "2026-05-18T20:50:00.000Z",
+          startedBy: "Eric Odom",
+          agents: ["Executive"],
+          attachments: [
+            {
+              id: "attachment-1",
+              name: "general-ledger.xlsx",
+              sizeBytes: 2_048,
+              mimeType:
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              createdAt: "2026-05-18T20:51:00.000Z",
+            },
+          ],
+          onDownloadAttachment,
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("thread-conversation-content").className,
+    ).toContain("md:pr-[324px]");
+    expect(
+      screen.getByTestId("thread-conversation-column").className,
+    ).toContain("max-w-[750px]");
+    expect(
+      screen.getByTestId("thread-conversation-column").className,
+    ).toContain("px-3");
+    expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
+      "md:pr-[324px]",
+    );
+    const panel = screen.getByTestId("thread-info-panel");
+    expect(panel.className).toContain("w-[300px]");
+    expect(panel.className).toContain("absolute");
+    expect(panel.className).toContain("right-6");
+    expect(within(panel).getByText("Date started")).toBeTruthy();
+    expect(within(panel).getByText("Eric Odom")).toBeTruthy();
+    expect(within(panel).getByText("Executive")).toBeTruthy();
+    fireEvent.click(
+      within(panel).getByRole("button", { name: /general-ledger/i }),
+    );
+    expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
   });
 
   it("renders exactly one Thinking row when an assistant message has no tool calls and a turn is running", () => {
@@ -372,6 +583,67 @@ describe("TaskThreadView", () => {
     );
     expect(within(promptQueue).getByText("Summarize evidence")).toBeTruthy();
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
+  });
+
+  it("reserves transcript scroll space for the docked composer and task queue", async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 750,
+        height: 260,
+        top: 0,
+        right: 750,
+        bottom: 260,
+        left: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the CRM dashboard",
+            },
+          ],
+        }}
+        runbookQueues={[
+          {
+            runbookRunId: "run-1",
+            displayName: "CRM Dashboard",
+            status: "COMPLETED",
+            phases: [
+              {
+                id: "produce",
+                title: "Produce",
+                tasks: [
+                  {
+                    id: "task-1",
+                    title: "Build dashboard",
+                    status: "COMPLETED",
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      const transcriptContent = screen
+        .getByText("Run the CRM dashboard")
+        .closest('[style*="padding-bottom"]') as HTMLElement | null;
+      expect(transcriptContent?.style.paddingBottom).toBe("292px");
+    });
+
+    rectSpy.mockRestore();
   });
 
   it("collapses and expands the prompt-area runbook queue", () => {

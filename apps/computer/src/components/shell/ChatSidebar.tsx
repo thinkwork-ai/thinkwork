@@ -1,29 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "urql";
+import { IconPlanet } from "@tabler/icons-react";
+import { useMutation, useQuery } from "urql";
+import { toast } from "sonner";
 import {
   Anchor,
   Archive,
   ArrowLeft,
   ChevronDown,
-  Folder,
-  FolderOpen,
   GitBranch,
   Globe,
   Keyboard,
   MessageCirclePlus,
   Monitor,
   Paperclip,
+  Repeat,
   Search,
   Settings,
   Shield,
   SlidersHorizontal,
   Sun,
+  Trash2,
   User,
 } from "lucide-react";
 import {
-  Button,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -34,19 +34,30 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import { SpacesQuery, ThreadsPagedQuery } from "@/lib/graphql-queries";
+import {
+  DeleteThreadMutation,
+  SpacesQuery,
+  ThreadsPagedQuery,
+  UpdateThreadMutation,
+} from "@/lib/graphql-queries";
+import { requestComputerComposerFocus } from "@/lib/composer-focus";
 import {
   clearMissingThreadDeletes,
+  setThreadDeletePending,
   usePendingThreadDeletes,
 } from "@/lib/pending-thread-deletes";
 import { cn } from "@/lib/utils";
 import {
-  groupThreadsByRecency,
+  formatTinyRelativeDate,
   isThreadUnread,
   selectNextThreadBelowDeleted,
   sortThreadsByActivityDesc,
+  threadActivityAt,
   threadTitle,
   type ChatThreadSummary,
 } from "./chat-sidebar-types";
@@ -71,23 +82,39 @@ interface SpacesResult {
 
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
+const SECTION_THREAD_LIMIT = 5;
 
-export function ChatSidebar() {
+interface ChatSidebarProps {
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
+}
+
+export function ChatSidebar({
+  settingsOpen: controlledSettingsOpen,
+  onSettingsOpenChange,
+}: ChatSidebarProps = {}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
+  const isNewThreadRoute = location.pathname === "/new";
+  const isAutomationsRoute = location.pathname === "/automations";
   const [searchOpen, setSearchOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [localSettingsOpen, setLocalSettingsOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
+  );
+  const [locallyReadThreadIds, setLocallyReadThreadIds] = useState<Set<string>>(
+    () => new Set(routeThreadId ? [routeThreadId] : []),
   );
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const pendingThreadDeletes = usePendingThreadDeletes();
   const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
   const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
+  const persistedReadThreadIdsRef = useRef(new Set<string>());
+  const [, updateThread] = useMutation(UpdateThreadMutation);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
@@ -155,13 +182,53 @@ export function ChatSidebar() {
     requestPolicy: "cache-and-network",
   });
 
+  const persistThreadRead = useCallback(
+    (threadId: string) => {
+      if (persistedReadThreadIdsRef.current.has(threadId)) return;
+      persistedReadThreadIdsRef.current.add(threadId);
+      void updateThread({
+        id: threadId,
+        input: { lastReadAt: new Date().toISOString() },
+      }).then((result) => {
+        if (result.error) {
+          persistedReadThreadIdsRef.current.delete(threadId);
+          console.warn(
+            `[ChatSidebar] failed to mark thread ${threadId} read:`,
+            result.error,
+          );
+        }
+      });
+    },
+    [updateThread],
+  );
+
+  const markThreadRead = useCallback((threadId: string) => {
+    setLocallyReadThreadIds((current) => {
+      if (current.has(threadId)) return current;
+      const next = new Set(current);
+      next.add(threadId);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (routeThreadId) {
       setSelectedThreadId(routeThreadId);
+      markThreadRead(routeThreadId);
+      persistThreadRead(routeThreadId);
     } else if (location.pathname === "/new") {
       setSelectedThreadId(undefined);
     }
-  }, [location.pathname, routeThreadId]);
+  }, [location.pathname, markThreadRead, persistThreadRead, routeThreadId]);
+
+  const activateThread = useCallback(
+    (threadId: string) => {
+      setSelectedThreadId(threadId);
+      markThreadRead(threadId);
+      persistThreadRead(threadId);
+    },
+    [markThreadRead, persistThreadRead],
+  );
 
   useEffect(() => {
     if (!recentData?.threadsPaged?.items) return;
@@ -215,7 +282,7 @@ export function ChatSidebar() {
     function handleThreadSelected(event: Event) {
       const detail = (event as CustomEvent<ThreadSelectedDetail>).detail;
       if (!detail?.threadId) return;
-      setSelectedThreadId(detail.threadId);
+      activateThread(detail.threadId);
     }
 
     window.addEventListener("thinkwork:thread-deleted", handleThreadDeleted);
@@ -230,7 +297,12 @@ export function ChatSidebar() {
         handleThreadSelected,
       );
     };
-  }, [navigate, reexecuteRecentThreadsQuery, reexecuteSearchThreadsQuery]);
+  }, [
+    activateThread,
+    navigate,
+    reexecuteRecentThreadsQuery,
+    reexecuteSearchThreadsQuery,
+  ]);
 
   const recentThreads = useMemo(
     () =>
@@ -246,10 +318,6 @@ export function ChatSidebar() {
       ),
     [defaultSpaceIds, recentThreads],
   );
-  const contextualSpaces = useMemo(
-    () => spaces.filter((space) => !defaultSpaceIds.has(space.id)),
-    [defaultSpaceIds, spaces],
-  );
   const spaceThreadsById = useMemo(() => {
     const grouped = new Map<string, ChatThreadSummary[]>();
     for (const thread of recentThreads) {
@@ -260,6 +328,15 @@ export function ChatSidebar() {
     }
     return grouped;
   }, [defaultSpaceIds, recentThreads]);
+  const contextualSpaces = useMemo(
+    () =>
+      spaces.filter(
+        (space) =>
+          !defaultSpaceIds.has(space.id) &&
+          (spaceThreadsById.get(space.id)?.length ?? 0) > 0,
+      ),
+    [defaultSpaceIds, spaceThreadsById, spaces],
+  );
   const searchThreads = useMemo(
     () =>
       sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
@@ -267,6 +344,9 @@ export function ChatSidebar() {
       ),
     [pendingThreadDeletes, searchData?.threadsPaged?.items],
   );
+
+  const settingsOpen = controlledSettingsOpen ?? localSettingsOpen;
+  const setSettingsOpen = onSettingsOpenChange ?? setLocalSettingsOpen;
 
   if (settingsOpen) {
     return (
@@ -278,6 +358,8 @@ export function ChatSidebar() {
           search={search}
           onSearchChange={setSearch}
           threads={searchThreads}
+          locallyReadThreadIds={locallyReadThreadIds}
+          onActivate={activateThread}
           isLoading={searchFetching && !searchData}
           error={searchError?.message ?? null}
         />
@@ -287,37 +369,53 @@ export function ChatSidebar() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 px-3 pb-3 group-data-[collapsible=icon]:hidden">
-        <nav className="space-y-1" aria-label="Chat actions">
-          <Button asChild variant="ghost" className={navItemClassName}>
-            <Link to="/new" search={{ spaceId: undefined }}>
-              <MessageCirclePlus className="size-4 shrink-0" />
-              <span>New thread</span>
-            </Link>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className={navItemClassName}
-            onClick={() => setSearchOpen(true)}
-          >
-            <Search className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 text-left">Search</span>
-            <span className="text-xs text-sidebar-foreground/45">⌘K</span>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className={navItemClassName}
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings className="size-4 shrink-0" />
-            <span>Settings</span>
-          </Button>
-        </nav>
-      </div>
+      <SidebarGroup className="shrink-0 pb-2 group-data-[collapsible=icon]:hidden">
+        <SidebarGroupContent>
+          <SidebarMenu className="gap-0.5" aria-label="Chat actions">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isNewThreadRoute}
+                tooltip="New thread"
+              >
+                <Link
+                  to="/new"
+                  search={{ spaceId: undefined }}
+                  onClick={requestComputerComposerFocus}
+                >
+                  <MessageCirclePlus />
+                  <span>New thread</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Search">
+                <button type="button" onClick={() => setSearchOpen(true)}>
+                  <Search />
+                  <span className="min-w-0 flex-1 text-left">Search</span>
+                  <span className="ml-auto text-xs text-sidebar-foreground/45">
+                    ⌘K
+                  </span>
+                </button>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isAutomationsRoute}
+                tooltip="Automations"
+              >
+                <Link to="/automations">
+                  <Repeat />
+                  <span>Automations</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
+      <div className="scrollbar-auto-hide min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
           {recentError ? (
             <p className="rounded-md border border-destructive/40 px-2 py-2 text-xs text-destructive">
@@ -341,7 +439,8 @@ export function ChatSidebar() {
                 selectedThreadId={selectedThreadId}
                 defaultOpen={false}
                 emptyBehavior="hidden"
-                onActivate={setSelectedThreadId}
+                locallyReadThreadIds={locallyReadThreadIds}
+                onActivate={activateThread}
               />
               <ThreadListSection
                 label="Chats"
@@ -349,12 +448,10 @@ export function ChatSidebar() {
                 selectedThreadId={selectedThreadId}
                 defaultOpen
                 emptyBehavior="message"
-                onActivate={setSelectedThreadId}
+                locallyReadThreadIds={locallyReadThreadIds}
+                onActivate={activateThread}
               />
               <div className="space-y-1">
-                <SidebarGroupLabel className="px-2 text-xs font-medium text-sidebar-foreground/50">
-                  Spaces
-                </SidebarGroupLabel>
                 {spacesError ? (
                   <p className="px-2 py-1 text-xs text-destructive">
                     {spacesError.message}
@@ -375,7 +472,8 @@ export function ChatSidebar() {
                       threads={spaceThreadsById.get(space.id) ?? []}
                       selectedThreadId={selectedThreadId}
                       activeSpaceId={routeSpaceId}
-                      onActivate={setSelectedThreadId}
+                      locallyReadThreadIds={locallyReadThreadIds}
+                      onActivate={activateThread}
                     />
                   ))
                 )}
@@ -391,6 +489,8 @@ export function ChatSidebar() {
         search={search}
         onSearchChange={setSearch}
         threads={searchThreads}
+        locallyReadThreadIds={locallyReadThreadIds}
+        onActivate={activateThread}
         isLoading={searchFetching && !searchData}
         error={searchError?.message ?? null}
       />
@@ -404,6 +504,8 @@ function ThreadSearchDialog({
   search,
   onSearchChange,
   threads,
+  locallyReadThreadIds,
+  onActivate,
   isLoading,
   error,
 }: {
@@ -412,6 +514,8 @@ function ThreadSearchDialog({
   search: string;
   onSearchChange: (value: string) => void;
   threads: ChatThreadSummary[];
+  locallyReadThreadIds: ReadonlySet<string>;
+  onActivate: (threadId: string) => void;
   isLoading: boolean;
   error: string | null;
 }) {
@@ -432,7 +536,7 @@ function ThreadSearchDialog({
             />
           </label>
         </div>
-        <div className="max-h-[420px] overflow-y-auto p-2">
+        <div className="scrollbar-auto-hide max-h-[420px] overflow-y-auto p-2">
           {error ? (
             <p className="px-2 py-3 text-sm text-destructive">{error}</p>
           ) : isLoading ? (
@@ -451,12 +555,18 @@ function ThreadSearchDialog({
                   to="/threads/$id"
                   params={{ id: thread.id }}
                   className="flex h-9 items-center gap-2 rounded-md px-2 text-sm outline-none hover:bg-accent focus-visible:bg-accent"
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => {
+                    onActivate(thread.id);
+                    onOpenChange(false);
+                  }}
                 >
                   <span
                     className={cn(
                       "size-1.5 shrink-0 rounded-full",
-                      isThreadUnread(thread) ? "bg-blue-500" : "bg-transparent",
+                      isThreadUnread(thread) &&
+                        !locallyReadThreadIds.has(thread.id)
+                        ? "bg-blue-500"
+                        : "bg-transparent",
                     )}
                   />
                   <span className="min-w-0 flex-1 truncate">
@@ -478,6 +588,7 @@ function ThreadListSection({
   selectedThreadId,
   defaultOpen = true,
   emptyBehavior,
+  locallyReadThreadIds,
   onActivate,
 }: {
   label: string;
@@ -485,10 +596,13 @@ function ThreadListSection({
   selectedThreadId?: string;
   defaultOpen?: boolean;
   emptyBehavior: "hidden" | "message";
+  locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
 }) {
+  const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
   if (threads.length === 0 && emptyBehavior === "hidden") return null;
-  const groups = groupThreadsByRecency(threads);
+  const visibleThreads = threads.slice(0, visibleCount);
+  const hiddenCount = threads.length - visibleThreads.length;
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/thread-section">
@@ -510,26 +624,29 @@ function ThreadListSection({
               No threads yet
             </p>
           ) : (
-            <div className="space-y-2">
-              {groups.map((group) => (
-                <div key={group.label}>
-                  {groups.length > 1 ? (
-                    <div className="mb-1 px-2 text-[11px] font-medium text-sidebar-foreground/45">
-                      {group.label}
-                    </div>
-                  ) : null}
-                  <div className="space-y-0.5">
-                    {group.threads.map((thread) => (
-                      <ChatThreadRow
-                        key={thread.id}
-                        thread={thread}
-                        active={selectedThreadId === thread.id}
-                        onActivate={() => onActivate(thread.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
+            <div className="space-y-0.5">
+              {visibleThreads.map((thread) => (
+                <ChatThreadRow
+                  key={thread.id}
+                  thread={thread}
+                  active={selectedThreadId === thread.id}
+                  locallyRead={locallyReadThreadIds.has(thread.id)}
+                  onActivate={() => onActivate(thread.id)}
+                />
               ))}
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+                  onClick={() =>
+                    setVisibleCount((count) =>
+                      Math.min(count + SECTION_THREAD_LIMIT, threads.length),
+                    )
+                  }
+                >
+                  Show more ({hiddenCount})
+                </button>
+              ) : null}
             </div>
           )}
         </SidebarGroupContent>
@@ -543,16 +660,21 @@ function SpaceThreadSection({
   threads,
   selectedThreadId,
   activeSpaceId,
+  locallyReadThreadIds,
   onActivate,
 }: {
   space: SpaceNavSummary;
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
   activeSpaceId?: string;
+  locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
 }) {
   const label = space.name ?? space.slug ?? "Space";
   const isActiveSpace = activeSpaceId === space.id;
+  const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
+  const visibleThreads = threads.slice(0, visibleCount);
+  const hiddenCount = threads.length - visibleThreads.length;
 
   return (
     <Collapsible
@@ -568,8 +690,7 @@ function SpaceThreadSection({
           )}
         >
           <button type="button" aria-label={`Toggle ${label}`}>
-            <Folder className="mr-2 h-4 w-4 shrink-0 group-data-[state=open]/space:hidden" />
-            <FolderOpen className="mr-2 hidden h-4 w-4 shrink-0 group-data-[state=open]/space:block" />
+            <IconPlanet className="-ml-1 mr-2 h-4 w-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {space.unreadThreadCount ? (
               <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
@@ -587,7 +708,7 @@ function SpaceThreadSection({
               to="/spaces/$spaceId"
               params={{ spaceId: space.id }}
               className={cn(
-                "ml-5 flex h-8 min-w-0 items-center rounded-md px-2 text-sm text-sidebar-foreground/55 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                "flex h-8 min-w-0 items-center rounded-md px-2 text-sm text-sidebar-foreground/55 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                 isActiveSpace &&
                   "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
@@ -595,16 +716,30 @@ function SpaceThreadSection({
               <span className="truncate">{label}</span>
             </Link>
           ) : (
-            <div className="ml-5 space-y-0.5">
-              {threads.slice(0, 6).map((thread) => (
+            <div className="space-y-0.5">
+              {visibleThreads.map((thread) => (
                 <ChatThreadRow
                   key={thread.id}
                   thread={thread}
                   active={selectedThreadId === thread.id}
                   spaceRouteId={space.id}
+                  locallyRead={locallyReadThreadIds.has(thread.id)}
                   onActivate={() => onActivate(thread.id)}
                 />
               ))}
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+                  onClick={() =>
+                    setVisibleCount((count) =>
+                      Math.min(count + SECTION_THREAD_LIMIT, threads.length),
+                    )
+                  }
+                >
+                  Show more ({hiddenCount})
+                </button>
+              ) : null}
             </div>
           )}
         </SidebarGroupContent>
@@ -632,7 +767,7 @@ function SettingsNav({ onBack }: { onBack: () => void }) {
   ];
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 group-data-[collapsible=icon]:hidden">
+    <div className="scrollbar-auto-hide min-h-0 flex-1 overflow-y-auto px-3 pb-3 group-data-[collapsible=icon]:hidden">
       <button
         type="button"
         className="mb-3 flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground/65 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -664,87 +799,122 @@ function ChatThreadRow({
   thread,
   active,
   spaceRouteId,
+  locallyRead,
   onActivate,
 }: {
   thread: ChatThreadSummary;
   active: boolean;
   spaceRouteId?: string;
+  locallyRead: boolean;
   onActivate: () => void;
 }) {
-  const unread = isThreadUnread(thread);
-  const content = (
-    <>
-      <span
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          unread ? "bg-blue-500" : "bg-transparent",
-        )}
-      />
-      <span className="min-w-0 flex-1 truncate text-sm">
-        {threadTitle(thread)}
-      </span>
-    </>
-  );
+  const unread = isThreadUnread(thread) && !locallyRead;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [{ fetching: deleting }, deleteThread] =
+    useMutation(DeleteThreadMutation);
+  const activity = threadActivityAt(thread);
+  const relativeDate = formatTinyRelativeDate(activity);
+  const title = threadTitle(thread);
+  const linkProps = spaceRouteId
+    ? ({
+        to: "/spaces/$spaceId/threads/$threadId",
+        params: { spaceId: spaceRouteId, threadId: thread.id },
+      } as const)
+    : ({ to: "/threads/$id", params: { id: thread.id } } as const);
 
-  return (
-    <ThreadRowLink
-      thread={thread}
-      active={active}
-      spaceRouteId={spaceRouteId}
-      onActivate={onActivate}
-    >
-      {content}
-    </ThreadRowLink>
-  );
-}
+  async function handleConfirmDelete() {
+    setThreadDeletePending(thread.id, true);
+    try {
+      const result = await deleteThread({ id: thread.id });
+      if (result.error) {
+        setThreadDeletePending(thread.id, false);
+        toast.error(`Could not delete thread: ${result.error.message}`);
+        return;
+      }
 
-function ThreadRowLink({
-  thread,
-  active,
-  spaceRouteId,
-  onActivate,
-  children,
-}: {
-  thread: ChatThreadSummary;
-  active: boolean;
-  spaceRouteId?: string;
-  onActivate: () => void;
-  children: ReactNode;
-}) {
-  if (spaceRouteId) {
-    return (
-      <Link
-        to="/spaces/$spaceId/threads/$threadId"
-        params={{ spaceId: spaceRouteId, threadId: thread.id }}
-        className={threadRowClass(active)}
-        onClick={onActivate}
-      >
-        {children}
-      </Link>
-    );
+      toast.success("Thread deleted.");
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:thread-deleted", {
+          detail: { threadId: thread.id },
+        }),
+      );
+    } catch (err) {
+      setThreadDeletePending(thread.id, false);
+      toast.error(
+        `Could not delete thread: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    } finally {
+      setConfirmingDelete(false);
+    }
   }
 
   return (
-    <Link
-      to="/threads/$id"
-      params={{ id: thread.id }}
-      className={threadRowClass(active)}
-      onClick={onActivate}
+    <div
+      className={cn(
+        "group/thread-row relative flex h-8 min-w-0 items-center rounded-md outline-none transition-colors hover:bg-sidebar-accent",
+        active && "bg-sidebar-accent",
+      )}
     >
-      {children}
-    </Link>
+      <Link
+        {...linkProps}
+        className={cn(
+          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 pr-14 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+          active && "bg-sidebar-accent text-sidebar-accent-foreground",
+        )}
+        onClick={onActivate}
+      >
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            unread ? "bg-blue-500" : "bg-transparent",
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate text-sm">{title}</span>
+      </Link>
+      {confirmingDelete ? (
+        <button
+          type="button"
+          className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/25 disabled:opacity-60"
+          disabled={deleting}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void handleConfirmDelete();
+          }}
+          onMouseLeave={() => setConfirmingDelete(false)}
+        >
+          Confirm
+        </button>
+      ) : (
+        <>
+          {relativeDate ? (
+            <span
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs tabular-nums text-sidebar-foreground/45 group-hover/thread-row:hidden"
+              title={activity ?? undefined}
+            >
+              {relativeDate}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="absolute right-0 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1.5 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
+            aria-label={`Delete ${title}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setConfirmingDelete(true);
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
 const navItemClassName =
   "flex h-8 w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 text-sm font-normal text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
-
-function threadRowClass(active: boolean) {
-  return cn(
-    "flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-    active && "bg-sidebar-accent text-sidebar-accent-foreground",
-  );
-}
 
 function threadIdFromThreadPath(pathname: string) {
   const canonicalMatch = /^\/threads\/([^/]+)$/.exec(pathname);
