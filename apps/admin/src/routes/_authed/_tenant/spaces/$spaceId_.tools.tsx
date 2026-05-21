@@ -15,7 +15,7 @@ function SpaceToolsRoute() {
 
   return (
     <SpaceDetailChrome spaceId={spaceId} activeTab="tools">
-      {() => <SpaceToolsPanel />}
+      {({ space }) => <SpaceToolsPanel space={space} />}
     </SpaceDetailChrome>
   );
 }

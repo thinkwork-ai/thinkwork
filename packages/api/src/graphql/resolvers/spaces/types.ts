@@ -18,8 +18,12 @@ import {
   snakeToCamel,
 } from "../../utils.js";
 import { toGraphqlSpaceChild } from "./shared.js";
+import { builtInToolsFromPolicy } from "./tools-policy.js";
 
 export const spaceTypeResolvers = {
+  builtInTools: async (parent: any) => {
+    return builtInToolsFromPolicy(parent.toolPolicy ?? parent.tool_policy);
+  },
   members: async (parent: any) => {
     const spaceId = parent.id;
     const tenantId = parent.tenantId ?? parent.tenant_id;

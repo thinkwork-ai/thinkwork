@@ -71,6 +71,22 @@ beforeEach(async () => {
 });
 
 describe("spaceTypeResolvers", () => {
+  it("resolves Space built-in tools from tool policy without leaking non-built-ins", async () => {
+    const result = await types.spaceTypeResolvers.builtInTools({
+      id: "space-1",
+      tenantId: "tenant-1",
+      toolPolicy: {
+        builtInTools: [
+          "web-search",
+          "not-a-builtin",
+          "query_crm_opportunity_context",
+        ],
+      },
+    });
+
+    expect(result).toEqual(["query_crm_opportunity_context", "web-search"]);
+  });
+
   it("resolves selected Space knowledge-base details", async () => {
     mockSelect
       .mockReturnValueOnce(
