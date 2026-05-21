@@ -13,6 +13,7 @@ import { TenantMembersListQuery } from "@/lib/graphql-queries";
 import { HumanProfileSection } from "@/components/humans/HumanProfileSection";
 import { HumanMembershipSection } from "@/components/humans/HumanMembershipSection";
 import { HumanComputerAssignmentsSection } from "@/components/humans/HumanComputerAssignmentsSection";
+import { HumanUserWorkspaceSection } from "@/components/humans/HumanUserWorkspaceSection";
 
 export const Route = createFileRoute("/_authed/_tenant/people/$humanId")({
   component: HumanDetailPage,
@@ -80,32 +81,41 @@ function HumanDetailPage() {
     <PageLayout
       header={<PageHeader title={humanName} description={member.user.email} />}
     >
-      <div className="space-y-6 max-w-[750px]">
-        <HumanProfileSection
+      <div className="max-w-[1100px] space-y-6">
+        <div className="max-w-[750px] space-y-6">
+          <HumanProfileSection
+            userId={member.user.id}
+            email={member.user.email}
+            initial={{
+              name: member.user.name,
+              phone: (member.user as { phone?: string | null }).phone ?? null,
+              image: member.user.image,
+            }}
+          />
+          <HumanComputerAssignmentsSection
+            userId={member.user.id}
+            tenantId={tenantId}
+          />
+        </div>
+        <HumanUserWorkspaceSection
           userId={member.user.id}
-          email={member.user.email}
-          initial={{
-            name: member.user.name,
-            phone: (member.user as { phone?: string | null }).phone ?? null,
-            image: member.user.image,
-          }}
+          profile={member.user.profile}
+          onSaved={() => reexecute({ requestPolicy: "network-only" })}
         />
-        <HumanComputerAssignmentsSection
-          userId={member.user.id}
-          tenantId={tenantId}
-        />
-        <HumanMembershipSection
-          memberId={member.id}
-          currentRole={member.role}
-          currentStatus={member.status}
-          humanName={humanName}
-          isSelf={callerIsSelf}
-          callerIsOwner={callerIsOwner}
-          onRemoved={() => {
-            reexecute({ requestPolicy: "network-only" });
-            navigate({ to: "/people" });
-          }}
-        />
+        <div className="max-w-[750px]">
+          <HumanMembershipSection
+            memberId={member.id}
+            currentRole={member.role}
+            currentStatus={member.status}
+            humanName={humanName}
+            isSelf={callerIsSelf}
+            callerIsOwner={callerIsOwner}
+            onRemoved={() => {
+              reexecute({ requestPolicy: "network-only" });
+              navigate({ to: "/people" });
+            }}
+          />
+        </div>
       </div>
     </PageLayout>
   );

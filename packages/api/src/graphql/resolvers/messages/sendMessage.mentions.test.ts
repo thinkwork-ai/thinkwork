@@ -45,6 +45,13 @@ describe("sendMessage mention collaboration path", () => {
     );
   });
 
+  it("preserves sender defaults while allowing agent-authenticated senders", () => {
+    expect(source).toContain('const senderType = i.senderType ?? "user"');
+    expect(source).toContain('senderType === "agent"');
+    expect(source).toContain("ctx.auth.agentId");
+    expect(source).toContain("Agent sender is not available in this tenant");
+  });
+
   it("refreshes activity for non-Computer Space collaboration user messages", () => {
     expect(source).toContain("const messageActivityAt = new Date()");
     expect(source).toContain("created_at: messageActivityAt");

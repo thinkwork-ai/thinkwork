@@ -1785,6 +1785,8 @@ export type Message = {
   id: Scalars['ID']['output'];
   mentions: Array<MessageMention>;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  ownerId?: Maybe<Scalars['ID']['output']>;
+  ownerType: Scalars['String']['output'];
   parts?: Maybe<Scalars['AWSJSON']['output']>;
   role: MessageRole;
   sender?: Maybe<MessageSender>;
@@ -2659,6 +2661,8 @@ export type MutationNotifyInboxItemUpdateArgs = {
 export type MutationNotifyNewMessageArgs = {
   content?: InputMaybe<Scalars['String']['input']>;
   messageId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
+  ownerType?: InputMaybe<Scalars['String']['input']>;
   role: Scalars['String']['input'];
   senderId?: InputMaybe<Scalars['ID']['input']>;
   senderType?: InputMaybe<Scalars['String']['input']>;
@@ -3199,6 +3203,8 @@ export type NewMessageEvent = {
   content?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   messageId: Scalars['ID']['output'];
+  ownerId?: Maybe<Scalars['ID']['output']>;
+  ownerType?: Maybe<Scalars['String']['output']>;
   role: Scalars['String']['output'];
   senderId?: Maybe<Scalars['ID']['output']>;
   senderType?: Maybe<Scalars['String']['output']>;

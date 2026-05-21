@@ -23,6 +23,11 @@ class FakeClientError(Exception):
         super().__init__(code)
 
 
+class BrokenBody:
+    def read(self):
+        raise OSError("stream broke")
+
+
 def test_user_knowledge_pack_key_is_user_scoped():
     from user_storage import user_knowledge_pack_key
 
@@ -30,6 +35,12 @@ def test_user_knowledge_pack_key_is_user_scoped():
         user_knowledge_pack_key("tenant-1", "user-1")
         == "tenants/tenant-1/users/user-1/knowledge-pack.md"
     )
+
+
+def test_user_context_md_key_is_user_scoped():
+    from user_storage import user_context_md_key
+
+    assert user_context_md_key("tenant-1", "user-1") == "tenants/tenant-1/users/user-1/USER.md"
 
 
 def test_get_user_knowledge_pack_reads_body_etag_and_last_modified():
@@ -63,6 +74,37 @@ def test_get_user_knowledge_pack_reads_body_etag_and_last_modified():
     ]
 
 
+def test_get_user_context_md_reads_body_etag_and_last_modified():
+    from user_storage import get_user_context_md
+
+    last_modified = datetime(2026, 5, 21, tzinfo=UTC)
+    s3 = FakeS3(
+        {
+            "Body": BytesIO(b"# USER\n\nCall Eric by his first name."),
+            "ETag": '"user-md"',
+            "LastModified": last_modified,
+        }
+    )
+
+    result = get_user_context_md(
+        "tenant-1",
+        "user-1",
+        bucket="workspace-bucket",
+        s3_client=s3,
+    )
+
+    assert result is not None
+    assert result.body.startswith("# USER")
+    assert result.etag == "user-md"
+    assert result.last_modified == last_modified
+    assert s3.calls == [
+        {
+            "Bucket": "workspace-bucket",
+            "Key": "tenants/tenant-1/users/user-1/USER.md",
+        }
+    ]
+
+
 def test_get_user_knowledge_pack_returns_none_for_missing_pack():
     from user_storage import get_user_knowledge_pack
 
@@ -71,6 +113,45 @@ def test_get_user_knowledge_pack_returns_none_for_missing_pack():
         "user-1",
         bucket="workspace-bucket",
         s3_client=FakeS3(exc=FakeClientError("NoSuchKey")),
+    )
+
+    assert result is None
+
+
+def test_get_user_context_md_returns_none_for_missing_context_file():
+    from user_storage import get_user_context_md
+
+    result = get_user_context_md(
+        "tenant-1",
+        "user-1",
+        bucket="workspace-bucket",
+        s3_client=FakeS3(exc=FakeClientError("NoSuchKey")),
+    )
+
+    assert result is None
+
+
+def test_get_user_context_md_returns_none_when_body_read_fails():
+    from user_storage import get_user_context_md
+
+    result = get_user_context_md(
+        "tenant-1",
+        "user-1",
+        bucket="workspace-bucket",
+        s3_client=FakeS3({"Body": BrokenBody(), "ETag": '"etag"'}),
+    )
+
+    assert result is None
+
+
+def test_get_user_knowledge_pack_returns_none_when_body_read_fails():
+    from user_storage import get_user_knowledge_pack
+
+    result = get_user_knowledge_pack(
+        "tenant-1",
+        "user-1",
+        bucket="workspace-bucket",
+        s3_client=FakeS3({"Body": BrokenBody(), "ETag": '"etag"'}),
     )
 
     assert result is None

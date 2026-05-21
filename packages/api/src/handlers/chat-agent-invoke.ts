@@ -912,8 +912,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } =
-          await import("../lib/hindsight-cost.js");
+        const { recordHindsightCost } = await import(
+          "../lib/hindsight-cost.js"
+        );
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -1161,8 +1162,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // 4c. Send push notification to user devices
     if (!computerThreadResponse?.responseMessageId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId,
           tenantId,
@@ -1472,6 +1474,8 @@ async function notifyNewMessage(payload: {
       $content: String!
       $senderType: String
       $senderId: ID
+      $ownerType: String
+      $ownerId: ID
     ) {
       notifyNewMessage(
         messageId: $messageId
@@ -1481,6 +1485,8 @@ async function notifyNewMessage(payload: {
         content: $content
         senderType: $senderType
         senderId: $senderId
+        ownerType: $ownerType
+        ownerId: $ownerId
       ) {
         messageId
         threadId
@@ -1489,6 +1495,8 @@ async function notifyNewMessage(payload: {
         content
         senderType
         senderId
+        ownerType
+        ownerId
         createdAt
       }
     }
@@ -1503,7 +1511,12 @@ async function notifyNewMessage(payload: {
       },
       body: JSON.stringify({
         query: mutation,
-        variables: payload,
+        variables: {
+          ...payload,
+          ownerType:
+            payload.senderType === "assistant" ? "agent" : payload.senderType,
+          ownerId: payload.senderId,
+        },
       }),
     });
 

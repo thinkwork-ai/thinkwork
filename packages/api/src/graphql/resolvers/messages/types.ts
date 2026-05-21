@@ -9,10 +9,12 @@ import {
 } from "../../utils.js";
 
 export const messageTypeResolvers = {
+  ownerType: (message: any) => resolveMessageOwner(message).type,
+  ownerId: (message: any) => resolveMessageOwner(message).id,
   sender: async (message: any, _args: unknown, ctx: GraphQLContext) => {
     const senderType = message.senderType ?? message.sender_type ?? null;
     const senderId = message.senderId ?? message.sender_id ?? null;
-    const role = String(message.role ?? "").toLowerCase();
+    const role = normalizedRole(message);
 
     if (senderType === "agent" && senderId) {
       const agent = await ctx.loaders.agent.load(senderId);
@@ -43,7 +45,20 @@ export const messageTypeResolvers = {
         avatarUrl: null,
       };
     }
-    return { type: "user", id: senderId, displayName: "User", avatarUrl: null };
+    if (senderType === "computer") {
+      return {
+        type: "computer",
+        id: senderId,
+        displayName: "Computer",
+        avatarUrl: null,
+      };
+    }
+    return {
+      type: senderType,
+      id: senderId,
+      displayName: "User",
+      avatarUrl: null,
+    };
   },
   mentions: async (message: any) => {
     const messageId = message.id;
@@ -58,6 +73,48 @@ export const messageTypeResolvers = {
     return rows.map(messageMentionToCamel);
   },
 };
+
+function resolveMessageOwner(message: any): {
+  type: string;
+  id: string | null;
+} {
+  const explicitType =
+    message.ownerType ??
+    message.owner_type ??
+    message.senderType ??
+    message.sender_type ??
+    null;
+  const explicitId =
+    message.ownerId ??
+    message.owner_id ??
+    message.senderId ??
+    message.sender_id ??
+    null;
+  const role = normalizedRole(message);
+  const type = normalizeOwnerType(explicitType, role);
+  return {
+    type,
+    id:
+      typeof explicitId === "string" && explicitId.length > 0
+        ? explicitId
+        : null,
+  };
+}
+
+function normalizeOwnerType(value: unknown, role: string): string {
+  const next = typeof value === "string" ? value.toLowerCase() : "";
+  if (next === "assistant") return "agent";
+  if (["agent", "computer", "system", "user"].includes(next)) {
+    return next;
+  }
+  if (role === "assistant") return "agent";
+  if (role === "system" || role === "tool") return "system";
+  return "user";
+}
+
+function normalizedRole(message: any) {
+  return String(message.role ?? "").toLowerCase();
+}
 
 export const messageMentionTypeResolvers = {
   user: (mention: any, _args: unknown, ctx: GraphQLContext) => {

@@ -969,6 +969,8 @@ export const ThreadDetailQuery = graphql(`
             content
             senderType
             senderId
+            ownerType
+            ownerId
             toolCalls
             toolResults
             metadata
@@ -1806,6 +1808,18 @@ export const TenantMembersListQuery = graphql(`
         name
         email
         image
+        phone
+        profile {
+          id
+          title
+          timezone
+          pronouns
+          callBy
+          notes
+          family
+          context
+          updatedAt
+        }
       }
       agent {
         id
@@ -1847,6 +1861,23 @@ export const UpdateUserMutation = graphql(`
       name
       image
       phone
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateUserProfileMutation = graphql(`
+  mutation UpdateUserProfile($userId: ID!, $input: UpdateUserProfileInput!) {
+    updateUserProfile(userId: $userId, input: $input) {
+      id
+      userId
+      title
+      timezone
+      pronouns
+      callBy
+      notes
+      family
+      context
       updatedAt
     }
   }
@@ -2215,6 +2246,8 @@ export const OnNewMessageSubscription = graphql(`
       content
       senderType
       senderId
+      ownerType
+      ownerId
       createdAt
     }
   }

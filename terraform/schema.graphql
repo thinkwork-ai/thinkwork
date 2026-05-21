@@ -41,6 +41,8 @@ type NewMessageEvent {
   content: String
   senderType: String
   senderId: ID
+  ownerType: String
+  ownerId: ID
   createdAt: AWSDateTime!
 }
 
@@ -142,6 +144,8 @@ type Mutation {
     content: String
     senderType: String
     senderId: ID
+    ownerType: String
+    ownerId: ID
   ): NewMessageEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyHeartbeatActivity(

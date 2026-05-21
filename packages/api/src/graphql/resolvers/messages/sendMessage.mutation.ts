@@ -6,6 +6,7 @@ import {
   eq,
   messageMentions,
   messages,
+  agents,
   threadParticipants,
   threads,
   messageToCamel,
@@ -35,11 +36,14 @@ export const sendMessage = async (
   ctx: GraphQLContext,
 ) => {
   const i = args.input;
+  const role = i.role.toLowerCase();
   const senderType = i.senderType ?? "user";
   const senderId =
     senderType === "user"
       ? ((await resolveCallerFromAuth(ctx.auth)).userId ?? i.senderId)
-      : i.senderId;
+      : senderType === "agent"
+        ? (i.senderId ?? ctx.auth.agentId)
+        : i.senderId;
   const [thread] = await db
     .select({
       tenant_id: threads.tenant_id,
@@ -52,8 +56,22 @@ export const sendMessage = async (
     .from(threads)
     .where(eq(threads.id, i.threadId));
   if (!thread) throw new Error("Thread not found");
+  if (senderType === "agent" && senderId) {
+    const [agent] = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(
+        and(eq(agents.id, senderId), eq(agents.tenant_id, thread.tenant_id)),
+      )
+      .limit(1);
+    if (!agent) {
+      throw new GraphQLError("Agent sender is not available in this tenant", {
+        extensions: { code: "FORBIDDEN" },
+      });
+    }
+  }
 
-  const isUserMessage = i.role.toLowerCase() === "user";
+  const isUserMessage = role === "user";
   if (
     isUserMessage &&
     senderType === "user" &&
@@ -135,7 +153,7 @@ export const sendMessage = async (
       .values({
         thread_id: i.threadId,
         tenant_id: thread.tenant_id,
-        role: i.role.toLowerCase(),
+        role,
         content: i.content,
         sender_type: senderType,
         sender_id: senderId,
@@ -324,11 +342,7 @@ export const sendMessage = async (
 
   // Computer-owned Threads are picked up exclusively through the durable
   // Computer work queue. Agent fallback is intentionally disabled.
-  if (
-    i.role.toLowerCase() === "user" &&
-    thread.computer_id &&
-    parsedMentions.length === 0
-  ) {
+  if (role === "user" && thread.computer_id && parsedMentions.length === 0) {
     const handledByRunbook = await routeRunbookForComputerMessage({
       tenantId: thread.tenant_id,
       computerId: thread.computer_id,
