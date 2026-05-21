@@ -297,6 +297,37 @@ describe("TaskThreadView", () => {
     expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
   });
 
+  it("does not turn the Conversation outer into a second scroll container (regression: double scrollbar with artifact side panel)", () => {
+    // Regression: TaskThreadView passed `overflow-y-auto` to <Conversation>,
+    // which tailwind-merge resolved by overriding the library's default
+    // `overflow-y-hidden` on the outer StickToBottom div. Combined with the
+    // library's inner scroll container (which sets overflow:auto via a
+    // layout effect plus scrollbarGutter "stable both-edges"), the
+    // transcript ended up with TWO stacked scroll containers, rendering
+    // two adjacent scrollbars at the right edge of the conversation column.
+    // The artifact side panel doesn't cause the bug -- it just narrows the
+    // column so the double scrollbars become obvious in the gutter between
+    // the panels. The outer [role="log"] element must not declare any
+    // overflow override that competes with the library's inner scroller.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Double scrollbar regression",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            { id: "m1", role: "USER", content: "Long enough to overflow" },
+          ],
+        }}
+      />,
+    );
+
+    const log = screen.getByRole("log", { name: "Thread transcript" });
+    expect(log.className).not.toMatch(/overflow-y-auto/);
+    expect(log.className).not.toMatch(/overflow-y-scroll/);
+    expect(log.className).not.toMatch(/\boverflow-auto\b/);
+  });
+
   it("renders exactly one Thinking row when an assistant message has no tool calls and a turn is running", () => {
     // Regression: before C-01 the per-message fallback ThinkingRow ('Reasoning
     // complete.') fired here on top of the turn-level ThinkingRow, producing
