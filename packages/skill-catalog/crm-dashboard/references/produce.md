@@ -69,6 +69,7 @@ Theme requirements:
 - Prefer host-injected shadcn Create theme tokens when available. Users configure Theme CSS through tenant app style settings; do not preserve that CSS in artifact metadata or generated TSX.
 - Write component classes against shadcn semantic tokens: `bg-background`, `text-foreground`, `bg-card`, `text-card-foreground`, `border-border`, `text-muted-foreground`, `bg-muted`, `text-primary`, `text-destructive`, and `bg-accent`.
 - Use chart colors from CSS variables (`var(--chart-1)` through `var(--chart-5)`) or `ChartContainer` config. Never set bars, lines, or tooltip text to black on dark surfaces.
+- Use the CSS variable directly. Do NOT wrap it in `hsl(...)`, `oklch(...)`, `rgb(...)`, or any color function — the tokens are full color values, not channel triples. Wrong: `color: "hsl(var(--chart-1))"`. Right: `color: "var(--chart-1)"`. Wrapping produces invalid CSS (e.g. `hsl(oklch(...))`) and the chart falls back to solid black.
 - Do not invent a one-off palette in TSX. Avoid raw hex colors unless the value comes directly from validated theme tokens.
 
 Hard UI requirements:
