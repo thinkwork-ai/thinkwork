@@ -10,6 +10,7 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,9 @@ import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import { type SpaceAdminDetailQuery as SpaceAdminDetailQueryResult } from "@/gql/graphql";
 import {
+  KnowledgeBasesListQuery,
+  SpaceMemoryQuery,
+  SetSpaceKnowledgeBasesMutation,
   SpaceAdminDetailQuery,
   UpdateSpaceMutation,
 } from "@/lib/graphql-queries";
@@ -45,6 +49,7 @@ interface SpaceDetailChromeContext {
   space: Space;
   draft: SpaceDraft;
   setDraft: Dispatch<SetStateAction<SpaceDraft>>;
+  refreshSpace: () => void;
 }
 
 interface SpaceDetailChromeProps {
@@ -203,6 +208,8 @@ export function SpaceDetailChrome({
         space,
         draft,
         setDraft,
+        refreshSpace: () =>
+          reexecuteSpaceQuery({ requestPolicy: "network-only" }),
       })}
     </PageLayout>
   );
@@ -283,8 +290,135 @@ export function SpaceToolsPanel() {
   return <EmptyPanel title="No tools selected." />;
 }
 
-export function SpaceMemoryPanel() {
-  return <EmptyPanel title="No knowledge bases selected." />;
+export function SpaceMemoryPanel({ space }: { space: Space }) {
+  const { tenantId } = useTenant();
+  const [spaceMemoryResult, reexecuteSpaceMemoryQuery] = useQuery({
+    query: SpaceMemoryQuery,
+    variables: { id: space.id },
+    pause: !space.id,
+    requestPolicy: "cache-and-network",
+  });
+  const spaceKnowledgeBases =
+    (spaceMemoryResult.data as any)?.space?.knowledgeBases ?? [];
+  const selectedKnowledgeBaseIds = spaceKnowledgeBases
+    .filter((assignment) => assignment.enabled)
+    .map((assignment) => assignment.knowledgeBaseId);
+  const [selectedIds, setSelectedIds] = useState(selectedKnowledgeBaseIds);
+  const [, setSpaceKnowledgeBases] = useMutation(
+    SetSpaceKnowledgeBasesMutation,
+  );
+  const [knowledgeBasesResult] = useQuery({
+    query: KnowledgeBasesListQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+
+  useEffect(() => {
+    setSelectedIds(selectedKnowledgeBaseIds);
+  }, [selectedKnowledgeBaseIds.join("|")]);
+
+  const knowledgeBases =
+    (knowledgeBasesResult.data as any)?.knowledgeBases ?? [];
+  const assignedKnowledgeBases = new Map(
+    spaceKnowledgeBases
+      .map((assignment) => assignment.knowledgeBase)
+      .filter(Boolean)
+      .map((knowledgeBase) => [knowledgeBase.id, knowledgeBase]),
+  );
+  const knowledgeBaseOptions = knowledgeBases.map(
+    (knowledgeBase: { id: string; name: string; status: string }) => ({
+      label: knowledgeBase.name,
+      value: knowledgeBase.id,
+      disabled:
+        !selectedIds.includes(knowledgeBase.id) &&
+        knowledgeBase.status !== "active",
+    }),
+  );
+  const selectedKnowledgeBases = selectedIds
+    .map(
+      (id) =>
+        knowledgeBases.find(
+          (knowledgeBase: { id: string }) => knowledgeBase.id === id,
+        ) ?? assignedKnowledgeBases.get(id),
+    )
+    .filter(Boolean) as Array<{ id: string; name: string; status: string }>;
+
+  async function handleKnowledgeBasesChange(nextIds: string[]) {
+    if (!tenantId) return;
+    setSelectedIds(nextIds);
+    const response = await setSpaceKnowledgeBases({
+      input: {
+        tenantId,
+        spaceId: space.id,
+        knowledgeBases: nextIds.map((knowledgeBaseId) => ({
+          knowledgeBaseId,
+          enabled: true,
+        })),
+      },
+    });
+
+    if (response.error) {
+      setSelectedIds(selectedKnowledgeBaseIds);
+      toast.error(`Could not save knowledge bases: ${response.error.message}`);
+      return;
+    }
+
+    toast.success("Knowledge bases saved.");
+    reexecuteSpaceMemoryQuery({ requestPolicy: "network-only" });
+  }
+
+  return (
+    <section className="space-y-4 rounded-md border p-4">
+      <div className="space-y-1.5">
+        <Label>Knowledge Bases</Label>
+        <MultiSelect
+          options={knowledgeBaseOptions}
+          defaultValue={selectedIds}
+          onValueChange={handleKnowledgeBasesChange}
+          placeholder={
+            knowledgeBasesResult.fetching
+              ? "Loading knowledge bases..."
+              : "Choose knowledge bases"
+          }
+          emptyIndicator={
+            <span className="text-sm text-muted-foreground">
+              No knowledge bases found.
+            </span>
+          }
+          maxCount={4}
+          disabled={
+            knowledgeBasesResult.fetching && knowledgeBases.length === 0
+          }
+          className="w-full justify-between"
+          popoverClassName="w-[var(--radix-popover-trigger-width)]"
+          hideSelectAll
+          deduplicateOptions
+        />
+      </div>
+      {selectedKnowledgeBases.length > 0 ? (
+        <div className="divide-y rounded-md border">
+          {selectedKnowledgeBases.map((knowledgeBase) => (
+            <div
+              key={knowledgeBase.id}
+              className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+            >
+              <span className="min-w-0 truncate font-medium">
+                {knowledgeBase.name}
+              </span>
+              <span className="shrink-0 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                {knowledgeBase.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-md border p-3 text-sm text-muted-foreground">
+          No knowledge bases selected.
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function SpaceAutomationsPanel() {

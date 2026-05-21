@@ -15,7 +15,7 @@ function SpaceMemoryRoute() {
 
   return (
     <SpaceDetailChrome spaceId={spaceId} activeTab="memory">
-      {() => <SpaceMemoryPanel />}
+      {({ space }) => <SpaceMemoryPanel space={space} />}
     </SpaceDetailChrome>
   );
 }

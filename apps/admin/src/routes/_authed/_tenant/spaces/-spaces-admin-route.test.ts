@@ -155,13 +155,32 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain("space.createdAt");
   });
 
+  it("keeps Memory scoped to knowledge-base selection", () => {
+    expect(memoryRouteSource).toContain("SpaceMemoryPanel");
+    expect(detailChromeSource).toContain("MultiSelect");
+    expect(detailChromeSource).toContain("KnowledgeBasesListQuery");
+    expect(detailChromeSource).toContain("SpaceMemoryQuery");
+    expect(detailChromeSource).toContain("SetSpaceKnowledgeBasesMutation");
+    expect(detailChromeSource).toContain("Choose knowledge bases");
+    expect(detailChromeSource).toContain("No knowledge bases selected.");
+    expect(detailChromeSource).not.toContain("Hindsight");
+    expect(detailChromeSource).not.toContain("Wiki");
+    expect(detailChromeSource).not.toContain("MemoryRecord");
+    expect(detailChromeSource).not.toContain("source adapter");
+  });
+
   it("queries only the Space fields needed by the simplified UI", () => {
     expect(queriesSource).toContain("query SpacesList");
     expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("mutation UpdateSpace");
     expect(queriesSource).toContain("query SpaceAdminDetail");
+    expect(queriesSource).toContain("query SpaceMemory");
+    expect(queriesSource).toContain("mutation SetSpaceKnowledgeBases");
     expect(queriesSource).toContain("includeAllForAdmin: true");
     expect(queriesSource).toContain("accessMode");
+    expect(queriesSource).toContain("knowledgeBases");
+    expect(queriesSource).toContain("knowledgeBaseId");
+    expect(queriesSource).toContain("setSpaceKnowledgeBases");
     expect(queriesSource).not.toContain("agentAssignments");
     expect(queriesSource).not.toContain("localInstructions");
     expect(queriesSource).not.toContain("contextConfig");

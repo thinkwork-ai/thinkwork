@@ -76,6 +76,7 @@ type Space {
   renderDiagnostics: AWSJSON
   members: [SpaceMember!]!
   agentAssignments: [SpaceAgentAssignment!]!
+  knowledgeBases: [SpaceKnowledgeBase!]!
   mcpServers: [SpaceMcpServer!]!
   checklistTemplates: [SpaceChecklistTemplate!]!
   integrations: [SpaceIntegration!]!
@@ -233,6 +234,12 @@ input SetSpaceAgentAvailabilityInput {
   allowedTools: AWSJSON
 }
 
+input SetSpaceKnowledgeBasesInput {
+  tenantId: ID!
+  spaceId: ID!
+  knowledgeBases: [SpaceKnowledgeBaseInput!]!
+}
+
 extend type Query {
   spaces(
     tenantId: ID!
@@ -249,6 +256,9 @@ extend type Mutation {
   setSpaceAgentAvailability(
     input: SetSpaceAgentAvailabilityInput!
   ): SpaceAgentAssignment!
+  setSpaceKnowledgeBases(
+    input: SetSpaceKnowledgeBasesInput!
+  ): [SpaceKnowledgeBase!]!
   startCustomerOnboarding(
     input: StartCustomerOnboardingInput!
   ): StartCustomerOnboardingPayload!
