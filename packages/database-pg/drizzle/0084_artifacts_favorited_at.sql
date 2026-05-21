@@ -1,5 +1,5 @@
 -- Add `favorited_at` to artifacts so users can star artifacts and the
--- apps/spaces sidebar can show a Favorites section.
+-- apps/computer sidebar can show a Favorites section.
 --
 -- Plan:
 --   docs/plans/2026-05-10-005-feat-computer-ui-updates-plan.md (U3)

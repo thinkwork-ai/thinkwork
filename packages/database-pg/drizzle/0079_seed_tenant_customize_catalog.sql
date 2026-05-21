@@ -1,5 +1,5 @@
 -- Seed every tenant's `tenant_workflow_catalog` with the v1 baseline catalog
--- so the apps/spaces Customize page has real Available rows to render.
+-- so the apps/computer Customize page has real Available rows to render.
 -- Idempotent via ON CONFLICT(tenant_id, slug) DO NOTHING — re-running this
 -- script never duplicates.
 --
@@ -10,7 +10,7 @@
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0079_seed_tenant_customize_catalog.sql
 --
 -- The data mirrors the workflow fixture catalog that previously lived in
--- apps/spaces/src/components/customize/customize-fixtures.ts so the live
+-- apps/computer/src/components/customize/customize-fixtures.ts so the live
 -- queries (U4 / U6) render the same shape the user already saw on the
 -- inert page. Per-tenant variation can be added by INSERTing rows with a
 -- specific tenant_id; the SELECT-from-tenants below is the convenient

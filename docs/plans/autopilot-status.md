@@ -20,7 +20,7 @@ Target branch: `main`
 - Active worktree: `.Codex/worktrees/spaces-rebrand-picker-polish`
 - Started: 2026-05-21
 - PR: [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526)
-- CI: pending
+- CI: fixing failed migration drift precheck
 
 ### Progress Log
 
@@ -30,7 +30,7 @@ Target branch: `main`
 
 ### CI Failures
 
-- None yet.
+- 2026-05-21: `Migration Drift Precheck (dev)` failed on PR #1526 because comment-only edits to hand-rolled migration files scoped the drift reporter to `packages/database-pg/drizzle/0078_tenant_customize_catalog.sql`, `0079_seed_tenant_customize_catalog.sql`, `0081_routines_catalog_slug.sql`, and `0084_artifacts_favorited_at.sql`; the pre-existing `0079_seed_tenant_customize_catalog.sql` file has no drift markers. Fix: reverted the migration comment-only edits so this internal app rebrand does not touch migration files or trigger the drift scope.
 
 ### Blockers
 
