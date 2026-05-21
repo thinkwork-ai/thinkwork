@@ -279,7 +279,14 @@ export function TaskThreadView({
         aria-label="Thread conversation"
       >
         <Conversation
-          className="h-full flex-1 overflow-y-auto overscroll-contain"
+          // Leave the outer StickToBottom div as a layout container only.
+          // The library's inner scroll wrapper (set up in StickToBottom.Content
+          // with overflow:auto + scrollbarGutter "stable both-edges") owns
+          // scrolling. Adding overflow-y-auto here forces a second scroll
+          // container and produces visible double scrollbars at the right
+          // edge of the conversation column once the artifact side panel
+          // narrows it.
+          className="flex-1"
           aria-label="Thread transcript"
         >
           <ConversationContent
