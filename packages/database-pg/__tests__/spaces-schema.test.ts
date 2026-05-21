@@ -13,6 +13,7 @@ import {
   spaceMembers,
   spaces,
 } from "../src/schema/spaces";
+import { spaceKnowledgeBases } from "../src/schema/knowledge-bases";
 import { spaceMcpServers } from "../src/schema/mcp-servers";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,10 @@ const migration0112 = readFileSync(
 );
 const migration0117 = readFileSync(
   join(HERE, "..", "drizzle", "0117_space_access_mode.sql"),
+  "utf-8",
+);
+const migration0119 = readFileSync(
+  join(HERE, "..", "drizzle", "0119_space_knowledge_bases.sql"),
   "utf-8",
 );
 
@@ -70,6 +75,12 @@ describe("Spaces schema", () => {
     expect(getTableName(spaceMcpServers)).toBe("space_mcp_servers");
     expect(getTableColumns(spaceMcpServers).enabled.default).toBe(true);
     expect(getTableColumns(spaceMcpServers).config.notNull).toBe(false);
+
+    expect(getTableName(spaceKnowledgeBases)).toBe("space_knowledge_bases");
+    expect(getTableColumns(spaceKnowledgeBases).enabled.default).toBe(true);
+    expect(getTableColumns(spaceKnowledgeBases).search_config.notNull).toBe(
+      false,
+    );
 
     expect(getTableName(spaceChecklistTemplates)).toBe(
       "space_checklist_templates",
@@ -148,6 +159,23 @@ describe("Spaces schema", () => {
     expect(migration0117).toContain(
       "CHECK (access_mode IN ('public','private'))",
     );
+  });
+
+  it("declares manual migration drift markers for Space knowledge bases", () => {
+    expect(migration0119).toMatch(
+      /--\s*creates:\s*public\.space_knowledge_bases\b/,
+    );
+    expect(migration0119).toMatch(
+      /CREATE TABLE IF NOT EXISTS public\.space_knowledge_bases\b/,
+    );
+    expect(migration0119).toMatch(/--\s*creates:\s*public\.uq_space_kb\b/);
+    expect(migration0119).toMatch(
+      /--\s*creates-trigger:\s*public\.space_knowledge_bases\.space_knowledge_bases_tenant_guard\b/,
+    );
+    expect(migration0119).toContain(
+      "CREATE TRIGGER space_knowledge_bases_tenant_guard",
+    );
+    expect(migration0119).toContain("space knowledge base tenant mismatch");
   });
 
   it("guards Space child rows against cross-tenant references", () => {

@@ -30,6 +30,17 @@ type AgentKnowledgeBase {
   createdAt: AWSDateTime!
 }
 
+type SpaceKnowledgeBase {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  knowledgeBaseId: ID!
+  knowledgeBase: KnowledgeBase
+  enabled: Boolean!
+  searchConfig: AWSJSON
+  createdAt: AWSDateTime!
+}
+
 input CreateKnowledgeBaseInput {
   tenantId: ID!
   name: String!
@@ -51,6 +62,12 @@ input AgentKnowledgeBaseInput {
   searchConfig: AWSJSON
 }
 
+input SpaceKnowledgeBaseInput {
+  knowledgeBaseId: ID!
+  enabled: Boolean
+  searchConfig: AWSJSON
+}
+
 extend type Query {
   knowledgeBases(tenantId: ID!): [KnowledgeBase!]!
   knowledgeBase(id: ID!): KnowledgeBase
@@ -61,7 +78,10 @@ extend type Mutation {
   updateKnowledgeBase(id: ID!, input: UpdateKnowledgeBaseInput!): KnowledgeBase!
   deleteKnowledgeBase(id: ID!): Boolean!
   syncKnowledgeBase(id: ID!): KnowledgeBase!
-  setAgentKnowledgeBases(agentId: ID!, knowledgeBases: [AgentKnowledgeBaseInput!]!): [AgentKnowledgeBase!]!
+  setAgentKnowledgeBases(
+    agentId: ID!
+    knowledgeBases: [AgentKnowledgeBaseInput!]!
+  ): [AgentKnowledgeBase!]!
 }
 
 extend type Agent {

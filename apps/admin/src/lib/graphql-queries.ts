@@ -220,6 +220,39 @@ export const SpaceAdminDetailQuery = graphql(`
   }
 `);
 
+export const SpaceMemoryQuery = graphql(`
+  query SpaceMemory($id: ID!) {
+    space(id: $id) {
+      id
+      knowledgeBases {
+        id
+        knowledgeBaseId
+        enabled
+        knowledgeBase {
+          id
+          name
+          status
+        }
+      }
+    }
+  }
+`);
+
+export const SetSpaceKnowledgeBasesMutation = graphql(`
+  mutation SetSpaceKnowledgeBases($input: SetSpaceKnowledgeBasesInput!) {
+    setSpaceKnowledgeBases(input: $input) {
+      id
+      knowledgeBaseId
+      enabled
+      knowledgeBase {
+        id
+        name
+        status
+      }
+    }
+  }
+`);
+
 export const UpdateAgentStatusMutation = graphql(`
   mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {
     updateAgentStatus(id: $id, status: $status) {
