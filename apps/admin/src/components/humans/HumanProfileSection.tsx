@@ -22,7 +22,17 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form";
-import { UpdateUserMutation } from "@/lib/graphql-queries";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  UpdateTenantMemberMutation,
+  UpdateUserMutation,
+} from "@/lib/graphql-queries";
 
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required").trim(),
@@ -34,16 +44,33 @@ type ProfileFormValues = z.infer<typeof profileSchema>;
 
 export interface HumanProfileSectionProps {
   userId: string;
+  memberId: string;
   email: string;
+  currentRole: string;
+  isSelf: boolean;
+  callerIsOwner: boolean;
   initial: {
     name?: string | null;
     phone?: string | null;
     image?: string | null;
   };
+  onRoleSaved?: () => void;
 }
 
-export function HumanProfileSection({ userId, email, initial }: HumanProfileSectionProps) {
+export function HumanProfileSection({
+  userId,
+  memberId,
+  email,
+  currentRole,
+  isSelf,
+  callerIsOwner,
+  initial,
+  onRoleSaved,
+}: HumanProfileSectionProps) {
   const [{ fetching }, updateUser] = useMutation(UpdateUserMutation);
+  const [{ fetching: updatingRole }, updateMember] = useMutation(
+    UpdateTenantMemberMutation,
+  );
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -61,6 +88,11 @@ export function HumanProfileSection({ userId, email, initial }: HumanProfileSect
       image: initial.image ?? "",
     });
   }, [initial.name, initial.phone, initial.image, form]);
+
+  const roleOptions =
+    callerIsOwner || currentRole === "owner"
+      ? ["owner", "admin", "member"]
+      : ["admin", "member"];
 
   const onSubmit = async (values: ProfileFormValues) => {
     const result = await updateUser({
@@ -85,11 +117,38 @@ export function HumanProfileSection({ userId, email, initial }: HumanProfileSect
     toast.success("Profile updated");
   };
 
+  async function handleRoleChange(role: string) {
+    if (role === currentRole) return;
+
+    const result = await updateMember({
+      id: memberId,
+      input: { role },
+    });
+
+    if (result.error) {
+      const first = result.error.graphQLErrors[0];
+      const code = first?.extensions?.code;
+      if (code === "LAST_OWNER") {
+        toast.error("Cannot demote the last owner of a tenant.");
+      } else if (code === "FORBIDDEN") {
+        toast.error("You don't have permission to change this role.");
+      } else {
+        toast.error(first?.message ?? result.error.message);
+      }
+      return;
+    }
+
+    toast.success("Role updated");
+    onRoleSaved?.();
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Profile</CardTitle>
-        <CardDescription>Global user fields. Email is read-only.</CardDescription>
+        <CardDescription>
+          Identity and access context for this person.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -99,6 +158,30 @@ export function HumanProfileSection({ userId, email, initial }: HumanProfileSect
               <FormControl>
                 <Input value={email} readOnly disabled className="text-sm" />
               </FormControl>
+            </FormItem>
+            <FormItem>
+              <FormLabel className="text-xs text-muted-foreground">Role</FormLabel>
+              <Select
+                value={currentRole}
+                onValueChange={handleRoleChange}
+                disabled={isSelf || updatingRole}
+              >
+                <SelectTrigger className="w-48 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((role) => (
+                    <SelectItem key={role} value={role} className="text-sm">
+                      {role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isSelf && (
+                <p className="text-xs text-muted-foreground">
+                  You can't change your own role here.
+                </p>
+              )}
             </FormItem>
             <FormField
               control={form.control}

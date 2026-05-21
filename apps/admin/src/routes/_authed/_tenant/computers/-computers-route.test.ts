@@ -41,7 +41,9 @@ describe("Computers admin routes", () => {
     const agentsItemsSource = sidebarSource.slice(agentsItemsStart);
 
     expect(workItemsSource).toMatch(/to: "\/dashboard"[\s\S]+to: "\/threads"/);
-    expect(agentsItemsSource).toMatch(/=\s*\[\s*\{\s*to: "\/spaces"/);
+    expect(agentsItemsSource).toMatch(
+      /=\s*\[\s*\{\s*to: "\/agents"[\s\S]+to: "\/spaces"/,
+    );
     expect(agentsItemsSource).toContain("IconPlanet");
     expect(workItemsSource).toContain('label: "Dashboard"');
     expect(workItemsSource).toContain('label: "Threads"');

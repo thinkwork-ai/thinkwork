@@ -7,30 +7,31 @@ function readSource(path: string) {
 
 describe("People detail User Workspace", () => {
   const routeSource = readSource("./$humanId.tsx");
-  const sectionSource = readSource(
-    "../../../../components/humans/HumanUserWorkspaceSection.tsx",
+  const profileSource = readSource(
+    "../../../../components/humans/HumanProfileSection.tsx",
   );
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
 
-  it("mounts the user workspace surface on People detail", () => {
-    expect(routeSource).toContain("HumanUserWorkspaceSection");
-    expect(routeSource).toContain("profile={member.user.profile}");
+  it("uses top-level Configuration and Workspace tabs", () => {
+    expect(routeSource).toContain('type HumanDetailTab = "configuration" | "workspace"');
+    expect(routeSource).toContain("Configuration");
+    expect(routeSource).toContain("Workspace");
+    expect(routeSource).toContain("WorkspaceEditor");
+    expect(routeSource).toContain("target={{ userId: member.user.id }}");
+    expect(routeSource).toContain('mode="context"');
   });
 
-  it("edits structured user profile fields and raw user workspace files", () => {
-    expect(sectionSource).toContain("UpdateUserProfileMutation");
-    expect(sectionSource).toContain("WorkspaceEditor");
-    expect(sectionSource).toContain("target={{ userId }}");
-    expect(sectionSource).toContain('mode="context"');
-    expect(sectionSource).toContain("title");
-    expect(sectionSource).toContain("timezone");
-    expect(sectionSource).toContain("pronouns");
-    expect(sectionSource).toContain("callBy");
-    expect(sectionSource).toContain("family");
-    expect(sectionSource).toContain("context");
+  it("keeps configuration focused on profile and role", () => {
+    expect(routeSource).toContain("HumanProfileSection");
+    expect(routeSource).toContain("currentRole={member.role}");
+    expect(routeSource).not.toContain("HumanComputerAssignmentsSection");
+    expect(routeSource).not.toContain("HumanMembershipSection");
+    expect(routeSource).not.toContain("HumanUserWorkspaceSection");
+    expect(profileSource).toContain("UpdateTenantMemberMutation");
+    expect(profileSource).toContain("Role");
   });
 
-  it("loads profile fields used to render user-scoped USER.md", () => {
+  it("loads profile fields used by the backend to render user-scoped USER.md", () => {
     const tenantMembersQuery = queriesSource.slice(
       queriesSource.indexOf("query TenantMembersList"),
       queriesSource.indexOf("export const InviteMemberMutation"),
@@ -38,7 +39,5 @@ describe("People detail User Workspace", () => {
     expect(tenantMembersQuery).toContain("phone");
     expect(tenantMembersQuery).toContain("profile {");
     expect(tenantMembersQuery).toContain("context");
-    expect(queriesSource).toContain("mutation UpdateUserProfile");
-    expect(queriesSource).toContain("updateUserProfile");
   });
 });

@@ -249,8 +249,8 @@ export function AppSidebar() {
   ];
 
   const agentsItems: NavItem[] = [
-    { to: "/spaces", icon: IconPlanet, label: "Spaces" },
     { to: "/agents", icon: Bot, label: "Agents" },
+    { to: "/spaces", icon: IconPlanet, label: "Spaces" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/ontology", icon: Network, label: "Ontology" },
