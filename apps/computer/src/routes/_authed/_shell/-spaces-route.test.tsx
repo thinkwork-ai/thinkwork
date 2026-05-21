@@ -10,6 +10,7 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: unknown }) => children,
   Outlet: () => <div>thread detail outlet</div>,
   createFileRoute: () => (config: Record<string, unknown>) => config,
+  redirect: (options: unknown) => ({ type: "redirect", options }),
   useRouterState: ({ select }: { select: (state: unknown) => unknown }) =>
     select({ location: { pathname: routePathnameMock() } }),
 }));
@@ -42,9 +43,24 @@ afterEach(() => {
 });
 
 describe("Spaces routes", () => {
-  it("renders the Spaces index instead of redirecting away from workrooms", () => {
-    expect(SpacesIndexRoute).toHaveProperty("component");
-    expect(SpacesIndexRoute).not.toHaveProperty("beforeLoad");
+  it("redirects the legacy Spaces index to the new thread route", () => {
+    const beforeLoad = (
+      SpacesIndexRoute as unknown as { beforeLoad: () => never }
+    ).beforeLoad;
+
+    try {
+      beforeLoad();
+      throw new Error("Expected Spaces index beforeLoad to redirect");
+    } catch (error) {
+      expect(error).toEqual({
+        type: "redirect",
+        options: {
+          to: "/new",
+          search: { spaceId: undefined },
+          replace: true,
+        },
+      });
+    }
   });
 
   it("renders a Space workroom page instead of redirecting away from the Space", () => {
