@@ -33,7 +33,7 @@ interface CreateThreadResult {
 interface CreateThreadVars {
   input: {
     tenantId: string;
-    computerId: string;
+    computerId?: string;
     spaceId?: string;
     title: string;
     channel: "CHAT";
@@ -182,9 +182,10 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
   ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
-    if (!tenantId || !computerId) {
+    const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? undefined;
+    if (!tenantId || (!computerId && !targetSpaceId)) {
       setError(
-        noAssignedComputers
+        noAssignedComputers && !targetSpaceId
           ? "You need access to a workspace before starting work."
           : "Your selected workspace is not ready yet. Try again in a moment.",
       );
@@ -193,7 +194,6 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
 
     setError(null);
     setBusy(true);
-    const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? undefined;
     try {
       // File-attached path: createThread WITHOUT firstMessage (so the
       // thread starts empty), upload each file via the U2 presign +
@@ -210,7 +210,7 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
         const result = await createThread({
           input: {
             tenantId,
-            computerId,
+            ...(computerId ? { computerId } : {}),
             spaceId: targetSpaceId,
             title: titleFromPrompt(trimmed),
             channel: "CHAT",
@@ -239,7 +239,7 @@ export function ComputerWorkbench({ spaceId }: ComputerWorkbenchProps = {}) {
       const created = await createThread({
         input: {
           tenantId,
-          computerId,
+          ...(computerId ? { computerId } : {}),
           spaceId: targetSpaceId,
           title: titleFromPromptWithAttachments(trimmed, files),
           channel: "CHAT",

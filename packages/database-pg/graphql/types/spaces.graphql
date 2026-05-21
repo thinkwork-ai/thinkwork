@@ -12,6 +12,11 @@ enum SpaceKind {
   CUSTOMER_ONBOARDING
 }
 
+enum SpaceAccessMode {
+  PUBLIC
+  PRIVATE
+}
+
 enum SpaceMemberRole {
   OWNER
   ADMIN
@@ -57,6 +62,7 @@ type Space {
   prompt: String
   status: SpaceStatus!
   kind: SpaceKind!
+  accessMode: SpaceAccessMode!
   icon: String
   category: String
   templateKey: String
@@ -204,6 +210,7 @@ input CreateSpaceInput {
   tenantId: ID!
   name: String!
   description: String
+  accessMode: SpaceAccessMode
 }
 
 input SetSpaceAgentAvailabilityInput {
@@ -219,7 +226,11 @@ input SetSpaceAgentAvailabilityInput {
 }
 
 extend type Query {
-  spaces(tenantId: ID!, status: SpaceStatus): [Space!]!
+  spaces(
+    tenantId: ID!
+    status: SpaceStatus
+    includeAllForAdmin: Boolean
+  ): [Space!]!
   space(id: ID!): Space
   customerOnboardingSpace(tenantId: ID!): Space
 }

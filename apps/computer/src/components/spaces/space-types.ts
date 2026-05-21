@@ -4,6 +4,7 @@ export interface SpaceSummary {
   name: string;
   description?: string | null;
   kind?: string | null;
+  accessMode?: string | null;
   templateKey?: string | null;
   status?: string | null;
   unreadThreadCount?: number | null;

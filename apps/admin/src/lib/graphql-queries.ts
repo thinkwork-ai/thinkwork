@@ -156,7 +156,7 @@ export const DeleteAgentMutation = graphql(`
 
 export const SpacesListQuery = graphql(`
   query SpacesList($tenantId: ID!) {
-    spaces(tenantId: $tenantId, status: ACTIVE) {
+    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {
       id
       tenantId
       slug
@@ -164,6 +164,7 @@ export const SpacesListQuery = graphql(`
       description
       status
       kind
+      accessMode
       contextConfig
       connectedDataConfig
       toolPolicy
@@ -207,6 +208,7 @@ export const CreateSpaceMutation = graphql(`
       description
       status
       kind
+      accessMode
       contextConfig
       connectedDataConfig
       toolPolicy
@@ -251,6 +253,7 @@ export const SpaceAdminDetailQuery = graphql(`
       prompt
       status
       kind
+      accessMode
       contextConfig
       connectedDataConfig
       toolPolicy

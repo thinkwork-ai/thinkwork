@@ -123,6 +123,7 @@ function SpaceDetailPage() {
           />
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="outline">{formatLabel(space.kind)}</Badge>
+            <Badge variant="outline">{formatLabel(space.accessMode)}</Badge>
             <Badge variant={space.status === "ACTIVE" ? "default" : "outline"}>
               {formatLabel(space.status)}
             </Badge>

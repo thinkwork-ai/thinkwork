@@ -46,6 +46,14 @@ interface AttachmentRow {
   created_at: Date;
 }
 
+interface ThreadParticipantRow {
+  id: string;
+  tenant_id: string;
+  thread_id: string;
+  participant_type: "user" | "agent";
+  user_id: string | null;
+}
+
 const THREAD_A: ThreadRow = {
   id: "thread-A",
   tenant_id: TENANT_A,
@@ -95,6 +103,7 @@ const mocks = vi.hoisted(() => {
   const dbState = {
     threads: [] as ThreadRow[],
     attachments: [] as AttachmentRow[],
+    participants: [] as ThreadParticipantRow[],
     // Records of each SELECT performed so tests can assert pin presence.
     queries: [] as Array<{
       table: "threads" | "thread_attachments";
@@ -126,6 +135,13 @@ const mocks = vi.hoisted(() => {
         if (short !== undefined && out[short] === undefined)
           out[short] = obj.value;
       }
+      if (obj._op === "sql" && Array.isArray((obj as any).values)) {
+        const visibleUserId = (obj as any).values.find(
+          (value: unknown) =>
+            typeof value === "string" && value.startsWith("user-"),
+        );
+        if (visibleUserId) out.__visibleUserId = visibleUserId;
+      }
     }
     walk(predicate);
     return out;
@@ -137,6 +153,13 @@ const mocks = vi.hoisted(() => {
     value,
   }));
   const and = vi.fn((...preds: unknown[]) => ({ _op: "and", preds }));
+  const sql = Object.assign(
+    (_strings: TemplateStringsArray, ...values: unknown[]) => ({
+      _op: "sql",
+      values,
+    }),
+    {},
+  );
 
   const threadsTable = {
     _name: "threads",
@@ -149,6 +172,14 @@ const mocks = vi.hoisted(() => {
     id: { _name: "thread_attachments.id" },
     thread_id: { _name: "thread_attachments.thread_id" },
     tenant_id: { _name: "thread_attachments.tenant_id" },
+  };
+  const threadParticipantsTable = {
+    _name: "thread_participants",
+    id: { _name: "thread_participants.id" },
+    tenant_id: { _name: "thread_participants.tenant_id" },
+    thread_id: { _name: "thread_participants.thread_id" },
+    participant_type: { _name: "thread_participants.participant_type" },
+    user_id: { _name: "thread_participants.user_id" },
   };
 
   function buildSelect(table: { _name?: string }) {
@@ -181,6 +212,18 @@ const mocks = vi.hoisted(() => {
             r.tenant_id !== captured.tenant_id
           ) {
             return false;
+          }
+          if (captured.__visibleUserId !== undefined) {
+            const visibleUserId = captured.__visibleUserId as string;
+            const ownsThread = r.user_id === visibleUserId;
+            const participates = dbState.participants.some(
+              (p) =>
+                p.tenant_id === r.tenant_id &&
+                p.thread_id === r.id &&
+                p.participant_type === "user" &&
+                p.user_id === visibleUserId,
+            );
+            if (!ownsThread && !participates) return false;
           }
           return true;
         });
@@ -243,12 +286,14 @@ const mocks = vi.hoisted(() => {
     callerUserImpl,
     eq,
     and,
+    sql,
     db,
     resolveCallerTenantId,
     resolveCallerUserId,
     requireTenantAdmin,
     threadsTable,
     threadAttachmentsTable,
+    threadParticipantsTable,
     snakeToCamel,
     threadToCamel,
   };
@@ -258,8 +303,10 @@ vi.mock("../../src/graphql/utils.js", () => ({
   db: mocks.db,
   eq: mocks.eq,
   and: mocks.and,
+  sql: mocks.sql,
   threads: mocks.threadsTable,
   threadAttachments: mocks.threadAttachmentsTable,
+  threadParticipants: mocks.threadParticipantsTable,
   snakeToCamel: mocks.snakeToCamel,
   threadToCamel: mocks.threadToCamel,
 }));
@@ -289,6 +336,7 @@ describe("thread(id) resolver — tenant pinning", () => {
   beforeEach(() => {
     mocks.dbState.threads = [THREAD_A, THREAD_B];
     mocks.dbState.attachments = [A_ATTACHMENT, B_ATTACHMENT];
+    mocks.dbState.participants = [];
     mocks.dbState.queries.length = 0;
     mocks.callerTenantImpl.current = TENANT_A;
     mocks.callerUserImpl.current = USER_A;
@@ -378,9 +426,30 @@ describe("thread(id) resolver — tenant pinning", () => {
     expect(result).toBeNull();
   });
 
-  it("lets tenant admins read another user's thread detail", async () => {
+  it("does not let tenant admins read another user's thread detail without participation", async () => {
     mocks.callerUserImpl.current = USER_B;
     mocks.requireTenantAdmin.mockImplementation(async () => "admin");
+    const result = (await thread(
+      null,
+      { id: "thread-A" },
+      cognitoCtx("principal-B"),
+    )) as { id: string } | null;
+    expect(result).toBeNull();
+    expect(mocks.requireTenantAdmin).not.toHaveBeenCalled();
+  });
+
+  it("lets a mentioned participant read another user's thread detail", async () => {
+    mocks.callerUserImpl.current = USER_B;
+    mocks.dbState.participants = [
+      {
+        id: "participant-B",
+        tenant_id: TENANT_A,
+        thread_id: "thread-A",
+        participant_type: "user",
+        user_id: USER_B,
+      },
+    ];
+
     const result = (await thread(
       null,
       { id: "thread-A" },

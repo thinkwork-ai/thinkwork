@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
@@ -38,6 +45,7 @@ type SpaceRow = {
   name: string;
   slug: string;
   kind: string;
+  accessMode: string;
   status: string;
   agentCount: number;
   mcpServerCount: number;
@@ -65,6 +73,16 @@ const columns: ColumnDef<SpaceRow>[] = [
       </Badge>
     ),
     size: 170,
+  },
+  {
+    accessorKey: "accessMode",
+    header: "Access",
+    cell: ({ row }) => (
+      <Badge variant="outline" className="text-xs whitespace-nowrap">
+        {formatLabel(row.original.accessMode)}
+      </Badge>
+    ),
+    size: 110,
   },
   {
     accessorKey: "agentCount",
@@ -151,6 +169,7 @@ function SpacesPage() {
       name: space.name,
       slug: space.slug,
       kind: space.kind,
+      accessMode: space.accessMode,
       status: space.status,
       agentCount: space.agentAssignments.filter(
         (assignment) => assignment.status === "ACTIVE",
@@ -263,6 +282,9 @@ function NewSpaceDialog({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [accessMode, setAccessMode] = useState<"PUBLIC" | "PRIVATE">(
+    "PUBLIC",
+  );
   const [{ fetching }, createSpace] = useMutation(CreateSpaceMutation);
   const canSubmit = name.trim().length > 0 && !fetching;
 
@@ -275,6 +297,7 @@ function NewSpaceDialog({
         tenantId,
         name: name.trim(),
         description: description.trim() || null,
+        accessMode,
       },
     });
 
@@ -292,6 +315,7 @@ function NewSpaceDialog({
     toast.success("Space created.");
     setName("");
     setDescription("");
+    setAccessMode("PUBLIC");
     onOpenChange(false);
     onCreated(spaceId);
   }
@@ -322,6 +346,23 @@ function NewSpaceDialog({
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Optional"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="space-access">Access</Label>
+              <Select
+                value={accessMode}
+                onValueChange={(value) =>
+                  setAccessMode(value as "PUBLIC" | "PRIVATE")
+                }
+              >
+                <SelectTrigger id="space-access">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PUBLIC">Public</SelectItem>
+                  <SelectItem value="PRIVATE">Private</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </DialogBody>
           <DialogFooter>

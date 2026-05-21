@@ -28,6 +28,7 @@ describe("Spaces admin routes", () => {
     expect(listRouteSource).toContain("New Space");
     expect(listRouteSource).toContain("<DataTable");
     expect(listRouteSource).toContain('header: "Space"');
+    expect(listRouteSource).toContain('header: "Access"');
     expect(listRouteSource).toContain('header: "Agents"');
     expect(listRouteSource).toContain('header: "MCP"');
     expect(listRouteSource).toContain('header: "Tools"');
@@ -69,6 +70,8 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("query SpacesList");
     expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("query SpaceAdminDetail");
+    expect(queriesSource).toContain("includeAllForAdmin: true");
+    expect(queriesSource).toContain("accessMode");
     expect(queriesSource).toContain("agentAssignments");
     expect(queriesSource).toContain("localInstructions");
     expect(queriesSource).toContain("contextConfig");

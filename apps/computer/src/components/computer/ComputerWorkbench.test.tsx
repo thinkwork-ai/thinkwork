@@ -8,7 +8,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ComputerWorkbench } from "./ComputerWorkbench";
 
-const { navigateMock, createThreadMock, queryDocs } = vi.hoisted(() => ({
+const { assignedComputers, navigateMock, createThreadMock, queryDocs } =
+  vi.hoisted(() => ({
+    assignedComputers: [{ id: "computer-1", name: "Sales Computer" }],
   navigateMock: vi.fn(),
   createThreadMock: vi.fn(),
   queryDocs: {
@@ -32,7 +34,7 @@ vi.mock("urql", () => ({
       return [
         {
           data: {
-            assignedComputers: [{ id: "computer-1", name: "Sales Computer" }],
+            assignedComputers,
           },
         },
       ];
@@ -76,6 +78,10 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 beforeEach(() => {
+  assignedComputers.splice(0, assignedComputers.length, {
+    id: "computer-1",
+    name: "Sales Computer",
+  });
   navigateMock.mockReset();
   createThreadMock.mockReset();
 });
@@ -152,6 +158,35 @@ describe("ComputerWorkbench", () => {
     expect(navigateMock).toHaveBeenCalledWith({
       to: "/spaces/$spaceId/threads/$threadId",
       params: { spaceId: "space-1", threadId: "thread-2" },
+    });
+  });
+
+  it("creates a Space-first thread when no Computer is assigned", async () => {
+    assignedComputers.splice(0, assignedComputers.length);
+    createThreadMock.mockResolvedValueOnce({
+      data: { createThread: { id: "thread-3" } },
+    });
+    render(<ComputerWorkbench />);
+
+    fireEvent.change(screen.getByLabelText("Ask your Computer"), {
+      target: { value: "What should I work on?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(createThreadMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-A",
+          spaceId: "space-default",
+          title: "What should I work on?",
+          channel: "CHAT",
+          firstMessage: "What should I work on?",
+        },
+      });
+    });
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/threads/$id",
+      params: { id: "thread-3" },
     });
   });
 });

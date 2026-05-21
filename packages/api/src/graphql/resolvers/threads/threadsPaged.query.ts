@@ -1,5 +1,4 @@
 import type { GraphQLContext } from "../../context.js";
-import { GraphQLError } from "graphql";
 import {
   db,
   eq,
@@ -16,7 +15,7 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
-import { requireTenantAdmin, hasServiceSecret } from "../core/authz.js";
+import { callerVisibleThreadPredicate } from "./access.js";
 
 export const threadsPaged_query = async (
   _parent: any,
@@ -25,7 +24,6 @@ export const threadsPaged_query = async (
 ) => {
   const authType = ctx.auth?.authType;
   let callerUserId: string | null = null;
-  let isTenantAdminCaller = hasServiceSecret(ctx);
   if (authType === "cognito") {
     const callerTenantId = await resolveCallerTenantId(ctx);
     if (!callerTenantId || callerTenantId !== args.tenantId) {
@@ -33,13 +31,6 @@ export const threadsPaged_query = async (
     }
     callerUserId = await resolveCallerUserId(ctx);
     if (!callerUserId) return { items: [], totalCount: 0 };
-    try {
-      await requireTenantAdmin(ctx, args.tenantId);
-      isTenantAdminCaller = true;
-    } catch (err) {
-      if (!(err instanceof GraphQLError)) throw err;
-      isTenantAdminCaller = false;
-    }
   }
 
   const conditions: any[] = [eq(threads.tenant_id, args.tenantId)];
@@ -47,9 +38,9 @@ export const threadsPaged_query = async (
     conditions.push(eq(threads.space_id, args.spaceId));
   }
 
-  if (authType === "cognito" && !isTenantAdminCaller && !args.spaceId) {
+  if (authType === "cognito") {
     if (!callerUserId) return { items: [], totalCount: 0 };
-    conditions.push(callerParticipantExists(args.tenantId, callerUserId));
+    conditions.push(callerVisibleThreadPredicate(args.tenantId, callerUserId));
   }
 
   // Filter: scope to a single Computer when the caller passes one. Plan
@@ -152,17 +143,6 @@ export const threadsPaged_query = async (
     totalCount: countResult[0]?.count ?? 0,
   };
 };
-
-function callerParticipantExists(tenantId: string, callerUserId: string) {
-  return sql`EXISTS (
-    SELECT 1
-      FROM ${threadParticipants} caller_tp
-     WHERE caller_tp.tenant_id = ${tenantId}
-       AND caller_tp.thread_id = ${threads.id}
-       AND caller_tp.participant_type = 'user'
-       AND caller_tp.user_id = ${callerUserId}
-  )`;
-}
 
 function callerUnreadParticipantExists(tenantId: string, callerUserId: string) {
   return sql`EXISTS (

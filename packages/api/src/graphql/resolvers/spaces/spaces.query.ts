@@ -2,14 +2,20 @@ import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, sql, spaces as spacesTable } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
+  canManageTenantSpaces,
   canReadTenantSpaces,
   parseSpaceStatus,
   toGraphqlSpace,
+  userAccessibleSpacePredicate,
 } from "./shared.js";
 
 export async function spaces(
   _parent: any,
-  args: { tenantId: string; status?: string | null },
+  args: {
+    tenantId: string;
+    status?: string | null;
+    includeAllForAdmin?: boolean | null;
+  },
   ctx: GraphQLContext,
 ) {
   if (!(await canReadTenantSpaces(ctx, args.tenantId))) {
@@ -23,6 +29,12 @@ export async function spaces(
   let callerUserId: string | null = null;
   if (ctx.auth.authType === "cognito") {
     callerUserId = await resolveCallerUserId(ctx);
+  }
+  const includeAllForAdmin =
+    Boolean(args.includeAllForAdmin) &&
+    (await canManageTenantSpaces(ctx, args.tenantId));
+  if (ctx.auth.authType === "cognito" && callerUserId && !includeAllForAdmin) {
+    conditions.push(userAccessibleSpacePredicate(args.tenantId, callerUserId));
   }
 
   const rows = await db

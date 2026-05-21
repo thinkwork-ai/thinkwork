@@ -10,6 +10,8 @@ const source = readFileSync(
 describe("thread mention targets", () => {
   it("loads existing participants, Space targets, tenant users, and legacy tenant agents", () => {
     expect(source).toContain("from(threadParticipants)");
+    expect(source).toContain("from(spaces)");
+    expect(source).toContain("spaceAccessMode === \"public\"");
     expect(source).toContain("from(spaceMembers)");
     expect(source).toContain("from(spaceAgentAssignments)");
     expect(source).toContain('eq(spaceAgentAssignments.status, "active")');

@@ -15,9 +15,10 @@ describe("unreadThreadCount participant-scoped read state", () => {
     expect(source).toContain("${activityExpression} > tp.last_read_at");
   });
 
-  it("keeps legacy thread-level unread behavior only for pre-participant rows", () => {
+  it("keeps legacy thread-level unread behavior only when the caller has no participant row", () => {
     expect(source).toContain("tp_legacy");
     expect(source).toContain("NOT EXISTS");
+    expect(source).toContain("tp_legacy.user_id = ${callerUserId}::uuid");
     expect(source).toContain("${threads.last_read_at} IS NULL");
     expect(source).toContain("${activityExpression} > ${threads.last_read_at}");
   });

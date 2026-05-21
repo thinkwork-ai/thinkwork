@@ -50,6 +50,7 @@ export const unreadThreadCount = async (
 					WHERE tp_legacy.tenant_id = ${threads.tenant_id}
 						AND tp_legacy.thread_id = ${threads.id}
 						AND tp_legacy.participant_type = 'user'
+						AND tp_legacy.user_id = ${callerUserId}::uuid
 				)
 				AND (${threads.last_read_at} IS NULL OR ${activityExpression} > ${threads.last_read_at})
 			)

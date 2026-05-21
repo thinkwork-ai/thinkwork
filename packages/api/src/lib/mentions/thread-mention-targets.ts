@@ -4,6 +4,7 @@ import {
   agents,
   spaceAgentAssignments,
   spaceMembers,
+  spaces,
   tenantMembers,
   threadParticipants,
   threads,
@@ -99,6 +100,10 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       addTarget(byKey, targetFromRow(row));
     }
 
+    const spaceAccessMode = input.spaceId
+      ? await this.loadSpaceAccessMode(input.tenantId, input.spaceId)
+      : null;
+
     if (input.spaceId) {
       const memberRows = await this.db
         .select({
@@ -159,33 +164,35 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       }
     }
 
-    const tenantMemberRows = await this.db
-      .select({
-        role: tenantMembers.role,
-        userId: users.id,
-        userName: users.name,
-        userEmail: users.email,
-        userImage: users.image,
-      })
-      .from(tenantMembers)
-      .innerJoin(users, eq(users.id, tenantMembers.principal_id))
-      .where(
-        and(
-          eq(tenantMembers.tenant_id, input.tenantId),
-          eq(tenantMembers.principal_type, "user"),
-          eq(tenantMembers.status, "active"),
-        ),
-      );
-    for (const row of tenantMemberRows) {
-      addTarget(byKey, {
-        id: `user:${row.userId}`,
-        targetType: "user",
-        targetId: row.userId,
-        displayName: row.userName ?? row.userEmail ?? "User",
-        aliases: [row.userName, row.userEmail].filter(isString),
-        avatarUrl: row.userImage,
-        role: row.role,
-      });
+    if (!input.spaceId || spaceAccessMode === "public") {
+      const tenantMemberRows = await this.db
+        .select({
+          role: tenantMembers.role,
+          userId: users.id,
+          userName: users.name,
+          userEmail: users.email,
+          userImage: users.image,
+        })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.principal_id))
+        .where(
+          and(
+            eq(tenantMembers.tenant_id, input.tenantId),
+            eq(tenantMembers.principal_type, "user"),
+            eq(tenantMembers.status, "active"),
+          ),
+        );
+      for (const row of tenantMemberRows) {
+        addTarget(byKey, {
+          id: `user:${row.userId}`,
+          targetType: "user",
+          targetId: row.userId,
+          displayName: row.userName ?? row.userEmail ?? "User",
+          aliases: [row.userName, row.userEmail].filter(isString),
+          avatarUrl: row.userImage,
+          role: row.role,
+        });
+      }
     }
 
     if (!input.spaceId) {
@@ -218,6 +225,17 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
     }
 
     return [...byKey.values()].filter((target) => target.targetId);
+  }
+
+  private async loadSpaceAccessMode(
+    tenantId: string,
+    spaceId: string,
+  ): Promise<string | null> {
+    const [space] = await this.db
+      .select({ accessMode: spaces.access_mode })
+      .from(spaces)
+      .where(and(eq(spaces.tenant_id, tenantId), eq(spaces.id, spaceId)));
+    return space?.accessMode ?? null;
   }
 }
 

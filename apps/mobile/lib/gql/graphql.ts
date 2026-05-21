@@ -1164,6 +1164,7 @@ export type CreateScheduledJobInput = {
 };
 
 export type CreateSpaceInput = {
+  accessMode?: InputMaybe<SpaceAccessMode>;
   description?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
@@ -4314,6 +4315,7 @@ export type QuerySpaceArgs = {
 
 
 export type QuerySpacesArgs = {
+  includeAllForAdmin?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<SpaceStatus>;
   tenantId: Scalars['ID']['input'];
 };
@@ -5194,6 +5196,7 @@ export type SlackWorkspaceInstallStart = {
 
 export type Space = {
   __typename?: 'Space';
+  accessMode: SpaceAccessMode;
   agentAssignments: Array<SpaceAgentAssignment>;
   agentAvailabilityPolicy?: Maybe<Scalars['AWSJSON']['output']>;
   category?: Maybe<Scalars['String']['output']>;
@@ -5223,6 +5226,11 @@ export type Space = {
   unreadThreadCount: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
+
+export enum SpaceAccessMode {
+  Private = 'PRIVATE',
+  Public = 'PUBLIC'
+}
 
 export type SpaceAgentAssignment = {
   __typename?: 'SpaceAgentAssignment';
