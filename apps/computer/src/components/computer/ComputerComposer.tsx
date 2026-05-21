@@ -99,6 +99,13 @@ export function ComputerComposer({
     setActiveMentionIndex(0);
   }, [mentionQuery, mentionOptions.length]);
 
+  // Re-runs when the textarea's disabled flag flips. Mount-time focus
+  // (autoFocus + the rAF/setTimeout pair) silently no-ops while the
+  // composer is disabled — e.g. on /new arrival while spaces/computers
+  // are still fetching. Without re-firing on the disabled→enabled
+  // transition, the textarea would sit unfocused after fetch completes
+  // and the user would have to click it.
+  const isComposerDisabled = disabled || isSubmitting;
   useEffect(() => {
     function focusComposerInput() {
       const input = document.querySelector<HTMLTextAreaElement>(
@@ -107,19 +114,25 @@ export function ComputerComposer({
       input?.focus();
     }
 
-    focusComposerInput();
-    const animationFrame = window.requestAnimationFrame(focusComposerInput);
-    const timeout = window.setTimeout(focusComposerInput, 0);
+    if (!isComposerDisabled) {
+      focusComposerInput();
+    }
+    const animationFrame = isComposerDisabled
+      ? 0
+      : window.requestAnimationFrame(focusComposerInput);
+    const timeout = isComposerDisabled
+      ? 0
+      : window.setTimeout(focusComposerInput, 0);
     window.addEventListener(COMPUTER_COMPOSER_FOCUS_EVENT, focusComposerInput);
     return () => {
-      window.cancelAnimationFrame(animationFrame);
-      window.clearTimeout(timeout);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      if (timeout) window.clearTimeout(timeout);
       window.removeEventListener(
         COMPUTER_COMPOSER_FOCUS_EVENT,
         focusComposerInput,
       );
     };
-  }, []);
+  }, [isComposerDisabled]);
 
   async function handlePromptSubmit(message: PromptInputMessage) {
     if (disabled || isSubmitting) return;
@@ -214,7 +227,7 @@ export function ComputerComposer({
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={handleComposerKeyDown}
               placeholder="Type @ to mention a person or agent"
-              disabled={disabled || isSubmitting}
+              disabled={isComposerDisabled}
               autoFocus
             />
           </PromptInputBody>

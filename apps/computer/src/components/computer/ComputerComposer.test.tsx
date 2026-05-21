@@ -69,6 +69,34 @@ describe("ComputerComposer", () => {
     await waitFor(() => expect(document.activeElement).toBe(input));
   });
 
+  it("focuses the input once the disabled flag flips to enabled", async () => {
+    // Regression: on /new arrival the composer is disabled while
+    // spacesFetching / computersFetching is true; autoFocus and the
+    // mount-time focusComposerInput() both silently no-op on a disabled
+    // input. After the fetches resolve and isSubmitting flips to false,
+    // the textarea must take focus without a user click.
+    const { rerender } = render(
+      <ComputerComposer
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        isSubmitting
+      />,
+    );
+
+    const input = screen.getByLabelText(
+      "Ask your Computer",
+    ) as HTMLTextAreaElement;
+    expect(input.disabled).toBe(true);
+    expect(document.activeElement).not.toBe(input);
+
+    rerender(
+      <ComputerComposer value="" onChange={() => {}} onSubmit={() => {}} />,
+    );
+
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
   it("refocuses the input when the New thread nav requests focus", async () => {
     render(
       <>
