@@ -213,6 +213,14 @@ input CreateSpaceInput {
   accessMode: SpaceAccessMode
 }
 
+input UpdateSpaceInput {
+  tenantId: ID!
+  spaceId: ID!
+  name: String
+  description: String
+  accessMode: SpaceAccessMode
+}
+
 input SetSpaceAgentAvailabilityInput {
   tenantId: ID!
   spaceId: ID!
@@ -237,6 +245,7 @@ extend type Query {
 
 extend type Mutation {
   createSpace(input: CreateSpaceInput!): Space!
+  updateSpace(input: UpdateSpaceInput!): Space!
   setSpaceAgentAvailability(
     input: SetSpaceAgentAvailabilityInput!
   ): SpaceAgentAssignment!

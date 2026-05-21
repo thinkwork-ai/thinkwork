@@ -228,7 +228,10 @@ function SpacesPage() {
           pageSize={20}
           scrollable
           onRowClick={(row) =>
-            navigate({ to: "/spaces/$spaceId", params: { spaceId: row.id } })
+            navigate({
+              to: "/spaces/$spaceId/workspace",
+              params: { spaceId: row.id },
+            })
           }
         />
       )}
@@ -238,7 +241,10 @@ function SpacesPage() {
         onOpenChange={setNewSpaceOpen}
         onCreated={(spaceId) => {
           reexecuteSpaces({ requestPolicy: "network-only" });
-          void navigate({ to: "/spaces/$spaceId", params: { spaceId } });
+          void navigate({
+            to: "/spaces/$spaceId/workspace",
+            params: { spaceId },
+          });
         }}
       />
     </PageLayout>
