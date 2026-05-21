@@ -1,4 +1,4 @@
-import { sql, threadParticipants, threads } from "../../utils.js";
+import { sql, threads } from "../../utils.js";
 
 /**
  * User-visible Threads are private to the requester unless the requester was
@@ -15,7 +15,7 @@ export function callerVisibleThreadPredicate(
       ${threads.user_id} = ${callerUserId}
       OR EXISTS (
         SELECT 1
-          FROM ${threadParticipants} caller_tp
+          FROM thread_participants caller_tp
          WHERE caller_tp.tenant_id = ${tenantId}
            AND caller_tp.thread_id = ${threads.id}
            AND caller_tp.participant_type = 'user'
