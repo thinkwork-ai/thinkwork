@@ -1,16 +1,6 @@
 import { useState } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  Brain,
-  GalleryVerticalEnd,
-  LogOut,
-  Moon,
-  Repeat,
-  Settings,
-  SlidersHorizontal,
-  Shapes,
-  Sun,
-} from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { LogOut, Moon, Settings, Sun } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -23,57 +13,21 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarTrigger,
   useSidebar,
   useTheme,
 } from "@thinkwork/ui";
-import type { FileRouteTypes } from "@/routeTree.gen";
 import { useAuth } from "@/context/AuthContext";
-import {
-  COMPUTER_ARTIFACTS_ROUTE,
-  COMPUTER_CUSTOMIZE_ROUTE,
-  COMPUTER_MEMORY_ROUTE,
-  COMPUTER_SPACES_ROUTE,
-} from "@/lib/computer-routes";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
 
-interface NavItem {
-  href: FileRouteTypes["to"];
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}
-
-const secondaryNavItems: NavItem[] = [
-  {
-    href: COMPUTER_SPACES_ROUTE,
-    icon: GalleryVerticalEnd,
-    label: "Spaces",
-  },
-  { href: COMPUTER_ARTIFACTS_ROUTE, icon: Shapes, label: "Artifacts" },
-  { href: "/automations", icon: Repeat, label: "Automations" },
-  { href: COMPUTER_MEMORY_ROUTE, icon: Brain, label: "Memory" },
-  {
-    href: COMPUTER_CUSTOMIZE_ROUTE,
-    icon: SlidersHorizontal,
-    label: "Customize",
-  },
-];
-
 export function ComputerSidebar() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { state, setOpen } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const isCollapsed = state === "collapsed";
   const nextTheme = theme === "dark" ? "light" : "dark";
-  const isChatMode = isChatSidebarPath(pathname);
 
   return (
     <Sidebar collapsible="icon">
@@ -109,14 +63,10 @@ export function ComputerSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="min-h-0">
-        {settingsOpen || isChatMode ? (
-          <ChatSidebar
-            settingsOpen={settingsOpen}
-            onSettingsOpenChange={setSettingsOpen}
-          />
-        ) : (
-          <SecondaryNav pathname={pathname} />
-        )}
+        <ChatSidebar
+          settingsOpen={settingsOpen}
+          onSettingsOpenChange={setSettingsOpen}
+        />
       </SidebarContent>
 
       {settingsOpen ? null : (
@@ -230,43 +180,4 @@ function getInitials(name?: string | null, email?: string | null) {
       .slice(0, 2);
   }
   return email?.slice(0, 2).toUpperCase() ?? "??";
-}
-
-export function isChatSidebarPath(pathname: string) {
-  return (
-    pathname === "/threads" ||
-    pathname.startsWith("/threads/") ||
-    /^\/spaces\/[^/]+\/threads\/[^/]+/.test(pathname) ||
-    /^\/artifacts\/[^/]+$/.test(pathname) ||
-    pathname === "/new"
-  );
-}
-
-function SecondaryNav({ pathname }: { pathname: string }) {
-  return (
-    <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-      <SidebarGroupContent>
-        <SidebarMenu className="gap-0.5">
-          {secondaryNavItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={isActive}
-                  tooltip={item.label}
-                >
-                  <Link to={item.href}>
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
 }

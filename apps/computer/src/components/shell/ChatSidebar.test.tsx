@@ -484,6 +484,36 @@ describe("ChatSidebar", () => {
     );
   });
 
+  it("clears the unread dot immediately when a thread is viewed", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "unread-thread",
+      title: "Unread thread",
+      lastActivityAt: "2026-05-10T12:00:00Z",
+      lastReadAt: null,
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    const unreadLink = screen.getByRole("link", { name: /unread thread/i });
+    expect(unreadLink.innerHTML).toContain("bg-blue-500");
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:thread-selected", {
+          detail: { threadId: "unread-thread" },
+        }),
+      );
+    });
+
+    expect(unreadLink.innerHTML).not.toContain("bg-blue-500");
+  });
+
   it("navigates to the row directly below the deleted thread and marks it active", () => {
     recentThreadItemsMock.length = 0;
     recentThreadItemsMock.push(

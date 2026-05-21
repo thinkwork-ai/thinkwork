@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { IconPlanet } from "@tabler/icons-react";
 import { useMutation, useQuery } from "urql";
@@ -24,7 +24,6 @@ import {
   User,
 } from "lucide-react";
 import {
-  Button,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -35,6 +34,9 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -94,10 +96,15 @@ export function ChatSidebar({
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
+  const isNewThreadRoute = location.pathname === "/new";
+  const isAutomationsRoute = location.pathname === "/automations";
   const [searchOpen, setSearchOpen] = useState(false);
   const [localSettingsOpen, setLocalSettingsOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
+  );
+  const [locallyReadThreadIds, setLocallyReadThreadIds] = useState<Set<string>>(
+    () => new Set(routeThreadId ? [routeThreadId] : []),
   );
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -174,10 +181,26 @@ export function ChatSidebar({
   useEffect(() => {
     if (routeThreadId) {
       setSelectedThreadId(routeThreadId);
+      setLocallyReadThreadIds((current) => {
+        if (current.has(routeThreadId)) return current;
+        const next = new Set(current);
+        next.add(routeThreadId);
+        return next;
+      });
     } else if (location.pathname === "/new") {
       setSelectedThreadId(undefined);
     }
   }, [location.pathname, routeThreadId]);
+
+  const activateThread = useCallback((threadId: string) => {
+    setSelectedThreadId(threadId);
+    setLocallyReadThreadIds((current) => {
+      if (current.has(threadId)) return current;
+      const next = new Set(current);
+      next.add(threadId);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!recentData?.threadsPaged?.items) return;
@@ -231,7 +254,7 @@ export function ChatSidebar({
     function handleThreadSelected(event: Event) {
       const detail = (event as CustomEvent<ThreadSelectedDetail>).detail;
       if (!detail?.threadId) return;
-      setSelectedThreadId(detail.threadId);
+      activateThread(detail.threadId);
     }
 
     window.addEventListener("thinkwork:thread-deleted", handleThreadDeleted);
@@ -246,7 +269,12 @@ export function ChatSidebar({
         handleThreadSelected,
       );
     };
-  }, [navigate, reexecuteRecentThreadsQuery, reexecuteSearchThreadsQuery]);
+  }, [
+    activateThread,
+    navigate,
+    reexecuteRecentThreadsQuery,
+    reexecuteSearchThreadsQuery,
+  ]);
 
   const recentThreads = useMemo(
     () =>
@@ -302,6 +330,8 @@ export function ChatSidebar({
           search={search}
           onSearchChange={setSearch}
           threads={searchThreads}
+          locallyReadThreadIds={locallyReadThreadIds}
+          onActivate={activateThread}
           isLoading={searchFetching && !searchData}
           error={searchError?.message ?? null}
         />
@@ -311,32 +341,47 @@ export function ChatSidebar({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 px-3 pb-3 group-data-[collapsible=icon]:hidden">
-        <nav className="space-y-1" aria-label="Chat actions">
-          <Button asChild variant="ghost" className={navItemClassName}>
-            <Link to="/new" search={{ spaceId: undefined }}>
-              <MessageCirclePlus className="size-4 shrink-0" />
-              <span>New thread</span>
-            </Link>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className={navItemClassName}
-            onClick={() => setSearchOpen(true)}
-          >
-            <Search className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 text-left">Search</span>
-            <span className="text-xs text-sidebar-foreground/45">⌘K</span>
-          </Button>
-          <Button asChild variant="ghost" className={navItemClassName}>
-            <Link to="/automations">
-              <Repeat className="size-4 shrink-0" />
-              <span>Automations</span>
-            </Link>
-          </Button>
-        </nav>
-      </div>
+      <SidebarGroup className="shrink-0 pb-2 group-data-[collapsible=icon]:hidden">
+        <SidebarGroupContent>
+          <SidebarMenu className="gap-0.5" aria-label="Chat actions">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isNewThreadRoute}
+                tooltip="New thread"
+              >
+                <Link to="/new" search={{ spaceId: undefined }}>
+                  <MessageCirclePlus />
+                  <span>New thread</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Search">
+                <button type="button" onClick={() => setSearchOpen(true)}>
+                  <Search />
+                  <span className="min-w-0 flex-1 text-left">Search</span>
+                  <span className="ml-auto text-xs text-sidebar-foreground/45">
+                    ⌘K
+                  </span>
+                </button>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isAutomationsRoute}
+                tooltip="Automations"
+              >
+                <Link to="/automations">
+                  <Repeat />
+                  <span>Automations</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
 
       <div className="scrollbar-auto-hide min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
@@ -362,7 +407,8 @@ export function ChatSidebar({
                 selectedThreadId={selectedThreadId}
                 defaultOpen={false}
                 emptyBehavior="hidden"
-                onActivate={setSelectedThreadId}
+                locallyReadThreadIds={locallyReadThreadIds}
+                onActivate={activateThread}
               />
               <ThreadListSection
                 label="Chats"
@@ -370,7 +416,8 @@ export function ChatSidebar({
                 selectedThreadId={selectedThreadId}
                 defaultOpen
                 emptyBehavior="message"
-                onActivate={setSelectedThreadId}
+                locallyReadThreadIds={locallyReadThreadIds}
+                onActivate={activateThread}
               />
               <div className="space-y-1">
                 {spacesError ? (
@@ -393,7 +440,8 @@ export function ChatSidebar({
                       threads={spaceThreadsById.get(space.id) ?? []}
                       selectedThreadId={selectedThreadId}
                       activeSpaceId={routeSpaceId}
-                      onActivate={setSelectedThreadId}
+                      locallyReadThreadIds={locallyReadThreadIds}
+                      onActivate={activateThread}
                     />
                   ))
                 )}
@@ -409,6 +457,8 @@ export function ChatSidebar({
         search={search}
         onSearchChange={setSearch}
         threads={searchThreads}
+        locallyReadThreadIds={locallyReadThreadIds}
+        onActivate={activateThread}
         isLoading={searchFetching && !searchData}
         error={searchError?.message ?? null}
       />
@@ -422,6 +472,8 @@ function ThreadSearchDialog({
   search,
   onSearchChange,
   threads,
+  locallyReadThreadIds,
+  onActivate,
   isLoading,
   error,
 }: {
@@ -430,6 +482,8 @@ function ThreadSearchDialog({
   search: string;
   onSearchChange: (value: string) => void;
   threads: ChatThreadSummary[];
+  locallyReadThreadIds: ReadonlySet<string>;
+  onActivate: (threadId: string) => void;
   isLoading: boolean;
   error: string | null;
 }) {
@@ -469,12 +523,18 @@ function ThreadSearchDialog({
                   to="/threads/$id"
                   params={{ id: thread.id }}
                   className="flex h-9 items-center gap-2 rounded-md px-2 text-sm outline-none hover:bg-accent focus-visible:bg-accent"
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => {
+                    onActivate(thread.id);
+                    onOpenChange(false);
+                  }}
                 >
                   <span
                     className={cn(
                       "size-1.5 shrink-0 rounded-full",
-                      isThreadUnread(thread) ? "bg-blue-500" : "bg-transparent",
+                      isThreadUnread(thread) &&
+                        !locallyReadThreadIds.has(thread.id)
+                        ? "bg-blue-500"
+                        : "bg-transparent",
                     )}
                   />
                   <span className="min-w-0 flex-1 truncate">
@@ -496,6 +556,7 @@ function ThreadListSection({
   selectedThreadId,
   defaultOpen = true,
   emptyBehavior,
+  locallyReadThreadIds,
   onActivate,
 }: {
   label: string;
@@ -503,6 +564,7 @@ function ThreadListSection({
   selectedThreadId?: string;
   defaultOpen?: boolean;
   emptyBehavior: "hidden" | "message";
+  locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
@@ -536,6 +598,7 @@ function ThreadListSection({
                   key={thread.id}
                   thread={thread}
                   active={selectedThreadId === thread.id}
+                  locallyRead={locallyReadThreadIds.has(thread.id)}
                   onActivate={() => onActivate(thread.id)}
                 />
               ))}
@@ -565,12 +628,14 @@ function SpaceThreadSection({
   threads,
   selectedThreadId,
   activeSpaceId,
+  locallyReadThreadIds,
   onActivate,
 }: {
   space: SpaceNavSummary;
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
   activeSpaceId?: string;
+  locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
 }) {
   const label = space.name ?? space.slug ?? "Space";
@@ -626,6 +691,7 @@ function SpaceThreadSection({
                   thread={thread}
                   active={selectedThreadId === thread.id}
                   spaceRouteId={space.id}
+                  locallyRead={locallyReadThreadIds.has(thread.id)}
                   onActivate={() => onActivate(thread.id)}
                 />
               ))}
@@ -701,14 +767,16 @@ function ChatThreadRow({
   thread,
   active,
   spaceRouteId,
+  locallyRead,
   onActivate,
 }: {
   thread: ChatThreadSummary;
   active: boolean;
   spaceRouteId?: string;
+  locallyRead: boolean;
   onActivate: () => void;
 }) {
-  const unread = isThreadUnread(thread);
+  const unread = isThreadUnread(thread) && !locallyRead;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [{ fetching: deleting }, deleteThread] =
     useMutation(DeleteThreadMutation);
