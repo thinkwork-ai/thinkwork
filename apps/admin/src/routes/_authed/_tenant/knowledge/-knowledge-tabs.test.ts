@@ -21,7 +21,6 @@ describe("currentKnowledgeTab", () => {
   it("uses Memory product labels for visible tabs", () => {
     expect(KNOWLEDGE_TABS.map((tab) => tab.label)).toEqual([
       "Memory",
-      "User",
       "Pages",
       "KBs",
       "Search",
