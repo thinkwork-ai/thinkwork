@@ -1165,6 +1165,8 @@ interface ChatMessage {
   content: string | null;
   senderType?: string | null;
   senderId?: string | null;
+  ownerType?: string | null;
+  ownerId?: string | null;
   createdAt: string;
   durableArtifact?: {
     id: string;

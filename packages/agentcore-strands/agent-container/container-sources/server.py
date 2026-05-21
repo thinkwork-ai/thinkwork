@@ -295,13 +295,14 @@ _compliance_client = None  # type: ignore[var-annotated]
 # unit-tested without importing the full Strands runtime.
 
 from bootstrap_workspace import bootstrap_workspace
-from user_storage import PackResult, get_user_knowledge_pack
+from user_storage import PackResult, get_user_context_md, get_user_knowledge_pack
 
 
 # Per-user knowledge pack — separate prompt-injection concern from the
 # workspace sync. Refreshed at the same per-invocation cadence as the
 # workspace bootstrap.
 _PACK_CACHE: PackResult | None = None
+_USER_CONTEXT_CACHE: PackResult | None = None
 
 
 def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> str:
@@ -495,8 +496,32 @@ def _build_system_prompt(
             parts.insert(1 + i, sp)
         logger.info("Loaded %d system workspace files", len(system_parts))
 
+    if _USER_CONTEXT_CACHE and _USER_CONTEXT_CACHE.body.strip():
+        insert_at = 1 + len(system_parts)
+        parts.insert(insert_at, _USER_CONTEXT_CACHE.body.strip())
+        user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
+        tenant_id = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
+        token_count = max(1, len(_USER_CONTEXT_CACHE.body) // 4)
+        logger.info(
+            "user_context_injected tenant_id=%s user_id=%s scope=user token_count=%d chars=%d etag=%s",
+            tenant_id,
+            user_id,
+            token_count,
+            len(_USER_CONTEXT_CACHE.body),
+            (_USER_CONTEXT_CACHE.etag or "")[:12],
+            extra={
+                "event_type": "user_context_injected",
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "scope": "user",
+                "token_count": token_count,
+            },
+        )
+
     if _PACK_CACHE and _PACK_CACHE.body.strip():
         insert_at = 1 + len(system_parts)
+        if _USER_CONTEXT_CACHE and _USER_CONTEXT_CACHE.body.strip():
+            insert_at += 1
         parts.insert(insert_at, _PACK_CACHE.body.strip())
         user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
         tenant_id = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
@@ -577,7 +602,9 @@ def _ensure_workspace_ready(
     Also refreshes the user knowledge pack (separate per-user prompt
     injection) — same per-invocation cadence.
     """
-    global _PACK_CACHE
+    global _PACK_CACHE, _USER_CONTEXT_CACHE
+    _PACK_CACHE = None
+    _USER_CONTEXT_CACHE = None
 
     if not workspace_tenant_id or not assistant_id:
         os.makedirs(WORKSPACE_DIR, exist_ok=True)
@@ -625,13 +652,17 @@ def _ensure_workspace_ready(
     # at the same cadence as the workspace sync.
     user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
     if user_id:
+        _USER_CONTEXT_CACHE = get_user_context_md(
+            workspace_tenant_id,
+            user_id,
+            bucket=bucket,
+        )
         _PACK_CACHE = get_user_knowledge_pack(
             workspace_tenant_id,
             user_id,
             bucket=bucket,
         )
     else:
-        _PACK_CACHE = None
         logger.info(
             "pack_skipped reason=no_user_id tenant_id=%s agent_id=%s",
             workspace_tenant_id,

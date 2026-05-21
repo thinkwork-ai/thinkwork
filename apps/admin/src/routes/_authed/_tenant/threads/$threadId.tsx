@@ -367,6 +367,8 @@ function ThreadDetailPage() {
         content: e.node.content,
         senderType: e.node.senderType ?? null,
         senderId: e.node.senderId ?? null,
+        ownerType: e.node.ownerType,
+        ownerId: e.node.ownerId ?? null,
         createdAt: e.node.createdAt,
         durableArtifact: e.node.durableArtifact ?? null,
       })),

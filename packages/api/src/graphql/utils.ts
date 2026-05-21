@@ -836,7 +836,22 @@ export function messageToCamel(
   if (typeof result.role === "string") {
     result.role = (result.role as string).toUpperCase();
   }
+  const senderType =
+    typeof result.senderType === "string" ? result.senderType : null;
+  const senderId = typeof result.senderId === "string" ? result.senderId : null;
+  result.ownerType = normalizeMessageOwnerType(senderType, result.role);
+  result.ownerId = senderId;
   return result;
+}
+
+function normalizeMessageOwnerType(senderType: string | null, role: unknown) {
+  const next = senderType?.toLowerCase() ?? "";
+  if (next === "assistant") return "agent";
+  if (["agent", "computer", "system", "user"].includes(next)) return next;
+  const normalizedRole = typeof role === "string" ? role.toLowerCase() : "";
+  if (normalizedRole === "assistant") return "agent";
+  if (normalizedRole === "system" || normalizedRole === "tool") return "system";
+  return "user";
 }
 
 export function artifactToCamel(

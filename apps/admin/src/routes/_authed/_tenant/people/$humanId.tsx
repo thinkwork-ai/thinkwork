@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useAuth } from "@/context/AuthContext";
@@ -11,18 +11,21 @@ import { EmptyState } from "@/components/EmptyState";
 import { Users } from "lucide-react";
 import { TenantMembersListQuery } from "@/lib/graphql-queries";
 import { HumanProfileSection } from "@/components/humans/HumanProfileSection";
-import { HumanMembershipSection } from "@/components/humans/HumanMembershipSection";
-import { HumanComputerAssignmentsSection } from "@/components/humans/HumanComputerAssignmentsSection";
+import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/_authed/_tenant/people/$humanId")({
   component: HumanDetailPage,
 });
+
+type HumanDetailTab = "configuration" | "workspace";
 
 function HumanDetailPage() {
   const { humanId } = Route.useParams();
   const { tenantId } = useTenant();
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<HumanDetailTab>("configuration");
 
   const [result, reexecute] = useQuery({
     query: TenantMembersListQuery,
@@ -78,35 +81,71 @@ function HumanDetailPage() {
 
   return (
     <PageLayout
-      header={<PageHeader title={humanName} description={member.user.email} />}
+      header={
+        <div className="space-y-3">
+          <div className="grid items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-bold leading-tight tracking-tight text-foreground">
+                {humanName}
+              </h1>
+              <p className="truncate text-sm text-muted-foreground">
+                {member.user.email}
+              </p>
+            </div>
+            <div className="flex justify-start lg:justify-center">
+              <Tabs
+                value={tab}
+                onValueChange={(value) => setTab(value as HumanDetailTab)}
+              >
+                <TabsList>
+                  <TabsTrigger value="configuration" className="px-4">
+                    Configuration
+                  </TabsTrigger>
+                  <TabsTrigger value="workspace" className="px-4">
+                    Workspace
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            <div />
+          </div>
+        </div>
+      }
+      contentClassName={
+        tab === "workspace" ? "overflow-hidden pb-4" : undefined
+      }
     >
-      <div className="space-y-6 max-w-[750px]">
-        <HumanProfileSection
-          userId={member.user.id}
-          email={member.user.email}
-          initial={{
-            name: member.user.name,
-            phone: (member.user as { phone?: string | null }).phone ?? null,
-            image: member.user.image,
-          }}
-        />
-        <HumanComputerAssignmentsSection
-          userId={member.user.id}
-          tenantId={tenantId}
-        />
-        <HumanMembershipSection
-          memberId={member.id}
-          currentRole={member.role}
-          currentStatus={member.status}
-          humanName={humanName}
-          isSelf={callerIsSelf}
-          callerIsOwner={callerIsOwner}
-          onRemoved={() => {
-            reexecute({ requestPolicy: "network-only" });
-            navigate({ to: "/people" });
-          }}
-        />
-      </div>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as HumanDetailTab)}
+        className={tab === "workspace" ? "h-full min-h-0" : undefined}
+      >
+        <TabsContent value="configuration">
+          <div className="max-w-[760px]">
+            <HumanProfileSection
+              userId={member.user.id}
+              memberId={member.id}
+              email={member.user.email}
+              currentRole={member.role}
+              isSelf={callerIsSelf}
+              callerIsOwner={callerIsOwner}
+              initial={{
+                name: member.user.name,
+                phone: (member.user as { phone?: string | null }).phone ?? null,
+                image: member.user.image,
+              }}
+              onRoleSaved={() => reexecute({ requestPolicy: "network-only" })}
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="workspace" className="min-h-0">
+          <WorkspaceEditor
+            target={{ userId: member.user.id }}
+            mode="context"
+            className="h-full min-h-0"
+          />
+        </TabsContent>
+      </Tabs>
     </PageLayout>
   );
 }

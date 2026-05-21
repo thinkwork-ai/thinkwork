@@ -171,6 +171,8 @@ export const SendMessageMutation = graphql(`
       content
       senderType
       senderId
+      ownerType
+      ownerId
       createdAt
     }
   }

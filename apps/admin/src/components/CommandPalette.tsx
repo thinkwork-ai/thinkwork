@@ -5,7 +5,6 @@ import {
   MessagesSquare,
   Inbox,
   Bot,
-  FolderKanban,
   Repeat,
   BarChart3,
   Network,
@@ -16,6 +15,7 @@ import {
   KeyRound,
   AppWindow,
 } from "lucide-react";
+import { IconPlanet } from "@tabler/icons-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useDialog } from "@/context/DialogContext";
 import {
@@ -31,7 +31,7 @@ import {
 
 const NAV_ITEMS = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
-  { label: "Spaces", to: "/spaces", icon: FolderKanban },
+  { label: "Spaces", to: "/spaces", icon: IconPlanet },
   { label: "Threads", to: "/threads", icon: MessagesSquare },
   { label: "Inbox", to: "/inbox", icon: Inbox },
   { label: "Artifacts", to: "/applets", icon: AppWindow },

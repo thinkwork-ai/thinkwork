@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Bot,
-  FolderKanban,
   LayoutDashboard,
   MessagesSquare,
   Inbox,
@@ -20,6 +19,7 @@ import {
   ShieldCheck,
   AppWindow,
 } from "lucide-react";
+import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
@@ -212,7 +212,6 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/spaces", icon: FolderKanban, label: "Spaces" },
     {
       to: "/threads",
       icon: MessagesSquare,
@@ -251,6 +250,7 @@ export function AppSidebar() {
 
   const agentsItems: NavItem[] = [
     { to: "/agents", icon: Bot, label: "Agents" },
+    { to: "/spaces", icon: IconPlanet, label: "Spaces" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/ontology", icon: Network, label: "Ontology" },

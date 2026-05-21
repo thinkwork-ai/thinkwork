@@ -641,9 +641,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     !blockedTools.includes("query_context") &&
     !blockedTools.includes("context_engine");
   const contextEngineConfig = contextEngineEnabled
-    ? (templateContextEngineResult.ok
-        ? (templateContextEngineResult.value ?? undefined)
-        : undefined)
+    ? templateContextEngineResult.ok
+      ? (templateContextEngineResult.value ?? undefined)
+      : undefined
     : undefined;
 
   const runtimeType = normalizeAgentRuntimeType(
@@ -2330,6 +2330,8 @@ async function notifyNewMessage(payload: {
 			$content: String!
 			$senderType: String
 			$senderId: ID
+			$ownerType: String
+			$ownerId: ID
 		) {
 			notifyNewMessage(
 				messageId: $messageId
@@ -2339,6 +2341,8 @@ async function notifyNewMessage(payload: {
 				content: $content
 				senderType: $senderType
 				senderId: $senderId
+				ownerType: $ownerType
+				ownerId: $ownerId
 			) {
 				messageId
 				threadId
@@ -2347,6 +2351,8 @@ async function notifyNewMessage(payload: {
 				content
 				senderType
 				senderId
+				ownerType
+				ownerId
 				createdAt
 			}
 		}
@@ -2359,7 +2365,15 @@ async function notifyNewMessage(payload: {
         "Content-Type": "application/json",
         "x-api-key": APPSYNC_API_KEY,
       },
-      body: JSON.stringify({ query: mutation, variables: payload }),
+      body: JSON.stringify({
+        query: mutation,
+        variables: {
+          ...payload,
+          ownerType:
+            payload.senderType === "assistant" ? "agent" : payload.senderType,
+          ownerId: payload.senderId,
+        },
+      }),
     });
     const responseBody = await response.text();
     if (!response.ok || responseBody.includes('"errors"')) {

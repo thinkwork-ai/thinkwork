@@ -23,6 +23,8 @@ type NewMessageEvent {
   content: String
   senderType: String
   senderId: ID
+  ownerType: String
+  ownerId: ID
   createdAt: AWSDateTime!
 }
 
@@ -123,6 +125,8 @@ extend type Mutation {
     content: String
     senderType: String
     senderId: ID
+    ownerType: String
+    ownerId: ID
   ): NewMessageEvent
 
   notifyHeartbeatActivity(
