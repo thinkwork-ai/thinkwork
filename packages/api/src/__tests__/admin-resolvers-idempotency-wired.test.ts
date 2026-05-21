@@ -357,5 +357,15 @@ describe("admin-skill resolvers wire through runWithIdempotency", () => {
         }
       ).status,
     ).toBe("succeeded");
+
+    // Regression guard for the case-mismatch bug that hid invited users
+    // from every membership-gated reader (canReadTenantSpaces, etc).
+    // tenant_members.principal_type must be lowercase 'user' — the
+    // tenant_members_principal_type_lowercase_chk CHECK constraint
+    // (drizzle/0118) rejects anything else at the DB layer.
+    const tenantMemberValues = insertPrimaryMock.mock.calls[0]?.[0] as {
+      principal_type: string;
+    };
+    expect(tenantMemberValues.principal_type).toBe("user");
   });
 });

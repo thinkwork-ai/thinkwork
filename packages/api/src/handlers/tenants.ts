@@ -281,11 +281,14 @@ async function inviteMember(
 	}
 
 	// 4. Insert tenant membership.
+	// principal_type must be lowercase 'user' — every reader gate filters
+	// on the lowercase value and the CHECK constraint added in
+	// drizzle/0118_normalize_tenant_member_principal_type.sql enforces it.
 	const [row] = await db
 		.insert(tenantMembers)
 		.values({
 			tenant_id: tenantId,
-			principal_type: "USER",
+			principal_type: "user",
 			principal_id: cognitoSub,
 			role,
 			status: "active",
