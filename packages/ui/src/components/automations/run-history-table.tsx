@@ -8,7 +8,7 @@ export interface RunHistoryTableProps {
   runs: ScheduledJobRunRow[];
   onRowClick: (run: ScheduledJobRunRow) => void;
   /**
-   * Per-app relative-time formatter (admin and computer each ship their
+   * Per-app relative-time formatter (admin and Spaces each ship their
    * own `Intl.RelativeTimeFormat` wrapper today; passing it in keeps the
    * shared component from duplicating that logic).
    */

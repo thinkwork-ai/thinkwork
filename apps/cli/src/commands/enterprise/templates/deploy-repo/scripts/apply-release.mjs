@@ -398,19 +398,21 @@ async function syncStaticSites() {
     await rm(extractDir, { recursive: true, force: true });
     await mkdir(extractDir, { recursive: true });
     run("tar", ["-xzf", localPath, "-C", extractDir]);
+    const terraformOutputPrefix =
+      artifact.name === "spaces" ? "computer" : artifact.name;
     const bucket = terraformOutput(
       terraformDir,
-      `${artifact.name}_bucket_name`,
+      `${terraformOutputPrefix}_bucket_name`,
     );
     if (!bucket) {
       throw new Error(
-        `Terraform output ${artifact.name}_bucket_name is missing`,
+        `Terraform output ${terraformOutputPrefix}_bucket_name is missing`,
       );
     }
     run("aws", ["s3", "sync", "--delete", extractDir, `s3://${bucket}/`]);
     const distributionId = terraformOutput(
       terraformDir,
-      `${artifact.name}_distribution_id`,
+      `${terraformOutputPrefix}_distribution_id`,
     );
     if (distributionId) {
       run("aws", [

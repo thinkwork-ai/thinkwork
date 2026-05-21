@@ -112,7 +112,7 @@ import {
   tenantMcpContextTools,
   tenantMcpServers,
   tenantCredentials,
-  // Customize page (apps/computer)
+  // Customize page (apps/spaces)
   skillCatalog,
   tenantSkills,
   tenantWorkflowCatalog,

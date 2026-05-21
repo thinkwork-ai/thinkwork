@@ -38,6 +38,7 @@ jobs:
       terraform: ${{ steps.filter.outputs.terraform }}
       skills: ${{ steps.filter.outputs.skills }}
       admin: ${{ steps.filter.outputs.admin }}
+      spaces: ${{ steps.filter.outputs.spaces }}
       docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +71,7 @@ jobs:
               - '.github/workflows/deploy.yml'
             computer_runtime:
               - 'packages/computer-runtime/**'
-              - 'scripts/build-computer-runtime-image.sh'
+              - 'scripts/build-spaces-runtime-image.sh'
               - '.github/workflows/deploy.yml'
             terraform:
               - 'terraform/**'
@@ -79,8 +80,8 @@ jobs:
               - 'packages/workspace-defaults/files/**'
             admin:
               - 'apps/admin/**'
-            computer:
-              - 'apps/computer/**'
+            spaces:
+              - 'apps/spaces/**'
             docs:
               - 'docs/**'
 
@@ -458,7 +459,7 @@ jobs:
     #
     # Gating: only run when something terraform-relevant changed.
     # Docs-only, admin-only, or mobile-only PRs skip terraform-apply;
-    # downstream publish jobs (build-admin/computer/docs) accept skipped
+    # downstream publish jobs (build-admin/spaces/docs) accept skipped
     # as success. We deliberately do NOT add `build-container` here even
     # to read `build-container.result` — that would reintroduce the
     # 20-minute queue gap. Instead we gate on the same detect-changes
@@ -713,13 +714,13 @@ jobs:
   # container until ECS starts a replacement. Build the arm64 image after
   # terraform has created the dedicated ECR repository, then force existing
   # Computer services to roll onto the freshly pushed phase2-skeleton tag.
-  build-computer-runtime:
+  build-spaces-runtime:
     name: Build Computer Runtime
     needs: [detect-changes, terraform-apply]
     # Allow terraform-apply == skipped: ECR repo + ECS services exist
     # from prior applies; this job pushes a new image and force-rolls
     # ECS. The same `(success || skipped)` pattern is used by
-    # build-admin / build-computer / build-docs / bootstrap.
+    # build-admin / build-spaces / build-docs / bootstrap.
     if: >-
       always()
       && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
@@ -975,9 +976,9 @@ jobs:
         # The server-side Lambda env injection (terraform-apply step
         # above) is a separate path and remains untouched.
 
-  # ── Build & deploy computer SPA (apps/computer at computer.thinkwork.ai) ─
-  build-computer:
-    name: Build & Deploy Computer
+  # ── Build & deploy Spaces SPA (apps/spaces at app.thinkwork.ai) ───────
+  build-spaces:
+    name: Build & Deploy Spaces
     needs: [terraform-apply]
     if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
@@ -1010,10 +1011,10 @@ jobs:
       - name: Build & deploy
         env:
           MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}
-        run: bash scripts/build-computer.sh ${{ env.STAGE }}
-        # Same API_AUTH_SECRET hygiene as build-admin: the computer SPA
+        run: bash scripts/build-spaces.sh ${{ env.STAGE }}
+        # Same API_AUTH_SECRET hygiene as build-admin: the Spaces SPA
         # authenticates REST calls with the user's Cognito id token (via
-        # apps/computer/src/lib/api-fetch.ts). Never inline a service-to-
+        # apps/spaces/src/lib/api-fetch.ts). Never inline a service-to-
         # service secret into the public JS bundle.
 
   # ── Build & deploy docs site ────────────────────────────────────
@@ -1131,10 +1132,10 @@ jobs:
         build-container,
         terraform-apply,
         update-agentcore-runtimes,
-        build-computer-runtime,
+        build-spaces-runtime,
         migration-drift-check,
         build-admin,
-        build-computer,
+        build-spaces,
         build-docs,
         bootstrap,
       ]
@@ -1210,7 +1211,7 @@ jobs:
           echo "║ Stage: ${{ env.STAGE }}"
           echo "║"
           echo "║ Admin App:  $(tf_output_raw admin_url || echo 'N/A')"
-          echo "║ Computer:   $(tf_output_raw computer_url || echo 'N/A')"
+          echo "║ Spaces:     $(tf_output_raw computer_url || echo 'N/A')"
           echo "║ Docs Site:  $(tf_output_raw docs_url || echo 'N/A')"
           echo "║ API:        $(tf_output_raw api_endpoint || echo 'N/A')"
           echo "║ AppSync:    $(tf_output_raw appsync_api_url || echo 'N/A')"
@@ -1224,10 +1225,10 @@ jobs:
           echo "║ Job Results:"
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
           echo "║   AgentCore Runtime:      ${{ needs.update-agentcore-runtimes.result }}"
-          echo "║   Computer Runtime:       ${{ needs.build-computer-runtime.result }}"
+          echo "║   Computer Runtime:       ${{ needs.build-spaces-runtime.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
           echo "║   Build Admin:            ${{ needs.build-admin.result }}"
-          echo "║   Build Computer:         ${{ needs.build-computer.result }}"
+          echo "║   Build Spaces:           ${{ needs.build-spaces.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
           echo "║   Bootstrap:              ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"

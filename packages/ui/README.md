@@ -1,6 +1,6 @@
 # @thinkwork/ui
 
-Shared visual primitives, theme tokens, and design utilities for ThinkWork's web apps. Owns the look and feel; does not own routing, GraphQL, auth, or app-specific composition — those stay in each consumer (`apps/admin`, future `apps/computer`).
+Shared visual primitives, theme tokens, and design utilities for ThinkWork's web apps. Owns the look and feel; does not own routing, GraphQL, auth, or app-specific composition — those stay in each consumer (`apps/admin`, `apps/spaces`).
 
 This is the seed of a larger extraction. Phase 1 of the package ships the `cn` class-name helper, the `ThemeProvider` / `useTheme` dark-mode hook, and a `theme.css` consumers can `@import "@thinkwork/ui/theme.css"`. shadcn primitives and the sidebar shell move in a follow-up PR (parent plan U2); admin migrates to consume the package after that (parent U4).
 

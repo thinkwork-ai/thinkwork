@@ -6,6 +6,38 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Spaces Rebrand and Picker Polish
+
+Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-21-003-feat-spaces-rebrand-and-picker-polish-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: CI passed; ready to squash merge
+- Active unit: grouped U1-U5 implementation
+- Active branch: `codex/spaces-rebrand-picker-polish`
+- Active worktree: `.Codex/worktrees/spaces-rebrand-picker-polish`
+- Started: 2026-05-21
+- PR: [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526)
+- CI: passed after migration-scope fix
+
+### Progress Log
+
+| Date       | Unit    | Branch                               | PR      | Status      | Verification                                                                                         | Notes                                                                                                                                       |
+| ---------- | ------- | ------------------------------------ | ------- | ----------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-21 | U1-U5   | `codex/spaces-rebrand-picker-polish` | [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526) | CI passed; ready to squash merge | `pnpm install`; stale tsbuildinfo cleanup; `pnpm --filter @thinkwork/database-pg build`; `pnpm --filter @thinkwork/spaces test`; `pnpm --filter @thinkwork/spaces typecheck`; `bash scripts/build-spaces.test.sh`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm --filter @thinkwork/spaces build`; `pnpm -r --if-present test`; `pnpm -r --if-present lint`; `terraform fmt -check` on touched Terraform; `terraform validate` for `terraform/modules/thinkwork` and `terraform/examples/greenfield`; `pnpm --filter @thinkwork/graph typecheck`; `pnpm --filter @thinkwork/ui typecheck`; grep guards; browser smoke at `http://localhost:5174/new`; GitHub checks: CLA, lint, test, typecheck, verify | Grouped by plan decision so the folder/package/scripts/component rebrand and picker polish land as one coherent PR without mixed naming. `pnpm format:check` cannot run because the repo does not currently install `prettier`; an ephemeral full-repo Prettier check also reports broad pre-existing formatting drift. `actionlint` is not installed and Docker is not running, so workflow syntax was covered by GitHub CI. |
+
+### CI Failures
+
+- 2026-05-21: `Migration Drift Precheck (dev)` failed on PR #1526 because comment-only edits to hand-rolled migration files scoped the drift reporter to `packages/database-pg/drizzle/0078_tenant_customize_catalog.sql`, `0079_seed_tenant_customize_catalog.sql`, `0081_routines_catalog_slug.sql`, and `0084_artifacts_favorited_at.sql`; the pre-existing `0079_seed_tenant_customize_catalog.sql` file has no drift markers. Fix: reverted the migration comment-only edits so this internal app rebrand does not touch migration files or trigger the drift scope.
+
+### Blockers
+
+- None.
+
+---
+
 ## Current Run: Admin Space Studio Simplification
 
 Plan: `docs/plans/2026-05-21-005-feat-admin-space-studio-simplification-plan.md`

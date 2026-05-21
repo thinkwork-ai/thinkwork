@@ -308,7 +308,7 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.6.0)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
 
-  apps/computer:
+  apps/spaces:
     dependencies:
       '@fontsource-variable/geist':
         specifier: ^5.2.8

@@ -57,7 +57,7 @@ SeamFn = Callable[..., dict[str, Any]]
 
 # Wire-protocol vocabulary — kept locally so this module is the single
 # source of truth for what we emit. Mirror with the TS parser at
-# apps/computer/src/lib/ui-message-chunk-parser.ts and the contract spec.
+# apps/spaces/src/lib/ui-message-chunk-parser.ts and the contract spec.
 ID_REQUIRED_TYPES: frozenset[str] = frozenset(
     {
         "text-start",

@@ -17,7 +17,7 @@
  * material refs so a filter change doesn't restart the force sim.
  *
  * Ported from apps/admin/src/components/WikiGraph.tsx in U2 of the
- * apps/computer Memory port (plan
+ * apps/spaces Memory port (plan
  * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md).
  */
 import {

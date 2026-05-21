@@ -27,7 +27,7 @@ This kit fills the gap.
 | `fixtures/crm-opportunity-won.json`       | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                        |
 | `fixtures/task-completed.json`            | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                            |
 | `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                       |
-| `computer-runbook-smoke.mjs`              | Computer runbook smoke. Dry-run validates repo runbooks; live mode checks auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
+| `spaces-runbook-smoke.mjs`              | Computer runbook smoke. Dry-run validates repo runbooks; live mode checks auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
 
 ## Quick start — run the full smoke suite
 
@@ -53,8 +53,8 @@ failure modes under "no connectors wired", and single-path invocations.
 The Computer runbook smoke covers published runbooks rather than skill runs:
 
 ```sh
-node scripts/smoke/computer-runbook-smoke.mjs
-SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/computer-runbook-smoke.mjs
+node scripts/smoke/spaces-runbook-smoke.mjs
+SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/spaces-runbook-smoke.mjs
 ```
 
 Live mode requires a deployed Computer stack and GraphQL/database credentials. It checks:

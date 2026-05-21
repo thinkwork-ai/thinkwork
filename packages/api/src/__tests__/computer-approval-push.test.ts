@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildComputerApprovalPushMessage } from "../lib/push-notifications.js";
 
 describe("buildComputerApprovalPushMessage", () => {
-	it("builds a mobile push that deep-links to apps/computer approvals", () => {
+	it("builds a mobile push that deep-links to apps/spaces approvals", () => {
 		expect(
 			buildComputerApprovalPushMessage({
 				token: "ExponentPushToken[test]",

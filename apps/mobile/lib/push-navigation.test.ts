@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { pushNavigationTarget } from "./push-navigation";
 
 describe("pushNavigationTarget", () => {
-  it("opens computer approval notifications at the apps/computer approval URL", () => {
+  it("opens computer approval notifications at the apps/spaces approval URL", () => {
     expect(
       pushNavigationTarget(
         {

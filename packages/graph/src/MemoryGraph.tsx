@@ -7,9 +7,9 @@
  * not "clean up" those without measuring.
  *
  * Ported from apps/admin/src/components/MemoryGraph.tsx in U2 of the
- * apps/computer Memory port (plan
+ * apps/spaces Memory port (plan
  * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md). Both
- * apps/admin and apps/computer consume this version.
+ * apps/admin and apps/spaces consume this version.
  */
 import {
   useCallback,

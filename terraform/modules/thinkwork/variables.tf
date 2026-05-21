@@ -460,7 +460,7 @@ variable "google_places_api_key" {
 }
 
 variable "mapbox_public_token" {
-  description = "Mapbox public pk.* token consumed by apps/computer's MapView primitive (in @thinkwork/computer-stdlib) for inline map tile rendering inside generated applets. Flows from this variable → terraform output → scripts/build-computer.sh → apps/computer/.env.production as VITE_MAPBOX_PUBLIC_TOKEN. URL-restrict on the Mapbox dashboard to the deployed `computer.<apex>` host (and any dev hosts) — the token ships in the public Vite bundle, so URL allowlist is the security boundary. Empty string is acceptable: MapView falls back to OpenStreetMap tiles when the env var is unset, so dev environments without an operator-provisioned token still render maps."
+  description = "Mapbox public pk.* token consumed by the apps/spaces MapView primitive (in @thinkwork/computer-stdlib) for inline map tile rendering inside generated applets. Flows from this variable → terraform output → scripts/build-spaces.sh → apps/spaces/.env.production as VITE_MAPBOX_PUBLIC_TOKEN. URL-restrict on the Mapbox dashboard to the deployed `computer.<apex>` host (and any dev hosts) — the token ships in the public Vite bundle, so URL allowlist is the security boundary. Empty string is acceptable: MapView falls back to OpenStreetMap tiles when the env var is unset, so dev environments without an operator-provisioned token still render maps."
   type        = string
   default     = ""
   sensitive   = true
