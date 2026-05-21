@@ -196,6 +196,13 @@ describe("Spaces admin routes", () => {
       "new URLSearchParams({ spaceId: space.id })",
     );
     expect(detailChromeSource).toContain("<DataTable");
+    expect(detailChromeSource).toContain("ScheduledJobFormDialog");
+    expect(detailChromeSource).toContain("WebhookFormDialog");
+    expect(detailChromeSource).toContain("Add Schedule");
+    expect(detailChromeSource).toContain("Add Webhook");
+    expect(detailChromeSource).toContain(
+      "JSON.stringify({ ...data, spaceId: space.id })",
+    );
     expect(detailChromeSource).toContain('header: "Name"');
     expect(detailChromeSource).toContain('header: "Type"');
     expect(detailChromeSource).toContain('header: "Schedule / Trigger"');
