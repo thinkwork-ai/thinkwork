@@ -119,20 +119,22 @@ export function ComputerSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-2 group-data-[collapsible=icon]:p-1">
-        <AccountMenu
-          name={user?.name}
-          email={user?.email}
-          theme={theme}
-          nextTheme={nextTheme}
-          onOpenSettings={() => {
-            setSettingsOpen(true);
-            if (isCollapsed) setOpen(true);
-          }}
-          onToggleTheme={toggleTheme}
-          onSignOut={signOut}
-        />
-      </SidebarFooter>
+      {settingsOpen ? null : (
+        <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1">
+          <AccountMenu
+            name={user?.name}
+            email={user?.email}
+            theme={theme}
+            nextTheme={nextTheme}
+            onOpenSettings={() => {
+              setSettingsOpen(true);
+              if (isCollapsed) setOpen(true);
+            }}
+            onToggleTheme={toggleTheme}
+            onSignOut={signOut}
+          />
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }
@@ -162,21 +164,12 @@ function AccountMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex h-10 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
-          aria-label="Open account menu"
+          className="flex h-9 w-full min-w-0 items-center gap-2 rounded-md py-2 pl-2.5 pr-2 text-left text-sidebar-foreground/85 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+          aria-label="Open settings menu"
         >
-          <Avatar size="xs">
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-          <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <span className="block truncate text-xs font-medium leading-tight">
-              {displayName}
-            </span>
-            {email ? (
-              <span className="block truncate text-xs leading-tight text-sidebar-foreground/55">
-                {email}
-              </span>
-            ) : null}
+          <Settings className="size-4 shrink-0" />
+          <span className="truncate text-sm group-data-[collapsible=icon]:hidden">
+            Settings
           </span>
         </button>
       </DropdownMenuTrigger>
@@ -187,7 +180,7 @@ function AccountMenu({
         className="w-72"
       >
         <DropdownMenuLabel className="font-normal">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-start gap-2">
             <Avatar size="xs">
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>

@@ -781,6 +781,7 @@ function ChatThreadRow({
             event.stopPropagation();
             void handleConfirmDelete();
           }}
+          onMouseLeave={() => setConfirmingDelete(false)}
         >
           Confirm
         </button>

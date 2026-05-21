@@ -429,7 +429,18 @@ describe("ChatSidebar", () => {
 
     expect(screen.getByText("4h")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /delete delete me/i }));
+    const deleteButton = () =>
+      screen.getByRole("button", { name: /delete delete me/i });
+
+    fireEvent.click(deleteButton());
+    const confirmButton = screen.getByRole("button", { name: "Confirm" });
+    fireEvent.mouseLeave(confirmButton);
+
+    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+    expect(deleteButton()).toBeTruthy();
+    expect(deleteThreadMock).not.toHaveBeenCalled();
+
+    fireEvent.click(deleteButton());
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
