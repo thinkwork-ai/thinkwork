@@ -120,7 +120,8 @@ def load_system_contracts(
         rendered = _render_body(parsed, vars_dict)
         matches.append((slug, rendered))
 
-    matches.sort(key=lambda item: item[0])
+    # No final sort -- the os.listdir() walk above is wrapped in sorted(...),
+    # so matches are appended in deterministic slug order already.
     return [body for _slug, body in matches]
 
 
