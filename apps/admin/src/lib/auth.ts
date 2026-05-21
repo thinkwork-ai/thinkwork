@@ -172,10 +172,13 @@ export function signOut(): void {
     return;
   }
 
-  const logoutUri = `${window.location.origin}/sign-in`;
+  // logout_uri must exactly match an entry in the Cognito user-pool client's
+  // LogoutURLs allowlist. The Terraform module registers bare origins (not
+  // `/sign-in`), so target the origin here and let the `_authed` route guard
+  // bounce the unauthenticated user to `/sign-in`.
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
-    logout_uri: logoutUri,
+    logout_uri: window.location.origin,
   });
   window.location.href = `${getCognitoDomainBase()}/logout?${params.toString()}`;
 }

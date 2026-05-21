@@ -54,8 +54,8 @@ describe("signOut", () => {
     const target = new URL(navigations[0]);
     expect(target.pathname).toBe("/logout");
     expect(target.searchParams.get("client_id")).toBe("test-client-id");
-    expect(target.searchParams.get("logout_uri")).toBe(
-      "https://admin.example/sign-in",
-    );
+    // Cognito LogoutURLs allowlist contains bare origins; the `_authed` route
+    // guard bounces the unauthenticated user to /sign-in once they land.
+    expect(target.searchParams.get("logout_uri")).toBe("https://admin.example");
   });
 });
