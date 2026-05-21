@@ -14,19 +14,19 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: Local verification passed; preparing PR
+- Status: CI passed; ready to squash merge
 - Active unit: grouped U1-U5 implementation
 - Active branch: `codex/spaces-rebrand-picker-polish`
 - Active worktree: `.Codex/worktrees/spaces-rebrand-picker-polish`
 - Started: 2026-05-21
 - PR: [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526)
-- CI: fixing failed migration drift precheck
+- CI: passed after migration-scope fix
 
 ### Progress Log
 
 | Date       | Unit    | Branch                               | PR      | Status      | Verification                                                                                         | Notes                                                                                                                                       |
 | ---------- | ------- | ------------------------------------ | ------- | ----------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-21 | U1-U5   | `codex/spaces-rebrand-picker-polish` | [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526) | PR opened; CI pending | `pnpm install`; stale tsbuildinfo cleanup; `pnpm --filter @thinkwork/database-pg build`; `pnpm --filter @thinkwork/spaces test`; `pnpm --filter @thinkwork/spaces typecheck`; `bash scripts/build-spaces.test.sh`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm --filter @thinkwork/spaces build`; `pnpm -r --if-present test`; `pnpm -r --if-present lint`; `terraform fmt -check` on touched Terraform; `terraform validate` for `terraform/modules/thinkwork` and `terraform/examples/greenfield`; `pnpm --filter @thinkwork/graph typecheck`; `pnpm --filter @thinkwork/ui typecheck`; grep guards; browser smoke at `http://localhost:5174/new` | Grouped by plan decision so the folder/package/scripts/component rebrand and picker polish land as one coherent PR without mixed naming. `pnpm format:check` cannot run because the repo does not currently install `prettier`; an ephemeral full-repo Prettier check also reports broad pre-existing formatting drift. `actionlint` is not installed and Docker is not running, so workflow syntax will be covered by GitHub CI. |
+| 2026-05-21 | U1-U5   | `codex/spaces-rebrand-picker-polish` | [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526) | CI passed; ready to squash merge | `pnpm install`; stale tsbuildinfo cleanup; `pnpm --filter @thinkwork/database-pg build`; `pnpm --filter @thinkwork/spaces test`; `pnpm --filter @thinkwork/spaces typecheck`; `bash scripts/build-spaces.test.sh`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm --filter @thinkwork/spaces build`; `pnpm -r --if-present test`; `pnpm -r --if-present lint`; `terraform fmt -check` on touched Terraform; `terraform validate` for `terraform/modules/thinkwork` and `terraform/examples/greenfield`; `pnpm --filter @thinkwork/graph typecheck`; `pnpm --filter @thinkwork/ui typecheck`; grep guards; browser smoke at `http://localhost:5174/new`; GitHub checks: CLA, lint, test, typecheck, verify | Grouped by plan decision so the folder/package/scripts/component rebrand and picker polish land as one coherent PR without mixed naming. `pnpm format:check` cannot run because the repo does not currently install `prettier`; an ephemeral full-repo Prettier check also reports broad pre-existing formatting drift. `actionlint` is not installed and Docker is not running, so workflow syntax was covered by GitHub CI. |
 
 ### CI Failures
 
