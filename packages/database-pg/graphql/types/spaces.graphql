@@ -70,6 +70,7 @@ type Space {
   contextConfig: AWSJSON
   connectedDataConfig: AWSJSON
   toolPolicy: AWSJSON
+  builtInTools: [String!]!
   mcpPolicy: AWSJSON
   agentAvailabilityPolicy: AWSJSON
   triggerConfig: AWSJSON
@@ -240,6 +241,13 @@ input SetSpaceKnowledgeBasesInput {
   knowledgeBases: [SpaceKnowledgeBaseInput!]!
 }
 
+input SetSpaceToolsInput {
+  tenantId: ID!
+  spaceId: ID!
+  builtInToolSlugs: [String!]!
+  mcpServerIds: [ID!]!
+}
+
 extend type Query {
   spaces(
     tenantId: ID!
@@ -259,6 +267,7 @@ extend type Mutation {
   setSpaceKnowledgeBases(
     input: SetSpaceKnowledgeBasesInput!
   ): [SpaceKnowledgeBase!]!
+  setSpaceTools(input: SetSpaceToolsInput!): Space!
   startCustomerOnboarding(
     input: StartCustomerOnboardingInput!
   ): StartCustomerOnboardingPayload!

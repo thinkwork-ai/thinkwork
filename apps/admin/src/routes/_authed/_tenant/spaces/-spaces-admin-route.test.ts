@@ -136,7 +136,7 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain("Agent Availability");
     expect(detailChromeSource).not.toContain("Trigger Config");
     expect(detailChromeSource).not.toContain("Raw Config");
-    expect(detailChromeSource).not.toContain("Slug");
+    expect(detailChromeSource).not.toContain(">Slug<");
     expect(detailChromeSource).not.toContain("Category");
     expect(detailChromeSource).not.toContain("Created");
     expect(detailChromeSource).not.toContain("JsonPanel");
@@ -169,6 +169,23 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain("source adapter");
   });
 
+  it("keeps Tools scoped to built-in tools and MCP server selection", () => {
+    expect(toolsRouteSource).toContain("SpaceToolsPanel");
+    expect(toolsRouteSource).toContain("space={space}");
+    expect(detailChromeSource).toContain("SpaceToolsQuery");
+    expect(detailChromeSource).toContain("SetSpaceToolsMutation");
+    expect(detailChromeSource).toContain("listBuiltinTools");
+    expect(detailChromeSource).toContain("listMcpServers");
+    expect(detailChromeSource).toContain("Built-in Tools");
+    expect(detailChromeSource).toContain("MCP Servers");
+    expect(detailChromeSource).toContain("Choose built-in tools");
+    expect(detailChromeSource).toContain("Choose MCP servers");
+    expect(detailChromeSource).toContain("No tools selected.");
+    expect(detailChromeSource).not.toContain("Tool Policy");
+    expect(detailChromeSource).not.toContain("MCP Policy");
+    expect(detailChromeSource).not.toContain("JsonPanel");
+  });
+
   it("queries only the Space fields needed by the simplified UI", () => {
     expect(queriesSource).toContain("query SpacesList");
     expect(queriesSource).toContain("mutation CreateSpace");
@@ -176,11 +193,17 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("query SpaceAdminDetail");
     expect(queriesSource).toContain("query SpaceMemory");
     expect(queriesSource).toContain("mutation SetSpaceKnowledgeBases");
+    expect(queriesSource).toContain("query SpaceTools");
+    expect(queriesSource).toContain("mutation SetSpaceTools");
     expect(queriesSource).toContain("includeAllForAdmin: true");
     expect(queriesSource).toContain("accessMode");
     expect(queriesSource).toContain("knowledgeBases");
     expect(queriesSource).toContain("knowledgeBaseId");
     expect(queriesSource).toContain("setSpaceKnowledgeBases");
+    expect(queriesSource).toContain("builtInTools");
+    expect(queriesSource).toContain("mcpServers");
+    expect(queriesSource).toContain("mcpServerId");
+    expect(queriesSource).toContain("setSpaceTools");
     expect(queriesSource).not.toContain("agentAssignments");
     expect(queriesSource).not.toContain("localInstructions");
     expect(queriesSource).not.toContain("contextConfig");
@@ -190,7 +213,6 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).not.toContain("agentAvailabilityPolicy");
     expect(queriesSource).not.toContain("triggerConfig");
     expect(queriesSource).not.toContain("renderDiagnostics");
-    expect(queriesSource).not.toContain("mcpServers");
     expect(queriesSource).not.toContain("checklistTemplates");
     expect(queriesSource).not.toContain("integrations");
     expect(queriesSource).not.toContain("members");

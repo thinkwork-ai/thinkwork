@@ -253,6 +253,48 @@ export const SetSpaceKnowledgeBasesMutation = graphql(`
   }
 `);
 
+export const SpaceToolsQuery = graphql(`
+  query SpaceTools($id: ID!) {
+    space(id: $id) {
+      id
+      builtInTools
+      mcpServers {
+        id
+        mcpServerId
+        enabled
+        mcpServer {
+          id
+          name
+          slug
+          enabled
+          status
+        }
+      }
+    }
+  }
+`);
+
+export const SetSpaceToolsMutation = graphql(`
+  mutation SetSpaceTools($input: SetSpaceToolsInput!) {
+    setSpaceTools(input: $input) {
+      id
+      builtInTools
+      mcpServers {
+        id
+        mcpServerId
+        enabled
+        mcpServer {
+          id
+          name
+          slug
+          enabled
+          status
+        }
+      }
+    }
+  }
+`);
+
 export const UpdateAgentStatusMutation = graphql(`
   mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {
     updateAgentStatus(id: $id, status: $status) {
