@@ -144,7 +144,7 @@ describe("inviteMember onboarding claim", () => {
       },
       {
         tenant_id: "tenant-A",
-        principal_type: "USER",
+        principal_type: "user",
         principal_id: "cognito-user-1",
         role: "member",
         status: "active",
