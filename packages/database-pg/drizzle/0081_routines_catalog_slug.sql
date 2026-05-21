@@ -1,5 +1,5 @@
 -- Add a stable pointer from `routines` rows back to the
--- `tenant_workflow_catalog.slug` they represent, so the apps/computer
+-- `tenant_workflow_catalog.slug` they represent, so the apps/spaces
 -- Customize Workflows tab (plan 010 U6) can match Connected items
 -- unambiguously and the enableWorkflow / disableWorkflow mutations can
 -- upsert idempotently.

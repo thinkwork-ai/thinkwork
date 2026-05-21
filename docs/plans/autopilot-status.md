@@ -6,6 +6,38 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Spaces Rebrand and Picker Polish
+
+Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-21-003-feat-spaces-rebrand-and-picker-polish-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: Local verification passed; preparing PR
+- Active unit: grouped U1-U5 implementation
+- Active branch: `codex/spaces-rebrand-picker-polish`
+- Active worktree: `.Codex/worktrees/spaces-rebrand-picker-polish`
+- Started: 2026-05-21
+- PR: pending
+- CI: pending
+
+### Progress Log
+
+| Date       | Unit    | Branch                               | PR      | Status      | Verification                                                                                         | Notes                                                                                                                                       |
+| ---------- | ------- | ------------------------------------ | ------- | ----------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-21 | U1-U5   | `codex/spaces-rebrand-picker-polish` | pending | Local verification passed | `pnpm install`; stale tsbuildinfo cleanup; `pnpm --filter @thinkwork/database-pg build`; `pnpm --filter @thinkwork/spaces test`; `pnpm --filter @thinkwork/spaces typecheck`; `bash scripts/build-spaces.test.sh`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm --filter @thinkwork/spaces build`; `pnpm -r --if-present test`; `pnpm -r --if-present lint`; `terraform fmt -check` on touched Terraform; `terraform validate` for `terraform/modules/thinkwork` and `terraform/examples/greenfield`; grep guards; browser smoke at `http://localhost:5174/new` | Grouped by plan decision so the folder/package/scripts/component rebrand and picker polish land as one coherent PR without mixed naming. `pnpm format:check` cannot run because the repo does not currently install `prettier`; an ephemeral full-repo Prettier check also reports broad pre-existing formatting drift. `actionlint` is not installed and Docker is not running, so workflow syntax will be covered by GitHub CI. |
+
+### CI Failures
+
+- None yet.
+
+### Blockers
+
+- None.
+
+---
+
 ## Current Run: Admin Space Studio Simplification
 
 Plan: `docs/plans/2026-05-21-005-feat-admin-space-studio-simplification-plan.md`

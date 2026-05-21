@@ -49,7 +49,7 @@ export const artifacts = pgTable(
 		metadata: jsonb("metadata"),
 
 		// Favorites: nullable timestamp. Set when the user stars the
-		// artifact; cleared to un-favorite. Drives the apps/computer
+		// artifact; cleared to un-favorite. Drives the apps/spaces
 		// sidebar Favorites section.
 		favorited_at: timestamp("favorited_at", { withTimezone: true }),
 

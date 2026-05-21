@@ -5,7 +5,7 @@
  * wire the operator's "Upload attachment" affordance and the click-to-
  * download row action.
  *
- * Mirrors `apps/computer/src/lib/upload-thread-attachments.ts` — kept
+ * Mirrors `apps/spaces/src/lib/upload-thread-attachments.ts` — kept
  * separate so the two surfaces can evolve independently (admin's
  * primary use case is mid-pilot operator seeding; computer's is
  * end-user uploads inside a turn).

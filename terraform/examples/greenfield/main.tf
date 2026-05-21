@@ -249,10 +249,10 @@ variable "google_places_api_key" {
 
 variable "mapbox_public_token" {
   description = <<-EOT
-    Mapbox public pk.* token consumed by apps/computer's MapView primitive
+    Mapbox public pk.* token consumed by the apps/spaces MapView primitive
     (in @thinkwork/computer-stdlib) for inline map tile rendering inside
-    generated applets. Flows through to scripts/build-computer.sh →
-    apps/computer/.env.production as VITE_MAPBOX_PUBLIC_TOKEN.
+    generated applets. Flows through to scripts/build-spaces.sh →
+    apps/spaces/.env.production as VITE_MAPBOX_PUBLIC_TOKEN.
 
     Mapbox tokens are designed to ship in public bundles; URL allowlist
     on the Mapbox dashboard is the security boundary. Restrict the token
@@ -454,8 +454,8 @@ module "thinkwork" {
   nova_act_api_key                              = var.nova_act_api_key
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
 
-  # Mapbox public token for apps/computer MapView primitive. Flows through
-  # to scripts/build-computer.sh → VITE_MAPBOX_PUBLIC_TOKEN.
+  # Mapbox public token for apps/spaces MapView primitive. Flows through
+  # to scripts/build-spaces.sh → VITE_MAPBOX_PUBLIC_TOKEN.
   mapbox_public_token = var.mapbox_public_token
 
   # Stripe billing — internal-plan → price-id map (per-stage, non-secret).
@@ -496,8 +496,8 @@ module "www_dns" {
   include_admin                = true
   admin_cloudfront_domain_name = module.thinkwork.admin_distribution_domain
 
-  # End-user app: canonical app.<apex> host. The underlying source package is
-  # still apps/computer for compatibility.
+  # End-user app: canonical app.<apex> host. The compatibility output names
+  # still use computer_* while the source path is apps/spaces.
   include_app                = true
   app_cloudfront_domain_name = module.thinkwork.app_distribution_domain
 
@@ -578,7 +578,7 @@ output "appsync_api_key" {
 }
 
 output "mapbox_public_token" {
-  description = "Mapbox public token used by apps/computer MapView. Read by scripts/build-computer.sh to inline VITE_MAPBOX_PUBLIC_TOKEN at build time; empty string lets MapView fall back to OpenStreetMap tiles."
+  description = "Mapbox public token used by apps/spaces MapView. Read by scripts/build-spaces.sh to inline VITE_MAPBOX_PUBLIC_TOKEN at build time; empty string lets MapView fall back to OpenStreetMap tiles."
   value       = module.thinkwork.mapbox_public_token
   sensitive   = true
 }

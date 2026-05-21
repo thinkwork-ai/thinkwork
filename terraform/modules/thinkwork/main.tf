@@ -130,7 +130,7 @@ module "cognito" {
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
 
   # Single ThinkworkAdmin Cognito client serves both admin and end-user SPAs.
-  # apps/computer reuses this client by design — same humans, same tenant
+  # apps/spaces reuses this client by design — same humans, same tenant
   # invitations, single sign-in across both surfaces. Each origin (admin
   # distribution, admin custom domain, app distribution, app custom domain,
   # compatibility computer domain, plus localhost dev for both) needs both
@@ -632,7 +632,7 @@ module "admin_site" {
 }
 
 ################################################################################
-# End-User App Static Site (apps/computer — canonical surface at app.thinkwork.ai)
+# End-User App Static Site (apps/spaces — canonical surface at app.thinkwork.ai)
 ################################################################################
 
 locals {
@@ -693,7 +693,7 @@ module "computer_site" {
 # channelId nonce + no-secrets-in-payload (see contract v1).
 #
 # Bucket is empty in this PR. U9 populates it with the iframe-shell bundle
-# via scripts/build-computer.sh.
+# via scripts/build-spaces.sh.
 #
 # Iframe CSP profile (per contract v1 §CSP profile):
 #   default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:;

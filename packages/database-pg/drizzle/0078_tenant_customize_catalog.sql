@@ -1,4 +1,4 @@
--- Per-tenant catalog table backing the apps/computer Customize page's
+-- Per-tenant catalog table backing the apps/spaces Customize page's
 -- Available / Discover sections for Workflows. Skills and MCP servers reuse
 -- the existing `tenant_skills` and `tenant_mcp_servers` tables.
 --

@@ -1,4 +1,4 @@
-// @thinkwork/graph — shared 3D force-graph rendering for admin and computer.
+// @thinkwork/graph — shared 3D force-graph rendering for admin and Spaces.
 //
 // Hosts:
 //   - MemoryGraph — Hindsight memory + entity graph (used by Brain).
@@ -6,7 +6,7 @@
 //
 // The two components were ported from apps/admin/src/components/{Memory,Wiki}Graph.tsx
 // in U2 of plan docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md
-// to give apps/admin and apps/computer one source of truth.
+// to give apps/admin and apps/spaces one source of truth.
 //
 // Performance invariants (in-place opacity mute on filter, one-shot camera
 // init, stable nodeThreeObject) are load-bearing — see each component's

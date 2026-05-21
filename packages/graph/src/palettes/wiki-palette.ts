@@ -8,9 +8,9 @@
  * coherent).
  *
  * Originally defined at apps/admin/src/lib/wiki-palette.ts; moved here in
- * U2 of the apps/computer Memory port (plan
+ * U2 of the apps/spaces Memory port (plan
  * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md) so admin
- * and computer share one palette.
+ * and Spaces share one palette.
  */
 
 export type WikiPageType = "ENTITY" | "TOPIC" | "DECISION";

@@ -12,7 +12,7 @@ import {
 import { resolveCaller } from "../core/resolve-auth-user.js";
 
 /**
- * Returns the slug / id sets that the apps/computer Customize page uses
+ * Returns the slug / id sets that the apps/spaces Customize page uses
  * to mark catalog rows as `connected`.
  *
  *   - **Skills:** `agent_skills.skill_id` is the same shape as

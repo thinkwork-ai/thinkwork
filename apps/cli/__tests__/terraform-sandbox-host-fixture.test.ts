@@ -41,7 +41,7 @@ const THINKWORK_VARS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/variables.tf",
 );
-const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-computer.sh");
+const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-spaces.sh");
 const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
 
 function read(path: string): string {
@@ -370,7 +370,7 @@ describe("U10 — host CSP wired for computer_site", () => {
 });
 
 describe("U11.5 — computer deploy script sandbox enforcement", () => {
-  it("build-computer requires sandbox outputs and does not emit a legacy loader flag", () => {
+  it("build-spaces requires sandbox outputs and does not emit a legacy loader flag", () => {
     const source = read(BUILD_COMPUTER);
     expect(source).toMatch(
       /COMPUTER_SANDBOX_URL="\$\(tf_output_raw computer_sandbox_url/,
@@ -393,7 +393,7 @@ describe("Computer Mapbox production wiring", () => {
     );
   });
 
-  it("build-computer allows CI to override the Terraform output token and passes it to the iframe shell", () => {
+  it("build-spaces allows CI to override the Terraform output token and passes it to the iframe shell", () => {
     const source = read(BUILD_COMPUTER);
     expect(source).toContain(
       'MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_raw mapbox_public_token)}"',

@@ -13,7 +13,7 @@ try {
   const targets = [
     ["api_endpoint", "api"],
     ["admin_url", "admin"],
-    ["computer_url", "computer"],
+    ["computer_url", "spaces"],
     ["docs_url", "docs"],
   ]
     .map(([output, name]) => ({
