@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { Info, PanelRight } from "lucide-react";
+import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
 import {
@@ -166,6 +166,7 @@ export function ComputerThreadDetailRoute({
     null,
   );
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
+  const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
@@ -198,7 +199,6 @@ export function ComputerThreadDetailRoute({
       })),
     [attachedData?.artifacts],
   );
-  const createdLabel = formatThreadCreatedAt(data?.thread?.createdAt);
   const [{ data: mentionTargetsData }, reexecuteMentionTargetsQuery] =
     useQuery<MentionTargetsResult>({
       query: ThreadMentionTargetsQuery,
@@ -395,7 +395,14 @@ export function ComputerThreadDetailRoute({
     if (threadArtifacts.length === 0 && artifactPanelOpen) {
       setArtifactPanelOpen(false);
     }
+    if (
+      (!artifactPanelOpen || threadArtifacts.length === 0) &&
+      artifactFullscreen
+    ) {
+      setArtifactFullscreen(false);
+    }
   }, [
+    artifactFullscreen,
     artifactPanelOpen,
     effectiveSelectedArtifactId,
     selectedArtifactId,
@@ -407,8 +414,12 @@ export function ComputerThreadDetailRoute({
       artifacts: threadArtifacts,
       selectedArtifactId: effectiveSelectedArtifactId,
       isOpen: artifactPanelOpen,
+      isFullscreen: artifactFullscreen,
       onOpenChange: (open: boolean) => {
         setArtifactPanelOpen(open);
+        if (!open) {
+          setArtifactFullscreen(false);
+        }
         if (open) {
           setThreadInfoOpen(false);
         }
@@ -422,7 +433,12 @@ export function ComputerThreadDetailRoute({
         setThreadInfoOpen(false);
       },
     }),
-    [artifactPanelOpen, effectiveSelectedArtifactId, threadArtifacts],
+    [
+      artifactFullscreen,
+      artifactPanelOpen,
+      effectiveSelectedArtifactId,
+      threadArtifacts,
+    ],
   );
   const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
     () => ({
@@ -431,6 +447,7 @@ export function ComputerThreadDetailRoute({
         setThreadInfoOpen(open);
         if (open) {
           setArtifactPanelOpen(false);
+          setArtifactFullscreen(false);
         }
       },
       startedAt: data?.thread?.createdAt ?? null,
@@ -453,11 +470,6 @@ export function ComputerThreadDetailRoute({
     documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
     action: (
       <div className="flex items-center gap-2">
-        {createdLabel ? (
-          <span className="hidden whitespace-nowrap text-xs text-muted-foreground tabular-nums sm:inline">
-            {createdLabel}
-          </span>
-        ) : null}
         <ThreadDetailActions
           threadId={threadId}
           threadTitle={threadTitle}
@@ -479,11 +491,41 @@ export function ComputerThreadDetailRoute({
             setThreadInfoOpen(nextOpen);
             if (nextOpen) {
               setArtifactPanelOpen(false);
+              setArtifactFullscreen(false);
             }
           }}
         >
           <Info className="size-4" />
         </Button>
+        {artifactPanelOpen && threadArtifacts.length > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={
+              artifactFullscreen
+                ? "Minimize artifact panel"
+                : "Maximize artifact panel"
+            }
+            title={
+              artifactFullscreen
+                ? "Minimize artifact panel"
+                : "Maximize artifact panel"
+            }
+            className={
+              artifactFullscreen ? "text-primary" : "text-muted-foreground"
+            }
+            onClick={() => {
+              setArtifactFullscreen((current) => !current);
+            }}
+          >
+            {artifactFullscreen ? (
+              <Minimize2 className="size-4" />
+            ) : (
+              <Maximize2 className="size-4" />
+            )}
+          </Button>
+        ) : null}
         {threadArtifacts.length > 0 ? (
           <Button
             type="button"
@@ -505,6 +547,9 @@ export function ComputerThreadDetailRoute({
             onClick={() => {
               const nextOpen = !artifactPanelOpen;
               setArtifactPanelOpen(nextOpen);
+              if (!nextOpen) {
+                setArtifactFullscreen(false);
+              }
               if (nextOpen) {
                 setThreadInfoOpen(false);
               }
@@ -515,7 +560,7 @@ export function ComputerThreadDetailRoute({
         ) : null}
       </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${createdLabel ?? ""}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}:${artifactFullscreen ? "fullscreen" : "normal"}`,
   });
 
   useEffect(() => {
@@ -651,19 +696,6 @@ function toSendMention(mention: ComposerMention) {
     displayName: mention.displayName,
     rawText: mention.rawText,
   };
-}
-
-function formatThreadCreatedAt(value?: string | null): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function resolveStartedBy(thread?: ThreadResult["thread"]) {

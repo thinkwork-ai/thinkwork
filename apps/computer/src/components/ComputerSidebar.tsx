@@ -20,6 +20,7 @@ import {
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
+import { requestComputerComposerFocus } from "@/lib/composer-focus";
 
 export function ComputerSidebar() {
   const { state, setOpen } = useSidebar();
@@ -40,7 +41,9 @@ export function ComputerSidebar() {
               if (isCollapsed) {
                 event.preventDefault();
                 setOpen(true);
+                return;
               }
+              requestComputerComposerFocus();
             }}
             className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
           >

@@ -9,7 +9,6 @@ import {
   Code2,
   Database,
   Download,
-  ExternalLink,
   FileText,
   ListChecks,
   Mic,
@@ -17,9 +16,7 @@ import {
   Search,
   Sparkles,
   Users,
-  X,
 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
 import {
   Children,
   useEffect,
@@ -157,6 +154,7 @@ export interface TaskThreadArtifactPanelState {
   artifacts: GeneratedArtifact[];
   selectedArtifactId: string | null;
   isOpen: boolean;
+  isFullscreen?: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectArtifact: (artifactId: string) => void;
 }
@@ -275,7 +273,7 @@ export function TaskThreadView({
   const infoPanelOpen = infoPanelState?.isOpen ?? false;
 
   return (
-    <main className="flex h-full w-full overflow-hidden bg-background">
+    <main className="relative flex h-full w-full overflow-hidden bg-background">
       <section
         className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background"
         aria-label="Thread conversation"
@@ -355,7 +353,7 @@ export function TaskThreadView({
       <ArtifactSidePanel
         artifact={selectedArtifact}
         open={artifactPanelState?.isOpen ?? false}
-        onOpenChange={artifactPanelState?.onOpenChange}
+        fullscreen={artifactPanelState?.isFullscreen ?? false}
       />
     </main>
   );
@@ -364,105 +362,87 @@ export function TaskThreadView({
 function ArtifactSidePanel({
   artifact,
   open,
-  onOpenChange,
+  fullscreen,
 }: {
   artifact: GeneratedArtifact | null;
   open: boolean;
-  onOpenChange?: (open: boolean) => void;
+  fullscreen: boolean;
 }) {
   const [width, setWidth] = useState(500);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    if (!isDragging) return;
+    if (!isDragging || fullscreen) return;
 
-    function handlePointerMove(event: PointerEvent) {
+    const handlePointerMove = (event: PointerEvent) => {
       const maxWidth = Math.max(420, window.innerWidth - 360);
-      const nextWidth = clamp(window.innerWidth - event.clientX, 360, maxWidth);
-      setWidth(nextWidth);
-    }
+      setWidth(clamp(window.innerWidth - event.clientX, 360, maxWidth));
+    };
 
-    function handlePointerUp() {
+    const handlePointerUp = () => {
       setIsDragging(false);
-    }
+    };
 
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
     return () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
-  }, [isDragging]);
+  }, [fullscreen, isDragging]);
 
   if (!open || !artifact) return null;
 
   return (
     <aside
-      className="relative hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex"
-      style={{ width }}
+      className={cn(
+        "relative hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex",
+        fullscreen && "absolute inset-0 z-30 w-full border-l-0",
+      )}
+      style={fullscreen ? undefined : { width }}
       aria-label="Artifact side panel"
       data-testid="artifact-side-panel"
     >
-      <div
-        role="separator"
-        aria-label="Resize artifact panel"
-        aria-orientation="vertical"
-        aria-valuemin={360}
-        aria-valuemax={Math.max(420, window.innerWidth - 360)}
-        aria-valuenow={width}
-        tabIndex={0}
-        className="absolute inset-y-0 left-0 z-20 flex w-2 -translate-x-1 cursor-col-resize items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onPointerDown={(event) => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") {
+      {!fullscreen ? (
+        <div
+          role="separator"
+          aria-label="Resize artifact panel"
+          aria-orientation="vertical"
+          aria-valuemin={360}
+          aria-valuemax={Math.max(420, window.innerWidth - 360)}
+          aria-valuenow={width}
+          tabIndex={0}
+          className="absolute inset-y-0 left-0 z-20 w-2 -translate-x-1 cursor-col-resize outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onPointerDown={(event) => {
             event.preventDefault();
-            setWidth((current) => current + 24);
-          }
-          if (event.key === "ArrowRight") {
+            setIsDragging(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
             event.preventDefault();
-            setWidth((current) => Math.max(360, current - 24));
-          }
-        }}
-      >
-        <div className="h-10 w-1 rounded-full bg-border transition-colors hover:bg-muted-foreground" />
-      </div>
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{artifact.title}</p>
-        </div>
-        <Button
-          asChild
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Open artifact full screen"
-        >
-          <Link to="/artifacts/$id" params={{ id: artifact.id }}>
-            <ExternalLink className="size-4" />
-          </Link>
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Close artifact panel"
-          onClick={() => onOpenChange?.(false)}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
+            const delta = event.key === "ArrowLeft" ? 24 : -24;
+            const maxWidth = Math.max(420, window.innerWidth - 360);
+            setWidth((currentWidth) =>
+              clamp(currentWidth + delta, 360, maxWidth),
+            );
+          }}
+        />
+      ) : null}
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <GeneratedArtifactPreview artifact={artifact} bare />
       </div>
     </aside>
   );
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
@@ -565,10 +545,6 @@ function InfoPanelRow({
       <p className="truncate text-sm text-white/75">{value}</p>
     </div>
   );
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }
 
 function formatInfoDate(value?: string | null) {

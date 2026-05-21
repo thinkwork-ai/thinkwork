@@ -1,4 +1,9 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  createFileRoute,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { MessageCirclePlus } from "lucide-react";
 import { Button } from "@thinkwork/ui";
@@ -38,6 +43,17 @@ interface SpaceThreadsResult {
 }
 
 function SpaceWorkroomPage() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (/^\/spaces\/[^/]+\/threads\/[^/]+$/.test(pathname)) {
+    return <Outlet />;
+  }
+
+  return <SpaceWorkroomHome />;
+}
+
+function SpaceWorkroomHome() {
   const { spaceId } = Route.useParams();
   const { tenantId } = useTenant();
   const [{ data: spaceData, fetching: spaceFetching, error: spaceError }] =

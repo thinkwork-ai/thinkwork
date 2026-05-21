@@ -43,7 +43,9 @@ import {
   DeleteThreadMutation,
   SpacesQuery,
   ThreadsPagedQuery,
+  UpdateThreadMutation,
 } from "@/lib/graphql-queries";
+import { requestComputerComposerFocus } from "@/lib/composer-focus";
 import {
   clearMissingThreadDeletes,
   setThreadDeletePending,
@@ -111,6 +113,8 @@ export function ChatSidebar({
   const pendingThreadDeletes = usePendingThreadDeletes();
   const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
   const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
+  const persistedReadThreadIdsRef = useRef(new Set<string>());
+  const [, updateThread] = useMutation(UpdateThreadMutation);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
@@ -178,22 +182,27 @@ export function ChatSidebar({
     requestPolicy: "cache-and-network",
   });
 
-  useEffect(() => {
-    if (routeThreadId) {
-      setSelectedThreadId(routeThreadId);
-      setLocallyReadThreadIds((current) => {
-        if (current.has(routeThreadId)) return current;
-        const next = new Set(current);
-        next.add(routeThreadId);
-        return next;
+  const persistThreadRead = useCallback(
+    (threadId: string) => {
+      if (persistedReadThreadIdsRef.current.has(threadId)) return;
+      persistedReadThreadIdsRef.current.add(threadId);
+      void updateThread({
+        id: threadId,
+        input: { lastReadAt: new Date().toISOString() },
+      }).then((result) => {
+        if (result.error) {
+          persistedReadThreadIdsRef.current.delete(threadId);
+          console.warn(
+            `[ChatSidebar] failed to mark thread ${threadId} read:`,
+            result.error,
+          );
+        }
       });
-    } else if (location.pathname === "/new") {
-      setSelectedThreadId(undefined);
-    }
-  }, [location.pathname, routeThreadId]);
+    },
+    [updateThread],
+  );
 
-  const activateThread = useCallback((threadId: string) => {
-    setSelectedThreadId(threadId);
+  const markThreadRead = useCallback((threadId: string) => {
     setLocallyReadThreadIds((current) => {
       if (current.has(threadId)) return current;
       const next = new Set(current);
@@ -201,6 +210,25 @@ export function ChatSidebar({
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    if (routeThreadId) {
+      setSelectedThreadId(routeThreadId);
+      markThreadRead(routeThreadId);
+      persistThreadRead(routeThreadId);
+    } else if (location.pathname === "/new") {
+      setSelectedThreadId(undefined);
+    }
+  }, [location.pathname, markThreadRead, persistThreadRead, routeThreadId]);
+
+  const activateThread = useCallback(
+    (threadId: string) => {
+      setSelectedThreadId(threadId);
+      markThreadRead(threadId);
+      persistThreadRead(threadId);
+    },
+    [markThreadRead, persistThreadRead],
+  );
 
   useEffect(() => {
     if (!recentData?.threadsPaged?.items) return;
@@ -350,7 +378,11 @@ export function ChatSidebar({
                 isActive={isNewThreadRoute}
                 tooltip="New thread"
               >
-                <Link to="/new" search={{ spaceId: undefined }}>
+                <Link
+                  to="/new"
+                  search={{ spaceId: undefined }}
+                  onClick={requestComputerComposerFocus}
+                >
                   <MessageCirclePlus />
                   <span>New thread</span>
                 </Link>

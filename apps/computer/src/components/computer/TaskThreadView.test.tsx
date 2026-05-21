@@ -144,6 +144,40 @@ describe("TaskThreadView", () => {
     expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
   });
 
+  it("submits the follow-up composer when Enter is pressed", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "CRM pipeline risk",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Build a CRM pipeline dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "I created a dashboard app.",
+            },
+          ],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const input = screen.getByLabelText("Follow up");
+    fireEvent.change(input, { target: { value: "Please continue" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(onSendFollowUp).toHaveBeenCalledWith("Please continue", [], []),
+    );
+  });
+
   it("renders the selected artifact in the side panel when artifact panel state is open", () => {
     render(
       <TaskThreadView
@@ -190,10 +224,14 @@ describe("TaskThreadView", () => {
     );
 
     const panel = screen.getByTestId("artifact-side-panel");
-    expect(
-      within(panel).getAllByText("CRM pipeline risk app").length,
-    ).toBeGreaterThan(0);
+    expect(within(panel).queryByText("CRM pipeline risk app")).toBeNull();
     expect(within(panel).getByTestId("inline-applet-embed-stub")).toBeTruthy();
+    expect(
+      within(panel).queryByRole("button", { name: /maximize artifact panel/i }),
+    ).toBeNull();
+    expect(
+      within(panel).getByRole("separator", { name: /resize artifact panel/i }),
+    ).toBeTruthy();
   });
 
   it("reserves thread width for the info panel with details and downloadable attachments", () => {

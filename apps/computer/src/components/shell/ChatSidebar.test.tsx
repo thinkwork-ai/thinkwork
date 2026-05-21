@@ -14,6 +14,7 @@ const {
   locationMock,
   navigateMock,
   deleteThreadMock,
+  updateThreadMock,
   recentThreadItemsMock,
   recentReexecuteMock,
   searchReexecuteMock,
@@ -22,6 +23,7 @@ const {
   locationMock: vi.fn(),
   navigateMock: vi.fn(),
   deleteThreadMock: vi.fn(),
+  updateThreadMock: vi.fn(),
   recentThreadItemsMock: [] as Array<{
     id: string;
     title: string;
@@ -37,6 +39,7 @@ const {
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
     SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
+    UpdateThreadMutation: Symbol("UpdateThreadMutation"),
   },
 }));
 
@@ -88,6 +91,9 @@ vi.mock("urql", () => ({
   useMutation: (mutation: unknown) => {
     if (mutation === queryDocs.DeleteThreadMutation) {
       return [{ fetching: false }, deleteThreadMock];
+    }
+    if (mutation === queryDocs.UpdateThreadMutation) {
+      return [{ fetching: false }, updateThreadMock];
     }
     return [{ fetching: false }, vi.fn()];
   },
@@ -236,6 +242,7 @@ afterEach(() => {
   locationMock.mockReset();
   navigateMock.mockReset();
   deleteThreadMock.mockReset();
+  updateThreadMock.mockReset();
   recentReexecuteMock.mockReset();
   searchReexecuteMock.mockReset();
   recentThreadItemsMock.length = 0;
@@ -244,6 +251,7 @@ afterEach(() => {
 describe("ChatSidebar", () => {
   beforeEach(() => {
     deleteThreadMock.mockResolvedValue({ data: { deleteThread: true } });
+    updateThreadMock.mockResolvedValue({ data: { updateThread: { id: "t" } } });
     recentThreadItemsMock.push({
       id: "thread-recent",
       title: "Recent Space thread",
@@ -484,7 +492,7 @@ describe("ChatSidebar", () => {
     );
   });
 
-  it("clears the unread dot immediately when a thread is viewed", () => {
+  it("clears the unread dot immediately and persists read state when a thread is viewed", async () => {
     recentThreadItemsMock.length = 0;
     recentThreadItemsMock.push({
       id: "unread-thread",
@@ -512,6 +520,12 @@ describe("ChatSidebar", () => {
     });
 
     expect(unreadLink.innerHTML).not.toContain("bg-blue-500");
+    await waitFor(() =>
+      expect(updateThreadMock).toHaveBeenCalledWith({
+        id: "unread-thread",
+        input: { lastReadAt: expect.any(String) },
+      }),
+    );
   });
 
   it("navigates to the row directly below the deleted thread and marks it active", () => {
