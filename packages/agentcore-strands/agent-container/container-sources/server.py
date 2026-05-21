@@ -376,7 +376,15 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
 
 from external_task_context import format_external_task_context
 from runbook_context import format_runbook_context
+from system_contract_loader import load_system_contracts
 from workflow_skill_context import format_workflow_skill_context
+
+# Platform skill catalog — bundled into the container image at /app/skill-catalog/
+# by the Dockerfile. Overridable via env for local pytest runs (conftest sets it
+# to the source-tree path). System contracts loaded from this directory inject
+# their bodies into the system prompt when their ``activates_on`` frontmatter
+# matches the per-turn conditions dict — see system_contract_loader for the rules.
+SKILL_CATALOG_DIR = os.environ.get("SKILL_CATALOG_DIR", "/app/skill-catalog")
 
 
 def _build_system_prompt(
@@ -2927,11 +2935,28 @@ def _execute_agent_turn(payload: dict) -> dict:
             except Exception as e:
                 logger.warning("KB retrieval failed: %s", e)
 
-        if is_computer_thread_turn:
-            system_prompt += "\n\n---\n\n" + _computer_thread_contract(
-                thread_id=ticket_id,
-                prompt=message,
-            )
+        # System-contract skills from packages/skill-catalog/ — Computer Thread
+        # Contract (U2), Eval Runtime Constraints (U3), Runbook Execution
+        # Contract (U4). The loader filters by ``contract: system`` + matches
+        # each skill's ``activates_on`` frontmatter against the conditions
+        # dict below, then substitutes ``{{var}}`` placeholders from variables.
+        # See docs/plans/2026-05-21-004-refactor-strands-system-contracts-as-
+        # skills-plan.md.
+        contract_conditions: dict[str, object] = {
+            "thread_mode": "computer" if is_computer_thread_turn else "default",
+            "eval_mode": eval_mode,
+            "runbook_active": bool(runbook_context),
+        }
+        contract_variables: dict[str, str] = {
+            "thread_id": ticket_id,
+            "prompt": message,
+        }
+        for contract_body in load_system_contracts(
+            SKILL_CATALOG_DIR,
+            conditions=contract_conditions,
+            variables=contract_variables,
+        ):
+            system_prompt += "\n\n---\n\n" + contract_body
 
         start_ms = int(time.time() * 1000)
         response_text, strands_usage = _call_strands_agent(

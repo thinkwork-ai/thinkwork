@@ -30,3 +30,12 @@ _SHARED_AGENTCORE = os.path.abspath(
 for path in (_CONTAINER_SOURCES, _SHARED_AGENTCORE):
     if path not in sys.path:
         sys.path.insert(0, path)
+
+# Point the system-contract loader at the source-tree skill catalog so tests
+# exercising _execute_agent_turn pick up the real catalog files instead of the
+# container-only /app/skill-catalog/ path. Individual tests may override via
+# monkeypatch when isolating from real catalog content.
+_SKILL_CATALOG = os.path.abspath(
+    os.path.join(_HERE, "..", "..", "skill-catalog")
+)
+os.environ.setdefault("SKILL_CATALOG_DIR", _SKILL_CATALOG)
