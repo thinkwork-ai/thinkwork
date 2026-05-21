@@ -364,9 +364,6 @@ export function ChatSidebar() {
                 onActivate={setSelectedThreadId}
               />
               <div className="space-y-1">
-                <SidebarGroupLabel className="px-2 text-xs font-medium text-sidebar-foreground/50">
-                  Spaces
-                </SidebarGroupLabel>
                 {spacesError ? (
                   <p className="px-2 py-1 text-xs text-destructive">
                     {spacesError.message}
@@ -790,7 +787,7 @@ function ChatThreadRow({
           ) : null}
           <button
             type="button"
-            className="absolute right-1 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
+            className="absolute right-0 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
             aria-label={`Delete ${title}`}
             onClick={(event) => {
               event.preventDefault();
