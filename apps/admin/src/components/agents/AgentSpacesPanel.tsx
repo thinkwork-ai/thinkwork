@@ -6,8 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { SpaceAgentAssignmentStatus } from "@/gql/graphql";
 import {
+  AgentSpaceAvailabilityQuery,
   SetSpaceAgentAvailabilityMutation,
-  SpacesListQuery,
 } from "@/lib/graphql-queries";
 
 interface AgentSpacesPanelProps {
@@ -18,7 +18,7 @@ interface AgentSpacesPanelProps {
 export function AgentSpacesPanel({ tenantId, agentId }: AgentSpacesPanelProps) {
   const [pendingSpaceId, setPendingSpaceId] = useState<string | null>(null);
   const [spacesResult, reexecuteSpaces] = useQuery({
-    query: SpacesListQuery,
+    query: AgentSpaceAvailabilityQuery,
     variables: { tenantId },
     pause: !tenantId,
     requestPolicy: "cache-and-network",

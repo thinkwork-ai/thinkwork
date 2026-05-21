@@ -37,6 +37,7 @@ type Documents = {
     "\n  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {\n    updateAgentRuntime(id: $id, runtime: $runtime) {\n      id\n      runtime\n      updatedAt\n    }\n  }\n": typeof types.UpdateAgentRuntimeDocument,
     "\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteAgentDocument,
     "\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SpacesListDocument,
+    "\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n": typeof types.AgentSpaceAvailabilityDocument,
     "\n  mutation CreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.CreateSpaceDocument,
     "\n  mutation UpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      accessMode\n    }\n  }\n": typeof types.UpdateSpaceDocument,
     "\n  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {\n    setSpaceAgentAvailability(input: $input) {\n      id\n      agentId\n      spaceId\n      localRole\n      autoSubscribe\n      allowedTools\n      status\n    }\n  }\n": typeof types.SetSpaceAgentAvailabilityDocument,
@@ -215,6 +216,7 @@ const documents: Documents = {
     "\n  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {\n    updateAgentRuntime(id: $id, runtime: $runtime) {\n      id\n      runtime\n      updatedAt\n    }\n  }\n": types.UpdateAgentRuntimeDocument,
     "\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.DeleteAgentDocument,
     "\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": types.SpacesListDocument,
+    "\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n": types.AgentSpaceAvailabilityDocument,
     "\n  mutation CreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": types.CreateSpaceDocument,
     "\n  mutation UpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      accessMode\n    }\n  }\n": types.UpdateSpaceDocument,
     "\n  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {\n    setSpaceAgentAvailability(input: $input) {\n      id\n      agentId\n      spaceId\n      localRole\n      autoSubscribe\n      allowedTools\n      status\n    }\n  }\n": types.SetSpaceAgentAvailabilityDocument,
@@ -476,6 +478,10 @@ export function graphql(source: "\n  mutation DeleteAgent($id: ID!) {\n    delet
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -218,7 +218,12 @@ describe("Spaces admin routes", () => {
   });
 
   it("queries only the Space fields needed by the simplified UI", () => {
+    const spacesListQuerySource = queriesSource.slice(
+      queriesSource.indexOf("query SpacesList"),
+      queriesSource.indexOf("export const AgentSpaceAvailabilityQuery"),
+    );
     expect(queriesSource).toContain("query SpacesList");
+    expect(queriesSource).toContain("query AgentSpaceAvailability");
     expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("mutation UpdateSpace");
     expect(queriesSource).toContain("query SpaceAdminDetail");
@@ -235,7 +240,8 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("mcpServers");
     expect(queriesSource).toContain("mcpServerId");
     expect(queriesSource).toContain("setSpaceTools");
-    expect(queriesSource).not.toContain("agentAssignments");
+    expect(queriesSource).toContain("agentAssignments");
+    expect(spacesListQuerySource).not.toContain("agentAssignments");
     expect(queriesSource).not.toContain("localInstructions");
     expect(queriesSource).not.toContain("contextConfig");
     expect(queriesSource).not.toContain("connectedDataConfig");

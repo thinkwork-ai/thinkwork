@@ -8,8 +8,9 @@ const source = readFileSync(
 
 describe("AgentSpacesPanel", () => {
   it("loads Spaces and toggles per-Space agent availability", () => {
-    expect(source).toContain("SpacesListQuery");
+    expect(source).toContain("AgentSpaceAvailabilityQuery");
     expect(source).toContain("SetSpaceAgentAvailabilityMutation");
+    expect(source).toContain("space.agentAssignments.find");
     expect(source).toContain("<Switch");
     expect(source).toContain("setAvailability");
     expect(source).toContain('to="/spaces/$spaceId"');
