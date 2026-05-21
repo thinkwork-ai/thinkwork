@@ -115,6 +115,7 @@ export const SpacesQuery = gql`
       name
       description
       kind
+      accessMode
       templateKey
       status
       unreadThreadCount
@@ -199,6 +200,7 @@ export const SpaceQuery = gql`
       description
       prompt
       kind
+      accessMode
       status
       checklistTemplates {
         id

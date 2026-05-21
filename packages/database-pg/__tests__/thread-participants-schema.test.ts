@@ -55,6 +55,25 @@ describe("Space thread participants schema", () => {
     );
   });
 
+  it("declares the access backfill migration for owners and mentioned users", () => {
+    const migration0116 = readFileSync(
+      join(HERE, "..", "drizzle", "0116_backfill_thread_participants_access.sql"),
+      "utf-8",
+    );
+
+    expect(migration0116).toContain(
+      "-- creates: public.view_thread_participants_access_backfilled",
+    );
+    expect(migration0116).toContain("FROM public.threads t");
+    expect(migration0116).toContain("t.user_id IS NOT NULL");
+    expect(migration0116).toContain("FROM public.message_mentions mm");
+    expect(migration0116).toContain("WHERE mm.target_type = 'user'");
+    expect(migration0116).toContain(
+      "ON CONFLICT (tenant_id, thread_id, user_id)",
+    );
+    expect(migration0116).toContain("DO NOTHING");
+  });
+
   it("declares manual migration markers for Space thread objects", () => {
     for (const marker of [
       "creates-column: public.threads.space_id",

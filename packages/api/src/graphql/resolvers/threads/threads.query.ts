@@ -14,8 +14,9 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
-import { requireTenantAdmin, hasServiceSecret } from "../core/authz.js";
+import { hasServiceSecret } from "../core/authz.js";
 import { requireComputerReadAccess } from "../computers/shared.js";
+import { callerVisibleThreadPredicate } from "./access.js";
 
 export const threads_query = async (
   _parent: any,
@@ -23,7 +24,6 @@ export const threads_query = async (
   ctx: GraphQLContext,
 ) => {
   let callerUserId: string | null = null;
-  let isTenantAdminCaller = hasServiceSecret(ctx);
 
   // Cross-tenant gate. The caller-supplied args.tenantId must match the
   // caller's authoritative tenant. Without this, a Cognito user with a
@@ -40,13 +40,6 @@ export const threads_query = async (
     if (!callerTenantId || callerTenantId !== args.tenantId) return [];
     callerUserId = await resolveCallerUserId(ctx);
     if (!callerUserId) return [];
-    try {
-      await requireTenantAdmin(ctx, args.tenantId);
-      isTenantAdminCaller = true;
-    } catch (err) {
-      if (!(err instanceof GraphQLError)) throw err;
-      isTenantAdminCaller = false;
-    }
   }
 
   // When the caller scopes to a specific Computer, enforce per-user ownership
@@ -63,11 +56,9 @@ export const threads_query = async (
   //   - apikey callers: skip the per-user gate entirely. They're trusted
   //     infrastructure pre-authorized by the shared API secret; the
   //     tenant_id filter further down still isolates by tenant.
-  //   - tenant admins: allowed via the existing `requireComputerReadAccess`
-  //     helper, which permits owner OR tenant-admin on the row's tenant.
-  //     This matches admin's Computer detail surfaces (apps/admin's
-  //     /computers/$id route) where operators read threads on Computers
-  //     they don't personally own.
+  //   - tenant admins: allowed to pass the Computer read gate, but still
+  //     filtered by thread participation below. Tenant role is not a blanket
+  //     grant to read other users' conversations.
   if (args.computerId && !hasServiceSecret(ctx)) {
     const [computerRow] = await db
       .select()
@@ -103,9 +94,9 @@ export const threads_query = async (
   if (args.agentId) conditions.push(eq(threads.agent_id, args.agentId));
   if (args.computerId)
     conditions.push(eq(threads.computer_id, args.computerId));
-  if (ctx.auth.authType === "cognito" && !isTenantAdminCaller) {
+  if (ctx.auth.authType === "cognito") {
     if (!callerUserId) return [];
-    conditions.push(eq(threads.user_id, callerUserId));
+    conditions.push(callerVisibleThreadPredicate(args.tenantId, callerUserId));
   }
   if (args.assigneeId) {
     // Mobile passes user.sub (Cognito) as assigneeId. For Google-OAuth

@@ -9,7 +9,11 @@ import {
 	threads,
 	messageToCamel,
 } from "../../utils.js";
-import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import {
+  resolveCallerTenantId,
+  resolveCallerUserId,
+} from "../core/resolve-auth-user.js";
+import { callerVisibleThreadPredicate } from "../threads/access.js";
 
 /**
  * Tenant-scoped messages query.
@@ -50,13 +54,28 @@ export const messages_ = async (
 			pageInfo: { hasNextPage: false, endCursor: null },
 		};
 	}
+	const callerUserId =
+		ctx.auth?.authType === "cognito" ? await resolveCallerUserId(ctx) : null;
+	if (ctx.auth?.authType === "cognito" && !callerUserId) {
+		return {
+			edges: [],
+			pageInfo: { hasNextPage: false, endCursor: null },
+		};
+	}
 
+	const threadConditions: any[] = [
+		eq(threads.id, args.threadId),
+		eq(threads.tenant_id, callerTenantId),
+	];
+	if (ctx.auth?.authType === "cognito") {
+		threadConditions.push(
+			callerVisibleThreadPredicate(callerTenantId, callerUserId!),
+		);
+	}
 	const [thread] = await db
 		.select({ id: threads.id, tenant_id: threads.tenant_id })
 		.from(threads)
-		.where(
-			and(eq(threads.id, args.threadId), eq(threads.tenant_id, callerTenantId)),
-		);
+		.where(and(...threadConditions));
 	if (!thread) {
 		return {
 			edges: [],

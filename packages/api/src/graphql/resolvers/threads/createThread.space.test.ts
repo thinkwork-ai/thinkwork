@@ -7,7 +7,7 @@ const {
   mockRequireTenantMember,
   mockResolveCallerFromAuth,
   mockResolveThreadComputer,
-  mockHasSpaceMemberAccess,
+  mockCanPostToSpace,
   mockEnsureDefaultThreadSpace,
   tables,
 } = vi.hoisted(() => {
@@ -125,7 +125,7 @@ const {
     mockRequireTenantMember: vi.fn(async () => "member"),
     mockResolveCallerFromAuth: vi.fn(async () => ({ userId: "user-1" })),
     mockResolveThreadComputer: vi.fn(async () => null),
-    mockHasSpaceMemberAccess: vi.fn(async () => true),
+    mockCanPostToSpace: vi.fn(async () => true),
     mockEnsureDefaultThreadSpace: vi.fn(async () => ({
       id: "space-default",
       tenant_id: "tenant-1",
@@ -185,7 +185,7 @@ vi.mock("../../../lib/computers/thread-cutover.js", () => ({
 }));
 
 vi.mock("../spaces/shared.js", () => ({
-  hasSpaceMemberAccess: mockHasSpaceMemberAccess,
+  canPostToSpace: mockCanPostToSpace,
 }));
 
 vi.mock("../../../lib/spaces/default-space.js", () => ({
@@ -227,8 +227,8 @@ beforeEach(() => {
   mockRequireTenantMember.mockClear();
   mockResolveCallerFromAuth.mockClear();
   mockResolveThreadComputer.mockClear();
-  mockHasSpaceMemberAccess.mockReset();
-  mockHasSpaceMemberAccess.mockResolvedValue(true);
+  mockCanPostToSpace.mockReset();
+  mockCanPostToSpace.mockResolvedValue(true);
   mockEnsureDefaultThreadSpace.mockReset();
   mockEnsureDefaultThreadSpace.mockResolvedValue({
     id: "space-default",
@@ -263,7 +263,7 @@ describe("createThread Space participation", () => {
     );
 
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
-    expect(mockHasSpaceMemberAccess).not.toHaveBeenCalled();
+    expect(mockCanPostToSpace).toHaveBeenCalledWith(ctx, "tenant-1", "space-1");
     expect(captures.insertedThreads[0]).toMatchObject({
       tenant_id: "tenant-1",
       space_id: "space-1",
@@ -317,7 +317,11 @@ describe("createThread Space participation", () => {
       tenantId: "tenant-1",
       userId: "user-1",
     });
-    expect(mockHasSpaceMemberAccess).not.toHaveBeenCalled();
+    expect(mockCanPostToSpace).toHaveBeenCalledWith(
+      ctx,
+      "tenant-1",
+      "space-default",
+    );
     expect(captures.insertedThreads[0]).toMatchObject({
       tenant_id: "tenant-1",
       space_id: "space-default",
@@ -362,6 +366,32 @@ describe("createThread Space participation", () => {
         ctx,
       ),
     ).rejects.toThrow(GraphQLError);
+    expect(captures.transactions).toBe(0);
+  });
+
+  it("rejects private Spaces when the caller cannot post there", async () => {
+    mockCanPostToSpace.mockResolvedValueOnce(false);
+    captures.spaceRows.push({
+      id: "space-private",
+      tenant_id: "tenant-1",
+      status: "active",
+    });
+
+    await expect(
+      createThread(
+        {},
+        {
+          input: {
+            tenantId: "tenant-1",
+            spaceId: "space-private",
+            title: "Acme onboarding",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "FORBIDDEN" },
+    });
     expect(captures.transactions).toBe(0);
   });
 });

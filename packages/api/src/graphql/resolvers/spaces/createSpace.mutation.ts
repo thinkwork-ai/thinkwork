@@ -3,12 +3,13 @@ import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, spaceMembers, spaces } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
-import { toGraphqlSpace } from "./shared.js";
+import { parseSpaceAccessMode, toGraphqlSpace } from "./shared.js";
 
 type CreateSpaceInput = {
   tenantId: string;
   name: string;
   description?: string | null;
+  accessMode?: string | null;
 };
 
 export async function createSpace(
@@ -25,6 +26,7 @@ export async function createSpace(
   }
 
   const description = input.description?.trim() || null;
+  const accessMode = parseSpaceAccessMode(input.accessMode) ?? "public";
   const callerUserId = await resolveCallerUserId(ctx);
   const slug = await nextAvailableSpaceSlug(input.tenantId, slugify(name));
 
@@ -38,6 +40,7 @@ export async function createSpace(
         description,
         status: "active",
         kind: "custom",
+        access_mode: accessMode,
         template_key: slug,
         config: {
           workflow: "custom",

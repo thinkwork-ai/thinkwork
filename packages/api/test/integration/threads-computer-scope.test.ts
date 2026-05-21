@@ -122,6 +122,20 @@ const mocks = vi.hoisted(() => {
       if (obj._op === "and" && Array.isArray(obj.preds)) {
         for (const p of obj.preds) walk(p);
       }
+      if (obj._op === "sql") {
+        const text = Array.isArray((obj as { text?: unknown }).text)
+          ? ((obj as { text: unknown[] }).text as unknown[]).join("?")
+          : String((obj as { text?: unknown }).text ?? "");
+        if (text.includes("thread_participants")) {
+          const callerUserId = (
+            (obj as { values?: unknown[] }).values ?? []
+          ).find(
+            (value) =>
+              typeof value === "string" && value.startsWith("user-"),
+          );
+          if (callerUserId) out.__callerVisibleUserId = callerUserId;
+        }
+      }
       if (
         obj._op === "eq" &&
         obj.column &&
@@ -148,7 +162,11 @@ const mocks = vi.hoisted(() => {
     column,
     value,
   }));
-  const sql = vi.fn(() => ({ _op: "sql" }));
+  const sql = vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    _op: "sql",
+    text: Array.from(strings),
+    values,
+  }));
 
   const computersTable = {
     _name: "computers",
@@ -203,6 +221,8 @@ const mocks = vi.hoisted(() => {
       );
       if (captured.computer_id)
         rows = rows.filter((r) => r.computer_id === captured.computer_id);
+      if (captured.__callerVisibleUserId)
+        rows = rows.filter((r) => r.user_id === captured.__callerVisibleUserId);
       if (captured.user_id)
         rows = rows.filter((r) => r.user_id === captured.user_id);
       rows.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
@@ -339,10 +359,10 @@ describe("threads(tenantId, computerId) resolver — multi-user scope", () => {
     expect(result).toEqual([]);
   });
 
-  it("allows admin operators to read any tenant Computer's threads (admin-bypass via requireComputerReadAccess)", async () => {
+  it("keeps other users' Computer threads hidden even when the Computer read gate allows access", async () => {
     // Admin scenario: requireComputerReadAccess succeeds even though the
-    // caller is not the Computer's owner. The real helper does this via
-    // requireTenantAdmin; here we just simulate the success path.
+    // caller is not the Computer's owner. Thread visibility remains scoped to
+    // the starter/participant rule.
     mocks.accessCheckImpl.current = async () => undefined;
     mocks.requireTenantAdmin.mockImplementation(async () => "admin");
     const result = await threads_query(
@@ -351,7 +371,7 @@ describe("threads(tenantId, computerId) resolver — multi-user scope", () => {
       cognitoCtx,
     );
     const ids = (result as { id: string }[]).map((r) => r.id);
-    expect(ids).toEqual(["t-B1"]);
+    expect(ids).toEqual([]);
   });
 
   it("filters shared Computer threads to the requesting user", async () => {
@@ -365,7 +385,7 @@ describe("threads(tenantId, computerId) resolver — multi-user scope", () => {
     expect(mocks.requireComputerReadAccess).toHaveBeenCalledTimes(1);
   });
 
-  it("lets admin operators see every user's thread on the shared Computer", async () => {
+  it("keeps shared Computer threads scoped to the caller even for admin operators", async () => {
     mocks.requireTenantAdmin.mockImplementation(async () => "owner");
     const result = await threads_query(
       null,
@@ -373,7 +393,7 @@ describe("threads(tenantId, computerId) resolver — multi-user scope", () => {
       cognitoCtx,
     );
     const ids = (result as { id: string }[]).map((r) => r.id);
-    expect(ids).toEqual(["t-shared-B", "t-shared-A"]);
+    expect(ids).toEqual(["t-shared-A"]);
   });
 
   it("returns [] when the queried Computer doesn't exist (or wrong tenant)", async () => {

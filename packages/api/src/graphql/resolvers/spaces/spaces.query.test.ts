@@ -4,13 +4,16 @@ const {
   mockSelect,
   mockExecute,
   mockCanReadTenantSpaces,
+  mockCanManageTenantSpaces,
   mockRequireTenantAdmin,
   mockResolveCallerUserId,
   mockToGraphqlSpace,
+  mockUserAccessibleSpacePredicate,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   mockExecute: vi.fn(),
   mockCanReadTenantSpaces: vi.fn(),
+  mockCanManageTenantSpaces: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
   mockToGraphqlSpace: vi.fn((row: Record<string, unknown>) => ({
@@ -19,9 +22,11 @@ const {
     name: row.name,
     status: String(row.status).toUpperCase(),
     kind: String(row.kind).toUpperCase(),
+    accessMode: String(row.access_mode ?? "public").toUpperCase(),
     prompt: row.prompt,
     templateKey: row.template_key,
   })),
+  mockUserAccessibleSpacePredicate: vi.fn(() => ({ type: "accessible" })),
 }));
 
 vi.mock("../../utils.js", () => ({
@@ -57,10 +62,12 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 }));
 
 vi.mock("./shared.js", () => ({
+  canManageTenantSpaces: mockCanManageTenantSpaces,
   canReadTenantSpaces: mockCanReadTenantSpaces,
   parseSpaceStatus: (value: unknown) =>
     value == null ? undefined : String(value).toLowerCase(),
   toGraphqlSpace: mockToGraphqlSpace,
+  userAccessibleSpacePredicate: mockUserAccessibleSpacePredicate,
 }));
 
 let resolver: typeof import("./spaces.query.js");
@@ -70,11 +77,13 @@ beforeEach(async () => {
   mockSelect.mockReset();
   mockExecute.mockReset();
   mockCanReadTenantSpaces.mockReset();
+  mockCanManageTenantSpaces.mockReset();
   mockRequireTenantAdmin.mockReset();
   mockRequireTenantAdmin.mockRejectedValue(new Error("not admin"));
   mockResolveCallerUserId.mockReset();
   mockResolveCallerUserId.mockResolvedValue("user-1");
   mockToGraphqlSpace.mockClear();
+  mockUserAccessibleSpacePredicate.mockClear();
   resolver = await import("./spaces.query.js");
 });
 
@@ -98,6 +107,7 @@ describe("spaces", () => {
           name: "Customer Onboarding",
           status: "active",
           kind: "customer_onboarding",
+          access_mode: "public",
           prompt: "Keep onboarding moving.",
           template_key: "customer_onboarding",
         },
@@ -121,6 +131,7 @@ describe("spaces", () => {
         name: "Customer Onboarding",
         status: "ACTIVE",
         kind: "CUSTOMER_ONBOARDING",
+        accessMode: "PUBLIC",
         prompt: "Keep onboarding moving.",
         templateKey: "customer_onboarding",
         unreadThreadCount: 2,
@@ -138,6 +149,42 @@ describe("spaces", () => {
 
     expect(result).toEqual([]);
     expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it("lets admins request every Space for management views", async () => {
+    mockCanReadTenantSpaces.mockResolvedValueOnce(true);
+    mockCanManageTenantSpaces.mockResolvedValueOnce(true);
+    mockExecute.mockResolvedValueOnce({ rows: [] });
+    mockSelect.mockReturnValueOnce(
+      queryRows([
+        {
+          id: "space-private",
+          tenant_id: "tenant-1",
+          name: "Executive",
+          status: "active",
+          kind: "custom",
+          access_mode: "private",
+          prompt: null,
+          template_key: "executive",
+        },
+      ]),
+    );
+
+    const result = await resolver.spaces(
+      null,
+      {
+        tenantId: "tenant-1",
+        status: "ACTIVE",
+        includeAllForAdmin: true,
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(mockUserAccessibleSpacePredicate).not.toHaveBeenCalled();
+    expect(result[0]).toMatchObject({
+      id: "space-private",
+      accessMode: "PRIVATE",
+    });
   });
 });
 

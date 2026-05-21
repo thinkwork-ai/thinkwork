@@ -12,8 +12,7 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
-import { requireTenantAdmin, hasServiceSecret } from "../core/authz.js";
-import { GraphQLError } from "graphql";
+import { callerVisibleThreadPredicate } from "./access.js";
 
 /**
  * Single-thread query. Tenant-pinned end-to-end so a Cognito caller in
@@ -39,7 +38,6 @@ export const thread = async (
 ) => {
   let callerTenantId: string | null = null;
   let callerUserId: string | null = null;
-  let isTenantAdminCaller = hasServiceSecret(ctx);
   if (ctx.auth.authType === "cognito") {
     callerTenantId = await resolveCallerTenantId(ctx);
     if (!callerTenantId) return null;
@@ -48,21 +46,15 @@ export const thread = async (
   }
 
   const threadConditions = callerTenantId
-    ? and(eq(threads.id, args.id), eq(threads.tenant_id, callerTenantId))
+    ? and(
+        eq(threads.id, args.id),
+        eq(threads.tenant_id, callerTenantId),
+        callerVisibleThreadPredicate(callerTenantId, callerUserId!),
+      )
     : eq(threads.id, args.id);
 
   const [row] = await db.select().from(threads).where(threadConditions);
   if (!row) return null;
-  if (ctx.auth.authType === "cognito") {
-    try {
-      await requireTenantAdmin(ctx, row.tenant_id);
-      isTenantAdminCaller = true;
-    } catch (err) {
-      if (!(err instanceof GraphQLError)) throw err;
-      isTenantAdminCaller = false;
-    }
-    if (!isTenantAdminCaller && row.user_id !== callerUserId) return null;
-  }
 
   const attachmentConditions = callerTenantId
     ? and(

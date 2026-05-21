@@ -32,8 +32,9 @@ const {
     return { __and: conditions };
   });
   const sql = Object.assign(
-    (_strings: TemplateStringsArray, ..._values: unknown[]) => ({
+    (_strings: TemplateStringsArray, ...values: unknown[]) => ({
       __sql: true,
+      __values: values,
     }),
     {},
   );
@@ -215,16 +216,16 @@ describe("threadsPaged filter assembly", () => {
     expect(hasUser).toBe(false);
   });
 
-  it("does not add a user_id condition for tenant admins", async () => {
+  it("still scopes tenant admins to their visible thread participants", async () => {
     mockRequireTenantAdmin.mockImplementation(async () => "admin");
     await threadsPaged_query({}, { tenantId: TENANT }, {
       auth: { authType: "cognito" },
     } as any);
     const allConditions = capturedConditions.flat();
-    const hasUser = allConditions.some(
-      (c: any) => c?.__eq?.field === threadsTable.user_id,
+    const hasCallerVisibility = allConditions.some(
+      (c: any) => c?.__sql && c.__values?.includes("user-a"),
     );
-    expect(hasUser).toBe(false);
+    expect(hasCallerVisibility).toBe(true);
   });
 
   it("adds a space_id condition when spaceId is set", async () => {
@@ -242,7 +243,7 @@ describe("threadsPaged filter assembly", () => {
     expect(hasSpace).toBe(true);
   });
 
-  it("lets non-admin tenant members list contextual workroom threads without a user_id filter", async () => {
+  it("scopes contextual workroom threads to the caller's visible participants", async () => {
     await threadsPaged_query(
       {},
       { tenantId: TENANT, spaceId: "space-onboarding" },
@@ -258,8 +259,12 @@ describe("threadsPaged filter assembly", () => {
     const hasUser = allConditions.some(
       (c: any) => c?.__eq?.field === threadsTable.user_id,
     );
+    const hasCallerVisibility = allConditions.some(
+      (c: any) => c?.__sql && c.__values?.includes("user-a"),
+    );
     expect(hasSpace).toBe(true);
     expect(hasUser).toBe(false);
+    expect(hasCallerVisibility).toBe(true);
   });
 
   it("adds a participant unread predicate for global Inbox filters", async () => {

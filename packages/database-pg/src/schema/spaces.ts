@@ -37,6 +37,7 @@ export const spaces = pgTable(
     prompt: text("prompt"),
     status: text("status").notNull().default("active"),
     kind: text("kind").notNull().default("custom"),
+    access_mode: text("access_mode").notNull().default("public"),
     icon: text("icon"),
     category: text("category"),
     template_key: text("template_key"),
@@ -69,6 +70,10 @@ export const spaces = pgTable(
     check(
       "spaces_kind_allowed",
       sql`${table.kind} IN ('custom','customer_onboarding')`,
+    ),
+    check(
+      "spaces_access_mode_allowed",
+      sql`${table.access_mode} IN ('public','private')`,
     ),
   ],
 );

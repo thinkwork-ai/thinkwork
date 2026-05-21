@@ -36,6 +36,15 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("senderId");
   });
 
+  it("checks thread visibility while preserving legacy Computer thread claiming", () => {
+    expect(source).toContain("callerVisibleThreadPredicate");
+    expect(source).toContain("isClaimingLegacyComputerThread");
+    expect(source).toContain("!isClaimingLegacyComputerThread");
+    expect(source.indexOf("await resolveThreadComputer")).toBeLessThan(
+      source.indexOf("const isClaimingLegacyComputerThread"),
+    );
+  });
+
   it("refreshes activity for non-Computer Space collaboration user messages", () => {
     expect(source).toContain("const messageActivityAt = new Date()");
     expect(source).toContain("created_at: messageActivityAt");

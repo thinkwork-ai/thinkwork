@@ -34,6 +34,7 @@ describe("default Spaces", () => {
       name: "Default",
       status: "active",
       kind: "custom",
+      access_mode: "public",
       template_key: "default",
       category: "default",
       config: {

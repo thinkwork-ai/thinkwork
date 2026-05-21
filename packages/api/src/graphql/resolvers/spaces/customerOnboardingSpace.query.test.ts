@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSelect, mockCanReadTenantSpaces, mockToGraphqlSpace } = vi.hoisted(
-  () => ({
+const {
+  mockSelect,
+  mockCanAccessSpace,
+  mockCanManageTenantSpaces,
+  mockCanReadTenantSpaces,
+  mockToGraphqlSpace,
+} = vi.hoisted(() => ({
     mockSelect: vi.fn(),
+    mockCanAccessSpace: vi.fn(),
+    mockCanManageTenantSpaces: vi.fn(),
     mockCanReadTenantSpaces: vi.fn(),
     mockToGraphqlSpace: vi.fn((row: Record<string, unknown>) => ({
       id: row.id,
@@ -14,8 +21,7 @@ const { mockSelect, mockCanReadTenantSpaces, mockToGraphqlSpace } = vi.hoisted(
       kind: String(row.kind).toUpperCase(),
       templateKey: row.template_key,
     })),
-  }),
-);
+  }));
 
 vi.mock("../../utils.js", () => ({
   agentToCamel: (row: Record<string, unknown>) => ({
@@ -75,6 +81,8 @@ vi.mock("./shared.js", async () => {
     await vi.importActual<typeof import("./shared.js")>("./shared.js");
   return {
     ...actual,
+    canAccessSpace: mockCanAccessSpace,
+    canManageTenantSpaces: mockCanManageTenantSpaces,
     canReadTenantSpaces: mockCanReadTenantSpaces,
     toGraphqlSpace: mockToGraphqlSpace,
   };
@@ -86,6 +94,10 @@ let types: typeof import("./types.js");
 beforeEach(async () => {
   vi.resetModules();
   mockSelect.mockReset();
+  mockCanAccessSpace.mockReset();
+  mockCanAccessSpace.mockResolvedValue(true);
+  mockCanManageTenantSpaces.mockReset();
+  mockCanManageTenantSpaces.mockResolvedValue(false);
   mockCanReadTenantSpaces.mockReset();
   mockToGraphqlSpace.mockClear();
   resolver = await import("./customerOnboardingSpace.query.js");

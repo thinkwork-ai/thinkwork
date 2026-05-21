@@ -32,6 +32,7 @@ import {
   toThreadParticipantInsert,
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
+import { canPostToSpace } from "../spaces/shared.js";
 
 export const createThread = async (
   _parent: any,
@@ -86,6 +87,14 @@ export const createThread = async (
       });
     }
     threadSpace = spaceRow;
+  }
+  if (
+    ctx.auth.authType === "cognito" &&
+    !(await canPostToSpace(ctx, i.tenantId, threadSpace.id))
+  ) {
+    throw new GraphQLError("Space access required", {
+      extensions: { code: "FORBIDDEN" },
+    });
   }
   const threadComputer = await resolveThreadComputer({
     tenantId: i.tenantId,

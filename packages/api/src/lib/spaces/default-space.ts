@@ -13,6 +13,7 @@ export function defaultAgentContextSpaceValues(tenantId: string) {
       "Use this Space for baseline agent context that should be available when no specialized Space applies.",
     status: "active",
     kind: "custom",
+    access_mode: "public",
     icon: "folder",
     category: "default",
     template_key: DEFAULT_AGENT_CONTEXT_SPACE_SLUG,
@@ -44,6 +45,7 @@ export async function ensureDefaultAgentContextSpace(input: {
       target: [spaces.tenant_id, spaces.slug],
       set: {
         status: "active",
+        access_mode: "public",
         updated_at: new Date(),
       },
     })
@@ -88,6 +90,7 @@ export async function ensureDefaultThreadSpace(input: {
         "Use this Space for general collaboration, ad hoc questions, and Threads that do not belong to a specialized workflow.",
       status: "active",
       kind: "custom",
+      access_mode: "public",
       template_key: "general",
       config: {
         workflow: "general",
@@ -99,6 +102,7 @@ export async function ensureDefaultThreadSpace(input: {
       target: [spaces.tenant_id, spaces.slug],
       set: {
         status: "active",
+        access_mode: "public",
         updated_at: new Date(),
       },
     })
