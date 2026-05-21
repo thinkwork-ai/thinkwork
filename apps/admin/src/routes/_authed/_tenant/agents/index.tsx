@@ -18,9 +18,9 @@ import {
   FilterBarSort,
 } from "@/components/ui/data-table-filter-bar";
 import {
+  AgentSpaceAvailabilityQuery,
   AgentsListQuery,
   OnAgentStatusChangedSubscription,
-  SpacesListQuery,
 } from "@/lib/graphql-queries";
 import { AgentRuntime } from "@/gql/graphql";
 import { useDialog } from "@/context/DialogContext";
@@ -135,7 +135,7 @@ function AgentsPage() {
     requestPolicy: "cache-and-network",
   });
   const [spacesResult] = useQuery({
-    query: SpacesListQuery,
+    query: AgentSpaceAvailabilityQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId,
     requestPolicy: "cache-and-network",
