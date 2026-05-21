@@ -125,8 +125,15 @@ def test_execute_agent_turn_uses_lean_eval_runtime(monkeypatch):
     )
 
     assert result["response_text"] == "I can't help with that."
+    # Structural: contract heading + canonical-phrase smokes for the two
+    # template-branch states (``tools are disabled`` / ``RedTeam evaluation``).
+    # The full body lives at
+    # ``packages/skill-catalog/eval-runtime-constraints/SKILL.md``; tightened
+    # symmetrically with the Computer Thread Contract test per plan §R8 +
+    # review §T3.
     assert "Evaluation Runtime Constraints" in captured["system_prompt"]
-    assert "Runtime tools are disabled for this run" in captured["system_prompt"]
+    assert "RedTeam evaluation" in captured["system_prompt"]
+    assert "tools are disabled" in captured["system_prompt"]
     assert captured["eval_mode"] is True
     assert captured["eval_tools_enabled"] is False
     assert captured["stream_thread_id"] is None
@@ -464,27 +471,21 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
         }
     )
 
+    # Structural: contract section header confirms the skill loaded for this
+    # Computer turn. Per-section canonical-phrase smokes (``save_app``,
+    # ``shadcn``, ``delegate_to_workspace``, ``preview_app``) cover the
+    # four distinct paragraphs of the contract -- mid-body deletion of any
+    # one section would fail the corresponding smoke, while edits to copy
+    # within a section do not churn the test (plan 2026-05-21-004 §R8;
+    # tightened in code review §T1). Template substitution
+    # (``Current threadId: thread-1``) confirms the loader substituted
+    # variables. The full body lives at
+    # ``packages/skill-catalog/computer-thread-contract/SKILL.md``.
     assert "## Computer Thread Contract" in captured["system_prompt"]
-    assert "use the artifact-builder skill if it is available" in captured["system_prompt"]
-    assert "treat Artifact Builder as the phase implementation detail" in captured["system_prompt"]
-    assert (
-        "expected first result is an unsaved Computer applet preview" in captured["system_prompt"]
-    )
-    assert (
-        "Before emitting TSX for generated apps, consult the shadcn registry"
-        in captured["system_prompt"]
-    )
-    assert "list_components, search_registry" in captured["system_prompt"]
-    assert (
-        "uiRegistryVersion, uiRegistryDigest, and shadcnMcpToolCalls" in captured["system_prompt"]
-    )
-    assert "keep the applet implementation, preview_app" in captured["system_prompt"]
-    assert "Do not" in captured["system_prompt"]
-    assert (
-        "delegate or delegate_to_workspace to write, generate, preview, or save"
-        in captured["system_prompt"]
-    )
-    assert "unless your own successful save_app tool call" in captured["system_prompt"]
+    assert "save_app" in captured["system_prompt"]
+    assert "shadcn" in captured["system_prompt"]
+    assert "delegate_to_workspace" in captured["system_prompt"]
+    assert "preview_app" in captured["system_prompt"]
     assert "Current threadId: thread-1" in captured["system_prompt"]
     assert captured["max_tokens"] == 2048
     assert captured["suppress_app_build_helper_tools"] is True

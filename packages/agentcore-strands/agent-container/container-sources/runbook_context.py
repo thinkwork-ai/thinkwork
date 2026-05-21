@@ -38,15 +38,12 @@ def format_runbook_context(runbook_context: Any) -> str:
 
     _assert_dependencies_available(current_task, previous_outputs)
 
+    # The "## Runbook Execution Context" header + behavioral preamble moved
+    # to packages/skill-catalog/runbook-execution-contract/SKILL.md (U4 of
+    # plan 2026-05-21-004). The loader appends that skill immediately before
+    # this data block when runbook_active is true, so the two read as one
+    # section in the resolved system prompt.
     lines: list[str] = [
-        "## Runbook Execution Context",
-        "",
-        "A ThinkWork runbook is active. The runbook definition is the source",
-        "of truth; Strands is only the execution target. Execute exactly the",
-        "current task, preserve the runbook phase/task semantics, and pass",
-        "task outputs forward through the runtime instead of inventing a",
-        "separate workflow.",
-        "",
         f"- **Runbook:** {_display_name(definition, run)} (`{run['runbookSlug']}` v{run['runbookVersion']})",
         f"- **Runbook run ID:** `{run['id']}`",
         f"- **Run status:** `{run['status']}`",

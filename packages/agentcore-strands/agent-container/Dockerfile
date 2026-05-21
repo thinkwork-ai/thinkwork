@@ -47,6 +47,14 @@ RUN mkdir -p /app/auth-agent
 COPY packages/agentcore/auth-agent/permission_request.py /app/auth-agent/permission_request.py
 COPY packages/agentcore/auth-agent/__init__.py /app/auth-agent/__init__.py
 
+# Platform skill catalog — read at request time by system_contract_loader to
+# resolve agent-shaping behavioral contracts (Computer Thread Contract, Eval
+# Runtime Constraints, Runbook Execution Contract) whose `contract: system`
+# frontmatter activates them per turn. Wildcarded for the same reason as the
+# container-sources/ COPY above: adding a new system-contract skill is a
+# platform decision but should not require a Dockerfile edit per skill.
+COPY packages/skill-catalog/ /app/skill-catalog/
+
 # Build-time filesystem check: fail the image build loud if any module
 # enumerated in _boot_assert.EXPECTED_* is missing from /app. Same assertion
 # runs again at server startup in case a packaging step drops a file between
