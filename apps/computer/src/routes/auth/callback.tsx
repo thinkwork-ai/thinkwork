@@ -6,6 +6,8 @@ import {
   getGoogleSignInUrl,
 } from "@/lib/auth";
 
+const POST_SIGN_IN_PATH = "/new";
+
 export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
   validateSearch: (search: Record<string, unknown>) => ({
@@ -52,17 +54,17 @@ function AuthCallback() {
         storeTokensInCognitoStorage(tokens);
         // If opened as popup, notify parent and close
         if (window.opener) {
-          window.opener.location.href = "/spaces";
+          window.opener.location.href = POST_SIGN_IN_PATH;
           window.close();
           return;
         }
         // Full reload so AuthProvider picks up the new session from localStorage
-        window.location.href = "/spaces";
+        window.location.href = POST_SIGN_IN_PATH;
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");
       });
-  }, [code]);
+  }, [code, error_description, oauthError]);
 
   if (error) {
     const isLinking = error.includes("linking") || error.includes("try again");

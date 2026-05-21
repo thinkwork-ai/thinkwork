@@ -157,7 +157,9 @@ function ArtifactsListBodyView({
 export function ArtifactsCreateAction() {
   return (
     <Button asChild size="sm">
-      <Link to="/spaces">Open Spaces</Link>
+      <Link to="/new" search={{ spaceId: undefined }}>
+        New thread
+      </Link>
     </Button>
   );
 }
