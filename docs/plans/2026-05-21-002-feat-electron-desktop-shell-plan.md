@@ -1,5 +1,5 @@
 ---
-title: feat — Electron desktop shell for apps/computer
+title: feat — Electron desktop shell for apps/spaces
 type: feat
 status: active
 date: 2026-05-21
@@ -7,17 +7,17 @@ deepened: 2026-05-21
 origin: docs/brainstorms/2026-05-20-computer-electron-desktop-shell-requirements.md
 ---
 
-# feat: Electron desktop shell for apps/computer
+# feat: Electron desktop shell for apps/spaces
 
 ## Summary
 
-Add `apps/desktop/` — a new Electron 42 + electron-vite 5 wrapper around the existing `apps/computer` React 19 + Vite SPA — and ship signed/notarized macOS DMG installers with `electron-updater` against GitHub Releases. The renderer build stays untouched (electron-vite delegates to `apps/computer/vite.config.ts`). Cognito auth is hoisted into the main process behind a new pluggable `TokenStorage` interface so the desktop variant routes through the IPC bridge into `Electron.safeStorage` while the web variant continues using `localStorage`. The plan is sequenced as: OAuth cold-start spike → foundation → auth flow → update + native UX → build + release → docs.
+Add `apps/desktop/` — a new Electron 42 + electron-vite 5 wrapper around the existing `apps/spaces` React 19 + Vite SPA — and ship signed/notarized macOS DMG installers with `electron-updater` against GitHub Releases. The renderer build stays untouched (electron-vite delegates to `apps/spaces/vite.config.ts`). Cognito auth is hoisted into the main process behind a new pluggable `TokenStorage` interface so the desktop variant routes through the IPC bridge into `Electron.safeStorage` while the web variant continues using `localStorage`. The plan is sequenced as: OAuth cold-start spike → foundation → auth flow → update + native UX → build + release → docs.
 
 ---
 
 ## Problem Frame
 
-`apps/computer` runs only as a browser tab today. The brainstorm establishes the install-identity, stable-launch-surface, and distribution-control motivations (see origin doc Problem Frame). This plan addresses the *how*: a new `apps/desktop/` package, a refactor of `apps/computer/src/lib/auth.ts` to enable per-platform token storage, two adjacent Terraform changes (Cognito callback URLs + iframe-shell parent-origin allowlist), and a new macOS GitHub Actions release pipeline that doesn't exist anywhere in the repo today.
+`apps/spaces` runs only as a browser tab today. The brainstorm establishes the install-identity, stable-launch-surface, and distribution-control motivations (see origin doc Problem Frame). This plan addresses the *how*: a new `apps/desktop/` package, a refactor of `apps/spaces/src/lib/auth.ts` to enable per-platform token storage, two adjacent Terraform changes (Cognito callback URLs + iframe-shell parent-origin allowlist), and a new macOS GitHub Actions release pipeline that doesn't exist anywhere in the repo today.
 
 ---
 
@@ -40,7 +40,7 @@ This plan inherits all 21 requirements from the origin brainstorm (see [docs/bra
 **Plan-time additions**
 - R22. **PKCE S256 + state nonce on the OAuth flow.** RFC 9700 (Jan 2025) made PKCE MUST for all OAuth clients including public desktop clients. Cognito app client must be configured without a client secret. Code verifier is generated per attempt in main, kept in memory only, deleted after the token exchange; state nonce is generated with `crypto.randomBytes` and validated on callback (reject mismatch).
 - R23. **Cognito refresh-token rotation enabled on the user-pool client.** RFC 9700 §4.3.3 makes rotation MUST for public clients. Each `refreshSession` call issues a new refresh token; the old one is invalidated by Cognito's replay detection.
-- R24. **TokenStorage abstraction in `apps/computer/src/lib/auth.ts`.** The current direct `localStorage` reads/writes (8 call sites) become calls into a small `TokenStorage` interface. Web variant constructs the localStorage-backed implementation; desktop variant constructs the IPC-backed implementation that proxies into main-process `safeStorage`. Required because `amazon-cognito-identity-js`'s `Storage` API is sync-only and a sync-IPC bridge would be an anti-pattern.
+- R24. **TokenStorage abstraction in `apps/spaces/src/lib/auth.ts`.** The current direct `localStorage` reads/writes (8 call sites) become calls into a small `TokenStorage` interface. Web variant constructs the localStorage-backed implementation; desktop variant constructs the IPC-backed implementation that proxies into main-process `safeStorage`. Required because `amazon-cognito-identity-js`'s `Storage` API is sync-only and a sync-IPC bridge would be an anti-pattern.
 
 **Origin actors:** A1 End-user operator (single actor; no operator/admin split inside the desktop shell).
 **Origin flows:** F1 First-launch OAuth, F2 Returning-user cold launch with cached session, F3 Autoupdate check/download/install.
@@ -69,6 +69,7 @@ Carried verbatim from the origin brainstorm (see origin Scope Boundaries — all
 - **AppSync subscription longevity over long-lived desktop sessions** (laptop sleep, network flap, in-flight token refresh): no characterization exists in `docs/solutions/`; mobile sessions get aggressive iOS backgrounding that masks the issue. Worth a follow-up brainstorm pre-launch but not in this plan's scope.
 - **Raise `ThinkworkAdmin` refresh-token validity from 30d to 90d:** keep at 30d for v1; raise if friction reports come in. Avoids a Cognito-client config change that affects web users too.
 - **New `docs/solutions/` runbook entries** that capture the Cognito callback-URL update playbook and the Apple credentials rotation playbook. Author after the first real instance, per repo convention.
+- **Rename Terraform `computer_*` → `spaces_*` (Registry breaking change).** ~30 `computer_*` identifiers across 11 Terraform files (variables, outputs, the `terraform/modules/app/computer-runtime/` module, the `terraform/examples/greenfield/` reference deploy). Plus the workspace packages `packages/computer-stdlib` and `packages/computer-runtime`. This is a `thinkwork-ai/thinkwork/aws` Terraform Registry breaking change with a customer-migration story (`terraform.tfvars` updates, `moved {}` blocks for resource addresses, state-migration runbook, CLI release ordering — same shape as the static-site artifact-name change in `dfc43c0d` but with a much larger blast radius). Deferred to its own brainstorm/plan; this plan's only Terraform contact is additive extension of `var.computer_sandbox_allowed_parent_origins` and the `ThinkworkAdmin` callback URL list.
 
 ---
 
@@ -76,18 +77,18 @@ Carried verbatim from the origin brainstorm (see origin Scope Boundaries — all
 
 ### Relevant Code and Patterns
 
-- `apps/computer/package.json`, `apps/computer/vite.config.ts`, `apps/computer/vite.iframe-shell.config.ts` — renderer build configuration the desktop shell delegates to. `vite.config.ts` is dev-port-pinned to 5174 with `strictPort: true` and polyfills `global: "globalThis"` for `amazon-cognito-identity-js`. Do not modify.
-- `apps/computer/src/main.tsx` — React entry. Provider tree (`ThemeProvider` → `UrqlProvider` → `AuthProvider` → `TenantProvider` → `PageHeaderProvider` → `TooltipProvider` → `RouterProvider`) wraps the SPA. The desktop variant detects Electron context here and chooses the IPC-backed TokenStorage.
-- `apps/computer/src/lib/auth.ts` — 367-line Cognito wrapper with 8+ direct `localStorage` calls keyed on `CognitoIdentityServiceProvider.<CLIENT_ID>.<user>.*`. This file is refactored by U6 to take a `TokenStorage` interface; web and desktop construct different implementations.
-- `apps/computer/src/routes/auth/callback.tsx` — existing TanStack Router OAuth callback for the web flow; uses `validateSearch` for `{code, error, error_description}`, idempotent exchange (the `exchanged` ref guards React Strict Mode double-fire), and full-page redirect after token write. U9 follows this pattern for the desktop variant.
-- `apps/computer/src/routes/_authed.tsx` — auth gate using `beforeLoad` redirect to `/sign-in?next=<path>`. Pattern reused for desktop deep-link routing.
+- `apps/spaces/package.json`, `apps/spaces/vite.config.ts`, `apps/spaces/vite.iframe-shell.config.ts` — renderer build configuration the desktop shell delegates to. `vite.config.ts` is dev-port-pinned to 5174 with `strictPort: true` and polyfills `global: "globalThis"` for `amazon-cognito-identity-js`. Do not modify.
+- `apps/spaces/src/main.tsx` — React entry. Provider tree (`ThemeProvider` → `UrqlProvider` → `AuthProvider` → `TenantProvider` → `PageHeaderProvider` → `TooltipProvider` → `RouterProvider`) wraps the SPA. The desktop variant detects Electron context here and chooses the IPC-backed TokenStorage.
+- `apps/spaces/src/lib/auth.ts` — 367-line Cognito wrapper with 8+ direct `localStorage` calls keyed on `CognitoIdentityServiceProvider.<CLIENT_ID>.<user>.*`. This file is refactored by U6 to take a `TokenStorage` interface; web and desktop construct different implementations.
+- `apps/spaces/src/routes/auth/callback.tsx` — existing TanStack Router OAuth callback for the web flow; uses `validateSearch` for `{code, error, error_description}`, idempotent exchange (the `exchanged` ref guards React Strict Mode double-fire), and full-page redirect after token write. U9 follows this pattern for the desktop variant.
+- `apps/spaces/src/routes/_authed.tsx` — auth gate using `beforeLoad` redirect to `/sign-in?next=<path>`. Pattern reused for desktop deep-link routing.
 - `terraform/modules/foundation/cognito/main.tf:201–238` — `aws_cognito_user_pool_client.admin` (`ThinkworkAdmin`).
 - `terraform/modules/foundation/cognito/main.tf:245–289` — `aws_cognito_user_pool_client.mobile` (`ThinkworkMobile`) — existing precedent for custom-scheme callbacks (`thinkwork://`, `thinkwork://auth/callback`).
 - `terraform/modules/foundation/cognito/variables.tf:109–119` — `mobile_callback_urls` variable shape; mirror this for `desktop_callback_urls`.
 - `terraform/modules/thinkwork/main.tf:139–156` — `concat()` block that computes admin callback URLs. The desktop scheme is added here.
-- `scripts/build-computer.sh` — env-injection pattern (Terraform outputs → `apps/computer/.env.production` → renderer build). U15's `scripts/build-desktop.sh` mirrors this shape.
+- `scripts/build-spaces.sh` — env-injection pattern (Terraform outputs → `apps/spaces/.env.production` → renderer build). U15's `scripts/build-desktop.sh` mirrors this shape.
 - `.github/workflows/release.yml` — existing tag-triggered release pipeline (all `ubuntu-latest`). U15 slots a new `macos-14` job alongside it.
-- `apps/computer/src/iframe-shell/iframe-shell.html` (lines 15–18) and `terraform/modules/app/static-site/main.tf:167+` — existing iframe-shell CSP precedent. The desktop `thinkwork://` host-bundle CSP is new; the iframe-shell CSP stays untouched.
+- `apps/spaces/src/iframe-shell/iframe-shell.html` (lines 15–18) and `terraform/modules/app/static-site/main.tf:167+` — existing iframe-shell CSP precedent. The desktop `thinkwork://` host-bundle CSP is new; the iframe-shell CSP stays untouched.
 - `/tmp/desktop-scout/t3code/apps/desktop/src/electron/ElectronProtocol.ts:58–141` — t3code's path-normalization + traversal-rejection + SPA-fallback logic, to port to `protocol.handle` (NOT `protocol.registerFileProtocol`, which is deprecated).
 - `/tmp/desktop-scout/t3code/apps/desktop/src/updates/updateMachine.ts` — t3code's pure-reducer update state machine. Already Effect-free; port verbatim minus any unused Effect imports.
 - `/tmp/desktop-scout/t3code/apps/desktop/src/preload.ts:22–127` — `contextBridge.exposeInMainWorld(name, { … } satisfies BridgeContract)` shape. Port the structure, not the SSH-specific methods.
@@ -107,7 +108,7 @@ Carried verbatim from the origin brainstorm (see origin Scope Boundaries — all
 - [Electron 42 deep-links tutorial](https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app) — `setAsDefaultProtocolClient` + `open-url` + `second-instance` patterns; `open-url` handler MUST be registered synchronously at module load (before `whenReady`).
 - [Electron `protocol.handle`](https://www.electronjs.org/docs/latest/api/protocol) — modern (Electron 28+) replacement for the deprecated `protocol.registerFileProtocol`.
 - [Electron `safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage) — async API preferred (`encryptStringAsync` / `decryptStringAsync`); sync API documented as "may be deprecated."
-- [electron-vite 5.0 config docs](https://electron-vite.org/config/) — `renderer.configFile` + `renderer.root` delegate to an external Vite config (the lever we need for `apps/computer/vite.config.ts`).
+- [electron-vite 5.0 config docs](https://electron-vite.org/config/) — `renderer.configFile` + `renderer.root` delegate to an external Vite config (the lever we need for `apps/spaces/vite.config.ts`).
 - [electron-builder mac docs](https://www.electron.build/mac) — `mac.zip` target is MANDATORY alongside DMG (Squirrel.Mac installs from zip, not DMG). `hardenedRuntime: true` and notarytool required for notarization in 2026.
 - [electron-builder release-using-channels tutorial](https://www.electron.build/tutorials/release-using-channels.html) — channel separation via SemVer prerelease suffix + `generateUpdatesFilesForAllChannels: true`.
 - [@electron/notarize 3.1](https://github.com/electron/notarize) — App Store Connect API key path preferred over Apple-ID + app-specific-password (key doesn't expire).
@@ -121,23 +122,24 @@ Carried verbatim from the origin brainstorm (see origin Scope Boundaries — all
 
 ## Key Technical Decisions
 
-- **Package layout: `apps/desktop/` + `packages/desktop-ipc/`.** Package names `@thinkwork/desktop` and `@thinkwork/desktop-ipc`. Conventional-commit scope: `feat(desktop):`. `apps/desktop/` owns main, preload, and Electron config; `packages/desktop-ipc/` owns the Zod schemas + bridge interface shared by main, preload, and the renderer-side detection code in `apps/computer`.
+- **Package layout: `apps/desktop/` + `packages/desktop-ipc/`.** Package names `@thinkwork/desktop` and `@thinkwork/desktop-ipc`. Conventional-commit scope: `feat(desktop):`. `apps/desktop/` owns main, preload, and Electron config; `packages/desktop-ipc/` owns the Zod schemas + bridge interface shared by main, preload, and the renderer-side detection code in `apps/spaces`.
 - **Electron version: 42.2 (or latest stable). `electron-vite` 5.0. `electron-builder` 26.x. `electron-updater` 6.x. `@electron/notarize` 3.x.** Node engine: ≥22 (already the monorepo floor).
 - **Module format: ESM for both main and preload.** Electron 42 ships Node 24 — no reason to ship CJS like t3code does. `"type": "module"` in `apps/desktop/package.json`.
 - **Protocol implementation: `protocol.handle` (Electron 28+ API), not `protocol.registerFileProtocol`.** t3code's pattern uses the deprecated API; port the path-normalization logic but rewrite atop `protocol.handle`.
 - **Custom scheme per stage:** `thinkwork://` for production, `thinkwork-dev://` for dev, `thinkwork-canary://` for canary. macOS `LSHandler` doesn't isolate per-app; a single scheme shared across stages would let the most-recently-installed variant capture every callback. Each variant registers a distinct scheme synchronously at main module load.
 - **OAuth flow: PKCE S256 + cryptographic state nonce + Cognito refresh-token rotation enabled.** Code verifier generated in main, kept in memory only, deleted after the token exchange. State nonce generated with `crypto.randomBytes`, validated on callback, mismatch rejected. RFC 9700 compliance.
 - **Cognito client reuse: extend `ThinkworkAdmin` callback URLs; accept 30-day refresh-token validity for v1.** Avoids new Cognito infrastructure. Users who launch the app every 31+ days re-OAuth via system browser — acceptable for v1; raise to 90d (or mint `ThinkworkDesktop` client) if friction reports come in (Deferred to Follow-Up Work).
-- **Auth hoist: refactor `apps/computer/src/lib/auth.ts` to a pluggable `TokenStorage` interface.** Web variant constructs localStorage-backed; desktop variant constructs IPC-backed (proxies into main-process `safeStorage`). Required because `amazon-cognito-identity-js`'s `Storage` API is sync-only; sync IPC is an anti-pattern. Hoisting Cognito's refresh exchange into main is cleaner than a sync-IPC shim.
+- **Auth hoist: refactor `apps/spaces/src/lib/auth.ts` to a pluggable `TokenStorage` interface.** Web variant constructs localStorage-backed; desktop variant constructs IPC-backed (proxies into main-process `safeStorage`). Required because `amazon-cognito-identity-js`'s `Storage` API is sync-only; sync IPC is an anti-pattern. Hoisting Cognito's refresh exchange into main is cleaner than a sync-IPC shim.
 - **safeStorage usage: async API (`encryptStringAsync` / `decryptStringAsync`) + `getSelectedStorageBackend()` Linux detection.** Sync API may be deprecated. On Linux without a real backend, `safeStorage.getSelectedStorageBackend()` returns `basic_text` (hardcoded-password encryption) — refuse to persist and fall back to in-memory session, surface to renderer for a degraded-mode UI banner. `isEncryptionAvailable()` called AFTER `app.whenReady()` (per electron PR #48206 fix).
 - **Update channel strategy: single GitHub repo (this monorepo) + SemVer prerelease suffix + `generateUpdatesFilesForAllChannels: true`.** Stable: `1.2.3`. Canary: `1.2.3-canary.1`. `allowPrerelease: false` on stable channel; only canary subscribers see prereleases. Avoids creating a separate release repo at v1.
 - **CI publish token: GitHub App OIDC-bound, not long-lived PAT. Rotate quarterly.** Per 2024–2026 supply-chain incidents (Nx S1ngularity, Shai-Hulud, chalk/debug compromise), the release-publishing token is the highest-value secret in CI.
 - **macOS code signing path: App Store Connect API key (`APPLE_API_KEY` + `APPLE_API_KEY_ID` + `APPLE_API_KEY_ISSUER`) over Apple-ID + app-specific-password.** Key doesn't expire; cleaner CI secret rotation.
 - **macOS build targets: separate arm64 + x64 DMG + zip (both per arch).** Half the per-user download vs universal. `mac.zip` is mandatory alongside DMG — Squirrel.Mac installs from zip, not DMG.
 - **Renderer URL allowlist for `setWindowOpenHandler` + `will-navigate`:** only `thinkwork://app/*` may navigate in-window; external links must match `^https://([a-z0-9-]+\.)*thinkwork\.ai$` or the explicit OAuth/Google allowlist before `shell.openExternal` is called. All other navigation is denied.
-- **Stage-specific `productName` and `userData` directory:** `ThinkWork Computer` (prod), `ThinkWork Computer (Dev)` (dev), `ThinkWork Computer (Canary)` (canary). Each gets its own dock icon and userData dir so installs coexist without state collision.
+- **Stage-specific `productName` and `userData` directory:** `ThinkWork Spaces` (prod), `ThinkWork Spaces (Dev)` (dev), `ThinkWork Spaces (Canary)` (canary). Each gets its own dock icon and userData dir so installs coexist without state collision.
 - **Cognito identity resolution: `users.id` via `me`/`meUser`, NEVER raw Cognito `sub`.** Honors learning #4 (`oauth-authorize-wrong-user-id-binding-2026-04-21`). Main process resolves identity once after token exchange and threads `users.id` into all downstream calls.
 - **iframe-shell stays at `https://sandbox.thinkwork.ai/`.** The brainstorm correctly preserves the iframe-shell as a separate origin for sandboxing guarantees. The desktop adds `thinkwork://app` to `var.computer_sandbox_allowed_parent_origins` so the iframe-shell accepts the desktop renderer as a parent (per `iframe-protocol.ts` origin check).
+- **Terraform `computer_*` identifiers preserved through the app-package rename.** The `apps/computer` → `apps/spaces` rebrand (commit `dfc43c0d`) explicitly *"keeps Terraform `computer_*` compatibility contracts"* — variables (`var.computer_sandbox_allowed_parent_origins`, `var.computer_callback_urls`, etc.), outputs, the `terraform/modules/app/computer-runtime/` module, the `packages/computer-stdlib` / `packages/computer-runtime` workspace packages, and the `terraform/examples/greenfield/` reference deploy all retain `computer_*` names. Renaming them is a Registry breaking change with customer-migration cost; deferred to a separate effort (see Scope Boundaries → Deferred to Follow-Up Work). This plan touches only `var.computer_sandbox_allowed_parent_origins` and Cognito callback URLs — both extended additively, neither renamed.
 
 ---
 
@@ -157,7 +159,7 @@ Carried verbatim from the origin brainstorm (see origin Scope Boundaries — all
 
 ### Deferred to Implementation
 
-- **Exact electron-vite renderer config delegation shape** — the docs show `renderer.configFile` + `renderer.root` working; validate during U2 that all of `apps/computer/vite.config.ts`'s plugins (`TanStackRouterVite`, `@tailwindcss/vite`, the `__SANDBOX_IFRAME_SRC__` define) load cleanly under electron-vite's wrapping. If not, fall back to importing `apps/computer/vite.config.ts` and spreading it into `defineConfig({ renderer: {...config, ...overrides} })`.
+- **Exact electron-vite renderer config delegation shape** — the docs show `renderer.configFile` + `renderer.root` working; validate during U2 that all of `apps/spaces/vite.config.ts`'s plugins (`TanStackRouterVite`, `@tailwindcss/vite`, the `__SANDBOX_IFRAME_SRC__` define) load cleanly under electron-vite's wrapping. If not, fall back to importing `apps/spaces/vite.config.ts` and spreading it into `defineConfig({ renderer: {...config, ...overrides} })`.
 - **TanStack Router OAuth callback timing** — confirm during U9 whether the renderer can subscribe to the IPC OAuth event during route resolution (`beforeLoad`) or whether the pattern needs to be "main buffers callback; renderer pulls via `consumePendingOAuthCallback()` IPC on mount." Pull-on-mount is the safer default.
 - **iframe-shell CSP tightening** — start with web parity at v1; tighten later if specific directives prove safe. Don't ship a stricter CSP that breaks artifact rendering on day one.
 - **Linux `safeStorage` fallback UI copy** — the brainstorm specifies the behavior (in-memory only + degraded-mode notice); exact UI string lives in implementation.
@@ -229,7 +231,7 @@ scripts/
 .github/workflows/
   release-desktop.yml               # macos-14 runner; tag-triggered; signed+notarized+published
 
-apps/computer/src/                  # modified, not created
+apps/spaces/src/                  # modified, not created
   lib/
     auth.ts                         # refactored: takes TokenStorage interface
     token-storage/
@@ -294,7 +296,7 @@ terraform/modules/thinkwork/
                                           │    "thinkworkBridge", { ... } satisfies ThinkworkBridge
                                           │  )
                                           ▼
-┌────────────────────────────── Renderer (apps/computer SPA) ──────────────────────────┐
+┌────────────────────────────── Renderer (apps/spaces SPA) ──────────────────────────┐
 │                                                                                      │
 │  main.tsx detects window.thinkworkBridge presence                                    │
 │    → constructs DesktopTokenStorage (IPC-backed)                                     │
@@ -394,7 +396,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - Create: spike report at `docs/solutions/spikes/2026-05-NN-electron-oauth-cold-start-validation.md` (or equivalent path, post-spike)
 
 **Approach:**
-- Scaffold a minimal Electron 42 app outside the monorepo (or in a throwaway worktree); ship `apps/computer` as the renderer via `protocol.handle` from a built `dist/`.
+- Scaffold a minimal Electron 42 app outside the monorepo (or in a throwaway worktree); ship `apps/spaces` as the renderer via `protocol.handle` from a built `dist/`.
 - Validate the 7-scenario matrix from the brainstorm Outstanding Question (cold start, warm start, dev mode, stage collision, PKCE round-trip, state validation, safeStorage edge cases).
 - Confirm `open-url` registered synchronously at top of main.ts fires before `whenReady` on cold-launch-via-URL.
 - Confirm `thinkwork-dev://` and `thinkwork://` distinct schemes don't collide on macOS.
@@ -418,7 +420,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 ### U2. Scaffold `apps/desktop/` package + electron-vite config (with build-time `__DESKTOP_BUILD__` define)
 
-**Goal:** Create the new app package with electron-vite delegating to `apps/computer`'s renderer config, bundling main + preload as ESM, and producing a launchable Electron app that loads `apps/computer/dist/` via the `thinkwork://` protocol handler. Inject a build-time `__DESKTOP_BUILD__` define via electron-vite's renderer config override (NOT inside `apps/computer/vite.config.ts`, which stays untouched) so the renderer can switch desktop-specific branches at compile time and tree-shake the web bundle clean of desktop dead code.
+**Goal:** Create the new app package with electron-vite delegating to `apps/spaces`'s renderer config, bundling main + preload as ESM, and producing a launchable Electron app that loads `apps/spaces/dist/` via the `thinkwork://` protocol handler. Inject a build-time `__DESKTOP_BUILD__` define via electron-vite's renderer config override (NOT inside `apps/spaces/vite.config.ts`, which stays untouched) so the renderer can switch desktop-specific branches at compile time and tree-shake the web bundle clean of desktop dead code.
 
 **Requirements:** R20, R21
 
@@ -427,7 +429,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 **Files:**
 - Create: `apps/desktop/package.json` (name: `@thinkwork/desktop`, type: module, electron + electron-vite + electron-builder + electron-updater + @electron/notarize deps)
 - Create: `apps/desktop/tsconfig.json` (extends `tsconfig.base.json`)
-- Create: `apps/desktop/electron.vite.config.ts` (main + preload bundles + renderer delegated to `apps/computer/vite.config.ts` via `renderer.configFile`)
+- Create: `apps/desktop/electron.vite.config.ts` (main + preload bundles + renderer delegated to `apps/spaces/vite.config.ts` via `renderer.configFile`)
 - Create: `apps/desktop/src/main/index.ts` (skeleton: synchronous open-url registration stub + whenReady chain)
 - Create: `apps/desktop/src/main/app.ts` (lifecycle skeleton)
 - Create: `apps/desktop/src/main/window.ts` (BrowserWindow factory with hardened `webPreferences`: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, `webSecurity: true`, preload pointer)
@@ -438,8 +440,8 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - Test: `apps/desktop/test/main/env.test.ts` (env snapshot returns expected shape)
 
 **Approach:**
-- `electron.vite.config.ts` exports `defineConfig({ main: {...}, preload: {...}, renderer: { root: '../computer', configFile: '../computer/vite.config.ts', define: { __DESKTOP_BUILD__: 'true' } } })`. The `define` injection lives in electron-vite's renderer override, so `apps/computer/vite.config.ts` stays untouched (the web Vite build never defines the symbol; `typeof __DESKTOP_BUILD__ === 'undefined'` coerces to `false` in conditionals).
-- `apps/computer/tsconfig.json` (or a shared types file in `apps/computer/src/`) declares `declare const __DESKTOP_BUILD__: boolean;` so TypeScript knows the symbol exists at type-check time. The declaration default-narrows to `boolean` — both web and desktop type-check cleanly.
+- `electron.vite.config.ts` exports `defineConfig({ main: {...}, preload: {...}, renderer: { root: '../computer', configFile: '../computer/vite.config.ts', define: { __DESKTOP_BUILD__: 'true' } } })`. The `define` injection lives in electron-vite's renderer override, so `apps/spaces/vite.config.ts` stays untouched (the web Vite build never defines the symbol; `typeof __DESKTOP_BUILD__ === 'undefined'` coerces to `false` in conditionals).
+- `apps/spaces/tsconfig.json` (or a shared types file in `apps/spaces/src/`) declares `declare const __DESKTOP_BUILD__: boolean;` so TypeScript knows the symbol exists at type-check time. The declaration default-narrows to `boolean` — both web and desktop type-check cleanly.
 - `build.externalizeDeps: true` (electron-vite 5 default) — only devDependencies bundled into main/preload.
 - Window initial size 1100x780; min 840x620; `show: false`; theme-matched `backgroundColor`; `titleBarStyle: 'hiddenInset'` on macOS with `trafficLightPosition: { x: 14, y: 14 }`.
 - `apps/desktop/package.json` scripts: `dev`, `build`, `package`, `typecheck`, `test`, `lint` (stub per `apps/cli` precedent).
@@ -447,7 +449,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 **Patterns to follow:**
 - [electron-vite 5.0 config](https://electron-vite.org/config/)
-- `apps/computer/package.json` for script naming + version conventions.
+- `apps/spaces/package.json` for script naming + version conventions.
 - `/tmp/desktop-scout/t3code/apps/desktop/src/preload.ts:22–127` for `contextBridge.exposeInMainWorld(name, { … } satisfies BridgeContract)` shape — adapt to plain TS.
 
 **Test scenarios:**
@@ -466,7 +468,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 ### U3. Shared IPC contract package `packages/desktop-ipc/`
 
-**Goal:** Define every IPC channel constant, the `ThinkworkBridge` interface that preload exposes, and Zod schemas for every payload and result — in a single shared package consumed by `apps/desktop/main`, `apps/desktop/preload`, and `apps/computer` (for the renderer-side bridge type).
+**Goal:** Define every IPC channel constant, the `ThinkworkBridge` interface that preload exposes, and Zod schemas for every payload and result — in a single shared package consumed by `apps/desktop/main`, `apps/desktop/preload`, and `apps/spaces` (for the renderer-side bridge type).
 
 **Requirements:** R14, R15
 
@@ -529,7 +531,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - Use Electron 28+ `protocol.handle` (NOT the deprecated `protocol.registerFileProtocol` from t3code).
 - Path normalization rejects any decoded path segment equal to `..`. Resolved target must start with the renderer root (`path.sep` boundary check).
 - SPA fallback: if the resolved path has no file extension AND no `index.html` exists at that nested dir, fall back to `<root>/index.html`.
-- CSP set inline on the `Response` returned from the handler. Directives are pinned at plan time (NOT "finalized in implementation") because the host bundle is a closed surface — there is no reason to inherit the looser web CSP. Specific AWS resource IDs (API Gateway ID, AppSync API ID, Cognito domain) are injected at build time from Terraform outputs via the same env-injection pattern as `scripts/build-computer.sh`, so the CSP wildcards become specific IDs rather than `*.execute-api.us-east-1.amazonaws.com` (broader than intended; matches any AWS account in the region):
+- CSP set inline on the `Response` returned from the handler. Directives are pinned at plan time (NOT "finalized in implementation") because the host bundle is a closed surface — there is no reason to inherit the looser web CSP. Specific AWS resource IDs (API Gateway ID, AppSync API ID, Cognito domain) are injected at build time from Terraform outputs via the same env-injection pattern as `scripts/build-spaces.sh`, so the CSP wildcards become specific IDs rather than `*.execute-api.us-east-1.amazonaws.com` (broader than intended; matches any AWS account in the region):
 
   ```
   default-src 'self' thinkwork://app;
@@ -554,7 +556,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 **Patterns to follow:**
 - `/tmp/desktop-scout/t3code/apps/desktop/src/electron/ElectronProtocol.ts:58–141` (port path-normalization and SPA-fallback logic, rewrite atop `protocol.handle`).
-- `apps/computer/src/iframe-shell/iframe-shell.html` (existing iframe-shell CSP) — for reference on what's already locked down at the iframe boundary.
+- `apps/spaces/src/iframe-shell/iframe-shell.html` (existing iframe-shell CSP) — for reference on what's already locked down at the iframe boundary.
 
 **Test scenarios:**
 - Happy path: GET `thinkwork://app/index.html` returns 200 + content-type `text/html` + CSP header.
@@ -615,32 +617,32 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 ---
 
-### U6. Refactor `apps/computer/src/lib/auth.ts` to `TokenStorage` interface (web-only; characterization-gated)
+### U6. Refactor `apps/spaces/src/lib/auth.ts` to `TokenStorage` interface (web-only; characterization-gated)
 
-**Goal:** Introduce a `TokenStorage` interface that abstracts the 8+ direct `localStorage` calls in `apps/computer/src/lib/auth.ts`. Land the web variant (`LocalStorageTokenStorage`) and prove web behavior is unchanged via characterization test BEFORE any desktop code exists. This unit ships green to web users in isolation with zero desktop coupling. (Desktop variant + main-process auth-bridge are split off into U17.)
+**Goal:** Introduce a `TokenStorage` interface that abstracts the 8+ direct `localStorage` calls in `apps/spaces/src/lib/auth.ts`. Land the web variant (`LocalStorageTokenStorage`) and prove web behavior is unchanged via characterization test BEFORE any desktop code exists. This unit ships green to web users in isolation with zero desktop coupling. (Desktop variant + main-process auth-bridge are split off into U17.)
 
 **Requirements:** R10, R24
 
-**Dependencies:** None (apps/computer only; no U3, no U5)
+**Dependencies:** None (apps/spaces only; no U3, no U5)
 
 **Files:**
-- Create: `apps/computer/src/lib/token-storage/index.ts` (`TokenStorage` interface)
-- Create: `apps/computer/src/lib/token-storage/local-storage.ts` (web variant)
-- Modify: `apps/computer/src/lib/auth.ts` (replace direct `localStorage` calls with `TokenStorage` interface calls)
-- Modify: `apps/computer/src/main.tsx` (construct `LocalStorageTokenStorage` and pass to AuthProvider; the `__DESKTOP_BUILD__` conditional branch is added later in U17)
-- Test: `apps/computer/src/lib/token-storage/local-storage.test.ts`
-- Test: `apps/computer/src/lib/auth.test.ts` (NEW characterization test — sign-in → cold reload → token-restored end-to-end against the refactored interface)
+- Create: `apps/spaces/src/lib/token-storage/index.ts` (`TokenStorage` interface)
+- Create: `apps/spaces/src/lib/token-storage/local-storage.ts` (web variant)
+- Modify: `apps/spaces/src/lib/auth.ts` (replace direct `localStorage` calls with `TokenStorage` interface calls)
+- Modify: `apps/spaces/src/main.tsx` (construct `LocalStorageTokenStorage` and pass to AuthProvider; the `__DESKTOP_BUILD__` conditional branch is added later in U17)
+- Test: `apps/spaces/src/lib/token-storage/local-storage.test.ts`
+- Test: `apps/spaces/src/lib/auth.test.ts` (NEW characterization test — sign-in → cold reload → token-restored end-to-end against the refactored interface)
 
 **Approach:**
 - `TokenStorage` interface: `getItem(key: string): string | null`, `setItem(key, value): void`, `removeItem(key): void`, `clear(): void`, `subscribe(listener): unsubscribe`. Sync read API matches `amazon-cognito-identity-js`'s `ICognitoStorage` contract.
 - `LocalStorageTokenStorage` wraps `localStorage` directly — preserves the current behavior of `auth.ts` exactly. The `subscribe` method uses `window.addEventListener('storage', ...)` so cross-tab token changes propagate (same behavior as today's implicit storage-event reads).
 - The `auth.ts` `getStoredIdToken()` fallback path (currently reads localStorage directly when `getCurrentSession()` returns null for federated users) goes through `TokenStorage.getItem` instead. Same Cognito key layout (`CognitoIdentityServiceProvider.<CLIENT_ID>.<user>.*`).
-- `apps/computer/src/main.tsx` constructs a `LocalStorageTokenStorage` and passes it to `AuthProvider`. In U17, this branch becomes `__DESKTOP_BUILD__ ? new DesktopBridgeTokenStorage() : new LocalStorageTokenStorage()`.
+- `apps/spaces/src/main.tsx` constructs a `LocalStorageTokenStorage` and passes it to `AuthProvider`. In U17, this branch becomes `__DESKTOP_BUILD__ ? new DesktopBridgeTokenStorage() : new LocalStorageTokenStorage()`.
 
 **Execution note:** Start with the characterization test for the existing web auth flow against the CURRENT codebase to lock in observable behavior. Then introduce the `TokenStorage` interface, refactor `auth.ts` behind it, prove the characterization test still passes. THEN merge. The desktop variant comes in U17.
 
 **Patterns to follow:**
-- The existing `apps/computer/src/routes/_authed.tsx` federation-fallback path (lines 14–25) for how the renderer treats the fallback storage read.
+- The existing `apps/spaces/src/routes/_authed.tsx` federation-fallback path (lines 14–25) for how the renderer treats the fallback storage read.
 - Learning `oauth-authorize-wrong-user-id-binding-2026-04-21` — main process resolves `users.id` via `me`/`meUser` after token exchange; this rule applies in U17 when main owns the refresh exchange.
 
 **Test scenarios:**
@@ -652,7 +654,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - Integration: every `localStorage.getItem(\`CognitoIdentityServiceProvider.${CLIENT_ID}.*\`)` call site in `auth.ts` now flows through `TokenStorage.getItem` and returns identical values.
 
 **Verification:**
-- `apps/computer` web build is functionally unchanged — existing test suite passes; manual sign-in/sign-out/cold-reload flow works on dev stage.
+- `apps/spaces` web build is functionally unchanged — existing test suite passes; manual sign-in/sign-out/cold-reload flow works on dev stage.
 - No new desktop dependencies introduced (`apps/desktop` need not exist for this unit to ship).
 
 ---
@@ -738,7 +740,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 **Patterns to follow:**
 - [RFC 9700 — OAuth 2.0 Security BCP](https://datatracker.ietf.org/doc/rfc9700/) for PKCE + state requirements.
 - [Cognito PKCE docs](https://docs.aws.amazon.com/cognito/latest/developerguide/using-pkce-in-authorization-code.html) for the exact request shape.
-- Existing `apps/computer/src/lib/auth.ts` `getGoogleSignInUrl()` + `exchangeCodeForSession()` — the desktop variant mirrors the URL shape and exchange, with PKCE additions.
+- Existing `apps/spaces/src/lib/auth.ts` `getGoogleSignInUrl()` + `exchangeCodeForSession()` — the desktop variant mirrors the URL shape and exchange, with PKCE additions.
 
 **Test scenarios:**
 - Happy path: `startOAuth` generates fresh verifier + state, returns the auth URL with `code_challenge` + `state` query params.
@@ -772,18 +774,18 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 ### U9. Renderer OAuth callback route + AuthContext rewiring for desktop mode
 
-**Goal:** Add a new TanStack Router file-route `apps/computer/src/routes/auth/desktop-callback.tsx` that the desktop variant routes to after main signals "OAuth callback received." Pull pending callback via `bridge.consumePendingOAuth()` on mount. Subscribe to `bridge.onDeepLink` for warm-state callbacks. Route to `next` if main supplied one (always sourced from `bridge.consumePendingOAuth()`'s response, NEVER from the URL — defends against the CursorJack-style threat in which an attacker crafts a callback URL with an embedded `next` to phish). Default to `/new`.
+**Goal:** Add a new TanStack Router file-route `apps/spaces/src/routes/auth/desktop-callback.tsx` that the desktop variant routes to after main signals "OAuth callback received." Pull pending callback via `bridge.consumePendingOAuth()` on mount. Subscribe to `bridge.onDeepLink` for warm-state callbacks. Route to `next` if main supplied one (always sourced from `bridge.consumePendingOAuth()`'s response, NEVER from the URL — defends against the CursorJack-style threat in which an attacker crafts a callback URL with an embedded `next` to phish). Default to `/new`.
 
 **Requirements:** R8
 
 **Dependencies:** U3, U7, U8, U17
 
 **Files:**
-- Create: `apps/computer/src/routes/auth/desktop-callback.tsx`
-- Modify: `apps/computer/src/context/AuthContext.tsx` (subscribe to `bridge.onDeepLink` in desktop mode; trigger re-hydration on token-change events)
-- Modify: `apps/computer/src/routes/sign-in.tsx` (in desktop mode, call `bridge.startOAuth()` instead of `window.location.href = getGoogleSignInUrl()`)
-- Test: `apps/computer/src/routes/auth/desktop-callback.test.tsx`
-- Test: `apps/computer/src/context/AuthContext.test.tsx` (existing test — extend with desktop-mode subscription path)
+- Create: `apps/spaces/src/routes/auth/desktop-callback.tsx`
+- Modify: `apps/spaces/src/context/AuthContext.tsx` (subscribe to `bridge.onDeepLink` in desktop mode; trigger re-hydration on token-change events)
+- Modify: `apps/spaces/src/routes/sign-in.tsx` (in desktop mode, call `bridge.startOAuth()` instead of `window.location.href = getGoogleSignInUrl()`)
+- Test: `apps/spaces/src/routes/auth/desktop-callback.test.tsx`
+- Test: `apps/spaces/src/context/AuthContext.test.tsx` (existing test — extend with desktop-mode subscription path)
 
 **Approach:**
 - The deep-link callback is handled by main process; renderer's role is to consume and rehydrate. Main fires `onDeepLink` event AFTER token exchange completes — by the time the renderer route mounts, tokens are already persisted in safeStorage and in main's in-memory cache.
@@ -795,8 +797,8 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - Sign-in page: detection at click time — if `__DESKTOP_BUILD__` (set by U2), call `bridge.startOAuth({ next: nextParam })`; if web, navigate to hosted UI URL as today.
 
 **Patterns to follow:**
-- Existing `apps/computer/src/routes/auth/callback.tsx` (the `exchanged` ref guard, the redirect-after-write pattern).
-- Existing `apps/computer/src/routes/_authed.tsx` (the `?next=` redirect pattern).
+- Existing `apps/spaces/src/routes/auth/callback.tsx` (the `exchanged` ref guard, the redirect-after-write pattern).
+- Existing `apps/spaces/src/routes/_authed.tsx` (the `?next=` redirect pattern).
 
 **Test scenarios:**
 - Happy path: route mounts; `bridge.consumePendingOAuth()` returns `{ code, state }` (no `next`); navigation to `/new` fires.
@@ -965,24 +967,24 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 **Dependencies:** U3, U6, U8, U11
 
 **Files:**
-- Create: `apps/computer/src/lib/desktop-detection.ts` (`isDesktop()` helper; one-line wrapper around `window.thinkworkBridge`)
-- Create: `apps/computer/src/components/update-banner.tsx` (subscribes to `bridge.onUpdateState`; surfaces available/downloading/downloaded states; "Restart to install" button → `bridge.installUpdate()`)
-- Create: `apps/computer/src/lib/desktop-notifications.ts` (thin wrapper around `Notification` API with permission check)
-- Modify: `apps/computer/src/routes/_authed/_shell/__layout.tsx` (or wherever the shell mounts; add `UpdateBanner`)
-- Modify: `apps/computer/src/routes/sign-in.tsx` (desktop branch → `bridge.startOAuth()`)
-- Test: `apps/computer/src/components/update-banner.test.tsx`
-- Test: `apps/computer/src/lib/desktop-notifications.test.ts`
+- Create: `apps/spaces/src/lib/desktop-detection.ts` (`isDesktop()` helper; one-line wrapper around `window.thinkworkBridge`)
+- Create: `apps/spaces/src/components/update-banner.tsx` (subscribes to `bridge.onUpdateState`; surfaces available/downloading/downloaded states; "Restart to install" button → `bridge.installUpdate()`)
+- Create: `apps/spaces/src/lib/desktop-notifications.ts` (thin wrapper around `Notification` API with permission check)
+- Modify: `apps/spaces/src/routes/_authed/_shell/__layout.tsx` (or wherever the shell mounts; add `UpdateBanner`)
+- Modify: `apps/spaces/src/routes/sign-in.tsx` (desktop branch → `bridge.startOAuth()`)
+- Test: `apps/spaces/src/components/update-banner.test.tsx`
+- Test: `apps/spaces/src/lib/desktop-notifications.test.ts`
 
 **Approach:**
 - `isDesktop()` returns boolean; cached after first call.
 - Update banner only renders when `isDesktop() && updateState.status !== 'up-to-date' && updateState.status !== 'disabled'`. Otherwise nothing rendered.
 - States surfaced: `available` ("Update v1.2.3 available — Download"), `downloading` ("Downloading 47%..."), `downloaded` ("Restart to install"), `error` ("Update failed: <message> — Retry"), Rosetta hint when `runningUnderArm64Translation === true && availableVersion has arm64 build`.
-- Notification permission: request once on app mount (after sign-in) if `Notification.permission === 'default'`. If denied, fall back to in-app toast via existing `sonner` (already in apps/computer deps).
+- Notification permission: request once on app mount (after sign-in) if `Notification.permission === 'default'`. If denied, fall back to in-app toast via existing `sonner` (already in apps/spaces deps).
 - Sign-in detection: `if (isDesktop()) { await bridge.startOAuth(); }` else web flow.
 
 **Patterns to follow:**
-- Existing `apps/computer/src/components/` shadcn pattern for the banner.
-- `sonner` already used in apps/computer for toasts.
+- Existing `apps/spaces/src/components/` shadcn pattern for the banner.
+- `sonner` already used in apps/spaces for toasts.
 
 **Test scenarios:**
 - Happy path: in desktop mode with `updateState.status === 'available'`, banner renders with version and Download button.
@@ -1031,8 +1033,8 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - `publish: [{ provider: github, owner: <org>, repo: thinkwork, vPrefixedTagName: true, releaseType: release, publishAutoUpdate: true }]`. The release-trigger workflow runs on tags like `desktop-v1.0.0`.
 - `generateUpdatesFilesForAllChannels: true` so prerelease versions publish `alpha-mac.yml` / `canary-mac.yml` alongside `latest-mac.yml`.
 - Entitlements plist: `com.apple.security.cs.allow-jit`, `com.apple.security.cs.allow-unsigned-executable-memory`, `com.apple.security.cs.allow-dyld-environment-variables`, `com.apple.security.network.client`, `com.apple.security.network.server`. These are required for V8 + outbound HTTPS + the localhost dev server (the latter only during dev).
-- Per-stage `productName` resolved from a `BUILD_CHANNEL` env at build time: `ThinkWork Computer` (stable), `ThinkWork Computer (Canary)` (canary), `ThinkWork Computer (Dev)` (dev). Icon also selected per channel.
-- `appId` per channel to give each variant its own `userData` directory: `ai.thinkwork.computer.desktop`, `ai.thinkwork.computer.desktop.canary`, `ai.thinkwork.computer.desktop.dev`.
+- Per-stage `productName` resolved from a `BUILD_CHANNEL` env at build time: `ThinkWork Spaces` (stable), `ThinkWork Spaces (Canary)` (canary), `ThinkWork Spaces (Dev)` (dev). Icon also selected per channel.
+- `appId` per channel to give each variant its own `userData` directory: `ai.thinkwork.spaces.desktop`, `ai.thinkwork.spaces.desktop.canary`, `ai.thinkwork.spaces.desktop.dev`.
 - **Pin Apple Team Identifier as a compile-time constant** in `apps/desktop/src/main/index.ts` (e.g., `const EXPECTED_TEAM_ID = "TEAMID";`). On launch, verify the running app's code signature team ID matches via `app.getCodeSignature()` (or the platform's equivalent). If a rogue update ever ships with a different signing identity (cert leak + re-issuance to attacker), the app refuses to launch. Forward-only guard — first install can't self-verify, but it closes the post-install drift window. Pairs with the U15 SHA-256-at-second-domain mitigation as the v1 Tier-0 stopgap before v1.1 manifest signing lands.
 
 **Patterns to follow:**
@@ -1041,9 +1043,9 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 **Test scenarios:**
 - Test expectation: none — config file; verify by running U15's GHA workflow against a `desktop-v0.0.0-test` tag on a branch and inspecting outputs.
-- Manual verification: `pnpm --filter @thinkwork/desktop run package` (locally on a Mac) produces `dist/ThinkWork Computer-1.0.0-arm64.dmg` + `.zip` + `.blockmap` + `latest-mac.yml`.
-- Manual verification: `codesign --verify --deep --strict --verbose=2 dist/mac-arm64/ThinkWork\ Computer.app` returns valid.
-- Manual verification: `spctl -a -t exec -vv dist/mac-arm64/ThinkWork\ Computer.app` (run on the unsigned bundle pre-notarization) shows the expected rejection; after notarization, accepts.
+- Manual verification: `pnpm --filter @thinkwork/desktop run package` (locally on a Mac) produces `dist/ThinkWork Spaces-1.0.0-arm64.dmg` + `.zip` + `.blockmap` + `latest-mac.yml`.
+- Manual verification: `codesign --verify --deep --strict --verbose=2 dist/mac-arm64/ThinkWork\ Spaces.app` returns valid.
+- Manual verification: `spctl -a -t exec -vv dist/mac-arm64/ThinkWork\ Spaces.app` (run on the unsigned bundle pre-notarization) shows the expected rejection; after notarization, accepts.
 
 **Verification:**
 - Local Mac build produces correct artifacts.
@@ -1054,7 +1056,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 ### U15. `scripts/build-desktop.sh` + GitHub Actions release workflow on `macos-14`
 
-**Goal:** A repo-root build script that mirrors `scripts/build-computer.sh`'s env-injection pattern but extends to invoke electron-vite + electron-builder. A new GHA workflow on `macos-14` runner that runs on `desktop-v*` tag pushes: imports the signing certificate, runs build, signs + notarizes + publishes to GitHub Releases via electron-builder's `--publish always`.
+**Goal:** A repo-root build script that mirrors `scripts/build-spaces.sh`'s env-injection pattern but extends to invoke electron-vite + electron-builder. A new GHA workflow on `macos-14` runner that runs on `desktop-v*` tag pushes: imports the signing certificate, runs build, signs + notarizes + publishes to GitHub Releases via electron-builder's `--publish always`.
 
 **Requirements:** R1, R3
 
@@ -1066,21 +1068,21 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - Modify: `.github/workflows/release.yml` IF integration is preferred over a sibling workflow (resolved during implementation; default is sibling workflow to keep concerns separate)
 
 **Approach:**
-- `scripts/build-desktop.sh`: reads terraform outputs into env vars (same shape as `scripts/build-computer.sh`); runs `pnpm --filter @thinkwork/computer build` then `pnpm --filter @thinkwork/desktop run build` then `pnpm --filter @thinkwork/desktop exec electron-builder --mac --publish always`. Channel and version derived from CI env (`GITHUB_REF_NAME` parsing for tag `desktop-v1.2.3-canary.1` → channel `canary`, version `1.2.3-canary.1`).
+- `scripts/build-desktop.sh`: reads terraform outputs into env vars (same shape as `scripts/build-spaces.sh`); runs `pnpm --filter /spaces build` then `pnpm --filter @thinkwork/desktop run build` then `pnpm --filter @thinkwork/desktop exec electron-builder --mac --publish always`. Channel and version derived from CI env (`GITHUB_REF_NAME` parsing for tag `desktop-v1.2.3-canary.1` → channel `canary`, version `1.2.3-canary.1`).
 - GHA workflow:
   - `on: push: tags: [desktop-v*]`
   - `runs-on: macos-14` (arm64 runner; Xcode 15+; notarytool pre-installed)
   - `timeout-minutes: 30`
   - **Preflight step: secrets check.** Before any build work, verify the required secrets are non-empty (`if [ -z "$MAC_CSC_LINK" ] || [ -z "$APPLE_API_KEY_P8_BASE64" ] || ... ]; then exit 1; fi`). Fails fast with a clear error if a secret was rotated incorrectly. Avoids burning 25 minutes only to fail at notarytool.
   - Steps: checkout → pnpm setup → Node 22 setup → `pnpm install --frozen-lockfile` → preflight secrets check → import signing cert from `MAC_CSC_LINK` + `MAC_CSC_KEY_PASSWORD` GH secrets into a temp keychain → run `scripts/build-desktop.sh` with env: `APPLE_API_KEY_ID`, `APPLE_API_KEY_ISSUER`, `APPLE_API_KEY` (path to .p8 written from `APPLE_API_KEY_P8_BASE64` secret), `APPLE_TEAM_ID`, `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`.
-  - **Post-publish step: SHA-256 mirror.** After electron-builder publishes the DMG to GitHub Releases, compute `shasum -a 256` of each DMG and publish them as a separate artifact to `docs.thinkwork.ai/releases/<version>.sha256` (a different infrastructure surface — Cloudflare-fronted docs site with a different publish token). A supply-chain attacker who steals the GH publish token still cannot update the SHA at docs.thinkwork.ai without also compromising Cloudflare. Document the manual verification command in U16's README: `shasum -a 256 ThinkWork\ Computer-1.0.0-arm64.dmg | grep -f <(curl https://docs.thinkwork.ai/releases/1.0.0.sha256)`. This is the Tier-0 stopgap before manifest signing lands in v1.1.
+  - **Post-publish step: SHA-256 mirror.** After electron-builder publishes the DMG to GitHub Releases, compute `shasum -a 256` of each DMG and publish them as a separate artifact to `docs.thinkwork.ai/releases/<version>.sha256` (a different infrastructure surface — Cloudflare-fronted docs site with a different publish token). A supply-chain attacker who steals the GH publish token still cannot update the SHA at docs.thinkwork.ai without also compromising Cloudflare. Document the manual verification command in U16's README: `shasum -a 256 ThinkWork\ Spaces-1.0.0-arm64.dmg | grep -f <(curl https://docs.thinkwork.ai/releases/1.0.0.sha256)`. This is the Tier-0 stopgap before manifest signing lands in v1.1.
   - GH_TOKEN uses the built-in `GITHUB_TOKEN` for v1; transition to a dedicated GitHub App OIDC-bound token in a follow-up (Deferred to Follow-Up Work).
 - The CI workflow uses `concurrency: { group: release-desktop-${{ github.ref }}, cancel-in-progress: false }` to prevent overlapping releases on the same tag.
 - Apple secrets convention (matches the `rotate-api-auth-secret-2026-04-24` runbook shape): `APPLE_API_KEY_P8_BASE64`, `APPLE_API_KEY_ID`, `APPLE_API_KEY_ISSUER`, `APPLE_TEAM_ID`, `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD` — all in GH repo secrets, rotated quarterly.
 - **Precondition for end-to-end verification:** U10 must be applied to the target stage. The workflow itself doesn't depend on terraform state, but the produced DMG won't authenticate until callback URLs are configured. Document in U16 runbook.
 
 **Patterns to follow:**
-- `scripts/build-computer.sh` for env-injection shape + terraform-outputs reading.
+- `scripts/build-spaces.sh` for env-injection shape + terraform-outputs reading.
 - `.github/workflows/release.yml` for the existing release-pipeline conventions in this repo.
 - [Simon Willison's GHA recipe for sign+notarize+publish Electron on macOS](https://til.simonwillison.net/electron/sign-notarize-electron-macos).
 
@@ -1113,14 +1115,14 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 - Modify: root `README.md` (add a brief pointer to the new desktop app under "Apps")
 
 **Approach:**
-- `appId` per channel: `ai.thinkwork.computer.desktop` (stable), `ai.thinkwork.computer.desktop.canary`, `ai.thinkwork.computer.desktop.dev`. Distinct `appId` is what gives each variant its own macOS `userData` dir (`~/Library/Application Support/<productName>/`).
+- `appId` per channel: `ai.thinkwork.spaces.desktop` (stable), `ai.thinkwork.spaces.desktop.canary`, `ai.thinkwork.spaces.desktop.dev`. Distinct `appId` is what gives each variant its own macOS `userData` dir (`~/Library/Application Support/<productName>/`).
 - README sections: "Local development" (pnpm install + tsbuildinfo bootstrap + `pnpm --filter @thinkwork/desktop dev`), "Building locally" (`pnpm --filter @thinkwork/desktop run package`), "Production install" (download DMG from Releases, drag to Applications), "Linux fallback caveat" (in-memory only when `safeStorage` is unavailable), "OAuth testing in dev" (use the `thinkwork-dev://` scheme; install only one stage at a time during dev to avoid scheme collision), "Channel selection" (how to opt into canary).
 - Runbook: Cognito callback URL update — snapshot existing client → mutate via Terraform variable → `terraform apply` → verify with `describe-user-pool-client`.
 - Runbook: Apple credentials rotation — `gh secret set APPLE_API_KEY_P8_BASE64` + `gh secret set APPLE_API_KEY_ID` + `gh secret set APPLE_API_KEY_ISSUER` + verify next release workflow run succeeds.
 
 **Patterns to follow:**
 - `docs/solutions/security/rotate-api-auth-secret-2026-04-24.md` as the runbook template.
-- Existing `apps/computer/README.md`, `apps/admin/README.md` for README shape conventions.
+- Existing `apps/spaces/README.md`, `apps/admin/README.md` for README shape conventions.
 
 **Test scenarios:**
 - Test expectation: docs; verify by reading them and confirming the procedures match the actual implementation.
@@ -1142,11 +1144,11 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 **Dependencies:** U3, U5, U6
 
 **Files:**
-- Create: `apps/computer/src/lib/token-storage/desktop-bridge.ts` (desktop variant; uses `window.thinkworkBridge`; hydrates on every mount)
-- Modify: `apps/computer/src/main.tsx` (add the `__DESKTOP_BUILD__` branch: `__DESKTOP_BUILD__ ? new DesktopBridgeTokenStorage() : new LocalStorageTokenStorage()`)
+- Create: `apps/spaces/src/lib/token-storage/desktop-bridge.ts` (desktop variant; uses `window.thinkworkBridge`; hydrates on every mount)
+- Modify: `apps/spaces/src/main.tsx` (add the `__DESKTOP_BUILD__` branch: `__DESKTOP_BUILD__ ? new DesktopBridgeTokenStorage() : new LocalStorageTokenStorage()`)
 - Create: `apps/desktop/src/main/auth-bridge.ts` (registers IPC handlers; owns the `CognitoUserPool` instance with safeStorage backend; implements the token broadcast)
 - Modify: `apps/desktop/src/main/ipc-handlers.ts` (wire auth-bridge handlers into the central registration)
-- Test: `apps/computer/src/lib/token-storage/desktop-bridge.test.ts` (mock `window.thinkworkBridge`)
+- Test: `apps/spaces/src/lib/token-storage/desktop-bridge.test.ts` (mock `window.thinkworkBridge`)
 - Test: `apps/desktop/test/main/auth-bridge.test.ts`
 
 **Approach:**
@@ -1200,7 +1202,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 
 **Test scenarios:**
 - Test expectation: none — terraform changes; verify via `terraform plan` diff.
-- Manual verification (post-apply): an iframe-shell artifact loaded from the desktop renderer passes the origin check in `apps/computer/src/iframe-shell/iframe-protocol.ts` against `__ALLOWED_PARENT_ORIGINS__`.
+- Manual verification (post-apply): an iframe-shell artifact loaded from the desktop renderer passes the origin check in `apps/spaces/src/iframe-shell/iframe-protocol.ts` against `__ALLOWED_PARENT_ORIGINS__`.
 
 **Verification:**
 - `terraform plan` against dev stage shows the expected origins added; nothing else changes.
@@ -1211,9 +1213,9 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 ## System-Wide Impact
 
 - **Interaction graph:**
-  - `apps/computer/src/lib/auth.ts` becomes pluggable behind `TokenStorage`. Every consumer of `auth.ts` continues to work in web mode without change; desktop mode hydrates from IPC instead.
-  - `apps/computer/src/main.tsx` gains a `__DESKTOP_BUILD__` (build-time define from electron-vite renderer override, NOT a runtime check) branch that chooses the TokenStorage variant. This branch fires before AuthProvider mounts. The web build tree-shakes the desktop variant entirely.
-  - `apps/computer/src/routes/sign-in.tsx` gains a `__DESKTOP_BUILD__` branch: in desktop mode, call `bridge.startOAuth({ next })` instead of navigating to the hosted UI URL.
+  - `apps/spaces/src/lib/auth.ts` becomes pluggable behind `TokenStorage`. Every consumer of `auth.ts` continues to work in web mode without change; desktop mode hydrates from IPC instead.
+  - `apps/spaces/src/main.tsx` gains a `__DESKTOP_BUILD__` (build-time define from electron-vite renderer override, NOT a runtime check) branch that chooses the TokenStorage variant. This branch fires before AuthProvider mounts. The web build tree-shakes the desktop variant entirely.
+  - `apps/spaces/src/routes/sign-in.tsx` gains a `__DESKTOP_BUILD__` branch: in desktop mode, call `bridge.startOAuth({ next })` instead of navigating to the hosted UI URL.
   - `terraform/modules/foundation/cognito/main.tf` + `terraform/modules/thinkwork/main.tf` gain new callback URLs on the `ThinkworkAdmin` client. Existing web flow continues to work.
   - `var.computer_sandbox_allowed_parent_origins` gains three desktop origins. Existing web parent origin continues to work.
 - **Error propagation:**
@@ -1235,15 +1237,15 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
   - F1 (first-launch OAuth) crosses renderer → main → system browser → Cognito → main → renderer. Manual smoke test in U8 + U9.
   - F2 (cold launch with cached session) crosses main → safeStorage → renderer. Manual smoke test + characterization test in U6.
   - F3 (autoupdate) crosses main → GitHub Releases → main → renderer. Manual smoke test + mocked integration test in U11.
-  - **F4 (token refresh during in-flight AppSync subscription):** Main owns the refresh exchange (U17). When access token rotates mid-subscription, the renderer's existing wss connection holds the old token. Contract: the renderer subscribes to `bridge.onTokensChanged` and reconnects AppSync subscriptions on every `tokensChanged` broadcast. Implementation seam lives in `apps/computer/src/lib/use-chat-appsync-transport.ts`. Pre-launch validation is the "AppSync subscription longevity over long-lived desktop sessions" brainstorm in Deferred to Follow-Up Work.
+  - **F4 (token refresh during in-flight AppSync subscription):** Main owns the refresh exchange (U17). When access token rotates mid-subscription, the renderer's existing wss connection holds the old token. Contract: the renderer subscribes to `bridge.onTokensChanged` and reconnects AppSync subscriptions on every `tokensChanged` broadcast. Implementation seam lives in `apps/spaces/src/lib/use-chat-appsync-transport.ts`. Pre-launch validation is the "AppSync subscription longevity over long-lived desktop sessions" brainstorm in Deferred to Follow-Up Work.
   - **F5 (sign-out broadcast race):** Sign-out (U8) clears local first, revokes async, broadcasts `signedOut`. Contract: the renderer aborts in-flight urql operations on `signedOut` event, then navigates to `/sign-in`. Prevents in-flight mutations from running with a just-revoked token.
   - **F6 (update install with unsaved renderer state):** `quitAndInstall` (U11) triggers immediate process exit. Contract: `installUpdate` IPC handler does a `beforeInstall` round-trip to the renderer asking "any unsaved state?" — defaults to install-on-confirm. Renderer surveys urql cache for unwritten mutations + open editor surfaces for unsaved drafts.
 - **Unchanged invariants:**
-  - `apps/computer/vite.config.ts` is untouched (R20). The `__DESKTOP_BUILD__` define is injected via electron-vite's renderer override config, not by modifying the web Vite config.
-  - `apps/computer/vite.iframe-shell.config.ts` is untouched.
+  - `apps/spaces/vite.config.ts` is untouched (R20). The `__DESKTOP_BUILD__` define is injected via electron-vite's renderer override config, not by modifying the web Vite config.
+  - `apps/spaces/vite.iframe-shell.config.ts` is untouched.
   - The web app's sign-in / sign-out / session-restore flows continue to work identically after the auth.ts refactor (characterization test in U6 enforces this).
   - The existing `ThinkworkAdmin` Cognito client is extended (added callbacks), not replaced.
-  - The existing `apps/computer/src/iframe-shell/iframe-shell.html` CSP is untouched — only the host-bundle CSP is new.
+  - The existing `apps/spaces/src/iframe-shell/iframe-shell.html` CSP is untouched — only the host-bundle CSP is new.
   - **The host-bundle CSP is stricter than the deployed web CSP** by design — the desktop is a closed surface, not a CDN-fronted SPA, so it doesn't need to inherit web's looser CSP.
 
 ---
@@ -1263,7 +1265,7 @@ disabled ──checkForUpdates──► checking ─────update-not-avail
 | Linux `safeStorage` `basic_text` fallback ships unintentionally to users | Low | Low | v1 is macOS-only; Linux is out of scope. If a Linux user runs an unsupported build, in-memory mode + UI banner is the correct degraded behavior. |
 | Differential-update blockmap corruption breaks updates | Low | Medium | Differential updates explicitly disabled in v1 (Deferred to Follow-Up Work). Full-download model is reliable. |
 | New macOS GHA pipeline introduces ops cost without owner | Medium | Medium | U16 runbooks formalize ownership; secrets rotation is on a quarterly calendar; pipeline is gated on tag push (no continuous cost). |
-| `apps/computer/src/lib/auth.ts` refactor introduces regression in web users | Low | High | U6 starts with a characterization test of the existing flow; refactor preserves the localStorage key layout; web build is functionally unchanged. Smoke against dev stage before merging the auth refactor PR. |
+| `apps/spaces/src/lib/auth.ts` refactor introduces regression in web users | Low | High | U6 starts with a characterization test of the existing flow; refactor preserves the localStorage key layout; web build is functionally unchanged. Smoke against dev stage before merging the auth refactor PR. |
 | `safeStorage` vault readable by other apps under the same signing identity (macOS) or same OS user (Windows/Linux) | Low (today) → Medium when a second ThinkWork-signed macOS app ships | Medium (refresh token theft → full account takeover until Cognito session expiry) | Documented in U16 README; do not ship a second ThinkWork-signed macOS app without an explicit decision on vault sharing; consider `kSecAttrAccessGroup` for cross-app isolation if needed post-v1. Cite: Apple Developer Documentation, "Sharing Access to Keychain Items Among a Collection of Apps." |
 | Sign-out RevokeToken failure leaves a valid refresh token at Cognito after user clears local storage (stolen-device scenario) | Medium | Medium (window between sign-out and token expiry; 30d default validity) | U8 explicit failure contract: clear local first, retry revoke with 5s budget, persist failed-revocation queue to disk, drain on next launch, surface "revoke pending" notice in renderer. RFC 7009 §2.1 compliant. |
 | Renderer XSS opens malicious `https://github.com/login/oauth/authorize?client_id=evil_app` via `shell.openExternal` (bare `github.com` allowlist) | Low | Medium | U12 allowlist tightened to `^https://github\.com/thinkwork-ai/` — only our org's URLs accepted. `accounts.google.com` removed entirely (not needed post-OAuth). |
@@ -1333,14 +1335,14 @@ The plan ships in five sequenced phases after the gating spike. Earlier PRs land
 
 - **Origin document:** [docs/brainstorms/2026-05-20-computer-electron-desktop-shell-requirements.md](../brainstorms/2026-05-20-computer-electron-desktop-shell-requirements.md)
 - Related code:
-  - `apps/computer/src/lib/auth.ts`
-  - `apps/computer/src/routes/auth/callback.tsx`
-  - `apps/computer/src/routes/sign-in.tsx`
-  - `apps/computer/src/main.tsx`
-  - `apps/computer/vite.config.ts`
+  - `apps/spaces/src/lib/auth.ts`
+  - `apps/spaces/src/routes/auth/callback.tsx`
+  - `apps/spaces/src/routes/sign-in.tsx`
+  - `apps/spaces/src/main.tsx`
+  - `apps/spaces/vite.config.ts`
   - `terraform/modules/foundation/cognito/main.tf` (lines 201-289)
   - `terraform/modules/thinkwork/main.tf` (lines 139-156)
-  - `scripts/build-computer.sh`
+  - `scripts/build-spaces.sh`
   - `.github/workflows/release.yml`
 - Related precedents (t3code reference impl, NOT copied wholesale):
   - `/tmp/desktop-scout/t3code/apps/desktop/src/electron/ElectronProtocol.ts`

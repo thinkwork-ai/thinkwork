@@ -3,17 +3,17 @@ date: 2026-05-20
 topic: computer-electron-desktop-shell
 ---
 
-# ThinkWork Computer — Electron Desktop Shell
+# ThinkWork Spaces — Electron Desktop Shell
 
 ## Summary
 
-Wrap `apps/computer` (the end-user React 19 + Vite SPA) in an Electron desktop shell, shipping signed/notarized macOS and Windows installers with an autoupdater, a hardened security baseline, and native menu/window chrome. The shell behaves like Slack or Notion desktop — an installed windowed app, not a system-resident agent — and adopts t3code's main-process patterns (custom `thinkwork://` protocol, typed `contextBridge` over Zod-validated IPC, `safeStorage`-backed Cognito token vault, pure-reducer update state machine, two-phase startup) implemented in plain TypeScript.
+Wrap `apps/spaces` (the end-user React 19 + Vite SPA) in an Electron desktop shell, shipping signed/notarized macOS and Windows installers with an autoupdater, a hardened security baseline, and native menu/window chrome. The shell behaves like Slack or Notion desktop — an installed windowed app, not a system-resident agent — and adopts t3code's main-process patterns (custom `thinkwork://` protocol, typed `contextBridge` over Zod-validated IPC, `safeStorage`-backed Cognito token vault, pure-reducer update state machine, two-phase startup) implemented in plain TypeScript.
 
 ---
 
 ## Problem Frame
 
-`apps/computer` today is a browser-tab product. End users open the SPA in Chrome or Safari, sign in via Cognito Google OAuth, and interact with their agents and generated applets through urql + AppSync. The product works in the browser, but the framing limits how users perceive and adopt it.
+`apps/spaces` today is a browser-tab product. End users open the SPA in Chrome or Safari, sign in via Cognito Google OAuth, and interact with their agents and generated applets through urql + AppSync. The product works in the browser, but the framing limits how users perceive and adopt it.
 
 Three pressures motivate the desktop conversion:
 
@@ -74,7 +74,7 @@ Today's gap: the React SPA is mature, but it runs only inside a browser context 
 
 **Packaging and distribution**
 - R1. macOS launches first as a notarized `.dmg` (arm64 + x64, ideally universal). Windows ships as a signed `.exe` installer (x64 minimum; arm64 if feasible) once a Windows code signing certificate is procured and the signing pipeline is in place — same codebase, post-launch.
-- R2. Build identity differs per stage. Dev/canary builds carry a distinct `productName` (e.g., `ThinkWork Computer (Dev)`), distinct dock/start-menu icons, and a distinct `userData` directory so they coexist with production installs without colliding state.
+- R2. Build identity differs per stage. Dev/canary builds carry a distinct `productName` (e.g., `ThinkWork Spaces (Dev)`), distinct dock/start-menu icons, and a distinct `userData` directory so they coexist with production installs without colliding state.
 - R3. An autoupdater ships with the app, configured against GitHub Releases as the update feed (the canonical `electron-updater` integration). CI publishes signed/notarized artifacts plus `latest-mac.yml` / `latest.yml` manifests to a Releases endpoint per channel. Update channels include at minimum `stable`; a `canary` or `nightly` channel is supported by configuration even if not enabled at launch.
 
 **Security baseline**
@@ -110,7 +110,7 @@ Today's gap: the React SPA is mature, but it runs only inside a browser context 
 - R19. The custom `thinkwork://` protocol handler sets a strict Content-Security-Policy header for renderer responses, lockable independently of the web app's CSP. The artifact iframe-shell inherits or further constrains this CSP — decided during planning.
 
 **Developer experience**
-- R20. The desktop app builds via `electron-vite`, reusing the existing `apps/computer` Vite config as the renderer build without modification. Main and preload are bundled separately (CommonJS or ESM per electron-vite default).
+- R20. The desktop app builds via `electron-vite`, reusing the existing `apps/spaces` Vite config as the renderer build without modification. Main and preload are bundled separately (CommonJS or ESM per electron-vite default).
 - R21. A dev launcher waits for both the Vite dev server (TCP probe) and the built main/preload bundles before spawning Electron, watches the bundles for changes with a debounced restart, distinguishes intentional restarts from crashes, and cleans up stale dev processes by marker arg.
 
 ---
@@ -130,7 +130,7 @@ Today's gap: the React SPA is mature, but it runs only inside a browser context 
 
 ## Success Criteria
 
-- A user can download an installer for their platform, complete OAuth sign-in once, and use ThinkWork Computer for everything the web app supports — chat, applets, memory, threads, approvals — with no functional gaps relative to the web version.
+- A user can download an installer for their platform, complete OAuth sign-in once, and use ThinkWork Spaces for everything the web app supports — chat, applets, memory, threads, approvals — with no functional gaps relative to the web version.
 - The app autoupdates without user intervention beyond restart, and the update state is observable in the UI throughout the lifecycle.
 - A security review can verify that the renderer process cannot access Node APIs, cannot read arbitrary files, cannot navigate to arbitrary URLs, and cannot bypass the IPC schema validation.
 - `ce-plan` can read this document and produce a step-by-step implementation plan — covering electron-vite configuration, IPC bridge module structure, update feed hosting, code signing certificates, OAuth callback routing into TanStack Router, and CI artifact build — without needing additional product decisions.
@@ -158,7 +158,7 @@ Today's gap: the React SPA is mature, but it runs only inside a browser context 
 - **Plain TypeScript + Zod over Effect.** t3code's main-process patterns (scoped lifecycle, typed services, schema-validated IPC, pure-reducer state machines) transfer directly. The Effect framework that hosts them in t3code does not — adopting Effect just for the desktop app would be a huge ongoing tax against a monorepo that uses none of it elsewhere. Borrow the shape, not the framework.
 - **Custom `thinkwork://` protocol for prod renderer load.** `file://` cannot host Service Workers, cannot be marked secure, breaks fetch CORS, and exposes the user's filesystem path. A custom standard-secure scheme fixes all four and is also the natural home for the OAuth callback URL.
 - **`safeStorage` for Cognito refresh token in desktop mode.** OS keychain (Keychain / DPAPI) is strictly better than the web app's localStorage fallback. Replaces `amazon-cognito-identity-js`'s default storage when running under Electron.
-- **`electron-vite` as the build tool.** Reuses the existing `apps/computer` Vite config as the renderer build untouched, only adds main + preload bundling. Idiomatic 2026 choice that aligns with the existing Vite-native dev experience.
+- **`electron-vite` as the build tool.** Reuses the existing `apps/spaces` Vite config as the renderer build untouched, only adds main + preload bundling. Idiomatic 2026 choice that aligns with the existing Vite-native dev experience.
 - **Windowed installed app, not system-resident.** Closing the window quits the app. No tray. No global hotkeys. No always-on background. Matches Slack and Notion desktop's posture, not Cursor or Claude Desktop's.
 - **OAuth in system browser, not embedded WebView.** Aligns with Cognito's recommended desktop OAuth pattern, avoids embedded-WebView restrictions that Google has been progressively tightening, and keeps the user's existing Google session active.
 - **macOS-first launch; Windows follows once signed.** Avoids the SmartScreen "Unrecognized publisher" warning entirely and lets the team validate the architecture on a single platform before adding Windows-specific complexity (DPAPI, second-instance argv parsing, NSIS installer signing). Windows ships on the same codebase when the cert lands.
@@ -168,7 +168,7 @@ Today's gap: the React SPA is mature, but it runs only inside a browser context 
 
 ## Dependencies / Assumptions
 
-- The `apps/computer` iframe-shell artifact runtime already executes in Safari WebKit when Mac users run the web app, so Chromium-equivalent rendering in Electron is a non-issue. Verified premise, not assumption.
+- The `apps/spaces` iframe-shell artifact runtime already executes in Safari WebKit when Mac users run the web app, so Chromium-equivalent rendering in Electron is a non-issue. Verified premise, not assumption.
 - Cognito Google OAuth federation will accept `thinkwork://oauth/callback` as a CallbackURL on the existing `ThinkworkComputer` user pool client (or a new desktop-specific client). Adding the callback URL is a Cognito config change that lands before launch — assumption to verify with the auth/Cognito setup.
 - Apple Developer Program membership exists under the Eric Individual team (per `project_mobile_testflight_setup` memory). Code signing + notarization for macOS uses this team's credentials.
 - A Windows code signing certificate (OV or EV) is not yet procured. Windows ships post-launch; v1 launch is macOS-only.
@@ -185,7 +185,7 @@ Today's gap: the React SPA is mature, but it runs only inside a browser context 
 - [Affects R6, R7] [Technical] Exact routing of the `thinkwork://oauth/callback` deep link into the renderer's TanStack Router. Likely a main-process IPC event that the renderer subscribes to via a `useEffect` on mount, but the timing relative to TanStack Router's initialization needs verification during planning.
 - [Affects R15] [Technical] Whether to share existing Zod schemas from `packages/api` for IPC payloads or define desktop-specific schemas. Affects coupling between desktop and API.
 - [Affects R19] [Needs research] Whether the artifact iframe-shell can adopt a stricter CSP than the web app without breaking shadcn/Radix components, streamdown, mermaid, or Leaflet. Likely requires a small spike during planning.
-- [Affects R20, R21] [Technical] Exact `electron-vite` configuration split — main vs preload vs renderer entry points, how the renderer config inherits from `apps/computer/vite.config.ts`, and how `vite.iframe-shell.config.ts` participates.
+- [Affects R20, R21] [Technical] Exact `electron-vite` configuration split — main vs preload vs renderer entry points, how the renderer config inherits from `apps/spaces/vite.config.ts`, and how `vite.iframe-shell.config.ts` participates.
 - [Affects R3, R16] [Technical] Update channel strategy under GitHub Releases: does each channel (stable, canary) map to a separate GitHub repo, separate release tags within one repo, or a pre-release flag? Affects how `productName` per stage (R2) maps to autoupdater configuration.
 - [Affects R3] [Technical] Which GitHub repo hosts release artifacts — the main `thinkwork` monorepo or a dedicated public release repo? Visibility, CI token scope, and download-URL stability all hinge on this.
 - [Affects all] [Technical] Pre-spike: a one-week deep-link OAuth callback validation before committing the full build. Every desktop OAuth implementation finds an edge case at the `open-url` boundary on macOS; the spike de-risks the rest of the work.
