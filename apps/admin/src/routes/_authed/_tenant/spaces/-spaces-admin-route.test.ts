@@ -67,6 +67,8 @@ describe("Spaces admin routes", () => {
     expect(automationsRouteSource).toContain(
       '"/_authed/_tenant/spaces/$spaceId_/automations"',
     );
+    expect(automationsRouteSource).toContain("SpaceAutomationsPanel");
+    expect(automationsRouteSource).toContain("space={space}");
   });
 
   it("renders a compact Spaces table that opens Configuration", () => {
@@ -184,6 +186,28 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain("Tool Policy");
     expect(detailChromeSource).not.toContain("MCP Policy");
     expect(detailChromeSource).not.toContain("JsonPanel");
+  });
+
+  it("renders Space Automations as a scoped schedules and webhooks table", () => {
+    expect(detailChromeSource).toContain("SpaceAutomationsPanel");
+    expect(detailChromeSource).toContain("/api/scheduled-jobs?");
+    expect(detailChromeSource).toContain("/api/webhooks?");
+    expect(detailChromeSource).toContain(
+      "new URLSearchParams({ spaceId: space.id })",
+    );
+    expect(detailChromeSource).toContain("<DataTable");
+    expect(detailChromeSource).toContain('header: "Name"');
+    expect(detailChromeSource).toContain('header: "Type"');
+    expect(detailChromeSource).toContain('header: "Schedule / Trigger"');
+    expect(detailChromeSource).toContain('header: "Status"');
+    expect(detailChromeSource).toContain('header: "Last Run"');
+    expect(detailChromeSource).toContain('header: "Next Run / Last Delivery"');
+    expect(detailChromeSource).toContain(
+      'to: "/automations/schedules/$scheduledJobId"',
+    );
+    expect(detailChromeSource).toContain(
+      'to: "/automations/webhooks/$webhookId"',
+    );
   });
 
   it("queries only the Space fields needed by the simplified UI", () => {

@@ -1,9 +1,13 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { type ColumnDef } from "@tanstack/react-table";
+import { Bot, Pause, Play, Repeat, Webhook as WebhookIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
+import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -23,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import { type SpaceAdminDetailQuery as SpaceAdminDetailQueryResult } from "@/gql/graphql";
+import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 import { listBuiltinTools, type BuiltinTool } from "@/lib/builtin-tools-api";
 import {
   KnowledgeBasesListQuery,
@@ -34,6 +39,7 @@ import {
   UpdateSpaceMutation,
 } from "@/lib/graphql-queries";
 import { listMcpServers, type McpServer } from "@/lib/mcp-api";
+import { relativeTime } from "@/lib/utils";
 
 type SpaceDetailTab =
   | "configuration"
@@ -722,8 +728,311 @@ export function SpaceMemoryPanel({ space }: { space: Space }) {
   );
 }
 
-export function SpaceAutomationsPanel() {
-  return <EmptyPanel title="No Space automations." />;
+type ScheduledJobRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  trigger_type: string;
+  enabled: boolean;
+  schedule_type: string | null;
+  schedule_expression: string | null;
+  timezone: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+};
+
+type WebhookRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  target_type: string;
+  enabled: boolean;
+  last_invoked_at: string | null;
+  invocation_count: number;
+  created_at: string;
+};
+
+type SpaceAutomationRow = {
+  id: string;
+  kind: "schedule" | "webhook";
+  name: string;
+  description: string | null;
+  typeLabel: string;
+  triggerLabel: string;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunOrDeliveryAt: string | null;
+  createdAt: string;
+};
+
+const SPACE_AUTOMATION_TYPE_LABELS: Record<string, string> = {
+  agent_heartbeat: "Heartbeat",
+  agent_reminder: "Reminder",
+  agent_scheduled: "Scheduled",
+  eval_scheduled: "Evaluation",
+  routine_schedule: "Routine",
+  routine_one_time: "One-time",
+};
+
+async function spaceApiFetch<T>(
+  path: string,
+  tenantId: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const { headers, ...rest } = options;
+  return authedApiFetch<T>(path, {
+    ...rest,
+    extraHeaders: {
+      "x-tenant-id": tenantId,
+      ...(headers as Record<string, string> | undefined),
+    },
+  });
+}
+
+function formatAutomationSchedule(expr: string | null): string {
+  if (!expr) return "—";
+  if (expr.startsWith("rate(")) return expr.slice(5, -1);
+  if (expr.startsWith("at(")) {
+    const value = expr.slice(3, -1);
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  }
+  return expr;
+}
+
+function estimateNextAutomationRun(
+  scheduleExpr: string | null,
+  lastRunAt: string | null,
+): string | null {
+  if (!scheduleExpr) return null;
+  if (scheduleExpr.startsWith("at(")) {
+    const date = new Date(scheduleExpr.slice(3, -1));
+    return date.getTime() > Date.now() ? date.toISOString() : null;
+  }
+  if (!scheduleExpr.startsWith("rate(")) return null;
+  const match = scheduleExpr
+    .slice(5, -1)
+    .trim()
+    .match(/^(\d+)\s+(minute|hour|day|second)s?$/i);
+  if (!match) return null;
+  const value = Number.parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const unitMs =
+    unit === "second"
+      ? 1000
+      : unit === "minute"
+        ? 60000
+        : unit === "hour"
+          ? 3600000
+          : 86400000;
+  const intervalMs = value * unitMs;
+  const base = lastRunAt ? new Date(lastRunAt).getTime() : Date.now();
+  if (!Number.isFinite(base) || intervalMs <= 0) return null;
+  const elapsed = Date.now() - base;
+  const periods = elapsed > 0 ? Math.ceil(elapsed / intervalMs) : 1;
+  return new Date(base + periods * intervalMs).toISOString();
+}
+
+function automationColumns(): ColumnDef<SpaceAutomationRow>[] {
+  return [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate font-medium">{row.original.name}</span>
+          {row.original.description ? (
+            <span className="truncate text-xs text-muted-foreground">
+              {row.original.description}
+            </span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "typeLabel",
+      header: "Type",
+      cell: ({ row }) => {
+        const Icon =
+          row.original.kind === "webhook"
+            ? WebhookIcon
+            : row.original.typeLabel === "Routine" ||
+                row.original.typeLabel === "One-time"
+              ? Repeat
+              : Bot;
+        return (
+          <Badge variant="secondary" className="gap-1 text-xs">
+            <Icon className="h-3.5 w-3.5" />
+            {row.original.typeLabel}
+          </Badge>
+        );
+      },
+      size: 150,
+    },
+    {
+      accessorKey: "triggerLabel",
+      header: "Schedule / Trigger",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.triggerLabel}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "enabled",
+      header: "Status",
+      cell: ({ row }) =>
+        row.original.enabled ? (
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-green-500/15 text-xs text-green-600 dark:text-green-400"
+          >
+            <Play className="h-3 w-3 fill-current" />
+            Enabled
+          </Badge>
+        ) : (
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-muted text-xs text-muted-foreground"
+          >
+            <Pause className="h-3 w-3" />
+            Disabled
+          </Badge>
+        ),
+      size: 120,
+    },
+    {
+      accessorKey: "lastRunAt",
+      header: "Last Run",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.lastRunAt ? relativeTime(row.original.lastRunAt) : "—"}
+        </span>
+      ),
+      size: 120,
+    },
+    {
+      accessorKey: "nextRunOrDeliveryAt",
+      header: "Next Run / Last Delivery",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.nextRunOrDeliveryAt
+            ? relativeTime(row.original.nextRunOrDeliveryAt)
+            : "—"}
+        </span>
+      ),
+      size: 180,
+    },
+  ];
+}
+
+export function SpaceAutomationsPanel({ space }: { space: Space }) {
+  const { tenantId } = useTenant();
+  const navigate = useNavigate();
+  const [scheduledJobs, setScheduledJobs] = useState<ScheduledJobRow[]>([]);
+  const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const fetchAutomations = useCallback(async () => {
+    if (!tenantId) return;
+    setLoading(true);
+    try {
+      const query = new URLSearchParams({ spaceId: space.id }).toString();
+      const [jobs, hooks] = await Promise.all([
+        spaceApiFetch<ScheduledJobRow[]>(
+          `/api/scheduled-jobs?${query}`,
+          tenantId,
+        ),
+        spaceApiFetch<WebhookRow[]>(`/api/webhooks?${query}`, tenantId),
+      ]);
+      setScheduledJobs(jobs);
+      setWebhooks(hooks);
+      setErrorMessage(null);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [space.id, tenantId]);
+
+  useEffect(() => {
+    void fetchAutomations();
+  }, [fetchAutomations]);
+
+  const rows = useMemo<SpaceAutomationRow[]>(
+    () =>
+      [
+        ...scheduledJobs.map((job) => ({
+          id: job.id,
+          kind: "schedule" as const,
+          name: job.name,
+          description: job.description,
+          typeLabel:
+            SPACE_AUTOMATION_TYPE_LABELS[job.trigger_type] ?? job.trigger_type,
+          triggerLabel: formatAutomationSchedule(job.schedule_expression),
+          enabled: job.enabled,
+          lastRunAt: job.last_run_at,
+          nextRunOrDeliveryAt:
+            job.next_run_at ??
+            estimateNextAutomationRun(job.schedule_expression, job.last_run_at),
+          createdAt: job.created_at,
+        })),
+        ...webhooks.map((webhook) => ({
+          id: webhook.id,
+          kind: "webhook" as const,
+          name: webhook.name,
+          description: webhook.description,
+          typeLabel: "Webhook",
+          triggerLabel:
+            webhook.target_type === "agent"
+              ? "Agent webhook"
+              : "Routine webhook",
+          enabled: webhook.enabled,
+          lastRunAt: null,
+          nextRunOrDeliveryAt: webhook.last_invoked_at,
+          createdAt: webhook.created_at,
+        })),
+      ].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      ),
+    [scheduledJobs, webhooks],
+  );
+
+  if (loading) return <PageSkeleton />;
+
+  if (errorMessage) {
+    return (
+      <section className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">
+        {errorMessage}
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3">
+      <DataTable
+        columns={automationColumns()}
+        data={rows}
+        pageSize={20}
+        onRowClick={(row) => {
+          if (row.kind === "schedule") {
+            navigate({
+              to: "/automations/schedules/$scheduledJobId",
+              params: { scheduledJobId: row.id },
+            });
+          } else {
+            navigate({
+              to: "/automations/webhooks/$webhookId",
+              params: { webhookId: row.id },
+            });
+          }
+        }}
+      />
+    </section>
+  );
 }
 
 function EmptyPanel({ title }: { title: string }) {

@@ -3,6 +3,7 @@ import {
   db,
   scheduledJobs,
   computers,
+  spaces,
   snakeToCamel,
   invokeJobScheduleManager,
   eq,
@@ -44,6 +45,19 @@ export const createScheduledJob = async (
     }
   }
 
+  if (i.spaceId) {
+    const [spaceRow] = await db
+      .select({ tenant_id: spaces.tenant_id })
+      .from(spaces)
+      .where(eq(spaces.id, i.spaceId));
+    if (!spaceRow) {
+      throw new Error(`Space ${i.spaceId} not found`);
+    }
+    if (spaceRow.tenant_id !== i.tenantId) {
+      throw new Error("Space does not belong to this tenant");
+    }
+  }
+
   const parsedConfig = parseConfig(i.config);
   const connectorTrigger =
     triggerType === "event" && hasConnectorTriggerDefinition(parsedConfig)
@@ -64,6 +78,7 @@ export const createScheduledJob = async (
       tenant_id: i.tenantId,
       trigger_type: connectorTrigger?.triggerType ?? triggerType,
       agent_id: i.agentId || null,
+      space_id: i.spaceId || null,
       computer_id: computerId,
       routine_id: i.routineId || null,
       team_id: i.teamId || null,
@@ -85,6 +100,7 @@ export const createScheduledJob = async (
       tenantId: i.tenantId,
       triggerType: row.trigger_type,
       agentId: i.agentId || undefined,
+      spaceId: i.spaceId || undefined,
       routineId: i.routineId || undefined,
       name: i.name,
       scheduleType: row.schedule_type,

@@ -1157,6 +1157,7 @@ export type CreateScheduledJobInput = {
   routineId?: InputMaybe<Scalars['ID']['input']>;
   scheduleExpression?: InputMaybe<Scalars['String']['input']>;
   scheduleType?: InputMaybe<Scalars['String']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   teamId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   timezone?: InputMaybe<Scalars['String']['input']>;
@@ -1244,6 +1245,7 @@ export type CreateWebhookInput = {
   prompt?: InputMaybe<Scalars['String']['input']>;
   rateLimit?: InputMaybe<Scalars['Int']['input']>;
   routineId?: InputMaybe<Scalars['ID']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   targetType: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
 };
@@ -4301,6 +4303,7 @@ export type QueryScheduledJobsArgs = {
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   routineId?: InputMaybe<Scalars['ID']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   triggerType?: InputMaybe<Scalars['String']['input']>;
 };
@@ -4535,6 +4538,7 @@ export type QueryWebhookDeliveriesArgs = {
 export type QueryWebhooksArgs = {
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   targetType?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
 };
@@ -5089,6 +5093,7 @@ export type ScheduledJob = {
   routineId?: Maybe<Scalars['ID']['output']>;
   scheduleExpression?: Maybe<Scalars['String']['output']>;
   scheduleType?: Maybe<Scalars['String']['output']>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
   teamId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
   timezone: Scalars['String']['output'];
@@ -6260,6 +6265,7 @@ export type UpdateScheduledJobInput = {
   prompt?: InputMaybe<Scalars['String']['input']>;
   scheduleExpression?: InputMaybe<Scalars['String']['input']>;
   scheduleType?: InputMaybe<Scalars['String']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   timezone?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -6383,6 +6389,7 @@ export type UpdateWebhookInput = {
   prompt?: InputMaybe<Scalars['String']['input']>;
   rateLimit?: InputMaybe<Scalars['Int']['input']>;
   routineId?: InputMaybe<Scalars['ID']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   targetType?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -6482,6 +6489,7 @@ export type Webhook = {
   prompt?: Maybe<Scalars['String']['output']>;
   rateLimit?: Maybe<Scalars['Int']['output']>;
   routineId?: Maybe<Scalars['ID']['output']>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
   targetType: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   token: Scalars['String']['output'];

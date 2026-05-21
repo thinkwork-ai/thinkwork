@@ -35,6 +35,7 @@ import {
   computerEvents,
   evalRuns,
   messages,
+  spaces,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
 import {
@@ -78,6 +79,22 @@ function isInternalScheduledJobBody(body: Record<string, unknown>): boolean {
   });
 }
 
+async function validateSpaceForTenant(
+  spaceId: string | null,
+  tenantId: string,
+): Promise<APIGatewayProxyStructuredResultV2 | null> {
+  if (!spaceId) return null;
+  const [spaceRow] = await db
+    .select({ tenant_id: spaces.tenant_id })
+    .from(spaces)
+    .where(eq(spaces.id, spaceId));
+  if (!spaceRow) return error(`Space ${spaceId} not found`, 400);
+  if (spaceRow.tenant_id !== tenantId) {
+    return error("Space does not belong to this tenant", 403);
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Job Schedule Manager — invoke to create/update/delete EventBridge schedules
 // ---------------------------------------------------------------------------
@@ -93,8 +110,9 @@ async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -122,8 +140,9 @@ async function invokeJobScheduleManager(
       console.error("[scheduled-jobs]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -367,6 +386,8 @@ async function listScheduledJobs(
       sql`COALESCE(${scheduledJobs.config}->>'internal', 'false') <> 'true' AND ${scheduledJobs.trigger_type} <> ${THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE}`,
     );
   }
+  const spaceId = params.spaceId || params.space_id;
+  if (spaceId) conditions.push(eq(scheduledJobs.space_id, spaceId));
   if (params.agent_id)
     conditions.push(eq(scheduledJobs.agent_id, params.agent_id));
   if (params.computer_id)
@@ -429,6 +450,11 @@ async function createScheduledJob(
   }
 
   const computerId = (body.computer_id as string) || null;
+  const spaceId =
+    ((body.space_id ?? body.spaceId) as string | null | undefined) || null;
+  const spaceError = await validateSpaceForTenant(spaceId, tenantId);
+  if (spaceError) return spaceError;
+
   if (computerId) {
     // Verify the named Computer belongs to the caller's tenant before
     // persisting the FK reference. The DB FK only enforces referential
@@ -489,6 +515,7 @@ async function createScheduledJob(
       tenant_id: tenantId,
       trigger_type: triggerType,
       agent_id: (body.agent_id as string) || null,
+      space_id: spaceId,
       computer_id: normalizedComputerId,
       routine_id: (body.routine_id as string) || null,
       team_id: (body.team_id as string) || null,
@@ -512,6 +539,7 @@ async function createScheduledJob(
       tenantId,
       triggerType: row.trigger_type,
       agentId: row.agent_id || undefined,
+      spaceId: row.space_id || undefined,
       routineId: row.routine_id || undefined,
       name: row.name,
       scheduleType: row.schedule_type,
@@ -577,6 +605,13 @@ async function updateScheduledJob(
   if (body.name !== undefined) updates.name = body.name;
   if (body.description !== undefined) updates.description = body.description;
   if (body.prompt !== undefined) updates.prompt = body.prompt;
+  if (body.space_id !== undefined || body.spaceId !== undefined) {
+    const nextSpaceId =
+      ((body.space_id ?? body.spaceId) as string | null | undefined) || null;
+    const spaceError = await validateSpaceForTenant(nextSpaceId, tenantId);
+    if (spaceError) return spaceError;
+    updates.space_id = nextSpaceId;
+  }
   if (body.config !== undefined) updates.config = body.config;
   if (body.schedule_expression !== undefined)
     updates.schedule_expression = body.schedule_expression;
@@ -601,6 +636,7 @@ async function updateScheduledJob(
       scheduleType: updated.schedule_type,
       timezone: updated.timezone,
       prompt: updated.prompt || undefined,
+      spaceId: updated.space_id || undefined,
       config: updated.config || undefined,
       enabled: updated.enabled,
     });
@@ -736,8 +772,9 @@ async function fireScheduledJob(
       .returning();
 
     try {
-      const { LambdaClient, InvokeCommand } =
-        await import("@aws-sdk/client-lambda");
+      const { LambdaClient, InvokeCommand } = await import(
+        "@aws-sdk/client-lambda"
+      );
       const lambda = new LambdaClient({});
       const stage = process.env.STAGE || "dev";
       const fnName =
@@ -847,6 +884,7 @@ async function fireScheduledJob(
     const { threadId } = await ensureThreadForWork({
       tenantId,
       computerId: computer.id,
+      spaceId: trig.space_id ?? undefined,
       userId: firingUserId,
       title: trig.name,
       channel: "schedule",
@@ -869,6 +907,7 @@ async function fireScheduledJob(
           source: "scheduled_job_manual_fire",
           triggerId,
           triggerType: trig.trigger_type,
+          spaceId: trig.space_id,
         },
       })
       .returning({ id: messages.id });
@@ -899,10 +938,12 @@ async function fireScheduledJob(
           contextClass: "user",
           triggerId,
           triggerType: trig.trigger_type,
+          spaceId: trig.space_id,
           surfaceContext: {
             source: "schedule",
             triggerId,
             triggerType: trig.trigger_type,
+            spaceId: trig.space_id,
             scheduleName: trig.name,
           },
         },
@@ -931,6 +972,7 @@ async function fireScheduledJob(
           messageId: message.id,
           triggerId,
           triggerType: trig.trigger_type,
+          spaceId: trig.space_id,
           requesterUserId: firingUserId,
         },
       });

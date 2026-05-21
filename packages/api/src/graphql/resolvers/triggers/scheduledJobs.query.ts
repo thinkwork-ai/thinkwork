@@ -16,6 +16,7 @@ export const scheduledJobs_ = async (
 ) => {
   const conditions = [eq(scheduledJobs.tenant_id, args.tenantId)];
   if (args.agentId) conditions.push(eq(scheduledJobs.agent_id, args.agentId));
+  if (args.spaceId) conditions.push(eq(scheduledJobs.space_id, args.spaceId));
   if (args.computerId)
     conditions.push(eq(scheduledJobs.computer_id, args.computerId));
   if (args.routineId)
