@@ -168,6 +168,24 @@ export const SpacesListQuery = graphql(`
   }
 `);
 
+export const AgentSpaceAvailabilityQuery = graphql(`
+  query AgentSpaceAvailability($tenantId: ID!) {
+    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {
+      id
+      name
+      slug
+      kind
+      agentAssignments {
+        id
+        status
+        agent {
+          id
+        }
+      }
+    }
+  }
+`);
+
 export const CreateSpaceMutation = graphql(`
   mutation CreateSpace($input: CreateSpaceInput!) {
     createSpace(input: $input) {
