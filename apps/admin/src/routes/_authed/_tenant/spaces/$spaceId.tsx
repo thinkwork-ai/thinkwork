@@ -8,6 +8,10 @@ function SpaceDetailRedirect() {
   const { spaceId } = Route.useParams();
 
   return (
-    <Navigate to="/spaces/$spaceId/workspace" params={{ spaceId }} replace />
+    <Navigate
+      to="/spaces/$spaceId/configuration"
+      params={{ spaceId }}
+      replace
+    />
   );
 }

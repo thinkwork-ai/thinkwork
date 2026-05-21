@@ -43,14 +43,8 @@ export const Route = createFileRoute("/_authed/_tenant/spaces/")({
 type SpaceRow = {
   id: string;
   name: string;
-  slug: string;
-  kind: string;
   accessMode: string;
   status: string;
-  agentCount: number;
-  mcpServerCount: number;
-  toolPolicyCount: number;
-  connectedDataCount: number;
   updatedAt: string;
 };
 
@@ -65,16 +59,6 @@ const columns: ColumnDef<SpaceRow>[] = [
     ),
   },
   {
-    accessorKey: "kind",
-    header: "Kind",
-    cell: ({ row }) => (
-      <Badge variant="outline" className="text-xs whitespace-nowrap">
-        {formatLabel(row.original.kind)}
-      </Badge>
-    ),
-    size: 170,
-  },
-  {
     accessorKey: "accessMode",
     header: "Access",
     cell: ({ row }) => (
@@ -83,44 +67,6 @@ const columns: ColumnDef<SpaceRow>[] = [
       </Badge>
     ),
     size: 110,
-  },
-  {
-    accessorKey: "agentCount",
-    header: "Agents",
-    cell: ({ row }) => (
-      <span className="text-sm tabular-nums">{row.original.agentCount}</span>
-    ),
-    size: 90,
-  },
-  {
-    accessorKey: "mcpServerCount",
-    header: "MCP",
-    cell: ({ row }) => (
-      <span className="text-sm tabular-nums">
-        {row.original.mcpServerCount}
-      </span>
-    ),
-    size: 100,
-  },
-  {
-    accessorKey: "toolPolicyCount",
-    header: "Tools",
-    cell: ({ row }) => (
-      <span className="text-sm tabular-nums">
-        {row.original.toolPolicyCount}
-      </span>
-    ),
-    size: 100,
-  },
-  {
-    accessorKey: "connectedDataCount",
-    header: "Connected Data",
-    cell: ({ row }) => (
-      <span className="text-sm tabular-nums">
-        {row.original.connectedDataCount}
-      </span>
-    ),
-    size: 140,
   },
   {
     accessorKey: "status",
@@ -167,17 +113,8 @@ function SpacesPage() {
     return (result.data?.spaces ?? []).map((space) => ({
       id: space.id,
       name: space.name,
-      slug: space.slug,
-      kind: space.kind,
       accessMode: space.accessMode,
       status: space.status,
-      agentCount: space.agentAssignments.filter(
-        (assignment) => assignment.status === "ACTIVE",
-      ).length,
-      mcpServerCount: space.mcpServers.filter((server) => server.enabled)
-        .length,
-      toolPolicyCount: countPolicyItems(space.toolPolicy),
-      connectedDataCount: countPolicyItems(space.connectedDataConfig),
       updatedAt: space.updatedAt,
     }));
   }, [result.data?.spaces]);
@@ -191,7 +128,6 @@ function SpacesPage() {
         <>
           <PageHeader
             title="Spaces"
-            description="Configure contextual workrooms: workspace files, connected data, tools, MCP servers, and agent availability."
             actions={
               <Button size="sm" onClick={() => setNewSpaceOpen(true)}>
                 <Plus className="h-4 w-4" />
@@ -229,7 +165,7 @@ function SpacesPage() {
           scrollable
           onRowClick={(row) =>
             navigate({
-              to: "/spaces/$spaceId/workspace",
+              to: "/spaces/$spaceId/configuration",
               params: { spaceId: row.id },
             })
           }
@@ -242,7 +178,7 @@ function SpacesPage() {
         onCreated={(spaceId) => {
           reexecuteSpaces({ requestPolicy: "network-only" });
           void navigate({
-            to: "/spaces/$spaceId/workspace",
+            to: "/spaces/$spaceId/configuration",
             params: { spaceId },
           });
         }}
@@ -259,22 +195,6 @@ function formatLabel(value: string) {
     .join(" ");
 }
 
-function countPolicyItems(value: unknown) {
-  if (!value || typeof value !== "object") return 0;
-  if (Array.isArray(value)) return value.length;
-  return Object.values(value as Record<string, unknown>).reduce(
-    (count, item) => {
-      if (Array.isArray(item)) return count + item.length;
-      if (item && typeof item === "object") return count + 1;
-      if (item !== null && item !== undefined && item !== false) {
-        return count + 1;
-      }
-      return count;
-    },
-    0,
-  );
-}
-
 function NewSpaceDialog({
   tenantId,
   open,
@@ -288,9 +208,7 @@ function NewSpaceDialog({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [accessMode, setAccessMode] = useState<"PUBLIC" | "PRIVATE">(
-    "PUBLIC",
-  );
+  const [accessMode, setAccessMode] = useState<"PUBLIC" | "PRIVATE">("PUBLIC");
   const [{ fetching }, createSpace] = useMutation(CreateSpaceMutation);
   const canSubmit = name.trim().length > 0 && !fetching;
 

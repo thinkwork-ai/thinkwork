@@ -1,21 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   SpaceDetailChrome,
-  SpaceMcpPanel,
+  SpaceMemoryPanel,
 } from "@/components/spaces/SpaceDetailChrome";
 
 export const Route = createFileRoute(
-  "/_authed/_tenant/spaces/$spaceId_/mcp",
+  "/_authed/_tenant/spaces/$spaceId_/memory",
 )({
-  component: SpaceMcpRoute,
+  component: SpaceMemoryRoute,
 });
 
-function SpaceMcpRoute() {
+function SpaceMemoryRoute() {
   const { spaceId } = Route.useParams();
 
   return (
-    <SpaceDetailChrome spaceId={spaceId} activeTab="mcp">
-      {({ space }) => <SpaceMcpPanel space={space} />}
+    <SpaceDetailChrome spaceId={spaceId} activeTab="memory">
+      {() => <SpaceMemoryPanel />}
     </SpaceDetailChrome>
   );
 }

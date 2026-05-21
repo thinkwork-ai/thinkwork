@@ -84,9 +84,9 @@ import { Route as AuthedTenantAutomationsRoutinesIndexRouteImport } from "./rout
 import { Route as AuthedTenantAutomationsCredentialsIndexRouteImport } from "./routes/_authed/_tenant/automations/credentials/index";
 import { Route as AuthedTenantSpacesSpaceIdWorkspaceRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.workspace";
 import { Route as AuthedTenantSpacesSpaceIdToolsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.tools";
-import { Route as AuthedTenantSpacesSpaceIdSettingsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.settings";
-import { Route as AuthedTenantSpacesSpaceIdMcpRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.mcp";
-import { Route as AuthedTenantSpacesSpaceIdConnectedDataRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.connected-data";
+import { Route as AuthedTenantSpacesSpaceIdMemoryRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.memory";
+import { Route as AuthedTenantSpacesSpaceIdConfigurationRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.configuration";
+import { Route as AuthedTenantSpacesSpaceIdAutomationsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.automations";
 import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from "./routes/_authed/_tenant/knowledge/knowledge-bases/$kbId";
 import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from "./routes/_authed/_tenant/evaluations/studio/new";
 import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/$testCaseId";
@@ -536,22 +536,22 @@ const AuthedTenantSpacesSpaceIdToolsRoute =
     path: "/spaces/$spaceId/tools",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantSpacesSpaceIdSettingsRoute =
-  AuthedTenantSpacesSpaceIdSettingsRouteImport.update({
-    id: "/spaces/$spaceId_/settings",
-    path: "/spaces/$spaceId/settings",
+const AuthedTenantSpacesSpaceIdMemoryRoute =
+  AuthedTenantSpacesSpaceIdMemoryRouteImport.update({
+    id: "/spaces/$spaceId_/memory",
+    path: "/spaces/$spaceId/memory",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantSpacesSpaceIdMcpRoute =
-  AuthedTenantSpacesSpaceIdMcpRouteImport.update({
-    id: "/spaces/$spaceId_/mcp",
-    path: "/spaces/$spaceId/mcp",
+const AuthedTenantSpacesSpaceIdConfigurationRoute =
+  AuthedTenantSpacesSpaceIdConfigurationRouteImport.update({
+    id: "/spaces/$spaceId_/configuration",
+    path: "/spaces/$spaceId/configuration",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantSpacesSpaceIdConnectedDataRoute =
-  AuthedTenantSpacesSpaceIdConnectedDataRouteImport.update({
-    id: "/spaces/$spaceId_/connected-data",
-    path: "/spaces/$spaceId/connected-data",
+const AuthedTenantSpacesSpaceIdAutomationsRoute =
+  AuthedTenantSpacesSpaceIdAutomationsRouteImport.update({
+    id: "/spaces/$spaceId_/automations",
+    path: "/spaces/$spaceId/automations",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
 const AuthedTenantKnowledgeKnowledgeBasesKbIdRoute =
@@ -778,9 +778,9 @@ export interface FileRoutesByFullPath {
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
-  "/spaces/$spaceId/connected-data": typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
-  "/spaces/$spaceId/mcp": typeof AuthedTenantSpacesSpaceIdMcpRoute;
-  "/spaces/$spaceId/settings": typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  "/spaces/$spaceId/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
+  "/spaces/$spaceId/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  "/spaces/$spaceId/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   "/spaces/$spaceId/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
   "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -875,9 +875,9 @@ export interface FileRoutesByTo {
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
-  "/spaces/$spaceId/connected-data": typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
-  "/spaces/$spaceId/mcp": typeof AuthedTenantSpacesSpaceIdMcpRoute;
-  "/spaces/$spaceId/settings": typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  "/spaces/$spaceId/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
+  "/spaces/$spaceId/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  "/spaces/$spaceId/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   "/spaces/$spaceId/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
   "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials": typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -979,9 +979,9 @@ export interface FileRoutesById {
   "/_authed/_tenant/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/_authed/_tenant/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/_authed/_tenant/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
-  "/_authed/_tenant/spaces/$spaceId_/connected-data": typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
-  "/_authed/_tenant/spaces/$spaceId_/mcp": typeof AuthedTenantSpacesSpaceIdMcpRoute;
-  "/_authed/_tenant/spaces/$spaceId_/settings": typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  "/_authed/_tenant/spaces/$spaceId_/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
+  "/_authed/_tenant/spaces/$spaceId_/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  "/_authed/_tenant/spaces/$spaceId_/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   "/_authed/_tenant/spaces/$spaceId_/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
   "/_authed/_tenant/spaces/$spaceId_/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/_authed/_tenant/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -1082,9 +1082,9 @@ export interface FileRouteTypes {
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
     | "/knowledge/knowledge-bases/$kbId"
-    | "/spaces/$spaceId/connected-data"
-    | "/spaces/$spaceId/mcp"
-    | "/spaces/$spaceId/settings"
+    | "/spaces/$spaceId/automations"
+    | "/spaces/$spaceId/configuration"
+    | "/spaces/$spaceId/memory"
     | "/spaces/$spaceId/tools"
     | "/spaces/$spaceId/workspace"
     | "/automations/credentials/"
@@ -1179,9 +1179,9 @@ export interface FileRouteTypes {
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
     | "/knowledge/knowledge-bases/$kbId"
-    | "/spaces/$spaceId/connected-data"
-    | "/spaces/$spaceId/mcp"
-    | "/spaces/$spaceId/settings"
+    | "/spaces/$spaceId/automations"
+    | "/spaces/$spaceId/configuration"
+    | "/spaces/$spaceId/memory"
     | "/spaces/$spaceId/tools"
     | "/spaces/$spaceId/workspace"
     | "/automations/credentials"
@@ -1282,9 +1282,9 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/evaluations/studio/$testCaseId"
     | "/_authed/_tenant/evaluations/studio/new"
     | "/_authed/_tenant/knowledge/knowledge-bases/$kbId"
-    | "/_authed/_tenant/spaces/$spaceId_/connected-data"
-    | "/_authed/_tenant/spaces/$spaceId_/mcp"
-    | "/_authed/_tenant/spaces/$spaceId_/settings"
+    | "/_authed/_tenant/spaces/$spaceId_/automations"
+    | "/_authed/_tenant/spaces/$spaceId_/configuration"
+    | "/_authed/_tenant/spaces/$spaceId_/memory"
     | "/_authed/_tenant/spaces/$spaceId_/tools"
     | "/_authed/_tenant/spaces/$spaceId_/workspace"
     | "/_authed/_tenant/automations/credentials/"
@@ -1838,25 +1838,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantSpacesSpaceIdToolsRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/spaces/$spaceId_/settings": {
-      id: "/_authed/_tenant/spaces/$spaceId_/settings";
-      path: "/spaces/$spaceId/settings";
-      fullPath: "/spaces/$spaceId/settings";
-      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdSettingsRouteImport;
+    "/_authed/_tenant/spaces/$spaceId_/memory": {
+      id: "/_authed/_tenant/spaces/$spaceId_/memory";
+      path: "/spaces/$spaceId/memory";
+      fullPath: "/spaces/$spaceId/memory";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdMemoryRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/spaces/$spaceId_/mcp": {
-      id: "/_authed/_tenant/spaces/$spaceId_/mcp";
-      path: "/spaces/$spaceId/mcp";
-      fullPath: "/spaces/$spaceId/mcp";
-      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdMcpRouteImport;
+    "/_authed/_tenant/spaces/$spaceId_/configuration": {
+      id: "/_authed/_tenant/spaces/$spaceId_/configuration";
+      path: "/spaces/$spaceId/configuration";
+      fullPath: "/spaces/$spaceId/configuration";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdConfigurationRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/spaces/$spaceId_/connected-data": {
-      id: "/_authed/_tenant/spaces/$spaceId_/connected-data";
-      path: "/spaces/$spaceId/connected-data";
-      fullPath: "/spaces/$spaceId/connected-data";
-      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdConnectedDataRouteImport;
+    "/_authed/_tenant/spaces/$spaceId_/automations": {
+      id: "/_authed/_tenant/spaces/$spaceId_/automations";
+      path: "/spaces/$spaceId/automations";
+      fullPath: "/spaces/$spaceId/automations";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdAutomationsRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/knowledge/knowledge-bases/$kbId": {
@@ -2195,9 +2195,9 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAutomationsWebhooksWebhookIdRoute: typeof AuthedTenantAutomationsWebhooksWebhookIdRoute;
   AuthedTenantEvaluationsStudioTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute;
-  AuthedTenantSpacesSpaceIdConnectedDataRoute: typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
-  AuthedTenantSpacesSpaceIdMcpRoute: typeof AuthedTenantSpacesSpaceIdMcpRoute;
-  AuthedTenantSpacesSpaceIdSettingsRoute: typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  AuthedTenantSpacesSpaceIdAutomationsRoute: typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
+  AuthedTenantSpacesSpaceIdConfigurationRoute: typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  AuthedTenantSpacesSpaceIdMemoryRoute: typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   AuthedTenantSpacesSpaceIdToolsRoute: typeof AuthedTenantSpacesSpaceIdToolsRoute;
   AuthedTenantSpacesSpaceIdWorkspaceRoute: typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   AuthedTenantAutomationsCredentialsIndexRoute: typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -2283,11 +2283,11 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantEvaluationsStudioTestCaseIdRoute:
     AuthedTenantEvaluationsStudioTestCaseIdRoute,
   AuthedTenantEvaluationsStudioNewRoute: AuthedTenantEvaluationsStudioNewRoute,
-  AuthedTenantSpacesSpaceIdConnectedDataRoute:
-    AuthedTenantSpacesSpaceIdConnectedDataRoute,
-  AuthedTenantSpacesSpaceIdMcpRoute: AuthedTenantSpacesSpaceIdMcpRoute,
-  AuthedTenantSpacesSpaceIdSettingsRoute:
-    AuthedTenantSpacesSpaceIdSettingsRoute,
+  AuthedTenantSpacesSpaceIdAutomationsRoute:
+    AuthedTenantSpacesSpaceIdAutomationsRoute,
+  AuthedTenantSpacesSpaceIdConfigurationRoute:
+    AuthedTenantSpacesSpaceIdConfigurationRoute,
+  AuthedTenantSpacesSpaceIdMemoryRoute: AuthedTenantSpacesSpaceIdMemoryRoute,
   AuthedTenantSpacesSpaceIdToolsRoute: AuthedTenantSpacesSpaceIdToolsRoute,
   AuthedTenantSpacesSpaceIdWorkspaceRoute:
     AuthedTenantSpacesSpaceIdWorkspaceRoute,
