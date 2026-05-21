@@ -15,7 +15,7 @@ function SpaceAutomationsRoute() {
 
   return (
     <SpaceDetailChrome spaceId={spaceId} activeTab="automations">
-      {() => <SpaceAutomationsPanel />}
+      {({ space }) => <SpaceAutomationsPanel space={space} />}
     </SpaceDetailChrome>
   );
 }

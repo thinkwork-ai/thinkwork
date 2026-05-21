@@ -23,6 +23,7 @@ import {
   db,
   eq,
   scheduledJobs,
+  spaces,
   snakeToCamel,
   invokeJobScheduleManager,
 } from "../../utils.js";
@@ -32,6 +33,7 @@ interface UpdateInput {
   name?: string;
   description?: string;
   prompt?: string;
+  spaceId?: string | null;
   config?: string | Record<string, unknown> | null;
   scheduleType?: string;
   scheduleExpression?: string;
@@ -56,11 +58,7 @@ export const updateScheduledJob = async (
     throw new Error(`Scheduled job ${args.id} not found`);
   }
 
-  await requireAdminOrServiceCaller(
-    ctx,
-    row.tenant_id,
-    "update_scheduled_job",
-  );
+  await requireAdminOrServiceCaller(ctx, row.tenant_id, "update_scheduled_job");
 
   // Pass through to the manager Lambda. config is AWSJSON-typed in
   // GraphQL → arrives as a JSON string; the Lambda expects an object,
@@ -72,6 +70,21 @@ export const updateScheduledJob = async (
   if (i.name !== undefined) body.name = i.name;
   if (i.description !== undefined) body.description = i.description;
   if (i.prompt !== undefined) body.prompt = i.prompt;
+  if (i.spaceId !== undefined) {
+    if (i.spaceId) {
+      const [spaceRow] = await db
+        .select({ tenant_id: spaces.tenant_id })
+        .from(spaces)
+        .where(eq(spaces.id, i.spaceId));
+      if (!spaceRow) {
+        throw new Error(`Space ${i.spaceId} not found`);
+      }
+      if (spaceRow.tenant_id !== row.tenant_id) {
+        throw new Error("Space does not belong to this tenant");
+      }
+    }
+    body.spaceId = i.spaceId;
+  }
   if (i.config !== undefined && i.config !== null) {
     body.config =
       typeof i.config === "string"

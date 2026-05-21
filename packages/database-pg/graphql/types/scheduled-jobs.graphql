@@ -5,6 +5,7 @@ type ScheduledJob {
   tenantId: ID!
   triggerType: String!
   agentId: ID
+  spaceId: ID
   computerId: ID
   routineId: ID
   teamId: ID
@@ -29,6 +30,7 @@ input CreateScheduledJobInput {
   tenantId: ID!
   triggerType: String!
   agentId: ID
+  spaceId: ID
   computerId: ID
   routineId: ID
   teamId: ID
@@ -47,6 +49,7 @@ extend type Query {
   scheduledJobs(
     tenantId: ID!
     agentId: ID
+    spaceId: ID
     computerId: ID
     routineId: ID
     triggerType: String
@@ -82,6 +85,7 @@ input UpdateScheduledJobInput {
   name: String
   description: String
   prompt: String
+  spaceId: ID
   config: AWSJSON
   scheduleType: String
   scheduleExpression: String

@@ -68,6 +68,7 @@ vi.mock("@thinkwork/database-pg/schema", () => {
     agents: make("agents"),
     agentTemplates: make("agentTemplates"),
     computers: make("computers"),
+    spaces: make("spaces"),
     computerTasks: make("computerTasks"),
     computerEvents: make("computerEvents"),
     evalRuns: make("evalRuns"),
@@ -173,6 +174,7 @@ function schedRow(overrides: Record<string, unknown> = {}) {
       tenant_id: TENANT_ID,
       trigger_type: "agent_scheduled",
       agent_id: AGENT_ID,
+      space_id: "space-1",
       computer_id: COMPUTER_ID,
       routine_id: null,
       name: "Check Package Updates",
@@ -241,6 +243,7 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
       expect.objectContaining({
         tenantId: TENANT_ID,
         computerId: COMPUTER_ID,
+        spaceId: "space-1",
         userId: USER_ID,
         channel: "schedule",
       }),
@@ -252,6 +255,9 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
     expect(taskValues.task_type).toBe("thread_turn");
     expect(taskValues.created_by_user_id).toBe(USER_ID);
     expect((taskValues.input as Record<string, unknown>).actorId).toBe(USER_ID);
+    expect((taskValues.input as Record<string, unknown>).spaceId).toBe(
+      "space-1",
+    );
 
     // Regression: zero entries into the legacy wakeup queue. This is the
     // path that could land on Flue — must not be used for automations.

@@ -30,6 +30,7 @@ vi.mock("../../utils.js", () => ({
     tenant_id: "scheduled_jobs.tenant_id",
     trigger_type: "scheduled_jobs.trigger_type",
     agent_id: "scheduled_jobs.agent_id",
+    space_id: "scheduled_jobs.space_id",
     routine_id: "scheduled_jobs.routine_id",
     prompt: "scheduled_jobs.prompt",
     eb_schedule_name: "scheduled_jobs.eb_schedule_name",
@@ -93,6 +94,7 @@ describe("runScheduledJob", () => {
         tenant_id: "tenant-A",
         trigger_type: "agent_heartbeat",
         agent_id: "a1",
+        space_id: null,
         routine_id: null,
         prompt: null,
         eb_schedule_name: "ebs-1",
@@ -123,13 +125,17 @@ describe("runScheduledJob", () => {
         tenant_id: "tenant-A",
         trigger_type: "routine_schedule",
         agent_id: null,
+        space_id: "space-1",
         routine_id: "r-1",
         prompt: "hello",
         eb_schedule_name: "ebs-2",
       },
     ]);
     mocks.requireAdminOrServiceCaller.mockResolvedValue(undefined);
-    mocks.lambdaSend.mockResolvedValue({ StatusCode: 200, FunctionError: undefined });
+    mocks.lambdaSend.mockResolvedValue({
+      StatusCode: 200,
+      FunctionError: undefined,
+    });
 
     const result = await runScheduledJob(null, { id: "sj-2" }, ctx());
 
@@ -151,6 +157,7 @@ describe("runScheduledJob", () => {
       triggerId: "sj-2",
       triggerType: "routine_schedule",
       tenantId: "tenant-A",
+      spaceId: "space-1",
       routineId: "r-1",
       prompt: "hello",
       scheduleName: "ebs-2",
@@ -164,6 +171,7 @@ describe("runScheduledJob", () => {
         tenant_id: "tenant-A",
         trigger_type: "agent_scheduled",
         agent_id: "a1",
+        space_id: null,
         routine_id: null,
         prompt: null,
         eb_schedule_name: null,
@@ -193,6 +201,7 @@ describe("runScheduledJob", () => {
         tenant_id: "tenant-A",
         trigger_type: "agent_heartbeat",
         agent_id: null,
+        space_id: null,
         routine_id: null,
         prompt: null,
         eb_schedule_name: null,
@@ -201,8 +210,8 @@ describe("runScheduledJob", () => {
     mocks.requireAdminOrServiceCaller.mockResolvedValue(undefined);
     delete process.env.STAGE;
 
-    await expect(
-      runScheduledJob(null, { id: "sj-4" }, ctx()),
-    ).rejects.toThrow(/STAGE and AWS_ACCOUNT_ID/);
+    await expect(runScheduledJob(null, { id: "sj-4" }, ctx())).rejects.toThrow(
+      /STAGE and AWS_ACCOUNT_ID/,
+    );
   });
 });
