@@ -4,6 +4,7 @@ import { setSpaceAgentAvailability } from "./setSpaceAgentAvailability.mutation.
 import { space } from "./space.query.js";
 import { spaces } from "./spaces.query.js";
 import { startCustomerOnboarding } from "./startCustomerOnboarding.mutation.js";
+import { updateSpace } from "./updateSpace.mutation.js";
 
 export const spaceQueries = {
   customerOnboardingSpace,
@@ -15,6 +16,7 @@ export const spaceMutations = {
   createSpace,
   setSpaceAgentAvailability,
   startCustomerOnboarding,
+  updateSpace,
 };
 
 export {

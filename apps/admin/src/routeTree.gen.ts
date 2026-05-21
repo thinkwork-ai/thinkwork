@@ -82,6 +82,11 @@ import { Route as AuthedTenantAutomationsWebhooksIndexRouteImport } from "./rout
 import { Route as AuthedTenantAutomationsSchedulesIndexRouteImport } from "./routes/_authed/_tenant/automations/schedules/index";
 import { Route as AuthedTenantAutomationsRoutinesIndexRouteImport } from "./routes/_authed/_tenant/automations/routines/index";
 import { Route as AuthedTenantAutomationsCredentialsIndexRouteImport } from "./routes/_authed/_tenant/automations/credentials/index";
+import { Route as AuthedTenantSpacesSpaceIdWorkspaceRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.workspace";
+import { Route as AuthedTenantSpacesSpaceIdToolsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.tools";
+import { Route as AuthedTenantSpacesSpaceIdSettingsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.settings";
+import { Route as AuthedTenantSpacesSpaceIdMcpRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.mcp";
+import { Route as AuthedTenantSpacesSpaceIdConnectedDataRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.connected-data";
 import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from "./routes/_authed/_tenant/knowledge/knowledge-bases/$kbId";
 import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from "./routes/_authed/_tenant/evaluations/studio/new";
 import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/$testCaseId";
@@ -519,6 +524,36 @@ const AuthedTenantAutomationsCredentialsIndexRoute =
     path: "/automations/credentials/",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
+const AuthedTenantSpacesSpaceIdWorkspaceRoute =
+  AuthedTenantSpacesSpaceIdWorkspaceRouteImport.update({
+    id: "/spaces/$spaceId_/workspace",
+    path: "/spaces/$spaceId/workspace",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
+const AuthedTenantSpacesSpaceIdToolsRoute =
+  AuthedTenantSpacesSpaceIdToolsRouteImport.update({
+    id: "/spaces/$spaceId_/tools",
+    path: "/spaces/$spaceId/tools",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
+const AuthedTenantSpacesSpaceIdSettingsRoute =
+  AuthedTenantSpacesSpaceIdSettingsRouteImport.update({
+    id: "/spaces/$spaceId_/settings",
+    path: "/spaces/$spaceId/settings",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
+const AuthedTenantSpacesSpaceIdMcpRoute =
+  AuthedTenantSpacesSpaceIdMcpRouteImport.update({
+    id: "/spaces/$spaceId_/mcp",
+    path: "/spaces/$spaceId/mcp",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
+const AuthedTenantSpacesSpaceIdConnectedDataRoute =
+  AuthedTenantSpacesSpaceIdConnectedDataRouteImport.update({
+    id: "/spaces/$spaceId_/connected-data",
+    path: "/spaces/$spaceId/connected-data",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
 const AuthedTenantKnowledgeKnowledgeBasesKbIdRoute =
   AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport.update({
     id: "/$kbId",
@@ -743,6 +778,11 @@ export interface FileRoutesByFullPath {
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
+  "/spaces/$spaceId/connected-data": typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
+  "/spaces/$spaceId/mcp": typeof AuthedTenantSpacesSpaceIdMcpRoute;
+  "/spaces/$spaceId/settings": typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  "/spaces/$spaceId/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
+  "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/automations/schedules/": typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -835,6 +875,11 @@ export interface FileRoutesByTo {
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
+  "/spaces/$spaceId/connected-data": typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
+  "/spaces/$spaceId/mcp": typeof AuthedTenantSpacesSpaceIdMcpRoute;
+  "/spaces/$spaceId/settings": typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  "/spaces/$spaceId/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
+  "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/automations/routines": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/automations/schedules": typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -934,6 +979,11 @@ export interface FileRoutesById {
   "/_authed/_tenant/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/_authed/_tenant/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
   "/_authed/_tenant/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
+  "/_authed/_tenant/spaces/$spaceId_/connected-data": typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
+  "/_authed/_tenant/spaces/$spaceId_/mcp": typeof AuthedTenantSpacesSpaceIdMcpRoute;
+  "/_authed/_tenant/spaces/$spaceId_/settings": typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  "/_authed/_tenant/spaces/$spaceId_/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
+  "/_authed/_tenant/spaces/$spaceId_/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/_authed/_tenant/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/_authed/_tenant/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/_authed/_tenant/automations/schedules/": typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -1032,6 +1082,11 @@ export interface FileRouteTypes {
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
     | "/knowledge/knowledge-bases/$kbId"
+    | "/spaces/$spaceId/connected-data"
+    | "/spaces/$spaceId/mcp"
+    | "/spaces/$spaceId/settings"
+    | "/spaces/$spaceId/tools"
+    | "/spaces/$spaceId/workspace"
     | "/automations/credentials/"
     | "/automations/routines/"
     | "/automations/schedules/"
@@ -1124,6 +1179,11 @@ export interface FileRouteTypes {
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
     | "/knowledge/knowledge-bases/$kbId"
+    | "/spaces/$spaceId/connected-data"
+    | "/spaces/$spaceId/mcp"
+    | "/spaces/$spaceId/settings"
+    | "/spaces/$spaceId/tools"
+    | "/spaces/$spaceId/workspace"
     | "/automations/credentials"
     | "/automations/routines"
     | "/automations/schedules"
@@ -1222,6 +1282,11 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/evaluations/studio/$testCaseId"
     | "/_authed/_tenant/evaluations/studio/new"
     | "/_authed/_tenant/knowledge/knowledge-bases/$kbId"
+    | "/_authed/_tenant/spaces/$spaceId_/connected-data"
+    | "/_authed/_tenant/spaces/$spaceId_/mcp"
+    | "/_authed/_tenant/spaces/$spaceId_/settings"
+    | "/_authed/_tenant/spaces/$spaceId_/tools"
+    | "/_authed/_tenant/spaces/$spaceId_/workspace"
     | "/_authed/_tenant/automations/credentials/"
     | "/_authed/_tenant/automations/routines/"
     | "/_authed/_tenant/automations/schedules/"
@@ -1759,6 +1824,41 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantAutomationsCredentialsIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
+    "/_authed/_tenant/spaces/$spaceId_/workspace": {
+      id: "/_authed/_tenant/spaces/$spaceId_/workspace";
+      path: "/spaces/$spaceId/workspace";
+      fullPath: "/spaces/$spaceId/workspace";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdWorkspaceRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/spaces/$spaceId_/tools": {
+      id: "/_authed/_tenant/spaces/$spaceId_/tools";
+      path: "/spaces/$spaceId/tools";
+      fullPath: "/spaces/$spaceId/tools";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdToolsRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/spaces/$spaceId_/settings": {
+      id: "/_authed/_tenant/spaces/$spaceId_/settings";
+      path: "/spaces/$spaceId/settings";
+      fullPath: "/spaces/$spaceId/settings";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdSettingsRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/spaces/$spaceId_/mcp": {
+      id: "/_authed/_tenant/spaces/$spaceId_/mcp";
+      path: "/spaces/$spaceId/mcp";
+      fullPath: "/spaces/$spaceId/mcp";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdMcpRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/spaces/$spaceId_/connected-data": {
+      id: "/_authed/_tenant/spaces/$spaceId_/connected-data";
+      path: "/spaces/$spaceId/connected-data";
+      fullPath: "/spaces/$spaceId/connected-data";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdConnectedDataRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
     "/_authed/_tenant/knowledge/knowledge-bases/$kbId": {
       id: "/_authed/_tenant/knowledge/knowledge-bases/$kbId";
       path: "/$kbId";
@@ -2095,6 +2195,11 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAutomationsWebhooksWebhookIdRoute: typeof AuthedTenantAutomationsWebhooksWebhookIdRoute;
   AuthedTenantEvaluationsStudioTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute;
+  AuthedTenantSpacesSpaceIdConnectedDataRoute: typeof AuthedTenantSpacesSpaceIdConnectedDataRoute;
+  AuthedTenantSpacesSpaceIdMcpRoute: typeof AuthedTenantSpacesSpaceIdMcpRoute;
+  AuthedTenantSpacesSpaceIdSettingsRoute: typeof AuthedTenantSpacesSpaceIdSettingsRoute;
+  AuthedTenantSpacesSpaceIdToolsRoute: typeof AuthedTenantSpacesSpaceIdToolsRoute;
+  AuthedTenantSpacesSpaceIdWorkspaceRoute: typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   AuthedTenantAutomationsCredentialsIndexRoute: typeof AuthedTenantAutomationsCredentialsIndexRoute;
   AuthedTenantAutomationsRoutinesIndexRoute: typeof AuthedTenantAutomationsRoutinesIndexRoute;
   AuthedTenantAutomationsSchedulesIndexRoute: typeof AuthedTenantAutomationsSchedulesIndexRoute;
@@ -2178,6 +2283,14 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantEvaluationsStudioTestCaseIdRoute:
     AuthedTenantEvaluationsStudioTestCaseIdRoute,
   AuthedTenantEvaluationsStudioNewRoute: AuthedTenantEvaluationsStudioNewRoute,
+  AuthedTenantSpacesSpaceIdConnectedDataRoute:
+    AuthedTenantSpacesSpaceIdConnectedDataRoute,
+  AuthedTenantSpacesSpaceIdMcpRoute: AuthedTenantSpacesSpaceIdMcpRoute,
+  AuthedTenantSpacesSpaceIdSettingsRoute:
+    AuthedTenantSpacesSpaceIdSettingsRoute,
+  AuthedTenantSpacesSpaceIdToolsRoute: AuthedTenantSpacesSpaceIdToolsRoute,
+  AuthedTenantSpacesSpaceIdWorkspaceRoute:
+    AuthedTenantSpacesSpaceIdWorkspaceRoute,
   AuthedTenantAutomationsCredentialsIndexRoute:
     AuthedTenantAutomationsCredentialsIndexRoute,
   AuthedTenantAutomationsRoutinesIndexRoute:

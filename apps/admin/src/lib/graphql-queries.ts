@@ -228,6 +228,28 @@ export const CreateSpaceMutation = graphql(`
   }
 `);
 
+export const UpdateSpaceMutation = graphql(`
+  mutation UpdateSpace($input: UpdateSpaceInput!) {
+    updateSpace(input: $input) {
+      id
+      tenantId
+      slug
+      name
+      description
+      status
+      kind
+      accessMode
+      contextConfig
+      connectedDataConfig
+      toolPolicy
+      mcpPolicy
+      agentAvailabilityPolicy
+      triggerConfig
+      updatedAt
+    }
+  }
+`);
+
 export const SetSpaceAgentAvailabilityMutation = graphql(`
   mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {
     setSpaceAgentAvailability(input: $input) {

@@ -2168,6 +2168,7 @@ export type Mutation = {
   updateRoutine: Routine;
   updateRoutineDefinition: RoutineDefinition;
   updateScheduledJob: ScheduledJob;
+  updateSpace: Space;
   updateTeam: Team;
   updateTenant: Tenant;
   updateTenantCredential: TenantCredential;
@@ -3114,6 +3115,11 @@ export type MutationUpdateRoutineDefinitionArgs = {
 export type MutationUpdateScheduledJobArgs = {
   id: Scalars['ID']['input'];
   input: UpdateScheduledJobInput;
+};
+
+
+export type MutationUpdateSpaceArgs = {
+  input: UpdateSpaceInput;
 };
 
 
@@ -6204,6 +6210,14 @@ export type UpdateScheduledJobInput = {
   scheduleExpression?: InputMaybe<Scalars['String']['input']>;
   scheduleType?: InputMaybe<Scalars['String']['input']>;
   timezone?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateSpaceInput = {
+  accessMode?: InputMaybe<SpaceAccessMode>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  spaceId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 export type UpdateTeamInput = {
