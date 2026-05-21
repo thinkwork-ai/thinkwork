@@ -159,41 +159,11 @@ export const SpacesListQuery = graphql(`
     spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {
       id
       tenantId
-      slug
       name
       description
       status
-      kind
       accessMode
-      contextConfig
-      connectedDataConfig
-      toolPolicy
-      mcpPolicy
-      agentAvailabilityPolicy
-      triggerConfig
       updatedAt
-      agentAssignments {
-        id
-        localRole
-        autoSubscribe
-        status
-        agent {
-          id
-          name
-          slug
-          avatarUrl
-        }
-      }
-      mcpServers {
-        id
-        enabled
-        mcpServer {
-          id
-          name
-          slug
-          status
-        }
-      }
     }
   }
 `);
@@ -203,27 +173,11 @@ export const CreateSpaceMutation = graphql(`
     createSpace(input: $input) {
       id
       tenantId
-      slug
       name
       description
       status
-      kind
       accessMode
-      contextConfig
-      connectedDataConfig
-      toolPolicy
-      mcpPolicy
-      agentAvailabilityPolicy
-      triggerConfig
       updatedAt
-      agentAssignments {
-        id
-        status
-      }
-      mcpServers {
-        id
-        enabled
-      }
     }
   }
 `);
@@ -233,19 +187,9 @@ export const UpdateSpaceMutation = graphql(`
     updateSpace(input: $input) {
       id
       tenantId
-      slug
       name
       description
-      status
-      kind
       accessMode
-      contextConfig
-      connectedDataConfig
-      toolPolicy
-      mcpPolicy
-      agentAvailabilityPolicy
-      triggerConfig
-      updatedAt
     }
   }
 `);
@@ -269,57 +213,9 @@ export const SpaceAdminDetailQuery = graphql(`
     space(id: $id) {
       id
       tenantId
-      slug
       name
       description
-      prompt
-      status
-      kind
       accessMode
-      contextConfig
-      connectedDataConfig
-      toolPolicy
-      mcpPolicy
-      agentAvailabilityPolicy
-      triggerConfig
-      renderDiagnostics
-      config
-      createdAt
-      updatedAt
-      agentAssignments {
-        id
-        agentId
-        localRole
-        localInstructions
-        autoSubscribe
-        allowedCapabilities
-        allowedTools
-        status
-        agent {
-          id
-          name
-          slug
-          avatarUrl
-          status
-        }
-      }
-      mcpServers {
-        id
-        mcpServerId
-        enabled
-        config
-        mcpServer {
-          id
-          name
-          slug
-          transport
-          authType
-          oauthProvider
-          tools
-          enabled
-          status
-        }
-      }
     }
   }
 `);
