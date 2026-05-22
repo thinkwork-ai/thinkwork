@@ -6,7 +6,9 @@ import { ThemeProvider, TooltipProvider } from "@thinkwork/ui";
 import { AuthProvider } from "@/context/AuthContext";
 import { PageHeaderProvider } from "@/context/PageHeaderContext";
 import { TenantProvider } from "@/context/TenantContext";
+import { configureTokenStorage } from "@/lib/auth";
 import { graphqlClient } from "@/lib/graphql-client";
+import { LocalStorageTokenStorage } from "@/lib/token-storage/local-storage";
 import { router } from "./router";
 import "./index.css";
 
@@ -16,11 +18,14 @@ declare module "@tanstack/react-router" {
   }
 }
 
+const tokenStorage = new LocalStorageTokenStorage();
+configureTokenStorage(tokenStorage);
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <UrqlProvider value={graphqlClient}>
-        <AuthProvider>
+        <AuthProvider tokenStorage={tokenStorage}>
           <TenantProvider>
             <PageHeaderProvider>
               <TooltipProvider>
