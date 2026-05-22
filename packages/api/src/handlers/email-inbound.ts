@@ -2,13 +2,13 @@
  * Email Inbound Lambda — Security Gateway (PRD-14)
  *
  * Invoked directly by SES receipt rule (not API Gateway).
- * Flow: SES event → parse recipient → look up agent → security checks →
- *       parse email from S3 → enqueue wakeup request.
+ * Flow: SES event → parse recipient → validate reply/cold-contact gates →
+ *       append to a thread or enqueue the compatible legacy wakeup.
  *
  * Security model:
- *   Ring 1: Allowlist — only pre-approved senders pass
- *   Ring 2: Reply Token — HMAC-signed tokens for agent-initiated conversations
- *   Ring 3: Rate Limit — per-agent/tenant hourly limits
+ *   Ring 1: Reply Token — HMAC-signed tokens for agent-initiated conversations
+ *   Ring 2: Cold-contact gate — enabled Space + tenant user + private membership
+ *   Ring 3: Legacy allowlist/rate limit — preserved for per-agent addresses
  *   Unauthorized → silent drop (no bounce = no info leakage)
  */
 
@@ -16,14 +16,24 @@ import type { SESEvent } from "aws-lambda";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-	agents,
-	agentCapabilities,
-	agentWakeupRequests,
-	emailReplyTokens,
+  agents,
+  agentCapabilities,
+  agentWakeupRequests,
+  emailReplyTokens,
+  messages,
+  spaceMembers,
+  spaces,
+  tenants,
+  threads,
+  users,
 } from "@thinkwork/database-pg/schema";
 import { verifyReplyToken, hashToken } from "../lib/email-tokens.js";
+import { createColdContactThread } from "../lib/email/cold-contact-trigger.js";
+import { parseSpaceAddress } from "../lib/email/space-address.js";
+import { enqueueComputerThreadTurn } from "../lib/computers/thread-cutover.js";
 
-const WORKSPACE_BUCKET = process.env.EMAIL_INBOUND_BUCKET || process.env.WORKSPACE_BUCKET || "";
+const WORKSPACE_BUCKET =
+  process.env.EMAIL_INBOUND_BUCKET || process.env.WORKSPACE_BUCKET || "";
 
 const db = getDb();
 
@@ -32,292 +42,660 @@ const db = getDb();
 // ---------------------------------------------------------------------------
 
 export async function handler(event: SESEvent): Promise<void> {
-	for (const record of event.Records) {
-		try {
-			await processRecord(record);
-		} catch (err) {
-			console.error("[email-inbound] Error processing record:", err);
-		}
-	}
+  for (const record of event.Records) {
+    try {
+      await processRecord(record);
+    } catch (err) {
+      console.error("[email-inbound] Error processing record:", err);
+    }
+  }
 }
 
-async function processRecord(
-	record: SESEvent["Records"][0],
-): Promise<void> {
-	const sesNotification = record.ses;
-	const mail = sesNotification.mail;
-	const sesMessageId = mail.messageId;
+async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
+  const sesNotification = record.ses;
+  const mail = sesNotification.mail;
+  const sesMessageId = mail.messageId;
 
-	// 1. Extract recipient slug
-	const recipients = sesNotification.receipt.recipients;
-	if (!recipients || recipients.length === 0) {
-		console.log("[email-inbound] No recipients, dropping");
-		return;
-	}
+  const recipient = parseAgentsRecipient(sesNotification.receipt.recipients);
+  if (!recipient) return;
 
-	const recipientEmail = recipients[0].toLowerCase();
-	const slugMatch = recipientEmail.match(/^([^@]+)@agents\.thinkwork\.ai$/);
-	if (!slugMatch) {
-		console.log(`[email-inbound] Non-agents.thinkwork.ai recipient: ${recipientEmail}, dropping`);
-		return;
-	}
+  const senderEmail = extractEmailAddress(mail.source || "");
+  if (!senderEmail) {
+    console.log("[email-inbound] No sender, dropping");
+    return;
+  }
 
-	const localPart = slugMatch[1];
+  const parsedEmail = await fetchEmailBody(mail, sesMessageId);
+  const replyTokenHeader = getHeader(mail, "x-thinkwork-reply-token");
+  const inReplyTo = parsedEmail.inReplyTo || getHeader(mail, "in-reply-to");
+  const spaceAddress = parseSpaceAddress(recipient.localPart);
 
-	// 2. Look up agent by slug first, then fall back to vanity address
-	let [agent] = await db
-		.select({
-			id: agents.id,
-			tenant_id: agents.tenant_id,
-			name: agents.name,
-			slug: agents.slug,
-		})
-		.from(agents)
-		.where(eq(agents.slug, localPart));
+  let inReplyToRoute: Awaited<ReturnType<typeof consumeTokenByInReplyTo>>;
+  try {
+    inReplyToRoute = await consumeTokenByInReplyTo(inReplyTo, senderEmail);
+  } catch (err) {
+    if (err instanceof InvalidReplyTokenError) return;
+    throw err;
+  }
+  let headerRoute: Awaited<ReturnType<typeof verifyAndConsumeToken>> = null;
+  if (spaceAddress && !inReplyToRoute && replyTokenHeader) {
+    headerRoute = await verifyAndConsumeToken(
+      replyTokenHeader,
+      undefined,
+      senderEmail,
+    );
+    if (!headerRoute) {
+      console.log(
+        `[email-inbound] reply_rejected:invalid_header_token sender=${senderEmail}`,
+      );
+      return;
+    }
+  }
+  const replyRoute = inReplyToRoute || headerRoute;
+  if (replyRoute) {
+    if (
+      replyRoute.contextType === "thread" &&
+      (await appendReplyToThread({
+        threadId: replyRoute.contextId,
+        senderEmail,
+        sesMessageId,
+        subject: parsedEmail.subject,
+        textBody: parsedEmail.textBody,
+        originalMessageId: parsedEmail.originalMessageId,
+      }))
+    ) {
+      return;
+    }
 
-	// If not found by slug, try vanity address lookup
-	if (!agent) {
-		const [vanityMatch] = await db
-			.select({ agent_id: agentCapabilities.agent_id })
-			.from(agentCapabilities)
-			.where(
-				and(
-					eq(agentCapabilities.capability, "email_channel"),
-					sql`${agentCapabilities.config}->>'vanityAddress' = ${localPart}`,
-				),
-			);
-		if (vanityMatch) {
-			[agent] = await db
-				.select({
-					id: agents.id,
-					tenant_id: agents.tenant_id,
-					name: agents.name,
-					slug: agents.slug,
-				})
-				.from(agents)
-				.where(eq(agents.id, vanityMatch.agent_id));
-		}
-	}
+    await enqueueReplyWakeup({
+      agentId: replyRoute.agentId,
+      senderEmail,
+      sesMessageId,
+      subject: parsedEmail.subject,
+      textBody: parsedEmail.textBody,
+      s3Key: parsedEmail.s3Key,
+      originalMessageId: parsedEmail.originalMessageId,
+      replyTokenContextId: replyRoute.contextId,
+      replyTokenContextType: replyRoute.contextType,
+      isAllowlisted: false,
+    });
+    return;
+  }
 
-	if (!agent) {
-		console.log(`[email-inbound] No agent found for local-part: ${localPart}, silent drop`);
-		return;
-	}
+  if (spaceAddress) {
+    await processColdContact({
+      ...spaceAddress,
+      senderEmail,
+      sesMessageId,
+      subject: parsedEmail.subject,
+      textBody: parsedEmail.textBody,
+      originalMessageId: parsedEmail.originalMessageId,
+    });
+    return;
+  }
 
-	// 3. Look up email capability
-	const [emailCap] = await db
-		.select()
-		.from(agentCapabilities)
-		.where(
-			and(
-				eq(agentCapabilities.agent_id, agent.id),
-				eq(agentCapabilities.capability, "email_channel"),
-			),
-		);
-
-	if (!emailCap || !emailCap.enabled) {
-		console.log(`[email-inbound] Email channel disabled for agent ${agent.id}, silent drop`);
-		return;
-	}
-
-	const config = (emailCap.config as Record<string, unknown>) || {};
-	const allowedSenders = (config.allowedSenders as string[]) || [];
-
-	// 4. Extract sender
-	const senderEmail = (mail.source || "").toLowerCase();
-	if (!senderEmail) {
-		console.log("[email-inbound] No sender, dropping");
-		return;
-	}
-
-	// 5. SECURITY CHECK 1: Allowlist
-	const isAllowlisted = checkAllowlist(senderEmail, allowedSenders);
-
-	// 6. SECURITY CHECK 2: Reply Token (if not allowlisted)
-	let replyTokenContextId: string | null = null;
-	let replyTokenContextType: string | null = null;
-
-	if (!isAllowlisted) {
-		// Check for reply token in common headers
-		const headers = mail.headers || [];
-		const replyTokenHeader = headers.find(
-			(h: { name: string; value: string }) => h.name.toLowerCase() === "x-thinkwork-reply-token",
-		);
-
-		if (replyTokenHeader?.value) {
-			const tokenResult = await verifyAndConsumeToken(
-				replyTokenHeader.value,
-				agent.id,
-			);
-			if (tokenResult) {
-				replyTokenContextId = tokenResult.contextId;
-				replyTokenContextType = tokenResult.contextType;
-			} else {
-				console.log(
-					`[email-inbound] Invalid reply token from ${senderEmail} to ${localPart}, silent drop`,
-				);
-				return;
-			}
-		} else {
-			console.log(
-				`[email-inbound] Unauthorized sender ${senderEmail} to ${localPart}, silent drop`,
-			);
-			return;
-		}
-	}
-
-	// 7. RATE LIMIT: Count recent email_received wakeups for this agent
-	const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-	const [rateCount] = await db
-		.select({ count: sql<number>`count(*)::int` })
-		.from(agentWakeupRequests)
-		.where(
-			and(
-				eq(agentWakeupRequests.agent_id, agent.id),
-				eq(agentWakeupRequests.source, "email_received"),
-				gte(agentWakeupRequests.created_at, oneHourAgo),
-			),
-		);
-
-	const agentRateLimit = (config.rateLimitPerHour as number) || 50;
-	if ((rateCount?.count || 0) >= agentRateLimit) {
-		console.log(
-			`[email-inbound] Rate limit hit for agent ${agent.id}: ${rateCount?.count}/${agentRateLimit}/hour`,
-		);
-		return;
-	}
-
-	// Per-tenant rate limit (200/hour)
-	const [tenantRateCount] = await db
-		.select({ count: sql<number>`count(*)::int` })
-		.from(agentWakeupRequests)
-		.where(
-			and(
-				eq(agentWakeupRequests.tenant_id, agent.tenant_id),
-				eq(agentWakeupRequests.source, "email_received"),
-				gte(agentWakeupRequests.created_at, oneHourAgo),
-			),
-		);
-
-	if ((tenantRateCount?.count || 0) >= 200) {
-		console.log(
-			`[email-inbound] Tenant rate limit hit for tenant ${agent.tenant_id}: ${tenantRateCount?.count}/200/hour`,
-		);
-		return;
-	}
-
-	// 8. PARSE: Fetch raw email from S3 and parse
-	const s3Key = `email/inbound/${sesMessageId}`;
-	let subject = "";
-	let textBody = "";
-	let originalMessageId = "";
-
-	try {
-		const { S3Client, GetObjectCommand } = await import(
-			"@aws-sdk/client-s3"
-		);
-		const s3 = new S3Client({});
-		const obj = await s3.send(
-			new GetObjectCommand({
-				Bucket: WORKSPACE_BUCKET,
-				Key: s3Key,
-			}),
-		);
-		const rawEmail = await obj.Body?.transformToString();
-
-		if (rawEmail) {
-			const { simpleParser } = await import("mailparser");
-			const parsed = await simpleParser(rawEmail);
-			subject = parsed.subject || "";
-			textBody = parsed.text || "";
-			originalMessageId = parsed.messageId || "";
-		}
-	} catch (parseErr) {
-		console.error("[email-inbound] Failed to parse email from S3:", parseErr);
-		// Fall back to SES headers for subject and Message-ID
-		const subjectHeader = mail.headers?.find(
-			(h: { name: string; value: string }) => h.name.toLowerCase() === "subject",
-		);
-		subject = subjectHeader?.value || "(no subject)";
-		const messageIdHeader = mail.headers?.find(
-			(h: { name: string; value: string }) => h.name.toLowerCase() === "message-id",
-		);
-		originalMessageId = messageIdHeader?.value || "";
-	}
-
-	// Truncate body to prevent prompt stuffing (max 10k chars)
-	if (textBody.length > 10000) {
-		textBody = textBody.slice(0, 10000) + "\n\n[... truncated — email body exceeds 10,000 characters]";
-	}
-
-	// 9. ENQUEUE: Insert wakeup request
-	const idempotencyKey = `email:${sesMessageId}`;
-
-	try {
-		await db.insert(agentWakeupRequests).values({
-			tenant_id: agent.tenant_id,
-			agent_id: agent.id,
-			source: "email_received",
-			trigger_detail: `email:${sesMessageId}`,
-			reason: `Email from ${senderEmail}: ${subject}`,
-			idempotency_key: idempotencyKey,
-			payload: {
-				from: senderEmail,
-				subject,
-				body: textBody,
-				s3Key,
-				sesMessageId,
-				originalMessageId,
-				replyTokenContextId,
-				replyTokenContextType,
-				isFromAllowlist: isAllowlisted,
-			},
-			status: "queued",
-		});
-
-		console.log(
-			`[email-inbound] Enqueued wakeup for agent=${agent.id} from=${senderEmail} subject="${subject}"`,
-		);
-	} catch (insertErr: unknown) {
-		// Handle idempotency constraint violation gracefully
-		if (
-			insertErr instanceof Error &&
-			insertErr.message.includes("idempotency")
-		) {
-			console.log(
-				`[email-inbound] Duplicate email ${sesMessageId}, skipping`,
-			);
-			return;
-		}
-		throw insertErr;
-	}
+  await processLegacyAgentInbound({
+    localPart: recipient.localPart,
+    senderEmail,
+    replyTokenHeader,
+    sesMessageId,
+    subject: parsedEmail.subject,
+    textBody: parsedEmail.textBody,
+    s3Key: parsedEmail.s3Key,
+    originalMessageId: parsedEmail.originalMessageId,
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
+function parseAgentsRecipient(recipients: string[] | undefined) {
+  if (!recipients || recipients.length === 0) {
+    console.log("[email-inbound] No recipients, dropping");
+    return null;
+  }
+
+  const recipientEmail = recipients[0].toLowerCase();
+  const slugMatch = recipientEmail.match(/^([^@]+)@agents\.thinkwork\.ai$/);
+  if (!slugMatch) {
+    console.log(
+      `[email-inbound] Non-agents.thinkwork.ai recipient: ${recipientEmail}, dropping`,
+    );
+    return null;
+  }
+
+  return { recipientEmail, localPart: slugMatch[1] };
+}
+
+function getHeader(
+  mail: SESEvent["Records"][0]["ses"]["mail"],
+  name: string,
+): string {
+  return (
+    mail.headers?.find(
+      (h: { name: string; value: string }) =>
+        h.name.toLowerCase() === name.toLowerCase(),
+    )?.value || ""
+  );
+}
+
+function extractEmailAddress(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  const angleMatch = trimmed.match(/<([^>]+)>/);
+  return (angleMatch?.[1] || trimmed).trim().toLowerCase();
+}
+
+async function fetchEmailBody(
+  mail: SESEvent["Records"][0]["ses"]["mail"],
+  sesMessageId: string,
+) {
+  const s3Key = `email/inbound/${sesMessageId}`;
+  let subject = "";
+  let textBody = "";
+  let originalMessageId = "";
+  let inReplyTo = "";
+
+  try {
+    const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const s3 = new S3Client({});
+    const obj = await s3.send(
+      new GetObjectCommand({
+        Bucket: WORKSPACE_BUCKET,
+        Key: s3Key,
+      }),
+    );
+    const rawEmail = await obj.Body?.transformToString();
+
+    if (rawEmail) {
+      const { simpleParser } = await import("mailparser");
+      const parsed = await simpleParser(rawEmail);
+      subject = parsed.subject || "";
+      textBody = parsed.text || "";
+      originalMessageId = parsed.messageId || "";
+      inReplyTo = typeof parsed.inReplyTo === "string" ? parsed.inReplyTo : "";
+    }
+  } catch (parseErr) {
+    console.error("[email-inbound] Failed to parse email from S3:", parseErr);
+    subject = getHeader(mail, "subject") || "(no subject)";
+    originalMessageId = getHeader(mail, "message-id");
+    inReplyTo = getHeader(mail, "in-reply-to");
+  }
+
+  if (textBody.length > 10000) {
+    textBody =
+      textBody.slice(0, 10000) +
+      "\n\n[... truncated — email body exceeds 10,000 characters]";
+  }
+
+  return { s3Key, subject, textBody, originalMessageId, inReplyTo };
+}
+
+async function processLegacyAgentInbound(input: {
+  localPart: string;
+  senderEmail: string;
+  replyTokenHeader: string;
+  sesMessageId: string;
+  subject: string;
+  textBody: string;
+  s3Key: string;
+  originalMessageId: string;
+}) {
+  const agent = await resolveAgentForLocalPart(input.localPart);
+  if (!agent) {
+    console.log(
+      `[email-inbound] No agent found for local-part: ${input.localPart}, silent drop`,
+    );
+    return;
+  }
+
+  const emailCap = await resolveEmailCapability(agent.id);
+  if (!emailCap || !emailCap.enabled) {
+    console.log(
+      `[email-inbound] Email channel disabled for agent ${agent.id}, silent drop`,
+    );
+    return;
+  }
+
+  const config = (emailCap.config as Record<string, unknown>) || {};
+  const allowedSenders = (config.allowedSenders as string[]) || [];
+  const isAllowlisted = checkAllowlist(input.senderEmail, allowedSenders);
+  let replyTokenContextId: string | null = null;
+  let replyTokenContextType: string | null = null;
+
+  if (!isAllowlisted) {
+    if (input.replyTokenHeader) {
+      const tokenResult = await verifyAndConsumeToken(
+        input.replyTokenHeader,
+        agent.id,
+        input.senderEmail,
+      );
+      if (tokenResult) {
+        replyTokenContextId = tokenResult.contextId;
+        replyTokenContextType = tokenResult.contextType;
+      } else {
+        console.log(
+          `[email-inbound] Invalid reply token from ${input.senderEmail} to ${input.localPart}, silent drop`,
+        );
+        return;
+      }
+    } else {
+      console.log(
+        `[email-inbound] Unauthorized sender ${input.senderEmail} to ${input.localPart}, silent drop`,
+      );
+      return;
+    }
+  }
+
+  if (!(await checkWakeupRateLimit(agent.id, agent.tenant_id, config))) return;
+
+  await insertWakeupRequest({
+    tenantId: agent.tenant_id,
+    agentId: agent.id,
+    senderEmail: input.senderEmail,
+    sesMessageId: input.sesMessageId,
+    subject: input.subject,
+    textBody: input.textBody,
+    s3Key: input.s3Key,
+    originalMessageId: input.originalMessageId,
+    replyTokenContextId,
+    replyTokenContextType,
+    isAllowlisted,
+  });
+}
+
+async function processColdContact(input: {
+  tenantSlug: string;
+  spaceSlug: string;
+  senderEmail: string;
+  sesMessageId: string;
+  subject: string;
+  textBody: string;
+  originalMessageId: string;
+}) {
+  const [space] = await db
+    .select({
+      tenantId: tenants.id,
+      spaceId: spaces.id,
+      accessMode: spaces.access_mode,
+      status: spaces.status,
+      emailTriggersEnabled: spaces.email_triggers_enabled,
+    })
+    .from(tenants)
+    .innerJoin(
+      spaces,
+      and(eq(spaces.tenant_id, tenants.id), eq(spaces.slug, input.spaceSlug)),
+    )
+    .where(eq(tenants.slug, input.tenantSlug))
+    .limit(1);
+
+  if (!space || space.status === "archived") {
+    logColdContactReject("space_not_found", input);
+    return;
+  }
+  if (!space.emailTriggersEnabled) {
+    logColdContactReject("triggers_disabled", input);
+    return;
+  }
+
+  const [sender] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.tenant_id, space.tenantId),
+        sql`lower(${users.email}) = ${input.senderEmail}`,
+      ),
+    )
+    .limit(1);
+  if (!sender) {
+    logColdContactReject("sender_not_registered", input);
+    return;
+  }
+
+  if (space.accessMode === "private") {
+    const [member] = await db
+      .select({ id: spaceMembers.id })
+      .from(spaceMembers)
+      .where(
+        and(
+          eq(spaceMembers.tenant_id, space.tenantId),
+          eq(spaceMembers.space_id, space.spaceId),
+          eq(spaceMembers.user_id, sender.id),
+        ),
+      )
+      .limit(1);
+    if (!member) {
+      logColdContactReject("not_space_member", input);
+      return;
+    }
+  }
+
+  const thread = await createColdContactThread({
+    tenantId: space.tenantId,
+    spaceId: space.spaceId,
+    senderUserId: sender.id,
+    senderEmail: input.senderEmail,
+    emailSubject: input.subject,
+    emailBody: input.textBody,
+    sesMessageId: input.sesMessageId,
+    originalMessageId: input.originalMessageId,
+  });
+  console.log(
+    `[email-inbound] cold_contact_thread_created tenant=${input.tenantSlug} space=${input.spaceSlug} sender=${input.senderEmail} thread=${thread.threadId}`,
+  );
+}
+
+async function appendReplyToThread(input: {
+  threadId: string;
+  senderEmail: string;
+  sesMessageId: string;
+  subject: string;
+  textBody: string;
+  originalMessageId: string;
+}) {
+  const [thread] = await db
+    .select({
+      tenant_id: threads.tenant_id,
+      computer_id: threads.computer_id,
+      space_id: threads.space_id,
+    })
+    .from(threads)
+    .where(eq(threads.id, input.threadId))
+    .limit(1);
+
+  if (!thread) {
+    console.log(
+      `[email-inbound] reply_rejected:thread_not_found thread=${input.threadId}`,
+    );
+    return true;
+  }
+  if (!thread.computer_id) return false;
+
+  const createdAt = new Date();
+  const [message] = await db
+    .insert(messages)
+    .values({
+      tenant_id: thread.tenant_id,
+      thread_id: input.threadId,
+      role: "user",
+      content: input.textBody || "(empty email)",
+      sender_type: "user",
+      sender_id: null,
+      metadata: {
+        source: "email_reply",
+        senderEmail: input.senderEmail,
+        subject: input.subject,
+        sesMessageId: input.sesMessageId,
+        originalMessageId: input.originalMessageId || null,
+      },
+      created_at: createdAt,
+    })
+    .returning({ id: messages.id });
+
+  if (!message) throw new Error("Email reply message insert failed");
+
+  await db
+    .update(threads)
+    .set({ updated_at: createdAt })
+    .where(eq(threads.id, input.threadId));
+
+  await enqueueComputerThreadTurn({
+    tenantId: thread.tenant_id,
+    computerId: thread.computer_id,
+    threadId: input.threadId,
+    messageId: message.id,
+    source: "email_reply",
+    actorType: "external_email",
+    actorId: null,
+  });
+
+  console.log(
+    `[email-inbound] reply_thread_turn_enqueued thread=${input.threadId} sender=${input.senderEmail} subject="${input.subject}"`,
+  );
+  return true;
+}
+
+async function resolveAgentForLocalPart(localPart: string) {
+  let [agent] = await db
+    .select({
+      id: agents.id,
+      tenant_id: agents.tenant_id,
+      name: agents.name,
+      slug: agents.slug,
+    })
+    .from(agents)
+    .where(eq(agents.slug, localPart));
+
+  if (!agent) {
+    const [vanityMatch] = await db
+      .select({ agent_id: agentCapabilities.agent_id })
+      .from(agentCapabilities)
+      .where(
+        and(
+          eq(agentCapabilities.capability, "email_channel"),
+          sql`${agentCapabilities.config}->>'vanityAddress' = ${localPart}`,
+        ),
+      );
+    if (vanityMatch) {
+      [agent] = await db
+        .select({
+          id: agents.id,
+          tenant_id: agents.tenant_id,
+          name: agents.name,
+          slug: agents.slug,
+        })
+        .from(agents)
+        .where(eq(agents.id, vanityMatch.agent_id));
+    }
+  }
+
+  return agent ?? null;
+}
+
+async function resolveAgentById(agentId: string) {
+  const [agent] = await db
+    .select({
+      id: agents.id,
+      tenant_id: agents.tenant_id,
+      name: agents.name,
+      slug: agents.slug,
+    })
+    .from(agents)
+    .where(eq(agents.id, agentId));
+  return agent ?? null;
+}
+
+async function resolveEmailCapability(agentId: string) {
+  const [emailCap] = await db
+    .select()
+    .from(agentCapabilities)
+    .where(
+      and(
+        eq(agentCapabilities.agent_id, agentId),
+        eq(agentCapabilities.capability, "email_channel"),
+      ),
+    );
+  return emailCap ?? null;
+}
+
+async function enqueueReplyWakeup(input: {
+  agentId: string;
+  senderEmail: string;
+  sesMessageId: string;
+  subject: string;
+  textBody: string;
+  s3Key: string;
+  originalMessageId: string;
+  replyTokenContextId: string;
+  replyTokenContextType: string;
+  isAllowlisted: boolean;
+}) {
+  const agent = await resolveAgentById(input.agentId);
+  if (!agent) {
+    console.log(
+      `[email-inbound] reply_rejected:agent_not_found agent=${input.agentId}`,
+    );
+    return;
+  }
+  const emailCap = await resolveEmailCapability(agent.id);
+  if (!emailCap || !emailCap.enabled) {
+    console.log(
+      `[email-inbound] reply_rejected:email_disabled agent=${agent.id}`,
+    );
+    return;
+  }
+  const config = (emailCap.config as Record<string, unknown>) || {};
+  if (!(await checkWakeupRateLimit(agent.id, agent.tenant_id, config))) return;
+
+  await insertWakeupRequest({
+    tenantId: agent.tenant_id,
+    agentId: agent.id,
+    senderEmail: input.senderEmail,
+    sesMessageId: input.sesMessageId,
+    subject: input.subject,
+    textBody: input.textBody,
+    s3Key: input.s3Key,
+    originalMessageId: input.originalMessageId,
+    replyTokenContextId: input.replyTokenContextId,
+    replyTokenContextType: input.replyTokenContextType,
+    isAllowlisted: input.isAllowlisted,
+  });
+}
+
+async function checkWakeupRateLimit(
+  agentId: string,
+  tenantId: string,
+  config: Record<string, unknown>,
+) {
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const [rateCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(agentWakeupRequests)
+    .where(
+      and(
+        eq(agentWakeupRequests.agent_id, agentId),
+        eq(agentWakeupRequests.source, "email_received"),
+        gte(agentWakeupRequests.created_at, oneHourAgo),
+      ),
+    );
+
+  const agentRateLimit = (config.rateLimitPerHour as number) || 50;
+  if ((rateCount?.count || 0) >= agentRateLimit) {
+    console.log(
+      `[email-inbound] Rate limit hit for agent ${agentId}: ${rateCount?.count}/${agentRateLimit}/hour`,
+    );
+    return false;
+  }
+
+  const [tenantRateCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(agentWakeupRequests)
+    .where(
+      and(
+        eq(agentWakeupRequests.tenant_id, tenantId),
+        eq(agentWakeupRequests.source, "email_received"),
+        gte(agentWakeupRequests.created_at, oneHourAgo),
+      ),
+    );
+
+  if ((tenantRateCount?.count || 0) >= 200) {
+    console.log(
+      `[email-inbound] Tenant rate limit hit for tenant ${tenantId}: ${tenantRateCount?.count}/200/hour`,
+    );
+    return false;
+  }
+  return true;
+}
+
+async function insertWakeupRequest(input: {
+  tenantId: string;
+  agentId: string;
+  senderEmail: string;
+  sesMessageId: string;
+  subject: string;
+  textBody: string;
+  s3Key: string;
+  originalMessageId: string;
+  replyTokenContextId: string | null;
+  replyTokenContextType: string | null;
+  isAllowlisted: boolean;
+}) {
+  const idempotencyKey = `email:${input.sesMessageId}`;
+  try {
+    await db.insert(agentWakeupRequests).values({
+      tenant_id: input.tenantId,
+      agent_id: input.agentId,
+      source: "email_received",
+      trigger_detail: `email:${input.sesMessageId}`,
+      reason: `Email from ${input.senderEmail}: ${input.subject}`,
+      idempotency_key: idempotencyKey,
+      payload: {
+        from: input.senderEmail,
+        subject: input.subject,
+        body: input.textBody,
+        s3Key: input.s3Key,
+        sesMessageId: input.sesMessageId,
+        originalMessageId: input.originalMessageId,
+        replyTokenContextId: input.replyTokenContextId,
+        replyTokenContextType: input.replyTokenContextType,
+        isFromAllowlist: input.isAllowlisted,
+      },
+      status: "queued",
+    });
+
+    console.log(
+      `[email-inbound] Enqueued wakeup for agent=${input.agentId} from=${input.senderEmail} subject="${input.subject}"`,
+    );
+  } catch (insertErr: unknown) {
+    if (
+      insertErr instanceof Error &&
+      insertErr.message.includes("idempotency")
+    ) {
+      console.log(
+        `[email-inbound] Duplicate email ${input.sesMessageId}, skipping`,
+      );
+      return;
+    }
+    throw insertErr;
+  }
+}
+
+function logColdContactReject(
+  reason: string,
+  input: {
+    tenantSlug: string;
+    spaceSlug: string;
+    senderEmail: string;
+    sesMessageId: string;
+  },
+) {
+  console.log(
+    `[email-inbound] cold_contact_rejected:${reason} tenant=${input.tenantSlug} space=${input.spaceSlug} sender=${input.senderEmail} ses=${input.sesMessageId}`,
+  );
+}
+
 /**
  * Check if sender is on the allowlist (case-insensitive).
  * Supports wildcard domain matching (*@company.com).
  */
 function checkAllowlist(sender: string, allowedSenders: string[]): boolean {
-	const senderLower = sender.toLowerCase();
+  const senderLower = sender.toLowerCase();
 
-	for (const allowed of allowedSenders) {
-		const pattern = allowed.toLowerCase();
+  for (const allowed of allowedSenders) {
+    const pattern = allowed.toLowerCase();
 
-		// Exact match
-		if (senderLower === pattern) return true;
+    // Exact match
+    if (senderLower === pattern) return true;
 
-		// Wildcard domain match (*@domain.com)
-		if (pattern.startsWith("*@")) {
-			const domain = pattern.slice(2);
-			if (senderLower.endsWith(`@${domain}`)) return true;
-		}
-	}
+    // Wildcard domain match (*@domain.com)
+    if (pattern.startsWith("*@")) {
+      const domain = pattern.slice(2);
+      if (senderLower.endsWith(`@${domain}`)) return true;
+    }
+  }
 
-	return false;
+  return false;
 }
 
 /**
@@ -325,42 +703,106 @@ function checkAllowlist(sender: string, allowedSenders: string[]): boolean {
  * Returns context info if valid, null otherwise.
  */
 async function verifyAndConsumeToken(
-	tokenValue: string,
-	agentId: string,
-): Promise<{ contextId: string; contextType: string } | null> {
-	// 1. Verify HMAC signature and expiry
-	const payload = verifyReplyToken(tokenValue);
-	if (!payload) return null;
+  tokenValue: string,
+  agentId?: string,
+  senderEmail?: string,
+): Promise<{
+  agentId: string;
+  contextId: string;
+  contextType: string;
+} | null> {
+  const payload = verifyReplyToken(tokenValue);
+  if (!payload) return null;
 
-	// 2. Verify agent matches
-	if (payload.agentId !== agentId) return null;
+  if (agentId && payload.agentId !== agentId) return null;
 
-	// 3. Look up token in DB by hash
-	const tokenHash = hashToken(tokenValue);
-	const [tokenRow] = await db
-		.select()
-		.from(emailReplyTokens)
-		.where(eq(emailReplyTokens.token_hash, tokenHash));
+  const tokenHash = hashToken(tokenValue);
+  const [tokenRow] = await db
+    .select()
+    .from(emailReplyTokens)
+    .where(eq(emailReplyTokens.token_hash, tokenHash));
 
-	if (!tokenRow) return null;
+  if (!tokenRow) return null;
+  if (!isTokenRowValid(tokenRow, senderEmail)) return null;
 
-	// 4. Check use count
-	if (tokenRow.use_count >= tokenRow.max_uses) return null;
+  await consumeTokenRow(tokenRow);
 
-	// 5. Check DB-level expiry
-	if (tokenRow.expires_at < new Date()) return null;
+  return {
+    agentId: tokenRow.agent_id,
+    contextId: payload.contextId,
+    contextType: payload.contextType,
+  };
+}
 
-	// 6. Increment use count
-	await db
-		.update(emailReplyTokens)
-		.set({
-			use_count: sql`${emailReplyTokens.use_count} + 1`,
-			consumed_at: tokenRow.use_count + 1 >= tokenRow.max_uses ? new Date() : undefined,
-		})
-		.where(eq(emailReplyTokens.id, tokenRow.id));
+async function consumeTokenByInReplyTo(
+  inReplyTo: string,
+  senderEmail: string,
+): Promise<{
+  agentId: string;
+  contextId: string;
+  contextType: string;
+} | null> {
+  const messageIds = normalizeMessageIdCandidates(inReplyTo);
+  for (const messageId of messageIds) {
+    const [tokenRow] = await db
+      .select()
+      .from(emailReplyTokens)
+      .where(eq(emailReplyTokens.ses_message_id, messageId));
+    if (!tokenRow) continue;
+    if (!isTokenRowValid(tokenRow, senderEmail)) {
+      console.log(
+        `[email-inbound] reply_rejected:${replyTokenRejectReason(tokenRow, senderEmail)} sesMessageId=${messageId}`,
+      );
+      throw new InvalidReplyTokenError();
+    }
+    await consumeTokenRow(tokenRow);
+    return {
+      agentId: tokenRow.agent_id,
+      contextId: tokenRow.context_id,
+      contextType: tokenRow.context_type,
+    };
+  }
+  return null;
+}
 
-	return {
-		contextId: payload.contextId,
-		contextType: payload.contextType,
-	};
+class InvalidReplyTokenError extends Error {}
+
+function normalizeMessageIdCandidates(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const withoutAngles = trimmed.replace(/^<|>$/g, "");
+  return Array.from(new Set([trimmed, withoutAngles, `<${withoutAngles}>`]));
+}
+
+function isTokenRowValid(
+  tokenRow: typeof emailReplyTokens.$inferSelect,
+  senderEmail?: string,
+) {
+  return !replyTokenRejectReason(tokenRow, senderEmail);
+}
+
+function replyTokenRejectReason(
+  tokenRow: typeof emailReplyTokens.$inferSelect,
+  senderEmail?: string,
+) {
+  if (
+    senderEmail &&
+    tokenRow.recipient_email.toLowerCase() !== senderEmail.toLowerCase()
+  ) {
+    return "sender_mismatch";
+  }
+  if (tokenRow.use_count >= tokenRow.max_uses) return "exhausted";
+  if (tokenRow.expires_at < new Date()) return "expired";
+  return "";
+}
+
+async function consumeTokenRow(tokenRow: typeof emailReplyTokens.$inferSelect) {
+  await db
+    .update(emailReplyTokens)
+    .set({
+      use_count: sql`${emailReplyTokens.use_count} + 1`,
+      consumed_at:
+        tokenRow.use_count + 1 >= tokenRow.max_uses ? new Date() : undefined,
+    })
+    .where(eq(emailReplyTokens.id, tokenRow.id));
 }

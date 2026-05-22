@@ -1,0 +1,162 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { db, enqueueComputerThreadTurn, resetDb, selectRows, txInserts } =
+  vi.hoisted(() => {
+    const rows: unknown[][] = [];
+    const inserts: Array<{ table: unknown; values: unknown }> = [];
+    const enqueue = vi.fn();
+
+    function insertBuilder(table: unknown) {
+      return {
+        values(value: unknown) {
+          inserts.push({ table, values: value });
+          return {
+            onConflictDoNothing: vi.fn(async () => undefined),
+            returning: vi.fn(async () => {
+              if ((table as { id?: unknown }).id === "threads.id") {
+                return [{ id: "thread-email-1" }];
+              }
+              if ((table as { id?: unknown }).id === "messages.id") {
+                return [{ id: "message-email-1" }];
+              }
+              return [];
+            }),
+          };
+        },
+      };
+    }
+
+    const tx = {
+      insert: vi.fn(insertBuilder),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => [{ nextNumber: 42 }]),
+          })),
+        })),
+      })),
+    };
+
+    return {
+      db: {
+        insert: vi.fn(insertBuilder),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              limit: vi.fn(async () => rows.shift() ?? []),
+            })),
+          })),
+        })),
+        transaction: vi.fn(async (fn: (arg: typeof tx) => unknown) => fn(tx)),
+      },
+      enqueueComputerThreadTurn: enqueue,
+      resetDb: () => {
+        rows.length = 0;
+        inserts.length = 0;
+        enqueue.mockReset();
+      },
+      selectRows: rows,
+      txInserts: inserts,
+    };
+  });
+
+vi.mock("drizzle-orm", () => ({
+  and: (...conditions: unknown[]) => ({ type: "and", conditions }),
+  eq: (left: unknown, right: unknown) => ({ type: "eq", left, right }),
+  ne: (left: unknown, right: unknown) => ({ type: "ne", left, right }),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    sql: strings.join("?"),
+    values,
+  })),
+}));
+
+vi.mock("@thinkwork/database-pg", () => ({
+  getDb: () => db,
+}));
+
+vi.mock("@thinkwork/database-pg/schema", () => ({
+  agents: { id: "agents.id", name: "agents.name" },
+  computers: {
+    id: "computers.id",
+    migrated_from_agent_id: "computers.migrated_from_agent_id",
+    primary_agent_id: "computers.primary_agent_id",
+    status: "computers.status",
+    tenant_id: "computers.tenant_id",
+  },
+  messages: { id: "messages.id" },
+  spaceAgentAssignments: {
+    agent_id: "space_agent_assignments.agent_id",
+    local_role: "space_agent_assignments.local_role",
+    space_id: "space_agent_assignments.space_id",
+    status: "space_agent_assignments.status",
+    tenant_id: "space_agent_assignments.tenant_id",
+  },
+  tenants: { id: "tenants.id", issue_counter: "tenants.issue_counter" },
+  threadParticipants: {},
+  threads: { id: "threads.id" },
+}));
+
+vi.mock("../computers/thread-cutover.js", () => ({
+  enqueueComputerThreadTurn,
+}));
+
+import { createColdContactThread } from "./cold-contact-trigger.js";
+
+describe("createColdContactThread", () => {
+  beforeEach(() => resetDb());
+
+  it("creates a Space thread, opening message, participants, and thread_turn task", async () => {
+    selectRows.push(
+      [{ agentId: "agent-finance", localRole: "finance" }],
+      [{ id: "computer-shared" }],
+    );
+
+    const result = await createColdContactThread({
+      tenantId: "tenant-acme",
+      spaceId: "space-finance",
+      senderUserId: "user-eric",
+      senderEmail: "eric@acme.com",
+      emailSubject: "Finance check-in",
+      emailBody: "Can you review the close packet?",
+      sesMessageId: "ses-1",
+      originalMessageId: "<external-1@example.com>",
+    });
+
+    expect(result).toEqual({
+      computerId: "computer-shared",
+      messageId: "message-email-1",
+      threadId: "thread-email-1",
+    });
+    expect(txInserts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          table: expect.objectContaining({ id: "threads.id" }),
+          values: expect.objectContaining({
+            channel: "email",
+            computer_id: "computer-shared",
+            identifier: "EMAIL-42",
+            space_id: "space-finance",
+            user_id: "user-eric",
+          }),
+        }),
+        expect.objectContaining({
+          table: expect.objectContaining({ id: "messages.id" }),
+          values: expect.objectContaining({
+            content: "Can you review the close packet?",
+            role: "user",
+            sender_id: "user-eric",
+          }),
+        }),
+      ]),
+    );
+    expect(enqueueComputerThreadTurn).toHaveBeenCalledWith({
+      tenantId: "tenant-acme",
+      computerId: "computer-shared",
+      threadId: "thread-email-1",
+      messageId: "message-email-1",
+      source: "email_cold_contact",
+      actorType: "user",
+      actorId: "user-eric",
+    });
+  });
+});
