@@ -24,11 +24,11 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 
 ThinkWork is a three-tier deployment ladder. The runtime is identical across tiers; only who operates it differs.
 
-| Tier | What you get | Who operates it |
-| --- | --- | --- |
-| **ThinkWork** _(this repo)_ | Apache 2.0. Self-host the harness in your AWS. Full product, no operating partner. Community-supported. | You |
-| **ThinkWork for Business** | Same harness, deployed in your AWS, operated by us. Managed updates, priority support, SLA. **Managed does not mean vendor-hosted.** | Us, in your AWS |
-| **ThinkWork Enterprise** | Strategy, pilot launch, managed operations, and workflow expansion services on top of either path. | Us, with you |
+| Tier                        | What you get                                                                                                                         | Who operates it |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| **ThinkWork** _(this repo)_ | Apache 2.0. Self-host the harness in your AWS. Full product, no operating partner. Community-supported.                              | You             |
+| **ThinkWork for Business**  | Same harness, deployed in your AWS, operated by us. Managed updates, priority support, SLA. **Managed does not mean vendor-hosted.** | Us, in your AWS |
+| **ThinkWork Enterprise**    | Strategy, pilot launch, managed operations, and workflow expansion services on top of either path.                                   | Us, with you    |
 
 The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thinkwork.ai) for the operated and services tiers; the rest of this README is the open self-host path.
 
@@ -39,7 +39,7 @@ The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thi
 ## What ships in v1
 
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
-- **Two clients:** an admin/operator web app (`apps/admin`) and a mobile client (`apps/mobile`, Expo)
+- **Three clients:** an admin/operator web app (`apps/admin`), a mobile client (`apps/mobile`, Expo), and a macOS desktop shell for the end-user Spaces surface (`apps/desktop`)
 - **A real CLI** (`thinkwork-cli`) with two surfaces: **deploy-side** (`login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`, `update`) and **API-side** (`login --stage`, `logout`, `me`, `user`, `mcp`, `tools`, `eval`, `wiki`, plus a scaffolded roadmap of `thread`, `agent`, `template`, `tenant`, `member`, `team`, `kb`, `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill`, `memory`, `recipe`, `artifact`, `cost`, `budget`, `performance`, `trace`, `inbox`, `dashboard` — see [apps/cli/README.md#roadmap](./apps/cli/README.md#roadmap))
 - **Three connectors at launch:** Slack, GitHub, Google Workspace
 - **Threads with structured channels** (CHAT, AUTO, EMAIL, SLACK, GITHUB) for task intake and execution
@@ -67,16 +67,20 @@ The operator surface. A React SPA at `apps/admin`, authenticated through Cognito
 
 The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per agent. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
 
+## Desktop shell
+
+`apps/desktop` is an Electron shell around the end-user Spaces app, with system-browser Cognito OAuth, OS-backed token storage, native update UX, and signed/notarized macOS release packaging. See [`apps/desktop/README.md`](./apps/desktop/README.md) for local development, packaging, and release runbooks.
+
 ## Roadmap
 
 We ship things only after they're load-bearing in production. Everything below is scoped but intentionally not in v1. See the [full docs roadmap](https://docs.thinkwork.ai/roadmap/) for the authoritative breakdown.
 
-| Item | Status | Notes |
-| --- | --- | --- |
-| Ontology Studio | Planned | Authoring UI for entity/relation schemas — a step beyond today's memory graph view |
-| AutoResearch | Planned | Long-running research agents with structured citations; schema reserved, runtime not wired |
-| Places service | Planned | Location/venue entity service for field- and route-based workflows |
-| Web end-user client | Planned | Browser counterpart to the mobile inbox; today the admin web app is operator-only |
+| Item                | Status  | Notes                                                                                      |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| Ontology Studio     | Planned | Authoring UI for entity/relation schemas — a step beyond today's memory graph view         |
+| AutoResearch        | Planned | Long-running research agents with structured citations; schema reserved, runtime not wired |
+| Places service      | Planned | Location/venue entity service for field- and route-based workflows                         |
+| Web end-user client | Planned | Browser counterpart to the mobile inbox; today the admin web app is operator-only          |
 
 ## Quick start
 
@@ -98,7 +102,7 @@ Eight commands, one AWS account, and you own a production-grade Agent Harness �
 
 ```
 thinkwork/
-  apps/        # runnable products: admin (web), mobile (Expo), cli
+  apps/        # runnable products: admin, spaces, desktop, mobile, cli
   packages/    # shared libraries
   terraform/   # IaC modules (registry-shaped) and reference examples
   examples/    # runnable reference packs: skill-pack, eval-pack, connector-recipe
@@ -124,6 +128,7 @@ See [SECURITY.md](./SECURITY.md) for vulnerability disclosure.
 Apache 2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
 
 <!-- thinkwork-symphony:TECH-70:start -->
+
 ## Symphony checkpoint: TECH-70
 
 - Linear issue: TECH-70

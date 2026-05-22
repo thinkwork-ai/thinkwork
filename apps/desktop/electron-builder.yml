@@ -1,3 +1,6 @@
+# Stable-channel defaults. scripts/build-desktop.sh writes a generated config
+# with channel-specific productName, appId, icon, version, and protocol scheme
+# before packaging dev or canary variants.
 appId: ai.thinkwork.spaces.desktop
 productName: ThinkWork Spaces
 artifactName: ${productName}-${version}-${arch}.${ext}
