@@ -37,6 +37,10 @@ const migration0122 = readFileSync(
   join(HERE, "..", "drizzle", "0122_space_email_triggers.sql"),
   "utf-8",
 );
+const migration0123 = readFileSync(
+  join(HERE, "..", "drizzle", "0123_single_platform_agent_and_overrides.sql"),
+  "utf-8",
+);
 
 describe("Spaces schema", () => {
   it("models tenant-scoped Spaces with contextual workroom metadata", () => {
@@ -61,6 +65,11 @@ describe("Spaces schema", () => {
     expect(columns.trigger_config.notNull).toBe(false);
     expect(columns.email_triggers_enabled.notNull).toBe(true);
     expect(columns.email_triggers_enabled.default).toBe(false);
+    expect(columns.model_override.notNull).toBe(false);
+    expect(columns.guardrail_id_override.notNull).toBe(false);
+    expect(columns.budget_monthly_cents_override.notNull).toBe(false);
+    expect(columns.budget_paused_override.notNull).toBe(false);
+    expect(columns.sandbox_override.notNull).toBe(false);
     expect(columns.render_diagnostics.notNull).toBe(false);
   });
 
@@ -197,6 +206,31 @@ describe("Spaces schema", () => {
     expect(migration0122).toContain(
       "ALTER COLUMN email_triggers_enabled SET NOT NULL",
     );
+  });
+
+  it("declares manual migration drift markers for Space runtime overrides", () => {
+    for (const column of [
+      "model_override",
+      "guardrail_id_override",
+      "budget_monthly_cents_override",
+      "budget_paused_override",
+      "sandbox_override",
+    ]) {
+      expect(migration0123).toMatch(
+        new RegExp(`--\\s*creates-column:\\s*public\\.spaces\\.${column}\\b`),
+      );
+      expect(migration0123).toMatch(
+        new RegExp(`ADD COLUMN IF NOT EXISTS ${column}\\b`),
+      );
+    }
+    expect(migration0123).toMatch(
+      /--\s*creates-constraint:\s*public\.spaces\.spaces_guardrail_id_override_guardrails_id_fk\b/,
+    );
+    expect(migration0123).toContain(
+      "CONSTRAINT spaces_guardrail_id_override_guardrails_id_fk",
+    );
+    expect(migration0123).toContain("FOREIGN KEY (guardrail_id_override)");
+    expect(migration0123).toContain("REFERENCES public.guardrails(id)");
   });
 
   it("guards Space child rows against cross-tenant references", () => {

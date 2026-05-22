@@ -6,6 +6,39 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Single Platform Agent and Space Runtime Overrides
+
+Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-22-005-refactor-single-platform-agent-and-space-runtime-overrides-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: in progress
+- Active unit: U1a — Schema additions: platform-agent flag + Space runtime override columns
+- Active branch: `codex/plan-b-u1a-schema-overrides`
+- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u1a-schema-overrides`
+- Started: 2026-05-22
+- Latest merged PR: none for this run
+- Active PR: none
+- CI: local implementation in progress
+
+### Progress Log
+
+| Date       | Unit | Branch                              | PR   | Status      | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Notes                                                                                                                                                                                                                                                     |
+| ---------- | ---- | ----------------------------------- | ---- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-22 | U1a  | `codex/plan-b-u1a-schema-overrides` | none | In progress | `pnpm --filter @thinkwork/database-pg test __tests__/schema-agent-runtime.test.ts __tests__/spaces-schema.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; touched-file Prettier check; `git diff --check`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; dev apply: `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; scoped dev drift: `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; dev column/index/constraint checks confirmed `agents.is_platform_default` as NOT NULL default false, all five Space override columns nullable, `uq_agents_platform_default_per_tenant`, and `spaces_guardrail_id_override_guardrails_id_fk`. | Created U1a worktree from `origin/main`. This unit is intentionally additive: `agents.is_platform_default` plus typed nullable Space runtime override columns. `space_agent_assignments` drop remains deferred to gated U1b after consumer rewrites land. |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
+---
+
 ## Current Run: Spaces Runtime Renderer and Channels
 
 Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-22-002-feat-spaces-runtime-renderer-and-channels-plan.md`

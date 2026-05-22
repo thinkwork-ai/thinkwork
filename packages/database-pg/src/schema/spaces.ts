@@ -21,6 +21,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { agents } from "./agents.js";
 import { tenants, users } from "./core.js";
+import { guardrails } from "./guardrails.js";
 
 export const spaces = pgTable(
   "spaces",
@@ -51,6 +52,13 @@ export const spaces = pgTable(
     email_triggers_enabled: boolean("email_triggers_enabled")
       .notNull()
       .default(false),
+    model_override: text("model_override"),
+    guardrail_id_override: uuid("guardrail_id_override").references(
+      () => guardrails.id,
+    ),
+    budget_monthly_cents_override: integer("budget_monthly_cents_override"),
+    budget_paused_override: boolean("budget_paused_override"),
+    sandbox_override: boolean("sandbox_override"),
     render_diagnostics: jsonb("render_diagnostics"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
