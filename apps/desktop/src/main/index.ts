@@ -53,6 +53,8 @@ if (!app.requestSingleInstanceLock()) {
   void bootstrapDesktopApp({
     snapshotEnv: snapshotDesktopEnv,
     preloadPath: join(__dirname, "../preload/index.mjs"),
+    protocol,
+    rendererRoot: join(__dirname, "../renderer"),
   }).catch((error) => {
     console.error("[desktop] failed to bootstrap", error);
     app.quit();
