@@ -9,9 +9,11 @@ import {
   GET_SESSION_TOKENS_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
+  OAUTH_ERROR_EVENT_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SIGN_OUT_CHANNEL,
+  SIGNED_OUT_EVENT_CHANNEL,
   START_OAUTH_CHANNEL,
   SET_TOKEN_STORAGE_ITEM_CHANNEL,
   TOKENS_CHANGED_EVENT_CHANNEL,
@@ -21,8 +23,13 @@ import {
   GetUpdateStateResponseSchema,
   ConsumePendingOAuthResponseSchema,
   RemoveTokenStorageItemRequestSchema,
+  OAuthErrorEventSchema,
   ReportInstallOutcomeRequestSchema,
   SetTokenStorageItemRequestSchema,
+  SignOutResponseSchema,
+  SignedOutEventSchema,
+  StartOAuthRequestSchema,
+  StartOAuthResponseSchema,
   TokensChangedEventSchema,
   UpdateStateEventSchema,
 } from "@thinkwork/desktop-ipc";
@@ -59,11 +66,29 @@ const bridge = {
     return () =>
       ipcRenderer.removeListener(TOKENS_CHANGED_EVENT_CHANNEL, wrappedListener);
   },
-  async startOAuth() {
-    await ipcRenderer.invoke(START_OAUTH_CHANNEL);
+  async startOAuth(request) {
+    return StartOAuthResponseSchema.parse(
+      await ipcRenderer.invoke(
+        START_OAUTH_CHANNEL,
+        StartOAuthRequestSchema.parse(request),
+      ),
+    );
   },
   async signOut() {
-    await ipcRenderer.invoke(SIGN_OUT_CHANNEL);
+    return SignOutResponseSchema.parse(
+      await ipcRenderer.invoke(SIGN_OUT_CHANNEL),
+    );
+  },
+  onSignedOut(listener) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ) => {
+      listener(SignedOutEventSchema.parse(payload));
+    };
+    ipcRenderer.on(SIGNED_OUT_EVENT_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(SIGNED_OUT_EVENT_CHANNEL, wrappedListener);
   },
   async consumePendingOAuth() {
     return ConsumePendingOAuthResponseSchema.parse(
@@ -80,6 +105,17 @@ const bridge = {
     ipcRenderer.on(DEEP_LINK_EVENT_CHANNEL, wrappedListener);
     return () =>
       ipcRenderer.removeListener(DEEP_LINK_EVENT_CHANNEL, wrappedListener);
+  },
+  onOAuthError(listener) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ) => {
+      listener(OAuthErrorEventSchema.parse(payload));
+    };
+    ipcRenderer.on(OAUTH_ERROR_EVENT_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(OAUTH_ERROR_EVENT_CHANNEL, wrappedListener);
   },
   async getUpdateState() {
     return GetUpdateStateResponseSchema.parse(

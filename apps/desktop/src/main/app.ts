@@ -13,7 +13,7 @@ export interface BootstrapDesktopAppOptions {
   preloadPath: string;
   protocol: ElectronProtocolLike;
   rendererRoot: string;
-  registerIpcHandlers?: () => Promise<void>;
+  registerIpcHandlers?: (env: DesktopEnvSnapshot) => Promise<void>;
 }
 
 export async function bootstrapDesktopApp(
@@ -36,7 +36,7 @@ export async function bootstrapDesktopApp(
     csp,
   });
 
-  await options.registerIpcHandlers?.();
+  await options.registerIpcHandlers?.(env);
 
   createMainWindow({
     preloadPath: options.preloadPath,

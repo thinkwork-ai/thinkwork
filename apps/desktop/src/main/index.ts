@@ -71,8 +71,9 @@ if (!app.requestSingleInstanceLock()) {
     snapshotEnv: snapshotDesktopEnv,
     preloadPath: join(__dirname, "../preload/index.mjs"),
     protocol,
-    registerIpcHandlers: () =>
+    registerIpcHandlers: (env) =>
       registerDesktopIpcHandlers({
+        env,
         consumePendingOAuthDeepLink,
         markDeepLinkIpcReady,
       }).then(() => undefined),

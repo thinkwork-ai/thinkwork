@@ -34,11 +34,33 @@ export const ClearTokenStorageRequestSchema = EmptyRequestSchema;
 export const ClearTokenStorageResponseSchema = VoidResponseSchema;
 export const TokensChangedEventSchema = TokenStorageSnapshotSchema;
 
-export const StartOAuthRequestSchema = EmptyRequestSchema;
-export const StartOAuthResponseSchema = VoidResponseSchema;
+export const StartOAuthRequestSchema = z
+  .object({
+    next: z
+      .string()
+      .min(1)
+      .refine((value) => value.startsWith("/") && !value.startsWith("//"), {
+        message: "next must be an internal absolute path",
+      })
+      .optional(),
+  })
+  .strict()
+  .optional();
+export const StartOAuthResponseSchema = z
+  .object({
+    url: z.string().url(),
+    state: z.string().min(1),
+  })
+  .strict();
 
 export const SignOutRequestSchema = EmptyRequestSchema;
-export const SignOutResponseSchema = VoidResponseSchema;
+export const SignOutResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    revokeFailed: z.boolean(),
+  })
+  .strict();
+export const SignedOutEventSchema = SignOutResponseSchema;
 
 export const DeepLinkCallbackSchema = z
   .object({
@@ -47,10 +69,19 @@ export const DeepLinkCallbackSchema = z
   })
   .strict();
 
+export const PendingOAuthCallbackSchema = DeepLinkCallbackSchema.extend({
+  next: z.string().min(1).optional(),
+}).strict();
+
 export const ConsumePendingOAuthRequestSchema = EmptyRequestSchema;
 export const ConsumePendingOAuthResponseSchema =
-  DeepLinkCallbackSchema.nullable();
+  PendingOAuthCallbackSchema.nullable();
 export const DeepLinkEventSchema = DeepLinkCallbackSchema;
+export const OAuthErrorEventSchema = z
+  .object({
+    message: z.string().min(1),
+  })
+  .strict();
 
 export const UpdateStatusSchema = z.enum([
   "disabled",
@@ -169,7 +200,12 @@ export type SetTokenStorageItemRequest = z.infer<
 export type RemoveTokenStorageItemRequest = z.infer<
   typeof RemoveTokenStorageItemRequestSchema
 >;
+export type StartOAuthRequest = z.infer<typeof StartOAuthRequestSchema>;
+export type StartOAuthResponse = z.infer<typeof StartOAuthResponseSchema>;
+export type SignOutResponse = z.infer<typeof SignOutResponseSchema>;
 export type DeepLinkCallback = z.infer<typeof DeepLinkCallbackSchema>;
+export type PendingOAuthCallback = z.infer<typeof PendingOAuthCallbackSchema>;
+export type OAuthErrorEvent = z.infer<typeof OAuthErrorEventSchema>;
 export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
 export type UpdateArchMetadata = z.infer<typeof UpdateArchMetadataSchema>;
 export type UpdateState = z.infer<typeof UpdateStateSchema>;

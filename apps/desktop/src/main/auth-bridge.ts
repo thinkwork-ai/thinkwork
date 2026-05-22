@@ -3,9 +3,12 @@ import {
   CONSUME_PENDING_OAUTH_CHANNEL,
   DEEP_LINK_EVENT_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
+  OAUTH_ERROR_EVENT_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   SIGN_OUT_CHANNEL,
+  SIGNED_OUT_EVENT_CHANNEL,
   SET_TOKEN_STORAGE_ITEM_CHANNEL,
+  START_OAUTH_CHANNEL,
   TOKENS_CHANGED_EVENT_CHANNEL,
   assertSafeSenderFrame,
   rateLimit,
@@ -14,8 +17,13 @@ import {
   RemoveTokenStorageItemRequestSchema,
   SetTokenStorageItemRequestSchema,
   SignOutRequestSchema,
+  StartOAuthRequestSchema,
   type DeepLinkCallback,
+  type PendingOAuthCallback,
   type SenderFrameEvent,
+  type SignOutResponse,
+  type StartOAuthRequest,
+  type StartOAuthResponse,
   type TokenStorageSnapshot,
 } from "@thinkwork/desktop-ipc";
 import type { ICognitoStorage } from "./cognito-storage.js";
@@ -46,18 +54,29 @@ export interface RegisterAuthBridgeOptions {
   getWindows: () => BrowserWindowLike[];
   consumePendingOAuth: () => DeepLinkCallback | null;
   markDeepLinkReady: (dispatcher: DeepLinkDispatcher) => void;
+  oauth?: OAuthBridgeController;
   now?: () => number;
+  logger?: Pick<typeof console, "warn">;
 }
 
 export interface AuthBridgeState {
   snapshot(): TokenStorageSnapshot;
 }
 
+export interface OAuthBridgeController {
+  startOAuth(request?: StartOAuthRequest): Promise<StartOAuthResponse>;
+  completeOAuthCallback(
+    callback: DeepLinkCallback,
+  ): Promise<PendingOAuthCallback>;
+  signOut(refreshToken: string | null): Promise<SignOutResponse>;
+}
+
 export function registerAuthBridgeHandlers(
   options: RegisterAuthBridgeOptions,
 ): AuthBridgeState {
   let version = 0;
-  const pendingCallbacks: DeepLinkCallback[] = [];
+  const pendingCallbacks: PendingOAuthCallback[] = [];
+  const logger = options.logger ?? console;
 
   function snapshot(): TokenStorageSnapshot {
     return {
@@ -66,21 +85,39 @@ export function registerAuthBridgeHandlers(
     };
   }
 
+  function broadcast(channel: string, payload: unknown): void {
+    for (const window of options.getWindows()) {
+      window.webContents.send(channel, payload);
+    }
+  }
+
   function broadcastTokensChanged(): void {
-    const payload = snapshot();
-    for (const window of options.getWindows()) {
-      window.webContents.send(TOKENS_CHANGED_EVENT_CHANNEL, payload);
-    }
+    broadcast(TOKENS_CHANGED_EVENT_CHANNEL, snapshot());
   }
 
-  function acceptDeepLink(callback: DeepLinkCallback): void {
+  async function acceptDeepLink(callback: DeepLinkCallback): Promise<void> {
+    if (options.oauth) {
+      try {
+        const pending = await options.oauth.completeOAuthCallback(callback);
+        pendingCallbacks.push(pending);
+        version += 1;
+        broadcastTokensChanged();
+        broadcast(DEEP_LINK_EVENT_CHANNEL, callback);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn("[desktop:auth-bridge] OAuth callback failed", error);
+        broadcast(OAUTH_ERROR_EVENT_CHANNEL, { message });
+      }
+      return;
+    }
+
     pendingCallbacks.push(callback);
-    for (const window of options.getWindows()) {
-      window.webContents.send(DEEP_LINK_EVENT_CHANNEL, callback);
-    }
+    broadcast(DEEP_LINK_EVENT_CHANNEL, callback);
   }
 
-  options.markDeepLinkReady(acceptDeepLink);
+  options.markDeepLinkReady((callback) => {
+    void acceptDeepLink(callback);
+  });
 
   options.ipcMain.handle(GET_SESSION_TOKENS_CHANNEL, (event) => {
     assertSafeSenderFrame(event);
@@ -114,17 +151,37 @@ export function registerAuthBridgeHandlers(
     broadcastTokensChanged();
   });
 
-  options.ipcMain.handle(SIGN_OUT_CHANNEL, (event, payload) => {
+  options.ipcMain.handle(START_OAUTH_CHANNEL, async (event, payload) => {
+    assertSafeSenderFrame(event);
+    const request = StartOAuthRequestSchema.parse(payload);
+    rateLimit({
+      key: START_OAUTH_CHANNEL,
+      intervalMs: 2_000,
+      now: options.now,
+    });
+    if (!options.oauth) {
+      throw new Error("OAuth is not configured");
+    }
+    return options.oauth.startOAuth(request);
+  });
+
+  options.ipcMain.handle(SIGN_OUT_CHANNEL, async (event, payload) => {
     assertSafeSenderFrame(event);
     SignOutRequestSchema.parse(payload);
     rateLimit({
       key: SIGN_OUT_CHANNEL,
-      intervalMs: 500,
+      intervalMs: 2_000,
       now: options.now,
     });
+    const refreshToken = currentRefreshToken(options.storage.snapshot());
     options.storage.clear();
     version += 1;
     broadcastTokensChanged();
+    const result = options.oauth
+      ? await options.oauth.signOut(refreshToken)
+      : { ok: true as const, revokeFailed: false };
+    broadcast(SIGNED_OUT_EVENT_CHANNEL, result);
+    return result;
   });
 
   options.ipcMain.handle(CONSUME_PENDING_OAUTH_CHANNEL, (event, payload) => {
@@ -134,4 +191,15 @@ export function registerAuthBridgeHandlers(
   });
 
   return { snapshot };
+}
+
+function currentRefreshToken(items: Record<string, string>): string | null {
+  const lastAuthUserEntry = Object.entries(items).find(([key]) =>
+    key.endsWith(".LastAuthUser"),
+  );
+  if (!lastAuthUserEntry) return null;
+
+  const [lastAuthUserKey, username] = lastAuthUserEntry;
+  const prefix = lastAuthUserKey.slice(0, -".LastAuthUser".length);
+  return items[`${prefix}.${username}.refreshToken`] ?? null;
 }
