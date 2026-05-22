@@ -106,6 +106,16 @@ variable "admin_logout_urls" {
   ]
 }
 
+variable "desktop_callback_urls" {
+  description = "OAuth callback and logout URLs for the desktop client that reuses the ThinkworkAdmin public Cognito client."
+  type        = list(string)
+  default = [
+    "thinkwork://oauth/callback",
+    "thinkwork-dev://oauth/callback",
+    "thinkwork-canary://oauth/callback",
+  ]
+}
+
 variable "mobile_callback_urls" {
   description = "OAuth callback URLs for the mobile client. Host apps that embed the SDK register their own deep-link here. Proper per-host app client isolation is 0.3.0 work — this is the stopgap capture of the drift from the CLI-applied URIs."
   type        = list(string)
