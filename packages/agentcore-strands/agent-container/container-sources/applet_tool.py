@@ -232,8 +232,8 @@ def make_save_app_fn(
     ) -> dict[str, Any]:
         """Save or regenerate a Computer applet.
 
-        Use this after a preview when the user explicitly asks to save or an
-        active runbook phase requires durable output. Pass one or more source
+        Use this after a preview when the user explicitly asks to save. Pass
+        one or more source
         files, structured metadata, and an optional app_id. Omitting app_id
         creates a new applet; providing app_id regenerates that stable applet.
         Include a deterministic refresh() export in the TSX source whenever
