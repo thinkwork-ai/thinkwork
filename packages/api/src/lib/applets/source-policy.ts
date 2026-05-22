@@ -200,6 +200,60 @@ function rejectInlineStyleAndArbitraryTailwind(source: string) {
   }
 }
 
+// Recharts mark elements that render fills. Tooltip / axis / grid / legend
+// do not accept className fills; the agent's mistake we're guarding against
+// is `<Bar className="fill-primary" />`-style on mark elements only.
+const RECHARTS_MARK_ELEMENTS = [
+  "Bar",
+  "Line",
+  "Area",
+  "Pie",
+  "Cell",
+  "RadialBar",
+  "Scatter",
+] as const;
+
+// Semantic shadcn tokens that resolve to a single theme color (often near-
+// black in dark mode). When applied to chart marks via `fill-<token>` they
+// produce flat-color charts that ignore the uploaded theme's chart palette.
+// Chart marks must use `fill-chart-1` through `fill-chart-5` (which the
+// Tailwind v4 @theme directive in packages/ui/src/theme.css exposes via
+// `--color-chart-N: var(--chart-N)`), the `fill="var(--chart-N)"` JSX prop,
+// or the `ChartContainer` config plumbing.
+const REJECTED_FILL_TOKENS = [
+  "primary",
+  "primary-foreground",
+  "secondary",
+  "secondary-foreground",
+  "foreground",
+  "muted",
+  "muted-foreground",
+  "accent",
+  "accent-foreground",
+  "destructive",
+  "destructive-foreground",
+  "card",
+  "card-foreground",
+  "popover",
+  "popover-foreground",
+  "background",
+  "border",
+  "input",
+  "ring",
+  "sidebar",
+  "sidebar-foreground",
+  "sidebar-primary",
+  "sidebar-primary-foreground",
+  "sidebar-accent",
+  "sidebar-accent-foreground",
+  "sidebar-border",
+  "sidebar-ring",
+] as const;
+
+const REJECTED_FILL_CLASS_SET = new Set(
+  REJECTED_FILL_TOKENS.map((token) => `fill-${token}`),
+);
+
 function validateRechartsUsage(source: string, imports: ImportDeclaration[]) {
   const rechartsImports = new Set(
     imports
@@ -228,6 +282,32 @@ function validateRechartsUsage(source: string, imports: ImportDeclaration[]) {
         "APPLET_RECHARTS_OUTSIDE_CHART_CONTAINER",
         `${name} must be nested inside ChartContainer in generated applets.`,
       );
+    }
+  }
+
+  rejectNonChartFillOnRechartsMarks(source);
+}
+
+function rejectNonChartFillOnRechartsMarks(source: string) {
+  for (const element of RECHARTS_MARK_ELEMENTS) {
+    // Match an opening tag <Element ...> (optionally self-closing) and capture
+    // the contents of any literal-string className attribute. Skip elements
+    // without a className attribute entirely.
+    const tagPattern = new RegExp(
+      `<\\s*${element}\\b[^>]*?\\bclassName\\s*=\\s*["']([^"']*)["']`,
+      "g",
+    );
+    let match: RegExpExecArray | null;
+    while ((match = tagPattern.exec(source))) {
+      const classList = match[1].split(/\s+/).filter(Boolean);
+      for (const className of classList) {
+        if (REJECTED_FILL_CLASS_SET.has(className)) {
+          throw new AppletSourcePolicyError(
+            "APPLET_RECHARTS_FILL_NON_CHART_COLOR",
+            `${element} uses className="${className}" — chart marks must use the chart palette so the theme's chart colors apply. Use className="fill-chart-1" through "fill-chart-5", or pass fill="var(--chart-1)" as a JSX prop, or wire ChartContainer config. Semantic tokens like ${className} resolve to a single flat color and render dark-mode charts as solid black.`,
+          );
+        }
+      }
     }
   }
 }
