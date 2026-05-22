@@ -1,0 +1,139 @@
+import { z } from "zod";
+
+export const EmptyRequestSchema = z.undefined();
+export const VoidResponseSchema = z.undefined();
+
+export const SessionTokensSchema = z
+  .object({
+    idToken: z.string().min(1),
+    accessToken: z.string().min(1),
+    expiresAt: z.number().int().positive().optional(),
+  })
+  .strict();
+
+export const GetSessionTokensRequestSchema = EmptyRequestSchema;
+export const GetSessionTokensResponseSchema = SessionTokensSchema.nullable();
+
+export const StartOAuthRequestSchema = EmptyRequestSchema;
+export const StartOAuthResponseSchema = VoidResponseSchema;
+
+export const SignOutRequestSchema = EmptyRequestSchema;
+export const SignOutResponseSchema = VoidResponseSchema;
+
+export const DeepLinkCallbackSchema = z
+  .object({
+    code: z.string().min(1),
+    state: z.string().min(1),
+  })
+  .strict();
+
+export const ConsumePendingOAuthRequestSchema = EmptyRequestSchema;
+export const ConsumePendingOAuthResponseSchema =
+  DeepLinkCallbackSchema.nullable();
+export const DeepLinkEventSchema = DeepLinkCallbackSchema;
+
+export const UpdateStatusSchema = z.enum([
+  "disabled",
+  "checking",
+  "available",
+  "downloading",
+  "downloaded",
+  "up-to-date",
+  "error",
+]);
+
+export const UpdateArchMetadataSchema = z
+  .object({
+    hostArch: z.string().min(1),
+    appArch: z.string().min(1),
+    runningUnderArm64Translation: z.boolean(),
+  })
+  .strict();
+
+export const UpdateErrorSchema = z
+  .object({
+    message: z.string().min(1),
+    canRetry: z.boolean(),
+  })
+  .strict();
+
+export const UpdateStateSchema = z
+  .object({
+    status: UpdateStatusSchema,
+    arch: UpdateArchMetadataSchema,
+    version: z.string().min(1).nullable().optional(),
+    channel: z.string().min(1).optional(),
+    progressPercent: z.number().min(0).max(100).optional(),
+    error: UpdateErrorSchema.optional(),
+  })
+  .strict();
+
+export const GetUpdateStateRequestSchema = EmptyRequestSchema;
+export const GetUpdateStateResponseSchema = UpdateStateSchema;
+export const UpdateStateEventSchema = UpdateStateSchema;
+
+export const CheckForUpdatesRequestSchema = EmptyRequestSchema;
+export const CheckForUpdatesResponseSchema = VoidResponseSchema;
+
+export const DownloadUpdateRequestSchema = EmptyRequestSchema;
+export const DownloadUpdateResponseSchema = VoidResponseSchema;
+
+export const InstallUpdateRequestSchema = EmptyRequestSchema;
+export const InstallUpdateResponseSchema = VoidResponseSchema;
+
+export const ReportInstallOutcomeRequestSchema = z
+  .object({
+    version: z.string().min(1),
+    outcome: z.enum(["installed", "failed", "skipped"]),
+    error: z.string().min(1).optional(),
+  })
+  .strict();
+export const ReportInstallOutcomeResponseSchema = VoidResponseSchema;
+
+export const ChannelSchemas = {
+  getSessionTokens: {
+    request: GetSessionTokensRequestSchema,
+    response: GetSessionTokensResponseSchema,
+  },
+  startOAuth: {
+    request: StartOAuthRequestSchema,
+    response: StartOAuthResponseSchema,
+  },
+  signOut: {
+    request: SignOutRequestSchema,
+    response: SignOutResponseSchema,
+  },
+  consumePendingOAuth: {
+    request: ConsumePendingOAuthRequestSchema,
+    response: ConsumePendingOAuthResponseSchema,
+  },
+  getUpdateState: {
+    request: GetUpdateStateRequestSchema,
+    response: GetUpdateStateResponseSchema,
+  },
+  checkForUpdates: {
+    request: CheckForUpdatesRequestSchema,
+    response: CheckForUpdatesResponseSchema,
+  },
+  downloadUpdate: {
+    request: DownloadUpdateRequestSchema,
+    response: DownloadUpdateResponseSchema,
+  },
+  installUpdate: {
+    request: InstallUpdateRequestSchema,
+    response: InstallUpdateResponseSchema,
+  },
+  reportInstallOutcome: {
+    request: ReportInstallOutcomeRequestSchema,
+    response: ReportInstallOutcomeResponseSchema,
+  },
+} as const;
+
+export type SessionTokens = z.infer<typeof SessionTokensSchema>;
+export type DeepLinkCallback = z.infer<typeof DeepLinkCallbackSchema>;
+export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
+export type UpdateArchMetadata = z.infer<typeof UpdateArchMetadataSchema>;
+export type UpdateState = z.infer<typeof UpdateStateSchema>;
+export type ReportInstallOutcomeRequest = z.infer<
+  typeof ReportInstallOutcomeRequestSchema
+>;
