@@ -209,7 +209,7 @@ describe("admin-ops-mcp Lambda", () => {
     const names = body.result.tools.map((t: { name: string }) => t.name);
 
     // Must include the original tenant tools + the ported set from
-    // teams/agents/users/artifacts. Assert presence of a curated subset —
+    // teams/users/artifacts. Assert presence of a curated subset —
     // exact count is allowed to drift as ops are added.
     const mustHave = [
       "tenants_list",
@@ -218,12 +218,6 @@ describe("admin-ops-mcp Lambda", () => {
       "me",
       "users_get",
       "tenant_members_list",
-      "agents_list",
-      "agents_get",
-      "agents_list_all",
-      "agents_create",
-      "agents_set_skills",
-      "agents_set_capabilities",
       "teams_list",
       "teams_get",
       "teams_create",

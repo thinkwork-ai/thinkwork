@@ -14,14 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: local verification passed; preparing PR
+- Status: PR open; fixing CI
 - Active unit: U5/U7 grouped — Tenant agent GraphQL, Space runtime overrides, and admin `/agents` retirement
 - Active branch: `codex/plan-b-u5-tenant-agent-graphql`
 - Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u5-tenant-agent-graphql`
 - Started: 2026-05-22
 - Latest merged PR: [#1575](https://github.com/thinkwork-ai/thinkwork/pull/1575)
-- Active PR: none
-- CI: not opened yet; local verification passed after pulling admin UI retirement forward
+- Active PR: [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576)
+- CI: first run failed in `test` on stale admin-ops MCP expected `agents_*` tools; local focused fix passed and push pending
 
 ### Progress Log
 
@@ -37,6 +37,7 @@ Target branch: `main`
 
 - 2026-05-22 U2 local dev apply: first `--apply` run failed with `column "tenant_id" does not exist` because `agent_operation_leases` is agent-scoped but not tenant-scoped. No DB rows committed; fixed the repoint target metadata and reran successfully. S3 copy rerun safety was hardened by treating identical target objects as already folded.
 - 2026-05-22 U2 local verification: FK survey found `retry_queue.agent_id` after the initial successful apply. Added the table to the script and reran `--apply`; it repaired 2 dev rows without emitting duplicate audit events.
+- 2026-05-22 U5/U7 PR [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576): first GitHub `test` run failed in `packages/lambda/__tests__/admin-ops-mcp.test.ts` because the curated tool-list assertion still expected retired `agents_*` MCP tools. Removed those stale expectations and verified with `pnpm --filter @thinkwork/lambda test -- __tests__/admin-ops-mcp.test.ts`.
 
 ### Blockers
 
