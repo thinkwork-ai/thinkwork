@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import { createMainWindow } from "./window.js";
 import type { DesktopEnvSnapshot } from "./env.js";
+import type { DesktopMenuCommandHandlers } from "./menus.js";
 import {
   buildDesktopCsp,
   DESKTOP_APP_URL,
@@ -13,7 +14,10 @@ export interface BootstrapDesktopAppOptions {
   preloadPath: string;
   protocol: ElectronProtocolLike;
   rendererRoot: string;
-  registerIpcHandlers?: (env: DesktopEnvSnapshot) => Promise<void>;
+  registerIpcHandlers?: (
+    env: DesktopEnvSnapshot,
+  ) => Promise<DesktopMenuCommandHandlers | void>;
+  installMenus?: (handlers: DesktopMenuCommandHandlers) => void;
 }
 
 export async function bootstrapDesktopApp(
@@ -36,7 +40,10 @@ export async function bootstrapDesktopApp(
     csp,
   });
 
-  await options.registerIpcHandlers?.(env);
+  const menuHandlers = await options.registerIpcHandlers?.(env);
+  if (menuHandlers) {
+    options.installMenus?.(menuHandlers);
+  }
 
   createMainWindow({
     preloadPath: options.preloadPath,

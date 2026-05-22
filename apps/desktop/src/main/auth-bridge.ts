@@ -61,6 +61,8 @@ export interface RegisterAuthBridgeOptions {
 
 export interface AuthBridgeState {
   snapshot(): TokenStorageSnapshot;
+  signOut(): Promise<SignOutResponse>;
+  onAuthStateChanged(listener: () => void): () => void;
 }
 
 export interface OAuthBridgeController {
@@ -76,6 +78,7 @@ export function registerAuthBridgeHandlers(
 ): AuthBridgeState {
   let version = 0;
   const pendingCallbacks: PendingOAuthCallback[] = [];
+  const authStateListeners = new Set<() => void>();
   const logger = options.logger ?? console;
 
   function snapshot(): TokenStorageSnapshot {
@@ -95,13 +98,24 @@ export function registerAuthBridgeHandlers(
     broadcast(TOKENS_CHANGED_EVENT_CHANNEL, snapshot());
   }
 
+  function notifyAuthStateChanged(): void {
+    for (const listener of authStateListeners) {
+      listener();
+    }
+  }
+
+  function publishTokenStorageChange(): void {
+    version += 1;
+    broadcastTokensChanged();
+    notifyAuthStateChanged();
+  }
+
   async function acceptDeepLink(callback: DeepLinkCallback): Promise<void> {
     if (options.oauth) {
       try {
         const pending = await options.oauth.completeOAuthCallback(callback);
         pendingCallbacks.push(pending);
-        version += 1;
-        broadcastTokensChanged();
+        publishTokenStorageChange();
         broadcast(DEEP_LINK_EVENT_CHANNEL, callback);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -113,6 +127,22 @@ export function registerAuthBridgeHandlers(
 
     pendingCallbacks.push(callback);
     broadcast(DEEP_LINK_EVENT_CHANNEL, callback);
+  }
+
+  async function signOut(): Promise<SignOutResponse> {
+    rateLimit({
+      key: SIGN_OUT_CHANNEL,
+      intervalMs: 2_000,
+      now: options.now,
+    });
+    const refreshToken = currentRefreshToken(options.storage.snapshot());
+    options.storage.clear();
+    publishTokenStorageChange();
+    const result = options.oauth
+      ? await options.oauth.signOut(refreshToken)
+      : { ok: true as const, revokeFailed: false };
+    broadcast(SIGNED_OUT_EVENT_CHANNEL, result);
+    return result;
   }
 
   options.markDeepLinkReady((callback) => {
@@ -128,8 +158,7 @@ export function registerAuthBridgeHandlers(
     assertSafeSenderFrame(event);
     const request = SetTokenStorageItemRequestSchema.parse(payload);
     options.storage.setItem(request.key, request.value);
-    version += 1;
-    broadcastTokensChanged();
+    publishTokenStorageChange();
   });
 
   options.ipcMain.handle(
@@ -138,8 +167,7 @@ export function registerAuthBridgeHandlers(
       assertSafeSenderFrame(event);
       const request = RemoveTokenStorageItemRequestSchema.parse(payload);
       options.storage.removeItem(request.key);
-      version += 1;
-      broadcastTokensChanged();
+      publishTokenStorageChange();
     },
   );
 
@@ -147,8 +175,7 @@ export function registerAuthBridgeHandlers(
     assertSafeSenderFrame(event);
     ClearTokenStorageRequestSchema.parse(payload);
     options.storage.clear();
-    version += 1;
-    broadcastTokensChanged();
+    publishTokenStorageChange();
   });
 
   options.ipcMain.handle(START_OAUTH_CHANNEL, async (event, payload) => {
@@ -168,20 +195,7 @@ export function registerAuthBridgeHandlers(
   options.ipcMain.handle(SIGN_OUT_CHANNEL, async (event, payload) => {
     assertSafeSenderFrame(event);
     SignOutRequestSchema.parse(payload);
-    rateLimit({
-      key: SIGN_OUT_CHANNEL,
-      intervalMs: 2_000,
-      now: options.now,
-    });
-    const refreshToken = currentRefreshToken(options.storage.snapshot());
-    options.storage.clear();
-    version += 1;
-    broadcastTokensChanged();
-    const result = options.oauth
-      ? await options.oauth.signOut(refreshToken)
-      : { ok: true as const, revokeFailed: false };
-    broadcast(SIGNED_OUT_EVENT_CHANNEL, result);
-    return result;
+    return signOut();
   });
 
   options.ipcMain.handle(CONSUME_PENDING_OAUTH_CHANNEL, (event, payload) => {
@@ -190,7 +204,14 @@ export function registerAuthBridgeHandlers(
     return pendingCallbacks.shift() ?? options.consumePendingOAuth();
   });
 
-  return { snapshot };
+  return {
+    snapshot,
+    signOut,
+    onAuthStateChanged(listener) {
+      authStateListeners.add(listener);
+      return () => authStateListeners.delete(listener);
+    },
+  };
 }
 
 function currentRefreshToken(items: Record<string, string>): string | null {

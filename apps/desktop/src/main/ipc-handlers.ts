@@ -1,9 +1,6 @@
 import { BrowserWindow, app, ipcMain, safeStorage, shell } from "electron";
 import { SafeStorageCognitoStorage } from "./cognito-storage.js";
-import {
-  registerAuthBridgeHandlers,
-  type AuthBridgeState,
-} from "./auth-bridge.js";
+import { registerAuthBridgeHandlers } from "./auth-bridge.js";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
@@ -22,6 +19,7 @@ import {
 } from "@thinkwork/desktop-ipc";
 import type { DeepLinkDispatcher } from "./deep-link.js";
 import type { DesktopEnvSnapshot } from "./env.js";
+import type { DesktopMenuCommandHandlers } from "./menus.js";
 import { DesktopOAuthController } from "./oauth.js";
 import { createDesktopUpdatesController } from "./updates.js";
 
@@ -33,7 +31,7 @@ export interface RegisterDesktopIpcHandlersOptions {
 
 export async function registerDesktopIpcHandlers(
   options: RegisterDesktopIpcHandlersOptions,
-): Promise<AuthBridgeState> {
+): Promise<DesktopMenuCommandHandlers> {
   const storage = await SafeStorageCognitoStorage.create({
     app,
     safeStorage,
@@ -94,7 +92,7 @@ export async function registerDesktopIpcHandlers(
     oauth.dispose();
   });
 
-  return registerAuthBridgeHandlers({
+  const auth = registerAuthBridgeHandlers({
     ipcMain,
     storage,
     getWindows: () => BrowserWindow.getAllWindows(),
@@ -103,4 +101,15 @@ export async function registerDesktopIpcHandlers(
     oauth,
     logger: console,
   });
+
+  return {
+    checkForUpdates: () => updates.checkForUpdates(),
+    signOut: () => auth.signOut(),
+    isAuthenticated: () => hasAuthenticatedSession(auth.snapshot().items),
+    onAuthenticationChanged: (listener) => auth.onAuthStateChanged(listener),
+  };
+}
+
+function hasAuthenticatedSession(items: Record<string, string>): boolean {
+  return Object.keys(items).some((key) => key.endsWith(".LastAuthUser"));
 }
