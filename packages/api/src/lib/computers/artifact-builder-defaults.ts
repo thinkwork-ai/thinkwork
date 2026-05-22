@@ -38,6 +38,8 @@ const UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH = new Map<string, Set<string>>(
         "a29ce8d2efb38b5e138022d541f0b9213703c3696b5941f8da047c750156ae1f",
         // PR #1187 default before preview-first shadcn registry guidance.
         "78a41afa11db6c8c4f2df7dca3f87f6c3b49148c63675d2978715a63988e6005",
+        // PR #1548 default before on-demand shadcn lookups and runbook-bridge removal.
+        "b9a534d403d84e62617388f7bf3f76d6d218eb824da898f4412264faf523077c",
       ]),
     ],
     [

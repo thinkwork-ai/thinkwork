@@ -5,24 +5,21 @@ description: Builds reusable ThinkWork Computer apps and interactive artifacts f
 
 # Artifact Builder
 
-Use this skill when the user wants Computer to produce an interactive, reusable artifact. The expected output is a fast unsaved app preview first, not just a prose answer. Save only after the user asks to keep it or an active runbook explicitly requires durable output.
-
-This skill is a compatibility shim for the published ThinkWork runbooks. When a Runbook Execution Context is present, the runbook phase guidance is the source of truth and this skill supplies only the artifact-generation, preview, and optional `save_app` mechanics for the current phase. Do not replace the active runbook with a separate plan.
+Use this skill when the user wants Computer to produce an interactive, reusable artifact. The expected output is a fast unsaved app preview first, not just a prose answer. Save only after the user explicitly asks to keep the preview.
 
 ## Contract
 
 1. Research with the available tools and thread context.
 2. If live sources are missing or partial, keep going with the best available workspace, memory, context, web, or fixture data. Keep the visible app focused on the user's requested output; do not render provenance, source coverage, or recipe/refresh explainers unless the user explicitly asks for them.
-3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts outside an active runbook, load and follow `skills/artifact-builder/references/crm-dashboard.md` before writing TSX. Use that full workspace path, not a relative `references/...` path. During an active runbook, prefer the runbook's current phase guidance and use the reference only as fallback detail.
-4. Keep app generation and saving in this parent turn. Do not use `delegate` or `delegate_to_workspace` to write, generate, or save the app.
-5. Before writing TSX, consult the shadcn registry source for generated apps. Use the shadcn MCP tools when available: `list_components`, `search_registry`, `get_component_source`, and `get_block`. If MCP is unavailable, use the compact local registry generated from `packages/ui/registry/generated-app-components.json` or the runtime `shadcn_registry` helper. If neither source is available, stop with a structured guidance error instead of emitting TSX.
-6. Generate TSX using approved shadcn-compatible primitives from `@thinkwork/ui` plus approved domain primitives from `@thinkwork/computer-stdlib`. You must use approved shadcn primitives for their roles. Hand-rolled replacements for cards, tabs, badges, buttons, tables, selects, form controls, dialogs, sheets, separators, tooltips, scroll areas, charts, or maps are rejected.
-7. Never embed Theme CSS, `<style>` tags, or app-owned theme objects in artifact metadata or TSX. App style is tenant-controlled host configuration. Build with semantic shadcn token classes and chart variables so the host-injected style controls the rendered iframe.
-8. Export a deterministic `refresh()` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
-9. Call `preview_app` before responding. Pass at least `name`, `files`, and `metadata`. Metadata must include `threadId`, `prompt`, `agentVersion`, `modelId`, `uiRegistryVersion`, `uiRegistryDigest`, and `shadcnMcpToolCalls` when available. Use `["local_registry_fallback"]` for `shadcnMcpToolCalls` when MCP was unavailable but the local registry was consulted.
-10. Call `save_app` only after the user explicitly asks to save/keep the preview, or when an active runbook phase explicitly requires a durable saved artifact. Save metadata must preserve the preview's registry, data-provenance, prompt, source, agent, and model metadata. It must not include theme CSS.
-11. After `preview_app` returns `ok`, answer concisely with what is ready to inspect. After `save_app` returns `ok`, answer concisely with what was saved and the `/artifacts/{appId}` route.
-12. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use `lucide-react` named icon imports only when an icon materially improves scannability; otherwise use plain text, `Badge`, or approved registry components.
+3. Keep app generation and saving in this parent turn. Do not use `delegate` or `delegate_to_workspace` to write, generate, or save the app.
+4. **Look up shadcn components on demand, not up front.** Draft the TSX in your head first — the small, focused set of components a typical dashboard or report needs (usually 5-8: `Card`, `Table`/`DataTable`, `Badge`, `Button`, `Tabs`, one chart, sometimes `Tooltip` or `Dialog`). Then call `get_component_source` (or `get_block`) only for the specific components you are about to render. Do not fan out `list_components`, `search_registry`, `get_component_source`, and `get_block` in parallel across many components before writing any TSX — that pattern wastes tool calls, slows the turn dramatically, and risks deadlocking the shadcn MCP server. Treat the shadcn MCP like a precision lookup, not a bulk registry crawl. If MCP is unavailable, use the compact local registry generated from `packages/ui/registry/generated-app-components.json` or the runtime `shadcn_registry` helper. If neither source is available, stop with a structured guidance error instead of emitting TSX.
+5. Generate TSX using approved shadcn-compatible primitives from `@thinkwork/ui` plus approved domain primitives from `@thinkwork/computer-stdlib`. You must use approved shadcn primitives for their roles. Hand-rolled replacements for cards, tabs, badges, buttons, tables, selects, form controls, dialogs, sheets, separators, tooltips, scroll areas, charts, or maps are rejected.
+6. Never embed Theme CSS, `<style>` tags, or app-owned theme objects in artifact metadata or TSX. App style is tenant-controlled host configuration. Build with semantic shadcn token classes and chart variables so the host-injected style controls the rendered iframe.
+7. Export a deterministic `refresh()` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
+8. Call `preview_app` before responding. Pass at least `name`, `files`, and `metadata`. Metadata must include `threadId`, `prompt`, `agentVersion`, `modelId`, `uiRegistryVersion`, `uiRegistryDigest`, and `shadcnMcpToolCalls` when available. Use `["local_registry_fallback"]` for `shadcnMcpToolCalls` when MCP was unavailable but the local registry was consulted.
+9. Call `save_app` only after the user explicitly asks to save or keep the preview. Save metadata must preserve the preview's registry, data-provenance, prompt, source, agent, and model metadata. It must not include theme CSS.
+10. After `preview_app` returns `ok`, answer concisely with what is ready to inspect. After `save_app` returns `ok`, answer concisely with what was saved and the `/artifacts/{appId}` route.
+11. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use `lucide-react` named icon imports only when an icon materially improves scannability; otherwise use plain text, `Badge`, or approved registry components.
 
 ## Host Chrome And Runtime
 
@@ -73,18 +70,10 @@ Use only real available data, partial real data, or honest empty states. Do not 
 
 When the user asks to save, promote the preview by calling `save_app` with the same files and provenance metadata. Include the preview's `uiRegistryVersion`, `uiRegistryDigest`, and `shadcnMcpToolCalls` or `["local_registry_fallback"]` so the saved artifact records which shadcn registry source shaped the TSX.
 
+## Composing With Domain Skills
+
+Domain skills like `crm-dashboard`, `research-dashboard`, and `map-artifact` add their own layout, component, and data-shape guidance on top of this skill. When one of them is in play, follow its guidance for layout, top-level KPIs, chart choices, and data shape — and use this skill only for the artifact mechanics (component lookups, `preview_app`, `save_app`, validation, registry policy). Do not duplicate or override the domain skill's structure with a generic dashboard layout.
+
 ## Missing Data
 
 Missing data is not a reason to stop before creating the preview. Create a runnable app that handles gaps gracefully, then ask for source setup, approval, or save confirmation as a follow-up when needed.
-
-For the LastMile CRM pipeline risk prompt, build an app that covers stale activity, stage exposure, and top risks. If live LastMile CRM records are unavailable, use the canonical LastMile-shaped structure and mention limitations only when they materially affect the displayed result.
-
-## Runbook Bridge
-
-For published runbooks, treat artifact creation as the implementation detail of the active `produce` phase:
-
-- CRM Dashboard uses the `crm-dashboard` runbook and the `CrmDashboardData` shape.
-- Research Dashboard uses the `research-dashboard` runbook and should expose findings, evidence, confidence, and caveats.
-- Map Artifact uses the `map-artifact` runbook and `MapView` from `@thinkwork/computer-stdlib`.
-
-Always preserve runbook queue semantics: complete the current task, preview the artifact through `preview_app`, save through `save_app` only when the runbook phase requires persistence, and report the saved `/artifacts/{appId}` route only after persistence succeeds.
