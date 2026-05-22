@@ -1,13 +1,23 @@
 /**
- * Chat Agent Invoke Lambda
+ * Chat Agent Invoke Lambda — SETUP phase only.
  *
- * Invoked asynchronously (fire-and-forget) by the graphql-resolver after a
- * user message is inserted. This Lambda:
+ * After the direct-callback finalize refactor (plan 2026-05-22-006), this
+ * Lambda does:
  *
- * 1. Looks up the agent to determine runtime type + model
- * 2. Calls the AgentCore Invoke Lambda Function URL
- * 3. Inserts the assistant response into the messages table
- * 4. Calls the AppSync notifyNewMessage mutation to push to subscribers
+ *   1. Looks up the agent + resolves runtime config (skills, MCP, KBs,
+ *      sandbox preflight, guardrail, workspace tuple).
+ *   2. Builds the AgentCore invoke payload with finalize-callback fields
+ *      (URL + bearer secret + thread_turn_id).
+ *   3. Dispatches the AgentCore adapter Lambda in Event mode (no wait).
+ *   4. Returns in ~5 seconds end-to-end.
+ *
+ * The Strands runtime POSTs its end-of-turn result to
+ * /api/threads/{threadId}/finalize. The chat-agent-finalize Lambda runs
+ * the post-AgentCore bookkeeping (cost, guardrail-block, message insert,
+ * AppSync notify, computer-task completion, memory retain) out-of-band.
+ * This decouples Lambda lifetime from agent-turn duration, so 8h-capable
+ * AgentCore runs no longer hit the 5-min Lambda timeout / auto-retry
+ * cascade.
  */
 
 import { eq, and, ne, sql } from "drizzle-orm";
@@ -18,19 +28,9 @@ import {
   threads,
   users,
   threadTurns,
-  costEvents,
-  guardrailBlocks,
-  computerEvents,
-  computerTasks,
 } from "@thinkwork/database-pg/schema";
 import { randomBytes } from "crypto";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
-import {
-  extractUsage,
-  recordCostEvents,
-  checkBudgetAndPause,
-  notifyCostRecorded,
-} from "../lib/cost-recording.js";
 import {
   applySandboxPayloadFields,
   checkSandboxPreflight,
@@ -45,7 +45,17 @@ import {
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
 import { renderTurnContext } from "../lib/turn-context-renderer.js";
-// PRD-22: Signal protocol removed — agents use tools for thread state transitions
+// Post-AgentCore helpers — previously inline in this file; lifted into
+// the shared chat-finalize lib so chat-agent-finalize (the new HTTP
+// handler) and chat-agent-invoke (this file, for pre-dispatch error
+// paths only) share a single source of truth.
+import {
+  GENERIC_AGENT_ERROR_MESSAGE,
+  insertAssistantMessage,
+  markComputerTaskFailedFromFinalize,
+  notifyNewMessage,
+  notifyThreadTurnUpdate,
+} from "../lib/chat-finalize/notify.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -81,34 +91,10 @@ const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 const db = getDb();
 const lambdaClient = new LambdaClient({});
 
-const GENERIC_AGENT_ERROR_MESSAGE =
-  "I'm sorry, I encountered an error processing your request. Please try again.";
-
-/** Extract plain text from AgentCore response (handles ChatCompletion, raw text, etc.) */
-function extractResponseText(data: unknown): string {
-  if (typeof data === "string") return data;
-  if (!data || typeof data !== "object") return String(data);
-
-  const obj = data as Record<string, any>;
-
-  // OpenAI ChatCompletion format: { choices: [{ message: { content: "..." } }] }
-  if (Array.isArray(obj.choices) && obj.choices[0]?.message?.content) {
-    return obj.choices[0].message.content;
-  }
-
-  // Direct content fields
-  if (typeof obj.content === "string") return obj.content;
-  if (typeof obj.response === "string") return obj.response;
-  if (typeof obj.output === "string") return obj.output;
-  if (typeof obj.text === "string") return obj.text;
-
-  // Nested response object
-  if (obj.response && typeof obj.response === "object") {
-    return extractResponseText(obj.response);
-  }
-
-  return JSON.stringify(data);
-}
+// GENERIC_AGENT_ERROR_MESSAGE + extractResponseText now live in
+// packages/api/src/lib/chat-finalize/notify.ts. The import at the top of
+// this file pulls GENERIC_AGENT_ERROR_MESSAGE for the pre-dispatch error
+// paths; extractResponseText is only used by the finalize handler.
 
 interface InvokeAttachment {
   attachmentId: string;
@@ -732,6 +718,19 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               size_bytes: att.sizeBytes,
             }))
           : undefined,
+      // Finalize-callback opt-in (plan 2026-05-22-006 U3). The Strands
+      // runtime POSTs its end-of-turn result to this URL with the bearer
+      // secret, so chat-agent-invoke can dispatch Event-mode without
+      // waiting for the AgentCore Lambda response. eval-runner /
+      // agentcore-direct do NOT supply these fields and keep their
+      // synchronous response path.
+      finalize_callback_url:
+        THINKWORK_API_URL && turnId
+          ? `${THINKWORK_API_URL.replace(/\/$/, "")}/api/threads/${threadId}/finalize`
+          : undefined,
+      finalize_callback_secret:
+        THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
+      thread_turn_id: turnId || undefined,
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {
@@ -759,502 +758,53 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       isBase64Encoded: false,
     });
 
-    const invokeRes = await lambdaClient.send(
-      new InvokeCommand({
-        FunctionName: agentcoreFunctionName,
-        InvocationType: "RequestResponse",
-        Payload: new TextEncoder().encode(lambdaEventPayload),
-      }),
-    );
-
-    const rawPayload = invokeRes.Payload
-      ? new TextDecoder().decode(invokeRes.Payload)
-      : "{}";
-
-    if (invokeRes.FunctionError) {
-      const errMsgText = `AgentCore Lambda ${invokeRes.FunctionError}: ${rawPayload.slice(0, 500)}`;
-      console.error(`[chat-agent-invoke] ${errMsgText}`);
-      await markComputerTaskFailedFromChatInvokeError({
-        tenantId,
-        computerId: event.computerId,
-        taskId: event.computerTaskId,
-        threadId,
-        messageId: event.messageId,
-        message: errMsgText,
-        code: "agentcore_lambda_function_error",
-      });
-      if (turnId) {
-        try {
-          await db
-            .update(threadTurns)
-            .set({
-              status: "failed",
-              finished_at: new Date(),
-              error: errMsgText,
-            })
-            .where(eq(threadTurns.id, turnId));
-          await notifyThreadTurnUpdate({
-            runId: turnId,
-            tenantId,
-            threadId,
-            agentId,
-            status: "failed",
-            triggerName: "Chat",
-          });
-        } catch {}
-      }
-      const errMsg = await insertAssistantMessage(
-        threadId,
-        tenantId,
-        agentId,
-        GENERIC_AGENT_ERROR_MESSAGE,
+    // Event-mode dispatch (plan 2026-05-22-006 U3). The Strands runtime
+    // owns the post-AgentCore bookkeeping via the finalize-callback POST
+    // wired in U2; chat-agent-invoke just sets up the payload, fires
+    // AgentCore Event-mode, and returns. The SDK call resolves once AWS
+    // has queued the event (~tens of ms) — there is no per-turn wait
+    // anymore, so the 5-min Lambda timeout / auto-retry cascade is gone.
+    //
+    // Any synchronous failure here (throttling, IAM, function-not-found)
+    // throws from `lambdaClient.send` — the outer catch handles it. AWS
+    // does NOT route Event-mode FunctionErrors back; those land in the
+    // DLQ wired in handlers.tf.
+    try {
+      await lambdaClient.send(
+        new InvokeCommand({
+          FunctionName: agentcoreFunctionName,
+          InvocationType: "Event",
+          Payload: new TextEncoder().encode(lambdaEventPayload),
+        }),
       );
-      if (errMsg) {
-        await notifyNewMessage({
-          messageId: errMsg.id,
-          threadId,
-          tenantId,
-          role: "assistant",
-          content: GENERIC_AGENT_ERROR_MESSAGE,
-          senderType: "agent",
-          senderId: agentId,
-        });
-      }
-      return;
-    }
-
-    // Lambda Web Adapter returns {statusCode, body, headers}
-    const adapterResp = JSON.parse(rawPayload) as Record<string, unknown>;
-    const adapterStatus = (adapterResp.statusCode as number) || 200;
-    const adapterBodyStr = (adapterResp.body as string) || rawPayload;
-
-    if (adapterStatus < 200 || adapterStatus >= 300) {
-      const errMsgText = `AgentCore ${adapterStatus}: ${adapterBodyStr.slice(0, 500)}`;
-      console.error(`[chat-agent-invoke] ${errMsgText}`);
-      await markComputerTaskFailedFromChatInvokeError({
-        tenantId,
-        computerId: event.computerId,
-        taskId: event.computerTaskId,
-        threadId,
-        messageId: event.messageId,
-        message: errMsgText,
-        code: "agentcore_adapter_error",
-      });
-      if (turnId) {
-        try {
-          await db
-            .update(threadTurns)
-            .set({
-              status: "failed",
-              finished_at: new Date(),
-              error: errMsgText,
-            })
-            .where(eq(threadTurns.id, turnId));
-          await notifyThreadTurnUpdate({
-            runId: turnId,
-            tenantId,
-            threadId,
-            agentId,
-            status: "failed",
-            triggerName: "Chat",
-          });
-        } catch {}
-      }
-      const errMsg = await insertAssistantMessage(
-        threadId,
-        tenantId,
-        agentId,
-        GENERIC_AGENT_ERROR_MESSAGE,
-      );
-      if (errMsg) {
-        await notifyNewMessage({
-          messageId: errMsg.id,
-          threadId,
-          tenantId,
-          role: "assistant",
-          content: GENERIC_AGENT_ERROR_MESSAGE,
-          senderType: "agent",
-          senderId: agentId,
-        });
-      }
-      return;
-    }
-
-    const durationMs = Date.now() - invokeStart;
-    const invokeResult = JSON.parse(adapterBodyStr) as Record<string, any>;
-    console.log(
-      `[chat-agent-invoke] AgentCore response received in ${durationMs}ms`,
-    );
-
-    // Extract response text from AgentCore result
-    const responseData = invokeResult.response || invokeResult;
-    let responseText = extractResponseText(responseData);
-
-    // Check for guardrail block
-    const guardrailBlock =
-      invokeResult.guardrail_block ||
-      (invokeResult.response as Record<string, unknown>)?.guardrail_block;
-
-    if (guardrailBlock?.blocked) {
       console.log(
-        `[chat-agent-invoke] Guardrail block detected: type=${guardrailBlock.type} action=${guardrailBlock.action}`,
+        `[chat-agent-invoke] AgentCore Event-mode dispatch accepted in ${Date.now() - invokeStart}ms`,
       );
-      responseText = "This request was blocked by a content policy.";
-
-      if (runtimeConfig.guardrailId) {
-        try {
-          await db.insert(guardrailBlocks).values({
-            tenant_id: tenantId,
-            agent_id: agentId,
-            guardrail_id: runtimeConfig.guardrailId,
-            thread_id: threadId || undefined,
-            block_type: guardrailBlock.type || "INPUT",
-            action: guardrailBlock.action || "BLOCKED",
-            blocked_topics: guardrailBlock.topics || [],
-            content_filters: guardrailBlock.filters || {},
-            raw_response: guardrailBlock.raw || {},
-            user_message: userMessage.slice(0, 1000),
-          });
-          console.log(`[chat-agent-invoke] Guardrail block recorded to DB`);
-        } catch (blockErr) {
-          console.error(
-            `[chat-agent-invoke] Failed to record guardrail block:`,
-            blockErr,
-          );
-        }
-      }
-    }
-
-    console.log(
-      `[chat-agent-invoke] Extracted response (${responseText.length} chars): ${responseText.slice(0, 100)}`,
-    );
-
-    // Record cost events (PRD-02)
-    const usage = extractUsage(invokeResult);
-    const bedrockRequestIds = (responseData as any)?.bedrock_request_ids as
-      | string[]
-      | undefined;
-
-    try {
-      const costResult = await recordCostEvents({
-        tenantId,
-        agentId,
-        requestId: turnId ?? `chat-${threadId}-${Date.now()}`,
-        model: usage.model || agentModel || null,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cachedReadTokens: usage.cachedReadTokens,
-        durationMs,
-        inputText: userMessage,
-        outputText: responseText,
-        threadId,
-        traceId,
-        bedrockRequestIds,
-      });
-      await checkBudgetAndPause(tenantId, agentId);
-
-      if (costResult.totalUsd > 0) {
-        await notifyCostRecorded({
-          tenantId,
-          agentId,
-          agentName: agent.name,
-          eventType: "invocation",
-          amountUsd: costResult.totalUsd,
-          model: usage.model || agentModel || null,
-        });
-      }
-    } catch (costErr) {
-      console.error(`[chat-agent-invoke] Cost recording failed:`, costErr);
-    }
-
-    // PRD-41B Phase 7 item 2: drain Hindsight retain/reflect token usage
-    // captured by the agent container's hindsight_usage_capture monkey-patch
-    // and emit one cost_events row per call. Each entry is shaped:
-    //   { phase: 'retain'|'reflect', model: string, input_tokens, output_tokens }
-    const hindsightUsage = ((responseData as any)?.hindsight_usage ||
-      invokeResult.hindsight_usage ||
-      []) as Array<{
-      phase: "retain" | "reflect";
-      model: string;
-      input_tokens: number;
-      output_tokens: number;
-    }>;
-    if (hindsightUsage.length > 0) {
-      try {
-        const { recordHindsightCost } =
-          await import("../lib/hindsight-cost.js");
-        for (const entry of hindsightUsage) {
-          await recordHindsightCost({
-            tenantId,
-            agentId,
-            bankId: agentSlug,
-            phase: entry.phase,
-            model: entry.model,
-            inputTokens: entry.input_tokens,
-            outputTokens: entry.output_tokens,
-            threadId,
-            traceId,
-            source: "agent_invoke",
-          });
-        }
-        console.log(
-          `[chat-agent-invoke] Recorded ${hindsightUsage.length} Hindsight cost event(s)`,
-        );
-      } catch (hsCostErr) {
-        console.error(
-          `[chat-agent-invoke] Hindsight cost recording failed:`,
-          hsCostErr,
-        );
-      }
-    }
-
-    // 2b2. Record tool costs (Nova Act, browser sessions, etc.)
-    const toolCosts = (invokeResult.tool_costs ||
-      (invokeResult.response as Record<string, unknown>)?.tool_costs ||
-      []) as Array<Record<string, unknown>>;
-    if (toolCosts.length > 0) {
-      try {
-        for (const tc of toolCosts) {
-          await db
-            .insert(costEvents)
-            .values({
-              tenant_id: tenantId,
-              agent_id: agentId,
-              thread_id: threadId || undefined,
-              request_id: crypto.randomUUID(),
-              event_type: String(tc.event_type || "tool_cost"),
-              amount_usd: String(tc.amount_usd || "0.000000"),
-              provider: String(tc.provider || "unknown"),
-              duration_ms: (tc.duration_ms as number) || null,
-              trace_id: traceId || undefined,
-              metadata: tc.metadata || {},
-            })
-            .onConflictDoNothing();
-        }
-        console.log(
-          `[chat-agent-invoke] Recorded ${toolCosts.length} tool cost(s)`,
-        );
-      } catch (err) {
-        console.error(`[chat-agent-invoke] Tool cost recording failed:`, err);
-      }
-    }
-
-    // 2c. Update the thread_turn as succeeded
-    if (turnId) {
-      try {
-        const turnUsage = {
-          duration_ms: durationMs,
-          input_tokens: usage.inputTokens,
-          output_tokens: usage.outputTokens,
-          cached_read_tokens: usage.cachedReadTokens,
-          tools_called: (invokeResult.tools_called ||
-            (invokeResult.response as Record<string, unknown>)?.tools_called ||
-            []) as string[],
-          tool_costs: toolCosts.map((tc) => ({
-            event_type: tc.event_type,
-            amount_usd: tc.amount_usd,
-            provider: tc.provider,
-          })),
-          tool_invocations: (invokeResult.tool_invocations ||
-            (invokeResult.response as Record<string, unknown>)
-              ?.tool_invocations ||
-            []) as any[],
-        };
-
-        await db
-          .update(threadTurns)
-          .set({
-            status: "succeeded",
-            finished_at: new Date(),
-            result_json: { response: responseText.slice(0, 10000) },
-            usage_json: turnUsage,
-          })
-          .where(eq(threadTurns.id, turnId));
-
-        await notifyThreadTurnUpdate({
-          runId: turnId,
-          tenantId,
-          threadId,
-          agentId,
-          status: "succeeded",
-          triggerName: "Chat",
-        });
-      } catch (turnErr) {
-        console.error(
-          `[chat-agent-invoke] Failed to update thread_turn:`,
-          turnErr,
-        );
-      }
-    }
-
-    if (!responseText || responseText === "{}") {
-      console.warn(`[chat-agent-invoke] Empty response from AgentCore`);
       return;
-    }
-
-    // PRD-22: Use response directly (signal protocol removed)
-    const displayResponse = responseText;
-
-    // Extract tool invocations for GenUI rendering
-    const toolInvocations = (invokeResult.tool_invocations ||
-      (invokeResult.response as Record<string, unknown>)?.tool_invocations ||
-      []) as Array<Record<string, unknown>>;
-    const computerThreadResponse = (invokeResult.computer_thread_response ||
-      (invokeResult.response as Record<string, unknown>)
-        ?.computer_thread_response) as
-      | { responseMessageId?: string; threadId?: string; messageId?: string }
-      | undefined;
-
-    // 3. Insert assistant message into DB (with GenUI tool results if present)
-    const assistantMsg = computerThreadResponse?.responseMessageId
-      ? { id: computerThreadResponse.responseMessageId }
-      : await insertAssistantMessage(
-          threadId,
-          tenantId,
-          agentId,
-          displayResponse,
-          toolInvocations,
-        );
-
-    // 3a. Link orphan artifacts created during this turn to the thread + message.
-    // The Strands runtime doesn't forward thread_id to MCP tools, so artifacts
-    // created via create_artifact lack thread_id and source_message_id.
-    // Scope: only artifacts by this agent, in this tenant, created during this turn window.
-    if (assistantMsg && turnId && !computerThreadResponse?.responseMessageId) {
-      try {
-        const { artifacts } = await import("@thinkwork/database-pg/schema");
-        const { isNull, gte } = await import("drizzle-orm");
-        const turnStart = new Date(Date.now() - (durationMs + 5000)); // turn duration + buffer
-        await db
-          .update(artifacts)
-          .set({
-            thread_id: threadId,
-            source_message_id: assistantMsg.id,
-          })
-          .where(
-            and(
-              eq(artifacts.agent_id, agentId),
-              eq(artifacts.tenant_id, tenantId),
-              isNull(artifacts.source_message_id),
-              gte(artifacts.created_at, turnStart),
-            ),
-          );
-      } catch (err) {
-        console.error(
-          `[chat-agent-invoke] Failed to link orphan artifacts:`,
-          err,
-        );
-      }
-    }
-
-    // 3b. Bump thread timestamps — last_turn_completed_at drives inbox sorting
-    if (!computerThreadResponse?.responseMessageId) {
-      try {
-        const { threads } = await import("@thinkwork/database-pg/schema");
-        await db
-          .update(threads)
-          .set({
-            updated_at: new Date(),
-            last_turn_completed_at: new Date(),
-            last_response_preview:
-              displayResponse
-                .replace(/[#*_`]/g, "")
-                .trim()
-                .slice(0, 200) || null,
-          })
-          .where(eq(threads.id, threadId));
-      } catch (err) {
-        console.error(
-          `[chat-agent-invoke] Failed to update thread updated_at:`,
-          err,
-        );
-      }
-    }
-
-    // PRD-22: Signal processing removed — agents use thread-management tools directly
-
-    // 4. Notify subscribers via AppSync
-    if (assistantMsg && !computerThreadResponse?.responseMessageId) {
-      await notifyNewMessage({
-        messageId: assistantMsg.id,
-        threadId,
+    } catch (dispatchErr) {
+      const errMsgText = `AgentCore dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}`;
+      console.error(`[chat-agent-invoke] ${errMsgText}`);
+      await markComputerTaskFailedFromFinalize({
         tenantId,
-        role: "assistant",
-        content: responseText,
-        senderType: "agent",
-        senderId: agentId,
+        computerId: event.computerId,
+        taskId: event.computerTaskId,
+        threadId,
+        messageId: event.messageId,
+        message: errMsgText,
+        code: "agentcore_dispatch_failed",
       });
-    }
-
-    // 4b. Notify thread update so the home screen list re-sorts
-    if (!computerThreadResponse?.responseMessageId) {
-      try {
-        const { notifyThreadUpdate } = await import("../graphql/notify.js");
-        notifyThreadUpdate({
-          threadId,
-          tenantId,
-          status: "in_progress",
-          title: "",
-        }).catch(() => {});
-      } catch {}
-    }
-
-    // 4c. Send push notification to user devices
-    if (!computerThreadResponse?.responseMessageId) {
-      try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
-        await sendTurnCompletedPush({
-          threadId,
-          tenantId,
-          agentId,
-          title: agent.name || "Agent",
-          body: responseText.replace(/[#*_`]/g, "").trim(),
-        });
-      } catch (err) {
-        console.error("[chat-agent-invoke] Push notification failed:", err);
+      if (turnId) {
+        try {
+          await db
+            .update(threadTurns)
+            .set({
+              status: "failed",
+              finished_at: new Date(),
+              error: errMsgText,
+            })
+            .where(eq(threadTurns.id, turnId));
+        } catch {}
       }
-    }
-  } catch (err) {
-    console.error(`[chat-agent-invoke] Error:`, err);
-    await markComputerTaskFailedFromChatInvokeError({
-      tenantId,
-      computerId: event.computerId,
-      taskId: event.computerTaskId,
-      threadId,
-      messageId: event.messageId,
-      message: err instanceof Error ? err.message : String(err),
-      code: "chat_agent_invoke_failed",
-    });
-    // Best-effort: mark turn as failed
-    if (turnId) {
-      try {
-        await db
-          .update(threadTurns)
-          .set({
-            status: "failed",
-            finished_at: new Date(),
-            error: err instanceof Error ? err.message : String(err),
-          })
-          .where(eq(threadTurns.id, turnId));
-
-        await notifyThreadTurnUpdate({
-          runId: turnId,
-          tenantId,
-          threadId,
-          agentId,
-          status: "failed",
-          triggerName: "Chat",
-        });
-      } catch (turnErr) {
-        console.error(
-          `[chat-agent-invoke] Failed to update thread_turn on error:`,
-          turnErr,
-        );
-      }
-    }
-    // Best-effort: insert an error message and notify
-    try {
       const errMsg = await insertAssistantMessage(
         threadId,
         tenantId,
@@ -1272,263 +822,14 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           senderId: agentId,
         });
       }
-    } catch (innerErr) {
-      console.error(
-        `[chat-agent-invoke] Failed to insert error message:`,
-        innerErr,
-      );
+      return;
     }
-  }
-  return undefined;
-}
-
-async function markComputerTaskFailedFromChatInvokeError(input: {
-  tenantId: string;
-  computerId?: string;
-  taskId?: string;
-  threadId: string;
-  messageId?: string;
-  message: string;
-  code: string;
-}) {
-  if (!input.computerId || !input.taskId) return;
-  const error = {
-    message: input.message,
-    code: input.code,
-  };
-  try {
-    const [task] = await db
-      .update(computerTasks)
-      .set({
-        status: "failed",
-        error,
-        completed_at: new Date(),
-        updated_at: new Date(),
-      })
-      .where(
-        and(
-          eq(computerTasks.tenant_id, input.tenantId),
-          eq(computerTasks.computer_id, input.computerId),
-          eq(computerTasks.id, input.taskId),
-        ),
-      )
-      .returning({ id: computerTasks.id });
-
-    if (!task) return;
-
-    await db.insert(computerEvents).values({
-      tenant_id: input.tenantId,
-      computer_id: input.computerId,
-      task_id: input.taskId,
-      event_type: "task_failed",
-      level: "error",
-      payload: {
-        threadId: input.threadId,
-        messageId: input.messageId ?? null,
-        error,
-        source: "chat-agent-invoke",
-      },
-    });
-  } catch (taskErr) {
-    console.error(
-      `[chat-agent-invoke] Failed to mark computer task failed:`,
-      taskErr,
-    );
-  }
-}
-
-async function insertAssistantMessage(
-  threadId: string,
-  tenantId: string,
-  agentId: string,
-  content: string,
-  toolInvocations?: Array<Record<string, unknown>>,
-): Promise<{ id: string } | null> {
-  try {
-    // Extract GenUI data from tool invocations (typed JSON with _type field)
-    // MCP tools return _type JSON directly (Places, CRM, Tasks)
-    const genuiResults = (toolInvocations || [])
-      .filter((inv) => inv.genui_data)
-      .flatMap((inv) =>
-        Array.isArray(inv.genui_data) ? inv.genui_data : [inv.genui_data],
-      )
-      .filter((item) => item && item._type);
-
-    const [row] = await db
-      .insert(messages)
-      .values({
-        thread_id: threadId,
-        tenant_id: tenantId,
-        role: "assistant",
-        content,
-        sender_type: "agent",
-        sender_id: agentId,
-        tool_results: genuiResults.length > 0 ? genuiResults : undefined,
-        metadata:
-          toolInvocations && toolInvocations.length > 0
-            ? {
-                tool_invocations: toolInvocations.map(
-                  ({ genui_data, ...rest }) => rest,
-                ),
-              }
-            : undefined,
-      })
-      .returning({ id: messages.id });
-
-    console.log(
-      `[chat-agent-invoke] Inserted assistant message: ${row.id}${genuiResults.length > 0 ? ` (${genuiResults.length} genui results)` : ""}`,
-    );
-    return row;
   } catch (err) {
-    console.error(
-      `[chat-agent-invoke] Failed to insert assistant message:`,
-      err,
-    );
-    return null;
-  }
-}
-
-async function notifyNewMessage(payload: {
-  messageId: string;
-  threadId: string;
-  tenantId: string;
-  role: string;
-  content: string;
-  senderType: string;
-  senderId: string;
-}): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) {
-    console.warn(
-      `[chat-agent-invoke] AppSync not configured, skipping notification`,
-    );
+    // Outer setup error path. The original handler had a very large
+    // try/catch wrapping the entire flow; with the post-AgentCore body
+    // gone, the only paths that reach here are pre-dispatch setup
+    // failures (agent lookup, runtime config resolve, etc.).
+    console.error(`[chat-agent-invoke] Setup error:`, err);
     return;
-  }
-
-  const mutation = `
-    mutation NotifyNewMessage(
-      $messageId: ID!
-      $threadId: ID!
-      $tenantId: ID!
-      $role: String!
-      $content: String!
-      $senderType: String
-      $senderId: ID
-      $ownerType: String
-      $ownerId: ID
-    ) {
-      notifyNewMessage(
-        messageId: $messageId
-        threadId: $threadId
-        tenantId: $tenantId
-        role: $role
-        content: $content
-        senderType: $senderType
-        senderId: $senderId
-        ownerType: $ownerType
-        ownerId: $ownerId
-      ) {
-        messageId
-        threadId
-        tenantId
-        role
-        content
-        senderType
-        senderId
-        ownerType
-        ownerId
-        createdAt
-      }
-    }
-  `;
-
-  try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
-      },
-      body: JSON.stringify({
-        query: mutation,
-        variables: {
-          ...payload,
-          ownerType:
-            payload.senderType === "assistant" ? "agent" : payload.senderType,
-          ownerId: payload.senderId,
-        },
-      }),
-    });
-
-    const responseBody = await response.text();
-    if (!response.ok) {
-      console.error(
-        `[chat-agent-invoke] AppSync notify failed: ${response.status} ${responseBody}`,
-      );
-    } else {
-      // Log GraphQL errors even on HTTP 200
-      if (responseBody.includes('"errors"')) {
-        console.error(
-          `[chat-agent-invoke] AppSync notify GraphQL errors: ${responseBody}`,
-        );
-      } else {
-        console.log(
-          `[chat-agent-invoke] AppSync notifyNewMessage sent for ${payload.messageId}`,
-        );
-      }
-    }
-  } catch (err) {
-    console.error(`[chat-agent-invoke] AppSync notify error:`, err);
-  }
-}
-
-async function notifyThreadTurnUpdate(payload: {
-  runId: string;
-  tenantId: string;
-  threadId: string;
-  agentId: string;
-  status: string;
-  triggerName: string | null;
-}): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) return;
-
-  const mutation = `
-    mutation NotifyThreadTurnUpdate(
-      $runId: ID!
-      $tenantId: ID!
-      $threadId: ID
-      $agentId: ID
-      $status: String!
-      $triggerName: String
-    ) {
-      notifyThreadTurnUpdate(
-        runId: $runId
-        tenantId: $tenantId
-        threadId: $threadId
-        agentId: $agentId
-        status: $status
-        triggerName: $triggerName
-      ) {
-        runId
-        tenantId
-        threadId
-        agentId
-        status
-        triggerName
-        updatedAt
-      }
-    }
-  `;
-
-  try {
-    await fetch(APPSYNC_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
-      },
-      body: JSON.stringify({ query: mutation, variables: payload }),
-    });
-  } catch (err) {
-    console.error(`[chat-agent-invoke] notifyThreadTurnUpdate error:`, err);
   }
 }

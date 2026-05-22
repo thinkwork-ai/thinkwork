@@ -147,6 +147,9 @@ build_handler "agentcore-invoke" \
 build_handler "chat-agent-invoke" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-invoke.ts"
 
+build_handler "chat-agent-finalize" \
+  "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
+
 build_handler "wakeup-processor" \
   "$REPO_ROOT/packages/api/src/handlers/wakeup-processor.ts"
 
