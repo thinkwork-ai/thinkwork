@@ -523,7 +523,11 @@ resource "aws_lambda_function" "handler" {
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
+  # chat-agent-invoke is now the SETUP phase only (plan 2026-05-22-006 U3):
+  # validates the agent, builds the AgentCore invoke payload, dispatches
+  # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
+  # headroom for transient slowness.
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -575,6 +579,53 @@ resource "aws_sqs_queue" "wiki_compile_dlq" {
 
   tags = {
     Name = "thinkwork-${var.stage}-wiki-compile-dlq"
+  }
+}
+
+# chat-agent-invoke DLQ + retry-0 (plan 2026-05-22-006 U3). After the
+# direct-callback finalize refactor, chat-agent-invoke is Event-mode-
+# dispatched by the GraphQL resolver and itself dispatches AgentCore
+# Event-mode. There is no synchronous wait anymore — the Lambda returns
+# in ~5s. With retries pinned to 0, a setup failure (agent lookup,
+# runtime config resolve, throttling) is surfaced exactly once via the
+# existing inline error-message-insert path; the DLQ catches the
+# original event so an operator can replay if needed.
+
+resource "aws_sqs_queue" "chat_agent_invoke_dlq" {
+  count                     = local.deploy_lambda_handlers ? 1 : 0
+  name                      = "thinkwork-${var.stage}-chat-agent-invoke-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name = "thinkwork-${var.stage}-chat-agent-invoke-dlq"
+  }
+}
+
+resource "aws_iam_role_policy" "chat_agent_invoke_dlq_send" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+  name  = "thinkwork-${var.stage}-chat-agent-invoke-dlq-send"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.chat_agent_invoke_dlq[0].arn
+    }]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["chat-agent-invoke"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.chat_agent_invoke_dlq[0].arn
+    }
   }
 }
 
