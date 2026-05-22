@@ -2,7 +2,7 @@
 
 Build an inspectable dashboard artifact that exposes findings alongside evidence. Include useful comparison views, source-backed claims, confidence or caveat indicators, and filters appropriate to the topic.
 
-Use the Artifact Builder compatibility shim only as the implementation mechanism. The runbook owns discovery, synthesis, validation, and queue semantics; this phase owns the saved research dashboard.
+Compose with the `artifact-builder` skill for all artifact mechanics (preview, save, shadcn registry, TSX validation). This skill adds the research-evidence layout on top.
 
 Shape the app around the evidence gathered in earlier phases:
 
@@ -22,6 +22,5 @@ Call `save_app` directly in the parent Computer turn. Include:
 - `metadata.prompt`: user prompt.
 - `metadata.recipe`: `research-dashboard`.
 - `metadata.recipeVersion`: `1`.
-- `metadata.runbookSlug`: `research-dashboard`.
 
 Only report success after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`.

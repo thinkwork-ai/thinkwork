@@ -103,7 +103,6 @@ Call `save_app` directly in the parent Computer turn. Include:
 - `metadata.prompt`: user prompt.
 - `metadata.recipe`: `crm-dashboard`.
 - `metadata.recipeVersion`: `2`.
-- `metadata.runbookSlug`: `crm-dashboard`.
 - `metadata.dataShape`: `CrmDashboardData`.
 - Do not include theme CSS or app-owned theme objects in metadata.
 

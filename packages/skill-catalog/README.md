@@ -32,41 +32,18 @@ Any other `execution:` value is treated as a catalog regression —
 
 ## Computer runbook-capable skills
 
-Some context skills are also routable by Thinkwork Computer as
-substantial-work runbooks. They are still normal Agent Skills: `SKILL.md`
-is the required entrypoint, with optional `references/`, `assets/`, and
-`scripts/` folders. The Computer-specific contract is deliberately small
-and lives in standard skill extension space instead of a parallel
-`runbook.yaml` file.
+Domain skills that produce inspectable artifacts (CRM dashboards, research
+dashboards, map artifacts) compose with the platform `artifact-builder`
+skill (`packages/workspace-defaults/files/skills/artifact-builder/SKILL.md`).
+The domain skill owns the data fetching, layout, and component guidance
+specific to its output shape; `artifact-builder` owns the general
+preview/save mechanics, shadcn registry, and TSX validation. Both skills
+load via the standard AgentSkills progressive-disclosure mechanism.
 
-Mark a skill as Computer-runbook-capable with:
-
-```yaml
-metadata:
-  thinkwork_kind: computer-runbook
-```
-
-The marker requires a machine-readable contract at
-`references/thinkwork-runbook.json` unless
-`metadata.thinkwork_runbook_contract` points at another relative path.
-That contract contains only the fields Computer needs before loading the
-whole skill: routing aliases/examples, confirmation copy, phase ids and
-titles, phase guidance references, task seeds, expected outputs,
-capability roles, and optional output-shaping asset references.
-
-Detailed instructions stay out of the JSON contract. Put phase prose in
-focused files such as `references/discover.md`,
-`references/analyze.md`, `references/produce.md`, and
-`references/validate.md`. Put output schemas, example payloads,
-templates, screenshots, or other shaping material under `assets/`.
-
-Validate the contract with `validateRunbookSkillContract` from
-`scripts/runbook-skill-contract.ts`. The validator fails closed when the
-marker is present but the contract is missing, references files outside
-the skill directory, references missing phase/assets files, or requests a
-capability role outside the platform registry. `allowed-tools` remains
-advisory; runtime capability enforcement is owned by the Computer
-execution path.
+Put data-fetching guidance in `references/discover.md`, output-shaping
+guidance in `references/produce.md`, and data schemas / layout JSON under
+`assets/`. There is no Computer-specific runbook contract — the standard
+agentskills.io skill shape covers everything.
 
 ## Authoring a new skill
 
