@@ -1,7 +1,9 @@
 import type {
   DeepLinkCallback,
+  RemoveTokenStorageItemRequest,
   ReportInstallOutcomeRequest,
   SessionTokens,
+  SetTokenStorageItemRequest,
   UpdateState,
 } from "./schemas.js";
 
@@ -9,6 +11,10 @@ export type Unsubscribe = () => void;
 
 export interface ThinkworkBridge {
   getSessionTokens(): Promise<SessionTokens | null>;
+  setTokenStorageItem(request: SetTokenStorageItemRequest): Promise<void>;
+  removeTokenStorageItem(request: RemoveTokenStorageItemRequest): Promise<void>;
+  clearTokenStorage(): Promise<void>;
+  onTokensChanged(listener: (tokens: SessionTokens) => void): Unsubscribe;
   startOAuth(): Promise<void>;
   signOut(): Promise<void>;
   consumePendingOAuth(): Promise<DeepLinkCallback | null>;

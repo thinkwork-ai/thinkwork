@@ -17,9 +17,7 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 // runs without a .env.production still produce a coherent value.
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, new URL(".", import.meta.url).pathname, [
-    "VITE_",
-  ]);
+  const env = loadEnv(mode, new URL(".", import.meta.url).pathname, ["VITE_"]);
 
   const sandboxIframeSrc =
     env.VITE_SANDBOX_IFRAME_SRC ||
@@ -42,6 +40,9 @@ export default defineConfig(({ mode }) => {
     define: {
       // amazon-cognito-identity-js uses Node.js globals
       global: "globalThis",
+      // The Electron renderer config overrides this to true. Keeping the web
+      // default false lets Rollup tree-shake desktop-only dynamic imports.
+      __DESKTOP_BUILD__: "false",
       __SANDBOX_IFRAME_SRC__: JSON.stringify(sandboxIframeSrc),
       // Note: __ALLOWED_PARENT_ORIGINS__ is iframe-side trust
       // configuration — defined in vite.iframe-shell.config.ts only.

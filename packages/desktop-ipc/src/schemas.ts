@@ -3,16 +3,36 @@ import { z } from "zod";
 export const EmptyRequestSchema = z.undefined();
 export const VoidResponseSchema = z.undefined();
 
-export const SessionTokensSchema = z
+export const TokenStorageSnapshotSchema = z
   .object({
-    idToken: z.string().min(1),
-    accessToken: z.string().min(1),
-    expiresAt: z.number().int().positive().optional(),
+    items: z.record(z.string(), z.string()),
+    version: z.number().int().nonnegative(),
   })
   .strict();
 
+export const SessionTokensSchema = TokenStorageSnapshotSchema;
+
 export const GetSessionTokensRequestSchema = EmptyRequestSchema;
 export const GetSessionTokensResponseSchema = SessionTokensSchema.nullable();
+
+export const SetTokenStorageItemRequestSchema = z
+  .object({
+    key: z.string().min(1),
+    value: z.string(),
+  })
+  .strict();
+export const SetTokenStorageItemResponseSchema = VoidResponseSchema;
+
+export const RemoveTokenStorageItemRequestSchema = z
+  .object({
+    key: z.string().min(1),
+  })
+  .strict();
+export const RemoveTokenStorageItemResponseSchema = VoidResponseSchema;
+
+export const ClearTokenStorageRequestSchema = EmptyRequestSchema;
+export const ClearTokenStorageResponseSchema = VoidResponseSchema;
+export const TokensChangedEventSchema = TokenStorageSnapshotSchema;
 
 export const StartOAuthRequestSchema = EmptyRequestSchema;
 export const StartOAuthResponseSchema = VoidResponseSchema;
@@ -95,6 +115,18 @@ export const ChannelSchemas = {
     request: GetSessionTokensRequestSchema,
     response: GetSessionTokensResponseSchema,
   },
+  setTokenStorageItem: {
+    request: SetTokenStorageItemRequestSchema,
+    response: SetTokenStorageItemResponseSchema,
+  },
+  removeTokenStorageItem: {
+    request: RemoveTokenStorageItemRequestSchema,
+    response: RemoveTokenStorageItemResponseSchema,
+  },
+  clearTokenStorage: {
+    request: ClearTokenStorageRequestSchema,
+    response: ClearTokenStorageResponseSchema,
+  },
   startOAuth: {
     request: StartOAuthRequestSchema,
     response: StartOAuthResponseSchema,
@@ -129,7 +161,14 @@ export const ChannelSchemas = {
   },
 } as const;
 
-export type SessionTokens = z.infer<typeof SessionTokensSchema>;
+export type TokenStorageSnapshot = z.infer<typeof TokenStorageSnapshotSchema>;
+export type SessionTokens = TokenStorageSnapshot;
+export type SetTokenStorageItemRequest = z.infer<
+  typeof SetTokenStorageItemRequestSchema
+>;
+export type RemoveTokenStorageItemRequest = z.infer<
+  typeof RemoveTokenStorageItemRequestSchema
+>;
 export type DeepLinkCallback = z.infer<typeof DeepLinkCallbackSchema>;
 export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
 export type UpdateArchMetadata = z.infer<typeof UpdateArchMetadataSchema>;

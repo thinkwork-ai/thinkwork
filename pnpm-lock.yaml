@@ -624,6 +624,9 @@ importers:
       '@thinkwork/computer-stdlib':
         specifier: workspace:*
         version: link:../../packages/computer-stdlib
+      '@thinkwork/desktop-ipc':
+        specifier: workspace:*
+        version: link:../../packages/desktop-ipc
       '@thinkwork/graph':
         specifier: workspace:*
         version: link:../../packages/graph

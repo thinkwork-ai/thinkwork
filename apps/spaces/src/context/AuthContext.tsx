@@ -50,21 +50,47 @@ export function AuthProvider({
 
   // Check session on mount — restore cached token for GraphQL client
   useEffect(() => {
+    let cancelled = false;
     auth.configureTokenStorage(tokenStorage);
-    auth
-      .getCurrentSession()
-      .then(async (session) => {
-        if (session) {
-          setUser(auth.getCurrentUser());
-          const token = await auth.getIdToken();
-          setAuthToken(token);
-          setTokenProvider(() => auth.getIdToken());
-          startTokenRefresh();
-        }
-      })
-      .finally(() => setIsLoading(false));
 
-    return () => stopTokenRefresh();
+    async function restoreSession(hydrate: boolean): Promise<void> {
+      if (hydrate) {
+        await Promise.resolve(tokenStorage.hydrate?.()).catch((error) => {
+          console.error("[auth] failed to hydrate token storage", error);
+        });
+      }
+
+      const token = await auth.getIdToken();
+      const currentUser = auth.getCurrentUser();
+      if (cancelled) return;
+
+      if (token && currentUser) {
+        setUser(currentUser);
+        setAuthToken(token);
+        setTokenProvider(() => auth.getIdToken());
+        startTokenRefresh();
+        return;
+      }
+
+      setUser(null);
+      setAuthToken(null);
+      setTokenProvider(null);
+      stopTokenRefresh();
+    }
+
+    void restoreSession(true).finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+
+    const unsubscribe = tokenStorage.subscribe(() => {
+      void restoreSession(false);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      stopTokenRefresh();
+    };
   }, [tokenStorage]);
 
   const handleSignIn = useCallback(
