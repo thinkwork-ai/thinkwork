@@ -6,6 +6,38 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Spaces Runtime Renderer and Channels
+
+Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-22-002-feat-spaces-runtime-renderer-and-channels-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: in progress
+- Active unit: U1 — Per-Space Hindsight bank wiring
+- Active branch: `codex/u1-space-hindsight`
+- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/u1-space-hindsight`
+- Started: 2026-05-22
+- PR: pending
+- CI: pending
+
+### Progress Log
+
+| Date       | Unit | Branch                     | PR   | Status      | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Notes                                                                                                                                                                                                                                                         |
+| ---------- | ---- | -------------------------- | ---- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-22 | U1   | `codex/u1-space-hindsight` | none | In progress | `uv run pytest packages/agentcore-strands/agent-container/test_memory_tools_space_scope.py packages/agentcore-strands/agent-container/test_memory_tools_user_scope.py packages/agentcore-strands/agent-container/test_hindsight_tools.py packages/agentcore-strands/agent-container/test_invoker_env.py`; `pnpm --filter @thinkwork/api test src/lib/memory/adapters/hindsight-adapter.bank-id.test.ts src/lib/memory/adapters/hindsight-adapter.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm dlx prettier@3.8.2 --check ...`; `uv run ruff check --select E,F --ignore E402,E501 ...`; `git diff --check` | Created U1 worktree from `origin/main`. Read repository instructions, the plan, and relevant solution docs for inert/live rollout and env snapshotting. Review pass fixed explicit empty no-user snapshots so stale env cannot leak into no-user Space turns. |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
+---
+
 ## Current Run: Electron Desktop Shell
 
 Plan: `docs/plans/2026-05-21-002-feat-electron-desktop-shell-plan.md`

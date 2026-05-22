@@ -54,6 +54,7 @@ def make_hindsight_tools(
     *,
     hs_endpoint: str,
     hs_bank: str,
+    hs_read_banks: Sequence[str] | None = None,
     hs_tags: Sequence[str] | None = None,
     client_factory: Callable[[], Any] | None = None,
 ) -> tuple[Any, ...]:
@@ -72,6 +73,7 @@ def make_hindsight_tools(
 
     if not hs_endpoint or not hs_bank:
         return ()
+    read_banks = list(dict.fromkeys([*(hs_read_banks or []), hs_bank]))
 
     if client_factory is None:
         client_factory = _make_client_factory(hs_endpoint)
@@ -196,13 +198,15 @@ def make_hindsight_tools(
         for attempt in range(3):
             client = client_factory()
             try:
-                response = await client.arecall(
-                    bank_id=hs_bank,
-                    query=query,
-                    budget="low",
-                    max_tokens=1500,
-                )
-                raw = getattr(response, "results", None) or []
+                raw = []
+                for bank_id in read_banks:
+                    response = await client.arecall(
+                        bank_id=bank_id,
+                        query=query,
+                        budget="low",
+                        max_tokens=1500,
+                    )
+                    raw.extend(getattr(response, "results", None) or [])
                 if not raw:
                     return "No relevant memories found."
                 from hindsight_recall_filter import (

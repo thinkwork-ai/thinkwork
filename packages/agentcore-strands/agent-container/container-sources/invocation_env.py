@@ -34,6 +34,8 @@ def apply_invocation_env(payload: dict) -> list[str]:
     - `AGENT_ID`, `_MCP_AGENT_ID`   ← `assistant_id`
     - `USER_ID`, `_MCP_USER_ID`, `CURRENT_USER_ID` ← `user_id`
     - `CURRENT_THREAD_ID`           ← `thread_id`
+    - `ACTIVE_SPACE_ID`, `ACTIVE_SPACE_SLUG`, `ACTIVE_SPACE_IS_DEFAULT`
+      ← active Space payload fields
 
     Returns the list of env keys it actually set, so the caller can pass
     it back to `cleanup_invocation_env` to clear exactly those keys
@@ -44,6 +46,13 @@ def apply_invocation_env(payload: dict) -> list[str]:
     assistant_id = payload.get("assistant_id") or ""
     user_id = payload.get("user_id") or ""
     thread_id = payload.get("thread_id") or payload.get("ticket_id") or ""
+    active_space_id = payload.get("active_space_id") or payload.get("space_id") or ""
+    active_space_slug = (
+        payload.get("active_space_slug") or payload.get("space_slug") or ""
+    )
+    active_space_is_default = _truthy(payload.get("active_space_is_default"))
+    if active_space_slug == "default":
+        active_space_is_default = True
 
     if workspace_tenant_id:
         os.environ["_MCP_TENANT_ID"] = workspace_tenant_id
@@ -65,6 +74,17 @@ def apply_invocation_env(payload: dict) -> list[str]:
     if thread_id:
         os.environ["CURRENT_THREAD_ID"] = thread_id
         keys.append("CURRENT_THREAD_ID")
+    if active_space_id:
+        os.environ["ACTIVE_SPACE_ID"] = active_space_id
+        keys.append("ACTIVE_SPACE_ID")
+    if active_space_slug:
+        os.environ["ACTIVE_SPACE_SLUG"] = active_space_slug
+        keys.append("ACTIVE_SPACE_SLUG")
+    if active_space_id or active_space_slug:
+        os.environ["ACTIVE_SPACE_IS_DEFAULT"] = (
+            "true" if active_space_is_default else "false"
+        )
+        keys.append("ACTIVE_SPACE_IS_DEFAULT")
 
     slack = payload.get("slack")
     if isinstance(slack, dict):
@@ -126,6 +146,14 @@ def _set_json_env(keys: list[str], name: str, value: object) -> None:
     if value is not None:
         os.environ[name] = json.dumps(value, separators=(",", ":"))
         keys.append(name)
+
+
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ("1", "true", "yes")
+    return False
 
 
 def cleanup_invocation_env(keys: list[str]) -> None:

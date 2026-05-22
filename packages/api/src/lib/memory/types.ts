@@ -53,6 +53,11 @@ export type HindsightRecallOptions = {
   types?: HindsightRecallFactType[];
   includeEntities?: boolean;
   includeLegacyBanks?: boolean;
+  activeSpace?: {
+    spaceId?: string | null;
+    spaceSlug?: string | null;
+    isDefault?: boolean | null;
+  };
   trace?: boolean;
 };
 

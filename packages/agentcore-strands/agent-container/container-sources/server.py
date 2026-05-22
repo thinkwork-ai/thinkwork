@@ -734,19 +734,36 @@ def _register_delegate_to_workspace_tool(
     _dw_agent = os.environ.get("AGENT_ID", "") or os.environ.get("_ASSISTANT_ID", "")
     _hs_endpoint = os.environ.get("HINDSIGHT_ENDPOINT", "")
     _hs_user = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
-    _hs_bank = f"user_{_hs_user}" if _hs_user else ""
+    _hs_space_id = os.environ.get("ACTIVE_SPACE_ID", "")
+    _hs_space_slug = os.environ.get("ACTIVE_SPACE_SLUG", "")
+    _hs_space_is_default = (
+        os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "").lower() in ("1", "true", "yes")
+        or _hs_space_slug == "default"
+    )
+    _hs_read_banks = []
+    if _hs_user:
+        _hs_read_banks.append(f"user_{_hs_user}")
+    if _hs_space_id and not _hs_space_is_default:
+        _hs_read_banks.append(f"space_{_hs_space_id}")
+    _hs_bank = (
+        f"space_{_hs_space_id}"
+        if _hs_space_id and not _hs_space_is_default
+        else (f"user_{_hs_user}" if _hs_user else "")
+    )
     _hs_owner_id = _hs_user
     _hs_tenant = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
     _hs_stage = os.environ.get("STAGE", "") or "unknown"
     _memory_tool_context = {
         "hs_endpoint": _hs_endpoint,
         "hs_bank": _hs_bank,
+        "hs_read_banks": _hs_read_banks,
         "hs_tenant": _hs_tenant,
         "hs_owner_id": _hs_owner_id,
         "hs_tags": [
             f"agent_id:{_dw_agent}",
             f"user_id:{_hs_user}",
             f"tenant_id:{_hs_tenant}",
+            f"space_id:{_hs_space_id}",
             f"env:{_hs_stage or 'unknown'}",
         ],
         "wiki_tenant_id": _hs_tenant,
@@ -1224,9 +1241,19 @@ def _call_strands_agent(
     # model. Hindsight is an optional ADD-ON registered alongside when
     # HINDSIGHT_ENDPOINT is set in the environment.
     try:
-        from memory_tools import remember, recall, forget
+        import memory_tools
 
-        tools.extend([remember, recall, forget])
+        memory_tools.set_turn_memory_context(
+            user_id=os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", ""),
+            active_space_id=os.environ.get("ACTIVE_SPACE_ID", ""),
+            active_space_slug=os.environ.get("ACTIVE_SPACE_SLUG", ""),
+            active_space_is_default=(
+                os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "").lower()
+                in ("1", "true", "yes")
+                or os.environ.get("ACTIVE_SPACE_SLUG", "") == "default"
+            ),
+        )
+        tools.extend([memory_tools.remember, memory_tools.recall, memory_tools.forget])
         logger.info("Managed memory tools registered: remember, recall, forget")
     except Exception as e:
         logger.warning("Managed memory tools registration failed: %s", e)
@@ -1622,7 +1649,23 @@ def _call_strands_agent(
 
             hs_endpoint = os.environ.get("HINDSIGHT_ENDPOINT", "")
             hs_user = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
-            hs_bank = f"user_{hs_user}" if hs_user else ""
+            hs_space_id = os.environ.get("ACTIVE_SPACE_ID", "")
+            hs_space_slug = os.environ.get("ACTIVE_SPACE_SLUG", "")
+            hs_space_is_default = (
+                os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "").lower()
+                in ("1", "true", "yes")
+                or hs_space_slug == "default"
+            )
+            hs_read_banks = []
+            if hs_user:
+                hs_read_banks.append(f"user_{hs_user}")
+            if hs_space_id and not hs_space_is_default:
+                hs_read_banks.append(f"space_{hs_space_id}")
+            hs_bank = (
+                f"space_{hs_space_id}"
+                if hs_space_id and not hs_space_is_default
+                else (f"user_{hs_user}" if hs_user else "")
+            )
             hs_tenant = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
             hs_assistant = os.environ.get("_ASSISTANT_ID", "")
             hs_stage = os.environ.get("STAGE", "") or "unknown"
@@ -1630,6 +1673,7 @@ def _call_strands_agent(
                 f"agent_id:{hs_assistant}",
                 f"user_id:{hs_user}",
                 f"tenant_id:{hs_tenant}",
+                f"space_id:{hs_space_id}",
                 f"env:{hs_stage or 'unknown'}",
             ]
 
@@ -1637,6 +1681,7 @@ def _call_strands_agent(
                 _strands_tool,
                 hs_endpoint=hs_endpoint,
                 hs_bank=hs_bank,
+                hs_read_banks=hs_read_banks,
                 hs_tags=hs_tags,
             )
             if hs_tools:
@@ -3113,12 +3158,23 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             # applying. Cleared in `finally` so the warm container does
             # not leak identity into the next invocation.
             scope = payload.get("scope") or {}
+            turn_context = payload.get("turn_context") or {}
+            if not isinstance(turn_context, dict):
+                turn_context = {}
             invocation_env_keys = invocation_env.apply_invocation_env(
                 {
                     "workspace_tenant_id": payload.get("tenantId") or scope.get("tenantId") or "",
                     "assistant_id": payload.get("agentId") or scope.get("agentId") or "",
                     "user_id": payload.get("invokerUserId") or scope.get("invokerUserId") or "",
                     "thread_id": payload.get("threadId") or scope.get("threadId") or "",
+                    "active_space_id": payload.get("spaceId")
+                    or scope.get("spaceId")
+                    or turn_context.get("spaceId")
+                    or "",
+                    "active_space_slug": payload.get("spaceSlug")
+                    or scope.get("spaceSlug")
+                    or turn_context.get("spaceSlug")
+                    or "",
                 }
             )
             try:
@@ -3168,12 +3224,17 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         # invocations. CURRENT_USER_ID is only set when user_id is truthy —
         # a missing invoker must be distinguishable from an empty-string
         # one so the admin skill's R15 "no invoker" refusal triggers.
+        turn_context = payload.get("turn_context") or {}
+        if not isinstance(turn_context, dict):
+            turn_context = {}
         invocation_env_keys = invocation_env.apply_invocation_env(
             {
                 "workspace_tenant_id": workspace_tenant_id,
                 "assistant_id": assistant_id,
                 "user_id": user_id,
                 "thread_id": ticket_id,
+                "active_space_id": turn_context.get("spaceId") or payload.get("space_id") or "",
+                "active_space_slug": turn_context.get("spaceSlug") or payload.get("space_slug") or "",
                 "sandbox_interpreter_id": payload.get("sandbox_interpreter_id") or "",
                 "sandbox_environment": payload.get("sandbox_environment") or "",
             }
