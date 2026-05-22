@@ -6,6 +6,39 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Electron Desktop Shell
+
+Plan: `docs/plans/2026-05-21-002-feat-electron-desktop-shell-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: Active
+- Active unit: U2 desktop scaffold complete; CI passed, merge pending
+- Active branch: `codex/desktop-u2-scaffold`
+- Active worktree: `.Codex/worktrees/desktop-u2`
+- Started: 2026-05-21
+- PR: [#1528](https://github.com/thinkwork-ai/thinkwork/pull/1528)
+- CI: passed
+
+### Progress Log
+
+| Date       | Unit | Branch                      | PR                                                           | Status                   | Verification                                                                                                                                                                                                                                                                                                                                                                            | Notes                                                                                                                                                                                                                                                                                              |
+| ---------- | ---- | --------------------------- | ------------------------------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-21 | U1   | `codex/desktop-oauth-spike` | none                                                         | Complete                 | Packaged Electron 42.2.0 `.app` spike; macOS `open-url` cold-start delivery before `whenReady`; state validation pass/fail checks; Cognito hosted UI PKCE S256 probe returned HTTP 302; `safeStorage.isEncryptionAvailable()` returned true on macOS 26.1 arm64.                                                                                                                        | Spike report: `docs/solutions/spikes/2026-05-21-electron-oauth-cold-start-validation.md`. Plan explicitly marks U1 as gating spike, not production PR work. Non-destructive automation did not lock the user's login keychain; U5 should cover degraded safeStorage via dependency-injected tests. |
+| 2026-05-21 | U2   | `codex/desktop-u2-scaffold` | [#1528](https://github.com/thinkwork-ai/thinkwork/pull/1528) | CI passed; merge pending | `pnpm install`; `pnpm --filter @thinkwork/desktop test`; `pnpm --filter @thinkwork/desktop typecheck`; `pnpm --filter @thinkwork/desktop build`; `pnpm --filter @thinkwork/spaces typecheck`; dev-launch smoke via `pnpm --filter @thinkwork/desktop dev` reached `starting electron app...` and was terminated after launch. GitHub checks passed: CLA, lint, test, typecheck, verify. | Scaffolded `apps/desktop`, imported the Spaces Vite config directly because electron-vite 5.0.0 does not expose the planned `renderer.configFile` option, injected `__DESKTOP_BUILD__` from the desktop config, and added the env snapshot test/README.                                            |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
+---
+
 ## Current Run: Spaces Rebrand and Picker Polish
 
 Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-21-003-feat-spaces-rebrand-and-picker-polish-plan.md`
@@ -24,9 +57,9 @@ Target branch: `main`
 
 ### Progress Log
 
-| Date       | Unit    | Branch                               | PR      | Status      | Verification                                                                                         | Notes                                                                                                                                       |
-| ---------- | ------- | ------------------------------------ | ------- | ----------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-21 | U1-U5   | `codex/spaces-rebrand-picker-polish` | [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526) | CI passed; ready to squash merge | `pnpm install`; stale tsbuildinfo cleanup; `pnpm --filter @thinkwork/database-pg build`; `pnpm --filter @thinkwork/spaces test`; `pnpm --filter @thinkwork/spaces typecheck`; `bash scripts/build-spaces.test.sh`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm --filter @thinkwork/spaces build`; `pnpm -r --if-present test`; `pnpm -r --if-present lint`; `terraform fmt -check` on touched Terraform; `terraform validate` for `terraform/modules/thinkwork` and `terraform/examples/greenfield`; `pnpm --filter @thinkwork/graph typecheck`; `pnpm --filter @thinkwork/ui typecheck`; grep guards; browser smoke at `http://localhost:5174/new`; GitHub checks: CLA, lint, test, typecheck, verify | Grouped by plan decision so the folder/package/scripts/component rebrand and picker polish land as one coherent PR without mixed naming. `pnpm format:check` cannot run because the repo does not currently install `prettier`; an ephemeral full-repo Prettier check also reports broad pre-existing formatting drift. `actionlint` is not installed and Docker is not running, so workflow syntax was covered by GitHub CI. |
+| Date       | Unit  | Branch                               | PR                                                           | Status                           | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Notes                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------- | ----- | ------------------------------------ | ------------------------------------------------------------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-21 | U1-U5 | `codex/spaces-rebrand-picker-polish` | [#1526](https://github.com/thinkwork-ai/thinkwork/pull/1526) | CI passed; ready to squash merge | `pnpm install`; stale tsbuildinfo cleanup; `pnpm --filter @thinkwork/database-pg build`; `pnpm --filter @thinkwork/spaces test`; `pnpm --filter @thinkwork/spaces typecheck`; `bash scripts/build-spaces.test.sh`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm --filter @thinkwork/spaces build`; `pnpm -r --if-present test`; `pnpm -r --if-present lint`; `terraform fmt -check` on touched Terraform; `terraform validate` for `terraform/modules/thinkwork` and `terraform/examples/greenfield`; `pnpm --filter @thinkwork/graph typecheck`; `pnpm --filter @thinkwork/ui typecheck`; grep guards; browser smoke at `http://localhost:5174/new`; GitHub checks: CLA, lint, test, typecheck, verify | Grouped by plan decision so the folder/package/scripts/component rebrand and picker polish land as one coherent PR without mixed naming. `pnpm format:check` cannot run because the repo does not currently install `prettier`; an ephemeral full-repo Prettier check also reports broad pre-existing formatting drift. `actionlint` is not installed and Docker is not running, so workflow syntax was covered by GitHub CI. |
 
 ### CI Failures
 
