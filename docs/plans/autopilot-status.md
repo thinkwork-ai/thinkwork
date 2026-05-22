@@ -6,6 +6,37 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Electron Desktop Shell
+
+Plan: `docs/plans/2026-05-21-002-feat-electron-desktop-shell-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: Active
+- Active unit: U1 OAuth deep-link cold-start spike complete; next unit U2 desktop scaffold
+- Active branch: `codex/desktop-oauth-spike`
+- Active worktree: `.Codex/worktrees/desktop-spike`
+- Started: 2026-05-21
+- CI: not applicable for U1; plan marks U1 as non-merge spike work
+
+### Progress Log
+
+| Date | Unit | Branch | PR | Status | Verification | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-21 | U1 | `codex/desktop-oauth-spike` | none | Complete | Packaged Electron 42.2.0 `.app` spike; macOS `open-url` cold-start delivery before `whenReady`; state validation pass/fail checks; Cognito hosted UI PKCE S256 probe returned HTTP 302; `safeStorage.isEncryptionAvailable()` returned true on macOS 26.1 arm64. | Spike report: `docs/solutions/spikes/2026-05-21-electron-oauth-cold-start-validation.md`. Plan explicitly marks U1 as gating spike, not production PR work. Non-destructive automation did not lock the user's login keychain; U5 should cover degraded safeStorage via dependency-injected tests. |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
+---
+
 ## Current Run: Spaces Rebrand and Picker Polish
 
 Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-21-003-feat-spaces-rebrand-and-picker-polish-plan.md`
