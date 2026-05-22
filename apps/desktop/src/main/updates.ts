@@ -36,12 +36,12 @@ export interface CreateDesktopUpdatesControllerOptions {
 }
 
 export interface DesktopUpdatesControllerOptions extends CreateDesktopUpdatesControllerOptions {
-  autoUpdater: AutoUpdaterLike;
+  autoUpdater?: AutoUpdaterLike;
 }
 
 export class DesktopUpdatesController {
   private readonly app: UpdatesAppLike;
-  private readonly autoUpdater: AutoUpdaterLike;
+  private readonly autoUpdater?: AutoUpdaterLike;
   private readonly now: () => Date;
   private readonly onStateChange: (state: UpdateState) => void;
   private readonly telemetry: UpdateTelemetry;
@@ -72,11 +72,14 @@ export class DesktopUpdatesController {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    await this.telemetry.reportLaunchOutcome();
+
+    if (!this.app.isPackaged || !this.autoUpdater) return;
+
     this.autoUpdater.autoDownload = false;
     this.autoUpdater.autoInstallOnAppQuit = true;
     this.autoUpdater.channel = this.state.channel;
     this.registerUpdaterEvents();
-    await this.telemetry.reportLaunchOutcome();
   }
 
   getState(): UpdateState {
@@ -84,7 +87,7 @@ export class DesktopUpdatesController {
   }
 
   async checkForUpdates(): Promise<void> {
-    if (!this.app.isPackaged) return;
+    if (!this.app.isPackaged || !this.autoUpdater) return;
 
     this.dispatch({
       type: "checking-for-update",
@@ -102,7 +105,7 @@ export class DesktopUpdatesController {
   }
 
   async downloadUpdate(): Promise<void> {
-    if (!this.app.isPackaged) return;
+    if (!this.app.isPackaged || !this.autoUpdater) return;
 
     this.dispatch({ type: "download-started" });
     try {
@@ -117,7 +120,13 @@ export class DesktopUpdatesController {
   }
 
   installUpdate(): void {
-    if (!this.app.isPackaged || !this.state.downloadedVersion) return;
+    if (
+      !this.app.isPackaged ||
+      !this.autoUpdater ||
+      !this.state.downloadedVersion
+    ) {
+      return;
+    }
 
     this.autoUpdater.quitAndInstall();
   }
@@ -137,6 +146,8 @@ export class DesktopUpdatesController {
   }
 
   private registerUpdaterEvents(): void {
+    if (!this.autoUpdater) return;
+
     this.autoUpdater.on("checking-for-update", () => {
       this.dispatch({
         type: "checking-for-update",

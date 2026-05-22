@@ -16,22 +16,40 @@ export interface DesktopEnvSnapshot {
   cognito: CognitoEnvSnapshot;
 }
 
+declare const __THINKWORK_DESKTOP_ENV__:
+  | Partial<Record<string, string>>
+  | undefined;
+
 export function snapshotDesktopEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): DesktopEnvSnapshot {
+  const mergedEnv = mergeDesktopEnv(env);
+
   return Object.freeze({
-    nodeEnv: env.NODE_ENV ?? "development",
-    stage: env.THINKWORK_STAGE ?? env.VITE_THINKWORK_STAGE ?? "dev",
-    rendererUrl: env.ELECTRON_RENDERER_URL ?? null,
-    apiUrl: env.VITE_API_URL ?? null,
-    graphqlHttpUrl: env.VITE_GRAPHQL_HTTP_URL ?? null,
-    graphqlUrl: env.VITE_GRAPHQL_URL ?? null,
-    graphqlWsUrl: env.VITE_GRAPHQL_WS_URL ?? null,
-    sandboxFrameSrc: env.VITE_SANDBOX_IFRAME_SRC ?? null,
+    nodeEnv: mergedEnv.NODE_ENV ?? "development",
+    stage: mergedEnv.THINKWORK_STAGE ?? mergedEnv.VITE_THINKWORK_STAGE ?? "dev",
+    rendererUrl: mergedEnv.ELECTRON_RENDERER_URL ?? null,
+    apiUrl: mergedEnv.VITE_API_URL ?? null,
+    graphqlHttpUrl: mergedEnv.VITE_GRAPHQL_HTTP_URL ?? null,
+    graphqlUrl: mergedEnv.VITE_GRAPHQL_URL ?? null,
+    graphqlWsUrl: mergedEnv.VITE_GRAPHQL_WS_URL ?? null,
+    sandboxFrameSrc: mergedEnv.VITE_SANDBOX_IFRAME_SRC ?? null,
     cognito: Object.freeze({
-      userPoolId: env.VITE_COGNITO_USER_POOL_ID ?? null,
-      clientId: env.VITE_COGNITO_CLIENT_ID ?? null,
-      domain: env.VITE_COGNITO_DOMAIN ?? null,
+      userPoolId: mergedEnv.VITE_COGNITO_USER_POOL_ID ?? null,
+      clientId: mergedEnv.VITE_COGNITO_CLIENT_ID ?? null,
+      domain: mergedEnv.VITE_COGNITO_DOMAIN ?? null,
     }),
   });
+}
+
+function mergeDesktopEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const buildEnv =
+    typeof __THINKWORK_DESKTOP_ENV__ === "undefined"
+      ? {}
+      : __THINKWORK_DESKTOP_ENV__;
+
+  return {
+    ...buildEnv,
+    ...env,
+  };
 }

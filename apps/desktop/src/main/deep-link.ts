@@ -133,12 +133,20 @@ export function parseDeepLinkCallback(
     return null;
   }
 
-  const entries = [...url.searchParams.entries()];
-  if (
-    entries.length !== 2 ||
-    !url.searchParams.has("code") ||
-    !url.searchParams.has("state")
-  ) {
+  const oauthError = url.searchParams.get("error");
+  if (oauthError) {
+    return {
+      error: oauthError,
+      ...(url.searchParams.get("error_description")
+        ? { errorDescription: url.searchParams.get("error_description") ?? "" }
+        : {}),
+      ...(url.searchParams.get("state")
+        ? { state: url.searchParams.get("state") ?? "" }
+        : {}),
+    };
+  }
+
+  if (!url.searchParams.has("code") || !url.searchParams.has("state")) {
     options.logger?.warn("[desktop] rejected deep link with unexpected query");
     return null;
   }

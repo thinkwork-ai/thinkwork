@@ -1,9 +1,10 @@
-import { app, BrowserWindow, protocol } from "electron";
+import { app, BrowserWindow, nativeImage, protocol } from "electron";
 import type { DeepLinkCallback } from "@thinkwork/desktop-ipc";
 import { DEEP_LINK_EVENT_CHANNEL } from "@thinkwork/desktop-ipc";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bootstrapDesktopApp } from "./app.js";
+import { configureDesktopBranding } from "./branding.js";
 import { verifyAppleTeamIdentifier } from "./code-signature.js";
 import {
   createDeepLinkController,
@@ -13,11 +14,14 @@ import {
 import { snapshotDesktopEnv } from "./env.js";
 import { registerDesktopIpcHandlers } from "./ipc-handlers.js";
 import { installDesktopMenu } from "./menus.js";
+import { configureDevUserDataPath } from "./user-data.js";
 
 declare const __THINKWORK_APPLE_TEAM_ID__: string;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const expectedAppleTeamId = __THINKWORK_APPLE_TEAM_ID__;
+configureDevUserDataPath(app);
+void configureDesktopBranding({ app, nativeImage, rootDir: __dirname });
 const deepLinkController = createDeepLinkController({
   scheme: resolveDeepLinkScheme(
     process.env.THINKWORK_STAGE ?? process.env.VITE_THINKWORK_STAGE,
@@ -90,7 +94,7 @@ if (!app.requestSingleInstanceLock()) {
   if (codeSignatureVerified) {
     void bootstrapDesktopApp({
       snapshotEnv: snapshotDesktopEnv,
-      preloadPath: join(__dirname, "../preload/index.mjs"),
+      preloadPath: join(__dirname, "../preload/index.cjs"),
       protocol,
       installMenus: (handlers) =>
         installDesktopMenu({

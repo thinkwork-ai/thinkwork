@@ -69,14 +69,11 @@ For a dry package using already-exported `VITE_*` values instead of Terraform:
 ```bash
 DESKTOP_SKIP_TERRAFORM=1 \
 BUILD_CHANNEL=dev \
-APPLE_TEAM_ID=ABCDE12345 \
-CSC_IDENTITY_AUTO_DISCOVERY=false \
-CSC_NAME=null \
 bash scripts/build-desktop.sh dev --dir --publish never
 ```
 
-The dry `--dir` package verifies generated bundle metadata without signing,
-notarizing, publishing, or creating a DMG.
+The dry `--dir` package verifies generated bundle metadata with local ad-hoc
+signing, without notarizing, publishing, or creating a DMG.
 
 ## OAuth Testing
 

@@ -143,6 +143,21 @@ export THINKWORK_DESKTOP_SCHEME="$DESKTOP_SCHEME"
 export THINKWORK_DESKTOP_ICON="$DESKTOP_ICON"
 export THINKWORK_APPLE_TEAM_ID="${APPLE_TEAM_ID:-${THINKWORK_APPLE_TEAM_ID:-}}"
 
+DESKTOP_HAS_SIGNING=0
+if [[ -n "${CSC_LINK:-${MAC_CSC_LINK:-}}" ]]; then
+  DESKTOP_HAS_SIGNING=1
+fi
+if [[ -n "${CSC_NAME:-}" && "${CSC_NAME}" != "null" ]]; then
+  DESKTOP_HAS_SIGNING=1
+fi
+if [[ "$DESKTOP_HAS_SIGNING" == "1" ]]; then
+  DESKTOP_HARDENED_RUNTIME=true
+  DESKTOP_NOTARIZE=true
+else
+  DESKTOP_HARDENED_RUNTIME=false
+  DESKTOP_NOTARIZE=false
+fi
+
 cp "apps/desktop/${DESKTOP_ICON}" apps/desktop/build/icons/icon-active.icns
 BUILDER_CONFIG="apps/desktop/.electron-builder.generated.yml"
 trap 'rm -f "$BUILDER_CONFIG"' EXIT
@@ -173,7 +188,7 @@ protocols:
 mac:
   category: public.app-category.productivity
   icon: build/icons/icon-active.icns
-  hardenedRuntime: true
+  hardenedRuntime: ${DESKTOP_HARDENED_RUNTIME}
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
@@ -183,8 +198,8 @@ if [[ -n "${CSC_NAME:-}" ]]; then
   printf '  identity: %s\n' "$CSC_NAME" >> "$BUILDER_CONFIG"
 fi
 
-cat >> "$BUILDER_CONFIG" <<'EOF'
-  notarize: true
+cat >> "$BUILDER_CONFIG" <<EOF
+  notarize: ${DESKTOP_NOTARIZE}
   target:
     - target: dmg
       arch:

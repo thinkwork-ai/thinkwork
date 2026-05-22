@@ -25,7 +25,30 @@ describe("desktop deep links", () => {
     });
   });
 
-  it("rejects disallowed paths, unexpected query params, missing data, and malformed URLs", () => {
+  it("ignores extra Cognito callback query params once code and state are present", () => {
+    expect(
+      parseDeepLinkCallback(
+        "thinkwork://oauth/callback?code=abc&state=xyz&iss=https%3A%2F%2Fexample.com",
+      ),
+    ).toEqual({
+      code: "abc",
+      state: "xyz",
+    });
+  });
+
+  it("parses OAuth error callbacks so the renderer can show the hosted UI reason", () => {
+    expect(
+      parseDeepLinkCallback(
+        "thinkwork://oauth/callback?error=invalid_request&error_description=Bad%20redirect&state=xyz",
+      ),
+    ).toEqual({
+      error: "invalid_request",
+      errorDescription: "Bad redirect",
+      state: "xyz",
+    });
+  });
+
+  it("rejects disallowed paths, missing data, and malformed URLs", () => {
     const logger = { warn: vi.fn() };
 
     expect(
@@ -34,12 +57,6 @@ describe("desktop deep links", () => {
     expect(
       parseDeepLinkCallback(
         "thinkwork://oauth:123/callback?code=abc&state=xyz",
-        { logger },
-      ),
-    ).toBeNull();
-    expect(
-      parseDeepLinkCallback(
-        "thinkwork://oauth/callback?code=abc&state=xyz&next=/new",
         { logger },
       ),
     ).toBeNull();
@@ -54,7 +71,7 @@ describe("desktop deep links", () => {
     ).toBeNull();
     expect(parseDeepLinkCallback("not a url", { logger })).toBeNull();
 
-    expect(logger.warn).toHaveBeenCalledTimes(6);
+    expect(logger.warn).toHaveBeenCalledTimes(5);
   });
 
   it("rejects callbacks for schemes outside the active stage", () => {

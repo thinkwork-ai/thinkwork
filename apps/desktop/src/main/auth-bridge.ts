@@ -19,6 +19,7 @@ import {
   SignOutRequestSchema,
   StartOAuthRequestSchema,
   type DeepLinkCallback,
+  type OAuthSuccessCallback,
   type PendingOAuthCallback,
   type SenderFrameEvent,
   type SignOutResponse,
@@ -68,7 +69,7 @@ export interface AuthBridgeState {
 export interface OAuthBridgeController {
   startOAuth(request?: StartOAuthRequest): Promise<StartOAuthResponse>;
   completeOAuthCallback(
-    callback: DeepLinkCallback,
+    callback: OAuthSuccessCallback,
   ): Promise<PendingOAuthCallback>;
   signOut(refreshToken: string | null): Promise<SignOutResponse>;
 }
@@ -111,6 +112,13 @@ export function registerAuthBridgeHandlers(
   }
 
   async function acceptDeepLink(callback: DeepLinkCallback): Promise<void> {
+    if ("error" in callback) {
+      const message = formatOAuthError(callback);
+      logger.warn("[desktop:auth-bridge] OAuth returned an error", message);
+      broadcast(OAUTH_ERROR_EVENT_CHANNEL, { message });
+      return;
+    }
+
     if (options.oauth) {
       try {
         const pending = await options.oauth.completeOAuthCallback(callback);
@@ -212,6 +220,15 @@ export function registerAuthBridgeHandlers(
       return () => authStateListeners.delete(listener);
     },
   };
+}
+
+function formatOAuthError(callback: {
+  error: string;
+  errorDescription?: string;
+}): string {
+  const description = callback.errorDescription?.trim();
+  if (description) return `${callback.error}: ${description}`;
+  return callback.error;
 }
 
 function currentRefreshToken(items: Record<string, string>): string | null {

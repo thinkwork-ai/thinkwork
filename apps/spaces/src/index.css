@@ -36,3 +36,19 @@
 .ai-response [data-streamdown="code-block-header"] {
   display: none;
 }
+
+.desktop-shell {
+  --desktop-app-header-height: 2.75rem;
+}
+
+.desktop-app-header {
+  app-region: drag;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.desktop-app-header button,
+.desktop-app-header a {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}

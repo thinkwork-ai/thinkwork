@@ -8,6 +8,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   DeepLinkCallback,
+  OAuthSuccessCallback,
   PendingOAuthCallback,
   SignOutResponse,
   StartOAuthRequest,
@@ -142,7 +143,7 @@ export class DesktopOAuthController {
   }
 
   async completeOAuthCallback(
-    callback: DeepLinkCallback,
+    callback: OAuthSuccessCallback,
   ): Promise<PendingOAuthCallback> {
     this.evictExpiredAttempts();
 
@@ -155,8 +156,7 @@ export class DesktopOAuthController {
     this.inFlight.delete(callback.state);
     try {
       const tokens = await this.exchangeCodeForTokens(callback.code, attempt);
-      const userId = await this.resolveUserId(tokens.id_token);
-      this.persistTokens(tokens, userId);
+      this.persistTokens(tokens, resolveCognitoUsername(tokens.id_token));
 
       return {
         code: callback.code,
@@ -229,7 +229,7 @@ export class DesktopOAuthController {
       response_type: "code",
       client_id: options.clientId,
       redirect_uri: this.redirectUri(),
-      scope: "openid email profile aws.cognito.signin.user.admin",
+      scope: "openid email profile",
       code_challenge: options.challenge,
       code_challenge_method: "S256",
       state: options.state,
@@ -278,48 +278,20 @@ export class DesktopOAuthController {
     };
   }
 
-  private async resolveUserId(idToken: string): Promise<string> {
-    const graphqlUrl = this.graphqlHttpUrl();
-    const response = await this.fetchImpl(graphqlUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({
-        query: "query DesktopOAuthMe { me { id } }",
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`me query failed: ${await response.text()}`);
-    }
-
-    const body = (await response.json()) as {
-      data?: { me?: { id?: unknown } | null };
-      errors?: unknown;
-    };
-    const id = body.data?.me?.id;
-    if (typeof id !== "string" || id.length === 0) {
-      throw new Error("me query did not resolve a Thinkwork user id");
-    }
-    return id;
-  }
-
-  private persistTokens(tokens: OAuthTokens, userId: string): void {
+  private persistTokens(tokens: OAuthTokens, username: string): void {
     const clientId = requireConfig(this.env.cognito.clientId, "client id");
     const prefix = `CognitoIdentityServiceProvider.${clientId}`;
-    this.storage.setItem(`${prefix}.${userId}.idToken`, tokens.id_token);
+    this.storage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
     this.storage.setItem(
-      `${prefix}.${userId}.accessToken`,
+      `${prefix}.${username}.accessToken`,
       tokens.access_token,
     );
     this.storage.setItem(
-      `${prefix}.${userId}.refreshToken`,
+      `${prefix}.${username}.refreshToken`,
       tokens.refresh_token,
     );
-    this.storage.setItem(`${prefix}.${userId}.clockDrift`, "0");
-    this.storage.setItem(`${prefix}.LastAuthUser`, userId);
+    this.storage.setItem(`${prefix}.${username}.clockDrift`, "0");
+    this.storage.setItem(`${prefix}.LastAuthUser`, username);
   }
 
   private async revokeRefreshTokenWithRetry(
@@ -434,12 +406,6 @@ export class DesktopOAuthController {
     if (raw.startsWith("https://")) return raw;
     return `https://${raw}.auth.us-east-1.amazoncognito.com`;
   }
-
-  private graphqlHttpUrl(): string {
-    if (this.env.graphqlHttpUrl) return this.env.graphqlHttpUrl;
-    if (this.env.apiUrl) return `${this.env.apiUrl.replace(/\/$/, "")}/graphql`;
-    throw new Error("Missing GraphQL HTTP URL for OAuth user resolution");
-  }
 }
 
 function verifierString(bytes: Buffer): string {
@@ -453,4 +419,24 @@ function sha256Base64Url(value: BinaryLike): string {
 function requireConfig(value: string | null, label: string): string {
   if (!value) throw new Error(`Missing Cognito ${label}`);
   return value;
+}
+
+function resolveCognitoUsername(idToken: string): string {
+  const [, payloadSegment] = idToken.split(".");
+  if (!payloadSegment) {
+    throw new Error("ID token is not a JWT");
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(Buffer.from(payloadSegment, "base64url").toString());
+  } catch {
+    throw new Error("ID token payload could not be decoded");
+  }
+
+  const username = payload["cognito:username"] ?? payload.sub;
+  if (typeof username !== "string" || username.length === 0) {
+    throw new Error("ID token did not include a Cognito username");
+  }
+  return username;
 }

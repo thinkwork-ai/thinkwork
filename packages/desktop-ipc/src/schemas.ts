@@ -62,14 +62,27 @@ export const SignOutResponseSchema = z
   .strict();
 export const SignedOutEventSchema = SignOutResponseSchema;
 
-export const DeepLinkCallbackSchema = z
+export const OAuthSuccessCallbackSchema = z
   .object({
     code: z.string().min(1),
     state: z.string().min(1),
   })
   .strict();
 
-export const PendingOAuthCallbackSchema = DeepLinkCallbackSchema.extend({
+export const OAuthFailureCallbackSchema = z
+  .object({
+    error: z.string().min(1),
+    errorDescription: z.string().min(1).optional(),
+    state: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const DeepLinkCallbackSchema = z.union([
+  OAuthSuccessCallbackSchema,
+  OAuthFailureCallbackSchema,
+]);
+
+export const PendingOAuthCallbackSchema = OAuthSuccessCallbackSchema.extend({
   next: z.string().min(1).optional(),
 }).strict();
 
@@ -243,6 +256,8 @@ export type StartOAuthRequest = z.infer<typeof StartOAuthRequestSchema>;
 export type StartOAuthResponse = z.infer<typeof StartOAuthResponseSchema>;
 export type SignOutResponse = z.infer<typeof SignOutResponseSchema>;
 export type DeepLinkCallback = z.infer<typeof DeepLinkCallbackSchema>;
+export type OAuthSuccessCallback = z.infer<typeof OAuthSuccessCallbackSchema>;
+export type OAuthFailureCallback = z.infer<typeof OAuthFailureCallbackSchema>;
 export type PendingOAuthCallback = z.infer<typeof PendingOAuthCallbackSchema>;
 export type OAuthErrorEvent = z.infer<typeof OAuthErrorEventSchema>;
 export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
