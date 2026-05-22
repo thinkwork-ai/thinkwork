@@ -12,6 +12,10 @@ const migration0113 = readFileSync(
   join(HERE, "..", "drizzle", "0113_agents_own_runtime_fields.sql"),
   "utf-8",
 );
+const migration0123 = readFileSync(
+  join(HERE, "..", "drizzle", "0123_single_platform_agent_and_overrides.sql"),
+  "utf-8",
+);
 
 describe("agent runtime selector schema", () => {
   it("defaults agents to the Strands runtime", () => {
@@ -32,6 +36,8 @@ describe("agent runtime selector schema", () => {
     expect(columns.web_search.notNull).toBe(false);
     expect(columns.send_email.notNull).toBe(false);
     expect(columns.context_engine.notNull).toBe(false);
+    expect(columns.is_platform_default.notNull).toBe(true);
+    expect(columns.is_platform_default.default).toBe(false);
   });
 
   it("declares manual migration drift markers for Agent-owned runtime fields", () => {
@@ -54,6 +60,28 @@ describe("agent runtime selector schema", () => {
     }
     expect(migration0113).toContain("ALTER COLUMN template_id DROP NOT NULL");
     expect(migration0113).toContain("agents_guardrail_id_guardrails_id_fk");
+  });
+
+  it("declares the platform-agent marker and one-per-tenant index", () => {
+    expect(migration0123).toMatch(
+      /--\s*creates-column:\s*public\.agents\.is_platform_default\b/,
+    );
+    expect(migration0123).toMatch(
+      /--\s*creates:\s*public\.uq_agents_platform_default_per_tenant\b/,
+    );
+    expect(migration0123).toMatch(
+      /ADD COLUMN IF NOT EXISTS is_platform_default boolean\b/,
+    );
+    expect(migration0123).toContain(
+      "ALTER COLUMN is_platform_default SET DEFAULT false",
+    );
+    expect(migration0123).toContain(
+      "ALTER COLUMN is_platform_default SET NOT NULL",
+    );
+    expect(migration0123).toContain(
+      "CREATE UNIQUE INDEX IF NOT EXISTS uq_agents_platform_default_per_tenant",
+    );
+    expect(migration0123).toContain("WHERE is_platform_default IS TRUE");
   });
 
   it("defaults agent templates to the Strands runtime", () => {
