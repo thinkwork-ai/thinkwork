@@ -9,6 +9,7 @@
 #   AWS_REGION            AWS region (default: us-east-1)
 #   GITHUB_REF_NAME       Release tag such as desktop-v1.2.3-canary.1
 #   BUILD_CHANNEL         stable, canary, or dev
+#   DESKTOP_MAC_ARCHES    comma-separated macOS arches to package (default: arm64,x64)
 #   DESKTOP_SKIP_TERRAFORM=1 to use existing VITE_* env vars instead of terraform outputs
 
 set -euo pipefail
@@ -158,6 +159,29 @@ else
   DESKTOP_NOTARIZE=false
 fi
 
+DESKTOP_MAC_ARCHES="${DESKTOP_MAC_ARCHES:-arm64,x64}"
+DESKTOP_ARCH_LINES=""
+IFS=',' read -r -a DESKTOP_ARCH_ARRAY <<< "$DESKTOP_MAC_ARCHES"
+for raw_arch in "${DESKTOP_ARCH_ARRAY[@]}"; do
+  arch="${raw_arch//[[:space:]]/}"
+  case "$arch" in
+    arm64 | x64 | universal)
+      DESKTOP_ARCH_LINES+="        - ${arch}"$'\n'
+      ;;
+    "")
+      ;;
+    *)
+      echo "DESKTOP_MAC_ARCHES may only include arm64, x64, or universal; got '$arch'" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$DESKTOP_ARCH_LINES" ]]; then
+  echo "DESKTOP_MAC_ARCHES must include at least one architecture" >&2
+  exit 2
+fi
+
 cp "apps/desktop/${DESKTOP_ICON}" apps/desktop/build/icons/icon-active.icns
 BUILDER_CONFIG="apps/desktop/.electron-builder.generated.yml"
 trap 'rm -f "$BUILDER_CONFIG"' EXIT
@@ -203,12 +227,10 @@ cat >> "$BUILDER_CONFIG" <<EOF
   target:
     - target: dmg
       arch:
-        - arm64
-        - x64
+${DESKTOP_ARCH_LINES}
     - target: zip
       arch:
-        - arm64
-        - x64
+${DESKTOP_ARCH_LINES}
 
 dmg:
   sign: false
