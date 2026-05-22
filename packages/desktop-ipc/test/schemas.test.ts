@@ -4,16 +4,27 @@ import {
   DeepLinkCallbackSchema,
   UpdateStateSchema,
   UpdateStatusSchema,
+  UpdateTelemetryEventSchema,
   assertSafeSenderFrame,
   rateLimit,
   resetRateLimits,
   type UpdateState,
 } from "../src/index";
 
-const arch = {
+const updateState = {
+  status: "up-to-date",
+  currentVersion: "1.0.0",
+  availableVersion: null,
+  downloadedVersion: null,
+  downloadPercent: null,
   hostArch: "arm64",
   appArch: "arm64",
   runningUnderArm64Translation: false,
+  checkedAt: "2026-05-22T00:00:00.000Z",
+  message: null,
+  errorContext: null,
+  canRetry: false,
+  channel: "latest",
 };
 
 describe("desktop IPC schemas", () => {
@@ -87,11 +98,9 @@ describe("desktop IPC schemas", () => {
 
     expect(
       ChannelSchemas.getUpdateState.response.parse({
-        status: "up-to-date",
-        arch,
-        version: "1.0.0",
+        ...updateState,
       }),
-    ).toEqual({ status: "up-to-date", arch, version: "1.0.0" });
+    ).toEqual(updateState);
 
     expect(
       ChannelSchemas.checkForUpdates.request.parse(undefined),
@@ -146,9 +155,25 @@ describe("desktop IPC schemas", () => {
 
   it("accepts every update status", () => {
     for (const status of UpdateStatusSchema.options) {
-      const state: UpdateState = { status, arch };
+      const state: UpdateState = { ...updateState, status };
       expect(UpdateStateSchema.parse(state)).toEqual(state);
     }
+  });
+
+  it("parses update telemetry events", () => {
+    expect(
+      UpdateTelemetryEventSchema.parse({
+        type: "update.download_completed",
+        version: "1.0.1",
+        channel: "latest",
+        fromVersion: "1.0.0",
+      }),
+    ).toEqual({
+      type: "update.download_completed",
+      version: "1.0.1",
+      channel: "latest",
+      fromVersion: "1.0.0",
+    });
   });
 
   it("keeps the deep-link callback schema strict", () => {

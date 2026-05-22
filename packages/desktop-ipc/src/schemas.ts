@@ -111,13 +111,52 @@ export const UpdateErrorSchema = z
 export const UpdateStateSchema = z
   .object({
     status: UpdateStatusSchema,
-    arch: UpdateArchMetadataSchema,
-    version: z.string().min(1).nullable().optional(),
-    channel: z.string().min(1).optional(),
-    progressPercent: z.number().min(0).max(100).optional(),
-    error: UpdateErrorSchema.optional(),
+    currentVersion: z.string().min(1),
+    availableVersion: z.string().min(1).nullable(),
+    downloadedVersion: z.string().min(1).nullable(),
+    downloadPercent: z.number().min(0).max(100).nullable(),
+    hostArch: z.string().min(1),
+    appArch: z.string().min(1),
+    runningUnderArm64Translation: z.boolean(),
+    checkedAt: z.string().min(1).nullable(),
+    message: z.string().min(1).nullable(),
+    errorContext: z.enum(["check", "download", "install"]).nullable(),
+    canRetry: z.boolean(),
+    channel: z.string().min(1),
   })
   .strict();
+
+export const UpdateDownloadCompletedEventSchema = z
+  .object({
+    type: z.literal("update.download_completed"),
+    version: z.string().min(1),
+    channel: z.string().min(1),
+    fromVersion: z.string().min(1),
+  })
+  .strict();
+
+export const UpdateInstallCompletedEventSchema = z
+  .object({
+    type: z.literal("update.install_completed"),
+    version: z.string().min(1),
+    fromVersion: z.string().min(1),
+  })
+  .strict();
+
+export const UpdateInstallFailedOrSkippedEventSchema = z
+  .object({
+    type: z.literal("update.install_failed_or_skipped"),
+    version: z.string().min(1),
+    fromVersion: z.string().min(1),
+    attemptedVersion: z.string().min(1),
+  })
+  .strict();
+
+export const UpdateTelemetryEventSchema = z.discriminatedUnion("type", [
+  UpdateDownloadCompletedEventSchema,
+  UpdateInstallCompletedEventSchema,
+  UpdateInstallFailedOrSkippedEventSchema,
+]);
 
 export const GetUpdateStateRequestSchema = EmptyRequestSchema;
 export const GetUpdateStateResponseSchema = UpdateStateSchema;
@@ -209,6 +248,7 @@ export type OAuthErrorEvent = z.infer<typeof OAuthErrorEventSchema>;
 export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
 export type UpdateArchMetadata = z.infer<typeof UpdateArchMetadataSchema>;
 export type UpdateState = z.infer<typeof UpdateStateSchema>;
+export type UpdateTelemetryEvent = z.infer<typeof UpdateTelemetryEventSchema>;
 export type ReportInstallOutcomeRequest = z.infer<
   typeof ReportInstallOutcomeRequestSchema
 >;
