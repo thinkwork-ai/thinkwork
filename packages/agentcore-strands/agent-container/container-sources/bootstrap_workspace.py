@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -44,6 +43,26 @@ class BootstrapResult:
 
 def _agent_prefix(tenant_slug: str, agent_slug: str) -> str:
     return f"tenants/{tenant_slug}/agents/{agent_slug}/workspace/"
+
+
+def _normalize_prefix(prefix: str) -> str:
+    if not prefix:
+        return ""
+    return prefix if prefix.endswith("/") else f"{prefix}/"
+
+
+def _sync_prefix(
+    *,
+    tenant_slug: str,
+    agent_slug: str,
+    rendered_workspace_prefix: str = "",
+    rendered_workspace_prefix_template: str = "",
+) -> str:
+    if rendered_workspace_prefix_template:
+        normalized_rendered_prefix = _normalize_prefix(rendered_workspace_prefix)
+        if normalized_rendered_prefix:
+            return normalized_rendered_prefix
+    return _agent_prefix(tenant_slug, agent_slug)
 
 
 def _list_agent_keys(s3_client: "S3Client", bucket: str, prefix: str) -> list[str]:
@@ -93,10 +112,13 @@ def bootstrap_workspace(
     local_dir: str,
     s3_client: "S3Client",
     bucket: str,
+    rendered_workspace_prefix: str = "",
+    rendered_workspace_prefix_template: str = "",
 ) -> BootstrapResult:
-    """Sync the agent's S3 prefix to ``local_dir``.
+    """Sync the selected S3 prefix to ``local_dir``.
 
-    - Lists ``tenants/{tenant_slug}/agents/{agent_slug}/workspace/``.
+    - Lists the legacy agent workspace prefix unless rendered-prefix sync
+      is enabled by ``rendered_workspace_prefix_template``.
     - Downloads every file (skipping manifest.json + _defaults_version).
     - Deletes any local files no longer present in S3.
 
@@ -104,7 +126,12 @@ def bootstrap_workspace(
     list / IAM failures so the caller can surface a structured error
     rather than letting the agent run against a stale tree.
     """
-    prefix = _agent_prefix(tenant_slug, agent_slug)
+    prefix = _sync_prefix(
+        tenant_slug=tenant_slug,
+        agent_slug=agent_slug,
+        rendered_workspace_prefix=rendered_workspace_prefix,
+        rendered_workspace_prefix_template=rendered_workspace_prefix_template,
+    )
     remote_keys = _list_agent_keys(s3_client, bucket, prefix)
     remote_set = set(remote_keys)
 

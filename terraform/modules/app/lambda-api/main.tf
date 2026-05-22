@@ -539,6 +539,10 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         # for Computer-target list/get to bypass the computer_tasks queue
         # and read EFS directly. Standalone resource below.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs",
+        # workspace-renderer: chat-agent-invoke invokes this synchronously
+        # before AgentCore so the Strands runtime can opt into the rendered
+        # per-(agent, Space, user) workspace prefix.
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer",
       ]
     }]
   })
