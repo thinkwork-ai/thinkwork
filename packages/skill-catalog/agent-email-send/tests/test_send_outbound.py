@@ -79,6 +79,8 @@ def test_outbound_variant_declared_and_drops_inbound_vars() -> None:
     outbound = variants["outbound"]
     for key in ("THINKWORK_API_URL", "THINKWORK_API_SECRET", "AGENT_ID", "AGENT_EMAIL_ADDRESS"):
         assert key in outbound["requires_env"]
+    for optional_key in ("ACTIVE_SPACE_TENANT_SLUG", "ACTIVE_SPACE_SLUG"):
+        assert optional_key not in outbound["requires_env"]
     for forbidden in ("INBOUND_MESSAGE_ID", "INBOUND_SUBJECT", "INBOUND_FROM", "INBOUND_BODY"):
         assert forbidden not in outbound["requires_env"], (
             f"outbound must relax {forbidden}"
@@ -146,6 +148,30 @@ def test_outbound_mode_sends_without_threading_fields(send_env) -> None:
     assert "inReplyTo" not in captured["body"]
     assert "quotedFrom" not in captured["body"]
     assert "quotedBody" not in captured["body"]
+    assert "spaceTenantSlug" not in captured["body"]
+    assert "spaceSlug" not in captured["body"]
+
+
+def test_active_space_context_forwarded_when_available(send_env, monkeypatch) -> None:
+    monkeypatch.setenv("ACTIVE_SPACE_TENANT_SLUG", "acme")
+    monkeypatch.setenv("ACTIVE_SPACE_SLUG", "finance")
+    mod = _load_send_module()
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["body"] = json.loads(req.data.decode())
+        return _fake_response('{"messageId":"m-space","status":"sent"}')
+
+    with mock.patch("urllib.request.urlopen", fake_urlopen):
+        result = mod.send_email(
+            to=["recipient@example.com"],
+            subject="Finance update",
+            body="Here is the brief.",
+            mode="outbound",
+        )
+    assert json.loads(result) == {"messageId": "m-space", "status": "sent"}
+    assert captured["body"]["spaceTenantSlug"] == "acme"
+    assert captured["body"]["spaceSlug"] == "finance"
 
 
 def test_outbound_mode_rejects_threading_fields(send_env) -> None:

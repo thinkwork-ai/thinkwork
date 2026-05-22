@@ -3185,6 +3185,11 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     or scope.get("spaceId")
                     or turn_context.get("spaceId")
                     or "",
+                    "active_space_tenant_slug": payload.get("tenantSlug")
+                    or scope.get("tenantSlug")
+                    or turn_context.get("tenantSlug")
+                    or payload.get("tenant_slug")
+                    or "",
                     "active_space_slug": payload.get("spaceSlug")
                     or scope.get("spaceSlug")
                     or turn_context.get("spaceSlug")
@@ -3248,6 +3253,10 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 "user_id": user_id,
                 "thread_id": ticket_id,
                 "active_space_id": turn_context.get("spaceId") or payload.get("space_id") or "",
+                "active_space_tenant_slug": turn_context.get("tenantSlug")
+                or payload.get("tenant_slug")
+                or tenant_slug
+                or "",
                 "active_space_slug": turn_context.get("spaceSlug") or payload.get("space_slug") or "",
                 "sandbox_interpreter_id": payload.get("sandbox_interpreter_id") or "",
                 "sandbox_environment": payload.get("sandbox_environment") or "",

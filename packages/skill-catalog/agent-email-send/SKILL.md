@@ -2,7 +2,7 @@
 name: agent-email-send
 display_name: Agent Email Send
 description: >
-  Send emails from your agent email address with reply tracking.
+  Send emails from your active Space email address with reply tracking.
   Use when the agent needs to send an email, reply to a message, or follow up with someone.
 license: Proprietary
 metadata:
@@ -66,7 +66,7 @@ mode_variants:
 
 ## Your Email Address
 
-Your email address is `$AGENT_EMAIL_ADDRESS`. All outbound emails are sent from this address. Recipients can reply directly to this address.
+Your email address is the active Space address when `$ACTIVE_SPACE_TENANT_SLUG` and `$ACTIVE_SPACE_SLUG` are available: `$ACTIVE_SPACE_TENANT_SLUG.$ACTIVE_SPACE_SLUG@agents.thinkwork.ai`. Older invocations that do not include active Space context fall back to `$AGENT_EMAIL_ADDRESS`. Recipients can reply directly to the address used for the sent message.
 
 ## Sending an Email
 
@@ -79,16 +79,16 @@ Use the `send_email` tool to send emails. You MUST always include your `agent_id
 
 ### Parameters
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `agentId` | Yes | Your agent ID (`$AGENT_ID`) |
-| `to` | Yes | Recipient email address(es), comma-separated for multiple |
-| `subject` | Yes | Email subject line |
-| `body` | Yes | Plain text email body (your reply only — quoted thread is appended automatically) |
-| `threadId` | No | Thread ID to associate replies with a specific conversation |
-| `inReplyTo` | No | Message-ID of the email being replied to (for threading). Use `$INBOUND_MESSAGE_ID` when replying to an inbound email. |
-| `quotedFrom` | No | Sender of the original email (for quoting). Use `$INBOUND_FROM` when replying. |
-| `quotedBody` | No | Body of the original email (for quoting). Use `$INBOUND_BODY` when replying. |
+| Field        | Required | Description                                                                                                            |
+| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `agentId`    | Yes      | Your agent ID (`$AGENT_ID`)                                                                                            |
+| `to`         | Yes      | Recipient email address(es), comma-separated for multiple                                                              |
+| `subject`    | Yes      | Email subject line                                                                                                     |
+| `body`       | Yes      | Plain text email body (your reply only — quoted thread is appended automatically)                                      |
+| `threadId`   | No       | Thread ID to associate replies with a specific conversation                                                            |
+| `inReplyTo`  | No       | Message-ID of the email being replied to (for threading). Use `$INBOUND_MESSAGE_ID` when replying to an inbound email. |
+| `quotedFrom` | No       | Sender of the original email (for quoting). Use `$INBOUND_FROM` when replying.                                         |
+| `quotedBody` | No       | Body of the original email (for quoting). Use `$INBOUND_BODY` when replying.                                           |
 
 ### Response
 

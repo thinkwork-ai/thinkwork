@@ -52,6 +52,7 @@ ENV_KEYS = [
     "SLACK_PLACEHOLDER_TS",
     "SLACK_MODAL_VIEW_ID",
     "ACTIVE_SPACE_ID",
+    "ACTIVE_SPACE_TENANT_SLUG",
     "ACTIVE_SPACE_SLUG",
     "ACTIVE_SPACE_IS_DEFAULT",
 ]
@@ -144,11 +145,13 @@ class ApplyInvocationEnvTests(unittest.TestCase):
             "user_id": "user-a",
             "thread_id": "thread-a",
             "active_space_id": "space-finance",
+            "active_space_tenant_slug": "acme",
             "active_space_slug": "finance",
         }
         keys = invocation_env.apply_invocation_env(payload)
 
         self.assertEqual(os.environ.get("ACTIVE_SPACE_ID"), "space-finance")
+        self.assertEqual(os.environ.get("ACTIVE_SPACE_TENANT_SLUG"), "acme")
         self.assertEqual(os.environ.get("ACTIVE_SPACE_SLUG"), "finance")
         self.assertEqual(os.environ.get("ACTIVE_SPACE_IS_DEFAULT"), "false")
         self.assertIn("ACTIVE_SPACE_ID", keys)
