@@ -21,12 +21,6 @@ const CATALOG_SKILL_PREFIX = "skills/catalog";
 export const PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG =
   "thinkwork-computer-default";
 
-export const DEFAULT_COMPUTER_RUNBOOK_SKILL_SLUGS = [
-  "crm-dashboard",
-  "research-dashboard",
-  "map-artifact",
-] as const;
-
 type ComputerSeedRow = {
   id: string;
   tenant_id: string;
@@ -39,12 +33,6 @@ type SourceWorkspaceFile = {
   key: string;
   etag: string | null;
   size: number;
-};
-
-type DefaultRunbookSkillRow = {
-  id: string;
-  tenant_id: string;
-  tenant_slug: string | null;
 };
 
 type TemplateWorkspaceSyncTarget = {
@@ -114,60 +102,6 @@ export async function ensureMigratedComputerWorkspaceSeeded(input: {
     skipped,
     seededAt: new Date().toISOString(),
   });
-
-  return { seeded: true, enqueued, skipped };
-}
-
-export async function ensureDefaultComputerRunbookSkillsMaterialized(input: {
-  tenantId: string;
-  computerId: string;
-}) {
-  const target = await loadDefaultRunbookSkillTarget(
-    input.tenantId,
-    input.computerId,
-  );
-  if (!target) return { seeded: false, reason: "computer_missing" };
-  if (!target.tenant_slug) {
-    return { seeded: false, reason: "tenant_missing" };
-  }
-
-  let enqueued = 0;
-  let skipped = 0;
-
-  for (const skillSlug of DEFAULT_COMPUTER_RUNBOOK_SKILL_SLUGS) {
-    const sourcePrefix = `${CATALOG_SKILL_PREFIX}/${skillSlug}/`;
-    const files = await listWorkspaceFiles(sourcePrefix);
-
-    for (const file of files) {
-      if (file.size === 0 || file.size > MAX_SEED_FILE_BYTES) {
-        skipped++;
-        continue;
-      }
-      const content = await readWorkspaceFile(file.key);
-      if (!content.trim()) {
-        skipped++;
-        continue;
-      }
-
-      await enqueueComputerTask({
-        tenantId: input.tenantId,
-        computerId: input.computerId,
-        taskType: "workspace_file_write",
-        taskInput: {
-          path: `skills/${skillSlug}/${file.path}`,
-          content,
-        },
-        idempotencyKey: [
-          "computer_default_runbook_skill",
-          input.computerId,
-          skillSlug,
-          file.path,
-          file.etag ?? "no-etag",
-        ].join(":"),
-      });
-      enqueued++;
-    }
-  }
 
   return { seeded: true, enqueued, skipped };
 }
@@ -279,23 +213,6 @@ async function loadSourceAgentWorkspace(input: {
     agentSlug: row.agent_slug,
     prefix: `tenants/${row.tenant_slug}/agents/${row.agent_slug}/workspace/`,
   };
-}
-
-async function loadDefaultRunbookSkillTarget(
-  tenantId: string,
-  computerId: string,
-): Promise<DefaultRunbookSkillRow | undefined> {
-  const [row] = await db
-    .select({
-      id: computers.id,
-      tenant_id: computers.tenant_id,
-      tenant_slug: tenants.slug,
-    })
-    .from(computers)
-    .leftJoin(tenants, eq(tenants.id, computers.tenant_id))
-    .where(and(eq(computers.tenant_id, tenantId), eq(computers.id, computerId)))
-    .limit(1);
-  return row;
 }
 
 function parseComputerTemplateSkillObjectKey(key: string): {

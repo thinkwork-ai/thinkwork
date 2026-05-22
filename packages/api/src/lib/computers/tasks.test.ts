@@ -29,7 +29,6 @@ describe("Computer task helpers", () => {
     expect(parseComputerTaskType("GOOGLE_CALENDAR_UPCOMING")).toBe(
       "google_calendar_upcoming",
     );
-    expect(parseComputerTaskType("RUNBOOK_EXECUTE")).toBe("runbook_execute");
   });
 
   it("rejects unsupported task types", () => {
@@ -80,7 +79,6 @@ describe("Computer task helpers", () => {
       actorId: "user-1",
       requesterUserId: "user-1",
       contextClass: "user",
-      runbookRunId: null,
       credentialSubject: null,
       event: null,
       surfaceContext: {
@@ -94,22 +92,20 @@ describe("Computer task helpers", () => {
       normalizeTaskInput("thread_turn", {
         threadId: "thread-1",
         messageId: "message-1",
-        source: "runbook",
-        runbookRunId: "run-1",
+        source: "schedule",
       }),
     ).toEqual({
       threadId: "thread-1",
       messageId: "message-1",
-      source: "runbook",
+      source: "schedule",
       actorType: null,
       actorId: null,
       requesterUserId: null,
       contextClass: "system",
-      runbookRunId: "run-1",
       credentialSubject: null,
       event: null,
       surfaceContext: {
-        source: "runbook",
+        source: "schedule",
         triggerId: null,
         triggerType: null,
         scheduleName: null,
@@ -164,7 +160,6 @@ describe("Computer task helpers", () => {
       actorId: "user-1",
       requesterUserId: "user-1",
       contextClass: "personal_connector_event",
-      runbookRunId: null,
       credentialSubject: {
         type: "user",
         userId: "user-1",
@@ -354,26 +349,6 @@ describe("Computer task helpers", () => {
         actorId: "user-1",
       }),
     ).toThrow("triggerSurface is required");
-  });
-
-  it("normalizes runbook execution input", () => {
-    expect(
-      normalizeTaskInput("runbook_execute", {
-        runbookRunId: "run-1",
-        threadId: "thread-1",
-        messageId: "message-1",
-        actorType: "user",
-        actorId: "user-1",
-      }),
-    ).toEqual({
-      runbookRunId: "run-1",
-      threadId: "thread-1",
-      messageId: "message-1",
-      actorType: "user",
-      actorId: "user-1",
-      requesterUserId: "user-1",
-      contextClass: "user",
-    });
   });
 
   it("rejects unsafe workspace paths", () => {

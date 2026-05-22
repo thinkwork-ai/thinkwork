@@ -52,8 +52,6 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "hindsight_usage_capture",
     "invocation_env",
     "memory_tools",
-    "runbook_capabilities",
-    "runbook_context",
     "run_skill_dispatch",
     "sandbox_preamble",
     "sandbox_tool",
@@ -107,19 +105,6 @@ EXPECTED_AUTH_AGENT: tuple[str, ...] = (
     "auth-agent/permission_request.py",
 )
 
-# Platform system-contract skills shipped under /app/skill-catalog/ by the
-# Dockerfile wildcard COPY. Boot-time presence check guards the
-# system_contract_loader against silent degradation -- if a SKILL.md is
-# missing at build time, every turn that should activate the contract would
-# instead see no contract in its system prompt with only a CloudWatch warning.
-# Keep in sync with packages/skill-catalog/<slug>/ when contracts are added or
-# removed (plan 2026-05-21-004).
-EXPECTED_SYSTEM_CONTRACTS: tuple[str, ...] = (
-    "skill-catalog/computer-thread-contract/SKILL.md",
-    "skill-catalog/eval-runtime-constraints/SKILL.md",
-    "skill-catalog/runbook-execution-contract/SKILL.md",
-)
-
 REQUIRED_EXECUTABLES: tuple[str, ...] = (
     "opentelemetry-instrument",
 )
@@ -138,7 +123,7 @@ def _missing(app_dir: str) -> list[str]:
     for mod in EXPECTED_CONTAINER_SOURCES + EXPECTED_SHARED:
         if not os.path.isfile(os.path.join(app_dir, f"{mod}.py")):
             out.append(f"{mod}.py")
-    for rel in EXPECTED_AUTH_AGENT + EXPECTED_SYSTEM_CONTRACTS:
+    for rel in EXPECTED_AUTH_AGENT:
         if not os.path.isfile(os.path.join(app_dir, rel)):
             out.append(rel)
     return out
@@ -188,17 +173,11 @@ def check(app_dir: str = "/app") -> None:
             + "\n  ".join(missing_executables)
             + "\nCheck requirements.txt and the Dockerfile dependency install step."
         )
-    total = (
-        len(EXPECTED_CONTAINER_SOURCES)
-        + len(EXPECTED_SHARED)
-        + len(EXPECTED_AUTH_AGENT)
-        + len(EXPECTED_SYSTEM_CONTRACTS)
-    )
+    total = len(EXPECTED_CONTAINER_SOURCES) + len(EXPECTED_SHARED) + len(EXPECTED_AUTH_AGENT)
     print(
         f"[_boot_assert] ok — {total} expected files present under {app_dir} "
         f"({len(EXPECTED_CONTAINER_SOURCES)} container-sources, "
-        f"{len(EXPECTED_SHARED)} shared, {len(EXPECTED_AUTH_AGENT)} auth-agent, "
-        f"{len(EXPECTED_SYSTEM_CONTRACTS)} system-contracts)",
+        f"{len(EXPECTED_SHARED)} shared, {len(EXPECTED_AUTH_AGENT)} auth-agent)",
         flush=True,
     )
 

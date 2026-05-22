@@ -2,7 +2,7 @@
 
 Build a map-centered artifact with clear layers, filters, entity details, and caveats for missing or approximate location data.
 
-Use the Artifact Builder compatibility shim only as the implementation mechanism. The runbook owns location discovery, spatial analysis, validation, and queue semantics; this phase owns the saved map artifact.
+Compose with the `artifact-builder` skill for all artifact mechanics (preview, save, shadcn registry, TSX validation). This skill adds the map-specific spatial layout on top.
 
 Use `MapView` from `@thinkwork/computer-stdlib` for the primary map. Do not embed an OpenStreetMap.org iframe, hand-roll `react-leaflet` setup, or enable scroll-wheel trapping inside the artifact. `MapView` owns tile-provider fallback, theming, default marker handling, and map interaction defaults.
 
@@ -24,6 +24,5 @@ Call `save_app` directly in the parent Computer turn. Include:
 - `metadata.prompt`: user prompt.
 - `metadata.recipe`: `map-artifact`.
 - `metadata.recipeVersion`: `1`.
-- `metadata.runbookSlug`: `map-artifact`.
 
 Only report success after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`.

@@ -5,10 +5,10 @@ description: >
   Build a general-purpose research dashboard that turns gathered evidence into an inspectable artifact.
 license: Proprietary
 category: research
-version: "0.1.0"
+version: "0.2.0"
 author: thinkwork
 icon: search-check
-tags: [computer-runbook, research, dashboard, evidence]
+tags: [research, dashboard, evidence]
 execution: context
 allowed-tools:
   - workspace search
@@ -16,9 +16,7 @@ allowed-tools:
   - artifact builder
 metadata:
   author: thinkwork
-  version: "0.1.0"
-  thinkwork_kind: computer-runbook
-  thinkwork_runbook_contract: references/thinkwork-runbook.json
+  version: "0.2.0"
 triggers:
   - "Build a research dashboard comparing these vendors."
   - "Create an evidence dashboard for supplier risk."
@@ -29,8 +27,11 @@ triggers:
 
 Use this skill when the user wants gathered evidence, comparisons, source-backed findings, risks, or caveats turned into an inspectable dashboard artifact.
 
-Start by reading `references/thinkwork-runbook.json` for routing, confirmation, phase, output, and asset contracts. Then load only the phase guidance needed for the current phase.
+This skill composes with the `artifact-builder` skill — that skill owns the general artifact-build mechanics (`preview_app`, `save_app`, shadcn registry, TSX validation, component contracts). This skill adds the research-evidence layout, source-attribution components, and confidence/caveat-indicator guidance on top.
 
-Follow the phase order unless the active run snapshot tells you otherwise: discover evidence, synthesize findings, produce the dashboard artifact, then validate evidence and caveats. Preserve uncertainty and keep source-backed facts distinct from inference.
+## How to use it
 
-When producing the artifact, use `assets/research-dashboard-layout.json` as output-shaping guidance for the dashboard structure.
+1. Follow the `artifact-builder` skill's contract for all artifact mechanics.
+2. Use `references/discover.md` to scope the evidence gathering. Preserve uncertainty and keep source-backed facts distinct from inference.
+3. Use `references/produce.md` for the dashboard structure — findings/entities grouped by relevant dimension, source-backed claims with confidence indicators, filters and drill-in tables that let the user inspect rather than read a static report.
+4. Use `assets/research-dashboard-layout.json` for output-shaping guidance.

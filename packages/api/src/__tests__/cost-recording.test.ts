@@ -113,7 +113,7 @@ describe("extractUsage", () => {
 		});
 	});
 
-	it("extracts usage from AgentCore snake_case runbook step output", () => {
+	it("extracts usage from AgentCore snake_case step output", () => {
 		const result = extractUsage({
 			model: "us.anthropic.claude-sonnet-4-6",
 			usage: {

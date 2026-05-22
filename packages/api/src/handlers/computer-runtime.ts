@@ -28,16 +28,6 @@ import {
   resolveComputerRuntimeConfig,
 } from "../lib/computers/runtime-api.js";
 import {
-  completeRunbookExecutionRun,
-  completeRunbookExecutionTask,
-  executeRunbookExecutionTask,
-  failRunbookExecutionTask,
-  loadRunbookExecutionContext,
-  recordRunbookExecutionResponse,
-  RunbookRuntimeError,
-  startRunbookExecutionTask,
-} from "../lib/runbooks/runtime-api.js";
-import {
   COMPUTER_TASK_TYPES,
   ComputerTaskInputError,
   enqueueComputerTask,
@@ -62,9 +52,6 @@ export async function handler(
     if (err instanceof BadRequestError) return error(err.message, 400);
     if (err instanceof ComputerTaskInputError) return error(err.message, 400);
     if (err instanceof ComputerTaskDelegationError) {
-      return error(err.message, err.statusCode);
-    }
-    if (err instanceof RunbookRuntimeError) {
       return error(err.message, err.statusCode);
     }
     if (err instanceof ComputerNotFoundError) return notFound(err.message);
@@ -223,121 +210,6 @@ async function route(
         content: bodyString(body.content, "content"),
         model: optionalString(body.model),
         source: optionalString(body.source),
-        usage: body.usage,
-      }),
-    );
-  }
-
-  const runbookContextMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/context$/,
-  );
-  if (method === "POST" && runbookContextMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await loadRunbookExecutionContext({
-        tenantId,
-        computerId,
-        taskId: validUuid(runbookContextMatch[1], "taskId"),
-      }),
-    );
-  }
-
-  const runbookTaskStartMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/start$/,
-  );
-  if (method === "POST" && runbookTaskStartMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await startRunbookExecutionTask({
-        tenantId,
-        computerId,
-        taskId: validUuid(runbookTaskStartMatch[1], "taskId"),
-        runbookTaskId: validUuid(runbookTaskStartMatch[2], "runbookTaskId"),
-      }),
-    );
-  }
-
-  const runbookTaskExecuteMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/execute$/,
-  );
-  if (method === "POST" && runbookTaskExecuteMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await executeRunbookExecutionTask({
-        tenantId,
-        computerId,
-        taskId: validUuid(runbookTaskExecuteMatch[1], "taskId"),
-        runbookTaskId: validUuid(runbookTaskExecuteMatch[2], "runbookTaskId"),
-      }),
-    );
-  }
-
-  const runbookTaskCompleteMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/complete$/,
-  );
-  if (method === "POST" && runbookTaskCompleteMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await completeRunbookExecutionTask({
-        tenantId,
-        computerId,
-        taskId: validUuid(runbookTaskCompleteMatch[1], "taskId"),
-        runbookTaskId: validUuid(runbookTaskCompleteMatch[2], "runbookTaskId"),
-        output: body.output,
-      }),
-    );
-  }
-
-  const runbookTaskFailMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/fail$/,
-  );
-  if (method === "POST" && runbookTaskFailMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await failRunbookExecutionTask({
-        tenantId,
-        computerId,
-        taskId: validUuid(runbookTaskFailMatch[1], "taskId"),
-        runbookTaskId: validUuid(runbookTaskFailMatch[2], "runbookTaskId"),
-        error: body.error ?? { message: "Runbook task failed" },
-      }),
-    );
-  }
-
-  const runbookCompleteMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/complete$/,
-  );
-  if (method === "POST" && runbookCompleteMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await completeRunbookExecutionRun({
-        tenantId,
-        computerId,
-        taskId: validUuid(runbookCompleteMatch[1], "taskId"),
-        output: body.output,
-      }),
-    );
-  }
-
-  const runbookResponseMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/response$/,
-  );
-  if (method === "POST" && runbookResponseMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await recordRunbookExecutionResponse({
-        tenantId,
-        computerId,
-        taskId: validUuid(runbookResponseMatch[1], "taskId"),
-        content: bodyString(body.content, "content"),
-        model: optionalString(body.model),
         usage: body.usage,
       }),
     );

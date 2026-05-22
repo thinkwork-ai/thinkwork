@@ -17,13 +17,7 @@
  * signals.
  *
  * Migration states:
- *   - done              — execution is `script` or `context`, OR the
- *                         skill declares `contract: system` (system
- *                         contracts are platform-resident behavioral
- *                         rules loaded by the system_contract_loader,
- *                         not invocable skills — they don't go through
- *                         the script/context dispatch path so they have
- *                         no `execution` field to migrate).
+ *   - done              — execution is `script` or `context`.
  *   - regressed         — frontmatter declares an execution value the
  *                         runtime no longer handles (anything outside
  *                         `script` | `context`). Post-U6 this must
@@ -112,19 +106,10 @@ function inspect(slug: string, catalog: string): SlugStatus {
   const fm = result.parsed.data;
   const execution = typeof fm.execution === "string" ? fm.execution : "";
   const mode = typeof fm.mode === "string" ? fm.mode : "";
-  const contract = typeof fm.contract === "string" ? fm.contract : "";
   const steps = Array.isArray(fm.steps) ? (fm.steps as unknown[]) : [];
 
   let state: MigrationState;
-  let note: string | undefined;
-  if (contract === "system") {
-    // System contracts (loaded by packages/agentcore-strands/.../
-    // system_contract_loader.py per plan 2026-05-21-004) live in the
-    // catalog but don't go through script/context dispatch. No
-    // execution field to migrate.
-    state = "done";
-    note = "system contract";
-  } else if (!execution) {
+  if (!execution) {
     state = "unknown";
   } else if (SUPPORTED_EXECUTIONS.has(execution)) {
     state = "done";
@@ -135,12 +120,11 @@ function inspect(slug: string, catalog: string): SlugStatus {
   return {
     slug,
     state,
-    execution: execution || (contract === "system" ? "(contract)" : ""),
+    execution,
     mode,
     hasScriptsDir,
     hasSkillMd,
     stepCount: steps.length,
-    note,
   };
 }
 

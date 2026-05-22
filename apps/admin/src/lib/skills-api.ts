@@ -60,17 +60,12 @@ export type CatalogSkill = {
   }>;
 };
 
-export type CatalogSkillFilter = "all" | "runbooks";
-
-export function isRunbookCatalogSkill(skill: CatalogSkill): boolean {
-  return skill.tags.some((tag) => tag.toLowerCase() === "computer-runbook");
-}
+export type CatalogSkillFilter = "all";
 
 export function filterCatalogSkills(
   skills: CatalogSkill[],
-  filter: CatalogSkillFilter,
+  _filter: CatalogSkillFilter,
 ): CatalogSkill[] {
-  if (filter === "runbooks") return skills.filter(isRunbookCatalogSkill);
   return skills;
 }
 

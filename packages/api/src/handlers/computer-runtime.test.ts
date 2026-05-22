@@ -17,13 +17,6 @@ const mocks = vi.hoisted(() => {
     completeComputerTask: vi.fn(),
     cancelComputerTask: vi.fn(),
     failComputerTask: vi.fn(),
-    loadRunbookExecutionContext: vi.fn(),
-    startRunbookExecutionTask: vi.fn(),
-    executeRunbookExecutionTask: vi.fn(),
-    completeRunbookExecutionTask: vi.fn(),
-    failRunbookExecutionTask: vi.fn(),
-    completeRunbookExecutionRun: vi.fn(),
-    recordRunbookExecutionResponse: vi.fn(),
     ComputerTaskDelegationError: class ComputerTaskDelegationError extends Error {
       statusCode: number;
 
@@ -63,24 +56,6 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
   ComputerTaskDelegationError: mocks.ComputerTaskDelegationError,
   ComputerNotFoundError: mocks.ComputerNotFoundError,
   ComputerTaskNotFoundError: mocks.ComputerTaskNotFoundError,
-}));
-
-vi.mock("../lib/runbooks/runtime-api.js", () => ({
-  loadRunbookExecutionContext: mocks.loadRunbookExecutionContext,
-  startRunbookExecutionTask: mocks.startRunbookExecutionTask,
-  executeRunbookExecutionTask: mocks.executeRunbookExecutionTask,
-  completeRunbookExecutionTask: mocks.completeRunbookExecutionTask,
-  failRunbookExecutionTask: mocks.failRunbookExecutionTask,
-  completeRunbookExecutionRun: mocks.completeRunbookExecutionRun,
-  recordRunbookExecutionResponse: mocks.recordRunbookExecutionResponse,
-  RunbookRuntimeError: class RunbookRuntimeError extends Error {
-    statusCode: number;
-
-    constructor(message: string, statusCode = 400) {
-      super(message);
-      this.statusCode = statusCode;
-    }
-  },
 }));
 
 import { handler } from "./computer-runtime.js";
@@ -166,20 +141,6 @@ describe("computer-runtime handler", () => {
       status: "cancelled",
     });
     mocks.failComputerTask.mockResolvedValue({ id: TASK_ID, status: "failed" });
-    mocks.loadRunbookExecutionContext.mockResolvedValue({
-      taskId: TASK_ID,
-      run: {
-        id: "run-1",
-        status: "running",
-        runbookSlug: "research-dashboard",
-        runbookVersion: "0.1.0",
-      },
-      tasks: [],
-    });
-    mocks.startRunbookExecutionTask.mockResolvedValue({ id: "rt-1" });
-    mocks.completeRunbookExecutionTask.mockResolvedValue({ id: "rt-1" });
-    mocks.failRunbookExecutionTask.mockResolvedValue({ failed: true });
-    mocks.completeRunbookExecutionRun.mockResolvedValue({ id: "run-1" });
   });
 
   it("requires service auth", async () => {
@@ -289,100 +250,6 @@ describe("computer-runtime handler", () => {
       }),
     );
     expect(cancelResponse.statusCode).toBe(200);
-  });
-
-  it("routes runbook runtime endpoints through service-auth task paths", async () => {
-    const runbookTaskId = "77777777-8888-9999-aaaa-bbbbbbbbbbbb";
-
-    const contextResponse = await handler(
-      event("POST", `/api/computers/runtime/tasks/${TASK_ID}/runbook/context`, {
-        body: { tenantId: TENANT_ID, computerId: COMPUTER_ID },
-      }),
-    );
-    expect(contextResponse.statusCode).toBe(200);
-    expect(mocks.loadRunbookExecutionContext).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      computerId: COMPUTER_ID,
-      taskId: TASK_ID,
-    });
-
-    await handler(
-      event(
-        "POST",
-        `/api/computers/runtime/tasks/${TASK_ID}/runbook/tasks/${runbookTaskId}/start`,
-        {
-          body: { tenantId: TENANT_ID, computerId: COMPUTER_ID },
-        },
-      ),
-    );
-    expect(mocks.startRunbookExecutionTask).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      computerId: COMPUTER_ID,
-      taskId: TASK_ID,
-      runbookTaskId,
-    });
-
-    await handler(
-      event(
-        "POST",
-        `/api/computers/runtime/tasks/${TASK_ID}/runbook/tasks/${runbookTaskId}/complete`,
-        {
-          body: {
-            tenantId: TENANT_ID,
-            computerId: COMPUTER_ID,
-            output: { ok: true },
-          },
-        },
-      ),
-    );
-    expect(mocks.completeRunbookExecutionTask).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      computerId: COMPUTER_ID,
-      taskId: TASK_ID,
-      runbookTaskId,
-      output: { ok: true },
-    });
-
-    await handler(
-      event(
-        "POST",
-        `/api/computers/runtime/tasks/${TASK_ID}/runbook/tasks/${runbookTaskId}/fail`,
-        {
-          body: {
-            tenantId: TENANT_ID,
-            computerId: COMPUTER_ID,
-            error: { message: "boom" },
-          },
-        },
-      ),
-    );
-    expect(mocks.failRunbookExecutionTask).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      computerId: COMPUTER_ID,
-      taskId: TASK_ID,
-      runbookTaskId,
-      error: { message: "boom" },
-    });
-
-    await handler(
-      event(
-        "POST",
-        `/api/computers/runtime/tasks/${TASK_ID}/runbook/complete`,
-        {
-          body: {
-            tenantId: TENANT_ID,
-            computerId: COMPUTER_ID,
-            output: { done: true },
-          },
-        },
-      ),
-    );
-    expect(mocks.completeRunbookExecutionRun).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      computerId: COMPUTER_ID,
-      taskId: TASK_ID,
-      output: { done: true },
-    });
   });
 
   it("loads Computer-owned thread turn context through the service-auth task endpoint", async () => {

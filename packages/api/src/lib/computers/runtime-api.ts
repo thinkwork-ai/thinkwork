@@ -5,8 +5,6 @@ import {
   artifacts,
   computers,
   computerEvents,
-  computerRunbookRuns,
-  computerRunbookTasks,
   computerTasks,
   messages,
   threads,
@@ -16,16 +14,9 @@ import {
   resolveOAuthTokenDetails,
 } from "../oauth-token.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
-import {
-  ensureDefaultComputerRunbookSkillsMaterialized,
-  ensureMigratedComputerWorkspaceSeeded,
-} from "./workspace-seed.js";
+import { ensureMigratedComputerWorkspaceSeeded } from "./workspace-seed.js";
 import { toGraphqlComputerTask } from "./tasks.js";
 import type { MemoryRequestContext } from "../memory/index.js";
-import {
-  completeRunbookRunFromThreadTurn,
-  failRunbookRunFromThreadTurn,
-} from "../runbooks/runs.js";
 import { resolveMessageAttachmentsForDispatch } from "./thread-cutover.js";
 import {
   assembleRequesterContext,
@@ -125,22 +116,6 @@ export async function recordComputerHeartbeat(input: {
       last_active_at: computers.last_active_at,
     });
   if (!row) throw new ComputerNotFoundError(input.computerId);
-  let staleRunbookTasksReconciled = 0;
-  try {
-    staleRunbookTasksReconciled = await reconcileStaleComputerRunbookTasks({
-      tenantId: input.tenantId,
-      computerId: input.computerId,
-    });
-  } catch (err) {
-    console.error(
-      "[computer-runtime] failed to reconcile stale runbook tasks",
-      {
-        tenantId: input.tenantId,
-        computerId: input.computerId,
-        message: err instanceof Error ? err.message : String(err),
-      },
-    );
-  }
   try {
     await ensureMigratedComputerWorkspaceSeeded({
       tenantId: input.tenantId,
@@ -153,21 +128,6 @@ export async function recordComputerHeartbeat(input: {
       message: err instanceof Error ? err.message : String(err),
     });
   }
-  try {
-    await ensureDefaultComputerRunbookSkillsMaterialized({
-      tenantId: input.tenantId,
-      computerId: input.computerId,
-    });
-  } catch (err) {
-    console.error(
-      "[computer-runtime] failed to materialize default runbook skills",
-      {
-        tenantId: input.tenantId,
-        computerId: input.computerId,
-        message: err instanceof Error ? err.message : String(err),
-      },
-    );
-  }
   return {
     computerId: row.id,
     runtimeStatus: row.runtime_status,
@@ -175,194 +135,9 @@ export async function recordComputerHeartbeat(input: {
     lastHeartbeatAt: row.last_heartbeat_at,
     lastActiveAt: row.last_active_at,
     runtimeVersion: input.runtimeVersion ?? null,
-    staleRunbookTasksReconciled,
   };
 }
 
-async function reconcileStaleComputerRunbookTasks(input: {
-  tenantId: string;
-  computerId: string;
-}) {
-  const result = await db.execute(sql`
-    WITH candidates AS (
-      SELECT
-        task.id AS task_id,
-        task.title AS task_title,
-        run.id AS run_id,
-        run.thread_id,
-        thread.title AS thread_title,
-        COALESCE(task.started_at, task.updated_at, task.created_at) AS stale_since,
-        CASE
-          WHEN task.details->'supervision'->>'staleAfterMinutes' ~ '^[0-9]+$'
-            THEN LEAST(
-              GREATEST((task.details->'supervision'->>'staleAfterMinutes')::int, 1),
-              120
-            )
-          ELSE ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}::int
-        END AS stale_after_minutes
-      FROM ${computerRunbookTasks} task
-      JOIN ${computerRunbookRuns} run ON run.id = task.run_id
-      LEFT JOIN ${threads} thread ON thread.id = run.thread_id
-      WHERE task.tenant_id = ${input.tenantId}::uuid
-        AND run.computer_id = ${input.computerId}::uuid
-        AND task.status = 'running'
-        AND run.status IN ('queued', 'running')
-    )
-    SELECT *
-    FROM candidates
-    WHERE stale_since <= NOW() - make_interval(mins => stale_after_minutes)
-    LIMIT 25
-  `);
-
-  const rows = (result.rows || []) as Array<{
-    task_id: string;
-    task_title: string;
-    run_id: string;
-    thread_id: string | null;
-    thread_title: string | null;
-    stale_after_minutes: number;
-  }>;
-  if (rows.length === 0) return 0;
-
-  let processed = 0;
-  for (const row of rows) {
-    const staleAfterMinutes =
-      typeof row.stale_after_minutes === "number"
-        ? row.stale_after_minutes
-        : Number(row.stale_after_minutes) ||
-          RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES;
-    const message = `Runbook task exceeded the ${staleAfterMinutes} minute execution budget.`;
-    await db.execute(sql`
-      UPDATE ${computerRunbookTasks}
-      SET
-        status = 'failed',
-        error = jsonb_build_object(
-          'code', 'runbook_step_timed_out',
-          'message', ${message}::text,
-          'source', 'computer_heartbeat',
-          'staleAfterMinutes', ${staleAfterMinutes}::int
-        ),
-        completed_at = NOW(),
-        updated_at = NOW()
-      WHERE id = ${row.task_id}::uuid
-        AND status = 'running'
-    `);
-
-    await db.execute(sql`
-      UPDATE ${computerRunbookTasks}
-      SET
-        status = 'skipped',
-        completed_at = NOW(),
-        updated_at = NOW()
-      WHERE run_id = ${row.run_id}::uuid
-        AND status = 'pending'
-    `);
-
-    await db.execute(sql`
-      UPDATE ${computerRunbookRuns}
-      SET
-        status = 'failed',
-        error = jsonb_build_object(
-          'code', 'runbook_step_timed_out',
-          'message', ${message}::text,
-          'source', 'computer_heartbeat',
-          'taskId', ${row.task_id}::text,
-          'staleAfterMinutes', ${staleAfterMinutes}::int
-        ),
-        completed_at = NOW(),
-        updated_at = NOW()
-      WHERE id = ${row.run_id}::uuid
-        AND status IN ('queued', 'running')
-    `);
-
-    await db.execute(sql`
-      UPDATE ${computerTasks}
-      SET
-        status = 'failed',
-        error = jsonb_build_object(
-          'code', 'runbook_step_timed_out',
-          'message', ${message}::text,
-          'source', 'computer_heartbeat',
-          'runbookRunId', ${row.run_id}::text
-        ),
-        completed_at = NOW(),
-        updated_at = NOW()
-      WHERE tenant_id = ${input.tenantId}::uuid
-        AND computer_id = ${input.computerId}::uuid
-        AND task_type = 'runbook_execute'
-        AND status IN ('pending', 'running')
-        AND input->>'runbookRunId' = ${row.run_id}
-    `);
-
-    if (row.thread_id) {
-      const content = `**Stopped:** ${row.task_title}\n\n${message}`;
-      const preview =
-        content.length > 240 ? `${content.slice(0, 237)}...` : content;
-      const [assistantMessage] = await db
-        .insert(messages)
-        .values({
-          tenant_id: input.tenantId,
-          thread_id: row.thread_id,
-          role: "assistant",
-          content,
-          parts: [
-            {
-              type: "text",
-              id: `runbook-timeout:${row.run_id}:${row.task_id}`,
-              text: content,
-            },
-          ],
-          sender_type: "computer",
-          sender_id: input.computerId,
-          metadata: {
-            runbookMessageKey: `runbook-timeout:${row.run_id}:${row.task_id}`,
-            runbookRunId: row.run_id,
-            runbookTaskId: row.task_id,
-            runbookProgressKind: "failed",
-            source: "computer_heartbeat",
-          },
-        })
-        .returning({ id: messages.id });
-
-      const [thread] = await db
-        .update(threads)
-        .set({
-          status: "blocked",
-          last_response_preview: preview,
-          updated_at: new Date(),
-        })
-        .where(
-          and(
-            eq(threads.tenant_id, input.tenantId),
-            eq(threads.id, row.thread_id),
-          ),
-        )
-        .returning({ status: threads.status, title: threads.title });
-
-      if (assistantMessage) {
-        await notifyNewMessage({
-          messageId: assistantMessage.id,
-          threadId: row.thread_id,
-          tenantId: input.tenantId,
-          role: "assistant",
-          content,
-          senderType: "computer",
-          senderId: input.computerId,
-        }).catch(() => {});
-      }
-      await notifyThreadUpdate({
-        threadId: row.thread_id,
-        tenantId: input.tenantId,
-        status: thread?.status ?? "blocked",
-        title: thread?.title ?? row.thread_title ?? "Untitled thread",
-      }).catch(() => {});
-    }
-
-    processed++;
-  }
-
-  return processed;
-}
 
 export async function claimNextComputerTask(input: {
   tenantId: string;
@@ -892,35 +667,6 @@ export async function recordThreadTurnResponse(input: {
           requesterUserId,
           error: idleLearning.error,
         },
-      });
-    }
-  }
-
-  if (payload.runbookRunId) {
-    const runbookOutput = {
-      responseMessageId: assistantMessage.id,
-      threadId: thread.id,
-      sourceMessageId: message.id,
-      linkedArtifactIds,
-      linkedArtifactCount: linkedArtifactIds.length,
-      draftPreviewCount: draftPreviewParts.length,
-      draftPreviewSucceeded,
-      artifactSaveMissing,
-    };
-    if (artifactSaveMissing) {
-      await failRunbookRunFromThreadTurn({
-        tenantId: input.tenantId,
-        runId: payload.runbookRunId,
-        error: {
-          message: ARTIFACT_SAVE_MISSING_MESSAGE,
-          ...runbookOutput,
-        },
-      });
-    } else {
-      await completeRunbookRunFromThreadTurn({
-        tenantId: input.tenantId,
-        runId: payload.runbookRunId,
-        output: runbookOutput,
       });
     }
   }
@@ -1513,10 +1259,6 @@ function threadTurnPayload(input: unknown) {
               ? payload.source
               : "chat_message",
         },
-    runbookRunId:
-      typeof payload.runbookRunId === "string" && payload.runbookRunId.trim()
-        ? payload.runbookRunId.trim()
-        : null,
   };
 }
 

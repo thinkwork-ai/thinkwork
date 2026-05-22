@@ -181,7 +181,6 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 vi.mock("../../../lib/computers/thread-cutover.js", () => ({
   enqueueComputerThreadTurn: vi.fn(async () => undefined),
   resolveThreadComputer: mockResolveThreadComputer,
-  routeRunbookForComputerMessage: vi.fn(async () => false),
 }));
 
 vi.mock("../spaces/shared.js", () => ({

@@ -44,11 +44,6 @@ import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
-import {
-  completeRunbookExecutionTask,
-  failRunbookExecutionTask,
-} from "../lib/runbooks/runtime-api.js";
-import { failRunbookRunFromThreadTurn } from "../lib/runbooks/runs.js";
 import { renderTurnContext } from "../lib/turn-context-renderer.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
@@ -86,15 +81,6 @@ const lambdaClient = new LambdaClient({});
 
 const GENERIC_AGENT_ERROR_MESSAGE =
   "I'm sorry, I encountered an error processing your request. Please try again.";
-const RUNBOOK_AGENT_ERROR_MESSAGE =
-  "I hit a runtime error while executing this runbook. I marked the runbook as failed so you can review the task queue and retry after the issue is fixed.";
-
-class RunbookStepPersistenceError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RunbookStepPersistenceError";
-  }
-}
 
 /** Extract plain text from AgentCore response (handles ChatCompletion, raw text, etc.) */
 function extractResponseText(data: unknown): string {
@@ -138,9 +124,6 @@ interface InvokeEvent {
   messageId?: string;
   computerId?: string;
   computerTaskId?: string;
-  runbookTaskId?: string;
-  runbookContext?: unknown;
-  responseMode?: "runbook_step";
   /**
    * U3 of the finance pilot — the dispatch caller (thread-cutover.ts)
    * resolves `messages.metadata.attachments` against `thread_attachments`
@@ -279,8 +262,6 @@ export async function resolveChatInvokeIdentity(
 
 export async function handler(event: InvokeEvent): Promise<unknown | void> {
   const { threadId, tenantId, agentId, userMessage } = event;
-  const responseOnly = event.responseMode === "runbook_step";
-  const runbookRunId = runbookRunIdFromContext(event.runbookContext);
   const traceId = getTraceId();
   console.log(
     `[chat-agent-invoke] threadId=${threadId} agentId=${agentId} traceId=${traceId}`,
@@ -335,7 +316,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }
 
     const runtimeType: AgentRuntimeType =
-      event.computerId && (event.computerTaskId || responseOnly)
+      event.computerId && event.computerTaskId
         ? "strands"
         : runtimeConfig.runtimeType;
     const agentModel = runtimeConfig.templateModel;
@@ -370,10 +351,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // removed DB-based sub-agent query.
 
     // 2a. Create a thread_turn record so the UI shows normal chat invocations.
-    // Runbook substeps are response-only calls owned by the durable
-    // computer_tasks/runbook task state, so they intentionally avoid extra
-    // thread_turn rows.
-    if (!responseOnly) {
+    {
       try {
         const [countRow] = await db
           .select({ count: sql<number>`COUNT(*)::int` })
@@ -592,7 +570,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       appsync_api_key: APPSYNC_API_KEY || undefined,
       computer_id: event.computerId || undefined,
       computer_task_id: event.computerTaskId || undefined,
-      computer_response_mode: responseOnly ? "runbook_step" : "thread_turn",
+      computer_response_mode: "thread_turn",
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       web_search_config: !isAnyEffectivelyBlocked("web-search", "web_search")
         ? runtimeConfig.webSearchConfig
@@ -632,7 +610,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       turn_context: renderedTurnContext.rendered
         ? renderedTurnContext.payload
         : undefined,
-      runbook_context: event.runbookContext || undefined,
       // U3 of the finance pilot — Strands' _execute_agent_turn reads
       // payload["message_attachments"] directly off this dict (no
       // apply_invocation_env indirection; that helper is an os.environ
@@ -691,13 +668,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     if (invokeRes.FunctionError) {
       const errMsgText = `AgentCore Lambda ${invokeRes.FunctionError}: ${rawPayload.slice(0, 500)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
-      if (responseOnly) throw new Error(errMsgText);
-      await markRunbookFailedFromChatInvokeError({
-        tenantId,
-        runbookRunId,
-        message: errMsgText,
-        code: "agentcore_lambda_function_error",
-      });
       await markComputerTaskFailedFromChatInvokeError({
         tenantId,
         computerId: event.computerId,
@@ -731,7 +701,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         threadId,
         tenantId,
         agentId,
-        chatInvokeErrorMessage(runbookRunId),
+        GENERIC_AGENT_ERROR_MESSAGE,
       );
       if (errMsg) {
         await notifyNewMessage({
@@ -739,7 +709,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           threadId,
           tenantId,
           role: "assistant",
-          content: chatInvokeErrorMessage(runbookRunId),
+          content: GENERIC_AGENT_ERROR_MESSAGE,
           senderType: "agent",
           senderId: agentId,
         });
@@ -755,13 +725,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     if (adapterStatus < 200 || adapterStatus >= 300) {
       const errMsgText = `AgentCore ${adapterStatus}: ${adapterBodyStr.slice(0, 500)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
-      if (responseOnly) throw new Error(errMsgText);
-      await markRunbookFailedFromChatInvokeError({
-        tenantId,
-        runbookRunId,
-        message: errMsgText,
-        code: "agentcore_adapter_error",
-      });
       await markComputerTaskFailedFromChatInvokeError({
         tenantId,
         computerId: event.computerId,
@@ -795,7 +758,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         threadId,
         tenantId,
         agentId,
-        chatInvokeErrorMessage(runbookRunId),
+        GENERIC_AGENT_ERROR_MESSAGE,
       );
       if (errMsg) {
         await notifyNewMessage({
@@ -803,7 +766,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           threadId,
           tenantId,
           role: "assistant",
-          content: chatInvokeErrorMessage(runbookRunId),
+          content: GENERIC_AGENT_ERROR_MESSAGE,
           senderType: "agent",
           senderId: agentId,
         });
@@ -1021,9 +984,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
 
     if (!responseText || responseText === "{}") {
       console.warn(`[chat-agent-invoke] Empty response from AgentCore`);
-      if (responseOnly) {
-        throw new Error("AgentCore returned an empty runbook step response");
-      }
       return;
     }
 
@@ -1039,31 +999,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         ?.computer_thread_response) as
       | { responseMessageId?: string; threadId?: string; messageId?: string }
       | undefined;
-
-    if (responseOnly) {
-      const runbookStepOutput = {
-        ok: true,
-        responseText,
-        model: usage.model || agentModel || null,
-        usage: {
-          duration_ms: durationMs,
-          input_tokens: usage.inputTokens,
-          output_tokens: usage.outputTokens,
-          cached_read_tokens: usage.cachedReadTokens,
-          tool_invocations: toolInvocations,
-        },
-        toolInvocations,
-        durationMs,
-      };
-      await completeRunbookStepFromChatInvoke({
-        tenantId,
-        computerId: event.computerId,
-        computerTaskId: event.computerTaskId,
-        runbookTaskId: event.runbookTaskId,
-        output: runbookStepOutput,
-      });
-      return runbookStepOutput;
-    }
 
     // 3. Insert assistant message into DB (with GenUI tool results if present)
     const assistantMsg = computerThreadResponse?.responseMessageId
@@ -1178,28 +1113,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }
   } catch (err) {
     console.error(`[chat-agent-invoke] Error:`, err);
-    if (responseOnly) {
-      if (err instanceof RunbookStepPersistenceError) throw err;
-      await failRunbookStepFromChatInvoke({
-        tenantId,
-        computerId: event.computerId,
-        computerTaskId: event.computerTaskId,
-        runbookTaskId: event.runbookTaskId,
-        error: {
-          message: err instanceof Error ? err.message : String(err),
-        },
-      });
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-    await markRunbookFailedFromChatInvokeError({
-      tenantId,
-      runbookRunId,
-      message: err instanceof Error ? err.message : String(err),
-      code: "chat_agent_invoke_failed",
-    });
     await markComputerTaskFailedFromChatInvokeError({
       tenantId,
       computerId: event.computerId,
@@ -1242,7 +1155,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         threadId,
         tenantId,
         agentId,
-        chatInvokeErrorMessage(runbookRunId),
+        GENERIC_AGENT_ERROR_MESSAGE,
       );
       if (errMsg) {
         await notifyNewMessage({
@@ -1250,7 +1163,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           threadId,
           tenantId,
           role: "assistant",
-          content: chatInvokeErrorMessage(runbookRunId),
+          content: GENERIC_AGENT_ERROR_MESSAGE,
           senderType: "agent",
           senderId: agentId,
         });
@@ -1263,84 +1176,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }
   }
   return undefined;
-}
-
-async function completeRunbookStepFromChatInvoke(input: {
-  tenantId: string;
-  computerId?: string;
-  computerTaskId?: string;
-  runbookTaskId?: string;
-  output: unknown;
-}) {
-  if (!input.computerId || !input.computerTaskId || !input.runbookTaskId) {
-    return;
-  }
-  try {
-    await completeRunbookExecutionTask({
-      tenantId: input.tenantId,
-      computerId: input.computerId,
-      taskId: input.computerTaskId,
-      runbookTaskId: input.runbookTaskId,
-      output: input.output,
-    });
-  } catch (err) {
-    throw new RunbookStepPersistenceError(
-      err instanceof Error ? err.message : String(err),
-    );
-  }
-}
-
-async function failRunbookStepFromChatInvoke(input: {
-  tenantId: string;
-  computerId?: string;
-  computerTaskId?: string;
-  runbookTaskId?: string;
-  error: unknown;
-}) {
-  if (!input.computerId || !input.computerTaskId || !input.runbookTaskId) {
-    return;
-  }
-  try {
-    await failRunbookExecutionTask({
-      tenantId: input.tenantId,
-      computerId: input.computerId,
-      taskId: input.computerTaskId,
-      runbookTaskId: input.runbookTaskId,
-      error: input.error,
-    });
-  } catch (err) {
-    console.error("[chat-agent-invoke] Failed to fail runbook step:", err);
-  }
-}
-
-function chatInvokeErrorMessage(runbookRunId: string | null) {
-  return runbookRunId
-    ? RUNBOOK_AGENT_ERROR_MESSAGE
-    : GENERIC_AGENT_ERROR_MESSAGE;
-}
-
-async function markRunbookFailedFromChatInvokeError(input: {
-  tenantId: string;
-  runbookRunId: string | null;
-  message: string;
-  code: string;
-}) {
-  if (!input.runbookRunId) return;
-  try {
-    await failRunbookRunFromThreadTurn({
-      tenantId: input.tenantId,
-      runId: input.runbookRunId,
-      error: {
-        message: input.message,
-        code: input.code,
-      },
-    });
-  } catch (runbookErr) {
-    console.error(
-      `[chat-agent-invoke] Failed to mark runbook failed:`,
-      runbookErr,
-    );
-  }
 }
 
 async function markComputerTaskFailedFromChatInvokeError(input: {
@@ -1594,10 +1429,3 @@ async function notifyThreadTurnUpdate(payload: {
   }
 }
 
-function runbookRunIdFromContext(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const run = (value as Record<string, unknown>).run;
-  if (!run || typeof run !== "object" || Array.isArray(run)) return null;
-  const id = (run as Record<string, unknown>).id;
-  return typeof id === "string" && id.trim() ? id.trim() : null;
-}
