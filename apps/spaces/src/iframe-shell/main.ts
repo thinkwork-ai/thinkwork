@@ -367,13 +367,24 @@ function handleInit(payload: InitPayload, msgId: string): void {
 // sub-pixel rendering difference between reported content height and the
 // iframe's pixel height surfaces an inner scrollbar that stacks against the
 // panel's outer scrollbar (the nested-scrollbar bug Eric flagged 2026-05-22).
+//
+// **Use `hidden`, not `visible`.** CSS Overflow §3 coerces `overflow-y: visible`
+// to `auto` when `overflow-x` is `hidden` / `clip` / `scroll` / `auto`
+// (https://www.w3.org/TR/css-overflow-3/#overflow-properties). The shell root
+// keeps `overflow-x: hidden` from installScrollableShellRoot, so setting
+// `overflow-y: visible` here silently computes as `overflow-y: auto` and the
+// scrollbar comes back. `overflow-y: hidden` is the spec-stable way to drop
+// the inner scroll — the iframe's pixel height already matches the reported
+// content height, so any sub-pixel overflow is clipped invisibly at the
+// iframe boundary.
+//
 // When the host uses default sizing (iframe = 100% of parent), the shell
 // still needs the auto-overflow as the only scroll boundary.
 function applyShellRootOverflow(fitContentHeight: boolean): void {
   if (typeof document === "undefined") return;
   const root = document.getElementById("thinkwork-iframe-shell-root");
   if (!root) return;
-  root.style.overflowY = fitContentHeight ? "visible" : "auto";
+  root.style.overflowY = fitContentHeight ? "hidden" : "auto";
 }
 
 function handleTheme(payload: ThemePayload): void {
