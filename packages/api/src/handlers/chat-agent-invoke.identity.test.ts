@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  renderWorkspaceTupleForInvoke,
   resolveChatInvokeIdentity,
   type ChatInvokeIdentityDeps,
 } from "./chat-agent-invoke.js";
@@ -111,5 +112,60 @@ describe("resolveChatInvokeIdentity", () => {
       source: "none",
     });
     expect(subject.loadAgentHumanPair).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderWorkspaceTupleForInvoke", () => {
+  it("invokes the workspace-renderer Lambda and returns the rendered prefix", async () => {
+    const send = vi.fn(
+      async (_command: { input: Record<string, unknown> }) => ({
+        Payload: new TextEncoder().encode(
+          JSON.stringify({
+            ok: true,
+            renderedPrefix: "tenants/acme/rendered/marco/default/eric/",
+            cacheStatus: "hit",
+          }),
+        ),
+      }),
+    );
+
+    await expect(
+      renderWorkspaceTupleForInvoke(
+        {
+          tenantId: "tenant-1",
+          agentId: "agent-1",
+          spaceId: "space-1",
+          userId: "user-1",
+        },
+        { functionName: "renderer", lambda: { send } as any },
+      ),
+    ).resolves.toEqual({
+      rendered: true,
+      renderedPrefix: "tenants/acme/rendered/marco/default/eric/",
+      cacheStatus: "hit",
+    });
+    const command = send.mock.calls.at(0)?.[0] as
+      | { input: Record<string, unknown> }
+      | undefined;
+    expect(command?.input).toMatchObject({
+      FunctionName: "renderer",
+      InvocationType: "RequestResponse",
+    });
+  });
+
+  it("falls back when the renderer function is not configured", async () => {
+    await expect(
+      renderWorkspaceTupleForInvoke(
+        {
+          tenantId: "tenant-1",
+          agentId: "agent-1",
+          spaceId: "space-1",
+        },
+        { functionName: "" },
+      ),
+    ).resolves.toEqual({
+      rendered: false,
+      reason: "workspace_renderer_unconfigured",
+    });
   });
 });

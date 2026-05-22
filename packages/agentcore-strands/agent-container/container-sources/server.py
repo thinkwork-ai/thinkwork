@@ -587,13 +587,15 @@ def _ensure_workspace_ready(
     instance_id: str = "",
     agent_name: str = "",
     human_name: str = "",
+    rendered_workspace_prefix: str = "",
 ):
-    """Sync the agent's S3 prefix to /tmp/workspace.
+    """Sync the selected workspace S3 prefix to /tmp/workspace.
 
-    Per docs/plans/2026-04-27-003 (materialize-at-write-time): the agent's
-    S3 prefix is the only thing the runtime reads. List the prefix,
-    download every file, delete locals that disappeared upstream. No
-    overlay, no template/defaults fallback, no read-time substitution.
+    By default this reads the legacy agent prefix. When the runtime env
+    `RENDERED_WORKSPACE_PREFIX_TEMPLATE` is set, the bootstrapper reads
+    the rendered tuple prefix passed by the API layer instead. This lets
+    U3 deploy inert renderer production safely before enabling runtime
+    consumption.
 
     Runs on every invocation (not cold-start-only). Operator edits land
     on the next turn without any cache-invalidation choreography.
@@ -627,12 +629,18 @@ def _ensure_workspace_ready(
     t_sync = time.time()
     try:
         s3 = boto3.client("s3", region_name=AWS_REGION)
+        rendered_prefix_template = os.environ.get("RENDERED_WORKSPACE_PREFIX_TEMPLATE", "")
+        sync_mode = (
+            "rendered" if rendered_prefix_template and rendered_workspace_prefix else "legacy"
+        )
         result = bootstrap_workspace(
             tenant_slug=ws_tenant,
             agent_slug=ws_instance,
             local_dir=WORKSPACE_DIR,
             s3_client=s3,
             bucket=bucket,
+            rendered_workspace_prefix=rendered_workspace_prefix,
+            rendered_workspace_prefix_template=rendered_prefix_template,
         )
     except Exception as e:
         logger.warning("workspace_sync bootstrap failed: %s", e)
@@ -640,7 +648,8 @@ def _ensure_workspace_ready(
 
     sync_ms = round((time.time() - t_sync) * 1000)
     logger.info(
-        "workspace_sync action=bootstrap sync_ms=%d synced=%d deleted=%d total=%d",
+        "workspace_sync action=bootstrap mode=%s sync_ms=%d synced=%d deleted=%d total=%d",
+        sync_mode,
         sync_ms,
         result.synced,
         result.deleted,
@@ -2793,6 +2802,10 @@ def _execute_agent_turn(payload: dict) -> dict:
     # identity; these are orthogonal — workspace / composer / hindsight).
     workspace_bucket = payload.get("workspace_bucket") or ""
     _apply_workspace_bucket_env(workspace_bucket)
+    turn_context = payload.get("turn_context") or {}
+    if not isinstance(turn_context, dict):
+        turn_context = {}
+    rendered_workspace_prefix = payload.get("rendered_workspace_prefix") or ""
     thinkwork_api_url = payload.get("thinkwork_api_url") or ""
     if thinkwork_api_url:
         os.environ["THINKWORK_API_URL"] = thinkwork_api_url
@@ -2827,6 +2840,7 @@ def _execute_agent_turn(payload: dict) -> dict:
         instance_id=instance_id,
         agent_name=agent_name,
         human_name=human_name,
+        rendered_workspace_prefix=rendered_workspace_prefix,
     )
 
     injected_env_keys = _inject_skill_env(skills_config) if skills_config else []
