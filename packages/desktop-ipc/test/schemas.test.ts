@@ -57,16 +57,33 @@ describe("desktop IPC schemas", () => {
     ).toBeUndefined();
 
     expect(ChannelSchemas.startOAuth.request.parse(undefined)).toBeUndefined();
-    expect(ChannelSchemas.startOAuth.response.parse(undefined)).toBeUndefined();
+    expect(ChannelSchemas.startOAuth.request.parse({ next: "/new" })).toEqual({
+      next: "/new",
+    });
+    expect(
+      ChannelSchemas.startOAuth.response.parse({
+        url: "https://auth.example/oauth2/authorize?state=xyz",
+        state: "xyz",
+      }),
+    ).toEqual({
+      url: "https://auth.example/oauth2/authorize?state=xyz",
+      state: "xyz",
+    });
     expect(ChannelSchemas.signOut.request.parse(undefined)).toBeUndefined();
-    expect(ChannelSchemas.signOut.response.parse(undefined)).toBeUndefined();
+    expect(
+      ChannelSchemas.signOut.response.parse({
+        ok: true,
+        revokeFailed: false,
+      }),
+    ).toEqual({ ok: true, revokeFailed: false });
 
     expect(
       ChannelSchemas.consumePendingOAuth.response.parse({
         code: "abc",
+        next: "/automations/123",
         state: "xyz",
       }),
-    ).toEqual({ code: "abc", state: "xyz" });
+    ).toEqual({ code: "abc", next: "/automations/123", state: "xyz" });
 
     expect(
       ChannelSchemas.getUpdateState.response.parse({
@@ -109,6 +126,9 @@ describe("desktop IPC schemas", () => {
   it("rejects empty objects where fields are required", () => {
     expect(() => ChannelSchemas.getSessionTokens.response.parse({})).toThrow();
     expect(() => ChannelSchemas.getUpdateState.response.parse({})).toThrow();
+    expect(() =>
+      ChannelSchemas.startOAuth.request.parse({ next: "https://evil.example" }),
+    ).toThrow();
     expect(() =>
       ChannelSchemas.reportInstallOutcome.request.parse({}),
     ).toThrow();

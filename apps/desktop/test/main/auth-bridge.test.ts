@@ -3,8 +3,10 @@ import {
   CLEAR_TOKEN_STORAGE_CHANNEL,
   CONSUME_PENDING_OAUTH_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
+  START_OAUTH_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   SIGN_OUT_CHANNEL,
+  SIGNED_OUT_EVENT_CHANNEL,
   SET_TOKEN_STORAGE_ITEM_CHANNEL,
   TOKENS_CHANGED_EVENT_CHANNEL,
   resetRateLimits,
@@ -154,7 +156,75 @@ describe("auth bridge handlers", () => {
     ).toThrow(/untrusted sender frame/);
   });
 
-  it("rate limits sign-out requests", () => {
+  it("delegates startOAuth through the guarded IPC handler", async () => {
+    const ipcMain = createIpcMain();
+    const startOAuth = vi.fn(async () => ({
+      url: "https://auth.example/oauth2/authorize?state=xyz",
+      state: "xyz",
+    }));
+    registerAuthBridgeHandlers({
+      ipcMain,
+      storage: createStorage(),
+      getWindows: () => [],
+      consumePendingOAuth: () => null,
+      markDeepLinkReady: () => {},
+      oauth: {
+        startOAuth,
+        completeOAuthCallback: vi.fn(),
+        signOut: vi.fn(),
+      },
+    });
+
+    await expect(
+      ipcMain.invoke(START_OAUTH_CHANNEL, { next: "/automations/123" }),
+    ).resolves.toEqual({
+      url: "https://auth.example/oauth2/authorize?state=xyz",
+      state: "xyz",
+    });
+    expect(startOAuth).toHaveBeenCalledWith({ next: "/automations/123" });
+  });
+
+  it("clears local storage before revoking during sign-out", async () => {
+    const ipcMain = createIpcMain();
+    const sent = vi.fn();
+    const signOut = vi.fn(async () => ({
+      ok: true as const,
+      revokeFailed: false,
+    }));
+    registerAuthBridgeHandlers({
+      ipcMain,
+      storage: createStorage({
+        "CognitoIdentityServiceProvider.client.LastAuthUser": "user-id",
+        "CognitoIdentityServiceProvider.client.user-id.refreshToken":
+          "refresh-token",
+      }),
+      getWindows: () => [{ webContents: { send: sent } }],
+      consumePendingOAuth: () => null,
+      markDeepLinkReady: () => {},
+      oauth: {
+        startOAuth: vi.fn(),
+        completeOAuthCallback: vi.fn(),
+        signOut,
+      },
+    });
+
+    await expect(ipcMain.invoke(SIGN_OUT_CHANNEL)).resolves.toEqual({
+      ok: true,
+      revokeFailed: false,
+    });
+
+    expect(signOut).toHaveBeenCalledWith("refresh-token");
+    expect(sent).toHaveBeenNthCalledWith(1, TOKENS_CHANGED_EVENT_CHANNEL, {
+      items: {},
+      version: 1,
+    });
+    expect(sent).toHaveBeenNthCalledWith(2, SIGNED_OUT_EVENT_CHANNEL, {
+      ok: true,
+      revokeFailed: false,
+    });
+  });
+
+  it("rate limits sign-out requests", async () => {
     const ipcMain = createIpcMain();
     registerAuthBridgeHandlers({
       ipcMain,
@@ -165,8 +235,10 @@ describe("auth bridge handlers", () => {
       now: () => 1_000,
     });
 
-    ipcMain.invoke(SIGN_OUT_CHANNEL);
+    await ipcMain.invoke(SIGN_OUT_CHANNEL);
 
-    expect(() => ipcMain.invoke(SIGN_OUT_CHANNEL)).toThrow(/Rate limit/);
+    await expect(ipcMain.invoke(SIGN_OUT_CHANNEL)).rejects.toThrow(
+      /Rate limit/,
+    );
   });
 });

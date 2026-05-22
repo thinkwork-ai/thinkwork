@@ -6,8 +6,10 @@ export const CLEAR_TOKEN_STORAGE_CHANNEL = "desktop:clear-token-storage";
 export const TOKENS_CHANGED_EVENT_CHANNEL = "desktop:tokens-changed";
 export const START_OAUTH_CHANNEL = "desktop:start-oauth";
 export const SIGN_OUT_CHANNEL = "desktop:sign-out";
+export const SIGNED_OUT_EVENT_CHANNEL = "desktop:signed-out";
 export const CONSUME_PENDING_OAUTH_CHANNEL = "desktop:consume-pending-oauth";
 export const DEEP_LINK_EVENT_CHANNEL = "desktop:deep-link";
+export const OAUTH_ERROR_EVENT_CHANNEL = "desktop:oauth-error";
 export const GET_UPDATE_STATE_CHANNEL = "desktop:get-update-state";
 export const CHECK_FOR_UPDATES_CHANNEL = "desktop:check-for-updates";
 export const DOWNLOAD_UPDATE_CHANNEL = "desktop:download-update";
@@ -23,8 +25,10 @@ export const IPC_CHANNELS = {
   TOKENS_CHANGED_EVENT: TOKENS_CHANGED_EVENT_CHANNEL,
   START_OAUTH: START_OAUTH_CHANNEL,
   SIGN_OUT: SIGN_OUT_CHANNEL,
+  SIGNED_OUT_EVENT: SIGNED_OUT_EVENT_CHANNEL,
   CONSUME_PENDING_OAUTH: CONSUME_PENDING_OAUTH_CHANNEL,
   DEEP_LINK_EVENT: DEEP_LINK_EVENT_CHANNEL,
+  OAUTH_ERROR_EVENT: OAUTH_ERROR_EVENT_CHANNEL,
   GET_UPDATE_STATE: GET_UPDATE_STATE_CHANNEL,
   CHECK_FOR_UPDATES: CHECK_FOR_UPDATES_CHANNEL,
   DOWNLOAD_UPDATE: DOWNLOAD_UPDATE_CHANNEL,

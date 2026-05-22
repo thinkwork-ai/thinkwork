@@ -40,12 +40,25 @@ function makeBridge(
         listener = null;
       };
     },
-    async startOAuth() {},
-    async signOut() {},
+    async startOAuth() {
+      return {
+        url: "https://auth.example/oauth2/authorize?state=xyz",
+        state: "xyz",
+      };
+    },
+    async signOut() {
+      return { ok: true, revokeFailed: false };
+    },
+    onSignedOut() {
+      return () => {};
+    },
     async consumePendingOAuth() {
       return null;
     },
     onDeepLink() {
+      return () => {};
+    },
+    onOAuthError() {
       return () => {};
     },
     async getUpdateState() {
