@@ -200,6 +200,60 @@ function rejectInlineStyleAndArbitraryTailwind(source: string) {
   }
 }
 
+// Recharts mark elements that render fills. Tooltip / axis / grid / legend
+// do not accept className fills; the agent's mistake we're guarding against
+// is `<Bar className="fill-primary" />`-style on mark elements only.
+const RECHARTS_MARK_ELEMENTS = [
+  "Bar",
+  "Line",
+  "Area",
+  "Pie",
+  "Cell",
+  "RadialBar",
+  "Scatter",
+] as const;
+
+// Semantic shadcn tokens that resolve to a single theme color (often near-
+// black in dark mode). When applied to chart marks via `fill-<token>` they
+// produce flat-color charts that ignore the uploaded theme's chart palette.
+// Chart marks must use `fill-chart-1` through `fill-chart-5` (which the
+// Tailwind v4 @theme directive in packages/ui/src/theme.css exposes via
+// `--color-chart-N: var(--chart-N)`), the `fill="var(--chart-N)"` JSX prop,
+// or the `ChartContainer` config plumbing.
+const REJECTED_FILL_TOKENS = [
+  "primary",
+  "primary-foreground",
+  "secondary",
+  "secondary-foreground",
+  "foreground",
+  "muted",
+  "muted-foreground",
+  "accent",
+  "accent-foreground",
+  "destructive",
+  "destructive-foreground",
+  "card",
+  "card-foreground",
+  "popover",
+  "popover-foreground",
+  "background",
+  "border",
+  "input",
+  "ring",
+  "sidebar",
+  "sidebar-foreground",
+  "sidebar-primary",
+  "sidebar-primary-foreground",
+  "sidebar-accent",
+  "sidebar-accent-foreground",
+  "sidebar-border",
+  "sidebar-ring",
+] as const;
+
+const REJECTED_FILL_CLASS_SET = new Set(
+  REJECTED_FILL_TOKENS.map((token) => `fill-${token}`),
+);
+
 function validateRechartsUsage(source: string, imports: ImportDeclaration[]) {
   const rechartsImports = new Set(
     imports
@@ -230,6 +284,95 @@ function validateRechartsUsage(source: string, imports: ImportDeclaration[]) {
       );
     }
   }
+
+  rejectNonChartFillOnRechartsMarks(source);
+}
+
+function rejectNonChartFillOnRechartsMarks(source: string) {
+  // For each Recharts mark element, find its opening-tag bounds with a parser
+  // that tolerates JSX expressions (`{...}`) and string literals — both of
+  // which can contain `>` characters that would break a naive `[^>]*?` regex
+  // gap (e.g. `<Bar onClick={() => fn()} className="fill-primary" />`). Then
+  // inspect the opening-tag range for a literal-string className attribute
+  // and check each token against the rejected set. Catches the className
+  // literal-string form only; template-literal and `className={cn(...)}`
+  // expression forms fall through (same bound as the surrounding validator).
+  const elementUnion = RECHARTS_MARK_ELEMENTS.join("|");
+  const openingTagPattern = new RegExp(`<\\s*(${elementUnion})\\b`, "g");
+  let match: RegExpExecArray | null;
+  while ((match = openingTagPattern.exec(source))) {
+    const element = match[1];
+    const tagStart = match.index;
+    const tagEnd = findOpeningTagEnd(source, openingTagPattern.lastIndex);
+    if (tagEnd < 0) continue;
+    const tagBody = source.slice(match.index, tagEnd);
+    const classNameLiteral = extractLiteralClassName(tagBody);
+    if (classNameLiteral === null) continue;
+    const classList = classNameLiteral.split(/\s+/).filter(Boolean);
+    for (const className of classList) {
+      if (REJECTED_FILL_CLASS_SET.has(className)) {
+        throw new AppletSourcePolicyError(
+          "APPLET_RECHARTS_FILL_NON_CHART_COLOR",
+          `${element} uses className="${className}" — chart marks must use the chart palette so the theme's chart colors apply. Use className="fill-chart-1" through "fill-chart-5", or pass fill="var(--chart-1)" as a JSX prop, or wire ChartContainer config. Semantic tokens like ${className} resolve to a single flat color and render dark-mode charts as solid black.`,
+        );
+      }
+    }
+    // Advance the outer regex past this tag so siblings still match.
+    openingTagPattern.lastIndex = tagEnd;
+    void tagStart;
+  }
+}
+
+// Returns the index immediately AFTER the `>` that closes the opening tag
+// starting at `startIndex` (i.e. just past `<Bar`'s name). Tracks JSX
+// expression `{...}` nesting and "/'  string literals so `>` characters
+// inside them don't terminate the scan. Returns -1 on unterminated input.
+function findOpeningTagEnd(source: string, startIndex: number): number {
+  let i = startIndex;
+  let braceDepth = 0;
+  let stringQuote: '"' | "'" | "`" | null = null;
+  while (i < source.length) {
+    const ch = source[i];
+    if (stringQuote) {
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === stringQuote) stringQuote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      stringQuote = ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "{") {
+      braceDepth += 1;
+      i += 1;
+      continue;
+    }
+    if (ch === "}") {
+      if (braceDepth > 0) braceDepth -= 1;
+      i += 1;
+      continue;
+    }
+    if (ch === ">" && braceDepth === 0) {
+      return i + 1;
+    }
+    i += 1;
+  }
+  return -1;
+}
+
+// Finds `className="..."` or `className='...'` in the opening-tag range and
+// returns the literal string contents. Returns null when className is absent
+// or uses a non-literal form (template literal, JSX expression, etc.).
+function extractLiteralClassName(tagBody: string): string | null {
+  const literalPattern = /\bclassName\s*=\s*("([^"]*)"|'([^']*)')/;
+  const match = literalPattern.exec(tagBody);
+  if (!match) return null;
+  return match[2] ?? match[3] ?? "";
 }
 
 function isJsxTagInsideChartContainer(source: string, targetName: string) {

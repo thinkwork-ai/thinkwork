@@ -127,6 +127,22 @@ describe("AppletRouteContent", () => {
     expect(host).toBeTruthy();
   });
 
+  // Regression: saved-app side panel mounted <AppletMount> without
+  // fitContentHeight, so the iframe sized to 100% of its parent and rendered
+  // its own inner scrollbar — stacking against the AppCanvasPanel scrollbar
+  // and producing the nested-scrollbar bug Eric flagged on 2026-05-22. The
+  // mount.tsx host surfaces the prop as a `data-fit-content-height`
+  // attribute; assert via toHaveAttribute so this test pins the contract
+  // (not the Tailwind class composition, which could be restyled).
+  // DraftAppletPreview and InlineAppletEmbed already pass fitContentHeight=
+  // true; saved-app parity is the contract this test pins.
+  it("mounts the saved applet with fitContentHeight=true so the panel owns the only scrollbar", async () => {
+    render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
+
+    const host = await screen.findByTestId("applet-iframe-host");
+    expect(host.getAttribute("data-fit-content-height")).toBe("true");
+  });
+
   it("uses browser history for the artifact back button with /artifacts as fallback", () => {
     render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
 

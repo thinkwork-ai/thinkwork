@@ -195,6 +195,11 @@ function IframeAppletMount({
       <div
         ref={containerRef}
         data-testid="applet-iframe-host"
+        // Surface fitContentHeight as a data attribute so consumers'
+        // regression tests can pin the contract via `toHaveAttribute`
+        // instead of inspecting the conditional className string.
+        // Class-string assertions silently rot if the host is restyled.
+        data-fit-content-height={fitContentHeight ? "true" : "false"}
         className={
           fitContentHeight
             ? "min-h-0 min-w-0 overflow-x-hidden"
