@@ -109,6 +109,11 @@ export const threadTurns = pgTable(
     kind: text("kind").notNull().default("agent_turn"), // agent_turn | system_event (escalate/delegate); see U2 of docs/plans/2026-04-24-002-refactor-thread-detail-pre-launch-cleanup-plan.md
     started_at: timestamp("started_at", { withTimezone: true }),
     finished_at: timestamp("finished_at", { withTimezone: true }),
+    // Idempotency key for the chat-agent-finalize callback. Set when the
+    // post-AgentCore work (cost recording, message insert, notify, etc.)
+    // has run. A second finalize POST for the same thread_turn_id detects
+    // finalized_at IS NOT NULL and no-ops.
+    finalized_at: timestamp("finalized_at", { withTimezone: true }),
     error: text("error"),
     error_code: text("error_code"),
     usage_json: jsonb("usage_json"),

@@ -1,0 +1,156 @@
+/**
+ * chat-agent-finalize — HTTP endpoint that the Strands runtime POSTs to
+ * at end-of-turn so the post-AgentCore bookkeeping can run without
+ * chat-agent-invoke holding a Lambda open for the full turn duration
+ * (plan 2026-05-22-006).
+ *
+ * POST /api/threads/{threadId}/finalize
+ *   Authorization: Bearer <API_AUTH_SECRET>
+ *   body: FinalizePayload (see ../lib/chat-finalize/types.ts)
+ *
+ *   → 200 { ok: true, idempotent: false, messageId: "..." }    -- finalized just now
+ *   → 200 { ok: true, idempotent: true }                       -- already finalized (retry)
+ *   → 400 { ok: false, error, code: "BAD_REQUEST" }            -- shape failure / path mismatch
+ *   → 401 { ok: false, error, code: "UNAUTHORIZED" }           -- bearer missing/wrong
+ *   → 404 { ok: false, error, code: "TURN_NOT_FOUND" }         -- thread_turn_id doesn't exist
+ *   → 500 { ok: false, error, code: "INTERNAL" }               -- unhandled failure
+ *
+ * Service-endpoint auth pattern (Bearer API_AUTH_SECRET) — same shape
+ * as routine-step-callback / sandbox-quota-check. Idempotency is keyed
+ * on `thread_turns.finalized_at` (migration 0123); two concurrent calls
+ * race through a conditional UPDATE so only one wins the claim.
+ */
+
+import type {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
+} from "aws-lambda";
+import { eq } from "drizzle-orm";
+import { getDb } from "@thinkwork/database-pg";
+import { threadTurns } from "@thinkwork/database-pg/schema";
+import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
+import {
+  processFinalize,
+  toFinalizeResponse,
+} from "../lib/chat-finalize/process-finalize.js";
+import type { FinalizePayload } from "../lib/chat-finalize/types.js";
+
+const db = getDb();
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function json(
+  statusCode: number,
+  body: unknown,
+): APIGatewayProxyStructuredResultV2 {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+function badRequest(reason: string): APIGatewayProxyStructuredResultV2 {
+  return json(400, { ok: false, error: reason, code: "BAD_REQUEST" });
+}
+
+export async function handler(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  // ---- Auth -----------------------------------------------------------
+  const token = extractBearerToken(event);
+  if (!token || !validateApiSecret(token)) {
+    return json(401, {
+      ok: false,
+      error: "Missing or invalid Bearer token",
+      code: "UNAUTHORIZED",
+    });
+  }
+
+  // ---- Method gate ----------------------------------------------------
+  if (event.requestContext.http.method !== "POST") {
+    return json(405, {
+      ok: false,
+      error: "Method not allowed",
+      code: "METHOD_NOT_ALLOWED",
+    });
+  }
+
+  // ---- Path param + body parse ----------------------------------------
+  const pathThreadId = event.pathParameters?.threadId;
+  if (!pathThreadId || !UUID_RE.test(pathThreadId)) {
+    return badRequest("Missing or invalid threadId path parameter");
+  }
+
+  let payload: FinalizePayload;
+  try {
+    payload = JSON.parse(event.body || "{}") as FinalizePayload;
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+
+  if (!payload.thread_turn_id || !UUID_RE.test(payload.thread_turn_id)) {
+    return badRequest("Missing or invalid thread_turn_id");
+  }
+  if (!payload.tenant_id || !UUID_RE.test(payload.tenant_id)) {
+    return badRequest("Missing or invalid tenant_id");
+  }
+  if (!payload.agent_id || !UUID_RE.test(payload.agent_id)) {
+    return badRequest("Missing or invalid agent_id");
+  }
+  if (!payload.thread_id || !UUID_RE.test(payload.thread_id)) {
+    return badRequest("Missing or invalid thread_id");
+  }
+  if (payload.thread_id !== pathThreadId) {
+    return badRequest("Body thread_id does not match path threadId");
+  }
+  if (payload.status !== "completed" && payload.status !== "failed") {
+    return badRequest(`Invalid status: ${payload.status}`);
+  }
+  if (typeof payload.duration_ms !== "number" || payload.duration_ms < 0) {
+    return badRequest("Missing or invalid duration_ms");
+  }
+
+  // ---- Turn lookup ----------------------------------------------------
+  const [turn] = await db
+    .select({
+      id: threadTurns.id,
+      tenant_id: threadTurns.tenant_id,
+      thread_id: threadTurns.thread_id,
+    })
+    .from(threadTurns)
+    .where(eq(threadTurns.id, payload.thread_turn_id))
+    .limit(1);
+
+  if (!turn) {
+    return json(404, {
+      ok: false,
+      error: "thread_turn_id not found",
+      code: "TURN_NOT_FOUND",
+    });
+  }
+  // Tenant + thread pin: defense in depth against forged callbacks
+  // referencing a turn under a different tenant.
+  if (
+    turn.tenant_id !== payload.tenant_id ||
+    (turn.thread_id !== null && turn.thread_id !== payload.thread_id)
+  ) {
+    return badRequest(
+      "thread_turn_id is not in the tenant/thread named in the body",
+    );
+  }
+
+  // ---- Run the finalize chain ----------------------------------------
+  try {
+    const result = await processFinalize(payload);
+    return json(200, toFinalizeResponse(result));
+  } catch (err) {
+    console.error(`[chat-agent-finalize] Internal error:`, err);
+    return json(500, {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      code: "INTERNAL",
+    });
+  }
+}

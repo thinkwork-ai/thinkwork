@@ -293,6 +293,14 @@ resource "aws_lambda_function" "handler" {
   for_each = local.deploy_lambda_handlers ? toset([
     "graphql-http",
     "chat-agent-invoke",
+    # chat-agent-finalize — POST /api/threads/{threadId}/finalize. The
+    # Strands runtime POSTs here at end-of-turn so the post-AgentCore
+    # bookkeeping (cost recording, message insert, AppSync notify,
+    # computer-task completion, memory retain dispatch) can run without
+    # chat-agent-invoke holding a Lambda open for the full turn duration.
+    # Bearer API_AUTH_SECRET. Idempotent on thread_turns.finalized_at
+    # (migration 0123). Plan: 2026-05-22-006.
+    "chat-agent-finalize",
     "wakeup-processor",
     "workspace-event-dispatcher",
     "workspace-renderer",
@@ -970,6 +978,12 @@ locals {
     "OPTIONS /api/routines/step"      = "routine-step-callback"
     "POST /api/routines/execution"    = "routine-execution-callback"
     "OPTIONS /api/routines/execution" = "routine-execution-callback"
+
+    # chat-agent-finalize — Strands runtime POSTs here at end-of-turn so
+    # the post-AgentCore bookkeeping runs out-of-band from chat-agent-invoke.
+    # Bearer API_AUTH_SECRET. Plan 2026-05-22-006.
+    "POST /api/threads/{threadId}/finalize"    = "chat-agent-finalize"
+    "OPTIONS /api/threads/{threadId}/finalize" = "chat-agent-finalize"
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"
