@@ -13,6 +13,7 @@
     "lint": "echo 'lint: skipped (eslint not configured)'"
   },
   "dependencies": {
+    "@thinkwork/desktop-ipc": "workspace:*",
     "electron-updater": "6.8.3"
   },
   "devDependencies": {
