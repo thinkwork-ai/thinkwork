@@ -1,10 +1,13 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { SidebarInset, SidebarProvider } from "@thinkwork/ui";
 import { AppTopBar } from "@/components/AppTopBar";
 import { SpacesSidebar } from "@/components/SpacesSidebar";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { NoTenantAssigned } from "@/components/NoTenantAssigned";
+import { UpdateBanner } from "@/components/update-banner";
 import { useTenant } from "@/context/TenantContext";
+import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
 
 export const Route = createFileRoute("/_authed/_shell")({
   component: ShellLayout,
@@ -12,6 +15,10 @@ export const Route = createFileRoute("/_authed/_shell")({
 
 function ShellLayout() {
   const { noTenantAssigned, isLoading } = useTenant();
+
+  useEffect(() => {
+    void requestDesktopNotificationPermission();
+  }, []);
 
   if (noTenantAssigned) {
     return <NoTenantAssigned />;
@@ -37,6 +44,7 @@ function ShellLayout() {
       <SpacesSidebar />
       <SidebarInset className="min-h-0 min-w-0 h-svh flex flex-col">
         <AppTopBar />
+        <UpdateBanner />
         <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
           <Outlet />
         </main>
