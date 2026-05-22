@@ -72,6 +72,8 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+const WORKSPACE_RENDERER_FUNCTION_NAME =
+  process.env.WORKSPACE_RENDERER_FUNCTION_NAME || "";
 // Used by sandbox-preflight to namespace Secrets Manager paths per stage.
 // STACK_NAME is the legacy env var every other handler reads; mirror that.
 const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
@@ -132,6 +134,82 @@ interface InvokeEvent {
    * invoke payload as `message_attachments` (snake_case for Python).
    */
   messageAttachments?: InvokeAttachment[];
+}
+
+export interface RenderWorkspaceTupleForInvokeInput {
+  tenantId: string;
+  agentId: string;
+  spaceId: string;
+  userId?: string | null;
+}
+
+export interface RenderWorkspaceTupleForInvokeResult {
+  rendered: boolean;
+  renderedPrefix?: string;
+  cacheStatus?: "hit" | "miss";
+  reason?: string;
+}
+
+interface RenderWorkspaceTupleForInvokeDeps {
+  lambda?: Pick<LambdaClient, "send">;
+  functionName?: string;
+}
+
+export async function renderWorkspaceTupleForInvoke(
+  input: RenderWorkspaceTupleForInvokeInput,
+  deps: RenderWorkspaceTupleForInvokeDeps = {},
+): Promise<RenderWorkspaceTupleForInvokeResult> {
+  const functionName =
+    deps.functionName ?? WORKSPACE_RENDERER_FUNCTION_NAME ?? "";
+  if (!functionName) {
+    return { rendered: false, reason: "workspace_renderer_unconfigured" };
+  }
+
+  const client = deps.lambda ?? lambdaClient;
+  const response = await client.send(
+    new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: "RequestResponse",
+      Payload: new TextEncoder().encode(
+        JSON.stringify({
+          tenantId: input.tenantId,
+          agentId: input.agentId,
+          spaceId: input.spaceId,
+          userId: input.userId ?? null,
+        }),
+      ),
+    }),
+  );
+
+  const rawPayload = response.Payload
+    ? new TextDecoder().decode(response.Payload)
+    : "{}";
+  if (response.FunctionError) {
+    return {
+      rendered: false,
+      reason: `workspace_renderer_function_error:${response.FunctionError}`,
+    };
+  }
+
+  const parsed = JSON.parse(rawPayload) as Record<string, unknown>;
+  if (parsed.ok !== true || typeof parsed.renderedPrefix !== "string") {
+    return {
+      rendered: false,
+      reason:
+        typeof parsed.error === "object" && parsed.error
+          ? JSON.stringify(parsed.error)
+          : "workspace_renderer_failed",
+    };
+  }
+
+  return {
+    rendered: true,
+    renderedPrefix: parsed.renderedPrefix,
+    cacheStatus:
+      parsed.cacheStatus === "hit" || parsed.cacheStatus === "miss"
+        ? parsed.cacheStatus
+        : undefined,
+  };
 }
 
 type ChatInvokeIdentitySource =
@@ -471,6 +549,33 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       console.error(`[chat-agent-invoke] Space context render failed:`, err);
     }
 
+    let renderedWorkspacePrefix: string | undefined;
+    if (renderedTurnContext.rendered) {
+      try {
+        const renderedTuple = await renderWorkspaceTupleForInvoke({
+          tenantId,
+          agentId,
+          spaceId: renderedTurnContext.payload.spaceId,
+          userId: currentUserId || null,
+        });
+        if (renderedTuple.rendered) {
+          renderedWorkspacePrefix = renderedTuple.renderedPrefix;
+          console.log(
+            `[chat-agent-invoke] rendered workspace tuple prefix=${renderedWorkspacePrefix} cache=${renderedTuple.cacheStatus ?? "unknown"}`,
+          );
+        } else {
+          console.log(
+            `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedTuple.reason}`,
+          );
+        }
+      } catch (err) {
+        console.error(
+          `[chat-agent-invoke] rendered workspace tuple failed; falling back to legacy workspace sync:`,
+          err,
+        );
+      }
+    }
+
     const isEffectivelyBlocked = (toolName: string): boolean =>
       effectiveBlockedTools.includes(toolName);
     const isAnyEffectivelyBlocked = (...toolNames: string[]): boolean =>
@@ -560,6 +665,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       system_prompt: runtimeConfig.agentSystemPrompt || undefined,
       human_name: humanName || undefined,
       workspace_bucket: WORKSPACE_BUCKET || undefined,
+      rendered_workspace_prefix: renderedWorkspacePrefix,
       // Unit 7: container calls /api/workspaces/files at bootstrap via
       // x-api-key auth. Plumb the API URL + service secret so the
       // container can set them on os.environ and use them for the
@@ -875,9 +981,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } = await import(
-          "../lib/hindsight-cost.js"
-        );
+        const { recordHindsightCost } =
+          await import("../lib/hindsight-cost.js");
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -1097,9 +1202,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // 4c. Send push notification to user devices
     if (!computerThreadResponse?.responseMessageId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId,
           tenantId,
@@ -1428,4 +1532,3 @@ async function notifyThreadTurnUpdate(payload: {
     console.error(`[chat-agent-invoke] notifyThreadTurnUpdate error:`, err);
   }
 }
-
