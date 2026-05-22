@@ -21,7 +21,12 @@ Target branch: `main`
 - Started: 2026-05-21
 - Completed: 2026-05-22
 - Final PR: [#1543](https://github.com/thinkwork-ai/thinkwork/pull/1543)
+- Follow-up PR: [#1545](https://github.com/thinkwork-ai/thinkwork/pull/1545)
 - CI: all required checks passed
+
+### Follow-up Log
+
+- 2026-05-22: PR [#1545](https://github.com/thinkwork-ai/thinkwork/pull/1545) (`codex/fix-electron-login-header-branding`) repaired local packaged desktop login by loading Spaces env into the Electron build, accepting Cognito callback query additions, persisting Cognito OAuth tokens directly by token username/sub instead of blocking on a GraphQL `me` lookup, and making local no-signing package builds ad-hoc signable. It also added ThinkWork branding/app icon wiring, draggable desktop headers, an unauthenticated splash, desktop sidebar logo removal, header border removal, and verified the `thinkwork-dev` scheme resolves to `ai.thinkwork.spaces.desktop.dev`. Verification included focused desktop OAuth/deep-link/auth-bridge tests, focused Spaces sign-in/shell/sidebar tests, desktop and Spaces typechecks, full desktop tests, touched-file Prettier, local dry packaging, packaged `.app` smoke, LaunchServices callback smoke, and green GitHub checks. Squash merged as `2c5fed8a43c0a449bfda8c6ec1bf4dfd94ce0cde`; remote and local branches deleted and `main` synced.
 
 ### Progress Log
 
