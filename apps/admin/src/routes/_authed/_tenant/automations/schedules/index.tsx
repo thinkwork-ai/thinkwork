@@ -414,7 +414,9 @@ function ScheduledJobsPage() {
   });
   const agentNames = useMemo(() => {
     const map = new Map<string, string>();
-    for (const a of (agentsResult.data?.agents ?? []) as {
+    for (const a of (agentsResult.data?.agent
+      ? [agentsResult.data.agent]
+      : []) as {
       id: string;
       name: string;
     }[]) {
@@ -437,8 +439,8 @@ function ScheduledJobsPage() {
   const breadcrumbs = useMemo(() => {
     if (type === "agent" && agentId) {
       return [
-        { label: "Agents", href: "/agents" },
-        { label: agentName ?? "...", href: `/agents/${agentId}` },
+        { label: "Tenant agent", href: "/tenant-agent" },
+        { label: agentName ?? "Agent" },
         { label: "Automations" },
       ];
     }

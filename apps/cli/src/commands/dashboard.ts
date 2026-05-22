@@ -7,11 +7,14 @@ import { Command } from "commander";
 import { graphql } from "../gql/index.js";
 import { gqlQuery } from "../lib/gql-client.js";
 import { isJsonMode, printJson, printKeyValue } from "../lib/output.js";
-import { resolveTenantContext, type TenantCliOptions } from "../lib/resolve-tenant-id.js";
+import {
+  resolveTenantContext,
+  type TenantCliOptions,
+} from "../lib/resolve-tenant-id.js";
 
 const DashboardDoc = graphql(`
   query CliDashboard($tenantId: ID!) {
-    agents(tenantId: $tenantId) {
+    tenantAgent(tenantId: $tenantId) {
       id
       status
     }
@@ -34,9 +37,11 @@ const DashboardDoc = graphql(`
 
 async function runDashboard(opts: TenantCliOptions): Promise<void> {
   const ctx = await resolveTenantContext(opts);
-  const data = await gqlQuery(ctx.client, DashboardDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, DashboardDoc, {
+    tenantId: ctx.tenantId,
+  });
 
-  const agents = data.agents ?? [];
+  const agents = data.tenantAgent ? [data.tenantAgent] : [];
   const threads = (data.threads ?? []).filter((t) => t.archivedAt == null);
   const openThreads = threads.filter(
     (t) => t.status !== "DONE" && t.status !== "CANCELLED",
@@ -67,7 +72,10 @@ async function runDashboard(opts: TenantCliOptions): Promise<void> {
     ],
     ["Threads", `${threads.length} total, ${openThreads.length} open`],
     ["Pending approvals", String(inbox.length)],
-    ["Spend (to date)", `$${cost.totalUsd.toFixed(2)} (LLM: $${cost.llmUsd.toFixed(2)}, compute: $${cost.computeUsd.toFixed(2)})`],
+    [
+      "Spend (to date)",
+      `$${cost.totalUsd.toFixed(2)} (LLM: $${cost.llmUsd.toFixed(2)}, compute: $${cost.computeUsd.toFixed(2)})`,
+    ],
     ["LLM events", cost.eventCount.toLocaleString()],
   ]);
 }
@@ -76,7 +84,9 @@ export function registerDashboardCommand(program: Command): void {
   program
     .command("dashboard")
     .alias("overview")
-    .description("One-screen snapshot of the tenant — agents, open threads, approvals, spend.")
+    .description(
+      "One-screen snapshot of the tenant — agents, open threads, approvals, spend.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .addHelpText(

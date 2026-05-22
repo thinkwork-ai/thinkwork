@@ -14,9 +14,6 @@ import { TypedDocumentNode as DocumentNode } from "@graphql-typed-document-node/
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-  "\n  query AgentDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n    }\n  }\n": typeof types.AgentDetailDocument;
-  "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": typeof types.CreateSubAgentDocument;
-  "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteSubAgentDocument;
   "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n": typeof types.CreateThreadDocument;
   "\n  query TenantLabels($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.TenantLabelsDocument;
   "\n  mutation CreateThreadLabel($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.CreateThreadLabelDocument;
@@ -29,28 +26,19 @@ type Documents = {
   "\n  query ComplianceEventByHash($eventHash: String!) {\n    complianceEventByHash(eventHash: $eventHash) {\n      eventId\n      tenantId\n      occurredAt\n      recordedAt\n      actor\n      actorType\n      source\n      eventType\n      eventHash\n      prevHash\n      anchorStatus {\n        state\n        cadenceId\n        anchoredRecordedAt\n        nextCadenceWithinMinutes\n      }\n    }\n  }\n": typeof types.ComplianceEventByHashDocument;
   "\n  query ComplianceTenants {\n    complianceTenants\n  }\n": typeof types.ComplianceTenantsDocument;
   "\n  query ComplianceOperatorCheck {\n    complianceOperatorCheck {\n      isOperator\n      allowlistConfigured\n    }\n  }\n": typeof types.ComplianceOperatorCheckDocument;
-  "\n  query AgentsList($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n": typeof types.AgentsListDocument;
-  "\n  query AgentProfileDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.AgentProfileDetailDocument;
-  "\n  mutation CreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n": typeof types.CreateAgentDocument;
-  "\n  query AgentKnowledgeBases($id: ID!) {\n    agent(id: $id) {\n      knowledgeBases {\n        id\n        knowledgeBaseId\n        enabled\n        knowledgeBase {\n          id\n          name\n          description\n          status\n        }\n      }\n    }\n  }\n": typeof types.AgentKnowledgeBasesDocument;
-  "\n  mutation UpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      updatedAt\n    }\n  }\n": typeof types.UpdateAgentDocument;
-  "\n  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {\n    updateAgentRuntime(id: $id, runtime: $runtime) {\n      id\n      runtime\n      updatedAt\n    }\n  }\n": typeof types.UpdateAgentRuntimeDocument;
-  "\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteAgentDocument;
+  "\n  query AgentsList($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n": typeof types.AgentsListDocument;
+  "\n  query TenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.TenantAgentDocument;
+  "\n  mutation UpdateTenantAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {\n    updateTenantAgent(tenantId: $tenantId, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      model\n      guardrailId\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      sandbox\n      updatedAt\n    }\n  }\n": typeof types.UpdateTenantAgentDocument;
   "\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SpacesListDocument;
-  "\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n": typeof types.AgentSpaceAvailabilityDocument;
   "\n  mutation CreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.CreateSpaceDocument;
   "\n  mutation UpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      accessMode\n    }\n  }\n": typeof types.UpdateSpaceDocument;
-  "\n  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {\n    setSpaceAgentAvailability(input: $input) {\n      id\n      agentId\n      spaceId\n      localRole\n      autoSubscribe\n      allowedTools\n      status\n    }\n  }\n": typeof types.SetSpaceAgentAvailabilityDocument;
-  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n": typeof types.SpaceAdminDetailDocument;
+  "\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n": typeof types.SetSpaceRuntimeOverridesDocument;
+  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n": typeof types.SpaceAdminDetailDocument;
   "\n  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {\n    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {\n      id\n      emailTriggersEnabled\n      updatedAt\n    }\n  }\n": typeof types.SetSpaceEmailTriggersDocument;
   "\n  query SpaceMemory($id: ID!) {\n    space(id: $id) {\n      id\n      knowledgeBases {\n        id\n        knowledgeBaseId\n        enabled\n        knowledgeBase {\n          id\n          name\n          status\n        }\n      }\n    }\n  }\n": typeof types.SpaceMemoryDocument;
   "\n  mutation SetSpaceKnowledgeBases($input: SetSpaceKnowledgeBasesInput!) {\n    setSpaceKnowledgeBases(input: $input) {\n      id\n      knowledgeBaseId\n      enabled\n      knowledgeBase {\n        id\n        name\n        status\n      }\n    }\n  }\n": typeof types.SetSpaceKnowledgeBasesDocument;
   "\n  query SpaceTools($id: ID!) {\n    space(id: $id) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n": typeof types.SpaceToolsDocument;
   "\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n": typeof types.SetSpaceToolsDocument;
-  "\n  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.UpdateAgentStatusDocument;
-  "\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n": typeof types.SetAgentCapabilitiesDocument;
-  "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n": typeof types.SetAgentBudgetPolicyDocument;
-  "\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n": typeof types.DeleteAgentBudgetPolicyDocument;
   "\n  query ComputersList($tenantId: ID!) {\n    computers(tenantId: $tenantId) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.ComputersListDocument;
   "\n  query ComputerDetail($id: ID!) {\n    computer(id: $id) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      runtimeConfig\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdBy\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.ComputerDetailDocument;
   "\n  mutation CreateComputer($input: CreateComputerInput!) {\n    createComputer(input: $input) {\n      id\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      tenantId\n      ownerUserId\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CreateComputerDocument;
@@ -62,11 +50,6 @@ type Documents = {
   "\n  mutation SetUserComputerAssignments(\n    $input: SetUserComputerAssignmentsInput!\n  ) {\n    setUserComputerAssignments(input: $input) {\n      id\n      computerId\n      subjectType\n      userId\n      teamId\n      role\n      updatedAt\n    }\n  }\n": typeof types.SetUserComputerAssignmentsDocument;
   "\n  mutation EnqueueComputerTask($input: EnqueueComputerTaskInput!) {\n    enqueueComputerTask(input: $input) {\n      id\n      taskType\n      status\n      input\n      output\n      error\n      idempotencyKey\n      claimedAt\n      completedAt\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.EnqueueComputerTaskDocument;
   "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n": typeof types.ModelCatalogDocument;
-  "\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n": typeof types.AgentEmailCapabilityDocument;
-  "\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n": typeof types.UpdateAgentEmailAllowlistDocument;
-  "\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n": typeof types.ToggleAgentEmailChannelDocument;
-  "\n  mutation ClaimVanityEmailAddress($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      id\n      config\n    }\n  }\n": typeof types.ClaimVanityEmailAddressDocument;
-  "\n  mutation ReleaseVanityEmailAddress($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      id\n      config\n    }\n  }\n": typeof types.ReleaseVanityEmailAddressDocument;
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.KnowledgeBasesListDocument;
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.KnowledgeBaseDetailDocument;
   "\n  mutation CreateKnowledgeBase($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      slug\n      status\n      createdAt\n    }\n  }\n": typeof types.CreateKnowledgeBaseDocument;
@@ -121,9 +104,6 @@ type Documents = {
   "\n  mutation UpdateUserProfile($userId: ID!, $input: UpdateUserProfileInput!) {\n    updateUserProfile(userId: $userId, input: $input) {\n      id\n      userId\n      title\n      timezone\n      pronouns\n      callBy\n      notes\n      family\n      context\n      updatedAt\n    }\n  }\n": typeof types.UpdateUserProfileDocument;
   "\n  mutation UpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      updatedAt\n    }\n  }\n": typeof types.UpdateTenantMemberDocument;
   "\n  mutation RemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n": typeof types.RemoveTenantMemberDocument;
-  "\n  query AgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      tenantId\n      agentId\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n": typeof types.AgentApiKeysDocument;
-  "\n  mutation CreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        agentId\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n": typeof types.CreateAgentApiKeyDocument;
-  "\n  mutation RevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n": typeof types.RevokeAgentApiKeyDocument;
   "\n  query CostSummary($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {\n    costSummary(tenantId: $tenantId, from: $from, to: $to) {\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      evalUsd\n      totalInputTokens\n      totalOutputTokens\n      eventCount\n      periodStart\n      periodEnd\n    }\n  }\n": typeof types.CostSummaryDocument;
   "\n  query CostByAgent($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {\n    costByAgent(tenantId: $tenantId, from: $from, to: $to) {\n      agentId\n      agentName\n      totalUsd\n      eventCount\n    }\n  }\n": typeof types.CostByAgentDocument;
   "\n  query CostByModel($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {\n    costByModel(tenantId: $tenantId, from: $from, to: $to) {\n      model\n      totalUsd\n      inputTokens\n      outputTokens\n    }\n  }\n": typeof types.CostByModelDocument;
@@ -194,12 +174,6 @@ type Documents = {
   "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n": typeof types.OnEvalRunUpdatedDocument;
 };
 const documents: Documents = {
-  "\n  query AgentDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n    }\n  }\n":
-    types.AgentDetailDocument,
-  "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n":
-    types.CreateSubAgentDocument,
-  "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n":
-    types.DeleteSubAgentDocument,
   "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n":
     types.CreateThreadDocument,
   "\n  query TenantLabels($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n":
@@ -224,31 +198,21 @@ const documents: Documents = {
     types.ComplianceTenantsDocument,
   "\n  query ComplianceOperatorCheck {\n    complianceOperatorCheck {\n      isOperator\n      allowlistConfigured\n    }\n  }\n":
     types.ComplianceOperatorCheckDocument,
-  "\n  query AgentsList($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n":
+  "\n  query AgentsList($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n":
     types.AgentsListDocument,
-  "\n  query AgentProfileDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n":
-    types.AgentProfileDetailDocument,
-  "\n  mutation CreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n":
-    types.CreateAgentDocument,
-  "\n  query AgentKnowledgeBases($id: ID!) {\n    agent(id: $id) {\n      knowledgeBases {\n        id\n        knowledgeBaseId\n        enabled\n        knowledgeBase {\n          id\n          name\n          description\n          status\n        }\n      }\n    }\n  }\n":
-    types.AgentKnowledgeBasesDocument,
-  "\n  mutation UpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      updatedAt\n    }\n  }\n":
-    types.UpdateAgentDocument,
-  "\n  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {\n    updateAgentRuntime(id: $id, runtime: $runtime) {\n      id\n      runtime\n      updatedAt\n    }\n  }\n":
-    types.UpdateAgentRuntimeDocument,
-  "\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n":
-    types.DeleteAgentDocument,
+  "\n  query TenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n":
+    types.TenantAgentDocument,
+  "\n  mutation UpdateTenantAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {\n    updateTenantAgent(tenantId: $tenantId, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      model\n      guardrailId\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      sandbox\n      updatedAt\n    }\n  }\n":
+    types.UpdateTenantAgentDocument,
   "\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n":
     types.SpacesListDocument,
-  "\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n":
-    types.AgentSpaceAvailabilityDocument,
   "\n  mutation CreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n":
     types.CreateSpaceDocument,
   "\n  mutation UpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      accessMode\n    }\n  }\n":
     types.UpdateSpaceDocument,
-  "\n  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {\n    setSpaceAgentAvailability(input: $input) {\n      id\n      agentId\n      spaceId\n      localRole\n      autoSubscribe\n      allowedTools\n      status\n    }\n  }\n":
-    types.SetSpaceAgentAvailabilityDocument,
-  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n":
+  "\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n":
+    types.SetSpaceRuntimeOverridesDocument,
+  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n":
     types.SpaceAdminDetailDocument,
   "\n  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {\n    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {\n      id\n      emailTriggersEnabled\n      updatedAt\n    }\n  }\n":
     types.SetSpaceEmailTriggersDocument,
@@ -260,14 +224,6 @@ const documents: Documents = {
     types.SpaceToolsDocument,
   "\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n":
     types.SetSpaceToolsDocument,
-  "\n  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n      updatedAt\n    }\n  }\n":
-    types.UpdateAgentStatusDocument,
-  "\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n":
-    types.SetAgentCapabilitiesDocument,
-  "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n":
-    types.SetAgentBudgetPolicyDocument,
-  "\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n":
-    types.DeleteAgentBudgetPolicyDocument,
   "\n  query ComputersList($tenantId: ID!) {\n    computers(tenantId: $tenantId) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdAt\n      updatedAt\n    }\n  }\n":
     types.ComputersListDocument,
   "\n  query ComputerDetail($id: ID!) {\n    computer(id: $id) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      runtimeConfig\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdBy\n      createdAt\n      updatedAt\n    }\n  }\n":
@@ -290,16 +246,6 @@ const documents: Documents = {
     types.EnqueueComputerTaskDocument,
   "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n":
     types.ModelCatalogDocument,
-  "\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n":
-    types.AgentEmailCapabilityDocument,
-  "\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n":
-    types.UpdateAgentEmailAllowlistDocument,
-  "\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n":
-    types.ToggleAgentEmailChannelDocument,
-  "\n  mutation ClaimVanityEmailAddress($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      id\n      config\n    }\n  }\n":
-    types.ClaimVanityEmailAddressDocument,
-  "\n  mutation ReleaseVanityEmailAddress($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      id\n      config\n    }\n  }\n":
-    types.ReleaseVanityEmailAddressDocument,
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n":
     types.KnowledgeBasesListDocument,
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n":
@@ -408,12 +354,6 @@ const documents: Documents = {
     types.UpdateTenantMemberDocument,
   "\n  mutation RemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n":
     types.RemoveTenantMemberDocument,
-  "\n  query AgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      tenantId\n      agentId\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n":
-    types.AgentApiKeysDocument,
-  "\n  mutation CreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        agentId\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n":
-    types.CreateAgentApiKeyDocument,
-  "\n  mutation RevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n":
-    types.RevokeAgentApiKeyDocument,
   "\n  query CostSummary($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {\n    costSummary(tenantId: $tenantId, from: $from, to: $to) {\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      evalUsd\n      totalInputTokens\n      totalOutputTokens\n      eventCount\n      periodStart\n      periodEnd\n    }\n  }\n":
     types.CostSummaryDocument,
   "\n  query CostByAgent($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {\n    costByAgent(tenantId: $tenantId, from: $from, to: $to) {\n      agentId\n      agentName\n      totalUsd\n      eventCount\n    }\n  }\n":
@@ -570,24 +510,6 @@ export function graphql(source: string): unknown;
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  query AgentDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n    }\n  }\n",
-): (typeof documents)["\n  query AgentDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      slug\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n",
-): (typeof documents)["\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n",
-): (typeof documents)["\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
   source: "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n",
 ): (typeof documents)["\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n"];
 /**
@@ -660,56 +582,26 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  query AgentsList($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n",
-): (typeof documents)["\n  query AgentsList($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n"];
+  source: "\n  query AgentsList($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n",
+): (typeof documents)["\n  query AgentsList($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      avatarUrl\n      createdAt\n    }\n    modelCatalog {\n      modelId\n      displayName\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  query AgentProfileDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n",
-): (typeof documents)["\n  query AgentProfileDetail($id: ID!) {\n    agent(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n"];
+  source: "\n  query TenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  query TenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      systemPrompt\n      avatarUrl\n      lastHeartbeatAt\n      runtimeConfig\n      adapterType\n      adapterConfig\n      humanPairId\n      humanPair {\n        id\n        name\n        email\n      }\n      version\n      capabilities {\n        id\n        capability\n        config\n        enabled\n      }\n      skills {\n        id\n        skillId\n        enabled\n        config\n        permissions\n      }\n      budgetPolicy {\n        id\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      parentAgentId\n      subAgents {\n        id\n        name\n        slug\n        role\n        status\n      }\n      createdAt\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  mutation CreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n",
-): (typeof documents)["\n  mutation CreateAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      role\n      type\n      status\n      runtime\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query AgentKnowledgeBases($id: ID!) {\n    agent(id: $id) {\n      knowledgeBases {\n        id\n        knowledgeBaseId\n        enabled\n        knowledgeBase {\n          id\n          name\n          description\n          status\n        }\n      }\n    }\n  }\n",
-): (typeof documents)["\n  query AgentKnowledgeBases($id: ID!) {\n    agent(id: $id) {\n      knowledgeBases {\n        id\n        knowledgeBaseId\n        enabled\n        knowledgeBase {\n          id\n          name\n          description\n          status\n        }\n      }\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation UpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      updatedAt\n    }\n  }\n",
-): (typeof documents)["\n  mutation UpdateAgent($id: ID!, $input: UpdateAgentInput!) {\n    updateAgent(id: $id, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      updatedAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {\n    updateAgentRuntime(id: $id, runtime: $runtime) {\n      id\n      runtime\n      updatedAt\n    }\n  }\n",
-): (typeof documents)["\n  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {\n    updateAgentRuntime(id: $id, runtime: $runtime) {\n      id\n      runtime\n      updatedAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n",
-): (typeof documents)["\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n"];
+  source: "\n  mutation UpdateTenantAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {\n    updateTenantAgent(tenantId: $tenantId, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      model\n      guardrailId\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      sandbox\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation UpdateTenantAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {\n    updateTenantAgent(tenantId: $tenantId, input: $input) {\n      id\n      name\n      role\n      type\n      runtime\n      model\n      guardrailId\n      systemPrompt\n      adapterType\n      budgetMonthlyCents\n      sandbox\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
   source: "\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n",
 ): (typeof documents)["\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n",
-): (typeof documents)["\n  query AgentSpaceAvailability($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      name\n      slug\n      kind\n      agentAssignments {\n        id\n        status\n        agent {\n          id\n        }\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -726,14 +618,14 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {\n    setSpaceAgentAvailability(input: $input) {\n      id\n      agentId\n      spaceId\n      localRole\n      autoSubscribe\n      allowedTools\n      status\n    }\n  }\n",
-): (typeof documents)["\n  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {\n    setSpaceAgentAvailability(input: $input) {\n      id\n      agentId\n      spaceId\n      localRole\n      autoSubscribe\n      allowedTools\n      status\n    }\n  }\n"];
+  source: "\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n",
-): (typeof documents)["\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n"];
+  source: "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n",
+): (typeof documents)["\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -764,30 +656,6 @@ export function graphql(
 export function graphql(
   source: "\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n      updatedAt\n    }\n  }\n",
-): (typeof documents)["\n  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n      updatedAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n",
-): (typeof documents)["\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n",
-): (typeof documents)["\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n",
-): (typeof documents)["\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -854,36 +722,6 @@ export function graphql(
 export function graphql(
   source: "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n",
 ): (typeof documents)["\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n",
-): (typeof documents)["\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n",
-): (typeof documents)["\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n",
-): (typeof documents)["\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation ClaimVanityEmailAddress($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      id\n      config\n    }\n  }\n",
-): (typeof documents)["\n  mutation ClaimVanityEmailAddress($agentId: ID!, $localPart: String!) {\n    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {\n      id\n      config\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation ReleaseVanityEmailAddress($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      id\n      config\n    }\n  }\n",
-): (typeof documents)["\n  mutation ReleaseVanityEmailAddress($agentId: ID!) {\n    releaseVanityEmailAddress(agentId: $agentId) {\n      id\n      config\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -1208,24 +1046,6 @@ export function graphql(
 export function graphql(
   source: "\n  mutation RemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n",
 ): (typeof documents)["\n  mutation RemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query AgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      tenantId\n      agentId\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n",
-): (typeof documents)["\n  query AgentApiKeys($agentId: ID!) {\n    agentApiKeys(agentId: $agentId) {\n      id\n      tenantId\n      agentId\n      name\n      keyPrefix\n      lastUsedAt\n      revokedAt\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation CreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        agentId\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n",
-): (typeof documents)["\n  mutation CreateAgentApiKey($input: CreateAgentApiKeyInput!) {\n    createAgentApiKey(input: $input) {\n      apiKey {\n        id\n        agentId\n        name\n        keyPrefix\n        createdAt\n      }\n      plainTextKey\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation RevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n",
-): (typeof documents)["\n  mutation RevokeAgentApiKey($id: ID!) {\n    revokeAgentApiKey(id: $id) {\n      id\n      revokedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -1,11 +1,7 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import {
-  agentWakeupRequests,
-  agents,
-  spaceAgentAssignments,
-  spaces,
-} from "@thinkwork/database-pg/schema";
+import { agentWakeupRequests, spaces } from "@thinkwork/database-pg/schema";
+import { resolveTenantPlatformAgent } from "../agents/tenant-platform-agent.js";
 
 export type CoordinatorWakeupReason =
   | "kickoff_triage"
@@ -221,38 +217,38 @@ class DrizzleCoordinatorAgentRepository implements CoordinatorAgentRepository {
     tenantId: string;
     spaceId: string;
   }): Promise<CoordinatorAssignment | null> {
-    const [row] = await this.db
+    const [space] = await this.db
       .select({
-        assignmentId: spaceAgentAssignments.id,
-        tenantId: spaceAgentAssignments.tenant_id,
-        spaceId: spaceAgentAssignments.space_id,
-        agentId: agents.id,
-        agentName: agents.name,
-        agentSlug: agents.slug,
-        localRole: spaceAgentAssignments.local_role,
-        localInstructions: spaceAgentAssignments.local_instructions,
-        allowedCapabilities: spaceAgentAssignments.allowed_capabilities,
-        allowedTools: spaceAgentAssignments.allowed_tools,
+        id: spaces.id,
+        tenantId: spaces.tenant_id,
         spaceName: spaces.name,
         spacePrompt: spaces.prompt,
       })
-      .from(spaceAgentAssignments)
-      .innerJoin(agents, eq(spaceAgentAssignments.agent_id, agents.id))
-      .innerJoin(spaces, eq(spaceAgentAssignments.space_id, spaces.id))
+      .from(spaces)
       .where(
         and(
-          eq(spaceAgentAssignments.tenant_id, input.tenantId),
-          eq(spaceAgentAssignments.space_id, input.spaceId),
-          eq(spaceAgentAssignments.status, "active"),
+          eq(spaces.tenant_id, input.tenantId),
+          eq(spaces.id, input.spaceId),
           eq(spaces.status, "active"),
-          or(
-            eq(spaceAgentAssignments.local_role, "coordinator"),
-            eq(agents.slug, "coordinator"),
-          ),
         ),
       )
       .limit(1);
-    return row ?? null;
+    if (!space) return null;
+    const agent = await resolveTenantPlatformAgent(input.tenantId, this.db);
+    return {
+      assignmentId: agent.id,
+      tenantId: space.tenantId,
+      spaceId: space.id,
+      agentId: agent.id,
+      agentName: agent.name,
+      agentSlug: agent.slug,
+      localRole: "coordinator",
+      localInstructions: null,
+      allowedCapabilities: null,
+      allowedTools: null,
+      spaceName: space.spaceName,
+      spacePrompt: space.spacePrompt,
+    };
   }
 
   async findExistingWakeup(input: {

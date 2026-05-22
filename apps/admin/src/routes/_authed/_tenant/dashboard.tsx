@@ -111,7 +111,7 @@ function DashboardPage() {
 
   if (!tenantId) return <PageSkeleton />;
 
-  const agents = agentsResult.data?.agents ?? [];
+  const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
   const threads = threadsResult.data?.threads ?? [];
 
   const onlineAgents = agents.filter(
@@ -146,9 +146,9 @@ function DashboardPage() {
         {/* Metrics */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">
           <MetricCard
-            label="Agents Online"
+            label="Agent Online"
             value={`${onlineAgents.length} / ${agents.length}`}
-            href="/agents"
+            href="/tenant-agent"
           />
           <MetricCard
             label="Open Threads"

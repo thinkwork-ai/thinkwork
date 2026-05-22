@@ -4,7 +4,6 @@ import {
   linkedTaskEvents,
   linkedTasks,
   messages,
-  spaceAgentAssignments,
   spaceChecklistItems,
   spaceChecklistTemplates,
   spaceIntegrations,
@@ -132,7 +131,6 @@ export interface CustomerOnboardingWorkflowSpace {
   prompt: string | null;
   config: Record<string, unknown> | null;
   checklistItems: CustomerOnboardingChecklistItem[];
-  agentAssignments: CustomerOnboardingAgentAssignment[];
   integration: CustomerOnboardingIntegration | null;
 }
 
@@ -144,12 +142,6 @@ export interface CustomerOnboardingChecklistItem {
   roleKey: string | null;
   required: boolean;
   externalTaskTemplate: Record<string, unknown> | null;
-}
-
-export interface CustomerOnboardingAgentAssignment {
-  agentId: string;
-  localRole: string | null;
-  autoSubscribe: boolean;
 }
 
 export interface CustomerOnboardingIntegration {
@@ -562,9 +554,7 @@ function createUnavailableLastMileTaskAdapter(): LastMileTasksWorkflowAdapter {
   };
 }
 
-class DrizzleCustomerOnboardingRepository
-  implements CustomerOnboardingWorkflowRepository
-{
+class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowRepository {
   private readonly db = getDb();
 
   async findSpace(input: {
@@ -612,16 +602,6 @@ class DrizzleCustomerOnboardingRepository
           )
           .orderBy(asc(spaceChecklistItems.sort_order))
       : [];
-    const assignments = await this.db
-      .select()
-      .from(spaceAgentAssignments)
-      .where(
-        and(
-          eq(spaceAgentAssignments.tenant_id, input.tenantId),
-          eq(spaceAgentAssignments.space_id, space.id),
-          eq(spaceAgentAssignments.status, "active"),
-        ),
-      );
     const [integration] = await this.db
       .select()
       .from(spaceIntegrations)
@@ -649,11 +629,6 @@ class DrizzleCustomerOnboardingRepository
         roleKey: item.role_key,
         required: item.required,
         externalTaskTemplate: objectOrNull(item.external_task_template),
-      })),
-      agentAssignments: assignments.map((assignment) => ({
-        agentId: assignment.agent_id,
-        localRole: assignment.local_role,
-        autoSubscribe: assignment.auto_subscribe,
       })),
       integration: integration
         ? {
@@ -729,18 +704,6 @@ class DrizzleCustomerOnboardingRepository
           user_id: input.createdById,
           role: "requester",
           source: "customer_onboarding_start",
-        });
-      }
-      for (const assignment of input.space.agentAssignments) {
-        if (!assignment.autoSubscribe) continue;
-        participantRows.push({
-          tenant_id: input.tenantId,
-          thread_id: thread.id,
-          space_id: input.space.id,
-          participant_type: "agent",
-          agent_id: assignment.agentId,
-          role: assignment.localRole ?? "agent",
-          source: "space_auto_subscribe",
         });
       }
       if (participantRows.length > 0) {

@@ -1,5 +1,5 @@
-# Agent domain types: Agent, AgentCapability, AgentSkill,
-# AgentBudgetPolicy, and related enums/inputs.
+# Agent domain types. Plan B collapses tenant-visible configuration to a
+# single platform agent per tenant; sub-agents remain workspace folders.
 
 enum AgentType {
   AGENT
@@ -94,81 +94,12 @@ type AgentBudgetPolicy {
   updatedAt: AWSDateTime!
 }
 
-# --- Agent Email Capability (PRD-14) ---
-
-type AgentEmailCapability {
-  id: ID!
-  agentId: ID!
-  enabled: Boolean!
-  emailAddress: String
-  vanityAddress: String
-  allowedSenders: [String!]!
-  replyTokensEnabled: Boolean!
-  maxReplyTokenAgeDays: Int!
-  maxReplyTokenUses: Int!
-  rateLimitPerHour: Int!
-}
-
-# --- Agent API Keys (admin management) ---
-
-type AgentApiKey {
-  id: ID!
-  tenantId: ID!
-  agentId: ID!
-  name: String
-  keyPrefix: String!
-  lastUsedAt: AWSDateTime
-  revokedAt: AWSDateTime
-  createdAt: AWSDateTime!
-}
-
-type CreateAgentApiKeyResult {
-  apiKey: AgentApiKey!
-  plainTextKey: String!
-}
-
 # --- Inputs ---
 
-input CreateAgentInput {
-  tenantId: ID!
-  name: String!
-  role: String
-  type: AgentType
-  systemPrompt: String
-  reportsTo: ID
-  humanPairId: ID
-  parentAgentId: ID
-  runtime: AgentRuntime
-  adapterType: String
-  adapterConfig: AWSJSON
-  runtimeConfig: AWSJSON
-  model: String
-  guardrailId: ID
-  blockedTools: AWSJSON
-  sandbox: AWSJSON
-  browser: AWSJSON
-  webSearch: AWSJSON
-  sendEmail: AWSJSON
-  contextEngine: AWSJSON
-  budgetMonthlyCents: Int
-  avatarUrl: String
-  """
-  Optional client-supplied idempotency key. When provided, a retry with
-  the same key returns the prior call's result without re-executing.
-  Null/absent = server derives a key from canonicalized inputs.
-  See packages/api/src/lib/idempotency.ts.
-  """
-  idempotencyKey: String
-}
-
-input UpdateAgentInput {
+input UpdateTenantAgentInput {
   name: String
   role: String
-  type: AgentType
   systemPrompt: String
-  reportsTo: ID
-  humanPairId: ID
-  parentAgentId: ID
   runtime: AgentRuntime
   adapterType: String
   adapterConfig: AWSJSON
@@ -182,6 +113,7 @@ input UpdateAgentInput {
   sendEmail: AWSJSON
   contextEngine: AWSJSON
   budgetMonthlyCents: Int
+  budgetPaused: Boolean
   avatarUrl: String
 }
 
@@ -206,11 +138,6 @@ input AgentBudgetPolicyInput {
   actionOnExceed: String
 }
 
-input CreateAgentApiKeyInput {
-  agentId: ID!
-  name: String
-}
-
 # --- Query / Mutation extensions ---
 
 type ModelCatalogEntry {
@@ -233,59 +160,10 @@ type AgentWorkspace {
 }
 
 extend type Query {
-  agents(
-    tenantId: ID!
-    status: AgentStatus
-    type: AgentType
-    includeSystem: Boolean
-  ): [Agent!]!
-  # Workspace-wide agent list for tenant owners/admins (admin app). Fails closed
-  # to an empty list when the caller is not an owner/admin of `tenantId`.
-  allTenantAgents(
-    tenantId: ID!
-    includeSystem: Boolean
-    includeSubAgents: Boolean
-  ): [Agent!]!
-  agent(id: ID!): Agent
-  agentWorkspaces(agentId: ID!): [AgentWorkspace!]!
-  agentApiKeys(agentId: ID!): [AgentApiKey!]!
-  agentEmailCapability(agentId: ID!): AgentEmailCapability
+  tenantAgent(tenantId: ID!): Agent!
   modelCatalog: [ModelCatalogEntry!]!
 }
 
 extend type Mutation {
-  createAgent(input: CreateAgentInput!): Agent!
-  updateAgent(id: ID!, input: UpdateAgentInput!): Agent!
-  updateAgentRuntime(id: ID!, runtime: AgentRuntime!): Agent!
-  deleteAgent(id: ID!): Boolean!
-  updateAgentStatus(id: ID!, status: AgentStatus!): Agent!
-
-  "Replace an agent's capabilities. idempotencyKey optional — see CreateAgentInput.idempotencyKey."
-  setAgentCapabilities(
-    agentId: ID!
-    capabilities: [AgentCapabilityInput!]!
-    idempotencyKey: String
-  ): [AgentCapability!]!
-  "Replace an agent's skills. idempotencyKey optional — see CreateAgentInput.idempotencyKey."
-  setAgentSkills(
-    agentId: ID!
-    skills: [AgentSkillInput!]!
-    idempotencyKey: String
-  ): [AgentSkill!]!
-  setAgentBudgetPolicy(
-    agentId: ID!
-    input: AgentBudgetPolicyInput!
-  ): AgentBudgetPolicy!
-  deleteAgentBudgetPolicy(agentId: ID!): Boolean!
-
-  createAgentApiKey(input: CreateAgentApiKeyInput!): CreateAgentApiKeyResult!
-  revokeAgentApiKey(id: ID!): AgentApiKey!
-
-  updateAgentEmailAllowlist(
-    agentId: ID!
-    allowedSenders: [String!]!
-  ): AgentCapability!
-  toggleAgentEmailChannel(agentId: ID!, enabled: Boolean!): AgentCapability!
-  claimVanityEmailAddress(agentId: ID!, localPart: String!): AgentCapability!
-  releaseVanityEmailAddress(agentId: ID!): AgentCapability!
+  updateTenantAgent(tenantId: ID!, input: UpdateTenantAgentInput!): Agent!
 }

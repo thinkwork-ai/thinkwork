@@ -13,8 +13,19 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
-import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess, printWarning } from "../ui.js";
+import {
+  isJsonMode,
+  logStderr,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+  printWarning,
+} from "../ui.js";
 
 const KnowledgeBasesDoc = graphql(`
   query CliKnowledgeBases($tenantId: ID!) {
@@ -93,8 +104,8 @@ const SyncKBDoc = graphql(`
 `);
 
 const AgentKBsDoc = graphql(`
-  query CliAgentKBs($agentId: ID!) {
-    agent(id: $agentId) {
+  query CliAgentKBs($tenantId: ID!) {
+    tenantAgent(tenantId: $tenantId) {
       id
       knowledgeBases {
         knowledgeBaseId
@@ -136,7 +147,10 @@ async function resolveKbContext(opts: KbCliOptions) {
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
-  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({ stage, region });
+  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({
+    stage,
+    region,
+  });
 
   const flagOrEnv = opts.tenant ?? process.env.THINKWORK_TENANT;
   if (flagOrEnv) {
@@ -154,7 +168,9 @@ async function resolveKbContext(opts: KbCliOptions) {
     return { stage, region, client, tenantId: session.tenantId };
   }
   if (ctxTenantSlug) {
-    const data = await gqlQuery(client, KBTenantBySlugDoc, { slug: ctxTenantSlug });
+    const data = await gqlQuery(client, KBTenantBySlugDoc, {
+      slug: ctxTenantSlug,
+    });
     if (data.tenantBySlug) {
       return { stage, region, client, tenantId: data.tenantBySlug.id };
     }
@@ -172,7 +188,9 @@ function fmtIso(iso: string | null | undefined): string {
 
 async function runKbList(opts: KbCliOptions): Promise<void> {
   const ctx = await resolveKbContext(opts);
-  const data = await gqlQuery(ctx.client, KnowledgeBasesDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, KnowledgeBasesDoc, {
+    tenantId: ctx.tenantId,
+  });
   const items = data.knowledgeBases ?? [];
   if (isJsonMode()) {
     printJson({ items });
@@ -248,7 +266,9 @@ async function runKbCreate(
       process.exit(1);
     }
     requireTty("KB name");
-    resolvedName = await promptOrExit(() => input({ message: "Knowledge base name:" }));
+    resolvedName = await promptOrExit(() =>
+      input({ message: "Knowledge base name:" }),
+    );
   }
 
   if (opts.s3Uri) {
@@ -285,7 +305,9 @@ async function runKbUpdate(id: string, opts: UpdateOptions): Promise<void> {
   if (opts.name !== undefined) input.name = opts.name;
   if (opts.description !== undefined) input.description = opts.description;
   if (Object.keys(input).length === 0) {
-    printError("Nothing to update. Pass at least one of --name, --description.");
+    printError(
+      "Nothing to update. Pass at least one of --name, --description.",
+    );
     process.exit(1);
   }
   const data = await gqlMutate(ctx.client, UpdateKBDoc, { id, input });
@@ -304,7 +326,9 @@ async function runKbDelete(id: string, opts: DeleteOptions): Promise<void> {
   const ctx = await resolveKbContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to delete without --yes in a non-interactive session.");
+      printError(
+        "Refusing to delete without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
@@ -371,12 +395,10 @@ async function runKbAttach(kbId: string, opts: AttachOptions): Promise<void> {
     }
   }
 
-  const current = await gqlQuery(ctx.client, AgentKBsDoc, { agentId: opts.agent });
-  if (!current.agent) {
-    printError(`Agent ${opts.agent} not found.`);
-    process.exit(1);
-  }
-  const existing = current.agent.knowledgeBases ?? [];
+  const current = await gqlQuery(ctx.client, AgentKBsDoc, {
+    tenantId: ctx.tenantId,
+  });
+  const existing = current.tenantAgent.knowledgeBases ?? [];
   const filtered = existing.filter((a) => a.knowledgeBaseId !== kbId);
   const next = [
     ...filtered.map((a) => ({
@@ -393,7 +415,11 @@ async function runKbAttach(kbId: string, opts: AttachOptions): Promise<void> {
   });
 
   if (isJsonMode()) {
-    printJson({ attached: kbId, agentId: opts.agent, set: data.setAgentKnowledgeBases });
+    printJson({
+      attached: kbId,
+      agentId: opts.agent,
+      set: data.setAgentKnowledgeBases,
+    });
     return;
   }
   printSuccess(`Attached ${kbId} to agent ${opts.agent}.`);
@@ -405,12 +431,10 @@ async function runKbDetach(kbId: string, opts: AttachOptions): Promise<void> {
     printError("--agent <id> is required.");
     process.exit(1);
   }
-  const current = await gqlQuery(ctx.client, AgentKBsDoc, { agentId: opts.agent });
-  if (!current.agent) {
-    printError(`Agent ${opts.agent} not found.`);
-    process.exit(1);
-  }
-  const next = (current.agent.knowledgeBases ?? [])
+  const current = await gqlQuery(ctx.client, AgentKBsDoc, {
+    tenantId: ctx.tenantId,
+  });
+  const next = (current.tenantAgent.knowledgeBases ?? [])
     .filter((a) => a.knowledgeBaseId !== kbId)
     .map((a) => ({
       knowledgeBaseId: a.knowledgeBaseId,
@@ -424,7 +448,11 @@ async function runKbDetach(kbId: string, opts: AttachOptions): Promise<void> {
   });
 
   if (isJsonMode()) {
-    printJson({ detached: kbId, agentId: opts.agent, set: data.setAgentKnowledgeBases });
+    printJson({
+      detached: kbId,
+      agentId: opts.agent,
+      set: data.setAgentKnowledgeBases,
+    });
     return;
   }
   printSuccess(`Detached ${kbId} from agent ${opts.agent}.`);
@@ -434,29 +462,33 @@ export function registerKbCommand(program: Command): void {
   const kb = program
     .command("kb")
     .alias("knowledge-base")
-    .description("Manage knowledge bases (RAG stores) and attach them to agents.");
+    .description(
+      "Manage knowledge bases (RAG stores) and attach them to agents.",
+    );
 
-  kb
-    .command("list")
+  kb.command("list")
     .alias("ls")
     .description("List knowledge bases in the tenant.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runKbList);
 
-  kb
-    .command("get <id>")
+  kb.command("get <id>")
     .description("Fetch one knowledge base with its source + sync status.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runKbGet);
 
-  kb
-    .command("create [name]")
-    .description("Create a new knowledge base. Interactive prompts for missing fields.")
+  kb.command("create [name]")
+    .description(
+      "Create a new knowledge base. Interactive prompts for missing fields.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--s3-uri <uri>", "S3 source (currently set in admin UI; flag accepted for forward compat)")
+    .option(
+      "--s3-uri <uri>",
+      "S3 source (currently set in admin UI; flag accepted for forward compat)",
+    )
     .option("--description <text>")
     .option("--embedding-model <id>", "Bedrock embedding model ID")
     .addHelpText(
@@ -469,33 +501,31 @@ Examples:
     )
     .action(runKbCreate);
 
-  kb
-    .command("update <id>")
-    .description("Update knowledge base metadata (name, description). Source changes need re-create.")
+  kb.command("update <id>")
+    .description(
+      "Update knowledge base metadata (name, description). Source changes need re-create.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--name <n>")
     .option("--description <text>")
     .action(runKbUpdate);
 
-  kb
-    .command("delete <id>")
+  kb.command("delete <id>")
     .description("Delete a knowledge base. Embeddings + index are destroyed.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
     .action(runKbDelete);
 
-  kb
-    .command("sync <id>")
+  kb.command("sync <id>")
     .description("Re-embed from S3. Idempotent; safe to re-run.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--wait", "Block until the sync finishes (not yet implemented)")
     .action(runKbSync);
 
-  kb
-    .command("attach <kbId>")
+  kb.command("attach <kbId>")
     .description("Attach a knowledge base to an agent.")
     .option("--agent <id>", "Agent ID")
     .option("--config <json>", "Retrieval config (topK, score threshold, …)")
@@ -511,8 +541,7 @@ Examples:
     )
     .action(runKbAttach);
 
-  kb
-    .command("detach <kbId>")
+  kb.command("detach <kbId>")
     .description("Detach a knowledge base from an agent.")
     .option("--agent <id>", "Agent ID")
     .option("-s, --stage <name>", "Deployment stage")

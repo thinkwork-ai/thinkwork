@@ -1,12 +1,9 @@
 import {
-  agents,
-  agentToCamel,
   and,
   db,
   eq,
   inArray,
   knowledgeBases,
-  spaceAgentAssignments,
   spaceChecklistItems,
   spaceChecklistTemplates,
   spaceIntegrations,
@@ -24,6 +21,18 @@ export const spaceTypeResolvers = {
   builtInTools: async (parent: any) => {
     return builtInToolsFromPolicy(parent.toolPolicy ?? parent.tool_policy);
   },
+  runtimeOverrides: (parent: any) => ({
+    model: parent.modelOverride ?? parent.model_override ?? null,
+    guardrailId:
+      parent.guardrailIdOverride ?? parent.guardrail_id_override ?? null,
+    budgetMonthlyCents:
+      parent.budgetMonthlyCentsOverride ??
+      parent.budget_monthly_cents_override ??
+      null,
+    budgetPaused:
+      parent.budgetPausedOverride ?? parent.budget_paused_override ?? null,
+    sandbox: parent.sandboxOverride ?? parent.sandbox_override ?? null,
+  }),
   members: async (parent: any) => {
     const spaceId = parent.id;
     const tenantId = parent.tenantId ?? parent.tenant_id;
@@ -34,20 +43,6 @@ export const spaceTypeResolvers = {
         and(
           eq(spaceMembers.tenant_id, tenantId),
           eq(spaceMembers.space_id, spaceId),
-        ),
-      );
-    return rows.map((row) => toGraphqlSpaceChild(row));
-  },
-  agentAssignments: async (parent: any) => {
-    const spaceId = parent.id;
-    const tenantId = parent.tenantId ?? parent.tenant_id;
-    const rows = await db
-      .select()
-      .from(spaceAgentAssignments)
-      .where(
-        and(
-          eq(spaceAgentAssignments.tenant_id, tenantId),
-          eq(spaceAgentAssignments.space_id, spaceId),
         ),
       );
     return rows.map((row) => toGraphqlSpaceChild(row));
@@ -134,15 +129,6 @@ export const spaceMemberTypeResolvers = {
     if (!userId) return null;
     const [row] = await db.select().from(users).where(eq(users.id, userId));
     return row ? snakeToCamel(row) : null;
-  },
-};
-
-export const spaceAgentAssignmentTypeResolvers = {
-  agent: async (parent: any) => {
-    const agentId = parent.agentId ?? parent.agent_id;
-    if (!agentId) return null;
-    const [row] = await db.select().from(agents).where(eq(agents.id, agentId));
-    return row ? agentToCamel(row) : null;
   },
 };
 

@@ -6,14 +6,16 @@ import { gql } from "urql";
 // ---------------------------------------------------------------------------
 
 export const AgentsQuery = graphql(`
-  query Agents($tenantId: ID!, $status: AgentStatus, $type: AgentType) {
-    agents(tenantId: $tenantId, status: $status, type: $type) {
+  query Agents($tenantId: ID!) {
+    agent: tenantAgent(tenantId: $tenantId) {
       id
       tenantId
       name
+      slug
       role
       type
       status
+      runtime
       systemPrompt
       adapterType
       adapterConfig
@@ -30,8 +32,8 @@ export const AgentsQuery = graphql(`
 `);
 
 export const AgentQuery = graphql(`
-  query Agent($id: ID!) {
-    agent(id: $id) {
+  query Agent($tenantId: ID!) {
+    agent: tenantAgent(tenantId: $tenantId) {
       id
       tenantId
       name
@@ -75,8 +77,8 @@ export const AgentQuery = graphql(`
 `);
 
 export const CreateAgentMutation = graphql(`
-  mutation CreateAgent($input: CreateAgentInput!) {
-    createAgent(input: $input) {
+  mutation CreateAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {
+    updateTenantAgent(tenantId: $tenantId, input: $input) {
       id
       tenantId
       name
@@ -88,8 +90,8 @@ export const CreateAgentMutation = graphql(`
 `);
 
 export const UpdateAgentMutation = graphql(`
-  mutation UpdateAgent($id: ID!, $input: UpdateAgentInput!) {
-    updateAgent(id: $id, input: $input) {
+  mutation UpdateAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {
+    updateTenantAgent(tenantId: $tenantId, input: $input) {
       id
       name
       role
@@ -102,14 +104,16 @@ export const UpdateAgentMutation = graphql(`
 `);
 
 export const DeleteAgentMutation = graphql(`
-  mutation DeleteAgent($id: ID!) {
-    deleteAgent(id: $id)
+  mutation DeleteAgent($tenantId: ID!) {
+    updateTenantAgent(tenantId: $tenantId, input: {}) {
+      id
+    }
   }
 `);
 
 export const UpdateAgentStatusMutation = graphql(`
-  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {
-    updateAgentStatus(id: $id, status: $status) {
+  mutation UpdateAgentStatus($tenantId: ID!) {
+    updateTenantAgent(tenantId: $tenantId, input: {}) {
       id
       status
       lastHeartbeatAt
@@ -119,40 +123,41 @@ export const UpdateAgentStatusMutation = graphql(`
 `);
 
 export const SetAgentCapabilitiesMutation = graphql(`
-  mutation SetAgentCapabilities(
-    $agentId: ID!
-    $capabilities: [AgentCapabilityInput!]!
-  ) {
-    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {
+  mutation SetAgentCapabilities($tenantId: ID!) {
+    updateTenantAgent(tenantId: $tenantId, input: {}) {
       id
-      capability
-      config
-      enabled
+      capabilities {
+        id
+        capability
+        config
+        enabled
+      }
     }
   }
 `);
 
 export const SetAgentSkillsMutation = graphql(`
-  mutation SetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {
-    setAgentSkills(agentId: $agentId, skills: $skills) {
+  mutation SetAgentSkills($tenantId: ID!) {
+    updateTenantAgent(tenantId: $tenantId, input: {}) {
       id
-      skillId
-      config
-      enabled
+      skills {
+        id
+        skillId
+        config
+        enabled
+      }
     }
   }
 `);
 
 export const SetAgentBudgetPolicyMutation = graphql(`
   mutation SetAgentBudgetPolicy(
-    $agentId: ID!
-    $input: AgentBudgetPolicyInput!
+    $tenantId: ID!
+    $input: UpdateTenantAgentInput!
   ) {
-    setAgentBudgetPolicy(agentId: $agentId, input: $input) {
+    updateTenantAgent(tenantId: $tenantId, input: $input) {
       id
-      period
-      limitUsd
-      actionOnExceed
+      budgetMonthlyCents
     }
   }
 `);
@@ -1577,11 +1582,15 @@ export const UnregisterPushTokenMutation = gql`
 // ---------------------------------------------------------------------------
 
 export const AgentWorkspacesQuery = gql`
-  query AgentWorkspaces($agentId: ID!) {
-    agentWorkspaces(agentId: $agentId) {
-      slug
-      name
-      purpose
+  query AgentWorkspaces($tenantId: ID!) {
+    tenantAgent(tenantId: $tenantId) {
+      id
+      subAgents {
+        id
+        slug
+        name
+        role
+      }
     }
   }
 `;

@@ -2,12 +2,12 @@ import { graphql } from "@/gql";
 import { gql } from "@urql/core";
 
 // ---------------------------------------------------------------------------
-// Agents
+// Tenant agent
 // ---------------------------------------------------------------------------
 
 export const AgentsListQuery = graphql(`
   query AgentsList($tenantId: ID!) {
-    agents: allTenantAgents(tenantId: $tenantId) {
+    agent: tenantAgent(tenantId: $tenantId) {
       id
       name
       slug
@@ -26,9 +26,9 @@ export const AgentsListQuery = graphql(`
   }
 `);
 
-export const AgentDetailQuery = gql`
-  query AgentProfileDetail($id: ID!) {
-    agent(id: $id) {
+export const TenantAgentQuery = graphql(`
+  query TenantAgent($tenantId: ID!) {
+    agent: tenantAgent(tenantId: $tenantId) {
       id
       tenantId
       name
@@ -82,71 +82,24 @@ export const AgentDetailQuery = gql`
       updatedAt
     }
   }
-`;
-
-export const CreateAgentMutation = graphql(`
-  mutation CreateAgent($input: CreateAgentInput!) {
-    createAgent(input: $input) {
-      id
-      name
-      role
-      type
-      status
-      runtime
-      budgetMonthlyCents
-      createdAt
-    }
-  }
 `);
 
-// Agent knowledge bases — uses gql (not codegen) since the schema types are new
-export const AgentKnowledgeBasesQuery = gql`
-  query AgentKnowledgeBases($id: ID!) {
-    agent(id: $id) {
-      knowledgeBases {
-        id
-        knowledgeBaseId
-        enabled
-        knowledgeBase {
-          id
-          name
-          description
-          status
-        }
-      }
-    }
-  }
-`;
-
-export const UpdateAgentMutation = graphql(`
-  mutation UpdateAgent($id: ID!, $input: UpdateAgentInput!) {
-    updateAgent(id: $id, input: $input) {
+export const UpdateTenantAgentMutation = graphql(`
+  mutation UpdateTenantAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {
+    updateTenantAgent(tenantId: $tenantId, input: $input) {
       id
       name
       role
       type
       runtime
+      model
+      guardrailId
       systemPrompt
       adapterType
       budgetMonthlyCents
+      sandbox
       updatedAt
     }
-  }
-`);
-
-export const UpdateAgentRuntimeMutation = graphql(`
-  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {
-    updateAgentRuntime(id: $id, runtime: $runtime) {
-      id
-      runtime
-      updatedAt
-    }
-  }
-`);
-
-export const DeleteAgentMutation = graphql(`
-  mutation DeleteAgent($id: ID!) {
-    deleteAgent(id: $id)
   }
 `);
 
@@ -164,24 +117,6 @@ export const SpacesListQuery = graphql(`
       status
       accessMode
       updatedAt
-    }
-  }
-`);
-
-export const AgentSpaceAvailabilityQuery = graphql(`
-  query AgentSpaceAvailability($tenantId: ID!) {
-    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {
-      id
-      name
-      slug
-      kind
-      agentAssignments {
-        id
-        status
-        agent {
-          id
-        }
-      }
     }
   }
 `);
@@ -212,16 +147,21 @@ export const UpdateSpaceMutation = graphql(`
   }
 `);
 
-export const SetSpaceAgentAvailabilityMutation = graphql(`
-  mutation SetSpaceAgentAvailability($input: SetSpaceAgentAvailabilityInput!) {
-    setSpaceAgentAvailability(input: $input) {
+export const SetSpaceRuntimeOverridesMutation = graphql(`
+  mutation SetSpaceRuntimeOverrides(
+    $spaceId: ID!
+    $input: SetSpaceRuntimeOverridesInput!
+  ) {
+    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {
       id
-      agentId
-      spaceId
-      localRole
-      autoSubscribe
-      allowedTools
-      status
+      runtimeOverrides {
+        model
+        guardrailId
+        budgetMonthlyCents
+        budgetPaused
+        sandbox
+      }
+      updatedAt
     }
   }
 `);
@@ -237,6 +177,13 @@ export const SpaceAdminDetailQuery = graphql(`
       status
       accessMode
       emailTriggersEnabled
+      runtimeOverrides {
+        model
+        guardrailId
+        budgetMonthlyCents
+        budgetPaused
+        sandbox
+      }
     }
   }
 `);
@@ -323,49 +270,6 @@ export const SetSpaceToolsMutation = graphql(`
         }
       }
     }
-  }
-`);
-
-export const UpdateAgentStatusMutation = graphql(`
-  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {
-    updateAgentStatus(id: $id, status: $status) {
-      id
-      status
-      updatedAt
-    }
-  }
-`);
-
-export const SetAgentCapabilitiesMutation = graphql(`
-  mutation SetAgentCapabilities(
-    $agentId: ID!
-    $capabilities: [AgentCapabilityInput!]!
-  ) {
-    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {
-      id
-      capability
-      enabled
-    }
-  }
-`);
-
-export const SetAgentBudgetPolicyMutation = graphql(`
-  mutation SetAgentBudgetPolicy(
-    $agentId: ID!
-    $input: AgentBudgetPolicyInput!
-  ) {
-    setAgentBudgetPolicy(agentId: $agentId, input: $input) {
-      id
-      limitUsd
-      actionOnExceed
-      enabled
-    }
-  }
-`);
-
-export const DeleteAgentBudgetPolicyMutation = graphql(`
-  mutation DeleteAgentBudgetPolicy($agentId: ID!) {
-    deleteAgentBudgetPolicy(agentId: $agentId)
   }
 `);
 
@@ -650,66 +554,6 @@ export const ModelCatalogQuery = graphql(`
     }
   }
 `);
-
-// ---------------------------------------------------------------------------
-// Email Channel (PRD-14)
-// ---------------------------------------------------------------------------
-
-export const AgentEmailCapabilityQuery = gql`
-  query AgentEmailCapability($agentId: ID!) {
-    agentEmailCapability(agentId: $agentId) {
-      id
-      agentId
-      enabled
-      emailAddress
-      vanityAddress
-      allowedSenders
-    }
-  }
-`;
-
-export const UpdateAgentEmailAllowlistMutation = gql`
-  mutation UpdateAgentEmailAllowlist(
-    $agentId: ID!
-    $allowedSenders: [String!]!
-  ) {
-    updateAgentEmailAllowlist(
-      agentId: $agentId
-      allowedSenders: $allowedSenders
-    ) {
-      id
-      config
-      enabled
-    }
-  }
-`;
-
-export const ToggleAgentEmailChannelMutation = gql`
-  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {
-    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {
-      id
-      enabled
-    }
-  }
-`;
-
-export const ClaimVanityEmailAddressMutation = gql`
-  mutation ClaimVanityEmailAddress($agentId: ID!, $localPart: String!) {
-    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {
-      id
-      config
-    }
-  }
-`;
-
-export const ReleaseVanityEmailAddressMutation = gql`
-  mutation ReleaseVanityEmailAddress($agentId: ID!) {
-    releaseVanityEmailAddress(agentId: $agentId) {
-      id
-      config
-    }
-  }
-`;
 
 // ---------------------------------------------------------------------------
 // Knowledge Bases (PRD-13)
@@ -1902,53 +1746,6 @@ export const UpdateTenantMemberMutation = graphql(`
 export const RemoveTenantMemberMutation = graphql(`
   mutation RemoveTenantMember($id: ID!) {
     removeTenantMember(id: $id)
-  }
-`);
-
-// ---------------------------------------------------------------------------
-// Subscriptions
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Agent API Keys (admin management, still via GraphQL)
-// ---------------------------------------------------------------------------
-
-export const AgentApiKeysQuery = graphql(`
-  query AgentApiKeys($agentId: ID!) {
-    agentApiKeys(agentId: $agentId) {
-      id
-      tenantId
-      agentId
-      name
-      keyPrefix
-      lastUsedAt
-      revokedAt
-      createdAt
-    }
-  }
-`);
-
-export const CreateAgentApiKeyMutation = graphql(`
-  mutation CreateAgentApiKey($input: CreateAgentApiKeyInput!) {
-    createAgentApiKey(input: $input) {
-      apiKey {
-        id
-        agentId
-        name
-        keyPrefix
-        createdAt
-      }
-      plainTextKey
-    }
-  }
-`);
-
-export const RevokeAgentApiKeyMutation = graphql(`
-  mutation RevokeAgentApiKey($id: ID!) {
-    revokeAgentApiKey(id: $id) {
-      id
-      revokedAt
-    }
   }
 `);
 

@@ -5,9 +5,28 @@ import { BarChart, Bar, XAxis, YAxis } from "recharts";
 import { useTenant } from "@/context/TenantContext";
 import { MetricCard } from "@/components/MetricCard";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableFooter,
+} from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { formatUsd, formatTokens } from "@/lib/utils";
 import { useCostData } from "@/hooks/useCostData";
@@ -21,8 +40,13 @@ const trendChartConfig = {
 } satisfies ChartConfig;
 
 function shortenModelId(modelId: string): string {
-  const afterSlash = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
-  return afterSlash.replace(/^us\.anthropic\./, "").replace(/-\d{8,}/, "").replace(/-v\d+:\d+$/, "");
+  const afterSlash = modelId.includes("/")
+    ? modelId.split("/").pop()!
+    : modelId;
+  return afterSlash
+    .replace(/^us\.anthropic\./, "")
+    .replace(/-\d{8,}/, "")
+    .replace(/-v\d+:\d+$/, "");
 }
 
 function useModelDisplayNames(): Map<string, string> {
@@ -52,22 +76,44 @@ export function CostView() {
 
 function SummaryMetrics() {
   const summary = useCostStore((s) => s.summary);
-  const costPerEvent = (summary?.eventCount ?? 0) > 0
-    ? (summary?.totalUsd ?? 0) / (summary?.eventCount ?? 1)
-    : 0;
+  const costPerEvent =
+    (summary?.eventCount ?? 0) > 0
+      ? (summary?.totalUsd ?? 0) / (summary?.eventCount ?? 1)
+      : 0;
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">
-      <MetricCard label="Total Spend" value={formatUsd(summary?.totalUsd ?? 0)} />
+      <MetricCard
+        label="Total Spend"
+        value={formatUsd(summary?.totalUsd ?? 0)}
+      />
       <MetricCard label="LLM Costs" value={formatUsd(summary?.llmUsd ?? 0)} />
-      <MetricCard label="Infra Costs" value={formatUsd(summary?.computeUsd ?? 0)} />
-      <MetricCard label="Tool Costs" value={formatUsd(summary?.toolsUsd ?? 0)} />
+      <MetricCard
+        label="Infra Costs"
+        value={formatUsd(summary?.computeUsd ?? 0)}
+      />
+      <MetricCard
+        label="Tool Costs"
+        value={formatUsd(summary?.toolsUsd ?? 0)}
+      />
       <MetricCard label="Invocations" value={summary?.eventCount ?? 0} />
-      <MetricCard label="Cost / Event" value={costPerEvent > 0 ? formatUsd(costPerEvent) : "—"} />
+      <MetricCard
+        label="Cost / Event"
+        value={costPerEvent > 0 ? formatUsd(costPerEvent) : "—"}
+      />
     </div>
   );
 }
 
-function buildLast30Days(timeSeries: { day: string; totalUsd: number; llmUsd: number; computeUsd: number; toolsUsd: number; eventCount: number }[]) {
+function buildLast30Days(
+  timeSeries: {
+    day: string;
+    totalUsd: number;
+    llmUsd: number;
+    computeUsd: number;
+    toolsUsd: number;
+    eventCount: number;
+  }[],
+) {
   const lookup = new Map(timeSeries.map((d) => [d.day, d]));
   const days: typeof timeSeries = [];
   const now = new Date();
@@ -75,7 +121,16 @@ function buildLast30Days(timeSeries: { day: string; totalUsd: number; llmUsd: nu
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    days.push(lookup.get(key) ?? { day: key, totalUsd: 0, llmUsd: 0, computeUsd: 0, toolsUsd: 0, eventCount: 0 });
+    days.push(
+      lookup.get(key) ?? {
+        day: key,
+        totalUsd: 0,
+        llmUsd: 0,
+        computeUsd: 0,
+        toolsUsd: 0,
+        eventCount: 0,
+      },
+    );
   }
   return days;
 }
@@ -91,7 +146,10 @@ function TrendChart() {
         <CardDescription>Last 30 days</CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={trendChartConfig} className="aspect-auto h-52 w-full">
+        <ChartContainer
+          config={trendChartConfig}
+          className="aspect-auto h-52 w-full"
+        >
           <BarChart data={data}>
             <XAxis
               dataKey="day"
@@ -119,14 +177,22 @@ function TrendChart() {
                     const day = payload[0]?.payload?.day;
                     if (!day) return "";
                     const date = new Date(day + "T00:00:00");
-                    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    return date.toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    });
                   }}
                   formatter={(value, name) => (
                     <>
-                      <div className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: `var(--color-${name})` }} />
+                      <div
+                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                        style={{ backgroundColor: `var(--color-${name})` }}
+                      />
                       <div className="flex flex-1 justify-between items-center leading-none gap-2">
                         <span className="text-muted-foreground">
-                          {trendChartConfig[name as keyof typeof trendChartConfig]?.label ?? name}
+                          {trendChartConfig[
+                            name as keyof typeof trendChartConfig
+                          ]?.label ?? name}
                         </span>
                         <span className="font-mono font-medium tabular-nums text-foreground">
                           {formatUsd(Number(value))}
@@ -137,9 +203,25 @@ function TrendChart() {
                 />
               }
             />
-            <Bar dataKey="llmUsd" stackId="cost" fill="var(--color-llmUsd)" fillOpacity={0.85} />
-            <Bar dataKey="computeUsd" stackId="cost" fill="var(--color-computeUsd)" fillOpacity={0.85} />
-            <Bar dataKey="toolsUsd" stackId="cost" radius={[3, 3, 0, 0]} fill="var(--color-toolsUsd)" fillOpacity={0.85} />
+            <Bar
+              dataKey="llmUsd"
+              stackId="cost"
+              fill="var(--color-llmUsd)"
+              fillOpacity={0.85}
+            />
+            <Bar
+              dataKey="computeUsd"
+              stackId="cost"
+              fill="var(--color-computeUsd)"
+              fillOpacity={0.85}
+            />
+            <Bar
+              dataKey="toolsUsd"
+              stackId="cost"
+              radius={[3, 3, 0, 0]}
+              fill="var(--color-toolsUsd)"
+              fillOpacity={0.85}
+            />
           </BarChart>
         </ChartContainer>
       </CardContent>
@@ -160,7 +242,9 @@ function AgentBudgetTable() {
     pause: !tenantId,
   });
   const activeAgentIds = new Set(
-    (agentsResult.data?.agents ?? []).map((a: { id: string }) => a.id),
+    (agentsResult.data?.agent ? [agentsResult.data.agent] : []).map(
+      (a: { id: string }) => a.id,
+    ),
   );
 
   const agentBudgetMap = new Map(
@@ -181,7 +265,9 @@ function AgentBudgetTable() {
         eventCount: agent.eventCount,
         avgCost: agent.eventCount > 0 ? agent.totalUsd / agent.eventCount : 0,
         limit: budget?.policy.limitUsd ?? null,
-        percent: budget ? (agent.totalUsd / budget.policy.limitUsd) * 100 : null,
+        percent: budget
+          ? (agent.totalUsd / budget.policy.limitUsd) * 100
+          : null,
         isActive: activeAgentIds.has(agent.agentId),
       };
     });
@@ -205,8 +291,8 @@ function AgentBudgetTable() {
               Cost by Agent
             </CardTitle>
             <CardDescription>
-              Per-agent spend over the selected period. Computer-owned cost
-              is not yet broken out separately.
+              Per-agent spend over the selected period. Computer-owned cost is
+              not yet broken out separately.
             </CardDescription>
           </div>
           {hasArchived && (
@@ -238,7 +324,9 @@ function AgentBudgetTable() {
             {rows.map((row) => (
               <TableRow key={row.agentId} className="border-0">
                 <TableCell>
-                  <p className="text-sm font-medium truncate">{row.agentName}</p>
+                  <p className="text-sm font-medium truncate">
+                    {row.agentName}
+                  </p>
                 </TableCell>
                 <TableCell>
                   {row.limit != null ? (
@@ -253,13 +341,20 @@ function AgentBudgetTable() {
                       }
                     />
                   ) : (
-                    <span className="text-xs text-muted-foreground">No budget</span>
+                    <span className="text-xs text-muted-foreground">
+                      No budget
+                    </span>
                   )}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                  <span className="text-sm font-medium tabular-nums">{formatUsd(row.spent)}</span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {formatUsd(row.spent)}
+                  </span>
                   {row.limit != null && (
-                    <span className="text-sm text-muted-foreground tabular-nums"> / {formatUsd(row.limit, 0)}</span>
+                    <span className="text-sm text-muted-foreground tabular-nums">
+                      {" "}
+                      / {formatUsd(row.limit, 0)}
+                    </span>
                   )}
                 </TableCell>
               </TableRow>
@@ -270,9 +365,14 @@ function AgentBudgetTable() {
               <TableCell className="font-semibold">Total</TableCell>
               <TableCell />
               <TableCell className="whitespace-nowrap">
-                <span className="font-semibold tabular-nums">{formatUsd(totalSpent)}</span>
+                <span className="font-semibold tabular-nums">
+                  {formatUsd(totalSpent)}
+                </span>
                 {totalLimit != null && (
-                  <span className="text-muted-foreground tabular-nums"> / {formatUsd(totalLimit, 0)}</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {" "}
+                    / {formatUsd(totalLimit, 0)}
+                  </span>
                 )}
               </TableCell>
             </TableRow>
@@ -315,7 +415,9 @@ function CostByModelCard() {
           {sorted.length === 0 ? (
             <TableBody className="[&_tr]:border-0">
               <TableRow>
-                <TableCell colSpan={3} className="text-muted-foreground">No cost data yet.</TableCell>
+                <TableCell colSpan={3} className="text-muted-foreground">
+                  No cost data yet.
+                </TableCell>
               </TableRow>
             </TableBody>
           ) : (
@@ -324,15 +426,21 @@ function CostByModelCard() {
                 {sorted.map((model) => (
                   <TableRow key={model.model} className="border-0">
                     <TableCell>
-                      <p className="text-sm font-medium truncate">{displayNames.get(model.model) ?? shortenModelId(model.model)}</p>
+                      <p className="text-sm font-medium truncate">
+                        {displayNames.get(model.model) ??
+                          shortenModelId(model.model)}
+                      </p>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span className="text-xs text-muted-foreground tabular-nums">
-                        {formatTokens(model.inputTokens)} in / {formatTokens(model.outputTokens)} out
+                        {formatTokens(model.inputTokens)} in /{" "}
+                        {formatTokens(model.outputTokens)} out
                       </span>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <span className="text-sm font-medium tabular-nums">{formatUsd(model.totalUsd, 4)}</span>
+                      <span className="text-sm font-medium tabular-nums">
+                        {formatUsd(model.totalUsd, 4)}
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -342,11 +450,14 @@ function CostByModelCard() {
                   <TableCell className="font-semibold">Total</TableCell>
                   <TableCell className="whitespace-nowrap">
                     <span className="text-xs text-muted-foreground tabular-nums">
-                      {formatTokens(totalInput)} in / {formatTokens(totalOutput)} out
+                      {formatTokens(totalInput)} in /{" "}
+                      {formatTokens(totalOutput)} out
                     </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <span className="font-semibold tabular-nums">{formatUsd(totalModelCost, 4)}</span>
+                    <span className="font-semibold tabular-nums">
+                      {formatUsd(totalModelCost, 4)}
+                    </span>
                   </TableCell>
                 </TableRow>
               </TableFooter>

@@ -22,7 +22,7 @@ describe("Computers admin routes", () => {
     expect(commandPaletteSource).not.toContain('to: "/computers"');
   });
 
-  it("places Spaces and Agents in the visible admin IA", () => {
+  it("places Spaces in the visible admin IA", () => {
     expect(sidebarSource).toContain("<SidebarGroupLabel>Agentic OS");
     expect(sidebarSource).not.toContain("<SidebarGroupLabel>Managed Harness");
     const workItemsStart = sidebarSource.indexOf(
@@ -41,15 +41,13 @@ describe("Computers admin routes", () => {
     const agentsItemsSource = sidebarSource.slice(agentsItemsStart);
 
     expect(workItemsSource).toMatch(/to: "\/dashboard"[\s\S]+to: "\/threads"/);
-    expect(agentsItemsSource).toMatch(
-      /=\s*\[\s*\{\s*to: "\/agents"[\s\S]+to: "\/spaces"/,
-    );
+    expect(agentsItemsSource).toContain('to: "/spaces"');
     expect(agentsItemsSource).toContain("IconPlanet");
     expect(workItemsSource).toContain('label: "Dashboard"');
     expect(workItemsSource).toContain('label: "Threads"');
     expect(workItemsSource).not.toContain('label: "Spaces"');
     expect(agentsItemsSource).toContain('label: "Spaces"');
-    expect(agentsItemsSource).toContain('label: "Agents"');
+    expect(agentsItemsSource).not.toContain('label: "Agents"');
     expect(workItemsSource).not.toContain('to: "/computers"');
     expect(workItemsSource).not.toContain('to: "/agent-templates"');
     expect(agentsItemsSource).not.toContain('to: "/computers"');

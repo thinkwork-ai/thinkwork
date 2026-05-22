@@ -9,7 +9,6 @@ import { UserMenu } from "@thinkwork/ui";
 import { CommandPalette } from "@/components/CommandPalette";
 import { AppSyncSubscriptionProvider } from "@/context/AppSyncSubscriptionProvider";
 import { CreateThreadDialog } from "@/components/threads/CreateThreadDialog";
-import { NewAgentDialog } from "@/components/agents/NewAgentDialog";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getAdminExtension } from "@/extensions/registry";
 import { cn } from "@/lib/utils";
@@ -85,7 +84,6 @@ function TenantLayout() {
         </SidebarInset>
       </SidebarProvider>
       <CreateThreadDialog />
-      <NewAgentDialog />
     </AppSyncSubscriptionProvider>
   );
 }

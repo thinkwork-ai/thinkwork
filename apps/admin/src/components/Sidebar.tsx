@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  Bot,
   LayoutDashboard,
   MessagesSquare,
   Inbox,
@@ -250,7 +249,6 @@ export function AppSidebar() {
   ];
 
   const agentsItems: NavItem[] = [
-    { to: "/agents", icon: Bot, label: "Agents" },
     { to: "/spaces", icon: IconPlanet, label: "Spaces" },
     { to: "/capabilities", icon: PocketKnife, label: "Tools" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
