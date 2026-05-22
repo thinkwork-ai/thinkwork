@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +31,7 @@ import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
+import { notifyAgentCompletion } from "@/lib/desktop-notifications";
 
 interface SpacesThreadDetailRouteProps {
   threadId: string;
@@ -381,12 +382,37 @@ export function SpacesThreadDetailRoute({
     isActiveRunbookQueue(queue.status),
   );
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
+  const completionNotificationRef = useRef<{
+    threadId: string;
+    hasDurableAssistant: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (hasDurableAssistant) {
       resetStreamingChunks();
     }
   }, [hasDurableAssistant, resetStreamingChunks]);
+
+  useEffect(() => {
+    const previous = completionNotificationRef.current;
+    completionNotificationRef.current = { threadId, hasDurableAssistant };
+
+    if (
+      !visibleThread ||
+      previous?.threadId !== threadId ||
+      previous.hasDurableAssistant ||
+      !hasDurableAssistant
+    ) {
+      return;
+    }
+
+    void notifyAgentCompletion({
+      title: "Agent finished",
+      body: visibleThread.title
+        ? `${visibleThread.title} is ready.`
+        : "Thread response is ready.",
+    });
+  }, [hasDurableAssistant, threadId, visibleThread]);
 
   useEffect(() => {
     if (selectedArtifactId !== effectiveSelectedArtifactId) {
@@ -962,9 +988,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 
