@@ -10,6 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history required for artifact-builder-defaults.history.test.ts,
+          # which walks `git log` for the managed workspace-defaults files and
+          # asserts every prior-version SHA is registered in the upgradable set.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

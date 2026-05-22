@@ -40,7 +40,8 @@ export type ArtifactBuilderManagedPath =
 // alone. The parity test `artifact-builder-defaults.history.test.ts` walks
 // `git log` for each managed path and asserts every historical SHA is present
 // here, so drift fails CI rather than silently stranding agents on old defaults
-// (as it did pre-PR #1551 with the orphan `4281155...` SHA from commit 6b31f0f4).
+// (as happened with the orphan `4281155...` SHA from commit 6b31f0f4 before this
+// backfill landed).
 const UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH = new Map<string, Set<string>>(
   [
     [
@@ -183,6 +184,18 @@ async function readObjectIfExists(key: string): Promise<string | null> {
   }
 }
 
+function lookupHistorical(s3Path: string): ReadonlySet<string> {
+  const set = UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH.get(s3Path);
+  if (!set) {
+    // Surfaces a missing-key bug at module load (during test import) rather
+    // than handing the parity test an empty Set that silently loops zero times.
+    throw new Error(
+      `UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH is missing an entry for ${s3Path}`,
+    );
+  }
+  return set;
+}
+
 /**
  * Source-of-truth view of the upgradable-SHA history keyed by the `packages/...`
  * repo-relative source path (not the S3 workspace path). Exported only for the
@@ -190,18 +203,18 @@ async function readObjectIfExists(key: string): Promise<string | null> {
  * walks `git log` for each managed file and asserts every prior-version SHA is
  * registered here. Do not import this anywhere outside that test; production
  * code reads `UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH` directly.
+ *
+ * @internal
  */
 export const ARTIFACT_BUILDER_HISTORY_FOR_TESTING: Readonly<
   Record<ArtifactBuilderManagedPath, ReadonlySet<string>>
 > = {
-  [WORKSPACE_DEFAULTS_SKILL_SOURCE]:
-    UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH.get(
-      ARTIFACT_BUILDER_SKILL_PATH,
-    ) ?? new Set<string>(),
-  [WORKSPACE_DEFAULTS_CRM_SOURCE]:
-    UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH.get(
-      ARTIFACT_BUILDER_CRM_DASHBOARD_PATH,
-    ) ?? new Set<string>(),
+  [WORKSPACE_DEFAULTS_SKILL_SOURCE]: lookupHistorical(
+    ARTIFACT_BUILDER_SKILL_PATH,
+  ),
+  [WORKSPACE_DEFAULTS_CRM_SOURCE]: lookupHistorical(
+    ARTIFACT_BUILDER_CRM_DASHBOARD_PATH,
+  ),
 };
 
 function isUpgradableArtifactBuilderDefault(path: string, content: string) {

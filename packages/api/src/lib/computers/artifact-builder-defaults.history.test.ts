@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -11,14 +12,18 @@ import {
 // Parity test: every historical version of each managed artifact-builder file
 // that ever existed on `main` must be registered in the upgradable-SHA set.
 // Without this, agents materialized off an unregistered platform default get
-// stranded on stale content forever (PR #1551 backfilled the orphan SHA
-// `4281155...` from commit 6b31f0f4 that hit Eric's dev agent on 2026-05-22).
+// stranded on stale content forever (the orphan SHA `4281155...` from commit
+// 6b31f0f4 hit Eric's dev agent on 2026-05-22 — this test prevents recurrence).
 //
 // The test reads from the repo's `.git`, which is available in CI and locally
 // when full history is fetched. Shallow clones (default for many CI checkouts)
-// fail the `git log` walk; we skip with a clear message rather than silently
-// passing.
+// cannot enumerate file history; the `beforeAll` guard throws a clear setup
+// error so the failure points operators at the fix (add `fetch-depth: 0` to
+// the workflow's actions/checkout step). The CI test workflow has been updated
+// to fetch full history.
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..", "..");
 
 function git(args: string[]): string {
@@ -29,13 +34,20 @@ function git(args: string[]): string {
   });
 }
 
-function isShallowClone(): boolean {
+function ensureGitAvailable(): void {
   try {
-    const out = git(["rev-parse", "--is-shallow-repository"]).trim();
-    return out === "true";
-  } catch {
-    return true;
+    git(["rev-parse", "--git-dir"]);
+  } catch (err) {
+    throw new Error(
+      "This test requires `git` on PATH and a real .git directory. " +
+        `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
+}
+
+function isShallowClone(): boolean {
+  const out = git(["rev-parse", "--is-shallow-repository"]).trim();
+  return out === "true";
 }
 
 function commitsTouching(path: string): string[] {
@@ -66,6 +78,7 @@ function shaAtHead(path: string): string {
 
 describe("artifact-builder upgradable-SHA history parity", () => {
   beforeAll(() => {
+    ensureGitAvailable();
     if (isShallowClone()) {
       throw new Error(
         "This test requires full git history. CI runs need actions/checkout@v4 with fetch-depth: 0. " +
@@ -78,10 +91,15 @@ describe("artifact-builder upgradable-SHA history parity", () => {
     ARTIFACT_BUILDER_HISTORY_FOR_TESTING,
   ) as ArtifactBuilderManagedPath[]) {
     describe(path, () => {
-      const registered =
-        ARTIFACT_BUILDER_HISTORY_FOR_TESTING[path] ?? new Set<string>();
+      const registered = ARTIFACT_BUILDER_HISTORY_FOR_TESTING[path];
       const commits = commitsTouching(path);
       const headSha = shaAtHead(path);
+      const historicalShas = new Set<string>();
+      for (const commit of commits) {
+        const sha = shaAtCommit(commit, path);
+        if (!sha || sha === headSha) continue;
+        historicalShas.add(sha);
+      }
 
       it("has at least one historical commit", () => {
         expect(commits.length).toBeGreaterThan(0);
@@ -126,6 +144,24 @@ describe("artifact-builder upgradable-SHA history parity", () => {
             `Drift detected: ${missing.length} historical SHA(s) for ${path} ` +
               `are missing from UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH. ` +
               `Add the following entries:\n${lines.join("\n")}`,
+          );
+        }
+      });
+
+      it("contains no cruft SHAs that do not appear in git history", () => {
+        // Inverse drift check: every SHA in the registry must correspond to
+        // some commit. Typos, stale entries from reverted PRs, or copy-paste
+        // mistakes show up here. Without this assertion, the registry can
+        // accumulate noise that gives a false sense of coverage.
+        const cruft: string[] = [];
+        for (const sha of registered) {
+          if (!historicalShas.has(sha)) cruft.push(sha);
+        }
+        if (cruft.length > 0) {
+          throw new Error(
+            `Cruft detected: ${cruft.length} SHA(s) for ${path} are in the ` +
+              `upgradable set but do not match any commit on main. ` +
+              `Remove these entries:\n${cruft.map((s) => `  "${s}"`).join("\n")}`,
           );
         }
       });
