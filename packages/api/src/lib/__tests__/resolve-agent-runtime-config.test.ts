@@ -31,39 +31,33 @@ function takeRows(): unknown[] {
   return next;
 }
 
+function rowsResult() {
+  return {
+    then: (fn: (rows: unknown[]) => unknown) => Promise.resolve(fn(takeRows())),
+    limit: () => rowsResult(),
+  };
+}
+
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
     select: () => ({
       from: () => ({
         where: (pred: unknown) => ({
           __capture: whereCalls.push(pred),
-          then: (fn: (rows: unknown[]) => unknown) =>
-            Promise.resolve(fn(takeRows())),
+          ...rowsResult(),
           leftJoin: () => ({
-            where: () => ({
-              then: (fn: (rows: unknown[]) => unknown) =>
-                Promise.resolve(fn(takeRows())),
-            }),
+            where: () => rowsResult(),
           }),
           innerJoin: () => ({
-            where: () => ({
-              then: (fn: (rows: unknown[]) => unknown) =>
-                Promise.resolve(fn(takeRows())),
-            }),
+            where: () => rowsResult(),
           }),
           // Allow direct-await forms too (for chained calls that don't use .then).
         }),
         innerJoin: () => ({
-          where: () => ({
-            then: (fn: (rows: unknown[]) => unknown) =>
-              Promise.resolve(fn(takeRows())),
-          }),
+          where: () => rowsResult(),
         }),
         leftJoin: () => ({
-          where: () => ({
-            then: (fn: (rows: unknown[]) => unknown) =>
-              Promise.resolve(fn(takeRows())),
-          }),
+          where: () => rowsResult(),
         }),
       }),
     }),
@@ -78,6 +72,8 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     system_prompt: "agents.system_prompt",
     model: "agents.model",
     guardrail_id: "agents.guardrail_id",
+    budget_monthly_cents: "agents.budget_monthly_cents",
+    budget_paused: "agents.budget_paused",
     blocked_tools: "agents.blocked_tools",
     sandbox: "agents.sandbox",
     browser: "agents.browser",
@@ -132,6 +128,15 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: "guardrails.tenant_id",
     is_default: "guardrails.is_default",
   },
+  spaces: {
+    id: "spaces.id",
+    tenant_id: "spaces.tenant_id",
+    model_override: "spaces.model_override",
+    guardrail_id_override: "spaces.guardrail_id_override",
+    budget_monthly_cents_override: "spaces.budget_monthly_cents_override",
+    budget_paused_override: "spaces.budget_paused_override",
+    sandbox_override: "spaces.sandbox_override",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -175,6 +180,8 @@ function stageAgentRow(overrides?: Record<string, unknown>) {
       runtime: "strands",
       model: "us.anthropic.claude-sonnet-4-6",
       guardrail_id: null,
+      budget_monthly_cents: 10_000,
+      budget_paused: false,
       blocked_tools: null,
       sandbox: null,
       browser: null,
@@ -656,5 +663,45 @@ describe("resolveAgentRuntimeConfig", () => {
       null,
       expect.stringContaining("agent-runtime-config"),
     );
+  });
+
+  it("overlays Space runtime overrides when spaceId is provided", async () => {
+    stageAgentRow({ sandbox: { environment: "default-public" } });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    rowsQueue.push([
+      {
+        model_override: "us.anthropic.claude-opus-4-7",
+        guardrail_id_override: "guardrail-finance",
+        budget_monthly_cents_override: 25_000,
+        budget_paused_override: true,
+        sandbox_override: false,
+      },
+    ]); // Space overrides
+    rowsQueue.push([
+      {
+        bedrock_guardrail_id: "bg-finance",
+        bedrock_version: "2",
+      },
+    ]); // override guardrail
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      spaceId: "space-finance",
+    });
+
+    expect(cfg.templateModel).toBe("us.anthropic.claude-opus-4-7");
+    expect(cfg.guardrailId).toBe("guardrail-finance");
+    expect(cfg.guardrailConfig).toEqual({
+      guardrailIdentifier: "bg-finance",
+      guardrailVersion: "2",
+    });
+    expect(cfg.budgetMonthlyCents).toBe(25_000);
+    expect(cfg.budgetPaused).toBe(true);
+    expect(cfg.sandboxTemplate).toBeNull();
   });
 });

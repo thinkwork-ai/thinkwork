@@ -107,6 +107,8 @@ export function buildEvalAgentCorePayload(input: {
     context_engine_config: undefined,
     runtime_type: runtimeConfig.runtimeType,
     model: evalModelId(input.model),
+    budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
+    budget_paused: runtimeConfig.budgetPaused,
     max_tokens: evalMaxTokens(),
     skills:
       runtimeConfig.skillsConfig.length > 0

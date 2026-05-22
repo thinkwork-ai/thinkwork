@@ -248,6 +248,7 @@ def _build_synthetic_payload(
         envelope.get("invokerUserId") or scope.get("invokerUserId") or ""
     )
     thread_id = envelope.get("threadId") or scope.get("threadId") or ""
+    space_id = envelope.get("spaceId") or scope.get("spaceId") or ""
 
     payload: dict = {
         "tenant_id": tenant_id,
@@ -255,6 +256,7 @@ def _build_synthetic_payload(
         "assistant_id": agent_id,
         "user_id": invoker_user_id,
         "thread_id": thread_id,
+        "active_space_id": space_id,
         "tenant_slug": _cfg("tenantSlug", "tenant_slug") or "",
         "instance_id": _cfg("agentSlug", "agent_slug") or "",
         "agent_name": _cfg("agentName", "agent_name") or "",
@@ -336,6 +338,7 @@ async def dispatch_run_skill(payload: dict) -> dict:
     invoker_user_id = (
         payload.get("invokerUserId") or scope.get("invokerUserId") or ""
     )
+    space_id = payload.get("spaceId") or scope.get("spaceId") or ""
 
     # Snapshot the completion-callback env at dispatcher entry. Real
     # incidents on dev (2026-04-25, run c886c82e + 6d143ead) showed that
@@ -416,6 +419,7 @@ async def dispatch_run_skill(payload: dict) -> dict:
             agent_id=agent_id,
             tenant_id=tenant_id,
             current_user_id=invoker_user_id or None,
+            space_id=space_id or None,
             api_url=api_url_snapshot,
             api_secret=api_secret_snapshot,
         )

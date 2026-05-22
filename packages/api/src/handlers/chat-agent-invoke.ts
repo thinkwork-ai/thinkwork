@@ -353,6 +353,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       );
     }
 
+    const spaceId = await resolveThreadSpaceId({ tenantId, threadId });
+
     // 2. Resolve agent runtime config (agent + template + tenant + skills +
     //    KBs + MCP + guardrail + sandbox template). Shared with the
     //    skill-run dispatcher's `/api/agents/runtime-config` endpoint.
@@ -361,6 +363,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       runtimeConfig = await resolveAgentRuntimeConfig({
         tenantId,
         agentId,
+        spaceId,
         currentUserId: currentUserId || undefined,
         currentUserEmail: currentUserEmail || undefined,
         // Email-only fallback to the agent's human pair (R15: only for
@@ -684,6 +687,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         : undefined,
       runtime_type: runtimeType,
       model: agentModel,
+      budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
+      budget_paused: runtimeConfig.budgetPaused,
       skills:
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
       knowledge_bases: knowledgeBasesConfig,
@@ -832,4 +837,21 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     console.error(`[chat-agent-invoke] Setup error:`, err);
     return;
   }
+}
+
+async function resolveThreadSpaceId(input: {
+  tenantId: string;
+  threadId: string;
+}): Promise<string | null> {
+  const [thread] = await db
+    .select({ spaceId: threads.space_id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.id, input.threadId),
+        eq(threads.tenant_id, input.tenantId),
+      ),
+    )
+    .limit(1);
+  return thread?.spaceId ?? null;
 }

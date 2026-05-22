@@ -69,6 +69,7 @@ def fetch(
     *,
     current_user_id: str | None = None,
     current_user_email: str | None = None,
+    space_id: str | None = None,
     api_url: str | None = None,
     api_secret: str | None = None,
     timeout: int = 15,
@@ -82,6 +83,7 @@ def fetch(
         current_user_id, current_user_email: optional invoker hints the
             helper forwards to the REST endpoint so it overlays
             ``CURRENT_USER_EMAIL`` on default-skill envOverrides.
+        space_id: optional active Space id for per-Space runtime overrides.
         timeout: per-attempt urllib timeout. Total wall-clock budget is
             ~14s (timeout + 3 retries × mean-5s backoff) which fits well
             inside the 900s AgentCore Lambda ceiling.
@@ -103,6 +105,8 @@ def fetch(
         params["currentUserId"] = current_user_id
     if current_user_email:
         params["currentUserEmail"] = current_user_email
+    if space_id:
+        params["spaceId"] = space_id
     url = (
         f"{api_url.rstrip('/')}/api/agents/runtime-config?"
         + urllib.parse.urlencode(params)
