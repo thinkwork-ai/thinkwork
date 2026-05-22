@@ -11,6 +11,7 @@ import {
 } from "./deep-link.js";
 import { snapshotDesktopEnv } from "./env.js";
 import { registerDesktopIpcHandlers } from "./ipc-handlers.js";
+import { installDesktopMenu } from "./menus.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const deepLinkController = createDeepLinkController({
@@ -71,12 +72,18 @@ if (!app.requestSingleInstanceLock()) {
     snapshotEnv: snapshotDesktopEnv,
     preloadPath: join(__dirname, "../preload/index.mjs"),
     protocol,
+    installMenus: (handlers) =>
+      installDesktopMenu({
+        ...handlers,
+        appName: "ThinkWork Spaces",
+        isDev: !app.isPackaged,
+      }),
     registerIpcHandlers: (env) =>
       registerDesktopIpcHandlers({
         env,
         consumePendingOAuthDeepLink,
         markDeepLinkIpcReady,
-      }).then(() => undefined),
+      }),
     rendererRoot: join(__dirname, "../renderer"),
   }).catch((error) => {
     console.error("[desktop] failed to bootstrap", error);
