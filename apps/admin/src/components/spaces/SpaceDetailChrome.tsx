@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
+import { SpaceEmailTriggersToggle } from "@/components/spaces/SpaceEmailTriggersToggle";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/PageHeader";
@@ -115,9 +116,9 @@ export function SpaceDetailChrome({
 
   const dirty = Boolean(
     space &&
-      (draft.name.trim() !== space.name ||
-        (draft.description.trim() || null) !== (space.description ?? null) ||
-        draft.accessMode !== space.accessMode),
+    (draft.name.trim() !== space.name ||
+      (draft.description.trim() || null) !== (space.description ?? null) ||
+      draft.accessMode !== space.accessMode),
   );
   const canSave =
     dirty && draft.name.trim().length > 0 && !updateResult.fetching;
@@ -235,63 +236,83 @@ export function SpaceDetailChrome({
 }
 
 export function SpaceConfigurationPanel({
+  space,
   draft,
   setDraft,
+  refreshSpace,
 }: {
+  space: Space;
   draft: SpaceDraft;
   setDraft: Dispatch<SetStateAction<SpaceDraft>>;
+  refreshSpace: () => void;
 }) {
+  const { tenant } = useTenant();
+  const tenantSlug = tenant?.slug ?? "";
+
   return (
-    <section className="rounded-md border p-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="space-name">Name</Label>
-          <Input
-            id="space-name"
-            value={draft.name}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                name: event.target.value,
-              }))
-            }
-          />
+    <div className="space-y-4">
+      <section className="rounded-md border p-4">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="space-name">Name</Label>
+            <Input
+              id="space-name"
+              value={draft.name}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="space-access">Access</Label>
+            <Select
+              value={draft.accessMode}
+              onValueChange={(value) =>
+                setDraft((current) => ({
+                  ...current,
+                  accessMode: value as SpaceAccessMode,
+                }))
+              }
+            >
+              <SelectTrigger id="space-access">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PUBLIC">Public</SelectItem>
+                <SelectItem value="PRIVATE">Private</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 lg:col-span-2">
+            <Label htmlFor="space-description">Description</Label>
+            <Textarea
+              id="space-description"
+              value={draft.description}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="space-access">Access</Label>
-          <Select
-            value={draft.accessMode}
-            onValueChange={(value) =>
-              setDraft((current) => ({
-                ...current,
-                accessMode: value as SpaceAccessMode,
-              }))
-            }
-          >
-            <SelectTrigger id="space-access">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="PUBLIC">Public</SelectItem>
-              <SelectItem value="PRIVATE">Private</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5 lg:col-span-2">
-          <Label htmlFor="space-description">Description</Label>
-          <Textarea
-            id="space-description"
-            value={draft.description}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                description: event.target.value,
-              }))
-            }
-          />
-        </div>
-      </div>
-    </section>
+      </section>
+      <SpaceEmailTriggersToggle
+        tenantSlug={tenantSlug}
+        space={{
+          id: space.id,
+          slug: space.slug,
+          status: space.status,
+          accessMode: space.accessMode,
+          emailTriggersEnabled: space.emailTriggersEnabled,
+        }}
+        onSaved={refreshSpace}
+      />
+    </div>
   );
 }
 
