@@ -1,11 +1,23 @@
-import { app, protocol } from "electron";
+import { app, BrowserWindow, protocol } from "electron";
+import type { DeepLinkCallback } from "@thinkwork/desktop-ipc";
+import { DEEP_LINK_EVENT_CHANNEL } from "@thinkwork/desktop-ipc";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bootstrapDesktopApp } from "./app.js";
+import {
+  createDeepLinkController,
+  resolveDeepLinkScheme,
+  type DeepLinkDispatcher,
+} from "./deep-link.js";
 import { snapshotDesktopEnv } from "./env.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const bufferedOpenUrls: string[] = [];
+const deepLinkController = createDeepLinkController({
+  scheme: resolveDeepLinkScheme(
+    process.env.THINKWORK_STAGE ?? process.env.VITE_THINKWORK_STAGE,
+  ),
+  logger: console,
+});
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -37,17 +49,21 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+app.setAsDefaultProtocolClient(deepLinkController.scheme);
+
 app.on("open-url", (event, url) => {
   event.preventDefault();
-  bufferedOpenUrls.push(url);
+  deepLinkController.handleUrl(url);
 });
+
+deepLinkController.handleArgv(process.argv);
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", (_event, argv) => {
-    const url = argv.find((arg) => /^thinkwork(-dev|-canary)?:\/\//.test(arg));
-    if (url) bufferedOpenUrls.push(url);
+    deepLinkController.handleArgv(argv);
+    focusExistingWindow();
   });
 
   void bootstrapDesktopApp({
@@ -61,6 +77,26 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-export function consumeBufferedOpenUrls(): string[] {
-  return bufferedOpenUrls.splice(0);
+export function markDeepLinkIpcReady(
+  dispatcher: DeepLinkDispatcher = sendDeepLinkToRenderers,
+): void {
+  deepLinkController.markReady(dispatcher);
+}
+
+export function consumePendingOAuthDeepLink(): DeepLinkCallback | null {
+  return deepLinkController.consumePending();
+}
+
+function sendDeepLinkToRenderers(callback: DeepLinkCallback): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(DEEP_LINK_EVENT_CHANNEL, callback);
+  }
+}
+
+function focusExistingWindow(): void {
+  const [window] = BrowserWindow.getAllWindows();
+  if (!window) return;
+
+  if (window.isMinimized()) window.restore();
+  window.focus();
 }
