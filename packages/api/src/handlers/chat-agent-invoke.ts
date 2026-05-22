@@ -44,7 +44,7 @@ import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
-import { renderTurnContext } from "../lib/turn-context-renderer.js";
+import type { EffectiveWorkspacePolicy } from "../lib/workspace-renderer/index.js";
 // Post-AgentCore helpers — previously inline in this file; lifted into
 // the shared chat-finalize lib so chat-agent-finalize (the new HTTP
 // handler) and chat-agent-invoke (this file, for pre-dispatch error
@@ -127,12 +127,21 @@ export interface RenderWorkspaceTupleForInvokeInput {
   agentId: string;
   spaceId: string;
   userId?: string | null;
+  agentBlockedTools?: unknown;
+  agentAllowedTools?: unknown;
 }
 
 export interface RenderWorkspaceTupleForInvokeResult {
   rendered: boolean;
   renderedPrefix?: string;
   cacheStatus?: "hit" | "miss";
+  activeSpace?: {
+    id: string;
+    slug: string;
+    name: string;
+    isDefault: boolean;
+  };
+  effectivePolicy?: EffectiveWorkspacePolicy;
   reason?: string;
 }
 
@@ -162,6 +171,8 @@ export async function renderWorkspaceTupleForInvoke(
           agentId: input.agentId,
           spaceId: input.spaceId,
           userId: input.userId ?? null,
+          agentBlockedTools: input.agentBlockedTools,
+          agentAllowedTools: input.agentAllowedTools,
         }),
       ),
     }),
@@ -191,11 +202,57 @@ export async function renderWorkspaceTupleForInvoke(
   return {
     rendered: true,
     renderedPrefix: parsed.renderedPrefix,
+    activeSpace: isActiveSpacePayload(parsed.activeSpace)
+      ? parsed.activeSpace
+      : undefined,
+    effectivePolicy: isEffectiveWorkspacePolicy(parsed.effectivePolicy)
+      ? parsed.effectivePolicy
+      : undefined,
     cacheStatus:
       parsed.cacheStatus === "hit" || parsed.cacheStatus === "miss"
         ? parsed.cacheStatus
         : undefined,
   };
+}
+
+function isActiveSpacePayload(value: unknown): value is {
+  id: string;
+  slug: string;
+  name: string;
+  isDefault: boolean;
+} {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.id === "string" &&
+    typeof obj.slug === "string" &&
+    typeof obj.name === "string" &&
+    typeof obj.isDefault === "boolean"
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+function isNullableStringArray(value: unknown): value is string[] | null {
+  return value === null || isStringArray(value);
+}
+
+function isEffectiveWorkspacePolicy(
+  value: unknown,
+): value is EffectiveWorkspacePolicy {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    isStringArray(obj.blockedTools) &&
+    isNullableStringArray(obj.allowedTools) &&
+    isNullableStringArray(obj.mcpAllowedServers) &&
+    isStringArray(obj.mcpBlockedServers) &&
+    isStringArray(obj.diagnostics)
+  );
 }
 
 type ChatInvokeIdentitySource =
@@ -511,50 +568,31 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // MCP configs already resolved by runtimeConfig.
     const mcpConfigs = runtimeConfig.mcpConfigs;
     let effectiveBlockedTools = runtimeConfig.blockedTools;
-    let renderedTurnContext: Awaited<ReturnType<typeof renderTurnContext>> = {
+    let renderedWorkspace: RenderWorkspaceTupleForInvokeResult = {
       rendered: false,
       reason: "not_attempted",
     };
-    try {
-      renderedTurnContext = await renderTurnContext({
-        tenantId,
-        agentId,
-        threadId,
-        turnId,
-        agentBlockedTools: runtimeConfig.blockedTools,
-      });
-      if (renderedTurnContext.rendered) {
-        effectiveBlockedTools =
-          renderedTurnContext.effectivePolicy.blockedTools;
-        console.log(
-          `[chat-agent-invoke] rendered Space context space=${renderedTurnContext.spaceSlug} copied=${renderedTurnContext.copiedFiles.length}`,
-        );
-      } else {
-        console.log(
-          `[chat-agent-invoke] Space context render skipped: ${renderedTurnContext.reason}`,
-        );
-      }
-    } catch (err) {
-      console.error(`[chat-agent-invoke] Space context render failed:`, err);
-    }
-
     let renderedWorkspacePrefix: string | undefined;
-    if (renderedTurnContext.rendered) {
+    if (spaceId) {
       try {
-        const renderedTuple = await renderWorkspaceTupleForInvoke({
+        renderedWorkspace = await renderWorkspaceTupleForInvoke({
           tenantId,
           agentId,
-          spaceId: renderedTurnContext.payload.spaceId,
+          spaceId,
           userId: currentUserId || null,
+          agentBlockedTools: runtimeConfig.blockedTools,
         });
-        if (renderedTuple.rendered) {
-          renderedWorkspacePrefix = renderedTuple.renderedPrefix;
+        if (renderedWorkspace.rendered) {
+          renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
+          effectiveBlockedTools =
+            renderedWorkspace.effectivePolicy?.blockedTools ??
+            runtimeConfig.blockedTools;
           console.log(
-            `[chat-agent-invoke] rendered workspace tuple prefix=${renderedWorkspacePrefix} cache=${renderedTuple.cacheStatus ?? "unknown"}`,
+            `[chat-agent-invoke] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? spaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"}`,
           );
         } else {
           console.log(
-            `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedTuple.reason}`,
+            `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedWorkspace.reason}`,
           );
         }
       } catch (err) {
@@ -576,8 +614,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               !effectiveBlockedTools.includes(skill.skillId),
           )
         : skillsConfig;
-    const effectiveMcpPolicy = renderedTurnContext.rendered
-      ? renderedTurnContext.effectivePolicy
+    const effectiveMcpPolicy = renderedWorkspace.rendered
+      ? (renderedWorkspace.effectivePolicy ?? null)
       : null;
     const effectiveMcpConfigs = mcpConfigs.filter(
       (config: { name: string }) => {
@@ -704,8 +742,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         !isAnyEffectivelyBlocked("browser_automation", "browser")
           ? true
           : undefined,
-      turn_context: renderedTurnContext.rendered
-        ? renderedTurnContext.payload
+      turn_context: renderedWorkspace.rendered
+        ? {
+            spaceId: renderedWorkspace.activeSpace?.id ?? spaceId,
+            spaceSlug: renderedWorkspace.activeSpace?.slug ?? undefined,
+            renderedWorkspacePrefix,
+          }
         : undefined,
       // U3 of the finance pilot — Strands' _execute_agent_turn reads
       // payload["message_attachments"] directly off this dict (no

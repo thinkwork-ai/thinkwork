@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { composeWorkspacePolicy, isToolAllowed } from "./workspace-policy.js";
+import {
+  composeWorkspacePolicy,
+  isToolAllowed,
+} from "./effective-policy-composer.js";
 
 describe("composeWorkspacePolicy", () => {
   it("unions agent and Space blocked tools", () => {

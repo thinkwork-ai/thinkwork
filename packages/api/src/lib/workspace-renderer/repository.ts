@@ -47,6 +47,8 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
         name: spaces.name,
         kind: spaces.kind,
         prompt: spaces.prompt,
+        toolPolicy: spaces.tool_policy,
+        mcpPolicy: spaces.mcp_policy,
         status: spaces.status,
       })
       .from(spaces)
@@ -91,6 +93,8 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       spaceName: space.name,
       spaceKind: space.kind,
       spacePrompt: space.prompt,
+      spaceToolPolicy: space.toolPolicy,
+      spaceMcpPolicy: space.mcpPolicy,
       userId: resolvedUser?.id ?? input.userId ?? null,
       userSlug: resolvedUser?.slug ?? null,
       userName: resolvedUser?.name ?? null,

@@ -18,6 +18,8 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceName: "Board Pack",
   spaceKind: "custom",
   spacePrompt: "Prepare board reporting work.",
+  spaceToolPolicy: { blockedTools: ["send_email"] },
+  spaceMcpPolicy: { allowedServers: ["github"], blockedServers: ["prod-db"] },
   userId: "user-1",
   userSlug: "eric",
   userName: "Eric",
@@ -161,6 +163,11 @@ describe("renderWorkspaceTuple", () => {
     expect(result.writtenFiles).not.toContain("SPACE_CONTEXT.md");
     expect(result.writtenFiles).not.toContain("effective-policy.json");
     expect(result.writtenFiles).not.toContain("spaces/old/SPACE.md");
+    expect(result.effectivePolicy).toMatchObject({
+      blockedTools: ["send_email"],
+      mcpAllowedServers: ["github"],
+      mcpBlockedServers: ["prod-db"],
+    });
 
     const renderedAgents = store.puts.find((put) =>
       put.key.endsWith("/AGENTS.md"),
@@ -200,6 +207,7 @@ describe("renderWorkspaceTuple", () => {
     );
 
     expect(result.cacheStatus).toBe("hit");
+    expect(result.effectivePolicy.blockedTools).toEqual(["send_email"]);
     expect(result.writtenFiles).toEqual([]);
     expect(store.puts).toEqual([]);
   });

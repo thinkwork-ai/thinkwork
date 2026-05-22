@@ -1,6 +1,7 @@
 import {
   renderWorkspaceTuple,
   WorkspaceRenderError,
+  type EffectiveWorkspacePolicy,
   type RenderWorkspaceTupleDeps,
 } from "../lib/workspace-renderer/index.js";
 
@@ -9,6 +10,8 @@ export interface WorkspaceRendererEvent {
   agentId?: string;
   spaceId?: string;
   userId?: string | null;
+  agentBlockedTools?: unknown;
+  agentAllowedTools?: unknown;
   bucket?: string;
 }
 
@@ -25,6 +28,7 @@ export interface WorkspaceRendererResponse {
     name: string;
     isDefault: boolean;
   };
+  effectivePolicy?: EffectiveWorkspacePolicy;
   error?: {
     code: string;
     message: string;
@@ -70,6 +74,8 @@ export function createWorkspaceRendererHandler(
           agentId: event.agentId,
           spaceId: event.spaceId,
           userId: event.userId,
+          agentBlockedTools: event.agentBlockedTools,
+          agentAllowedTools: event.agentAllowedTools,
         },
         {
           ...deps,
@@ -84,6 +90,7 @@ export function createWorkspaceRendererHandler(
         sourcePrefixes: result.sourcePrefixes,
         writtenFiles: result.writtenFiles,
         activeSpace: result.activeSpace,
+        effectivePolicy: result.effectivePolicy,
       };
     } catch (error) {
       if (error instanceof WorkspaceRenderError) {

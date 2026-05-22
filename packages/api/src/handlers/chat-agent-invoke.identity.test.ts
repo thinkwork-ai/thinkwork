@@ -124,6 +124,19 @@ describe("renderWorkspaceTupleForInvoke", () => {
             ok: true,
             renderedPrefix: "tenants/acme/rendered/marco/default/eric/",
             cacheStatus: "hit",
+            activeSpace: {
+              id: "space-1",
+              slug: "default",
+              name: "Default",
+              isDefault: true,
+            },
+            effectivePolicy: {
+              blockedTools: ["send_email"],
+              allowedTools: null,
+              mcpAllowedServers: null,
+              mcpBlockedServers: [],
+              diagnostics: [],
+            },
           }),
         ),
       }),
@@ -136,6 +149,7 @@ describe("renderWorkspaceTupleForInvoke", () => {
           agentId: "agent-1",
           spaceId: "space-1",
           userId: "user-1",
+          agentBlockedTools: ["browser_automation"],
         },
         { functionName: "renderer", lambda: { send } as any },
       ),
@@ -143,6 +157,19 @@ describe("renderWorkspaceTupleForInvoke", () => {
       rendered: true,
       renderedPrefix: "tenants/acme/rendered/marco/default/eric/",
       cacheStatus: "hit",
+      activeSpace: {
+        id: "space-1",
+        slug: "default",
+        name: "Default",
+        isDefault: true,
+      },
+      effectivePolicy: {
+        blockedTools: ["send_email"],
+        allowedTools: null,
+        mcpAllowedServers: null,
+        mcpBlockedServers: [],
+        diagnostics: [],
+      },
     });
     const command = send.mock.calls.at(0)?.[0] as
       | { input: Record<string, unknown> }
@@ -150,6 +177,13 @@ describe("renderWorkspaceTupleForInvoke", () => {
     expect(command?.input).toMatchObject({
       FunctionName: "renderer",
       InvocationType: "RequestResponse",
+    });
+    const payload =
+      command?.input.Payload instanceof Uint8Array
+        ? new TextDecoder().decode(command.input.Payload)
+        : "{}";
+    expect(JSON.parse(payload)).toMatchObject({
+      agentBlockedTools: ["browser_automation"],
     });
   });
 
