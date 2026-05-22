@@ -216,7 +216,15 @@ export const EVENT_PAYLOAD_SHAPES: Record<ComplianceEventType, RedactionSchema> 
 			allowedFields: new Set(["agentId", "name", "templateId"]),
 		},
 		"agent.deleted": {
-			allowedFields: new Set(["agentId", "reason"]),
+			allowedFields: new Set(["agentId", "reason", "canonicalId"]),
+		},
+		"agent.migrated": {
+			allowedFields: new Set([
+				"agentId",
+				"reason",
+				"canonicalId",
+				"archivedAgentIds",
+			]),
 		},
 		"agent.skills_changed": {
 			// Direct evidence of effective-capability change (CC8.1).

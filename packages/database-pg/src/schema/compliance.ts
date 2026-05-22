@@ -324,6 +324,7 @@ export const COMPLIANCE_EVENT_TYPES = [
 	"user.deleted",
 	"agent.created",
 	"agent.deleted",
+	"agent.migrated",
 	"agent.skills_changed",
 	"mcp.added",
 	"mcp.removed",
