@@ -16,6 +16,11 @@ describe("snapshotDesktopEnv", () => {
       nodeEnv: "production",
       stage: "canary",
       rendererUrl: "http://localhost:5174",
+      apiUrl: null,
+      graphqlHttpUrl: null,
+      graphqlUrl: null,
+      graphqlWsUrl: null,
+      sandboxFrameSrc: null,
       cognito: {
         userPoolId: "us-east-1_test",
         clientId: "client-id",

@@ -1,10 +1,18 @@
 import { app, BrowserWindow } from "electron";
 import { createMainWindow } from "./window.js";
 import type { DesktopEnvSnapshot } from "./env.js";
+import {
+  buildDesktopCsp,
+  DESKTOP_APP_URL,
+  registerThinkworkProtocol,
+  type ElectronProtocolLike,
+} from "./protocol.js";
 
 export interface BootstrapDesktopAppOptions {
   snapshotEnv: () => DesktopEnvSnapshot;
   preloadPath: string;
+  protocol: ElectronProtocolLike;
+  rendererRoot: string;
 }
 
 export async function bootstrapDesktopApp(
@@ -12,10 +20,25 @@ export async function bootstrapDesktopApp(
 ): Promise<void> {
   await app.whenReady();
   const env = options.snapshotEnv();
+  const csp = buildDesktopCsp({
+    apiUrl: env.apiUrl,
+    graphqlHttpUrl: env.graphqlHttpUrl,
+    graphqlUrl: env.graphqlUrl,
+    graphqlWsUrl: env.graphqlWsUrl,
+    cognitoDomain: env.cognito.domain,
+    sandboxFrameSrc: env.sandboxFrameSrc,
+  });
+
+  registerThinkworkProtocol({
+    protocol: options.protocol,
+    rendererRoot: options.rendererRoot,
+    csp,
+  });
 
   createMainWindow({
     preloadPath: options.preloadPath,
     rendererUrl: env.rendererUrl,
+    productionUrl: DESKTOP_APP_URL,
   });
 
   app.on("window-all-closed", () => {
@@ -30,6 +53,7 @@ export async function bootstrapDesktopApp(
       createMainWindow({
         preloadPath: options.preloadPath,
         rendererUrl: env.rendererUrl,
+        productionUrl: DESKTOP_APP_URL,
       });
     }
   });
