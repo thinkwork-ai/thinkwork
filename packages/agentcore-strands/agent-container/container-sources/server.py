@@ -2549,6 +2549,171 @@ def _error_response(message: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Finalize callback (plan 2026-05-22-006)
+# ---------------------------------------------------------------------------
+#
+# chat-agent-invoke used to call this runtime RequestResponse-style and wait
+# for the Lambda response, then run ~750 lines of post-AgentCore bookkeeping
+# (cost recording, message insert, AppSync notify, computer task completion,
+# memory retain dispatch). That kept the chat-agent-invoke Lambda open for
+# the full agent-turn duration — up to 5 min before AWS auto-retried,
+# producing 1-3 stacked "5 min stall" entries in the user's timeline.
+#
+# In the new architecture, chat-agent-invoke dispatches AgentCore Event-mode
+# (no wait) and supplies `finalize_callback_url` + `finalize_callback_secret`
+# + `thread_turn_id` in the invoke payload. At end-of-turn (success, guardrail
+# block, or runtime error) the runtime POSTs the FinalizePayload to the URL.
+# The chat-agent-finalize Lambda runs the bookkeeping out-of-band.
+#
+# Eval-runner and other direct-invocation callers DO NOT supply
+# `finalize_callback_url` — they still need the synchronous Lambda response
+# shape. So this code path is gated entirely on the field's presence.
+def _build_finalize_payload(
+    *,
+    payload: dict,
+    result: dict,
+    status: str,
+    duration_ms: int,
+    error_message: str = "",
+) -> dict:
+    """Build the FinalizePayload body the chat-agent-finalize endpoint expects.
+
+    Mirrors packages/api/src/lib/chat-finalize/types.ts. Fields that today's
+    chat-agent-invoke reads from the AgentCore response are nested under
+    `response`; tenant/agent/thread identity comes from the invoke payload.
+    """
+    usage = result.get("usage") or {}
+    finalize_body = {
+        "thread_turn_id": payload.get("thread_turn_id") or "",
+        "tenant_id": payload.get("tenant_id") or "",
+        "agent_id": payload.get("assistant_id") or "",
+        "thread_id": payload.get("thread_id") or "",
+        "trace_id": payload.get("trace_id") or None,
+        "user_message": payload.get("message") or "",
+        "agent_model": result.get("model") or payload.get("model") or None,
+        "agent_slug": payload.get("instance_id") or None,
+        "agent_name": payload.get("agent_name") or None,
+        "duration_ms": duration_ms,
+        "status": status,
+        "computer_id": payload.get("computer_id") or None,
+        "computer_task_id": payload.get("computer_task_id") or None,
+        "guardrail_id": (payload.get("guardrail_config") or {}).get(
+            "guardrailIdentifier"
+        ),
+        "usage": {
+            "model": result.get("model") or None,
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+            # Strands captures cached-read separately when supported.
+            "cached_read_tokens": usage.get("cached_read_tokens", 0),
+        },
+        "response": {
+            # OpenAI-shape choices[].message.content is what chat-finalize's
+            # extractResponseText() walks; preserve the shape verbatim.
+            "choices": result.get("choices"),
+            "tool_invocations": result.get("tool_invocations") or [],
+            "tools_called": result.get("tools_called") or [],
+            "tool_costs": result.get("tool_costs") or [],
+            "bedrock_request_ids": result.get("bedrock_request_ids") or [],
+            "hindsight_usage": result.get("hindsight_usage") or [],
+            "computer_thread_response": result.get("computer_thread_response"),
+        },
+    }
+    if result.get("guardrail_block"):
+        finalize_body["guardrail_block"] = result["guardrail_block"]
+        finalize_body["response"]["guardrail_block"] = result["guardrail_block"]
+    if error_message:
+        finalize_body["error_message"] = error_message
+    return finalize_body
+
+
+def _post_finalize_callback(
+    *,
+    finalize_callback_url: str,
+    finalize_callback_secret: str,
+    finalize_body: dict,
+) -> bool:
+    """POST the FinalizePayload to chat-agent-finalize. Retries once on
+    transient failure (5xx / network). Returns True on success (2xx), False
+    otherwise. Never raises — failure is logged and the caller continues.
+
+    Bounded total wait: ~5 s. We do not block the turn return forever; the
+    user already sees the assistant message via AppSync chunk streaming;
+    finalize is the durable bookkeeping step.
+    """
+    import urllib.request
+    import urllib.error
+
+    body_bytes = json.dumps(finalize_body).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {finalize_callback_secret}",
+    }
+
+    def _attempt() -> tuple[bool, int | None, str]:
+        req = urllib.request.Request(
+            finalize_callback_url,
+            data=body_bytes,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                status = resp.getcode()
+                body = resp.read().decode("utf-8", errors="replace")[:500]
+                return (200 <= status < 300, status, body)
+        except urllib.error.HTTPError as e:
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                body = ""
+            return (False, e.code, body)
+        except Exception as e:
+            return (False, None, str(e))
+
+    ok, status, body_preview = _attempt()
+    if ok:
+        logger.info(
+            "[finalize-callback] POST ok status=%s thread_turn_id=%s",
+            status,
+            finalize_body.get("thread_turn_id"),
+        )
+        return True
+
+    # Retry once on transient failure (5xx or network) — but not on 4xx
+    # client errors (those are deterministic and won't get better).
+    retryable = status is None or (status is not None and status >= 500)
+    if not retryable:
+        logger.error(
+            "[finalize-callback] POST failed (non-retryable) status=%s body=%s",
+            status,
+            body_preview,
+        )
+        return False
+
+    logger.warning(
+        "[finalize-callback] POST transient failure status=%s body=%s; retrying once",
+        status,
+        body_preview,
+    )
+    time.sleep(1.0)
+    ok, status, body_preview = _attempt()
+    if ok:
+        logger.info(
+            "[finalize-callback] POST ok after retry status=%s thread_turn_id=%s",
+            status,
+            finalize_body.get("thread_turn_id"),
+        )
+        return True
+    logger.error(
+        "[finalize-callback] POST failed after retry status=%s body=%s",
+        status,
+        body_preview,
+    )
+    return False
+
+
 def _build_full_thread_transcript(history_payload, message: str, response_text: str) -> list:
     """Construct the per-turn transcript for retain_full_thread.
 
@@ -3206,6 +3371,17 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 invocation_env.cleanup_invocation_env(invocation_env_keys)
             return
 
+        # Finalize-callback opt-in. Captured here so any environment
+        # mutation during the turn doesn't shadow the values. Only
+        # chat-agent-invoke supplies these; eval-runner / direct callers
+        # leave them unset and continue to read the synchronous Lambda
+        # response shape below.
+        finalize_callback_url = payload.get("finalize_callback_url") or ""
+        finalize_callback_secret = payload.get("finalize_callback_secret") or ""
+        use_finalize_callback = bool(
+            finalize_callback_url and finalize_callback_secret
+        )
+
         tenant_id = payload.get("sessionId") or payload.get("tenant_id") or "unknown"
         ticket_id = payload.get("thread_id") or payload.get("ticket_id") or ""
         assistant_id = payload.get("assistant_id") or ""
@@ -3360,7 +3536,24 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     duration_ms=duration_ms,
                     status="success",
                 )
-                self._respond(200, result)
+                if use_finalize_callback:
+                    finalize_body = _build_finalize_payload(
+                        payload=payload,
+                        result=result,
+                        status="completed",
+                        duration_ms=duration_ms,
+                    )
+                    _post_finalize_callback(
+                        finalize_callback_url=finalize_callback_url,
+                        finalize_callback_secret=finalize_callback_secret,
+                        finalize_body=finalize_body,
+                    )
+                    # Ack envelope back to AgentCore — chat-agent-invoke is
+                    # already gone (Event-mode dispatch); this body only
+                    # surfaces in CloudWatch / direct-debug invocations.
+                    self._respond(200, {"ok": True, "finalize_dispatched": True})
+                else:
+                    self._respond(200, result)
 
             except Exception as e:
                 duration_ms = int(time.time() * 1000) - start_ms
@@ -3400,7 +3593,21 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                         duration_ms=duration_ms,
                         status="guardrail_blocked",
                     )
-                    self._respond(200, block_result)
+                    if use_finalize_callback:
+                        finalize_body = _build_finalize_payload(
+                            payload=payload,
+                            result=block_result,
+                            status="completed",
+                            duration_ms=duration_ms,
+                        )
+                        _post_finalize_callback(
+                            finalize_callback_url=finalize_callback_url,
+                            finalize_callback_secret=finalize_callback_secret,
+                            finalize_body=finalize_body,
+                        )
+                        self._respond(200, {"ok": True, "finalize_dispatched": True})
+                    else:
+                        self._respond(200, block_result)
                 else:
                     log_agent_invocation(
                         tenant_id=tenant_id, tools_used=[], duration_ms=duration_ms, status="error"
@@ -3408,7 +3615,24 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     logger.error(
                         "Strands agent invocation failed tenant_id=%s error=%s", tenant_id, e
                     )
-                    self._respond(500, _error_response(str(e)))
+                    if use_finalize_callback:
+                        finalize_body = _build_finalize_payload(
+                            payload=payload,
+                            result={},
+                            status="failed",
+                            duration_ms=duration_ms,
+                            error_message=str(e),
+                        )
+                        _post_finalize_callback(
+                            finalize_callback_url=finalize_callback_url,
+                            finalize_callback_secret=finalize_callback_secret,
+                            finalize_body=finalize_body,
+                        )
+                        # 200 ack even on agent failure — chat-agent-finalize
+                        # handles the user-facing error message insertion.
+                        self._respond(200, {"ok": True, "finalize_dispatched": True})
+                    else:
+                        self._respond(500, _error_response(str(e)))
         finally:
             invocation_env.cleanup_invocation_env(invocation_env_keys)
 
