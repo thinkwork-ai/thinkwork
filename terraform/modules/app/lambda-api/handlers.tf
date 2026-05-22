@@ -294,6 +294,7 @@ resource "aws_lambda_function" "handler" {
     "chat-agent-invoke",
     "wakeup-processor",
     "workspace-event-dispatcher",
+    "workspace-renderer",
     "agents",
     "agent-actions",
     "messages",
