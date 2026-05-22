@@ -53,7 +53,6 @@ import {
   computerMutations,
   computerTypeResolvers,
 } from "./computers/index.js";
-import { runbookQueries, runbookMutations } from "./runbooks/index.js";
 import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
@@ -99,7 +98,6 @@ export const queryResolvers: Record<string, any> = {
   ...tenantCredentialQueries,
   ...quickActionQueries,
   ...computerQueries,
-  ...runbookQueries,
   ...customizeQueries,
   ...complianceQueries,
   ...slackQueries,
@@ -134,7 +132,6 @@ export const mutationResolvers: Record<string, any> = {
   ...tenantCredentialMutations,
   ...quickActionMutations,
   ...computerMutations,
-  ...runbookMutations,
   ...customizeMutations,
   ...complianceMutations,
   ...slackMutations,

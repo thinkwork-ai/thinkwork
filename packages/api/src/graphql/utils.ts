@@ -97,9 +97,6 @@ import {
   computerTasks,
   computerEvents,
   computerSnapshots,
-  tenantRunbookCatalog,
-  computerRunbookRuns,
-  computerRunbookTasks,
   // Skill Runs (composable-skills Unit 4)
   skillRuns,
   // Mutation idempotency (thinkwork-admin plan Unit 4)
@@ -206,9 +203,6 @@ export {
   computerTasks,
   computerEvents,
   computerSnapshots,
-  tenantRunbookCatalog,
-  computerRunbookRuns,
-  computerRunbookTasks,
   skillRuns,
   mutationIdempotency,
   tenantPolicyEvents,
@@ -344,7 +338,6 @@ export async function invokeChatAgent(payload: {
   messageId: string;
   computerId?: string;
   computerTaskId?: string;
-  runbookContext?: unknown;
   /**
    * U3 of the finance pilot — the attachment records the dispatching
    * caller resolved from `messages.metadata.attachments`. Empty array

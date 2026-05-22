@@ -40,7 +40,6 @@ export * from "./capability-catalog";
 export * from "./guardrails";
 export * from "./agent-templates";
 export * from "./computers";
-export * from "./runbooks";
 export * from "./activity-log";
 export * from "./quick-actions";
 export * from "./workflow-configs";
