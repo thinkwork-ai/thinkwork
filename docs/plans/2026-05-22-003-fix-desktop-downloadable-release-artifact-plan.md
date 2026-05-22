@@ -50,7 +50,9 @@ Files:
 Change:
 
 - Add a Terraform init step in `terraform/examples/greenfield` before
-  `scripts/build-desktop.sh` runs.
+  `scripts/build-desktop.sh` runs, then select the release `STAGE` workspace so
+  outputs are read from the deployed stage rather than Terraform's default
+  workspace.
 - Keep this read-only: no plan/apply/deploy mutation.
 
 Tests:
