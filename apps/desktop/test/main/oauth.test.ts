@@ -102,6 +102,7 @@ describe("DesktopOAuthController", () => {
     expect(url.searchParams.get("redirect_uri")).toBe(
       "thinkwork-dev://oauth/callback",
     );
+    expect(url.searchParams.get("scope")).toBe("openid email profile");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(url.searchParams.get("state")).toBe(result.state);

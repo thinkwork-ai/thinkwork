@@ -3,6 +3,7 @@ import {
   CLEAR_TOKEN_STORAGE_CHANNEL,
   CONSUME_PENDING_OAUTH_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
+  OAUTH_ERROR_EVENT_CHANNEL,
   START_OAUTH_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   SIGN_OUT_CHANNEL,
@@ -136,6 +137,38 @@ describe("auth bridge handlers", () => {
     expect(ipcMain.invoke(CONSUME_PENDING_OAUTH_CHANNEL)).toEqual({
       code: "abc",
       state: "xyz",
+    });
+  });
+
+  it("broadcasts OAuth error callbacks without attempting token exchange", () => {
+    const ipcMain = createIpcMain();
+    const sent = vi.fn();
+    const completeOAuthCallback = vi.fn();
+    const dispatchers: Array<(callback: DeepLinkCallback) => void> = [];
+    registerAuthBridgeHandlers({
+      ipcMain,
+      storage: createStorage(),
+      getWindows: () => [{ webContents: { send: sent } }],
+      consumePendingOAuth: () => null,
+      markDeepLinkReady: (nextDispatcher) => {
+        dispatchers.push(nextDispatcher);
+      },
+      oauth: {
+        startOAuth: vi.fn(),
+        completeOAuthCallback,
+        signOut: vi.fn(),
+      },
+    });
+
+    dispatchers[0]?.({
+      error: "invalid_request",
+      errorDescription: "Bad redirect",
+      state: "xyz",
+    });
+
+    expect(completeOAuthCallback).not.toHaveBeenCalled();
+    expect(sent).toHaveBeenCalledWith(OAUTH_ERROR_EVENT_CHANNEL, {
+      message: "invalid_request: Bad redirect",
     });
   });
 

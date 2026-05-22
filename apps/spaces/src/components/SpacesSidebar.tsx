@@ -69,7 +69,9 @@ export function SpacesSidebar() {
         </SidebarHeader>
       )}
 
-      <SidebarContent className="min-h-0">
+      <SidebarContent
+        className={`min-h-0 ${isDesktop ? "pt-[var(--desktop-app-header-height)]" : ""}`}
+      >
         <ChatSidebar
           settingsOpen={settingsOpen}
           onSettingsOpenChange={setSettingsOpen}

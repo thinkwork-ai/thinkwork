@@ -35,8 +35,16 @@ vi.mock("@thinkwork/ui", async () => {
     SidebarProvider: ({ children }: { children: React.ReactNode }) => (
       <div data-testid="sidebar-provider">{children}</div>
     ),
-    SidebarInset: ({ children }: { children: React.ReactNode }) => (
-      <section>{children}</section>
+    SidebarInset: ({
+      children,
+      className,
+    }: {
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <section data-testid="sidebar-inset" className={className}>
+        {children}
+      </section>
     ),
   };
 });
@@ -106,6 +114,10 @@ describe("_authed/_shell layout", () => {
 
     expect(screen.getByTestId("desktop-application-header")).toBeTruthy();
     expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
+    expect(screen.queryByTestId("app-top-bar")).toBeNull();
+    expect(screen.getByTestId("sidebar-inset").className).toContain(
+      "pt-[var(--desktop-app-header-height)]",
+    );
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 });

@@ -58,8 +58,16 @@ vi.mock("@thinkwork/ui", () => ({
   Sidebar: ({ children }: { children: React.ReactNode }) => (
     <aside>{children}</aside>
   ),
-  SidebarContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  SidebarContent: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <div data-testid="sidebar-content" className={className}>
+      {children}
+    </div>
   ),
   SidebarFooter: ({ children }: { children: React.ReactNode }) => (
     <footer>{children}</footer>
@@ -95,6 +103,9 @@ describe("SpacesSidebar", () => {
 
     expect(screen.queryByTestId("sidebar-brand")).toBeNull();
     expect(screen.queryByAltText("ThinkWork")).toBeNull();
+    expect(screen.getByTestId("sidebar-content").className).toContain(
+      "pt-[var(--desktop-app-header-height)]",
+    );
     expect(screen.getByTestId("chat-sidebar")).toBeTruthy();
   });
 });
