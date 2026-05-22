@@ -36,6 +36,18 @@ describe("desktop deep links", () => {
     });
   });
 
+  it("parses OAuth error callbacks so the renderer can show the hosted UI reason", () => {
+    expect(
+      parseDeepLinkCallback(
+        "thinkwork://oauth/callback?error=invalid_request&error_description=Bad%20redirect&state=xyz",
+      ),
+    ).toEqual({
+      error: "invalid_request",
+      errorDescription: "Bad redirect",
+      state: "xyz",
+    });
+  });
+
   it("rejects disallowed paths, missing data, and malformed URLs", () => {
     const logger = { warn: vi.fn() };
 

@@ -8,6 +8,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   DeepLinkCallback,
+  OAuthSuccessCallback,
   PendingOAuthCallback,
   SignOutResponse,
   StartOAuthRequest,
@@ -142,7 +143,7 @@ export class DesktopOAuthController {
   }
 
   async completeOAuthCallback(
-    callback: DeepLinkCallback,
+    callback: OAuthSuccessCallback,
   ): Promise<PendingOAuthCallback> {
     this.evictExpiredAttempts();
 
@@ -228,7 +229,7 @@ export class DesktopOAuthController {
       response_type: "code",
       client_id: options.clientId,
       redirect_uri: this.redirectUri(),
-      scope: "openid email profile aws.cognito.signin.user.admin",
+      scope: "openid email profile",
       code_challenge: options.challenge,
       code_challenge_method: "S256",
       state: options.state,

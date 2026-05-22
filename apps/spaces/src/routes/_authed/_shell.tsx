@@ -44,9 +44,9 @@ function ShellLayout() {
     <>
       <SpacesSidebar />
       <SidebarInset
-        className={`min-h-0 min-w-0 flex flex-col ${isDesktop ? "h-full" : "h-svh"}`}
+        className={`min-h-0 min-w-0 flex flex-col ${isDesktop ? "h-full pt-[var(--desktop-app-header-height)]" : "h-svh"}`}
       >
-        <AppTopBar />
+        {isDesktop ? null : <AppTopBar />}
         <UpdateBanner />
         <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
           <Outlet />
@@ -57,13 +57,17 @@ function ShellLayout() {
 
   return (
     <SidebarProvider
-      className={isDesktop ? "desktop-shell h-svh min-h-0 flex-col" : undefined}
+      className={
+        isDesktop
+          ? "desktop-shell relative h-svh min-h-0 overflow-hidden"
+          : undefined
+      }
       style={{ "--sidebar-width": "300px" } as React.CSSProperties}
     >
       {isDesktop ? (
         <>
           <DesktopApplicationHeader />
-          <div className="flex min-h-0 w-full flex-1">{shellChrome}</div>
+          <div className="flex h-full min-h-0 w-full">{shellChrome}</div>
         </>
       ) : (
         shellChrome
