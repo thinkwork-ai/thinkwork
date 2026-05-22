@@ -282,6 +282,15 @@ variable "admin_logout_urls" {
   ]
 }
 
+variable "desktop_callback_urls" {
+  type = list(string)
+  default = [
+    "thinkwork://oauth/callback",
+    "thinkwork-dev://oauth/callback",
+    "thinkwork-canary://oauth/callback",
+  ]
+}
+
 variable "mobile_callback_urls" {
   type    = list(string)
   default = ["exp://localhost:8081", "thinkwork://", "thinkwork://auth/callback"]

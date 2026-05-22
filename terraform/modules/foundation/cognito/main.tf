@@ -7,14 +7,14 @@
 ################################################################################
 
 locals {
-  create             = var.create_cognito
-  create_pre_signup  = local.create && var.pre_signup_lambda_zip != ""
+  create            = var.create_cognito
+  create_pre_signup = local.create && var.pre_signup_lambda_zip != ""
 
-  user_pool_id       = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
-  user_pool_arn      = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
-  admin_client_id     = local.create ? aws_cognito_user_pool_client.admin[0].id : var.existing_admin_client_id
+  user_pool_id     = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
+  user_pool_arn    = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
+  admin_client_id  = local.create ? aws_cognito_user_pool_client.admin[0].id : var.existing_admin_client_id
   mobile_client_id = local.create ? aws_cognito_user_pool_client.mobile[0].id : var.existing_mobile_client_id
-  identity_pool_id   = local.create ? aws_cognito_identity_pool.main[0].id : var.existing_identity_pool_id
+  identity_pool_id = local.create ? aws_cognito_identity_pool.main[0].id : var.existing_identity_pool_id
 }
 
 data "aws_caller_identity" "current" {}
@@ -209,8 +209,8 @@ resource "aws_cognito_user_pool_client" "admin" {
 
   supported_identity_providers = local.identity_providers
 
-  callback_urls = var.admin_callback_urls
-  logout_urls   = var.admin_logout_urls
+  callback_urls = distinct(concat(var.admin_callback_urls, var.desktop_callback_urls))
+  logout_urls   = distinct(concat(var.admin_logout_urls, var.desktop_callback_urls))
 
   access_token_validity  = 1
   id_token_validity      = 1

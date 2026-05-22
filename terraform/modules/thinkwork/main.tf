@@ -143,7 +143,8 @@ module "cognito" {
     ["https://${module.computer_site.distribution_domain}", "https://${module.computer_site.distribution_domain}/auth/callback"],
     local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}", "https://${local.end_user_app_domain}/auth/callback"] : [],
     var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : [],
-    ["http://localhost:5180", "http://localhost:5180/auth/callback"]
+    ["http://localhost:5180", "http://localhost:5180/auth/callback"],
+    var.desktop_callback_urls
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
@@ -152,10 +153,12 @@ module "cognito" {
     ["https://${module.computer_site.distribution_domain}"],
     local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}"] : [],
     var.computer_domain != "" ? ["https://${var.computer_domain}"] : [],
-    ["http://localhost:5180"]
+    ["http://localhost:5180"],
+    var.desktop_callback_urls
   ))
-  mobile_callback_urls = var.mobile_callback_urls
-  mobile_logout_urls   = var.mobile_logout_urls
+  desktop_callback_urls = var.desktop_callback_urls
+  mobile_callback_urls  = var.mobile_callback_urls
+  mobile_logout_urls    = var.mobile_logout_urls
 }
 
 module "dns" {
