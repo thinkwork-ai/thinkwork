@@ -36,3 +36,24 @@
 .ai-response [data-streamdown="code-block-header"] {
   display: none;
 }
+
+.desktop-shell {
+  --desktop-app-header-height: 2.75rem;
+}
+
+.desktop-shell [data-slot="sidebar-container"] {
+  top: var(--desktop-app-header-height);
+  height: calc(100svh - var(--desktop-app-header-height));
+}
+
+.desktop-app-header {
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.desktop-app-header-controls,
+.desktop-app-header button,
+.desktop-app-header a {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}

@@ -107,20 +107,19 @@ describe("DesktopOAuthController", () => {
     expect(url.searchParams.get("state")).toBe(result.state);
   });
 
-  it("exchanges a matching callback, resolves the DB user id, and writes Cognito keys", async () => {
+  it("exchanges a matching callback and writes Cognito keys by token username", async () => {
     const storage = createStorage();
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          id_token: "id-token",
-          access_token: "access-token",
-          refresh_token: "refresh-token",
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ data: { me: { id: "db-user-id" } } }),
-      );
+    const idToken = encodeJwtPayload({
+      "cognito:username": "google_123",
+      sub: "cognito-sub",
+    });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        id_token: idToken,
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    );
     const controller = createController({
       fetch: fetchImpl,
       storage,
@@ -137,7 +136,7 @@ describe("DesktopOAuthController", () => {
       next: "/automations/123",
       state: started.state,
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     const tokenRequest = fetchImpl.mock.calls[0]?.[1] as RequestInit;
     const tokenBody = tokenRequest.body as URLSearchParams;
     const authorizeUrl = new URL(started.url);
@@ -148,18 +147,13 @@ describe("DesktopOAuthController", () => {
         .update(tokenBody.get("code_verifier") ?? "")
         .digest("base64url"),
     ).toBe(authorizeUrl.searchParams.get("code_challenge"));
-    const meRequest = fetchImpl.mock.calls[1]?.[1] as RequestInit;
-    expect(meRequest.headers).toMatchObject({
-      Authorization: "Bearer id-token",
-    });
-
     const prefix = "CognitoIdentityServiceProvider.test-client-id";
     expect(storage.snapshot()).toEqual({
-      [`${prefix}.LastAuthUser`]: "db-user-id",
-      [`${prefix}.db-user-id.accessToken`]: "access-token",
-      [`${prefix}.db-user-id.clockDrift`]: "0",
-      [`${prefix}.db-user-id.idToken`]: "id-token",
-      [`${prefix}.db-user-id.refreshToken`]: "refresh-token",
+      [`${prefix}.LastAuthUser`]: "google_123",
+      [`${prefix}.google_123.accessToken`]: "access-token",
+      [`${prefix}.google_123.clockDrift`]: "0",
+      [`${prefix}.google_123.idToken`]: idToken,
+      [`${prefix}.google_123.refreshToken`]: "refresh-token",
     });
   });
 
@@ -223,18 +217,15 @@ describe("DesktopOAuthController", () => {
     ).resolves.toBe("[]");
   });
 
-  it("does not persist tokens when user id resolution fails", async () => {
+  it("does not persist tokens when the ID token has no Cognito username", async () => {
     const storage = createStorage();
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          id_token: "id-token",
-          access_token: "access-token",
-          refresh_token: "refresh-token",
-        }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ data: { me: null } }));
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        id_token: encodeJwtPayload({ email: "user@example.test" }),
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    );
     const controller = createController({ fetch: fetchImpl, storage });
 
     const started = await controller.startOAuth();
@@ -244,7 +235,7 @@ describe("DesktopOAuthController", () => {
         code: "auth-code",
         state: started.state,
       }),
-    ).rejects.toThrow(/did not resolve/);
+    ).rejects.toThrow(/Cognito username/);
     expect(storage.snapshot()).toEqual({});
   });
 
@@ -277,3 +268,11 @@ describe("DesktopOAuthController", () => {
     ).resolves.toBe("[]");
   });
 });
+
+function encodeJwtPayload(payload: Record<string, unknown>): string {
+  return [
+    Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url"),
+    Buffer.from(JSON.stringify(payload)).toString("base64url"),
+    "signature",
+  ].join(".");
+}

@@ -72,6 +72,34 @@ afterEach(() => {
 });
 
 describe("SignInPage", () => {
+  it("renders a blank splash with a single login action for unauthenticated users", () => {
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
+    expect(screen.getByRole("heading", { name: "ThinkWork" })).toBeTruthy();
+    expect(screen.getByText("Spaces")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
+  });
+
+  it("waits for auth restoration before enabling login", () => {
+    authContextMocks.useAuth.mockReturnValue({
+      isAuthenticated: false,
+      isLoading: true,
+    });
+
+    render(<SignInPage />);
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Checking session...",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
   it("starts desktop OAuth with the sanitized next destination", async () => {
     const startOAuth = vi.fn().mockResolvedValue({
       url: "https://auth.example/oauth2/authorize?state=xyz",
@@ -84,13 +112,23 @@ describe("SignInPage", () => {
     routerMocks.search = { next: "/automations/123" };
 
     render(<SignInPage />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Continue with Google" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
 
     await waitFor(() =>
       expect(startOAuth).toHaveBeenCalledWith({ next: "/automations/123" }),
     );
+  });
+
+  it("renders draggable desktop chrome in the Electron sign-in shell", () => {
+    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
+    expect(screen.getByRole("banner").textContent).toContain(
+      "ThinkWork Spaces",
+    );
+    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
   });
 
   it("uses the existing browser OAuth redirect outside desktop mode", () => {
@@ -109,9 +147,7 @@ describe("SignInPage", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Continue with Google" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
 
     expect(navigations).toEqual(["https://auth.example/login"]);
   });
