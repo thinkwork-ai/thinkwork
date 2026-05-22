@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot } from "lucide-react";
 import { Button } from "@thinkwork/ui";
+import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { useAuth } from "@/context/AuthContext";
 import { getGoogleSignInUrl } from "@/lib/auth";
 import {
@@ -21,6 +21,7 @@ export function SignInPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const { next } = Route.useSearch();
   const navigate = useNavigate();
+  const isDesktop = isDesktopBuild();
   const [error, setError] = useState<string | null>(null);
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
 
@@ -67,27 +68,57 @@ export function SignInPage() {
     window.location.href = getGoogleSignInUrl();
   }
 
-  return (
-    <div className="min-h-svh flex flex-col items-center justify-center gap-6 px-6 py-12">
-      <div className="flex items-center gap-3">
-        <Bot className="h-8 w-8 text-primary" />
-        <span className="text-2xl font-semibold tracking-tight">ThinkWork</span>
-      </div>
-      <p className="max-w-md text-center text-sm text-muted-foreground">
-        Sign in with the Google account associated with your tenant.
-      </p>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button
-        onClick={() => void handleGoogle()}
-        size="lg"
-        className="min-w-[280px]"
-        disabled={isStartingOAuth}
+  const splash = (
+    <main className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
+      <section
+        aria-label="Sign in"
+        className="flex w-full max-w-xs flex-col items-center gap-8"
       >
-        {isStartingOAuth ? "Opening Google..." : "Continue with Google"}
-      </Button>
-      <p className="text-xs text-muted-foreground">
-        ThinkWork is the collaborative workspace for your AI workplace.
-      </p>
+        <div className="flex flex-col items-center gap-3">
+          <img
+            src="/logo.png"
+            alt=""
+            className="size-16 object-contain"
+            aria-hidden="true"
+          />
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">ThinkWork</h1>
+            <p className="text-sm text-muted-foreground">Spaces</p>
+          </div>
+        </div>
+        {error && (
+          <p role="alert" className="text-center text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <Button
+          onClick={() => void handleGoogle()}
+          size="lg"
+          className="min-w-40"
+          disabled={isLoading || isStartingOAuth}
+        >
+          {isLoading
+            ? "Checking session..."
+            : isStartingOAuth
+              ? "Opening..."
+              : "Log in"}
+        </Button>
+      </section>
+    </main>
+  );
+
+  if (isDesktop) {
+    return (
+      <div className="flex min-h-svh flex-col bg-background text-foreground">
+        <DesktopWindowHeader />
+        {splash}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-svh flex-col bg-background text-foreground">
+      {splash}
     </div>
   );
 }

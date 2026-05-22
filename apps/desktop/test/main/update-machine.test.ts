@@ -260,6 +260,21 @@ describe("desktop updater controller", () => {
     ]);
     expect(updater.quitAndInstallCalls).toBe(1);
   });
+
+  it("starts in non-packaged dev mode without an updater instance", async () => {
+    const controller = new DesktopUpdatesController({
+      app: {
+        ...appLike(userDataDir),
+        isPackaged: false,
+      },
+      runtimeInfo,
+    });
+
+    await expect(controller.start()).resolves.toBeUndefined();
+    await expect(controller.checkForUpdates()).resolves.toBeUndefined();
+    await expect(controller.downloadUpdate()).resolves.toBeUndefined();
+    expect(controller.getState()).toMatchObject({ status: "disabled" });
+  });
 });
 
 function appLike(userDataDir: string): UpdatesAppLike {

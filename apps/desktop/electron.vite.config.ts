@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { defineConfig } from "electron-vite";
-import { mergeConfig, type UserConfig as ViteUserConfig } from "vite";
+import { loadEnv, mergeConfig, type UserConfig as ViteUserConfig } from "vite";
 import spacesConfig from "../spaces/vite.config";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
@@ -18,6 +18,7 @@ async function resolveSpacesConfig(env: {
 
   return mergeConfig(baseConfig, {
     root: spacesDir,
+    envDir: spacesDir,
     define: {
       __DESKTOP_BUILD__: "true",
     },
@@ -31,27 +32,52 @@ async function resolveSpacesConfig(env: {
   } satisfies ViteUserConfig);
 }
 
-export default defineConfig(async (env) => ({
-  main: {
-    define: {
-      __THINKWORK_APPLE_TEAM_ID__: JSON.stringify(
-        process.env.APPLE_TEAM_ID ?? process.env.THINKWORK_APPLE_TEAM_ID ?? "",
-      ),
-    },
-    build: {
-      outDir: "out/main",
-      rollupOptions: {
-        input: resolve(rootDir, "src/main/index.ts"),
+function loadSpacesEnv(mode: string): Record<string, string> {
+  const env = loadEnv(mode, spacesDir, ["VITE_"]);
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("VITE_") && value) env[key] = value;
+  }
+  return env;
+}
+
+export default defineConfig(async (env) => {
+  const spacesEnv = loadSpacesEnv(env.mode);
+
+  return {
+    main: {
+      define: {
+        __THINKWORK_APPLE_TEAM_ID__: JSON.stringify(
+          process.env.APPLE_TEAM_ID ??
+            process.env.THINKWORK_APPLE_TEAM_ID ??
+            "",
+        ),
+        __THINKWORK_DESKTOP_ENV__: JSON.stringify(spacesEnv),
+      },
+      build: {
+        externalizeDeps: {
+          exclude: ["@thinkwork/desktop-ipc"],
+        },
+        outDir: "out/main",
+        rollupOptions: {
+          input: resolve(rootDir, "src/main/index.ts"),
+        },
       },
     },
-  },
-  preload: {
-    build: {
-      outDir: "out/preload",
-      rollupOptions: {
-        input: resolve(rootDir, "src/preload/index.ts"),
+    preload: {
+      build: {
+        externalizeDeps: {
+          exclude: ["@thinkwork/desktop-ipc"],
+        },
+        outDir: "out/preload",
+        rollupOptions: {
+          input: resolve(rootDir, "src/preload/index.ts"),
+          output: {
+            entryFileNames: "[name].cjs",
+            format: "cjs" as const,
+          },
+        },
       },
     },
-  },
-  renderer: await resolveSpacesConfig(env),
-}));
+    renderer: await resolveSpacesConfig(env),
+  };
+});

@@ -2,12 +2,23 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const tenantMock = vi.fn();
+const desktopRuntimeMocks = vi.hoisted(() => ({
+  getDesktopBridge: vi.fn(() => null),
+  isDesktopBuild: vi.fn(() => false),
+}));
+
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMock(),
 }));
+vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 
 vi.mock("@/components/AppTopBar", () => ({
   AppTopBar: () => <header data-testid="app-top-bar" />,
+}));
+vi.mock("@/components/DesktopApplicationHeader", () => ({
+  DesktopApplicationHeader: () => (
+    <header data-testid="desktop-application-header" />
+  ),
 }));
 vi.mock("@/components/SpacesSidebar", () => ({
   SpacesSidebar: () => <aside data-testid="computer-sidebar" />,
@@ -50,6 +61,8 @@ const ShellLayout = (Route as unknown as { component: React.ComponentType })
 afterEach(() => {
   cleanup();
   tenantMock.mockReset();
+  desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+  desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
 
 describe("_authed/_shell layout", () => {
@@ -82,6 +95,17 @@ describe("_authed/_shell layout", () => {
     render(<ShellLayout />);
     expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
     expect(screen.getByTestId("app-top-bar")).toBeTruthy();
+    expect(screen.getByTestId("outlet")).toBeTruthy();
+  });
+
+  it("adds the desktop application header for Electron builds", () => {
+    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    tenantMock.mockReturnValue({ noTenantAssigned: false, isLoading: false });
+
+    render(<ShellLayout />);
+
+    expect(screen.getByTestId("desktop-application-header")).toBeTruthy();
+    expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 });
