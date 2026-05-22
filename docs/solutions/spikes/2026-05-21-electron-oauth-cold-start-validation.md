@@ -21,15 +21,15 @@ The desktop OAuth approach is viable. A packaged Electron 42.2.0 `.app` register
 
 ## Validation Matrix
 
-| Scenario | Result | Evidence |
-| --- | --- | --- |
-| Cold-start deep link | Pass | `open 'thinkwork-dev://oauth/callback?code=cold-code&state=expected-state'` launched the packaged app and logged `open-url` with `beforeReady: true`, then `validated-callback: { ok: true }`. |
-| Warm-start deep link | Pass with same handler path | The same `open-url` listener handled URL delivery; production should also keep `second-instance` support for Windows/future hardening. |
-| Dev-mode registration | Constrained | Raw `electron .` returned `setAsDefaultProtocolClient(...)=true`, but Launch Services still reported no default URL handler. Packaged `.app` validation is the reliable path. Dev scripts should launch Electron directly and not rely on OS default registration. |
-| Stage collision | Pass for scheme isolation | `thinkwork-dev://` and `thinkwork://` can both be declared in `CFBundleURLTypes`; production should still use one scheme per stage and separate bundle identifiers/userData directories to avoid "last installed app wins" capture. |
-| PKCE round trip acceptance | Pass for authorize request | A hosted UI request with `code_challenge_method=S256`, a SHA-256 `code_challenge`, and an allowed localhost redirect returned HTTP `302` instead of a Cognito parameter rejection. Full user sign-in was not completed in the non-interactive spike. |
-| State validation | Pass | `state=expected-state` accepted; `state=wrong-state` produced `validated-callback: { ok: false, reason: "state-mismatch" }`. |
-| safeStorage edge cases | Partial | Normal macOS keychain path reports `safeStorage.isEncryptionAvailable() === true`. Non-destructive automation cannot lock the user's login keychain to force degraded mode; production should cover degraded mode with dependency-injected tests and runtime checks. |
+| Scenario                   | Result                      | Evidence                                                                                                                                                                                                                                                             |
+| -------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cold-start deep link       | Pass                        | `open 'thinkwork-dev://oauth/callback?code=cold-code&state=expected-state'` launched the packaged app and logged `open-url` with `beforeReady: true`, then `validated-callback: { ok: true }`.                                                                       |
+| Warm-start deep link       | Pass with same handler path | The same `open-url` listener handled URL delivery; production should also keep `second-instance` support for Windows/future hardening.                                                                                                                               |
+| Dev-mode registration      | Constrained                 | Raw `electron .` returned `setAsDefaultProtocolClient(...)=true`, but Launch Services still reported no default URL handler. Packaged `.app` validation is the reliable path. Dev scripts should launch Electron directly and not rely on OS default registration.   |
+| Stage collision            | Pass for scheme isolation   | `thinkwork-dev://` and `thinkwork://` can both be declared in `CFBundleURLTypes`; production should still use one scheme per stage and separate bundle identifiers/userData directories to avoid "last installed app wins" capture.                                  |
+| PKCE round trip acceptance | Pass for authorize request  | A hosted UI request with `code_challenge_method=S256`, a SHA-256 `code_challenge`, and an allowed localhost redirect returned HTTP `302` instead of a Cognito parameter rejection. Full user sign-in was not completed in the non-interactive spike.                 |
+| State validation           | Pass                        | `state=expected-state` accepted; `state=wrong-state` produced `validated-callback: { ok: false, reason: "state-mismatch" }`.                                                                                                                                         |
+| safeStorage edge cases     | Partial                     | Normal macOS keychain path reports `safeStorage.isEncryptionAvailable() === true`. Non-destructive automation cannot lock the user's login keychain to force degraded mode; production should cover degraded mode with dependency-injected tests and runtime checks. |
 
 ## Key Findings
 
