@@ -236,10 +236,7 @@ function isCrmDashboardApplet(options: AppletValidationOptions) {
   const candidates = [
     options.name,
     metadata?.recipe,
-    metadata?.runbookSlug,
     metadata?.dataShape,
-    metadata?.thinkwork_runbook_slug,
-    metadata?.thinkworkRunbookSlug,
     metadata?.kind,
   ];
 

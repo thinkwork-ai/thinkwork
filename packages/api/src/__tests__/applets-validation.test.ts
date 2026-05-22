@@ -224,7 +224,7 @@ describe("applet source validation", () => {
             );
           }
         `,
-        { metadata: { runbookSlug: "crm-dashboard" } },
+        { metadata: { recipe: "crm-dashboard" } },
       ),
     ).toThrow(AppletQualityError);
   });

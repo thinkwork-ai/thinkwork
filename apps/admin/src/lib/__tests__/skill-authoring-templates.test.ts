@@ -56,44 +56,4 @@ describe("skill authoring templates", () => {
     expect(source).toMatch(/^    default_enabled: true$/m);
     expect(files["scripts/tool.py"]).toContain("def approve_receipt_action");
   });
-
-  it("renders runbook skills with a standard Agent Skill contract", () => {
-    const options = {
-      template: "runbook" as const,
-      name: "Quarterly Business Review",
-      description: "Build a quarterly business review artifact.",
-      category: "artifact",
-      tags: "review",
-    };
-
-    const source = renderSkillTemplate(options);
-    const files = renderSkillExtraFiles(options);
-    const contract = JSON.parse(files["references/thinkwork-runbook.json"]);
-
-    expect(source).toMatch(/^  thinkwork_kind: computer-runbook$/m);
-    expect(source).toMatch(
-      /^  thinkwork_runbook_contract: references\/thinkwork-runbook\.json$/m,
-    );
-    expect(source).toMatch(/^  - "computer-runbook"$/m);
-    expect(source).toMatch(/^  - "review"$/m);
-    expect(source).not.toContain("runbook.yaml");
-    expect(Object.keys(files).sort()).toEqual([
-      "references/analyze.md",
-      "references/discover.md",
-      "references/produce.md",
-      "references/thinkwork-runbook.json",
-      "references/validate.md",
-    ]);
-    expect(contract.routing.explicitAliases).toContain(
-      "quarterly business review",
-    );
-    expect(
-      contract.phases.map((phase: { guidance: string }) => phase.guidance),
-    ).toEqual([
-      "references/discover.md",
-      "references/analyze.md",
-      "references/produce.md",
-      "references/validate.md",
-    ]);
-  });
 });

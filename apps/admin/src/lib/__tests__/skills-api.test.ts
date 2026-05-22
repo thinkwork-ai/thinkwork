@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  filterCatalogSkills,
-  isRunbookCatalogSkill,
-  type CatalogSkill,
-} from "../skills-api";
+import { filterCatalogSkills, type CatalogSkill } from "../skills-api";
 
 function catalogSkill(slug: string, tags: string[]): CatalogSkill {
   return {
@@ -20,29 +16,14 @@ function catalogSkill(slug: string, tags: string[]): CatalogSkill {
 }
 
 describe("skills api catalog helpers", () => {
-  it("detects runbook-capable catalog skills by tag", () => {
-    expect(
-      isRunbookCatalogSkill(
-        catalogSkill("crm-dashboard", ["computer-runbook"]),
-      ),
-    ).toBe(true);
-    expect(isRunbookCatalogSkill(catalogSkill("docs", ["knowledge"]))).toBe(
-      false,
-    );
-  });
-
-  it("filters catalog skills to runbook starters when requested", () => {
+  it("passes catalog skills through when no filter is applied", () => {
     const skills = [
-      catalogSkill("crm-dashboard", ["computer-runbook"]),
+      catalogSkill("crm-dashboard", ["dashboard", "crm"]),
       catalogSkill("slack", ["integration"]),
-      catalogSkill("research-dashboard", ["COMPUTER-RUNBOOK"]),
     ];
 
     expect(
       filterCatalogSkills(skills, "all").map((skill) => skill.slug),
-    ).toEqual(["crm-dashboard", "slack", "research-dashboard"]);
-    expect(
-      filterCatalogSkills(skills, "runbooks").map((skill) => skill.slug),
-    ).toEqual(["crm-dashboard", "research-dashboard"]);
+    ).toEqual(["crm-dashboard", "slack"]);
   });
 });
