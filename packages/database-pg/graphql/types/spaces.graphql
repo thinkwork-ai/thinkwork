@@ -74,6 +74,7 @@ type Space {
   mcpPolicy: AWSJSON
   agentAvailabilityPolicy: AWSJSON
   triggerConfig: AWSJSON
+  emailTriggersEnabled: Boolean!
   renderDiagnostics: AWSJSON
   members: [SpaceMember!]!
   agentAssignments: [SpaceAgentAssignment!]!
@@ -261,6 +262,7 @@ extend type Query {
 extend type Mutation {
   createSpace(input: CreateSpaceInput!): Space!
   updateSpace(input: UpdateSpaceInput!): Space!
+  setSpaceEmailTriggers(spaceId: ID!, enabled: Boolean!): Space!
   setSpaceAgentAvailability(
     input: SetSpaceAgentAvailabilityInput!
   ): SpaceAgentAssignment!

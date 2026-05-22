@@ -48,6 +48,9 @@ export const spaces = pgTable(
     mcp_policy: jsonb("mcp_policy"),
     agent_availability_policy: jsonb("agent_availability_policy"),
     trigger_config: jsonb("trigger_config"),
+    email_triggers_enabled: boolean("email_triggers_enabled")
+      .notNull()
+      .default(false),
     render_diagnostics: jsonb("render_diagnostics"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
