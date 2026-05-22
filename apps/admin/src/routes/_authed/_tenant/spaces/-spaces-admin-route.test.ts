@@ -150,10 +150,10 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).toContain("Name");
     expect(detailChromeSource).toContain("Description");
     expect(detailChromeSource).toContain("Access");
+    expect(detailChromeSource).toContain("SpaceEmailTriggersToggle");
+    expect(detailChromeSource).toContain("emailTriggersEnabled");
     expect(detailChromeSource).toContain("Save");
-    expect(detailChromeSource).not.toContain("space.slug");
     expect(detailChromeSource).not.toContain("space.kind");
-    expect(detailChromeSource).not.toContain("space.status");
     expect(detailChromeSource).not.toContain("space.createdAt");
   });
 
@@ -227,12 +227,15 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("mutation UpdateSpace");
     expect(queriesSource).toContain("query SpaceAdminDetail");
+    expect(queriesSource).toContain("mutation SetSpaceEmailTriggers");
     expect(queriesSource).toContain("query SpaceMemory");
     expect(queriesSource).toContain("mutation SetSpaceKnowledgeBases");
     expect(queriesSource).toContain("query SpaceTools");
     expect(queriesSource).toContain("mutation SetSpaceTools");
     expect(queriesSource).toContain("includeAllForAdmin: true");
     expect(queriesSource).toContain("accessMode");
+    expect(queriesSource).toContain("emailTriggersEnabled");
+    expect(queriesSource).toContain("setSpaceEmailTriggers");
     expect(queriesSource).toContain("knowledgeBases");
     expect(queriesSource).toContain("knowledgeBaseId");
     expect(queriesSource).toContain("setSpaceKnowledgeBases");

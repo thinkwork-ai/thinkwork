@@ -15,8 +15,13 @@ function SpaceConfigurationRoute() {
 
   return (
     <SpaceDetailChrome spaceId={spaceId} activeTab="configuration">
-      {({ draft, setDraft }) => (
-        <SpaceConfigurationPanel draft={draft} setDraft={setDraft} />
+      {({ space, draft, setDraft, refreshSpace }) => (
+        <SpaceConfigurationPanel
+          space={space}
+          draft={draft}
+          setDraft={setDraft}
+          refreshSpace={refreshSpace}
+        />
       )}
     </SpaceDetailChrome>
   );

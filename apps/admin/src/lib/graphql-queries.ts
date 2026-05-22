@@ -232,8 +232,21 @@ export const SpaceAdminDetailQuery = graphql(`
       id
       tenantId
       name
+      slug
       description
+      status
       accessMode
+      emailTriggersEnabled
+    }
+  }
+`);
+
+export const SetSpaceEmailTriggersMutation = graphql(`
+  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {
+    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {
+      id
+      emailTriggersEnabled
+      updatedAt
     }
   }
 `);
