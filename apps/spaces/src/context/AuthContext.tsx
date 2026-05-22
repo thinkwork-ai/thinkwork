@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
+import { getDesktopBridge } from "@/lib/desktop-runtime";
 import type { TokenStorage } from "@/lib/token-storage";
 import {
   setAuthToken,
@@ -15,6 +16,7 @@ import {
   startTokenRefresh,
   stopTokenRefresh,
 } from "@/lib/graphql-client";
+import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,9 +43,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({
   children,
   tokenStorage = auth.getTokenStorage(),
+  desktopBridge = getDesktopBridge(),
 }: {
   children: ReactNode;
   tokenStorage?: TokenStorage;
+  desktopBridge?: ThinkworkBridge | null;
 }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +56,13 @@ export function AuthProvider({
   useEffect(() => {
     let cancelled = false;
     auth.configureTokenStorage(tokenStorage);
+
+    function clearSession(): void {
+      setUser(null);
+      setAuthToken(null);
+      setTokenProvider(null);
+      stopTokenRefresh();
+    }
 
     async function restoreSession(hydrate: boolean): Promise<void> {
       if (hydrate) {
@@ -72,10 +83,7 @@ export function AuthProvider({
         return;
       }
 
-      setUser(null);
-      setAuthToken(null);
-      setTokenProvider(null);
-      stopTokenRefresh();
+      clearSession();
     }
 
     void restoreSession(true).finally(() => {
@@ -85,13 +93,26 @@ export function AuthProvider({
     const unsubscribe = tokenStorage.subscribe(() => {
       void restoreSession(false);
     });
+    const unsubscribeDeepLink = desktopBridge?.onDeepLink(() => {
+      void restoreSession(true);
+    });
+    const unsubscribeSignedOut = desktopBridge?.onSignedOut(() => {
+      if (cancelled) return;
+      clearSession();
+    });
+    const unsubscribeOAuthError = desktopBridge?.onOAuthError((event) => {
+      console.error("[auth] desktop OAuth failed", event.message);
+    });
 
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeDeepLink?.();
+      unsubscribeSignedOut?.();
+      unsubscribeOAuthError?.();
       stopTokenRefresh();
     };
-  }, [tokenStorage]);
+  }, [desktopBridge, tokenStorage]);
 
   const handleSignIn = useCallback(
     async (email: string, password: string) => {
@@ -127,10 +148,16 @@ export function AuthProvider({
     setTokenProvider(null);
     setAuthToken(null);
     setUser(null);
+    if (desktopBridge) {
+      void desktopBridge.signOut().catch((error) => {
+        console.error("[auth] desktop sign-out failed", error);
+      });
+      return;
+    }
     // `auth.signOut()` redirects through Cognito's hosted-UI `/logout` so the
     // Cognito session cookie is cleared on its way back to `/sign-in`.
     auth.signOut();
-  }, []);
+  }, [desktopBridge]);
 
   const getToken = useCallback(() => auth.getIdToken(), []);
 

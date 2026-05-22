@@ -13,6 +13,7 @@ import { Route as SignInRouteImport } from "./routes/sign-in";
 import { Route as AuthedRouteImport } from "./routes/_authed";
 import { Route as SplatRouteImport } from "./routes/$";
 import { Route as IndexRouteImport } from "./routes/index";
+import { Route as AuthDesktopCallbackRouteImport } from "./routes/auth/desktop-callback";
 import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
 import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
@@ -56,6 +57,11 @@ const SplatRoute = SplatRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const AuthDesktopCallbackRoute = AuthDesktopCallbackRouteImport.update({
+  id: "/auth/desktop-callback",
+  path: "/auth/desktop-callback",
   getParentRoute: () => rootRouteImport,
 } as any);
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -199,6 +205,7 @@ export interface FileRoutesByFullPath {
   "/$": typeof SplatRoute;
   "/sign-in": typeof SignInRoute;
   "/auth/callback": typeof AuthCallbackRoute;
+  "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/memory": typeof AuthedShellMemoryRouteWithChildren;
@@ -228,6 +235,7 @@ export interface FileRoutesByTo {
   "/$": typeof SplatRoute;
   "/sign-in": typeof SignInRoute;
   "/auth/callback": typeof AuthCallbackRoute;
+  "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/new": typeof AuthedShellNewRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
@@ -257,6 +265,7 @@ export interface FileRoutesById {
   "/sign-in": typeof SignInRoute;
   "/_authed/_shell": typeof AuthedShellRouteWithChildren;
   "/auth/callback": typeof AuthCallbackRoute;
+  "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/_authed/_shell/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | "/$"
     | "/sign-in"
     | "/auth/callback"
+    | "/auth/desktop-callback"
     | "/automations"
     | "/customize"
     | "/memory"
@@ -317,6 +327,7 @@ export interface FileRouteTypes {
     | "/$"
     | "/sign-in"
     | "/auth/callback"
+    | "/auth/desktop-callback"
     | "/new"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
@@ -345,6 +356,7 @@ export interface FileRouteTypes {
     | "/sign-in"
     | "/_authed/_shell"
     | "/auth/callback"
+    | "/auth/desktop-callback"
     | "/_authed/_shell/automations"
     | "/_authed/_shell/customize"
     | "/_authed/_shell/memory"
@@ -376,6 +388,7 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren;
   SignInRoute: typeof SignInRoute;
   AuthCallbackRoute: typeof AuthCallbackRoute;
+  AuthDesktopCallbackRoute: typeof AuthDesktopCallbackRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -406,6 +419,13 @@ declare module "@tanstack/react-router" {
       path: "/";
       fullPath: "/";
       preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/auth/desktop-callback": {
+      id: "/auth/desktop-callback";
+      path: "/auth/desktop-callback";
+      fullPath: "/auth/desktop-callback";
+      preLoaderRoute: typeof AuthDesktopCallbackRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/auth/callback": {
@@ -712,6 +732,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   SignInRoute: SignInRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthDesktopCallbackRoute: AuthDesktopCallbackRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

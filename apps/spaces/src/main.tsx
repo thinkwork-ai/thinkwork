@@ -9,6 +9,7 @@ import { TenantProvider } from "@/context/TenantContext";
 import { configureTokenStorage } from "@/lib/auth";
 import { graphqlClient } from "@/lib/graphql-client";
 import type { TokenStorage } from "@/lib/token-storage";
+import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { LocalStorageTokenStorage } from "@/lib/token-storage/local-storage";
 import { router } from "./router";
 import "./index.css";
@@ -49,8 +50,4 @@ async function createTokenStorage(): Promise<TokenStorage> {
   }
 
   return new LocalStorageTokenStorage();
-}
-
-function isDesktopBuild(): boolean {
-  return typeof __DESKTOP_BUILD__ !== "undefined" && __DESKTOP_BUILD__;
 }
