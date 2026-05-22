@@ -5,6 +5,8 @@ import {
   CognitoUserSession,
   CognitoUserAttribute,
 } from "amazon-cognito-identity-js";
+import type { TokenStorage } from "./token-storage";
+import { LocalStorageTokenStorage } from "./token-storage/local-storage";
 
 // ---------------------------------------------------------------------------
 // Config — lazy-init to avoid crashing when env vars aren't set (local dev)
@@ -14,6 +16,17 @@ const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID || "";
 const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN || "";
 
 let _userPool: CognitoUserPool | null = null;
+let tokenStorage: TokenStorage = new LocalStorageTokenStorage();
+
+export function configureTokenStorage(storage: TokenStorage): void {
+  if (tokenStorage === storage) return;
+  tokenStorage = storage;
+  _userPool = null;
+}
+
+export function getTokenStorage(): TokenStorage {
+  return tokenStorage;
+}
 
 function getUserPool(): CognitoUserPool | null {
   if (!USER_POOL_ID || !CLIENT_ID) return null;
@@ -21,6 +34,7 @@ function getUserPool(): CognitoUserPool | null {
     _userPool = new CognitoUserPool({
       UserPoolId: USER_POOL_ID,
       ClientId: CLIENT_ID,
+      Storage: tokenStorage as unknown as Storage,
     });
   }
   return _userPool;
@@ -61,13 +75,21 @@ export function signIn(
       newPasswordRequired: () => {
         if (newPassword) {
           // Pass empty attributes — avoids "non-writable attributes" errors
-          user.completeNewPasswordChallenge(newPassword, {}, {
-            onSuccess: (session) => resolve(session),
-            onFailure: (err) => reject(err),
-          });
+          user.completeNewPasswordChallenge(
+            newPassword,
+            {},
+            {
+              onSuccess: (session) => resolve(session),
+              onFailure: (err) => reject(err),
+            },
+          );
         } else {
           // Signal that a new password is needed
-          reject(Object.assign(new Error("New password required"), { code: "NewPasswordRequired" }));
+          reject(
+            Object.assign(new Error("New password required"), {
+              code: "NewPasswordRequired",
+            }),
+          );
         }
       },
     });
@@ -200,15 +222,13 @@ export function getCurrentSession(): Promise<CognitoUserSession | null> {
       return;
     }
 
-    user.getSession(
-      (err: Error | null, session: CognitoUserSession | null) => {
-        if (err || !session || !session.isValid()) {
-          resolve(null);
-          return;
-        }
-        resolve(session);
-      },
-    );
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session || !session.isValid()) {
+        resolve(null);
+        return;
+      }
+      resolve(session);
+    });
   });
 }
 
@@ -218,9 +238,9 @@ export function getCurrentSession(): Promise<CognitoUserSession | null> {
 
 function getStoredIdToken(): string | null {
   const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
-  const lastUser = localStorage.getItem(`${prefix}.LastAuthUser`);
+  const lastUser = tokenStorage.getItem(`${prefix}.LastAuthUser`);
   if (!lastUser) return null;
-  return localStorage.getItem(`${prefix}.${lastUser}.idToken`);
+  return tokenStorage.getItem(`${prefix}.${lastUser}.idToken`);
 }
 
 export async function getAccessToken(): Promise<string | null> {
@@ -228,9 +248,9 @@ export async function getAccessToken(): Promise<string | null> {
   if (session) return session.getAccessToken().getJwtToken();
   // Fallback for OAuth sessions
   const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
-  const lastUser = localStorage.getItem(`${prefix}.LastAuthUser`);
+  const lastUser = tokenStorage.getItem(`${prefix}.LastAuthUser`);
   if (!lastUser) return null;
-  return localStorage.getItem(`${prefix}.${lastUser}.accessToken`);
+  return tokenStorage.getItem(`${prefix}.${lastUser}.accessToken`);
 }
 
 export async function getIdToken(): Promise<string | null> {
@@ -253,14 +273,12 @@ export function getCurrentUser(): AuthUser | null {
 
   let authUser: AuthUser | null = null;
 
-  user.getSession(
-    (err: Error | null, session: CognitoUserSession | null) => {
-      if (err || !session || !session.isValid()) return;
-      authUser = parseIdToken(session);
-    },
-  );
+  user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+    if (err || !session || !session.isValid()) return;
+    authUser = parseIdToken(session);
+  });
 
-  // Fallback: parse id token directly from localStorage (OAuth sessions)
+  // Fallback: parse id token directly from token storage (OAuth sessions)
   if (!authUser) {
     const rawToken = getStoredIdToken();
     if (rawToken) {
@@ -330,7 +348,9 @@ interface OAuthTokens {
   refresh_token: string;
 }
 
-export async function exchangeCodeForSession(code: string): Promise<OAuthTokens> {
+export async function exchangeCodeForSession(
+  code: string,
+): Promise<OAuthTokens> {
   const redirectUri = `${window.location.origin}/auth/callback`;
   const base = getCognitoDomainBase();
 
@@ -377,8 +397,14 @@ export function storeTokensInCognitoStorage(tokens: OAuthTokens): void {
 
   const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
 
-  localStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
-  localStorage.setItem(`${prefix}.${username}.accessToken`, tokens.access_token);
-  localStorage.setItem(`${prefix}.${username}.refreshToken`, tokens.refresh_token);
-  localStorage.setItem(`${prefix}.LastAuthUser`, username);
+  tokenStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
+  tokenStorage.setItem(
+    `${prefix}.${username}.accessToken`,
+    tokens.access_token,
+  );
+  tokenStorage.setItem(
+    `${prefix}.${username}.refreshToken`,
+    tokens.refresh_token,
+  );
+  tokenStorage.setItem(`${prefix}.LastAuthUser`, username);
 }

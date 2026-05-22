@@ -8,7 +8,13 @@ import {
 } from "react";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
-import { setAuthToken, setTokenProvider, startTokenRefresh, stopTokenRefresh } from "@/lib/graphql-client";
+import type { TokenStorage } from "@/lib/token-storage";
+import {
+  setAuthToken,
+  setTokenProvider,
+  startTokenRefresh,
+  stopTokenRefresh,
+} from "@/lib/graphql-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,11 +24,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (
-    email: string,
-    password: string,
-    name: string,
-  ) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<void>;
   confirmSignUp: (email: string, code: string) => Promise<void>;
   signOut: () => void;
   getToken: () => Promise<string | null>;
@@ -36,12 +38,19 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+  tokenStorage = auth.getTokenStorage(),
+}: {
+  children: ReactNode;
+  tokenStorage?: TokenStorage;
+}) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check session on mount — restore cached token for GraphQL client
   useEffect(() => {
+    auth.configureTokenStorage(tokenStorage);
     auth
       .getCurrentSession()
       .then(async (session) => {
@@ -56,10 +65,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
 
     return () => stopTokenRefresh();
-  }, []);
+  }, [tokenStorage]);
 
   const handleSignIn = useCallback(
     async (email: string, password: string) => {
+      auth.configureTokenStorage(tokenStorage);
       const session = await auth.signIn(email, password);
       void session;
       const token = await auth.getIdToken();
@@ -68,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       startTokenRefresh();
       setUser(auth.getCurrentUser());
     },
-    [],
+    [tokenStorage],
   );
 
   const handleSignUp = useCallback(
