@@ -17,7 +17,7 @@ jobs:
   build-sign-notarize-publish:
     name: Build, sign, notarize, and publish
     runs-on: macos-14
-    timeout-minutes: 30
+    timeout-minutes: 90
     permissions:
       contents: write
     steps:
