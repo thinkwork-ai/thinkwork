@@ -57,6 +57,7 @@ import { handler } from "./agents-runtime-config.js";
 
 const GOOD_TENANT = "11111111-2222-3333-4444-555555555555";
 const GOOD_AGENT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+const GOOD_SPACE = "99999999-8888-7777-6666-555555555555";
 
 function makeEvent(params: {
   method?: string;
@@ -196,6 +197,21 @@ describe("agents-runtime-config handler", () => {
     expect(mockResolve).not.toHaveBeenCalled();
   });
 
+  it("400 when spaceId is not a UUID", async () => {
+    const res = await handler(
+      makeEvent({
+        authHeader: "Bearer test-service-secret",
+        query: {
+          tenantId: GOOD_TENANT,
+          agentId: GOOD_AGENT,
+          spaceId: "not-a-uuid",
+        },
+      }),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(mockResolve).not.toHaveBeenCalled();
+  });
+
   it("404 when helper raises AgentNotFoundError", async () => {
     mockResolve.mockRejectedValueOnce(new FakeAgentNotFoundError(GOOD_AGENT));
     const res = await handler(
@@ -254,6 +270,30 @@ describe("agents-runtime-config handler", () => {
         agentId: GOOD_AGENT,
         currentUserId: userId,
         currentUserEmail: "rep@acme.test",
+      }),
+    );
+  });
+
+  it("forwards spaceId to the helper when provided", async () => {
+    mockResolve.mockResolvedValueOnce({
+      tenantId: GOOD_TENANT,
+      agentId: GOOD_AGENT,
+    });
+    await handler(
+      makeEvent({
+        authHeader: "Bearer test-service-secret",
+        query: {
+          tenantId: GOOD_TENANT,
+          agentId: GOOD_AGENT,
+          spaceId: GOOD_SPACE,
+        },
+      }),
+    );
+    expect(mockResolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: GOOD_TENANT,
+        agentId: GOOD_AGENT,
+        spaceId: GOOD_SPACE,
       }),
     );
   });

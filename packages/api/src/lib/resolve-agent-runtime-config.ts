@@ -48,6 +48,7 @@ import {
   agentKnowledgeBases,
   knowledgeBases,
   guardrails,
+  spaces,
 } from "@thinkwork/database-pg/schema";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
@@ -70,6 +71,10 @@ import {
   resolveWebSearchConfigFromSkills,
   type WebSearchRuntimeConfig,
 } from "./web-search-config.js";
+import {
+  applyRuntimeOverrides,
+  type SpaceRuntimeOverrides,
+} from "./workspace-renderer/runtime-overrides-applier.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -119,6 +124,8 @@ export interface AgentRuntimeConfig {
   humanPairId: string | null;
   templateId: string | null;
   templateModel: string | null;
+  budgetMonthlyCents: number | null;
+  budgetPaused: boolean;
   blockedTools: string[];
   sandboxTemplate: TemplateSandboxConfig | null;
   browserAutomationEnabled: boolean;
@@ -149,6 +156,11 @@ export class AgentNotFoundError extends Error {
 export interface ResolveAgentRuntimeConfigOptions {
   tenantId: string;
   agentId: string;
+  /**
+   * Active Space for this invocation. Null/undefined means no Space override
+   * overlay is applied and the platform-agent baseline is returned unchanged.
+   */
+  spaceId?: string | null;
   /**
    * Human invoker's user id. Required to light up CURRENT_USER_EMAIL overlays
    * and (downstream) sandbox preflight. Leave empty for wakeup-style runs where
@@ -216,6 +228,8 @@ export async function resolveAgentRuntimeConfig(
       runtime: agents.runtime,
       model: agents.model,
       guardrail_id: agents.guardrail_id,
+      budget_monthly_cents: agents.budget_monthly_cents,
+      budget_paused: agents.budget_paused,
       blocked_tools: agents.blocked_tools,
       sandbox: agents.sandbox,
       browser: agents.browser,
@@ -299,7 +313,12 @@ export async function resolveAgentRuntimeConfig(
         bedrock_version: guardrails.bedrock_version,
       })
       .from(guardrails)
-      .where(eq(guardrails.id, agent.guardrail_id));
+      .where(
+        and(
+          eq(guardrails.id, agent.guardrail_id),
+          eq(guardrails.tenant_id, opts.tenantId),
+        ),
+      );
     if (gr?.bedrock_guardrail_id && gr?.bedrock_version) {
       guardrailId = agent.guardrail_id;
       guardrailConfig = {
@@ -597,7 +616,7 @@ export async function resolveAgentRuntimeConfig(
     logPrefix,
   );
 
-  return {
+  const resolvedConfig: AgentRuntimeConfig = {
     tenantId: opts.tenantId,
     tenantSlug,
     agentId: opts.agentId,
@@ -608,6 +627,8 @@ export async function resolveAgentRuntimeConfig(
     humanPairId: agent.human_pair_id,
     templateId: agent.template_id ?? null,
     templateModel: agent.model ?? null,
+    budgetMonthlyCents: agent.budget_monthly_cents ?? null,
+    budgetPaused: agent.budget_paused ?? false,
     blockedTools,
     sandboxTemplate: (agent.sandbox as TemplateSandboxConfig | null) ?? null,
     browserAutomationEnabled,
@@ -622,4 +643,79 @@ export async function resolveAgentRuntimeConfig(
     knowledgeBasesConfig,
     mcpConfigs,
   };
+
+  const overrides = await resolveSpaceRuntimeOverrides({
+    tenantId: opts.tenantId,
+    spaceId: opts.spaceId ?? null,
+    logPrefix,
+  });
+
+  return applyRuntimeOverrides(resolvedConfig, overrides);
+}
+
+async function resolveSpaceRuntimeOverrides(input: {
+  tenantId: string;
+  spaceId: string | null;
+  logPrefix: string;
+}): Promise<SpaceRuntimeOverrides | null> {
+  if (!input.spaceId) return null;
+
+  const db = getDb();
+  const [space] = await db
+    .select({
+      model_override: spaces.model_override,
+      guardrail_id_override: spaces.guardrail_id_override,
+      budget_monthly_cents_override: spaces.budget_monthly_cents_override,
+      budget_paused_override: spaces.budget_paused_override,
+      sandbox_override: spaces.sandbox_override,
+    })
+    .from(spaces)
+    .where(
+      and(eq(spaces.id, input.spaceId), eq(spaces.tenant_id, input.tenantId)),
+    )
+    .limit(1);
+
+  if (!space) {
+    console.warn(
+      `${input.logPrefix} Space ${input.spaceId} not found for tenant ${input.tenantId}; runtime overrides skipped`,
+    );
+    return null;
+  }
+
+  const overrides: SpaceRuntimeOverrides = {
+    modelOverride: space.model_override ?? null,
+    guardrailIdOverride: space.guardrail_id_override ?? null,
+    budgetMonthlyCentsOverride: space.budget_monthly_cents_override ?? null,
+    budgetPausedOverride: space.budget_paused_override ?? null,
+    sandboxOverride: space.sandbox_override ?? null,
+  };
+
+  if (overrides.guardrailIdOverride) {
+    const [guardrail] = await db
+      .select({
+        bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
+        bedrock_version: guardrails.bedrock_version,
+      })
+      .from(guardrails)
+      .where(
+        and(
+          eq(guardrails.id, overrides.guardrailIdOverride),
+          eq(guardrails.tenant_id, input.tenantId),
+        ),
+      )
+      .limit(1);
+    if (guardrail?.bedrock_guardrail_id && guardrail?.bedrock_version) {
+      overrides.guardrailConfigOverride = {
+        guardrailIdentifier: guardrail.bedrock_guardrail_id,
+        guardrailVersion: guardrail.bedrock_version,
+      };
+    } else {
+      console.warn(
+        `${input.logPrefix} Space guardrail override ${overrides.guardrailIdOverride} did not resolve for tenant ${input.tenantId}; guardrail config omitted`,
+      );
+      overrides.guardrailIdOverride = null;
+    }
+  }
+
+  return overrides;
 }

@@ -77,14 +77,20 @@ export async function handler(
     typeof qs.currentUserEmail === "string" && qs.currentUserEmail
       ? qs.currentUserEmail
       : undefined;
+  const spaceId =
+    typeof qs.spaceId === "string" && qs.spaceId ? qs.spaceId : undefined;
   if (currentUserId && !UUID_RE.test(currentUserId)) {
     return error("currentUserId: must be a UUID if provided", 400);
+  }
+  if (spaceId && !UUID_RE.test(spaceId)) {
+    return error("spaceId: must be a UUID if provided", 400);
   }
 
   try {
     const cfg = await resolveAgentRuntimeConfig({
       tenantId,
       agentId,
+      spaceId,
       currentUserId,
       currentUserEmail,
       logPrefix: "[agents-runtime-config]",

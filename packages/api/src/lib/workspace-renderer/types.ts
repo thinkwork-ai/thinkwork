@@ -21,6 +21,14 @@ export interface ResolvedWorkspaceRenderTuple {
   userName: string | null;
 }
 
+export interface WorkspaceRuntimeOverrides {
+  modelOverride: string | null;
+  guardrailIdOverride: string | null;
+  budgetMonthlyCentsOverride: number | null;
+  budgetPausedOverride: boolean | null;
+  sandboxOverride: boolean | null;
+}
+
 export interface WorkspaceObjectMetadata {
   key: string;
   lastModified?: Date;

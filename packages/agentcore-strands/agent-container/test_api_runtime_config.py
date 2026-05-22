@@ -76,6 +76,28 @@ class FetchHappyPathTests(unittest.TestCase):
         self.assertIn("currentUserId=user-42", req.full_url)
         self.assertIn("currentUserEmail=rep%40acme.test", req.full_url)
 
+    def test_fetch_forwards_spaceId_when_provided(self):
+        class FakeResp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self):
+                return b'{}'
+
+        with patch("urllib.request.urlopen", return_value=FakeResp()) as mock_open:
+            api_runtime_config.fetch(
+                agent_id="agent-1",
+                tenant_id="tenant-1",
+                space_id="space-finance",
+            )
+        req = mock_open.call_args.args[0]
+        self.assertIn("spaceId=space-finance", req.full_url)
+
     def test_explicit_credentials_override_env(self):
         os.environ["THINKWORK_API_URL"] = "https://stale.example.test"
         os.environ["API_AUTH_SECRET"] = "stale-secret"

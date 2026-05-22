@@ -75,7 +75,12 @@ vi.mock("@thinkwork/database-pg", () => ({
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
-  agents: { id: "agents.id", name: "agents.name" },
+  agents: {
+    id: "agents.id",
+    is_platform_default: "agents.is_platform_default",
+    name: "agents.name",
+    tenant_id: "agents.tenant_id",
+  },
   computers: {
     id: "computers.id",
     migrated_from_agent_id: "computers.migrated_from_agent_id",
@@ -84,13 +89,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: "computers.tenant_id",
   },
   messages: { id: "messages.id" },
-  spaceAgentAssignments: {
-    agent_id: "space_agent_assignments.agent_id",
-    local_role: "space_agent_assignments.local_role",
-    space_id: "space_agent_assignments.space_id",
-    status: "space_agent_assignments.status",
-    tenant_id: "space_agent_assignments.tenant_id",
-  },
   tenants: { id: "tenants.id", issue_counter: "tenants.issue_counter" },
   threadParticipants: {},
   threads: { id: "threads.id" },
@@ -107,7 +105,7 @@ describe("createColdContactThread", () => {
 
   it("creates a Space thread, opening message, participants, and thread_turn task", async () => {
     selectRows.push(
-      [{ agentId: "agent-finance", localRole: "finance" }],
+      [{ id: "agent-platform", name: "Thinkwork" }],
       [{ id: "computer-shared" }],
     );
 
@@ -132,6 +130,7 @@ describe("createColdContactThread", () => {
         expect.objectContaining({
           table: expect.objectContaining({ id: "threads.id" }),
           values: expect.objectContaining({
+            agent_id: "agent-platform",
             channel: "email",
             computer_id: "computer-shared",
             identifier: "EMAIL-42",
@@ -146,6 +145,15 @@ describe("createColdContactThread", () => {
             role: "user",
             sender_id: "user-eric",
           }),
+        }),
+        expect.objectContaining({
+          values: expect.arrayContaining([
+            expect.objectContaining({
+              agent_id: "agent-platform",
+              participant_type: "agent",
+              role: "agent",
+            }),
+          ]),
         }),
       ]),
     );

@@ -21,6 +21,8 @@ const runtimeConfig: AgentRuntimeConfig = {
   humanPairId: null,
   templateId: "template-1",
   templateModel: "us.anthropic.claude-sonnet-4-6",
+  budgetMonthlyCents: 10_000,
+  budgetPaused: false,
   blockedTools: [],
   sandboxTemplate: null,
   browserAutomationEnabled: false,

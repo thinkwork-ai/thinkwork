@@ -1,15 +1,14 @@
 import { and, eq, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-  agents,
   computers,
   messages,
-  spaceAgentAssignments,
   tenants,
   threadParticipants,
   threads,
 } from "@thinkwork/database-pg/schema";
 import { enqueueComputerThreadTurn } from "../computers/thread-cutover.js";
+import { resolveTenantPlatformAgent } from "../agents/tenant-platform-agent.js";
 
 const db = getDb();
 
@@ -47,7 +46,7 @@ export async function createColdContactThread(
       .values({
         tenant_id: input.tenantId,
         computer_id: routing.computerId,
-        agent_id: null,
+        agent_id: routing.agentId,
         space_id: input.spaceId,
         user_id: input.senderUserId,
         number: tenant.nextNumber,
@@ -137,26 +136,8 @@ async function resolveColdContactComputer(input: {
   tenantId: string;
   spaceId: string;
 }) {
-  const [assignment] = await db
-    .select({
-      agentId: spaceAgentAssignments.agent_id,
-      localRole: spaceAgentAssignments.local_role,
-    })
-    .from(spaceAgentAssignments)
-    .where(
-      and(
-        eq(spaceAgentAssignments.tenant_id, input.tenantId),
-        eq(spaceAgentAssignments.space_id, input.spaceId),
-        eq(spaceAgentAssignments.status, "active"),
-      ),
-    )
-    .limit(1);
-
-  if (!assignment) {
-    throw new Error(
-      "Space has no active agent assignment for cold-contact email",
-    );
-  }
+  const platformAgent = await resolveTenantPlatformAgent(input.tenantId);
+  const agentId = platformAgent.id;
 
   const [computer] = await db
     .select({ id: computers.id })
@@ -165,26 +146,21 @@ async function resolveColdContactComputer(input: {
       and(
         eq(computers.tenant_id, input.tenantId),
         ne(computers.status, "archived"),
-        sql`(${computers.primary_agent_id} = ${assignment.agentId} OR ${computers.migrated_from_agent_id} = ${assignment.agentId})`,
+        sql`(${computers.primary_agent_id} = ${agentId} OR ${computers.migrated_from_agent_id} = ${agentId})`,
       ),
     )
     .limit(1);
 
   if (!computer) {
-    const [agent] = await db
-      .select({ name: agents.name })
-      .from(agents)
-      .where(eq(agents.id, assignment.agentId))
-      .limit(1);
     throw new Error(
-      `No active Computer found for cold-contact agent ${agent?.name ?? assignment.agentId}`,
+      `No active Computer found for cold-contact platform agent ${platformAgent.name ?? agentId}`,
     );
   }
 
   return {
-    agentId: assignment.agentId,
+    agentId,
     computerId: computer.id,
-    localRole: assignment.localRole,
+    localRole: "agent",
   };
 }
 
