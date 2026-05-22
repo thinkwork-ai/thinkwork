@@ -18,6 +18,7 @@ import {
   SET_TOKEN_STORAGE_ITEM_CHANNEL,
   TOKENS_CHANGED_EVENT_CHANNEL,
   UPDATE_STATE_EVENT_CHANNEL,
+  UPDATE_TELEMETRY_EVENT_CHANNEL,
   DeepLinkEventSchema,
   GetSessionTokensResponseSchema,
   GetUpdateStateResponseSchema,
@@ -32,6 +33,7 @@ import {
   StartOAuthResponseSchema,
   TokensChangedEventSchema,
   UpdateStateEventSchema,
+  UpdateTelemetryEventSchema,
 } from "@thinkwork/desktop-ipc";
 
 const bridge = {
@@ -141,6 +143,20 @@ const bridge = {
     ipcRenderer.on(UPDATE_STATE_EVENT_CHANNEL, wrappedListener);
     return () =>
       ipcRenderer.removeListener(UPDATE_STATE_EVENT_CHANNEL, wrappedListener);
+  },
+  onUpdateTelemetry(listener) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ) => {
+      listener(UpdateTelemetryEventSchema.parse(payload));
+    };
+    ipcRenderer.on(UPDATE_TELEMETRY_EVENT_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(
+        UPDATE_TELEMETRY_EVENT_CHANNEL,
+        wrappedListener,
+      );
   },
   async reportInstallOutcome(outcome) {
     await ipcRenderer.invoke(

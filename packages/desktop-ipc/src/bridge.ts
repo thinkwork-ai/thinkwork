@@ -10,6 +10,7 @@ import type {
   StartOAuthRequest,
   StartOAuthResponse,
   UpdateState,
+  UpdateTelemetryEvent,
 } from "./schemas.js";
 
 export type Unsubscribe = () => void;
@@ -31,5 +32,8 @@ export interface ThinkworkBridge {
   downloadUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
   onUpdateState(listener: (state: UpdateState) => void): Unsubscribe;
+  onUpdateTelemetry(
+    listener: (event: UpdateTelemetryEvent) => void,
+  ): Unsubscribe;
   reportInstallOutcome(outcome: ReportInstallOutcomeRequest): Promise<void>;
 }

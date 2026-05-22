@@ -15,6 +15,7 @@ export const CHECK_FOR_UPDATES_CHANNEL = "desktop:check-for-updates";
 export const DOWNLOAD_UPDATE_CHANNEL = "desktop:download-update";
 export const INSTALL_UPDATE_CHANNEL = "desktop:install-update";
 export const UPDATE_STATE_EVENT_CHANNEL = "desktop:update-state";
+export const UPDATE_TELEMETRY_EVENT_CHANNEL = "desktop:update-telemetry";
 export const REPORT_INSTALL_OUTCOME_CHANNEL = "desktop:report-install-outcome";
 
 export const IPC_CHANNELS = {
@@ -34,5 +35,6 @@ export const IPC_CHANNELS = {
   DOWNLOAD_UPDATE: DOWNLOAD_UPDATE_CHANNEL,
   INSTALL_UPDATE: INSTALL_UPDATE_CHANNEL,
   UPDATE_STATE_EVENT: UPDATE_STATE_EVENT_CHANNEL,
+  UPDATE_TELEMETRY_EVENT: UPDATE_TELEMETRY_EVENT_CHANNEL,
   REPORT_INSTALL_OUTCOME: REPORT_INSTALL_OUTCOME_CHANNEL,
 } as const;

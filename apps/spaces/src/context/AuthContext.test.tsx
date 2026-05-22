@@ -241,17 +241,27 @@ function makeBridge(): ThinkworkBridge & {
     async getUpdateState() {
       return {
         status: "disabled",
-        arch: {
-          hostArch: "arm64",
-          appArch: "arm64",
-          runningUnderArm64Translation: false,
-        },
+        currentVersion: "0.1.0",
+        availableVersion: null,
+        downloadedVersion: null,
+        downloadPercent: null,
+        hostArch: "arm64",
+        appArch: "arm64",
+        runningUnderArm64Translation: false,
+        checkedAt: null,
+        message: null,
+        errorContext: null,
+        canRetry: false,
+        channel: "latest",
       };
     },
     async checkForUpdates() {},
     async downloadUpdate() {},
     async installUpdate() {},
     onUpdateState() {
+      return () => {};
+    },
+    onUpdateTelemetry() {
       return () => {};
     },
     async reportInstallOutcome() {},
