@@ -1,0 +1,141 @@
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SignInPage } from "./sign-in";
+
+const routerMocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  search: { next: undefined as string | undefined },
+}));
+
+const authContextMocks = vi.hoisted(() => ({
+  useAuth: vi.fn(),
+}));
+
+const authMocks = vi.hoisted(() => ({
+  getGoogleSignInUrl: vi.fn(),
+}));
+
+const desktopRuntimeMocks = vi.hoisted(() => ({
+  getDesktopBridge: vi.fn(),
+  isDesktopBuild: vi.fn(),
+  normalizeDesktopNext: (value: unknown) =>
+    typeof value === "string" &&
+    value.startsWith("/") &&
+    !value.startsWith("//")
+      ? value
+      : undefined,
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  createFileRoute: () => (options: unknown) => ({
+    ...(options as object),
+    useSearch: () => routerMocks.search,
+  }),
+  useNavigate: () => routerMocks.navigate,
+}));
+
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: authContextMocks.useAuth,
+}));
+
+vi.mock("@/lib/auth", () => ({
+  getGoogleSignInUrl: authMocks.getGoogleSignInUrl,
+}));
+
+vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
+
+const ORIGINAL_LOCATION = window.location;
+
+beforeEach(() => {
+  authContextMocks.useAuth.mockReturnValue({
+    isAuthenticated: false,
+    isLoading: false,
+  });
+  authMocks.getGoogleSignInUrl.mockReturnValue("https://auth.example/login");
+  routerMocks.search = { next: undefined };
+  desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
+});
+
+afterEach(() => {
+  cleanup();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: ORIGINAL_LOCATION,
+  });
+  vi.clearAllMocks();
+});
+
+describe("SignInPage", () => {
+  it("starts desktop OAuth with the sanitized next destination", async () => {
+    const startOAuth = vi.fn().mockResolvedValue({
+      url: "https://auth.example/oauth2/authorize?state=xyz",
+      state: "xyz",
+    });
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
+      startOAuth,
+      onOAuthError: () => () => {},
+    });
+    routerMocks.search = { next: "/automations/123" };
+
+    render(<SignInPage />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    await waitFor(() =>
+      expect(startOAuth).toHaveBeenCalledWith({ next: "/automations/123" }),
+    );
+  });
+
+  it("uses the existing browser OAuth redirect outside desktop mode", () => {
+    const navigations: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        set href(target: string) {
+          navigations.push(target);
+        },
+        get href() {
+          return navigations.at(-1) ?? "https://app.example/sign-in";
+        },
+      },
+    });
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    expect(navigations).toEqual(["https://auth.example/login"]);
+  });
+
+  it("surfaces desktop OAuth errors broadcast by main", async () => {
+    const oauthError = {
+      listener: null as ((event: { message: string }) => void) | null,
+    };
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
+      startOAuth: vi.fn(),
+      onOAuthError(listener: (event: { message: string }) => void) {
+        oauthError.listener = listener;
+        return () => {
+          oauthError.listener = null;
+        };
+      },
+    });
+
+    render(<SignInPage />);
+    expect(oauthError.listener).not.toBeNull();
+    oauthError.listener?.({
+      message: "No in-flight OAuth attempt for callback state",
+    });
+
+    await screen.findByText("No in-flight OAuth attempt for callback state");
+  });
+});
