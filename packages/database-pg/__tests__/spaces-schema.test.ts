@@ -33,6 +33,10 @@ const migration0119 = readFileSync(
   join(HERE, "..", "drizzle", "0119_space_knowledge_bases.sql"),
   "utf-8",
 );
+const migration0122 = readFileSync(
+  join(HERE, "..", "drizzle", "0122_space_email_triggers.sql"),
+  "utf-8",
+);
 
 describe("Spaces schema", () => {
   it("models tenant-scoped Spaces with contextual workroom metadata", () => {
@@ -55,6 +59,8 @@ describe("Spaces schema", () => {
     expect(columns.mcp_policy.notNull).toBe(false);
     expect(columns.agent_availability_policy.notNull).toBe(false);
     expect(columns.trigger_config.notNull).toBe(false);
+    expect(columns.email_triggers_enabled.notNull).toBe(true);
+    expect(columns.email_triggers_enabled.default).toBe(false);
     expect(columns.render_diagnostics.notNull).toBe(false);
   });
 
@@ -176,6 +182,21 @@ describe("Spaces schema", () => {
       "CREATE TRIGGER space_knowledge_bases_tenant_guard",
     );
     expect(migration0119).toContain("space knowledge base tenant mismatch");
+  });
+
+  it("declares manual migration drift markers for per-Space email triggers", () => {
+    expect(migration0122).toMatch(
+      /--\s*creates-column:\s*public\.spaces\.email_triggers_enabled\b/,
+    );
+    expect(migration0122).toMatch(
+      /ADD COLUMN IF NOT EXISTS email_triggers_enabled boolean\b/,
+    );
+    expect(migration0122).toContain(
+      "ALTER COLUMN email_triggers_enabled SET DEFAULT false",
+    );
+    expect(migration0122).toContain(
+      "ALTER COLUMN email_triggers_enabled SET NOT NULL",
+    );
   });
 
   it("guards Space child rows against cross-tenant references", () => {

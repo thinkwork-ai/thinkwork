@@ -169,6 +169,9 @@ describe("GraphQL Schema Contract", () => {
         "AWSJSON",
       );
       expect(space.getFields().triggerConfig.type.toString()).toBe("AWSJSON");
+      expect(space.getFields().emailTriggersEnabled.type.toString()).toBe(
+        "Boolean!",
+      );
       expect(space.getFields().renderDiagnostics.type.toString()).toBe(
         "AWSJSON",
       );
@@ -179,6 +182,25 @@ describe("GraphQL Schema Contract", () => {
         "SpaceTenantMcpServer",
       );
       expect(tenantMcpServer.getFields().slug.type.toString()).toBe("String!");
+    });
+
+    it("exposes the per-Space email trigger mutation", () => {
+      const mutation = schema.getMutationType() as any;
+
+      expect(mutation.getFields().setSpaceEmailTriggers.type.toString()).toBe(
+        "Space!",
+      );
+      expect(
+        mutation
+          .getFields()
+          .setSpaceEmailTriggers.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([
+        ["spaceId", "ID!"],
+        ["enabled", "Boolean!"],
+      ]);
     });
   });
 

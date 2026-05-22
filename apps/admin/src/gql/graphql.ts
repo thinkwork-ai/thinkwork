@@ -2121,6 +2121,7 @@ export type Mutation = {
   setComputerAssignments: Array<ComputerAssignment>;
   setRoutineTrigger: RoutineTrigger;
   setSpaceAgentAvailability: SpaceAgentAssignment;
+  setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceTools: Space;
   setUserComputerAssignments: Array<ComputerAssignment>;
@@ -2919,6 +2920,12 @@ export type MutationSetRoutineTriggerArgs = {
 
 export type MutationSetSpaceAgentAvailabilityArgs = {
   input: SetSpaceAgentAvailabilityInput;
+};
+
+
+export type MutationSetSpaceEmailTriggersArgs = {
+  enabled: Scalars['Boolean']['input'];
+  spaceId: Scalars['ID']['input'];
 };
 
 
@@ -5113,6 +5120,7 @@ export type Space = {
   contextConfig?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   description?: Maybe<Scalars['String']['output']>;
+  emailTriggersEnabled: Scalars['Boolean']['output'];
   icon?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   integrations: Array<SpaceIntegration>;
