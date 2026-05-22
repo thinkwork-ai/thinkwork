@@ -70,6 +70,9 @@ export const agents = pgTable(
     context_engine: jsonb("context_engine").default(
       sql`'{"enabled": true}'::jsonb`,
     ),
+    is_platform_default: boolean("is_platform_default")
+      .notNull()
+      .default(false),
     budget_monthly_cents: integer("budget_monthly_cents"),
     spent_monthly_cents: integer("spent_monthly_cents").default(0),
     budget_paused: boolean("budget_paused").notNull().default(false),
@@ -108,6 +111,9 @@ export const agents = pgTable(
     uniqueIndex("uq_agents_tenant_name_active")
       .on(table.tenant_id, sql`lower(trim(${table.name}))`)
       .where(sql`${table.status} <> 'archived'`),
+    uniqueIndex("uq_agents_platform_default_per_tenant")
+      .on(table.tenant_id)
+      .where(sql`${table.is_platform_default} IS TRUE`),
     index("idx_agents_tenant_id").on(table.tenant_id),
     index("idx_agents_type").on(table.type),
     index("idx_agents_status").on(table.status),
