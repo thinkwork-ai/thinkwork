@@ -582,51 +582,22 @@ resource "aws_sqs_queue" "wiki_compile_dlq" {
   }
 }
 
-# chat-agent-invoke DLQ + retry-0 (plan 2026-05-22-006 U3). After the
+# chat-agent-invoke retry-0 (plan 2026-05-22-006 U3). After the
 # direct-callback finalize refactor, chat-agent-invoke is Event-mode-
 # dispatched by the GraphQL resolver and itself dispatches AgentCore
 # Event-mode. There is no synchronous wait anymore — the Lambda returns
-# in ~5s. With retries pinned to 0, a setup failure (agent lookup,
-# runtime config resolve, throttling) is surfaced exactly once via the
-# existing inline error-message-insert path; the DLQ catches the
-# original event so an operator can replay if needed.
-
-resource "aws_sqs_queue" "chat_agent_invoke_dlq" {
-  count                     = local.deploy_lambda_handlers ? 1 : 0
-  name                      = "thinkwork-${var.stage}-chat-agent-invoke-dlq"
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = {
-    Name = "thinkwork-${var.stage}-chat-agent-invoke-dlq"
-  }
-}
-
-resource "aws_iam_role_policy" "chat_agent_invoke_dlq_send" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "thinkwork-${var.stage}-chat-agent-invoke-dlq-send"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage"]
-      Resource = aws_sqs_queue.chat_agent_invoke_dlq[0].arn
-    }]
-  })
-}
-
+# in ~5s. Retries pinned to 0 so the 2-default-retry storm that produced
+# 5-min stall cascades cannot recur. Setup failures (agent lookup,
+# runtime config resolve, throttling) surface exactly once via the
+# inline error-message-insert path. No DLQ destination: the shared
+# Lambda execution role's inline policy budget is already at the
+# 10240-byte AWS hard cap, and operator replay of a setup failure is
+# rarely useful (the user has already retried by re-sending the message).
 resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["chat-agent-invoke"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.chat_agent_invoke_dlq[0].arn
-    }
-  }
 }
 
 resource "aws_iam_role_policy" "wiki_compile_dlq_send" {
