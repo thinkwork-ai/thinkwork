@@ -704,7 +704,7 @@ module "computer_site" {
 #     https://*.tile.openstreetmap.org https://api.mapbox.com;
 #   font-src 'self' data:; connect-src 'none';
 #   frame-src https://www.openstreetmap.org; object-src 'none';
-#   base-uri 'self'; frame-ancestors <var.computer_sandbox_allowed_parent_origins>;
+#   base-uri 'self'; frame-ancestors <web parents + desktop custom protocols>;
 #
 # Provisioning is gated on var.computer_sandbox_domain — leave empty in
 # stages that haven't allocated the subdomain yet.
@@ -713,7 +713,20 @@ module "computer_site" {
 locals {
   computer_sandbox_enabled = var.computer_sandbox_domain != ""
 
-  computer_sandbox_frame_ancestors = local.computer_sandbox_enabled && var.computer_sandbox_allowed_parent_origins != "" ? join(" ", split(",", replace(var.computer_sandbox_allowed_parent_origins, " ", ""))) : "'none'"
+  computer_sandbox_desktop_parent_origins = [
+    "thinkwork://app",
+    "thinkwork-dev://app",
+    "thinkwork-canary://app",
+  ]
+  computer_sandbox_allowed_parent_origin_list = distinct(concat(
+    [
+      for origin in split(",", replace(var.computer_sandbox_allowed_parent_origins, " ", "")) :
+      origin if origin != ""
+    ],
+    local.computer_sandbox_desktop_parent_origins
+  ))
+  computer_sandbox_allowed_parent_origins_effective = join(",", local.computer_sandbox_allowed_parent_origin_list)
+  computer_sandbox_frame_ancestors                  = local.computer_sandbox_enabled && length(local.computer_sandbox_allowed_parent_origin_list) > 0 ? join(" ", local.computer_sandbox_allowed_parent_origin_list) : "'none'"
 
   computer_sandbox_map_img_src   = "https://*.tile.openstreetmap.org https://api.mapbox.com"
   computer_sandbox_map_frame_src = "https://www.openstreetmap.org"

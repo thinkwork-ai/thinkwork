@@ -220,8 +220,8 @@ output "computer_sandbox_url" {
 }
 
 output "computer_sandbox_allowed_parent_origins" {
-  description = "Comma-separated list of trusted parent origins for the iframe-shell. Mirrors the CSP frame-ancestors directive on the sandbox distribution and is wired into the iframe-shell's __ALLOWED_PARENT_ORIGINS__ Vite define at build time."
-  value       = var.computer_sandbox_allowed_parent_origins
+  description = "Comma-separated list of trusted parent origins for the iframe-shell, including desktop custom-protocol origins. Mirrors the CSP frame-ancestors directive on the sandbox distribution and is wired into the iframe-shell's __ALLOWED_PARENT_ORIGINS__ Vite define at build time."
+  value       = local.computer_sandbox_allowed_parent_origins_effective
 }
 
 # Docs static site

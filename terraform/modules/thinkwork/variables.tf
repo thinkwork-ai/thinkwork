@@ -396,7 +396,7 @@ variable "computer_sandbox_certificate_arn" {
 }
 
 variable "computer_sandbox_allowed_parent_origins" {
-  description = "Comma-separated list of trusted parent origins that may frame the sandbox iframe (e.g. 'https://thinkwork.ai,https://dev.thinkwork.ai'). Wired into the sandbox CSP frame-ancestors directive AND mirrored at iframe-shell build time as __ALLOWED_PARENT_ORIGINS__. The two trust sets MUST stay in sync. Leave empty to allow no parents (effectively disabling the sandbox)."
+  description = "Comma-separated list of trusted web parent origins that may frame the sandbox iframe (e.g. 'https://thinkwork.ai,https://dev.thinkwork.ai'). Desktop custom-protocol origins are appended automatically. Wired into the sandbox CSP frame-ancestors directive AND mirrored at iframe-shell build time as __ALLOWED_PARENT_ORIGINS__. The two trust sets MUST stay in sync. Leave empty to allow only desktop custom-protocol parents."
   type        = string
   default     = ""
 }
