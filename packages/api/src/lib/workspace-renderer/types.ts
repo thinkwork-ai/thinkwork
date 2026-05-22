@@ -1,8 +1,12 @@
+import type { EffectiveWorkspacePolicy } from "./effective-policy-composer.js";
+
 export interface WorkspaceRenderTupleInput {
   tenantId: string;
   agentId: string;
   spaceId: string;
   userId?: string | null;
+  agentBlockedTools?: unknown;
+  agentAllowedTools?: unknown;
 }
 
 export interface ResolvedWorkspaceRenderTuple {
@@ -16,6 +20,8 @@ export interface ResolvedWorkspaceRenderTuple {
   spaceName: string;
   spaceKind: string;
   spacePrompt: string | null;
+  spaceToolPolicy: unknown;
+  spaceMcpPolicy: unknown;
   userId: string | null;
   userSlug: string | null;
   userName: string | null;
@@ -67,6 +73,7 @@ export interface RenderedWorkspaceTuple {
     name: string;
     isDefault: boolean;
   };
+  effectivePolicy: EffectiveWorkspacePolicy;
   user: {
     id: string | null;
     slug: string | null;

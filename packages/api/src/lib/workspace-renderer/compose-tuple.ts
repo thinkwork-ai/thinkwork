@@ -11,6 +11,7 @@ import {
   spaceSourcePrefix,
   userWorkspacePrefix,
 } from "./prefixes.js";
+import { composeWorkspacePolicy } from "./effective-policy-composer.js";
 import { DrizzleWorkspaceTupleRepository } from "./repository.js";
 import { S3WorkspaceRendererObjectStore } from "./s3-store.js";
 import type {
@@ -180,6 +181,12 @@ export async function renderWorkspaceTuple(
   const sourcePrefixes = [agentPrefix, spacePrefix, userPrefix].filter(
     (prefix): prefix is string => Boolean(prefix),
   );
+  const effectivePolicy = composeWorkspacePolicy({
+    agentBlockedTools: input.agentBlockedTools,
+    agentAllowedTools: input.agentAllowedTools,
+    spaceToolPolicy: tuple.spaceToolPolicy,
+    spaceMcpPolicy: tuple.spaceMcpPolicy,
+  });
   const marker = await objectStore.getText({ bucket, key: markerKey });
   if (
     markerIsFresh(marker, latestMtime([agentSource, spaceSource, userSource]))
@@ -195,6 +202,7 @@ export async function renderWorkspaceTuple(
         name: tuple.spaceName,
         isDefault: isDefaultSpace(tuple),
       },
+      effectivePolicy,
       user: {
         id: tuple.userId,
         slug: tuple.userSlug,
@@ -279,6 +287,7 @@ export async function renderWorkspaceTuple(
       name: tuple.spaceName,
       isDefault: isDefaultSpace(tuple),
     },
+    effectivePolicy,
     user: {
       id: tuple.userId,
       slug: tuple.userSlug,

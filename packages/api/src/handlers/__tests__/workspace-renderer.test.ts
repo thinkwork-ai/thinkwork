@@ -18,6 +18,8 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceName: "Default",
   spaceKind: "custom",
   spacePrompt: null,
+  spaceToolPolicy: { blockedTools: ["send_email"] },
+  spaceMcpPolicy: { blockedServers: ["prod-db"] },
   userId: null,
   userSlug: null,
   userName: null,
@@ -72,12 +74,17 @@ describe("workspace-renderer handler", () => {
         tenantId: "tenant-1",
         agentId: "agent-1",
         spaceId: "space-1",
+        agentBlockedTools: ["browser_automation"],
       }),
     ).resolves.toMatchObject({
       ok: true,
       statusCode: 200,
       renderedPrefix: "tenants/acme/rendered/agent/default/anon/",
       cacheStatus: "miss",
+      effectivePolicy: {
+        blockedTools: ["browser_automation", "send_email"],
+        mcpBlockedServers: ["prod-db"],
+      },
     });
   });
 
