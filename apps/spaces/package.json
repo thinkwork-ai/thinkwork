@@ -28,6 +28,7 @@
     "@tanstack/router-plugin": "^1.154.14",
     "@tabler/icons-react": "^3.40.0",
     "@thinkwork/computer-stdlib": "workspace:*",
+    "@thinkwork/desktop-ipc": "workspace:*",
     "@thinkwork/graph": "workspace:*",
     "@thinkwork/ui": "workspace:*",
     "@urql/core": "^6.0.0",

@@ -23,15 +23,38 @@ describe("desktop IPC schemas", () => {
     ).toBeUndefined();
     expect(
       ChannelSchemas.getSessionTokens.response.parse({
-        idToken: "id",
-        accessToken: "access",
-        expiresAt: 1_900_000_000,
+        items: {
+          "CognitoIdentityServiceProvider.client.LastAuthUser": "user-id",
+        },
+        version: 1,
       }),
     ).toEqual({
-      idToken: "id",
-      accessToken: "access",
-      expiresAt: 1_900_000_000,
+      items: {
+        "CognitoIdentityServiceProvider.client.LastAuthUser": "user-id",
+      },
+      version: 1,
     });
+    expect(
+      ChannelSchemas.setTokenStorageItem.request.parse({
+        key: "token-key",
+        value: "token-value",
+      }),
+    ).toEqual({ key: "token-key", value: "token-value" });
+    expect(
+      ChannelSchemas.setTokenStorageItem.response.parse(undefined),
+    ).toBeUndefined();
+    expect(
+      ChannelSchemas.removeTokenStorageItem.request.parse({ key: "token-key" }),
+    ).toEqual({ key: "token-key" });
+    expect(
+      ChannelSchemas.removeTokenStorageItem.response.parse(undefined),
+    ).toBeUndefined();
+    expect(
+      ChannelSchemas.clearTokenStorage.request.parse(undefined),
+    ).toBeUndefined();
+    expect(
+      ChannelSchemas.clearTokenStorage.response.parse(undefined),
+    ).toBeUndefined();
 
     expect(ChannelSchemas.startOAuth.request.parse(undefined)).toBeUndefined();
     expect(ChannelSchemas.startOAuth.response.parse(undefined)).toBeUndefined();

@@ -91,6 +91,10 @@ export class SafeStorageCognitoStorage implements ICognitoStorage {
     return {};
   }
 
+  snapshot(): Record<string, string> {
+    return Object.fromEntries(this.cache);
+  }
+
   async flushNow(): Promise<void> {
     this.cancelFlush();
 

@@ -1,4 +1,9 @@
 export const GET_SESSION_TOKENS_CHANNEL = "desktop:get-session-tokens";
+export const SET_TOKEN_STORAGE_ITEM_CHANNEL = "desktop:set-token-storage-item";
+export const REMOVE_TOKEN_STORAGE_ITEM_CHANNEL =
+  "desktop:remove-token-storage-item";
+export const CLEAR_TOKEN_STORAGE_CHANNEL = "desktop:clear-token-storage";
+export const TOKENS_CHANGED_EVENT_CHANNEL = "desktop:tokens-changed";
 export const START_OAUTH_CHANNEL = "desktop:start-oauth";
 export const SIGN_OUT_CHANNEL = "desktop:sign-out";
 export const CONSUME_PENDING_OAUTH_CHANNEL = "desktop:consume-pending-oauth";
@@ -12,6 +17,10 @@ export const REPORT_INSTALL_OUTCOME_CHANNEL = "desktop:report-install-outcome";
 
 export const IPC_CHANNELS = {
   GET_SESSION_TOKENS: GET_SESSION_TOKENS_CHANNEL,
+  SET_TOKEN_STORAGE_ITEM: SET_TOKEN_STORAGE_ITEM_CHANNEL,
+  REMOVE_TOKEN_STORAGE_ITEM: REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
+  CLEAR_TOKEN_STORAGE: CLEAR_TOKEN_STORAGE_CHANNEL,
+  TOKENS_CHANGED_EVENT: TOKENS_CHANGED_EVENT_CHANNEL,
   START_OAUTH: START_OAUTH_CHANNEL,
   SIGN_OUT: SIGN_OUT_CHANNEL,
   CONSUME_PENDING_OAUTH: CONSUME_PENDING_OAUTH_CHANNEL,
