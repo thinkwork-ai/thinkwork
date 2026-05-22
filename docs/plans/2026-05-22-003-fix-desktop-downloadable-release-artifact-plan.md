@@ -60,6 +60,9 @@ Tests:
 - YAML parse for `.github/workflows/release-desktop.yml`.
 - Trigger a fresh `desktop-v*` canary tag and verify the release workflow reaches
   package/sign/notarize/publish instead of failing at Terraform output lookup.
+- Use the deployed `dev` Terraform workspace for the first canary release. The
+  backend does not currently have a `prod` workspace, so `prod` is not a valid
+  target until production Terraform state exists.
 
 ### U2. Expose the Download Path on the Website Docs
 
