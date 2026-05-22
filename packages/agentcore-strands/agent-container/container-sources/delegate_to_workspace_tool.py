@@ -379,6 +379,7 @@ def _build_sub_agent_tools(
                     tool_decorator,
                     hs_endpoint=ctx.get("hs_endpoint", ""),
                     hs_bank=ctx.get("hs_bank", ""),
+                    hs_read_banks=ctx.get("hs_read_banks") or [],
                     hs_tags=ctx.get("hs_tags") or [],
                 )
             )

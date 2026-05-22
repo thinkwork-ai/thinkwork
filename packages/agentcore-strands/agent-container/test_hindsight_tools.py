@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 from types import SimpleNamespace
-from unittest.mock import patch
 
 
 def _tool(fn):
@@ -144,6 +143,34 @@ def test_recall_empty_results_closes_client_and_uses_snapshotted_bank():
             "max_tokens": 1500,
         }
     ]
+
+
+def test_recall_fans_out_across_snapshotted_read_banks():
+    from hindsight_tools import make_hindsight_tools
+
+    clients: list[_FakeClient] = []
+
+    def client_factory():
+        client = _FakeClient(recall_results=[{"text": "shared fact"}])
+        clients.append(client)
+        return client
+
+    _retain, recall, _reflect = make_hindsight_tools(
+        _tool,
+        hs_endpoint="https://hindsight.example.test",
+        hs_bank="space_space-1",
+        hs_read_banks=["user_user-1", "space_space-1"],
+        client_factory=client_factory,
+    )
+
+    result = asyncio.run(recall("where are credentials?"))
+
+    assert "shared fact" in result
+    assert [call["bank_id"] for client in clients for call in client.recall_calls] == [
+        "user_user-1",
+        "space_space-1",
+    ]
+    assert all(client.closed for client in clients)
 
 
 def test_reflect_retries_transient_failure_and_closes_each_client(monkeypatch):

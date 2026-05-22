@@ -51,6 +51,9 @@ ENV_KEYS = [
     "SLACK_FILE_REFS",
     "SLACK_PLACEHOLDER_TS",
     "SLACK_MODAL_VIEW_ID",
+    "ACTIVE_SPACE_ID",
+    "ACTIVE_SPACE_SLUG",
+    "ACTIVE_SPACE_IS_DEFAULT",
 ]
 
 
@@ -133,6 +136,34 @@ class ApplyInvocationEnvTests(unittest.TestCase):
         self.assertIsNone(os.environ.get("CURRENT_THREAD_ID"))
         # CURRENT_USER_ID still set — thread ID is independent of invoker
         self.assertEqual(os.environ.get("CURRENT_USER_ID"), "user-a")
+
+    def test_active_space_context_is_snapshotted(self):
+        payload = {
+            "workspace_tenant_id": "tenant-a",
+            "assistant_id": "agent-a",
+            "user_id": "user-a",
+            "thread_id": "thread-a",
+            "active_space_id": "space-finance",
+            "active_space_slug": "finance",
+        }
+        keys = invocation_env.apply_invocation_env(payload)
+
+        self.assertEqual(os.environ.get("ACTIVE_SPACE_ID"), "space-finance")
+        self.assertEqual(os.environ.get("ACTIVE_SPACE_SLUG"), "finance")
+        self.assertEqual(os.environ.get("ACTIVE_SPACE_IS_DEFAULT"), "false")
+        self.assertIn("ACTIVE_SPACE_ID", keys)
+
+    def test_default_space_slug_marks_active_space_as_default(self):
+        invocation_env.apply_invocation_env(
+            {
+                "workspace_tenant_id": "tenant-a",
+                "assistant_id": "agent-a",
+                "active_space_id": "space-default",
+                "active_space_slug": "default",
+            }
+        )
+
+        self.assertEqual(os.environ.get("ACTIVE_SPACE_IS_DEFAULT"), "true")
 
     def test_slack_envelope_sets_all_passthrough_keys(self):
         payload = {

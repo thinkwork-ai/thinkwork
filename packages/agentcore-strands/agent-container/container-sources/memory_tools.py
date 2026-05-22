@@ -22,6 +22,31 @@ from strands import tool
 
 logger = logging.getLogger(__name__)
 
+_TURN_MEMORY_CONTEXT: dict[str, str] | None = None
+
+
+def set_turn_memory_context(
+    *,
+    user_id: str = "",
+    active_space_id: str = "",
+    active_space_slug: str = "",
+    active_space_is_default: bool = False,
+) -> None:
+    """Snapshot memory routing context at tool-registration time."""
+    global _TURN_MEMORY_CONTEXT
+    _TURN_MEMORY_CONTEXT = {
+        "user_id": user_id or "",
+        "active_space_id": active_space_id or "",
+        "active_space_slug": active_space_slug or "",
+        "active_space_is_default": "true" if active_space_is_default else "false",
+    }
+
+
+def _snapshot_value(name: str) -> str:
+    if _TURN_MEMORY_CONTEXT is not None:
+        return _TURN_MEMORY_CONTEXT.get(name, "")
+    return ""
+
 
 def _get_memory_config():
     """Get memory configuration from environment."""
@@ -44,11 +69,59 @@ def _get_user_actor_id() -> str:
     doing so would let delegated sub-agents write to agent-specific memory
     while the rest of the runtime reads user-scoped memory.
     """
+    if _TURN_MEMORY_CONTEXT is not None:
+        return _snapshot_value("user_id")
     return (
         os.environ.get("USER_ID", "")
         or os.environ.get("CURRENT_USER_ID", "")
         or os.environ.get("_MCP_USER_ID", "")
     )
+
+
+def _active_space_context() -> tuple[str, str, bool]:
+    if _TURN_MEMORY_CONTEXT is not None:
+        space_id = _snapshot_value("active_space_id")
+        space_slug = _snapshot_value("active_space_slug")
+        default_value = _snapshot_value("active_space_is_default")
+    else:
+        space_id = os.environ.get("ACTIVE_SPACE_ID", "")
+        space_slug = os.environ.get("ACTIVE_SPACE_SLUG", "")
+        default_value = os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "")
+    is_default = default_value.lower() in ("1", "true", "yes") or space_slug == "default"
+    return space_id, space_slug, is_default
+
+
+def _hindsight_recall_bank_ids(user_id: str) -> list[str]:
+    space_id, _space_slug, is_default_space = _active_space_context()
+    bank_ids: list[str] = []
+    if user_id:
+        bank_ids.append(f"user_{user_id}")
+    if space_id and not is_default_space:
+        bank_ids.append(f"space_{space_id}")
+    return bank_ids
+
+
+def _resolve_hindsight_write_bank_id(scope_arg: str = "") -> tuple[str | None, str | None]:
+    user_id = _get_user_actor_id()
+    space_id, _space_slug, is_default_space = _active_space_context()
+    scope = (scope_arg or "space").strip().lower()
+
+    if scope == "user":
+        if user_id:
+            return f"user_{user_id}", None
+        return None, "scope=user requested but no invoking user is present"
+
+    if is_default_space:
+        if user_id:
+            return f"user_{user_id}", None
+        return None, "default Space memory requires an invoking user"
+
+    if space_id:
+        return f"space_{space_id}", None
+
+    if user_id:
+        return f"user_{user_id}", None
+    return None, "no user or active Space memory bank is available"
 
 
 def _get_tenant_id() -> str:
@@ -269,7 +342,7 @@ def _search_wiki_for_recall(
 
 
 @tool
-def remember(fact: str, category: str = "general") -> str:
+def remember(fact: str, category: str = "general", scope: str = "space") -> str:
     """Store an important fact about the user or conversation to long-term memory.
 
     Use this when the user shares preferences, important context, or asks you to
@@ -278,54 +351,67 @@ def remember(fact: str, category: str = "general") -> str:
     Args:
         fact: The fact or preference to remember. Be specific and concise.
         category: Optional category hint (e.g., "preference", "context", "instruction").
+        scope: "space" (default) writes to the active Space bank when the
+            Space is non-default; "user" writes to the invoking user's bank.
 
     Returns:
         Confirmation that the fact was stored.
     """
     client, memory_id, actor_id = _get_memory_config()
-    if not client:
+    hs_bank, hs_warning = _resolve_hindsight_write_bank_id(scope)
+    if hs_warning:
+        logger.warning("memory_tools.remember no-op: %s", hs_warning)
+        return f"Memory not stored: {hs_warning}."
+    if not client and not hs_bank:
         return "Memory system not configured — unable to store."
 
     try:
-        # 1. Write directly to the semantic namespace for immediate searchability.
-        request_id = uuid.uuid4().hex[:16]
         now = datetime.now(UTC)
-        response = client.batch_create_memory_records(
-            memoryId=memory_id,
-            records=[
-                {
-                    "requestIdentifier": request_id,
-                    "content": {"text": f"[{category}] {fact}"},
-                    "namespaces": [f"user_{actor_id}"],
-                    "timestamp": now,
-                }
-            ],
-        )
-        # Check for failures
-        failed = response.get("failedRecords", [])
-        if failed:
-            logger.warning("memory_tools.remember batch_create failed: %s", failed)
-
-        # 2. Also fire a CreateEvent so conversation-based strategies
-        #    (summary, preference, episodic) can process it over time.
-        session_id = os.environ.get("CURRENT_THREAD_ID", f"memory_user_{actor_id}")
-        client.create_event(
-            memoryId=memory_id,
-            actorId=actor_id,
-            sessionId=session_id,
-            eventTimestamp=now,
-            payload=[
-                {
-                    "conversational": {
-                        "content": {"text": f"The user asked me to remember: {fact}"},
-                        "role": "USER",
+        stored_anywhere = False
+        if client and actor_id and hs_bank == f"user_{actor_id}":
+            # 1. Write directly to the semantic namespace for immediate searchability.
+            request_id = uuid.uuid4().hex[:16]
+            response = client.batch_create_memory_records(
+                memoryId=memory_id,
+                records=[
+                    {
+                        "requestIdentifier": request_id,
+                        "content": {"text": f"[{category}] {fact}"},
+                        "namespaces": [f"user_{actor_id}"],
+                        "timestamp": now,
                     }
-                }
-            ],
-        )
+                ],
+            )
+            # Check for failures
+            failed = response.get("failedRecords", [])
+            if failed:
+                logger.warning("memory_tools.remember batch_create failed: %s", failed)
+
+            # 2. Also fire a CreateEvent so conversation-based strategies
+            #    (summary, preference, episodic) can process it over time.
+            session_id = os.environ.get("CURRENT_THREAD_ID", f"memory_user_{actor_id}")
+            client.create_event(
+                memoryId=memory_id,
+                actorId=actor_id,
+                sessionId=session_id,
+                eventTimestamp=now,
+                payload=[
+                    {
+                        "conversational": {
+                            "content": {"text": f"The user asked me to remember: {fact}"},
+                            "role": "USER",
+                        }
+                    }
+                ],
+            )
+            stored_anywhere = True
 
         logger.info(
-            "memory_tools.remember actor=%s category=%s fact=%s", actor_id, category, fact[:80]
+            "memory_tools.remember actor=%s bank=%s category=%s fact=%s",
+            actor_id,
+            hs_bank,
+            category,
+            fact[:80],
         )
 
         # Parallel: also retain in Hindsight (PRD-41B spike)
@@ -333,15 +419,17 @@ def remember(fact: str, category: str = "general") -> str:
 
         if hindsight_client.is_available():
             try:
-                hs_bank = f"user_{actor_id}"
                 hindsight_client.retain(
                     bank_id=hs_bank,
                     content=f"[{category}] {fact}",
                     context="explicit_memory",
                 )
+                stored_anywhere = True
             except Exception as he:
                 logger.warning("Hindsight retain failed (non-fatal): %s", he)
 
+        if not stored_anywhere:
+            return "Memory system not configured — unable to store."
         return f"Remembered: {fact}"
     except Exception as e:
         logger.warning("memory_tools.remember failed: %s", e)
@@ -368,7 +456,8 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
         Matching memories as formatted text, or message if nothing found.
     """
     actor_id = _get_user_actor_id()
-    if not actor_id:
+    bank_ids = _hindsight_recall_bank_ids(actor_id)
+    if not actor_id and not bank_ids:
         return "Memory system not configured — unable to search."
     managed_results: list[dict[str, Any]] = []
     graph_results: list[dict[str, Any]] = []
@@ -378,7 +467,7 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
     wiki_error: str | None = None
 
     # L2: AgentCore Memory — semantic search across strategy namespaces
-    if scope in ("memory", "all"):
+    if actor_id and scope in ("memory", "all"):
         if strategy and strategy != "managed":
             logger.debug("Ignoring unsupported managed-memory strategy filter: %s", strategy)
         managed_results.extend(_search_managed_memory(query=query, actor_id=actor_id, top_k=10))
@@ -419,17 +508,19 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
 
     if hindsight_client.is_available() and scope in ("all", "graph", "memory"):
         try:
-            hs_bank = f"user_{actor_id}"
-            hs_results = hindsight_client.recall(bank_id=hs_bank, query=query, max_tokens=2000)
-            if hs_results.get("results"):
-                for fact in hs_results["results"]:
-                    text = fact.get("text", fact.get("content", ""))
-                    if text:
-                        hindsight_results.append({"text": text, "score": 0.5})
+            for hs_bank in bank_ids:
+                hs_results = hindsight_client.recall(bank_id=hs_bank, query=query, max_tokens=2000)
+                if hs_results.get("results"):
+                    for fact in hs_results["results"]:
+                        text = fact.get("text", fact.get("content", ""))
+                        if text:
+                            hindsight_results.append(
+                                {"text": text, "score": 0.5, "strategy": hs_bank}
+                            )
         except Exception as he:
             logger.warning("Hindsight recall failed (non-fatal): %s", he)
 
-    if scope in ("memory", "all"):
+    if actor_id and scope in ("memory", "all"):
         wiki_results, wiki_error = _search_wiki_for_recall(actor_id, query, limit=5)
 
     sections = []
