@@ -7,19 +7,10 @@ const crmRecipe =
   defaults["skills/artifact-builder/references/crm-dashboard.md"];
 
 describe("Artifact Builder defaults", () => {
-  it("routes CRM dashboard prompts to the CRM dashboard recipe", () => {
-    expect(skill).toContain(
-      "skills/artifact-builder/references/crm-dashboard.md",
-    );
+  it("teaches the agent the artifact contract without legacy runbook bridges", () => {
     expect(skill).toContain("Do not use `delegate` or `delegate_to_workspace`");
-    expect(skill).toContain("CRM pipeline");
     expect(skill).toContain("save_app");
     expect(skill).toContain("/artifacts/{appId}");
-    expect(skill).toContain(
-      "compatibility shim for the published ThinkWork runbooks",
-    );
-    expect(skill).toContain("runbook's current phase guidance");
-    expect(skill).toContain("Runbook Bridge");
     expect(skill).toContain("host-provided Artifact chrome");
     expect(skill).toContain("sandboxed iframe runtime");
     expect(skill).toContain("Your TSX should render only the app body");
@@ -28,13 +19,16 @@ describe("Artifact Builder defaults", () => {
     expect(skill).toContain("KPIs must use `KpiStrip`");
     expect(skill).toContain("Do not hand-compose KPI metrics");
     expect(skill).toContain("do not rely on generated `grid-cols-*`");
+    // Runbook-bridge framing was removed in PR #1548; this skill no longer
+    // doubles as a compatibility shim for the (now-deprecated) runbook concept.
+    expect(skill).not.toContain("compatibility shim");
+    expect(skill).not.toContain("Runbook Bridge");
+    expect(skill).not.toContain("runbook phase guidance");
   });
 
-  it("requires preview-first shadcn registry guidance before TSX generation", () => {
+  it("requires on-demand shadcn lookups instead of pre-enumerating the registry", () => {
     expect(skill).toContain("fast unsaved app preview first");
-    expect(skill).toContain("consult the shadcn registry source");
-    expect(skill).toContain("list_components");
-    expect(skill).toContain("search_registry");
+    expect(skill).toContain("Look up shadcn components on demand");
     expect(skill).toContain("get_component_source");
     expect(skill).toContain("get_block");
     expect(skill).toContain(
@@ -50,6 +44,24 @@ describe("Artifact Builder defaults", () => {
     expect(skill).toContain("shadcnMcpToolCalls");
     expect(skill).toContain('["local_registry_fallback"]');
     expect(skill).toContain("same generated-app policy");
+    // The agent must NOT be told to consult/enumerate the registry up front.
+    // That phrasing caused the 31-parallel-call deadlock on thread fc4328eb.
+    expect(skill).not.toContain("consult the shadcn registry source");
+    expect(skill).not.toContain(
+      "Before writing TSX, consult the shadcn registry",
+    );
+  });
+
+  it("delegates domain layout to the domain skill, not the parent skill", () => {
+    expect(skill).toContain("Composing With Domain Skills");
+    expect(skill).toContain("crm-dashboard");
+    expect(skill).toContain("research-dashboard");
+    expect(skill).toContain("map-artifact");
+    // CRM-specific reference loading was moved out of the parent contract; the
+    // domain skill owns that routing decision now.
+    expect(skill).not.toContain(
+      "load and follow `skills/artifact-builder/references/crm-dashboard.md`",
+    );
   });
 
   it("allows bounded lucide-react icon imports for generated apps", () => {
@@ -62,9 +74,6 @@ describe("Artifact Builder defaults", () => {
   it("defines the CRM dashboard applet contract", () => {
     expect(crmRecipe).toContain("interface CrmDashboardData");
     expect(crmRecipe).toContain("sourceStatuses");
-    expect(crmRecipe).toContain(
-      "published `crm-dashboard` runbook owns orchestration",
-    );
     expect(crmRecipe).toContain("stageExposure");
     expect(crmRecipe).toContain("staleActivity");
     expect(crmRecipe).toContain("topRisks");

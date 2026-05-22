@@ -126,7 +126,7 @@ describe("ensureArtifactBuilderDefaults", () => {
       Key: "tenants/tenant-slug/agents/computer-source-agent/workspace/skills/artifact-builder/SKILL.md",
       ContentType: "text/markdown",
     });
-    expect(String(puts[0]?.Body)).toContain("references/crm-dashboard.md");
+    expect(String(puts[0]?.Body)).toContain("Look up shadcn components on demand");
     expect(puts[1]).toMatchObject({
       Key: "tenants/tenant-slug/agents/computer-source-agent/workspace/skills/artifact-builder/references/crm-dashboard.md",
     });
@@ -204,7 +204,7 @@ describe("ensureArtifactBuilderDefaults", () => {
       .filter((input) => "Body" in input);
     expect(puts).toHaveLength(1);
     expect(String(puts[0]?.Key)).toContain("SKILL.md");
-    expect(String(puts[0]?.Body)).toContain("references/crm-dashboard.md");
+    expect(String(puts[0]?.Body)).toContain("Look up shadcn components on demand");
   });
 
   it("is a no-op when both Artifact Builder files already exist", async () => {
