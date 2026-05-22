@@ -458,6 +458,11 @@ export default defineConfig({
                   ],
                 },
                 {
+                  label: "Desktop",
+                  collapsed: true,
+                  items: [{ label: "Overview", slug: "applications/desktop" }],
+                },
+                {
                   label: "CLI",
                   collapsed: true,
                   items: [
