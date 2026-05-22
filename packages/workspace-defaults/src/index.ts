@@ -1,7 +1,7 @@
 /**
  * Default workspace file content for Thinkwork agents.
  *
- * This package is the canonical source of the 16 workspace files that every
+ * This package is the canonical source of the 17 workspace files that every
  * agent template inherits from. The live overlay composer (Unit 4) resolves
  * the `_catalog/defaults/workspace/*` S3 layer from this content at tenant
  * creation / re-seed time.
@@ -9,7 +9,7 @@
  * Canonical file set (R1, extended by plan §008 U3 with `AGENTS.md` +
  * `CONTEXT.md` so the runtime's already-existing loaders for those two
  * filenames find seeded content on day one):
- *   SOUL.md, IDENTITY.md, USER.md, AGENTS.md, CONTEXT.md, GUARDRAILS.md,
+ *   SOUL.md, IDENTITY.md, USER.md, SPACE.md, AGENTS.md, CONTEXT.md, GUARDRAILS.md,
  *   MEMORY_GUIDE.md, CAPABILITIES.md, PLATFORM.md, ROUTER.md,
  *   memory/lessons.md, memory/preferences.md, memory/contacts.md,
  *   skills/.gitkeep, skills/artifact-builder/SKILL.md,
@@ -196,6 +196,18 @@ const USER_MD = `# USER.md - About Your Human
 ### Slack
 
 When I talk with you from Slack, treat Slack as a delivery surface for the selected shared Computer, not a separate identity. Use only the Slack thread, message, file references, and linked-user context the platform provides for the turn. Keep responses clear enough for a shared channel, and remember that the platform will add shared Computer and requester attribution when it posts back.
+`;
+
+/**
+ * Mirror of `packages/workspace-defaults/files/SPACE.md`.
+ */
+const SPACE_MD = `# SPACE.md - Active Shared Context
+
+_This file is replaced at render time with the active Space's context._
+
+Use this file as the first stop for assumptions that belong to the current shared Space: project goals, working agreements, connected data, and tool constraints. User-specific preferences stay in \`USER.md\`; agent identity and routing stay in \`AGENTS.md\`.
+
+When a turn is rendered, active Space files live under \`space/\`. The platform may also preserve a provenance copy under \`spaces/<space-slug>/\` while older runtime paths are phased out.
 `;
 
 /**
@@ -478,6 +490,9 @@ sub-agents, and assigns specialist skills. Edit this file when you add, rename,
 or reorganize sub-agents. The runtime, \`delegate_to_workspace\`, and the agent
 builder all read the routing table below.
 
+Keep this file short: map, naming, placement, and routing only. Detailed work
+instructions belong in \`CONTEXT.md\` files or the active \`space/\` folder.
+
 ## Who I am
 
 _(One sentence: who this agent is and what work it owns.)_
@@ -486,6 +501,7 @@ _(One sentence: who this agent is and what work it owns.)_
 
 \`\`\`
 .                    root identity, guardrails, platform rules, and routing
+space/               active shared Space context for this turn
 memory/              durable lessons, preferences, contacts
 skills/              optional local skills available to this agent
 <sub-agent>/         specialist folder with its own CONTEXT.md, optional
@@ -496,6 +512,12 @@ The folder is the agent: specialization comes from the files under the folder,
 not from a separate agent registry. A thin sub-agent can be just
 \`expenses/CONTEXT.md\`; it inherits root identity, guardrails, platform rules,
 and template defaults through the workspace overlay.
+
+<!-- RENDERED:ACTIVE_SPACE -->
+
+The \`space/\` folder is the active work area for the current shared Space. Treat
+it like the Layer-3 workspace from the blueprint: load only the files relevant
+to the task and follow its CONTEXT.md routing when present.
 
 \`memory/\` and \`skills/\` are reserved folder names at every depth. When a
 sub-agent writes memory, paths are relative to the agent root, for example
@@ -508,8 +530,8 @@ agents should not write orchestration files directly.
 
 ## Routing
 
-| Task                                       | Go to                | Read                              | Skills                       |
-| ------------------------------------------ | -------------------- | --------------------------------- | ---------------------------- |
+| Task | Go to | Read | Skills |
+| ---- | ----- | ---- | ------ |
 
 Add one row per sub-agent. For example, an \`expenses/\` sub-agent would point
 \`Go to\` at \`expenses/\` and usually read \`expenses/CONTEXT.md\`.
@@ -905,14 +927,14 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 17;
+export const DEFAULTS_VERSION = 18;
 
 // ---------------------------------------------------------------------------
 // Aggregator
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical 16-file set. Plan §008 U3 added `AGENTS.md` and `CONTEXT.md`
+ * Canonical 17-file set. Plan §008 U3 added `AGENTS.md` and `CONTEXT.md`
  * (the runtime already loaded both but defaults didn't ship them) — every
  * Fat-folder agent now seeds with the Layer-1 Map and a root scope file.
  * Ordering is not load-bearing but matches the plan's R1 requirement order
@@ -922,6 +944,7 @@ export const CANONICAL_FILE_NAMES = [
   "SOUL.md",
   "IDENTITY.md",
   "USER.md",
+  "SPACE.md",
   "AGENTS.md",
   "CONTEXT.md",
   "GUARDRAILS.md",
@@ -943,6 +966,7 @@ const CONTENT: Record<CanonicalFileName, string> = {
   "SOUL.md": SOUL_MD,
   "IDENTITY.md": IDENTITY_MD,
   "USER.md": USER_MD,
+  "SPACE.md": SPACE_MD,
   "AGENTS.md": AGENTS_MD,
   "CONTEXT.md": CONTEXT_MD,
   "GUARDRAILS.md": GUARDRAILS_MD,

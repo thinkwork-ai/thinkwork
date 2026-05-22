@@ -5,6 +5,9 @@ sub-agents, and assigns specialist skills. Edit this file when you add, rename,
 or reorganize sub-agents. The runtime, `delegate_to_workspace`, and the agent
 builder all read the routing table below.
 
+Keep this file short: map, naming, placement, and routing only. Detailed work
+instructions belong in `CONTEXT.md` files or the active `space/` folder.
+
 ## Who I am
 
 _(One sentence: who this agent is and what work it owns.)_
@@ -13,6 +16,7 @@ _(One sentence: who this agent is and what work it owns.)_
 
 ```
 .                    root identity, guardrails, platform rules, and routing
+space/               active shared Space context for this turn
 memory/              durable lessons, preferences, contacts
 skills/              optional local skills available to this agent
 <sub-agent>/         specialist folder with its own CONTEXT.md, optional
@@ -23,6 +27,12 @@ The folder is the agent: specialization comes from the files under the folder,
 not from a separate agent registry. A thin sub-agent can be just
 `expenses/CONTEXT.md`; it inherits root identity, guardrails, platform rules,
 and template defaults through the workspace overlay.
+
+<!-- RENDERED:ACTIVE_SPACE -->
+
+The `space/` folder is the active work area for the current shared Space. Treat
+it like the Layer-3 workspace from the blueprint: load only the files relevant
+to the task and follow its CONTEXT.md routing when present.
 
 `memory/` and `skills/` are reserved folder names at every depth. When a
 sub-agent writes memory, paths are relative to the agent root, for example
@@ -35,8 +45,8 @@ agents should not write orchestration files directly.
 
 ## Routing
 
-| Task                                       | Go to                | Read                              | Skills                       |
-| ------------------------------------------ | -------------------- | --------------------------------- | ---------------------------- |
+| Task | Go to | Read | Skills |
+| ---- | ----- | ---- | ------ |
 
 Add one row per sub-agent. For example, an `expenses/` sub-agent would point
 `Go to` at `expenses/` and usually read `expenses/CONTEXT.md`.

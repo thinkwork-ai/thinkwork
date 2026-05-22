@@ -153,6 +153,9 @@ build_handler "wakeup-processor" \
 build_handler "workspace-event-dispatcher" \
   "$REPO_ROOT/packages/api/src/handlers/workspace-event-dispatcher.ts"
 
+build_handler "workspace-renderer" \
+  "$REPO_ROOT/packages/api/src/handlers/workspace-renderer.ts"
+
 build_handler "job-trigger" \
   "$REPO_ROOT/packages/lambda/job-trigger.ts"
 
