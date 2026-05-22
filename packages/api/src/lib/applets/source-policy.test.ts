@@ -92,6 +92,33 @@ describe("generated app source policy", () => {
     ).toThrow(/Line uses className="fill-foreground"/);
   });
 
+  // Regression: the original naive `[^>]*?` regex span between tag name and
+  // className stopped at any literal `>` — including the `>` in `=>` inside a
+  // JSX expression attribute. That let `<Bar onClick={() => fn()} className=
+  // "fill-primary" />` sail through the gate. Fixed by using a `{}`-aware
+  // bracket walker to find the opening-tag end before scanning for className.
+  it("rejects fill-primary even when a JSX expression with > precedes className", () => {
+    expect(() =>
+      validateGeneratedAppSourcePolicy(`
+        import { ChartContainer } from "@thinkwork/ui";
+        import { Bar, BarChart } from "recharts";
+        export default function Applet() {
+          return (
+            <ChartContainer config={{}}>
+              <BarChart data={[]}>
+                <Bar
+                  dataKey="value"
+                  onClick={() => console.log(1 > 0)}
+                  className="fill-primary"
+                />
+              </BarChart>
+            </ChartContainer>
+          );
+        }
+      `),
+    ).toThrow(/Bar uses className="fill-primary"/);
+  });
+
   it("rejects sidebar-family fill classes on Recharts marks", () => {
     expect(() =>
       validateGeneratedAppSourcePolicy(`
