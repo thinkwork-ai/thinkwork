@@ -714,6 +714,7 @@ export type ComplianceEventPageInfo = {
 export enum ComplianceEventType {
   AgentCreated = 'AGENT_CREATED',
   AgentDeleted = 'AGENT_DELETED',
+  AgentMigrated = 'AGENT_MIGRATED',
   AgentSkillsChanged = 'AGENT_SKILLS_CHANGED',
   ApprovalRecorded = 'APPROVAL_RECORDED',
   AttachmentReceived = 'ATTACHMENT_RECEIVED',
