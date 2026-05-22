@@ -26,9 +26,11 @@ Secrets used by `.github/workflows/release-desktop.yml`:
 - `MAC_CSC_LINK`
 - `MAC_CSC_KEY_PASSWORD`
 
-The workflow also needs `DESKTOP_SHA256_MIRROR_URL` and
+The workflow optionally uses `DESKTOP_SHA256_MIRROR_URL` and
 `DESKTOP_SHA256_MIRROR_TOKEN` for the release checksum mirror. Rotate that token
-on the same cadence if it is managed by the same operator group.
+on the same cadence if it is managed by the same operator group. If those
+secrets are absent, the workflow still uploads the checksum manifest as a
+GitHub Actions artifact and skips the mirror upload.
 
 ## Prerequisites
 
@@ -39,6 +41,22 @@ on the same cadence if it is managed by the same operator group.
 - GitHub CLI authenticated with permission to set repository secrets.
 
 ## Steps
+
+### 0. Bootstrap a new Apple Developer account
+
+For direct-download Electron desktop releases, do not create an app listing from
+the App Store Connect **Apps** tab. The release workflow publishes DMG/zip
+artifacts through GitHub Releases, not the Mac App Store.
+
+Use these Apple surfaces instead:
+
+- App Store Connect → **Users and Access** → **Integrations** → **App Store
+  Connect API** for the notarization API key.
+- Apple Developer → **Certificates, Identifiers & Profiles** → **Certificates**
+  for the `Developer ID Application` signing certificate.
+
+The Apple account must be enrolled in the Apple Developer Program and the
+latest Apple Developer agreements must be accepted before notarization works.
 
 ### 1. Create a new App Store Connect API key
 
@@ -63,6 +81,18 @@ gh secret set APPLE_API_KEY_ID --body "<KEY_ID>"
 gh secret set APPLE_API_KEY_ISSUER --body "<ISSUER_ID>"
 gh secret set APPLE_TEAM_ID --body "<TEAM_ID>"
 gh secret set APPLE_API_KEY_P8_BASE64 --body "$(cat /tmp/apple-api-key.p8.base64)"
+```
+
+Or use the repo helper after the API key and certificate files exist:
+
+```bash
+APPLE_API_KEY_ID="<KEY_ID>" \
+APPLE_API_KEY_ISSUER="<ISSUER_ID>" \
+APPLE_TEAM_ID="<TEAM_ID>" \
+MAC_CSC_KEY_PASSWORD="<p12-password>" \
+bash scripts/setup-apple-desktop-secrets.sh \
+  --api-key /path/to/AuthKey_<KEY_ID>.p8 \
+  --cert /path/to/ThinkWork-Developer-ID-Application.p12
 ```
 
 ### 3. Rotate the signing certificate if needed

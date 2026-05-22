@@ -31,8 +31,6 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          DESKTOP_SHA256_MIRROR_TOKEN: ${{ secrets.DESKTOP_SHA256_MIRROR_TOKEN }}
-          DESKTOP_SHA256_MIRROR_URL: ${{ secrets.DESKTOP_SHA256_MIRROR_URL }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
@@ -45,8 +43,6 @@ jobs:
             APPLE_TEAM_ID \
             MAC_CSC_LINK \
             MAC_CSC_KEY_PASSWORD \
-            DESKTOP_SHA256_MIRROR_TOKEN \
-            DESKTOP_SHA256_MIRROR_URL \
             AWS_ACCESS_KEY_ID \
             AWS_SECRET_ACCESS_KEY
           do
@@ -102,10 +98,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/build-desktop.sh "${STAGE}" --publish always
 
-      - name: Publish desktop SHA-256 mirror
-        env:
-          DESKTOP_SHA256_MIRROR_TOKEN: ${{ secrets.DESKTOP_SHA256_MIRROR_TOKEN }}
-          DESKTOP_SHA256_MIRROR_URL: ${{ secrets.DESKTOP_SHA256_MIRROR_URL }}
+      - name: Build desktop SHA-256 manifest
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#desktop-v}"
@@ -121,6 +114,19 @@ jobs:
             echo "No desktop DMG artifacts found in apps/desktop/dist" >&2
             exit 1
           fi
+
+      - name: Publish desktop SHA-256 mirror
+        env:
+          DESKTOP_SHA256_MIRROR_TOKEN: ${{ secrets.DESKTOP_SHA256_MIRROR_TOKEN }}
+          DESKTOP_SHA256_MIRROR_URL: ${{ secrets.DESKTOP_SHA256_MIRROR_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SHA256_MIRROR_TOKEN:-}" ] || [ -z "${DESKTOP_SHA256_MIRROR_URL:-}" ]; then
+            echo "Skipping SHA-256 mirror upload; DESKTOP_SHA256_MIRROR_URL/TOKEN are not configured."
+            exit 0
+          fi
+          version="${GITHUB_REF_NAME#desktop-v}"
+          sha_file="dist/desktop-sha256/${version}.sha256"
           curl -fsS \
             -X PUT \
             -H "Authorization: Bearer ${DESKTOP_SHA256_MIRROR_TOKEN}" \

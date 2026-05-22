@@ -120,10 +120,16 @@ Required GitHub secrets:
 - `APPLE_TEAM_ID`
 - `MAC_CSC_LINK`
 - `MAC_CSC_KEY_PASSWORD`
-- `DESKTOP_SHA256_MIRROR_URL`
-- `DESKTOP_SHA256_MIRROR_TOKEN`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
+
+Optional GitHub secrets:
+
+- `DESKTOP_SHA256_MIRROR_URL`
+- `DESKTOP_SHA256_MIRROR_TOKEN`
+
+When the SHA-256 mirror secrets are absent, the workflow still uploads the
+checksum manifest as a GitHub Actions artifact and skips the mirror upload.
 
 Before launch, run one release build against the dev stage and install it on:
 
