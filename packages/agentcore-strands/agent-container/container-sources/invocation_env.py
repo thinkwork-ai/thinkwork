@@ -34,8 +34,8 @@ def apply_invocation_env(payload: dict) -> list[str]:
     - `AGENT_ID`, `_MCP_AGENT_ID`   ← `assistant_id`
     - `USER_ID`, `_MCP_USER_ID`, `CURRENT_USER_ID` ← `user_id`
     - `CURRENT_THREAD_ID`           ← `thread_id`
-    - `ACTIVE_SPACE_ID`, `ACTIVE_SPACE_SLUG`, `ACTIVE_SPACE_IS_DEFAULT`
-      ← active Space payload fields
+    - `ACTIVE_SPACE_ID`, `ACTIVE_SPACE_TENANT_SLUG`, `ACTIVE_SPACE_SLUG`,
+      `ACTIVE_SPACE_IS_DEFAULT` ← active Space payload fields
 
     Returns the list of env keys it actually set, so the caller can pass
     it back to `cleanup_invocation_env` to clear exactly those keys
@@ -49,6 +49,9 @@ def apply_invocation_env(payload: dict) -> list[str]:
     active_space_id = payload.get("active_space_id") or payload.get("space_id") or ""
     active_space_slug = (
         payload.get("active_space_slug") or payload.get("space_slug") or ""
+    )
+    active_space_tenant_slug = (
+        payload.get("active_space_tenant_slug") or payload.get("tenant_slug") or ""
     )
     active_space_is_default = _truthy(payload.get("active_space_is_default"))
     if active_space_slug == "default":
@@ -77,6 +80,9 @@ def apply_invocation_env(payload: dict) -> list[str]:
     if active_space_id:
         os.environ["ACTIVE_SPACE_ID"] = active_space_id
         keys.append("ACTIVE_SPACE_ID")
+    if active_space_tenant_slug:
+        os.environ["ACTIVE_SPACE_TENANT_SLUG"] = active_space_tenant_slug
+        keys.append("ACTIVE_SPACE_TENANT_SLUG")
     if active_space_slug:
         os.environ["ACTIVE_SPACE_SLUG"] = active_space_slug
         keys.append("ACTIVE_SPACE_SLUG")

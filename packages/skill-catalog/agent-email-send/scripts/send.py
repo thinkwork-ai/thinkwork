@@ -9,6 +9,8 @@ API_URL = os.environ.get("THINKWORK_API_URL", "")
 API_SECRET = os.environ.get("THINKWORK_API_SECRET", "")
 AGENT_ID = os.environ.get("AGENT_ID", "")
 AGENT_EMAIL = os.environ.get("AGENT_EMAIL_ADDRESS", "")
+ACTIVE_SPACE_TENANT_SLUG = os.environ.get("ACTIVE_SPACE_TENANT_SLUG", "")
+ACTIVE_SPACE_SLUG = os.environ.get("ACTIVE_SPACE_SLUG", "")
 TENANT_ID = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
 THREAD_ID = os.environ.get("CURRENT_THREAD_ID", "")
 
@@ -62,6 +64,9 @@ def send_email(
         "subject": subject,
         "body": body,
     }
+    if ACTIVE_SPACE_TENANT_SLUG and ACTIVE_SPACE_SLUG:
+        payload["spaceTenantSlug"] = ACTIVE_SPACE_TENANT_SLUG
+        payload["spaceSlug"] = ACTIVE_SPACE_SLUG
     tid = thread_id or THREAD_ID
     if tid:
         payload["threadId"] = tid
