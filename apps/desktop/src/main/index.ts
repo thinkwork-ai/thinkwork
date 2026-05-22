@@ -4,6 +4,7 @@ import { DEEP_LINK_EVENT_CHANNEL } from "@thinkwork/desktop-ipc";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bootstrapDesktopApp } from "./app.js";
+import { verifyAppleTeamIdentifier } from "./code-signature.js";
 import {
   createDeepLinkController,
   resolveDeepLinkScheme,
@@ -13,7 +14,10 @@ import { snapshotDesktopEnv } from "./env.js";
 import { registerDesktopIpcHandlers } from "./ipc-handlers.js";
 import { installDesktopMenu } from "./menus.js";
 
+declare const __THINKWORK_APPLE_TEAM_ID__: string;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const expectedAppleTeamId = __THINKWORK_APPLE_TEAM_ID__;
 const deepLinkController = createDeepLinkController({
   scheme: resolveDeepLinkScheme(
     process.env.THINKWORK_STAGE ?? process.env.VITE_THINKWORK_STAGE,
@@ -68,27 +72,44 @@ if (!app.requestSingleInstanceLock()) {
     focusExistingWindow();
   });
 
-  void bootstrapDesktopApp({
-    snapshotEnv: snapshotDesktopEnv,
-    preloadPath: join(__dirname, "../preload/index.mjs"),
-    protocol,
-    installMenus: (handlers) =>
-      installDesktopMenu({
-        ...handlers,
-        appName: "ThinkWork Spaces",
-        isDev: !app.isPackaged,
-      }),
-    registerIpcHandlers: (env) =>
-      registerDesktopIpcHandlers({
-        env,
-        consumePendingOAuthDeepLink,
-        markDeepLinkIpcReady,
-      }),
-    rendererRoot: join(__dirname, "../renderer"),
-  }).catch((error) => {
-    console.error("[desktop] failed to bootstrap", error);
+  let codeSignatureVerified = true;
+  try {
+    verifyAppleTeamIdentifier({
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      expectedTeamId: expectedAppleTeamId,
+      executablePath: process.execPath,
+    });
+  } catch (error) {
+    codeSignatureVerified = false;
+    process.exitCode = 1;
+    console.error("[desktop] failed code-signature verification", error);
     app.quit();
-  });
+  }
+
+  if (codeSignatureVerified) {
+    void bootstrapDesktopApp({
+      snapshotEnv: snapshotDesktopEnv,
+      preloadPath: join(__dirname, "../preload/index.mjs"),
+      protocol,
+      installMenus: (handlers) =>
+        installDesktopMenu({
+          ...handlers,
+          appName: "ThinkWork Spaces",
+          isDev: !app.isPackaged,
+        }),
+      registerIpcHandlers: (env) =>
+        registerDesktopIpcHandlers({
+          env,
+          consumePendingOAuthDeepLink,
+          markDeepLinkIpcReady,
+        }),
+      rendererRoot: join(__dirname, "../renderer"),
+    }).catch((error) => {
+      console.error("[desktop] failed to bootstrap", error);
+      app.quit();
+    });
+  }
 }
 
 export function markDeepLinkIpcReady(

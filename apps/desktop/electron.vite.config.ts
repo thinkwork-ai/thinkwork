@@ -33,6 +33,11 @@ async function resolveSpacesConfig(env: {
 
 export default defineConfig(async (env) => ({
   main: {
+    define: {
+      __THINKWORK_APPLE_TEAM_ID__: JSON.stringify(
+        process.env.APPLE_TEAM_ID ?? process.env.THINKWORK_APPLE_TEAM_ID ?? "",
+      ),
+    },
     build: {
       outDir: "out/main",
       rollupOptions: {

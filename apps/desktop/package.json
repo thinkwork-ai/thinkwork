@@ -1,13 +1,15 @@
 {
   "name": "@thinkwork/desktop",
   "version": "0.1.0",
+  "description": "Electron desktop shell for ThinkWork Spaces",
+  "author": "thinkwork-ai",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package": "pnpm run build && electron-builder --dir",
+    "package": "bash ../../scripts/build-desktop.sh dev --dir --publish never",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "echo 'lint: skipped (eslint not configured)'"
