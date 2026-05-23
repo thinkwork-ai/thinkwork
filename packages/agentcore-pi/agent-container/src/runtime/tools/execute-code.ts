@@ -15,8 +15,15 @@ function truncate(value: string, limit: number): { text: string; truncated: bool
   };
 }
 
-function quoteShellPath(path: string): string {
-  return `'${path.replace(/'/g, "'\\''")}'`;
+function pythonCommandFor(code: string): string {
+  const encoded = Buffer.from(code, "utf8").toString("base64");
+  return [
+    "python3 - <<'PY'",
+    "import base64",
+    `code = base64.b64decode("${encoded}").decode("utf-8")`,
+    'exec(compile(code, "<thinkwork-execute-code>", "exec"))',
+    "PY",
+  ].join("\n");
 }
 
 export interface ExecuteCodeToolOptions {
@@ -62,56 +69,44 @@ export function buildExecuteCodeTool(
       }
 
       const env = await getSession();
-      const scriptPath = `/tmp/thinkwork-execute-code-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.py`;
-      await env.writeFile(scriptPath, code);
-      try {
-        const started = Date.now();
-        const result = await env.exec(`python3 ${quoteShellPath(scriptPath)}`, {
-          cwd: env.cwd,
-          timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        });
-        const stdout = truncate(result.stdout ?? "", STDOUT_LIMIT_BYTES);
-        const stderr = truncate(result.stderr ?? "", STDERR_LIMIT_BYTES);
-        const summary = [
-          `exit_code: ${result.exitCode}`,
-          stdout.text ? `stdout:\n${stdout.text}` : "",
-          stderr.text ? `stderr:\n${stderr.text}` : "",
-          stdout.truncated ? "[stdout truncated]" : "",
-          stderr.truncated ? "[stderr truncated]" : "",
-        ]
-          .filter(Boolean)
-          .join("\n\n");
+      const started = Date.now();
+      const result = await env.exec(pythonCommandFor(code), {
+        cwd: env.cwd,
+        timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      });
+      const stdout = truncate(result.stdout ?? "", STDOUT_LIMIT_BYTES);
+      const stderr = truncate(result.stderr ?? "", STDERR_LIMIT_BYTES);
+      const summary = [
+        `exit_code: ${result.exitCode}`,
+        stdout.text ? `stdout:\n${stdout.text}` : "",
+        stderr.text ? `stderr:\n${stderr.text}` : "",
+        stdout.truncated ? "[stdout truncated]" : "",
+        stderr.truncated ? "[stderr truncated]" : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
-        return {
-          content: [{ type: "text", text: summary || "No output." }],
-          details: {
-            ok: result.exitCode === 0,
-            exit_code: result.exitCode,
-            exit_status: result.exitCode === 0 ? "ok" : "error",
-            duration_ms: Date.now() - started,
-            stdout: stdout.text,
-            stderr: stderr.text,
-            stdout_bytes: Buffer.byteLength(result.stdout ?? "", "utf8"),
-            stderr_bytes: Buffer.byteLength(result.stderr ?? "", "utf8"),
-            stdout_truncated: stdout.truncated,
-            stderr_truncated: stderr.truncated,
-            error: result.exitCode === 0 ? null : "SandboxError",
-            error_message:
-              result.exitCode === 0
-                ? null
-                : `Process exited with status ${result.exitCode}`,
-            runtime: "pi",
-          },
-        };
-      } finally {
-        try {
-          await env.rm(scriptPath, { force: true });
-        } catch {
-          // Best effort cleanup; the AgentCore session TTL is the backstop.
-        }
-      }
+      return {
+        content: [{ type: "text", text: summary || "No output." }],
+        details: {
+          ok: result.exitCode === 0,
+          exit_code: result.exitCode,
+          exit_status: result.exitCode === 0 ? "ok" : "error",
+          duration_ms: Date.now() - started,
+          stdout: stdout.text,
+          stderr: stderr.text,
+          stdout_bytes: Buffer.byteLength(result.stdout ?? "", "utf8"),
+          stderr_bytes: Buffer.byteLength(result.stderr ?? "", "utf8"),
+          stdout_truncated: stdout.truncated,
+          stderr_truncated: stderr.truncated,
+          error: result.exitCode === 0 ? null : "SandboxError",
+          error_message:
+            result.exitCode === 0
+              ? null
+              : `Process exited with status ${result.exitCode}`,
+          runtime: "pi",
+        },
+      };
     },
   };
 }

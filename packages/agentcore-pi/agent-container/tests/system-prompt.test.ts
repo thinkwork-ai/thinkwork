@@ -63,6 +63,37 @@ describe("composeSystemPrompt", () => {
     expect(prompt).toMatch(/Tuesday, May 5, 2026/);
   });
 
+  it("injects a runtime tool policy when execute_code is unavailable", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/tmp/workspace",
+      availableToolNames: ["send_email"],
+      now,
+      fileReader: readerFor({ "USER.md": "X" }),
+    });
+
+    expect(prompt).toContain("## Runtime Tool Policy");
+    expect(prompt).toContain("The `execute_code` tool is not available");
+    expect(prompt).toContain("Do not run code, simulate code execution");
+    expect(prompt).toContain("Do not treat vague phrases like \"send me\"");
+  });
+
+  it("instructs the agent to use execute_code when it is available", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/tmp/workspace",
+      availableToolNames: ["execute_code", "send_email"],
+      now,
+      fileReader: readerFor({ "USER.md": "X" }),
+    });
+
+    expect(prompt).toContain("The `execute_code` tool is available");
+    expect(prompt).toContain(
+      "Never claim that code ran, tests passed, a script produced output",
+    );
+    expect(prompt).toContain("The `send_email` tool is available");
+  });
+
   it("appends workspace skills block when provided", async () => {
     const prompt = await composeSystemPrompt({
       payload: {},

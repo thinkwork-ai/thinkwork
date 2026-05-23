@@ -36,6 +36,7 @@ export type WorkspaceFileReader = (
 export interface ComposeSystemPromptArgs {
   payload: PiInvocationPayload;
   workspaceDir: string;
+  availableToolNames?: string[];
   workspaceSkillsBlock?: string;
   now?: Date;
   /** Test seam — defaults to a filesystem reader that returns null for
@@ -99,6 +100,29 @@ function buildFallback(payload: PiInvocationPayload): string {
     .join("\n");
 }
 
+function buildRuntimeToolPolicy(toolNames: string[] | undefined): string {
+  const tools = new Set(toolNames ?? []);
+  const executeCodeAvailable = tools.has("execute_code");
+  const sendEmailAvailable = tools.has("send_email");
+
+  return [
+    "## Runtime Tool Policy",
+    "",
+    "### Code execution",
+    executeCodeAvailable
+      ? "- The `execute_code` tool is available. Use it for Python execution, script validation, data analysis, calculations, and generated output from code."
+      : "- The `execute_code` tool is not available for this turn. Do not run code, simulate code execution, or claim generated output from code.",
+    "- Never claim that code ran, tests passed, a script produced output, or calculated code results unless those facts came from an `execute_code` tool result in this turn.",
+    "- You may provide source code as text without running it, but if the user asks to run, execute, test, debug, calculate with, or provide output from code and `execute_code` is unavailable, say the Code Sandbox is not enabled for this agent instead of inventing results.",
+    "",
+    "### Email",
+    sendEmailAvailable
+      ? "- The `send_email` tool is available. Use it only when the user explicitly asks to email something or the active task is already an email reply."
+      : "- The `send_email` tool is not available for this turn.",
+    "- Do not treat vague phrases like \"send me\", \"share with me\", or \"give me\" as email permission by themselves; answer in chat unless the user specifically requests email.",
+  ].join("\n");
+}
+
 /**
  * Build the agent's system prompt by reading workspace files from disk.
  *
@@ -116,6 +140,7 @@ export async function composeSystemPrompt(
   const reader = args.fileReader ?? defaultFileReader;
   const now = args.now ?? new Date();
   const parts: string[] = [`Current date: ${formatDate(now)}`];
+  parts.push(buildRuntimeToolPolicy(args.availableToolNames));
 
   const filenames = [...SYSTEM_FILES, ...WORKSPACE_FILES];
   let filesLoaded = 0;
