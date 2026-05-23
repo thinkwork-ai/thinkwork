@@ -69,3 +69,32 @@ export function validateSubAgentSlug(
   }
   return { valid: true, slug };
 }
+
+/**
+ * Decide whether a move-completion event warrants a "lost template
+ * inheritance" toast. The carve-out: single-file moves are silent (per
+ * R20), but a folder move that detached one or more pinned files
+ * surfaces the bulk consequence so the operator isn't surprised.
+ *
+ * Returns the toast string when both `movedCount > 1` and
+ * `detachedPinnedCount > 0`; otherwise `null` (no toast).
+ */
+export function shouldEmitDetachToast(result: {
+  movedCount: number;
+  detachedPinnedCount: number;
+}): string | null {
+  if (result.movedCount <= 1) return null;
+  if (result.detachedPinnedCount <= 0) return null;
+  const fileWord = result.detachedPinnedCount === 1 ? "file" : "files";
+  return `Moved ${result.movedCount} files. ${result.detachedPinnedCount} ${fileWord} lost template inheritance.`;
+}
+
+/**
+ * Folder path of a file or folder. For files, returns the containing
+ * folder ("notes/foo.md" → "notes"). For folders, returns the parent
+ * folder ("notes/sub" → "notes"). Returns "" (root) when at top level.
+ */
+export function parentFolderOf(path: string): string {
+  const idx = path.lastIndexOf("/");
+  return idx === -1 ? "" : path.slice(0, idx);
+}

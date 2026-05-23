@@ -11,6 +11,7 @@ import {
   FileIcon,
   FolderIcon,
   FolderOpenIcon,
+  Loader2Icon,
 } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 import {
@@ -142,6 +143,19 @@ export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
    * the nested-children area.
    */
   trailing?: ReactNode;
+  /**
+   * Local extension: when true, substitute the folder icon with a spinning
+   * loader to signal an in-flight delete or move targeting this node.
+   * Other interactions on the rest of the tree remain responsive.
+   */
+  isMutating?: boolean;
+  /**
+   * Local extension: when true, render the row with reduced opacity and a
+   * dashed border to indicate the node is in the clipboard (cut, not yet
+   * pasted). Visual only — selection / expansion / context-menu wiring is
+   * unchanged.
+   */
+  isCut?: boolean;
 };
 
 export const FileTreeFolder = ({
@@ -150,6 +164,8 @@ export const FileTreeFolder = ({
   className,
   children,
   trailing,
+  isMutating,
+  isCut,
   ...props
 }: FileTreeFolderProps) => {
   const { expandedPaths, togglePath, selectedPath, onSelect } =
@@ -183,6 +199,7 @@ export const FileTreeFolder = ({
             className={cn(
               "flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
               isSelected && "bg-muted",
+              isCut && "border border-dashed border-muted-foreground/40 opacity-50",
             )}
           >
             <CollapsibleTrigger asChild>
@@ -204,7 +221,9 @@ export const FileTreeFolder = ({
               type="button"
             >
               <FileTreeIcon>
-                {isExpanded ? (
+                {isMutating ? (
+                  <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+                ) : isExpanded ? (
                   <FolderOpenIcon className="size-4 text-blue-500" />
                 ) : (
                   <FolderIcon className="size-4 text-blue-500" />
@@ -242,6 +261,17 @@ export type FileTreeFileProps = HTMLAttributes<HTMLDivElement> & {
    */
   name: ReactNode;
   icon?: ReactNode;
+  /**
+   * Local extension: when true, substitute the file icon with a spinning
+   * loader to signal an in-flight delete or move targeting this node.
+   */
+  isMutating?: boolean;
+  /**
+   * Local extension: when true, render the row with reduced opacity and a
+   * dashed border to indicate the node is in the clipboard (cut, not yet
+   * pasted).
+   */
+  isCut?: boolean;
 };
 
 export const FileTreeFile = ({
@@ -250,6 +280,8 @@ export const FileTreeFile = ({
   icon,
   className,
   children,
+  isMutating,
+  isCut,
   ...props
 }: FileTreeFileProps) => {
   const { selectedPath, onSelect } = useContext(FileTreeContext);
@@ -270,12 +302,19 @@ export const FileTreeFile = ({
 
   const fileContextValue = useMemo(() => ({ name, path }), [name, path]);
 
+  const resolvedIcon = isMutating ? (
+    <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+  ) : (
+    icon ?? <FileIcon className="size-4 text-muted-foreground" />
+  );
+
   return (
     <FileTreeFileContext.Provider value={fileContextValue}>
       <div
         className={cn(
           "group/file-tree-file flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
           isSelected && "bg-muted",
+          isCut && "border border-dashed border-muted-foreground/40 opacity-50",
           className,
         )}
         onClick={handleClick}
@@ -287,9 +326,7 @@ export const FileTreeFile = ({
         {children ?? (
           <>
             <span className="size-4 shrink-0" />
-            <FileTreeIcon>
-              {icon ?? <FileIcon className="size-4 text-muted-foreground" />}
-            </FileTreeIcon>
+            <FileTreeIcon>{resolvedIcon}</FileTreeIcon>
             <FileTreeName>{name}</FileTreeName>
           </>
         )}
