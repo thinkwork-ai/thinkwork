@@ -5,17 +5,19 @@ function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-describe("People detail User Workspace", () => {
-  const routeSource = readSource("./$humanId.tsx");
+describe("Users detail Files", () => {
+  const routeSource = readSource("./$userId.tsx");
   const profileSource = readSource(
     "../../../../components/humans/HumanProfileSection.tsx",
   );
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
 
-  it("uses top-level Configuration and Workspace tabs", () => {
-    expect(routeSource).toContain('type HumanDetailTab = "configuration" | "workspace"');
+  it("uses top-level Configuration and Files tabs", () => {
+    expect(routeSource).toContain(
+      'type UserDetailTab = "configuration" | "files"',
+    );
     expect(routeSource).toContain("Configuration");
-    expect(routeSource).toContain("Workspace");
+    expect(routeSource).toContain("Files");
     expect(routeSource).toContain("WorkspaceEditor");
     expect(routeSource).toContain("target={{ userId: member.user.id }}");
     expect(routeSource).toContain('mode="context"');

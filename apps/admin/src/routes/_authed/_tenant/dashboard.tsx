@@ -148,7 +148,7 @@ function DashboardPage() {
           <MetricCard
             label="Agent Online"
             value={`${onlineAgents.length} / ${agents.length}`}
-            href="/tenant-agent"
+            href="/agent"
           />
           <MetricCard
             label="Open Threads"

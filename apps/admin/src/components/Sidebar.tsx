@@ -18,6 +18,7 @@ import {
   CalendarClock,
   ShieldCheck,
   AppWindow,
+  Bot,
 } from "lucide-react";
 import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
@@ -249,6 +250,7 @@ export function AppSidebar() {
   ];
 
   const agentsItems: NavItem[] = [
+    { to: "/agent", icon: Bot, label: "Agent" },
     { to: "/spaces", icon: IconPlanet, label: "Spaces" },
     { to: "/capabilities", icon: PocketKnife, label: "Tools" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
@@ -262,7 +264,7 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/applets", icon: AppWindow, label: "Artifacts" },
-    { to: "/people", icon: Users, label: "People" },
+    { to: "/users", icon: Users, label: "Users" },
     ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),

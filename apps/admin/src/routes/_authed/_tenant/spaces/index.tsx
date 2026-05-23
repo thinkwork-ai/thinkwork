@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Bot, Boxes, Plus } from "lucide-react";
+import { Boxes, Plus } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
@@ -129,20 +129,10 @@ function SpacesPage() {
           <PageHeader
             title="Spaces"
             actions={
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate({ to: "/tenant-agent" })}
-                >
-                  <Bot className="h-4 w-4" />
-                  Configure agent
-                </Button>
-                <Button size="sm" onClick={() => setNewSpaceOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  New Space
-                </Button>
-              </>
+              <Button size="sm" onClick={() => setNewSpaceOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New Space
+              </Button>
             }
           />
           <div className="mt-4 flex items-center gap-2">

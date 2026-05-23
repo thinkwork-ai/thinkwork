@@ -19,11 +19,11 @@ import { TenantMembersListQuery } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 import { InviteMemberDialog } from "@/components/humans/InviteMemberDialog";
 
-export const Route = createFileRoute("/_authed/_tenant/people/")({
-  component: HumansPage,
+export const Route = createFileRoute("/_authed/_tenant/users/")({
+  component: UsersPage,
 });
 
-type HumanRow = {
+type UserRow = {
   id: string;
   name: string;
   email: string;
@@ -42,7 +42,7 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-const columns: ColumnDef<HumanRow>[] = [
+const columns: ColumnDef<UserRow>[] = [
   {
     accessorKey: "name",
     header: "Name",
@@ -97,12 +97,12 @@ const columns: ColumnDef<HumanRow>[] = [
   },
 ];
 
-function HumansPage() {
+function UsersPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
-  useBreadcrumbs([{ label: "People" }]);
+  useBreadcrumbs([{ label: "Users" }]);
 
   const [result, reexecute] = useQuery({
     query: TenantMembersListQuery,
@@ -117,7 +117,7 @@ function HumansPage() {
 
   const allMembers = result.data?.tenantMembers ?? [];
 
-  const rows: HumanRow[] = useMemo(() => {
+  const rows: UserRow[] = useMemo(() => {
     const humans = allMembers.filter(
       (m) => m.principalType.toUpperCase() === "USER",
     );
@@ -142,7 +142,7 @@ function HumansPage() {
     <PageLayout
       header={
         <>
-          <PageHeader title="People" />
+          <PageHeader title="Users" />
 
           <div className="flex items-center gap-2 mt-4">
             <div className="relative flex-1 max-w-sm">
@@ -175,7 +175,7 @@ function HumansPage() {
           data={rows}
           filterValue={search}
           onRowClick={(row) =>
-            navigate({ to: "/people/$humanId", params: { humanId: row.id } })
+            navigate({ to: "/users/$userId", params: { userId: row.id } })
           }
         />
       )}

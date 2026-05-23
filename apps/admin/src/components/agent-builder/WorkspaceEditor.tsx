@@ -6,7 +6,6 @@ import {
   Loader2,
   MoreHorizontal,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,10 +76,6 @@ export interface WorkspaceEditorProps {
   templateSlug?: string;
   initialFolder?: string;
   className?: string;
-}
-
-function isAgentOverride(source: ComposeSource | undefined): boolean {
-  return source === "agent-override" || source === "agent-override-pinned";
 }
 
 export function workspaceEditorTargetKey(target: Target): string {
@@ -343,29 +338,9 @@ export function WorkspaceEditor({
   };
 
   const handleDeletePath = async (path: string, isFolder: boolean) => {
-    const allPaths = isFolder
+    const paths = isFolder
       ? files.filter((file) => file === path || file.startsWith(`${path}/`))
       : [path];
-    const paths =
-      mode === "agent"
-        ? allPaths.filter((filePath) => isAgentOverride(fileSources[filePath]))
-        : allPaths;
-    if (allPaths.length === 0) return;
-
-    if (paths.length < allPaths.length) {
-      const inheritedCount = allPaths.length - paths.length;
-      if (!isFolder) {
-        toast.info(
-          "Inherited files stay visible until overridden; only agent overrides can be deleted.",
-        );
-        return;
-      }
-      if (paths.length > 0) {
-        toast.info(
-          `${inheritedCount} inherited file${inheritedCount === 1 ? "" : "s"} will remain visible.`,
-        );
-      }
-    }
     if (paths.length === 0) return;
 
     setConfirmingDeletePath(null);

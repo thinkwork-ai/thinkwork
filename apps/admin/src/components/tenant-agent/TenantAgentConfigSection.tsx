@@ -6,8 +6,6 @@ import { ModelSelect } from "@/components/agents/ModelSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   type TenantAgentQuery,
   type UpdateTenantAgentInput,
@@ -15,15 +13,6 @@ import {
 import { UpdateTenantAgentMutation } from "@/lib/graphql-queries";
 
 type TenantAgent = NonNullable<TenantAgentQuery["agent"]>;
-
-function sandboxEnabled(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "enabled" in value &&
-    Boolean((value as { enabled?: unknown }).enabled)
-  );
-}
 
 export function TenantAgentConfigSection({
   tenantId,
@@ -40,8 +29,6 @@ export function TenantAgentConfigSection({
   const [budgetMonthlyCents, setBudgetMonthlyCents] = useState(
     agent.budgetMonthlyCents?.toString() ?? "",
   );
-  const [sandbox, setSandbox] = useState(sandboxEnabled(agent.sandbox));
-  const [systemPrompt, setSystemPrompt] = useState(agent.systemPrompt ?? "");
   const [{ fetching }, updateTenantAgent] = useMutation(
     UpdateTenantAgentMutation,
   );
@@ -51,8 +38,6 @@ export function TenantAgentConfigSection({
     setRole(agent.role ?? "");
     setModel(agent.model ?? "");
     setBudgetMonthlyCents(agent.budgetMonthlyCents?.toString() ?? "");
-    setSandbox(sandboxEnabled(agent.sandbox));
-    setSystemPrompt(agent.systemPrompt ?? "");
   }, [agent]);
 
   const budgetValue = useMemo(() => {
@@ -69,8 +54,6 @@ export function TenantAgentConfigSection({
       role: role.trim() || null,
       model: model || null,
       budgetMonthlyCents: budgetValue,
-      sandbox: { enabled: sandbox },
-      systemPrompt: systemPrompt.trim() || null,
     };
 
     const result = await updateTenantAgent({ tenantId, input });
@@ -83,7 +66,10 @@ export function TenantAgentConfigSection({
   }
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form
+      className="w-full max-w-[750px] space-y-4"
+      onSubmit={handleSubmit}
+    >
       <section className="rounded-md border p-4">
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-1.5">
@@ -114,28 +100,6 @@ export function TenantAgentConfigSection({
               value={budgetMonthlyCents}
               onChange={(event) => setBudgetMonthlyCents(event.target.value)}
               placeholder="Inherit account default"
-            />
-          </div>
-          <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2 lg:col-span-2">
-            <div>
-              <Label htmlFor="tenant-agent-sandbox">Sandbox</Label>
-              <p className="text-xs text-muted-foreground">
-                Baseline execution isolation for the tenant agent.
-              </p>
-            </div>
-            <Switch
-              id="tenant-agent-sandbox"
-              checked={sandbox}
-              onCheckedChange={setSandbox}
-            />
-          </div>
-          <div className="space-y-1.5 lg:col-span-2">
-            <Label htmlFor="tenant-agent-system-prompt">System prompt</Label>
-            <Textarea
-              id="tenant-agent-system-prompt"
-              value={systemPrompt}
-              onChange={(event) => setSystemPrompt(event.target.value)}
-              className="min-h-36"
             />
           </div>
         </div>
