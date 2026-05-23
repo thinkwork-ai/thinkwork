@@ -44,6 +44,9 @@ describe("buildExecuteCodeTool", () => {
     expect(result.details).toMatchObject({
       ok: true,
       exit_code: 0,
+      exit_status: "ok",
+      stdout: expect.stringContaining("print(2 + 2)"),
+      stderr: "",
       runtime: "pi",
     });
     const content = result.content.find((item) => item.type === "text");

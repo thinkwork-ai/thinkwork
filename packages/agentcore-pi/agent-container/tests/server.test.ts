@@ -385,11 +385,9 @@ describe("handleInvocation — MCP URL validator", () => {
     expect(connectCalls[0]?.serverName).toBe("good");
 
     const writes = stdoutSpy.mock.calls.map((c) =>
-      typeof c[0] === "string" ? c[0] : c[0]?.toString() ?? "",
+      typeof c[0] === "string" ? c[0] : (c[0]?.toString() ?? ""),
     );
-    const rejects = writes.filter((line) =>
-      line.includes("mcp_url_rejected"),
-    );
+    const rejects = writes.filter((line) => line.includes("mcp_url_rejected"));
     expect(rejects).toHaveLength(2);
   });
 });
@@ -420,11 +418,9 @@ describe("handleInvocation — onConnectError logging", () => {
     });
 
     const writes = stdoutSpy.mock.calls.map((c) =>
-      typeof c[0] === "string" ? c[0] : c[0]?.toString() ?? "",
+      typeof c[0] === "string" ? c[0] : (c[0]?.toString() ?? ""),
     );
-    const fails = writes.filter((line) =>
-      line.includes("mcp_connect_failed"),
-    );
+    const fails = writes.filter((line) => line.includes("mcp_connect_failed"));
     expect(fails.length).toBeGreaterThan(0);
     const parsed = JSON.parse(fails[0]!.trim());
     expect(parsed).toMatchObject({
@@ -494,7 +490,7 @@ describe("postCompletion", () => {
     ).rejects.toThrow(CompletionCallbackAuthError);
 
     const writes = stdoutSpy.mock.calls.map((c) =>
-      typeof c[0] === "string" ? c[0] : c[0]?.toString() ?? "",
+      typeof c[0] === "string" ? c[0] : (c[0]?.toString() ?? ""),
     );
     for (const line of writes) {
       expect(line).not.toContain("test-secret-do-not-leak");
@@ -518,7 +514,12 @@ describe("postCompletion", () => {
       ...baseArgs,
       result: {
         status: "ok",
-        runResult: { content: "x", modelId: "m", toolsCalled: [], toolInvocations: [] },
+        runResult: {
+          content: "x",
+          modelId: "m",
+          toolsCalled: [],
+          toolInvocations: [],
+        },
         latencyMs: 100,
       },
       fetchImpl,
@@ -538,7 +539,12 @@ describe("postCompletion", () => {
       secrets: { apiUrl: "", apiAuthSecret: "" },
       result: {
         status: "ok",
-        runResult: { content: "x", modelId: "m", toolsCalled: [], toolInvocations: [] },
+        runResult: {
+          content: "x",
+          modelId: "m",
+          toolsCalled: [],
+          toolInvocations: [],
+        },
         latencyMs: 100,
       },
       fetchImpl,
@@ -560,7 +566,8 @@ describe("postFinalizeCallback", () => {
 
     const ok = await postFinalizeCallback({
       payload: VALID_PAYLOAD({
-        finalize_callback_url: "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_url:
+          "https://api.example.com/api/threads/thread-1/finalize",
         finalize_callback_secret: "secret",
         thread_turn_id: "turn-1",
       }),
@@ -579,7 +586,27 @@ describe("postFinalizeCallback", () => {
           content: "done",
           modelId: "amazon-bedrock/test-model",
           toolsCalled: ["execute_code"],
-          toolInvocations: [],
+          toolInvocations: [
+            {
+              id: "tool-1",
+              name: "browser_automation",
+              tool_name: "browser_automation",
+              runtime: "pi",
+              result: {
+                details: {
+                  tool_costs: [
+                    {
+                      provider: "agentcore_browser",
+                      event_type: "agentcore_browser_session",
+                      amount_usd: "0.000001",
+                      duration_ms: 42,
+                      metadata: { runtime: "pi" },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
         },
         latencyMs: 42,
       },
@@ -599,6 +626,12 @@ describe("postFinalizeCallback", () => {
       response: {
         runtime: "pi",
         tools_called: ["execute_code"],
+        tool_costs: [
+          expect.objectContaining({
+            provider: "agentcore_browser",
+            event_type: "agentcore_browser_session",
+          }),
+        ],
       },
     });
   });
@@ -615,7 +648,8 @@ describe("postFinalizeCallback", () => {
 
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
-        finalize_callback_url: "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_url:
+          "https://api.example.com/api/threads/thread-1/finalize",
         finalize_callback_secret: "secret",
         thread_turn_id: "turn-1",
       }),
@@ -628,6 +662,158 @@ describe("postFinalizeCallback", () => {
       finalize_dispatched: true,
       runtime: "pi",
     });
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it("rejects origin-mismatched finalize URLs before sending the bearer", async () => {
+    let fetchCalled = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      fetchCalled += 1;
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const ok = await postFinalizeCallback({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url:
+          "https://evil.example.com/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+      }),
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "tenant-1",
+        agentSlug: "agent-slug",
+        traceId: "trace-1",
+      },
+      result: {
+        status: "ok",
+        runResult: {
+          content: "done",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        },
+        latencyMs: 42,
+      },
+      fetchImpl,
+    });
+
+    expect(ok).toBe(false);
+    expect(fetchCalled).toBe(0);
+  });
+
+  it.each([
+    {
+      name: "malformed finalize URL",
+      overrides: { finalize_callback_url: "not-a-url" },
+    },
+    {
+      name: "non-localhost HTTP finalize URL",
+      overrides: {
+        finalize_callback_url:
+          "http://api.example.com/api/threads/thread-1/finalize",
+      },
+    },
+    {
+      name: "missing API URL",
+      overrides: { thinkwork_api_url: "" },
+    },
+    {
+      name: "malformed API URL",
+      overrides: { thinkwork_api_url: "not-a-url" },
+    },
+    {
+      name: "non-localhost HTTP API URL",
+      overrides: { thinkwork_api_url: "http://api.example.com" },
+    },
+  ])(
+    "rejects unsafe finalize callback config: $name",
+    async ({ overrides }) => {
+      let fetchCalled = 0;
+      const fetchImpl: typeof fetch = (async () => {
+        fetchCalled += 1;
+        return { ok: true, status: 200 } as unknown as Response;
+      }) as unknown as typeof fetch;
+
+      const ok = await postFinalizeCallback({
+        payload: VALID_PAYLOAD({
+          finalize_callback_url:
+            "https://api.example.com/api/threads/thread-1/finalize",
+          finalize_callback_secret: "secret",
+          thread_turn_id: "turn-1",
+          ...overrides,
+        }),
+        identity: {
+          tenantId: "tenant-1",
+          userId: "user-1",
+          agentId: "agent-1",
+          threadId: "thread-1",
+          tenantSlug: "tenant-1",
+          agentSlug: "agent-slug",
+          traceId: "trace-1",
+        },
+        result: {
+          status: "ok",
+          runResult: {
+            content: "done",
+            modelId: "amazon-bedrock/test-model",
+            toolsCalled: [],
+            toolInvocations: [],
+          },
+          latencyMs: 42,
+        },
+        fetchImpl,
+      });
+
+      expect(ok).toBe(false);
+      expect(fetchCalled).toBe(0);
+    },
+  );
+
+  it("allows localhost finalize callbacks for local runtime tests", async () => {
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const ok = await postFinalizeCallback({
+      payload: VALID_PAYLOAD({
+        thinkwork_api_url: "http://localhost:5174",
+        finalize_callback_url:
+          "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+      }),
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "tenant-1",
+        agentSlug: "agent-slug",
+        traceId: "trace-1",
+      },
+      result: {
+        status: "ok",
+        runResult: {
+          content: "done",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        },
+        latencyMs: 42,
+      },
+      fetchImpl,
+    });
+
+    expect(ok).toBe(true);
     expect(fetchCalls).toHaveLength(1);
   });
 });
@@ -834,7 +1020,9 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
   it("skips retain when use_memory is missing on the payload", async () => {
     process.env.MEMORY_RETAIN_FN_NAME = "thinkwork-test-api-memory-retain";
     const sendSpy = vi.fn();
-    const stubLambda: LambdaClient = { send: sendSpy } as unknown as LambdaClient;
+    const stubLambda: LambdaClient = {
+      send: sendSpy,
+    } as unknown as LambdaClient;
 
     const result = await handleInvocation({
       payload: VALID_PAYLOAD(),
@@ -850,7 +1038,9 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
   it("skips retain when MEMORY_RETAIN_FN_NAME env is unset", async () => {
     // env var deliberately not set — beforeEach already cleared it.
     const sendSpy = vi.fn();
-    const stubLambda: LambdaClient = { send: sendSpy } as unknown as LambdaClient;
+    const stubLambda: LambdaClient = {
+      send: sendSpy,
+    } as unknown as LambdaClient;
 
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({ use_memory: true }),
@@ -890,7 +1080,9 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
   it("does NOT fire retain when the agent loop itself fails (no partial transcripts)", async () => {
     process.env.MEMORY_RETAIN_FN_NAME = "thinkwork-test-api-memory-retain";
     const sendSpy = vi.fn();
-    const stubLambda: LambdaClient = { send: sendSpy } as unknown as LambdaClient;
+    const stubLambda: LambdaClient = {
+      send: sendSpy,
+    } as unknown as LambdaClient;
 
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({ use_memory: true }),
@@ -915,9 +1107,7 @@ interface MakeDepsOptions {
   connectMcpServerFactory?: ConnectMcpServerFn;
   runAgentLoop?: typeof import("../src/server.js").runAgentLoop;
   fetchImpl?: typeof fetch;
-  stageMessageAttachmentsImpl?: typeof import(
-    "../src/runtime/message-attachments.js"
-  ).stageMessageAttachments;
+  stageMessageAttachmentsImpl?: typeof import("../src/runtime/message-attachments.js").stageMessageAttachments;
   /** Hook fired after the agent loop finally block (before returning). */
   onHandlerComplete?: (
     bundle: import("../src/server.js").AssembledToolBundle,
@@ -944,8 +1134,7 @@ function makeDeps(opts: MakeDepsOptions = {}) {
     agentCoreClientFactory: () => fakeAgentCoreClient() as never,
     s3ClientFactory: () => fakeS3Client() as never,
     lambdaClientFactory: opts.lambdaClientFactory ?? (() => fakeLambdaClient()),
-    connectMcpServerFactory:
-      opts.connectMcpServerFactory ?? noopConnect,
+    connectMcpServerFactory: opts.connectMcpServerFactory ?? noopConnect,
     sessionStoreFactory: () => ({}) as never,
     fetchImpl: opts.fetchImpl,
     runAgentLoop: opts.runAgentLoop ?? stubAgentLoop,

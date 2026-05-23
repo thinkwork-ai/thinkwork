@@ -42,7 +42,11 @@
  */
 
 import http from "node:http";
-import { Agent, type AgentEvent, type AgentTool } from "@mariozechner/pi-agent-core";
+import {
+  Agent,
+  type AgentEvent,
+  type AgentTool,
+} from "@mariozechner/pi-agent-core";
 import type {
   AssistantMessage,
   Message,
@@ -50,9 +54,7 @@ import type {
   Usage,
 } from "@mariozechner/pi-ai";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
-import {
-  BedrockAgentCoreClient,
-} from "@aws-sdk/client-bedrock-agentcore";
+import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 
@@ -97,6 +99,10 @@ import {
 import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
+import {
+  collectToolCosts,
+  type ToolCostRecord,
+} from "./runtime/tools/tool-costs.js";
 import {
   discoverWorkspaceSkills,
   formatWorkspaceSkills,
@@ -144,6 +150,7 @@ export interface InvocationResponse {
     usage?: Usage;
     tools_called?: string[];
     tool_invocations?: ToolInvocationRecord[];
+    tool_costs?: ToolCostRecord[];
     hindsight_usage?: unknown[];
   };
   runtime: "pi";
@@ -158,6 +165,7 @@ export interface InvocationResponse {
   pi_retain?: PiRetainStatus;
   tools_called?: string[];
   tool_invocations?: ToolInvocationRecord[];
+  tool_costs?: ToolCostRecord[];
   hindsight_usage?: unknown[];
 }
 
@@ -272,7 +280,8 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
     if (!item || typeof item !== "object") return [];
     const record = item as Record<string, unknown>;
     const url = asString(record.url);
-    const serverName = asString(record.name) || asString(record.serverName) || url;
+    const serverName =
+      asString(record.name) || asString(record.serverName) || url;
     const auth =
       record.auth && typeof record.auth === "object"
         ? (record.auth as Record<string, unknown>)
@@ -315,9 +324,7 @@ export interface HandlerDependencies {
    * Optional override for the SessionStore constructor (tests inject fakes).
    * Production callers omit this and the default `AuroraSessionStore` runs.
    */
-  sessionStoreFactory?: (
-    opts: AuroraSessionStoreOptions,
-  ) => AuroraSessionStore;
+  sessionStoreFactory?: (opts: AuroraSessionStoreOptions) => AuroraSessionStore;
   /**
    * Optional override for the completion-callback HTTP fetch (tests inject
    * fakes). Production uses native `fetch` at invocation time.
@@ -539,6 +546,7 @@ export interface RunAgentLoopResult {
   modelId: string;
   toolsCalled: string[];
   toolInvocations: ToolInvocationRecord[];
+  toolCosts?: ToolCostRecord[];
 }
 
 export async function runAgentLoop(
@@ -580,7 +588,9 @@ export async function runAgentLoop(
       });
     }
     if (event.type === "tool_execution_end") {
-      const existing = toolInvocations.find((item) => item.id === event.toolCallId);
+      const existing = toolInvocations.find(
+        (item) => item.id === event.toolCallId,
+      );
       const finished = new Date().toISOString();
       if (existing) {
         existing.result = event.result;
@@ -606,7 +616,9 @@ export async function runAgentLoop(
   await agent.prompt(args.message);
   const assistant = [...agent.state.messages]
     .reverse()
-    .find((message): message is AssistantMessage => message.role === "assistant");
+    .find(
+      (message): message is AssistantMessage => message.role === "assistant",
+    );
 
   return {
     content: textFromAssistant(assistant),
@@ -614,6 +626,9 @@ export async function runAgentLoop(
     modelId: model.id,
     toolsCalled: [...toolsCalled],
     toolInvocations,
+    toolCosts: toolInvocations.flatMap((invocation) =>
+      collectToolCosts(invocation.result),
+    ),
   };
 }
 
@@ -775,7 +790,10 @@ export async function postCompletion(
     status,
     ...(failureReason !== null ? { failureReason } : {}),
   });
-  const signature = computeCompletionHmac(runContext.runId, runContext.hmacSecret);
+  const signature = computeCompletionHmac(
+    runContext.runId,
+    runContext.hmacSecret,
+  );
 
   const totalAttempts = COMPLETION_RETRY_DELAYS_MS.length + 1;
   for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
@@ -869,10 +887,18 @@ function usageNumber(usage: unknown, ...keys: string[]): number {
   return 0;
 }
 
-function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> {
+function buildFinalizeBody(
+  args: FinalizeCallbackArgs,
+): Record<string, unknown> {
   const { payload, identity, result } = args;
   const runResult = result.status === "ok" ? result.runResult : null;
   const usage = runResult?.usage;
+  const toolCosts =
+    runResult?.toolCosts ??
+    runResult?.toolInvocations.flatMap((invocation) =>
+      collectToolCosts(invocation.result),
+    ) ??
+    [];
   const errorMessage =
     result.status === "error"
       ? result.error instanceof Error
@@ -920,6 +946,7 @@ function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> 
           usage: runResult.usage,
           tools_called: runResult.toolsCalled,
           tool_invocations: runResult.toolInvocations,
+          tool_costs: toolCosts,
           hindsight_usage: [],
         }
       : {
@@ -931,11 +958,51 @@ function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> 
   };
 }
 
-function isFinalizeCallbackConfigured(payload: Record<string, unknown>): boolean {
+function callbackUrlAllowed(
+  callbackUrl: string,
+  apiUrl: string,
+): { ok: true } | { ok: false; reason: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(callbackUrl);
+  } catch {
+    return { ok: false, reason: "invalid-url" };
+  }
+
+  const isLocalhost =
+    parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  if (parsed.protocol !== "https:" && !isLocalhost) {
+    return { ok: false, reason: "insecure-url" };
+  }
+
+  const trimmedApiUrl = apiUrl.trim();
+  if (!trimmedApiUrl) return { ok: false, reason: "missing-api-url" };
+
+  try {
+    const parsedApiUrl = new URL(trimmedApiUrl);
+    const apiIsLocalhost =
+      parsedApiUrl.hostname === "localhost" ||
+      parsedApiUrl.hostname === "127.0.0.1";
+    if (parsedApiUrl.protocol !== "https:" && !apiIsLocalhost) {
+      return { ok: false, reason: "insecure-api-url" };
+    }
+    if (!apiIsLocalhost && parsed.origin !== parsedApiUrl.origin) {
+      return { ok: false, reason: "origin-mismatch" };
+    }
+  } catch {
+    return { ok: false, reason: "invalid-api-url" };
+  }
+
+  return { ok: true };
+}
+
+function isFinalizeCallbackConfigured(
+  payload: Record<string, unknown>,
+): boolean {
   return Boolean(
     asString(payload.finalize_callback_url) &&
-      asString(payload.finalize_callback_secret) &&
-      asString(payload.thread_turn_id),
+    asString(payload.finalize_callback_secret) &&
+    asString(payload.thread_turn_id),
   );
 }
 
@@ -951,28 +1018,20 @@ export async function postFinalizeCallback(
 
   if (!callbackUrl || !callbackSecret || !threadTurnId) return false;
 
-  let parsed: URL;
-  try {
-    parsed = new URL(callbackUrl);
-  } catch {
+  const urlCheck = callbackUrlAllowed(
+    callbackUrl,
+    asString(payload.thinkwork_api_url),
+  );
+  if (!urlCheck.ok) {
     logStructured({
       level: "error",
-      event: "finalize_callback_invalid_url",
+      event:
+        urlCheck.reason === "invalid-url"
+          ? "finalize_callback_invalid_url"
+          : "finalize_callback_rejected_url",
       tenantId: identity.tenantId,
       threadId: identity.threadId,
-    });
-    return false;
-  }
-  if (
-    parsed.protocol !== "https:" &&
-    parsed.hostname !== "localhost" &&
-    parsed.hostname !== "127.0.0.1"
-  ) {
-    logStructured({
-      level: "error",
-      event: "finalize_callback_insecure_url",
-      tenantId: identity.tenantId,
-      threadId: identity.threadId,
+      reason: urlCheck.reason,
     });
     return false;
   }
@@ -1264,10 +1323,7 @@ export async function handleInvocation(
     return {
       statusCode: 500,
       body: {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Pi tool assembly failed.",
+        error: err instanceof Error ? err.message : "Pi tool assembly failed.",
         runtime: "pi",
       },
     };
@@ -1402,8 +1458,7 @@ export async function handleInvocation(
     return {
       statusCode: 500,
       body: {
-        error:
-          runError instanceof Error ? runError.message : String(runError),
+        error: runError instanceof Error ? runError.message : String(runError),
         runtime: "pi",
       },
     };
@@ -1493,10 +1548,19 @@ export async function handleInvocation(
       usage: runResult.usage,
       tools_called: runResult.toolsCalled,
       tool_invocations: runResult.toolInvocations,
+      tool_costs:
+        runResult.toolCosts ??
+        runResult.toolInvocations.flatMap((invocation) =>
+          collectToolCosts(invocation.result),
+        ),
       hindsight_usage: hindsightUsage,
     },
   };
-  return { statusCode: 200, body: responseBody as unknown as Record<string, unknown> };
+  responseBody.tool_costs = responseBody.response.tool_costs;
+  return {
+    statusCode: 200,
+    body: responseBody as unknown as Record<string, unknown>,
+  };
 }
 
 // ---------------------------------------------------------------------------

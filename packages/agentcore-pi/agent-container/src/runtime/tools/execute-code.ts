@@ -89,11 +89,19 @@ export function buildExecuteCodeTool(
           details: {
             ok: result.exitCode === 0,
             exit_code: result.exitCode,
+            exit_status: result.exitCode === 0 ? "ok" : "error",
             duration_ms: Date.now() - started,
+            stdout: stdout.text,
+            stderr: stderr.text,
             stdout_bytes: Buffer.byteLength(result.stdout ?? "", "utf8"),
             stderr_bytes: Buffer.byteLength(result.stderr ?? "", "utf8"),
             stdout_truncated: stdout.truncated,
             stderr_truncated: stderr.truncated,
+            error: result.exitCode === 0 ? null : "SandboxError",
+            error_message:
+              result.exitCode === 0
+                ? null
+                : `Process exited with status ${result.exitCode}`,
             runtime: "pi",
           },
         };

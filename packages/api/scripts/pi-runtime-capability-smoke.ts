@@ -2,7 +2,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-type Capability = "plain" | "web_search" | "execute_code" | "hindsight" | "mcp";
+type Capability =
+  | "plain"
+  | "web_search"
+  | "execute_code"
+  | "browser_automation"
+  | "hindsight"
+  | "mcp";
 
 interface Args {
   tenantId: string;
@@ -41,6 +47,7 @@ interface ThreadTurn {
   usageJson?: {
     tools_called?: unknown;
     tool_invocations?: unknown;
+    tool_costs?: unknown;
     duration_ms?: number;
   };
   error?: string | null;
@@ -72,6 +79,10 @@ const ALL_CAPABILITIES: Capability[] = [
   "hindsight",
   "mcp",
 ];
+const SELECTABLE_CAPABILITIES: Capability[] = [
+  ...ALL_CAPABILITIES,
+  "browser_automation",
+];
 
 function usage(exitCode = 2): never {
   console.error(`Usage:
@@ -79,7 +90,7 @@ function usage(exitCode = 2): never {
     --tenant-id <tenant-id> \\
     --agent-id <agent-id> \\
     [--sender-id <human-user-id>] \\
-    [--capability plain,web_search,execute_code,hindsight,mcp] \\
+    [--capability plain,web_search,execute_code,browser_automation,hindsight,mcp] \\
     [--timeout 90000] [--json]
 
 Environment:
@@ -149,7 +160,7 @@ function parseArgs(): Args {
           .map((c) => c.trim())
           .filter(Boolean);
   for (const capability of capabilities) {
-    if (!ALL_CAPABILITIES.includes(capability as Capability)) {
+    if (!SELECTABLE_CAPABILITIES.includes(capability as Capability)) {
       console.error(`Unknown capability: ${capability}`);
       usage();
     }
@@ -392,10 +403,7 @@ function hasWebSearchResult(invocation: Record<string, unknown>): boolean {
         result_count?: unknown;
         results?: unknown;
       };
-      if (
-        typeof parsed.result_count === "number" &&
-        parsed.result_count > 0
-      ) {
+      if (typeof parsed.result_count === "number" && parsed.result_count > 0) {
         return true;
       }
       if (Array.isArray(parsed.results) && parsed.results.length > 0) {
@@ -421,9 +429,30 @@ function hasExecuteCodeResult(invocation: Record<string, unknown>): boolean {
   );
 }
 
-function hasHindsightResult(
+function hasBrowserAutomationResult(
   invocation: Record<string, unknown>,
 ): boolean {
+  const blob = invocationBlob(invocation);
+  if (/"ok"\s*:\s*false/.test(blob) || /browserautomationerror/.test(blob)) {
+    return false;
+  }
+  return (
+    (blob.includes("browser_automation") ||
+      blob.includes("agentcore_browser")) &&
+    /"session_id"\s*:\s*"[a-z0-9-]+"/.test(blob) &&
+    /"screenshot_bytes"\s*:\s*[1-9]/.test(blob)
+  );
+}
+
+function hasBrowserCostRecord(turn: ThreadTurn): boolean {
+  const blob = JSON.stringify(turn.usageJson?.tool_costs ?? []).toLowerCase();
+  return (
+    blob.includes("agentcore_browser") &&
+    blob.includes("agentcore_browser_session")
+  );
+}
+
+function hasHindsightResult(invocation: Record<string, unknown>): boolean {
   const blob = invocationBlob(invocation);
   return /(hindsight_recall|hindsight_reflect)/.test(blob);
 }
@@ -452,6 +481,13 @@ function promptFor(capability: Capability, token: string): string {
         "Use the code sandbox or execute_code tool to run Python that computes sum(i*i for i in range(1, 11)).",
         `After executing code, reply exactly: ${token} 385.`,
         "Do not calculate mentally; use the tool.",
+      ].join(" ");
+    case "browser_automation":
+      return [
+        "Use the browser_automation tool exactly once to open https://example.com.",
+        "Confirm the page loads and captures browser evidence.",
+        `After using the browser tool, reply with ${token} and the page URL.`,
+        "Do not answer from memory; use the tool.",
       ].join(" ");
     case "hindsight":
       return [
@@ -510,6 +546,7 @@ function evaluate(
   const patterns: Record<Exclude<Capability, "plain">, RegExp[]> = {
     web_search: [/web[-_ ]?search/, /search/],
     execute_code: [/execute_code/, /sandbox/, /code/],
+    browser_automation: [/browser_automation/, /agentcore_browser/, /browser/],
     hindsight: [/hindsight/, /memory/, /reflect/, /recall/],
     mcp: [/mcp/, /server/],
   };
@@ -537,14 +574,20 @@ function evaluate(
       ? invocations.some(hasWebSearchResult)
       : capability === "execute_code"
         ? invocations.some(hasExecuteCodeResult)
-        : capability === "hindsight"
-          ? invocations.some(hasHindsightResult)
-          : capability === "mcp"
-            ? invocations.some(hasMcpResult)
-            : false;
+        : capability === "browser_automation"
+          ? invocations.some(hasBrowserAutomationResult)
+          : capability === "hindsight"
+            ? invocations.some(hasHindsightResult)
+            : capability === "mcp"
+              ? invocations.some(hasMcpResult)
+              : false;
 
   if (!evidenceOk) {
     return { ...base, reason: `${capability}_result_evidence_missing` };
+  }
+
+  if (capability === "browser_automation" && !hasBrowserCostRecord(turn)) {
+    return { ...base, reason: "browser_tool_cost_evidence_missing" };
   }
 
   return {

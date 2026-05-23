@@ -9,6 +9,8 @@ The smoke uses GraphQL to create a chat thread, sends a user message with `sendM
 - `apps/admin/.env` exists with `VITE_GRAPHQL_HTTP_URL` and `VITE_GRAPHQL_API_KEY`, or set `THINKWORK_GRAPHQL_URL` and `THINKWORK_GRAPHQL_API_KEY`.
 - A deployed agent whose `runtime` is `PI`.
 - The agent is reachable through the normal thread-message path.
+- For `execute_code`, the agent/template must have Code Sandbox enabled and sandbox preflight must report a ready interpreter for the invoking user.
+- For `browser_automation`, the agent/template must have Browser Automation enabled and the Pi runtime role/image must include AgentCore Browser permissions.
 
 ## Command
 
@@ -35,6 +37,7 @@ Capabilities:
 - `plain` proves basic Pi thread-message routing and assistant persistence.
 - `web_search` requires persisted web-search tool evidence.
 - `execute_code` requires persisted code/sandbox tool evidence.
+- `browser_automation` requires persisted AgentCore Browser tool evidence and should include Browser substrate cost metadata when the session starts.
 - `hindsight` requires persisted memory/retain/recall/reflect evidence.
 - `mcp` requires persisted MCP tool/server evidence.
 
@@ -48,6 +51,23 @@ Capabilities:
 
 The output includes thread id, thread identifier, turn id, assistant message id, response text, and the persisted `usageJson`/`resultJson` evidence needed for follow-up debugging.
 
-## Current Dev Baseline
+For Pi core-agent readiness, run at minimum:
 
-As of 2026-04-27, plain Pi chat passes for the sandbox agent. Tool-backed smokes fail because `packages/agentcore-pi/agent-container/src/runtime/pi-loop.ts` does not register Pi tools or return tool invocation metadata. Hindsight end-of-turn memory is therefore not being retained by Pi turns.
+```bash
+pnpm --filter @thinkwork/api pi:capability-smoke -- \
+  --tenant-id <tenant-id> \
+  --agent-id <pi-agent-id> \
+  --sender-id <human-user-id> \
+  --capability execute_code,browser_automation \
+  --timeout 120000
+```
+
+Do not mark the core ThinkWork agent Pi-ready until both capabilities pass through this deployed thread-message path. The pass condition is persisted `thread_turns.usage_json.tool_invocations`, not model-written prose.
+
+## Troubleshooting
+
+- `turn_status_running` or a timeout usually means the runtime did not POST the finalize callback. Check the Pi Lambda logs for `finalize_callback_*`.
+- `no_successful_tool_evidence_in_thread_turn_usage_json` means the tool was not called or the finalizer did not persist the invocation list.
+- Browser `AccessDeniedException` means the Pi runtime role is missing AgentCore Browser actions such as `StartBrowserSession`, `InvokeBrowser`, or `StopBrowserSession`.
+- Browser evidence with no cost row means the runtime called Browser but did not pass `tool_costs` through the finalizer payload.
+- Sandbox provisioning/cap errors are real tool results. Check tenant sandbox readiness and quota before rerunning.
