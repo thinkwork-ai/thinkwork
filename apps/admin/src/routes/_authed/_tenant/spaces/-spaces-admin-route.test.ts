@@ -13,7 +13,6 @@ describe("Spaces admin routes", () => {
   );
   const configurationRouteSource = readSource("./$spaceId_.configuration.tsx");
   const workspaceRouteSource = readSource("./$spaceId_.workspace.tsx");
-  const toolsRouteSource = readSource("./$spaceId_.tools.tsx");
   const memoryRouteSource = readSource("./$spaceId_.memory.tsx");
   const automationsRouteSource = readSource("./$spaceId_.automations.tsx");
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
@@ -27,9 +26,6 @@ describe("Spaces admin routes", () => {
     );
     expect(routeTreeSource).toContain(
       "AuthedTenantSpacesSpaceIdWorkspaceRouteImport",
-    );
-    expect(routeTreeSource).toContain(
-      "AuthedTenantSpacesSpaceIdToolsRouteImport",
     );
     expect(routeTreeSource).toContain(
       "AuthedTenantSpacesSpaceIdMemoryRouteImport",
@@ -46,6 +42,9 @@ describe("Spaces admin routes", () => {
     expect(routeTreeSource).not.toContain(
       "AuthedTenantSpacesSpaceIdSettingsRouteImport",
     );
+    expect(routeTreeSource).not.toContain(
+      "AuthedTenantSpacesSpaceIdToolsRouteImport",
+    );
     expect(listRouteSource).toContain(
       'createFileRoute("/_authed/_tenant/spaces/")',
     );
@@ -57,9 +56,6 @@ describe("Spaces admin routes", () => {
     );
     expect(workspaceRouteSource).toContain(
       'createFileRoute(\n  "/_authed/_tenant/spaces/$spaceId_/workspace"',
-    );
-    expect(toolsRouteSource).toContain(
-      '"/_authed/_tenant/spaces/$spaceId_/tools"',
     );
     expect(memoryRouteSource).toContain(
       '"/_authed/_tenant/spaces/$spaceId_/memory"',
@@ -96,7 +92,6 @@ describe("Spaces admin routes", () => {
     const tabOrder = [
       'value="configuration"',
       'value="workspace"',
-      'value="tools"',
       'value="memory"',
       'value="automations"',
     ];
@@ -115,7 +110,6 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).toContain("asChild");
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/configuration"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/workspace"');
-    expect(detailChromeSource).toContain('to="/spaces/$spaceId/tools"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/memory"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/automations"');
     expect(detailRouteSource).toContain('to="/spaces/$spaceId/configuration"');
@@ -127,6 +121,8 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain('value="connected-data"');
     expect(detailChromeSource).not.toContain('value="mcp"');
     expect(detailChromeSource).not.toContain('value="settings"');
+    expect(detailChromeSource).not.toContain('value="tools"');
+    expect(detailChromeSource).not.toContain('to="/spaces/$spaceId/tools"');
     expect(detailChromeSource).not.toContain('value="threads"');
     expect(detailChromeSource).not.toContain('value="checklist"');
     expect(detailChromeSource).not.toContain('value="members"');
@@ -171,18 +167,17 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain("source adapter");
   });
 
-  it("keeps Tools scoped to built-in tools and MCP server selection", () => {
-    expect(toolsRouteSource).toContain("SpaceToolsPanel");
-    expect(toolsRouteSource).toContain("space={space}");
-    expect(detailChromeSource).toContain("SpaceToolsQuery");
-    expect(detailChromeSource).toContain("SetSpaceToolsMutation");
-    expect(detailChromeSource).toContain("listBuiltinTools");
-    expect(detailChromeSource).toContain("listMcpServers");
-    expect(detailChromeSource).toContain("Built-in Tools");
-    expect(detailChromeSource).toContain("MCP Servers");
-    expect(detailChromeSource).toContain("Choose built-in tools");
-    expect(detailChromeSource).toContain("Choose MCP servers");
-    expect(detailChromeSource).toContain("No tools selected.");
+  it("does not expose the retired Space Tools UI", () => {
+    expect(detailChromeSource).not.toContain("SpaceToolsPanel");
+    expect(detailChromeSource).not.toContain("SpaceToolsQuery");
+    expect(detailChromeSource).not.toContain("SetSpaceToolsMutation");
+    expect(detailChromeSource).not.toContain("listBuiltinTools");
+    expect(detailChromeSource).not.toContain("listMcpServers");
+    expect(detailChromeSource).not.toContain("Built-in Tools");
+    expect(detailChromeSource).not.toContain("MCP Servers");
+    expect(detailChromeSource).not.toContain("Choose built-in tools");
+    expect(detailChromeSource).not.toContain("Choose MCP servers");
+    expect(detailChromeSource).not.toContain("No tools selected.");
     expect(detailChromeSource).not.toContain("Tool Policy");
     expect(detailChromeSource).not.toContain("MCP Policy");
     expect(detailChromeSource).not.toContain("JsonPanel");
@@ -230,8 +225,6 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("mutation SetSpaceEmailTriggers");
     expect(queriesSource).toContain("query SpaceMemory");
     expect(queriesSource).toContain("mutation SetSpaceKnowledgeBases");
-    expect(queriesSource).toContain("query SpaceTools");
-    expect(queriesSource).toContain("mutation SetSpaceTools");
     expect(queriesSource).toContain("includeAllForAdmin: true");
     expect(queriesSource).toContain("accessMode");
     expect(queriesSource).toContain("emailTriggersEnabled");
@@ -239,10 +232,9 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("knowledgeBases");
     expect(queriesSource).toContain("knowledgeBaseId");
     expect(queriesSource).toContain("setSpaceKnowledgeBases");
-    expect(queriesSource).toContain("builtInTools");
-    expect(queriesSource).toContain("mcpServers");
-    expect(queriesSource).toContain("mcpServerId");
-    expect(queriesSource).toContain("setSpaceTools");
+    expect(queriesSource).not.toContain("query SpaceTools");
+    expect(queriesSource).not.toContain("mutation SetSpaceTools");
+    expect(queriesSource).not.toContain("setSpaceTools(input");
     expect(queriesSource).toContain("runtimeOverrides");
     expect(spacesListQuerySource).not.toContain("agentAssignments");
     expect(queriesSource).not.toContain("localInstructions");

@@ -83,7 +83,6 @@ import { Route as AuthedTenantAutomationsSchedulesIndexRouteImport } from "./rou
 import { Route as AuthedTenantAutomationsRoutinesIndexRouteImport } from "./routes/_authed/_tenant/automations/routines/index";
 import { Route as AuthedTenantAutomationsCredentialsIndexRouteImport } from "./routes/_authed/_tenant/automations/credentials/index";
 import { Route as AuthedTenantSpacesSpaceIdWorkspaceRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.workspace";
-import { Route as AuthedTenantSpacesSpaceIdToolsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.tools";
 import { Route as AuthedTenantSpacesSpaceIdMemoryRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.memory";
 import { Route as AuthedTenantSpacesSpaceIdConfigurationRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.configuration";
 import { Route as AuthedTenantSpacesSpaceIdAutomationsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.automations";
@@ -518,12 +517,6 @@ const AuthedTenantSpacesSpaceIdWorkspaceRoute =
     path: "/spaces/$spaceId/workspace",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantSpacesSpaceIdToolsRoute =
-  AuthedTenantSpacesSpaceIdToolsRouteImport.update({
-    id: "/spaces/$spaceId_/tools",
-    path: "/spaces/$spaceId/tools",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
 const AuthedTenantSpacesSpaceIdMemoryRoute =
   AuthedTenantSpacesSpaceIdMemoryRouteImport.update({
     id: "/spaces/$spaceId_/memory",
@@ -708,7 +701,6 @@ export interface FileRoutesByFullPath {
   "/spaces/$spaceId/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   "/spaces/$spaceId/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
   "/spaces/$spaceId/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
-  "/spaces/$spaceId/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
   "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
@@ -795,7 +787,6 @@ export interface FileRoutesByTo {
   "/spaces/$spaceId/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   "/spaces/$spaceId/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
   "/spaces/$spaceId/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
-  "/spaces/$spaceId/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
   "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/automations/routines": typeof AuthedTenantAutomationsRoutinesIndexRoute;
@@ -890,7 +881,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/spaces/$spaceId_/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   "/_authed/_tenant/spaces/$spaceId_/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
   "/_authed/_tenant/spaces/$spaceId_/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
-  "/_authed/_tenant/spaces/$spaceId_/tools": typeof AuthedTenantSpacesSpaceIdToolsRoute;
   "/_authed/_tenant/spaces/$spaceId_/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/_authed/_tenant/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
   "/_authed/_tenant/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
@@ -984,7 +974,6 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId/automations"
     | "/spaces/$spaceId/configuration"
     | "/spaces/$spaceId/memory"
-    | "/spaces/$spaceId/tools"
     | "/spaces/$spaceId/workspace"
     | "/automations/credentials/"
     | "/automations/routines/"
@@ -1071,7 +1060,6 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId/automations"
     | "/spaces/$spaceId/configuration"
     | "/spaces/$spaceId/memory"
-    | "/spaces/$spaceId/tools"
     | "/spaces/$spaceId/workspace"
     | "/automations/credentials"
     | "/automations/routines"
@@ -1165,7 +1153,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/spaces/$spaceId_/automations"
     | "/_authed/_tenant/spaces/$spaceId_/configuration"
     | "/_authed/_tenant/spaces/$spaceId_/memory"
-    | "/_authed/_tenant/spaces/$spaceId_/tools"
     | "/_authed/_tenant/spaces/$spaceId_/workspace"
     | "/_authed/_tenant/automations/credentials/"
     | "/_authed/_tenant/automations/routines/"
@@ -1709,13 +1696,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantSpacesSpaceIdWorkspaceRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/spaces/$spaceId_/tools": {
-      id: "/_authed/_tenant/spaces/$spaceId_/tools";
-      path: "/spaces/$spaceId/tools";
-      fullPath: "/spaces/$spaceId/tools";
-      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdToolsRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
     "/_authed/_tenant/spaces/$spaceId_/memory": {
       id: "/_authed/_tenant/spaces/$spaceId_/memory";
       path: "/spaces/$spaceId/memory";
@@ -2018,7 +1998,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantSpacesSpaceIdAutomationsRoute: typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   AuthedTenantSpacesSpaceIdConfigurationRoute: typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
   AuthedTenantSpacesSpaceIdMemoryRoute: typeof AuthedTenantSpacesSpaceIdMemoryRoute;
-  AuthedTenantSpacesSpaceIdToolsRoute: typeof AuthedTenantSpacesSpaceIdToolsRoute;
   AuthedTenantSpacesSpaceIdWorkspaceRoute: typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   AuthedTenantAutomationsCredentialsIndexRoute: typeof AuthedTenantAutomationsCredentialsIndexRoute;
   AuthedTenantAutomationsRoutinesIndexRoute: typeof AuthedTenantAutomationsRoutinesIndexRoute;
@@ -2092,7 +2071,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantSpacesSpaceIdConfigurationRoute:
     AuthedTenantSpacesSpaceIdConfigurationRoute,
   AuthedTenantSpacesSpaceIdMemoryRoute: AuthedTenantSpacesSpaceIdMemoryRoute,
-  AuthedTenantSpacesSpaceIdToolsRoute: AuthedTenantSpacesSpaceIdToolsRoute,
   AuthedTenantSpacesSpaceIdWorkspaceRoute:
     AuthedTenantSpacesSpaceIdWorkspaceRoute,
   AuthedTenantAutomationsCredentialsIndexRoute:
