@@ -37,6 +37,7 @@
  */
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -405,6 +406,7 @@ async function resolveUserContextTarget(
 const WRITE_ACTIONS = new Set([
   "put",
   "delete",
+  "move",
   "create-sub-agent",
   "regenerate-map",
   "update-identity-field",
@@ -1329,6 +1331,243 @@ async function handleDelete(
   return json(200, { ok: true });
 }
 
+// ---------------------------------------------------------------------------
+// `move` action — atomic copy + delete, single-file in this unit
+// ---------------------------------------------------------------------------
+
+/**
+ * S3 `CopySource` header must be URL-encoded per AWS docs. Encode each
+ * path segment and preserve `/` separators so keys with spaces or
+ * parentheses (e.g. an auto-renamed `notes (2).md`) survive the copy.
+ */
+function s3CopySource(key: string): string {
+  const encoded = key.split("/").map(encodeURIComponent).join("/");
+  return `${bucket()}/${encoded}`;
+}
+
+function pathBasename(path: string): string {
+  const idx = path.lastIndexOf("/");
+  return idx === -1 ? path : path.slice(idx + 1);
+}
+
+function joinFolderPath(folder: string, name: string): string {
+  return folder === "" ? name : `${folder}/${name}`;
+}
+
+function splitNameAndExtension(name: string): { stem: string; ext: string } {
+  // Hidden files (`.gitkeep`, `.env`) are treated as having no extension —
+  // the leading dot is part of the stem so collision resolution produces
+  // `.gitkeep (2)` rather than ` (2).gitkeep`.
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return { stem: name, ext: "" };
+  return { stem: name.slice(0, dot), ext: name.slice(dot) };
+}
+
+/**
+ * Resolve a name collision by appending ` (2)`, ` (3)`, … until unique.
+ * For files, the suffix is inserted before the extension so
+ * `notes.md` → `notes (2).md`. For folders, the suffix is appended.
+ */
+function resolveCollisionName(
+  desired: string,
+  occupied: Set<string>,
+  isFolder: boolean,
+): string {
+  if (!occupied.has(desired)) return desired;
+  const { stem, ext } = isFolder
+    ? { stem: desired, ext: "" }
+    : splitNameAndExtension(desired);
+  for (let n = 2; n < 10000; n++) {
+    const candidate = `${stem} (${n})${ext}`;
+    if (!occupied.has(candidate)) return candidate;
+  }
+  throw new Error(`Unable to resolve collision for ${desired}`);
+}
+
+/**
+ * Compute the immediate child names of the destination folder, used for
+ * collision detection. `.gitkeep` sentinels are excluded — they're a
+ * folder-identity marker, not a real conflict.
+ *
+ * Caller passes the resolved `prefix` and `key` builder so this helper
+ * does not need to narrow the `Target` union (Computer targets are
+ * already rejected upstream and do not carry these fields).
+ */
+async function listImmediateChildren(
+  prefix: string,
+  keyOf: (path: string) => string,
+  folderPath: string,
+): Promise<Set<string>> {
+  const listKey = folderPath === "" ? prefix : keyOf(folderPath) + "/";
+  const paths = await listPrefix(listKey);
+  const children = new Set<string>();
+  for (const p of paths) {
+    const seg = p.split("/")[0];
+    if (!seg) continue;
+    if (seg === ".gitkeep") continue;
+    children.add(seg);
+  }
+  return children;
+}
+
+interface MoveSuccessPayload {
+  ok: true;
+  destPath: string;
+  movedCount: number;
+  detachedPinnedCount: number;
+}
+
+async function handleMove(
+  deps: HandlerDeps,
+  fromPath: string,
+  toFolder: string,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+
+  if (target.kind === "computer") {
+    return json(400, {
+      ok: false,
+      error: "move not supported for computer targets",
+    });
+  }
+
+  let cleanFrom: string;
+  let cleanToFolder: string;
+  try {
+    cleanFrom = normalizeWorkspacePath(fromPath);
+    cleanToFolder =
+      toFolder === "" ? "" : normalizeWorkspacePath(toFolder);
+  } catch (err) {
+    return json(400, {
+      ok: false,
+      error: err instanceof Error ? err.message : "Invalid workspace path",
+    });
+  }
+
+  if (target.kind === "user" && !isVisibleUserContextPath(cleanFrom)) {
+    return json(403, {
+      ok: false,
+      error: "User context path is not editable from this surface.",
+    });
+  }
+  if (isBuiltinToolWorkspacePath(cleanFrom)) {
+    return json(403, {
+      ok: false,
+      error:
+        "Built-in tools are configured through the Built-in Tools API, not workspace skill files.",
+    });
+  }
+
+  // Folder detection: is the source path a prefix that contains objects?
+  // Folder branch ships in U2; this unit returns 501 to keep the contract
+  // explicit until then.
+  const folderListing = await listPrefix(target.key(cleanFrom) + "/");
+  if (folderListing.length > 0) {
+    return json(501, {
+      ok: false,
+      error: "Folder moves are not yet implemented (Unit 2).",
+    });
+  }
+
+  // Compute destination with collision-resolved name.
+  const fromBase = pathBasename(cleanFrom);
+  const desiredDest = joinFolderPath(cleanToFolder, fromBase);
+  if (desiredDest === cleanFrom) {
+    return json(400, {
+      ok: false,
+      error: "Source and destination are identical",
+    });
+  }
+
+  const occupiedSiblings = await listImmediateChildren(
+    target.prefix,
+    target.key,
+    cleanToFolder,
+  );
+  const finalBase = resolveCollisionName(fromBase, occupiedSiblings, false);
+  const finalDest = joinFolderPath(cleanToFolder, finalBase);
+
+  if (isBuiltinToolWorkspacePath(finalDest)) {
+    return json(403, {
+      ok: false,
+      error:
+        "Built-in tools are configured through the Built-in Tools API, not workspace skill files.",
+    });
+  }
+  if (target.kind === "user" && !isVisibleUserContextPath(finalDest)) {
+    return json(403, {
+      ok: false,
+      error: "Destination is not editable from this surface.",
+    });
+  }
+  if (
+    target.kind === "agent" &&
+    isProtectedOrchestrationWritePath(finalDest)
+  ) {
+    return json(403, {
+      ok: false,
+      error: "use orchestration writer",
+    });
+  }
+
+  const sourceKey = target.key(cleanFrom);
+  const destKey = target.key(finalDest);
+
+  try {
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: bucket(),
+        CopySource: s3CopySource(sourceKey),
+        Key: destKey,
+      }),
+    );
+  } catch (err) {
+    if (isNoSuchKey(err)) {
+      return json(404, { ok: false, error: "Source file not found" });
+    }
+    throw err;
+  }
+
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: sourceKey }));
+
+  const detachedPinnedCount =
+    target.kind === "agent" && isPinnedWorkspacePath(cleanFrom) ? 1 : 0;
+
+  if (target.kind === "agent") {
+    await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+
+    const fromIsAgentsMd = pathBasename(cleanFrom) === "AGENTS.md";
+    const destIsAgentsMd = pathBasename(finalDest) === "AGENTS.md";
+    const fromIsSkillMd = isSkillMarkerPath(cleanFrom);
+    const destIsSkillMd = isSkillMarkerPath(finalDest);
+    if (fromIsAgentsMd || destIsAgentsMd || fromIsSkillMd || destIsSkillMd) {
+      try {
+        const result = await deriveAgentSkills({ tenantId }, target.agentId);
+        const summary =
+          `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
+          `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
+          `removed=${result.removedSlugs.join(",") || "-"}`;
+        console.log(`[derive-agent-skills] move ${summary}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[derive-agent-skills] move derive failed: ${message}`);
+        return json(500, {
+          ok: false,
+          error: "Move succeeded but agent_skills derive failed: " + message,
+        });
+      }
+    }
+  }
+
+  const payload: MoveSuccessPayload = {
+    ok: true,
+    destPath: finalDest,
+    movedCount: 1,
+    detachedPinnedCount,
+  };
+  return json(200, payload);
+}
+
 // Line-surgery anchors for IDENTITY.md personality fields. Only these 4
 // lines are editable via `update-identity-field`; the Name line is
 // reserved for `update_agent_name` (which goes through the updateAgent
@@ -1503,6 +1742,13 @@ interface RequestBody {
   slug?: string;
   /** For `create-sub-agent`: seeded {slug}/CONTEXT.md content. */
   contextContent?: string;
+  /** For `move`: source file or folder path (relative to workspace). */
+  fromPath?: string;
+  /**
+   * For `move`: destination folder path (relative to workspace).
+   * Empty string `""` means the workspace root.
+   */
+  toFolder?: string;
   // Legacy shape — rejected loudly so buggy clients surface.
   tenantSlug?: string;
   instanceId?: string;
@@ -1644,6 +1890,21 @@ export async function handler(
         if (!body.path)
           return json(400, { ok: false, error: "path is required for delete" });
         return await handleDelete(deps, body.path);
+      }
+      case "move": {
+        if (typeof body.fromPath !== "string" || body.fromPath === "") {
+          return json(400, {
+            ok: false,
+            error: "fromPath is required for move",
+          });
+        }
+        if (typeof body.toFolder !== "string") {
+          return json(400, {
+            ok: false,
+            error: "toFolder is required for move (use \"\" for the root)",
+          });
+        }
+        return await handleMove(deps, body.fromPath, body.toFolder);
       }
       case "regenerate-map":
         return await handleRegenerateMap(deps);
