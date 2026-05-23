@@ -45,6 +45,12 @@ export const TenantAgentQuery = graphql(`
       runtimeConfig
       adapterType
       adapterConfig
+      blockedTools
+      sandbox
+      browser
+      webSearch
+      sendEmail
+      contextEngine
       humanPairId
       humanPair {
         id

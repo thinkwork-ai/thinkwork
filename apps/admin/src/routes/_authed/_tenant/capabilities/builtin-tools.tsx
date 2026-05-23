@@ -13,7 +13,10 @@ import {
   Mail,
   BrainCircuit,
 } from "lucide-react";
-import { TenantSandboxStatusQuery } from "@/lib/graphql-queries";
+import {
+  TenantAgentQuery,
+  TenantSandboxStatusQuery,
+} from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -76,7 +79,7 @@ const CATALOG: CatalogEntry[] = [
     slug: "browser_automation",
     name: "Browser Automation",
     description:
-      "Lets agents operate dynamic websites with an AgentCore Browser session controlled by Nova Act. Policy-gated at the tenant level; opt-in per agent template or individual agent capability.",
+      "Lets the platform agent operate dynamic websites with an AgentCore Browser session controlled by Nova Act. Policy-gated at the tenant level and controlled on the tenant platform agent.",
     providers: [],
     kind: "policy-gated" as const,
     fixedProvider: "agentcore+nova_act",
@@ -85,7 +88,7 @@ const CATALOG: CatalogEntry[] = [
     slug: "code-sandbox",
     name: "Code Sandbox",
     description:
-      "Lets agents run Python via execute_code against real data in your AWS account. Runs on Bedrock AgentCore Code Interpreter — one per-tenant instance. Policy-gated at the tenant level; opt-in per agent template on the template's Configuration tab.",
+      "Lets the platform agent run Python via execute_code against real data in your AWS account. Runs on Bedrock AgentCore Code Interpreter and is controlled on the tenant platform agent.",
     providers: [],
     kind: "policy-gated" as const,
     fixedProvider: "agentcore",
@@ -94,7 +97,7 @@ const CATALOG: CatalogEntry[] = [
     slug: "agent-email-send",
     name: "Send Email",
     description:
-      "Lets agents send plain text email from their agent address with reply tracking. Policy-gated by the agent email channel and opt-in per agent template.",
+      "Lets the platform agent send plain text email from its agent address with reply tracking. Policy-gated by the agent email channel and controlled on the tenant platform agent.",
     providers: [],
     kind: "policy-gated" as const,
     fixedProvider: "thinkwork-email",
@@ -103,7 +106,7 @@ const CATALOG: CatalogEntry[] = [
     slug: "context-engine",
     name: "Company Brain",
     description:
-      "Lets agents query Company Brain across memory, pages, workspace files, knowledge bases, and approved search-safe MCP tools. Opt-in per agent template.",
+      "Lets the platform agent query Company Brain across memory, pages, workspace files, knowledge bases, and approved search-safe MCP tools.",
     providers: [],
     kind: "policy-gated" as const,
     fixedProvider: "thinkwork-context",
@@ -129,7 +132,147 @@ type SandboxState = {
 type Row = CatalogEntry & {
   state: BuiltinTool | null;
   sandbox?: SandboxState;
+  agentAccess: ToolAccess;
 };
+
+type AgentToolConfig = {
+  agentName: string;
+  blockedTools: unknown;
+  sandbox: unknown;
+  browser: unknown;
+  webSearch: unknown;
+  sendEmail: unknown;
+  contextEngine: unknown;
+};
+
+type ToolAccess = {
+  enabled: boolean;
+  label: string;
+  detail: string;
+  toolName: string | null;
+  warning?: boolean;
+};
+
+function configEnabled(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const enabled = (value as { enabled?: unknown }).enabled;
+  return enabled === undefined ? true : enabled === true;
+}
+
+function hasBlockedTool(value: unknown, toolName: string | null): boolean {
+  if (!toolName || !Array.isArray(value)) return false;
+  return value.map((item) => String(item).toLowerCase()).includes(toolName);
+}
+
+function toolNameFor(slug: string): string | null {
+  switch (slug) {
+    case "code-sandbox":
+      return "execute_code";
+    case "agent-email-send":
+      return "send_email";
+    case "context-engine":
+      return "query_context";
+    case "browser_automation":
+      return "browser_automation";
+    case "web-search":
+      return "web_search";
+    default:
+      return null;
+  }
+}
+
+function agentConfigFor(
+  slug: string,
+  agent: AgentToolConfig | null,
+): unknown {
+  if (!agent) return null;
+  switch (slug) {
+    case "code-sandbox":
+      return agent.sandbox;
+    case "agent-email-send":
+      return agent.sendEmail;
+    case "context-engine":
+      return agent.contextEngine;
+    case "browser_automation":
+      return agent.browser;
+    case "web-search":
+      return agent.webSearch;
+    default:
+      return null;
+  }
+}
+
+function accessForTool(
+  row: Pick<Row, "slug" | "kind" | "state" | "sandbox">,
+  agent: AgentToolConfig | null,
+): ToolAccess {
+  const toolName = toolNameFor(row.slug);
+  const agentName = agent?.agentName ?? "Agent";
+  const agentEnabled = configEnabled(agentConfigFor(row.slug, agent));
+
+  if (!agent) {
+    return {
+      enabled: false,
+      label: "Loading",
+      detail: "Loading platform agent configuration.",
+      toolName,
+      warning: true,
+    };
+  }
+
+  if (hasBlockedTool(agent.blockedTools, toolName)) {
+    return {
+      enabled: false,
+      label: "Blocked",
+      detail: `${toolName} is blocked on ${agentName}.`,
+      toolName,
+      warning: true,
+    };
+  }
+
+  if (row.slug === "code-sandbox") {
+    const tenantReady =
+      !!row.sandbox?.sandboxEnabled && !!row.sandbox?.hasInterpreters;
+    const enabled = tenantReady && agentEnabled;
+    return {
+      enabled,
+      label: enabled
+        ? "Enabled"
+        : tenantReady
+          ? "Agent off"
+          : "Platform off",
+      detail: enabled
+        ? `${agentName} receives execute_code.`
+        : tenantReady
+          ? `${agentName} is not opted into execute_code.`
+          : "The tenant Code Sandbox is disabled or still provisioning.",
+      toolName,
+      warning: !enabled,
+    };
+  }
+
+  if (row.kind !== "policy-gated" && row.state?.enabled !== true) {
+    return {
+      enabled: false,
+      label: row.state ? "Provider off" : "Provider missing",
+      detail: row.state
+        ? "The provider row is disabled."
+        : "No provider is configured for this built-in tool.",
+      toolName,
+      warning: true,
+    };
+  }
+
+  return {
+    enabled: agentEnabled,
+    label: agentEnabled ? "Enabled" : "Agent off",
+    detail: agentEnabled
+      ? `${agentName} receives ${toolName ?? row.slug}.`
+      : `${agentName} is not opted into ${toolName ?? row.slug}.`,
+    toolName,
+    warning: !agentEnabled,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Columns
@@ -165,7 +308,7 @@ const columns: ColumnDef<Row>[] = [
   },
   {
     accessorKey: "enabled",
-    header: () => <div className="text-center">Status</div>,
+    header: () => <div className="text-center">Platform</div>,
     size: 150,
     cell: ({ row }) => {
       // Policy-gated tools (Code Sandbox) derive their Enabled/Disabled
@@ -176,7 +319,7 @@ const columns: ColumnDef<Row>[] = [
           return (
             <div className="flex justify-center">
               <Badge variant="secondary" className="text-xs">
-                Template opt-in
+                Platform built-in
               </Badge>
             </div>
           );
@@ -232,6 +375,27 @@ const columns: ColumnDef<Row>[] = [
     },
   },
   {
+    accessorKey: "agentAccess",
+    header: () => <div className="text-center">Agent access</div>,
+    size: 150,
+    cell: ({ row }) => (
+      <div className="flex justify-center">
+        <Badge
+          variant="secondary"
+          className={`text-xs ${
+            row.original.agentAccess.enabled
+              ? "bg-green-500/15 text-green-600 dark:text-green-400"
+              : row.original.agentAccess.warning
+                ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {row.original.agentAccess.label}
+        </Badge>
+      </div>
+    ),
+  },
+  {
     accessorKey: "hasSecret",
     header: "API Key",
     size: 100,
@@ -281,6 +445,11 @@ function BuiltinToolsPage() {
     variables: { id: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [{ data: agentData }] = useQuery({
+    query: TenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
 
   const sandboxState: SandboxState | undefined = sandboxData?.tenant
     ? {
@@ -308,14 +477,31 @@ function BuiltinToolsPage() {
   if (!tenantSlug) return <PageSkeleton />;
   if (loading && tools.length === 0) return <PageSkeleton />;
 
-  const rows: Row[] = CATALOG.map((c) => ({
-    ...c,
-    state: tools.find((t) => t.toolSlug === c.slug) ?? null,
-    sandbox:
+  const agent: AgentToolConfig | null = agentData?.agent
+    ? {
+        agentName: agentData.agent.name,
+        blockedTools: agentData.agent.blockedTools,
+        sandbox: agentData.agent.sandbox,
+        browser: agentData.agent.browser,
+        webSearch: agentData.agent.webSearch,
+        sendEmail: agentData.agent.sendEmail,
+        contextEngine: agentData.agent.contextEngine,
+      }
+    : null;
+
+  const rows: Row[] = CATALOG.map((c) => {
+    const state = tools.find((t) => t.toolSlug === c.slug) ?? null;
+    const sandbox =
       c.kind === "policy-gated" && c.slug === "code-sandbox"
         ? sandboxState
-        : undefined,
-  }));
+        : undefined;
+    return {
+      ...c,
+      state,
+      sandbox,
+      agentAccess: accessForTool({ ...c, state, sandbox }, agent),
+    };
+  });
 
   return (
     <>
@@ -346,6 +532,7 @@ function BuiltinToolsPage() {
       {activeRow?.kind === "policy-gated" ? (
         <PolicyGatedInfoDialog
           row={activeRow}
+          agentName={agent?.agentName ?? "Agent"}
           onClose={() => setActiveRow(null)}
         />
       ) : activeRow ? (
@@ -617,9 +804,11 @@ function ConfigureDialog({
 
 function PolicyGatedInfoDialog({
   row,
+  agentName,
   onClose,
 }: {
   row: Row;
+  agentName: string;
   onClose: () => void;
 }) {
   const sb = row.sandbox;
@@ -691,33 +880,27 @@ function PolicyGatedInfoDialog({
           ) : null}
 
           <div className="space-y-1">
-            <Label>Agent template opt-in</Label>
+            <Label>Agent access</Label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge
+                variant="secondary"
+                className={`text-xs ${
+                  row.agentAccess.enabled
+                    ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                    : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                }`}
+              >
+                {row.agentAccess.label}
+              </Badge>
+              {row.agentAccess.toolName ? (
+                <Badge variant="outline" className="text-xs font-mono">
+                  {row.agentAccess.toolName}
+                </Badge>
+              ) : null}
+            </div>
             <p className="text-xs text-muted-foreground">
-              {isSandbox ? (
-                <>
-                  Enrollment is per-template. Open any{" "}
-                  <b>Agent Template → Configuration</b> and toggle the{" "}
-                  <code>execute_code</code> switch in the Code Sandbox card to
-                  opt in.
-                </>
-              ) : (
-                <>
-                  Open any <b>Agent Template → Configuration</b> and toggle{" "}
-                  <code>
-                    {isContextEngine
-                      ? "query_context"
-                      : isEmail
-                        ? "send_email"
-                        : "browser_automation"}
-                  </code>
-                  .
-                  {isContextEngine
-                    ? " Approved MCP context providers are managed from MCP Servers."
-                    : isEmail
-                      ? " The agent email channel must also be enabled for the agent."
-                      : " Individual agent capability rows can override the template default."}
-                </>
-              )}
+              {row.agentAccess.detail} This is the effective configuration for{" "}
+              {agentName}, the tenant platform agent used by chat.
             </p>
           </div>
 
