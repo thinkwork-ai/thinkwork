@@ -12,7 +12,7 @@ export const TenantBySlugDoc = graphql(`
 
 export const AllTenantAgentsForWikiDoc = graphql(`
   query CliAllTenantAgentsForWiki($tenantId: ID!) {
-    allTenantAgents(tenantId: $tenantId, includeSystem: false, includeSubAgents: false) {
+    tenantAgent(tenantId: $tenantId) {
       id
       name
       slug
@@ -23,7 +23,12 @@ export const AllTenantAgentsForWikiDoc = graphql(`
 `);
 
 export const CompileWikiNowDoc = graphql(`
-  mutation CliCompileWikiNow($tenantId: ID!, $ownerId: ID!, $modelId: String, $forceNew: Boolean) {
+  mutation CliCompileWikiNow(
+    $tenantId: ID!
+    $ownerId: ID!
+    $modelId: String
+    $forceNew: Boolean
+  ) {
     compileWikiNow(
       tenantId: $tenantId
       ownerId: $ownerId

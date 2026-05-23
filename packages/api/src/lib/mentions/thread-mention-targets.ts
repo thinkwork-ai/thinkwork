@@ -1,8 +1,7 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
-  spaceAgentAssignments,
   spaceMembers,
   spaces,
   tenantMembers,
@@ -134,32 +133,33 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         });
       }
 
-      const assignmentRows = await this.db
+      const [platformAgent] = await this.db
         .select({
-          role: spaceAgentAssignments.local_role,
+          role: agents.role,
           agentId: agents.id,
           agentName: agents.name,
           agentSlug: agents.slug,
           agentAvatarUrl: agents.avatar_url,
         })
-        .from(spaceAgentAssignments)
-        .innerJoin(agents, eq(agents.id, spaceAgentAssignments.agent_id))
+        .from(agents)
         .where(
           and(
-            eq(spaceAgentAssignments.tenant_id, input.tenantId),
-            eq(spaceAgentAssignments.space_id, input.spaceId),
-            eq(spaceAgentAssignments.status, "active"),
+            eq(agents.tenant_id, input.tenantId),
+            eq(agents.is_platform_default, true),
           ),
-        );
-      for (const row of assignmentRows) {
+        )
+        .limit(1);
+      if (platformAgent) {
         addTarget(byKey, {
-          id: `agent:${row.agentId}`,
+          id: `agent:${platformAgent.agentId}`,
           targetType: "agent",
-          targetId: row.agentId,
-          displayName: row.agentName,
-          aliases: [row.agentName].filter(isString),
-          avatarUrl: row.agentAvatarUrl,
-          role: row.role,
+          targetId: platformAgent.agentId,
+          displayName: platformAgent.agentName,
+          aliases: [platformAgent.agentName, platformAgent.agentSlug].filter(
+            isString,
+          ),
+          avatarUrl: platformAgent.agentAvatarUrl,
+          role: platformAgent.role,
         });
       }
     }
@@ -208,7 +208,7 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         .where(
           and(
             eq(agents.tenant_id, input.tenantId),
-            ne(agents.status, "archived"),
+            eq(agents.is_platform_default, true),
           ),
         );
       for (const row of tenantAgentRows) {

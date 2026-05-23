@@ -1,4 +1,7 @@
-import { agentQueries } from "./agents/index.js";
+import {
+  tenantAgentMutations,
+  tenantAgentQueries,
+} from "./tenant-agent/index.js";
 import { coreQueries } from "./core/index.js";
 import { teamQueries } from "./teams/index.js";
 import { threadQueries } from "./threads/index.js";
@@ -13,7 +16,6 @@ import { messageQueries } from "./messages/index.js";
 import { webhookQueries } from "./webhooks/index.js";
 import { memoryQueries, memoryMutations } from "./memory/index.js";
 import { recipeQueries, recipeMutations } from "./recipes/index.js";
-import { agentMutations } from "./agents/index.js";
 import { coreMutations } from "./core/index.js";
 import { messageMutations } from "./messages/index.js";
 import {
@@ -62,7 +64,6 @@ import {
   linkedTaskTypeResolvers,
 } from "./linked-tasks/index.js";
 import {
-  spaceAgentAssignmentTypeResolvers,
   spaceChecklistTemplateTypeResolvers,
   spaceMemberTypeResolvers,
   spaceMcpServerTypeResolvers,
@@ -73,7 +74,7 @@ import {
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
-  ...agentQueries,
+  ...tenantAgentQueries,
   ...coreQueries,
   ...teamQueries,
   ...threadQueries,
@@ -108,7 +109,7 @@ export const queryResolvers: Record<string, any> = {
 
 export const mutationResolvers: Record<string, any> = {
   _empty: () => null,
-  ...agentMutations,
+  ...tenantAgentMutations,
   ...coreMutations,
   ...messageMutations,
   ...teamMutations,
@@ -139,7 +140,7 @@ export const mutationResolvers: Record<string, any> = {
   ...spaceMutations,
 };
 
-import { agentTypeResolvers } from "./agents/types.js";
+import { agentTypeResolvers } from "./tenant-agent/types.js";
 import {
   threadParticipantTypeResolvers,
   threadTypeResolvers,
@@ -163,7 +164,6 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   ComputerAssignment: computerAssignmentTypeResolvers,
   Space: spaceTypeResolvers,
   SpaceMember: spaceMemberTypeResolvers,
-  SpaceAgentAssignment: spaceAgentAssignmentTypeResolvers,
   SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,
   SpaceMcpServer: spaceMcpServerTypeResolvers,
   LinkedTask: linkedTaskTypeResolvers,

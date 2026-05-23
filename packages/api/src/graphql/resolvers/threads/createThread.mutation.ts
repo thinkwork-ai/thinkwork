@@ -11,7 +11,6 @@ import {
   messages,
   messageMentions,
   spaces,
-  spaceAgentAssignments,
   threadParticipants,
   threadToCamel,
 } from "../../utils.js";
@@ -190,33 +189,6 @@ export const createThread = async (
         role: "requester",
         source: "thread_creator",
         last_read_at: openingMessageCreatedAt ?? undefined,
-      });
-    }
-
-    const autoSubscribedAgents = await tx
-      .select({
-        agent_id: spaceAgentAssignments.agent_id,
-        local_role: spaceAgentAssignments.local_role,
-      })
-      .from(spaceAgentAssignments)
-      .where(
-        and(
-          eq(spaceAgentAssignments.tenant_id, i.tenantId),
-          eq(spaceAgentAssignments.space_id, threadSpace.id),
-          eq(spaceAgentAssignments.status, "active"),
-          eq(spaceAgentAssignments.auto_subscribe, true),
-        ),
-      );
-    for (const assignment of autoSubscribedAgents) {
-      participantRows.push({
-        tenant_id: i.tenantId,
-        thread_id: threadRow.id,
-        space_id: threadSpace.id,
-        participant_type: "agent",
-        agent_id: assignment.agent_id,
-        role: assignment.local_role ?? "agent",
-        source: "space_auto_subscribe",
-        notification_preference: "subscribed",
       });
     }
 

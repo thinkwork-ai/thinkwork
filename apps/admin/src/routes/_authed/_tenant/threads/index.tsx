@@ -17,7 +17,11 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import {
   FilterBarSort,
   FilterBarGroup,
@@ -73,15 +77,27 @@ const defaultViewState: ThreadViewState = {
 
 // `as const satisfies` pins the arrays to the SortField/GroupBy unions at
 // definition — if the union grows and these tuples don't, TS fails at build.
-const SORT_FIELD_VALUES = ["title", "created", "updated"] as const satisfies readonly SortField[];
-const GROUP_BY_VALUES = ["assignee", "none"] as const satisfies readonly GroupBy[];
+const SORT_FIELD_VALUES = [
+  "title",
+  "created",
+  "updated",
+] as const satisfies readonly SortField[];
+const GROUP_BY_VALUES = [
+  "assignee",
+  "none",
+] as const satisfies readonly GroupBy[];
 
 function isSortField(v: unknown): v is SortField {
-  return typeof v === "string" && (SORT_FIELD_VALUES as readonly string[]).includes(v);
+  return (
+    typeof v === "string" &&
+    (SORT_FIELD_VALUES as readonly string[]).includes(v)
+  );
 }
 
 function isGroupBy(v: unknown): v is GroupBy {
-  return typeof v === "string" && (GROUP_BY_VALUES as readonly string[]).includes(v);
+  return (
+    typeof v === "string" && (GROUP_BY_VALUES as readonly string[]).includes(v)
+  );
 }
 
 // Defensive rehydrate: U3d/U4/U7 retired the task-era status/priority axis, so
@@ -97,12 +113,18 @@ function getViewState(key: string): ThreadViewState {
     if (!parsed || typeof parsed !== "object") return { ...defaultViewState };
     const p = parsed as Record<string, unknown>;
     return {
-      assignees: Array.isArray(p.assignees) ? p.assignees.filter((v): v is string => typeof v === "string") : [],
-      sortField: isSortField(p.sortField) ? p.sortField : defaultViewState.sortField,
+      assignees: Array.isArray(p.assignees)
+        ? p.assignees.filter((v): v is string => typeof v === "string")
+        : [],
+      sortField: isSortField(p.sortField)
+        ? p.sortField
+        : defaultViewState.sortField,
       // Any non-'asc' value (including undefined or a future third direction) falls to 'desc'.
       sortDir: p.sortDir === "asc" ? "asc" : "desc",
       groupBy: isGroupBy(p.groupBy) ? p.groupBy : defaultViewState.groupBy,
-      collapsedGroups: Array.isArray(p.collapsedGroups) ? p.collapsedGroups.filter((v): v is string => typeof v === "string") : [],
+      collapsedGroups: Array.isArray(p.collapsedGroups)
+        ? p.collapsedGroups.filter((v): v is string => typeof v === "string")
+        : [],
       showArchived: p.showArchived === true,
     };
   } catch {
@@ -114,7 +136,10 @@ function saveViewState(key: string, state: ThreadViewState) {
   localStorage.setItem(key, JSON.stringify(state));
 }
 
-function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]> {
+function groupBy<T>(
+  items: T[],
+  keyFn: (item: T) => string,
+): Record<string, T[]> {
   const groups: Record<string, T[]> = {};
   for (const item of items) {
     const key = keyFn(item);
@@ -153,7 +178,9 @@ function ThreadsPage() {
   const VIEW_STATE_KEY = "thinkwork:threads-view";
   const scopedKey = tenantId ? `${VIEW_STATE_KEY}:${tenantId}` : VIEW_STATE_KEY;
 
-  const [viewState, setViewState] = useState<ThreadViewState>(() => getViewState(scopedKey));
+  const [viewState, setViewState] = useState<ThreadViewState>(() =>
+    getViewState(scopedKey),
+  );
   const [issueSearch, setIssueSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const PAGE_SIZE = 50;
@@ -180,25 +207,28 @@ function ThreadsPage() {
     }
   }, [scopedKey]);
 
-  const updateView = useCallback((patch: Partial<ThreadViewState>) => {
-    setViewState((prev) => {
-      const next = { ...prev, ...patch };
-      saveViewState(scopedKey, next);
-      return next;
-    });
-    // Reset to first page when filters/sort change.
-    // `assignees` is included because the assignee facet narrows the effective
-    // result set; leaving `pageIndex` stale on a narrowed set shows a blank
-    // page at the previous offset.
-    if (
-      patch.assignees !== undefined ||
-      patch.showArchived !== undefined ||
-      patch.sortField !== undefined ||
-      patch.sortDir !== undefined
-    ) {
-      setPageIndex(0);
-    }
-  }, [scopedKey]);
+  const updateView = useCallback(
+    (patch: Partial<ThreadViewState>) => {
+      setViewState((prev) => {
+        const next = { ...prev, ...patch };
+        saveViewState(scopedKey, next);
+        return next;
+      });
+      // Reset to first page when filters/sort change.
+      // `assignees` is included because the assignee facet narrows the effective
+      // result set; leaving `pageIndex` stale on a narrowed set shows a blank
+      // page at the previous offset.
+      if (
+        patch.assignees !== undefined ||
+        patch.showArchived !== undefined ||
+        patch.sortField !== undefined ||
+        patch.sortDir !== undefined
+      ) {
+        setPageIndex(0);
+      }
+    },
+    [scopedKey],
+  );
 
   // GraphQL queries
   const [threadsResult, reexecuteThreads] = useQuery({
@@ -246,17 +276,21 @@ function ThreadsPage() {
     if (turnSub.data) reexecuteThreads({ requestPolicy: "network-only" });
   }, [turnSub.data, reexecuteThreads]);
 
-  const agents = agentsResult.data?.agents ?? [];
-  const rawThreads: ThreadItem[] = (threadsResult.data?.threadsPaged?.items ?? [])
-    .map((t: any) => ({
-      ...t,
-      status: t.status.toLowerCase(),
-    }));
+  const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
+  const rawThreads: ThreadItem[] = (
+    threadsResult.data?.threadsPaged?.items ?? []
+  ).map((t: any) => ({
+    ...t,
+    status: t.status.toLowerCase(),
+  }));
 
-  const agentName = useCallback((id: string | null) => {
-    if (!id) return null;
-    return agents.find((a: any) => a.id === id)?.name ?? null;
-  }, [agents]);
+  const agentName = useCallback(
+    (id: string | null) => {
+      if (!id) return null;
+      return agents.find((a: any) => a.id === id)?.name ?? null;
+    },
+    [agents],
+  );
 
   // Assignee filtering remains client-side (not in server query).
   // Computer-owned threads (`thread.computerId` set) are not Unassigned —
@@ -311,18 +345,22 @@ function ThreadsPage() {
     return defaults;
   };
 
-  const handleUpdateThread = useCallback((id: string, data: Record<string, unknown>) => {
-    const input: Record<string, unknown> = {};
-    if (data.status) input.status = (data.status as string).toUpperCase();
-    if (data.assigneeId !== undefined) input.assigneeId = data.assigneeId;
-    if (data.assigneeType !== undefined) input.assigneeType = data.assigneeType;
-    if (data.agentId !== undefined) {
-      // When assigning to an agent via the assignee picker
-      input.assigneeType = data.agentId ? "AGENT" : null;
-      input.assigneeId = data.agentId || null;
-    }
-    updateThread({ id, input });
-  }, [updateThread]);
+  const handleUpdateThread = useCallback(
+    (id: string, data: Record<string, unknown>) => {
+      const input: Record<string, unknown> = {};
+      if (data.status) input.status = (data.status as string).toUpperCase();
+      if (data.assigneeId !== undefined) input.assigneeId = data.assigneeId;
+      if (data.assigneeType !== undefined)
+        input.assigneeType = data.assigneeType;
+      if (data.agentId !== undefined) {
+        // When assigning to an agent via the assignee picker
+        input.assigneeType = data.agentId ? "AGENT" : null;
+        input.assigneeId = data.agentId || null;
+      }
+      updateThread({ id, input });
+    },
+    [updateThread],
+  );
 
   const activeThreadIds = useActiveTurnsStore((s) => s._activeThreadIds);
 
@@ -352,7 +390,11 @@ function ThreadsPage() {
         <>
           <PageHeader
             title="Threads"
-            description={isLoading ? "Loading..." : `${totalCount} thread${totalCount !== 1 ? "s" : ""}${viewState.showArchived ? " (archived)" : ""}`}
+            description={
+              isLoading
+                ? "Loading..."
+                : `${totalCount} thread${totalCount !== 1 ? "s" : ""}${viewState.showArchived ? " (archived)" : ""}`
+            }
           />
 
           {threadsResult.error && (
@@ -363,77 +405,89 @@ function ThreadsPage() {
 
           {/* Toolbar */}
           <div className="mt-4 flex items-center justify-between gap-2 sm:gap-3">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <div className="relative w-48 sm:w-64 md:w-80">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={issueSearch}
-              onChange={(e) => setIssueSearch(e.target.value)}
-              placeholder="Search threads..."
-              className="pl-7 text-xs sm:text-sm"
-              aria-label="Search threads"
-            />
-          </div>
-        </div>
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="relative w-48 sm:w-64 md:w-80">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={issueSearch}
+                  onChange={(e) => setIssueSearch(e.target.value)}
+                  placeholder="Search threads..."
+                  className="pl-7 text-xs sm:text-sm"
+                  aria-label="Search threads"
+                />
+              </div>
+            </div>
 
-        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-          <FilterBarPopover
-            activeCount={activeFilterCount}
-            onClearAll={() => updateView({ assignees: [], showArchived: false })}
-          >
-            <FilterBarFacet
-              label="Assignee"
-              options={[
-                { value: "__unassigned", label: "No assignee" },
-                ...agents.map((a: any) => ({ value: a.id, label: a.name })),
-              ]}
-              selected={viewState.assignees}
-              onChange={(assignees) => updateView({ assignees })}
-            />
-
-            <div className="border-t border-border" />
-
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Archive className="h-3.5 w-3.5" />
-                Show archived only
-              </span>
-              <button
-                role="switch"
-                aria-checked={viewState.showArchived}
-                onClick={() => updateView({ showArchived: !viewState.showArchived })}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
-                  viewState.showArchived ? "bg-primary border-primary" : "bg-muted border-border"
-                }`}
+            <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+              <FilterBarPopover
+                activeCount={activeFilterCount}
+                onClearAll={() =>
+                  updateView({ assignees: [], showArchived: false })
+                }
               >
-                <span className={`inline-block h-3.5 w-3.5 rounded-full bg-background transition-transform ${
-                  viewState.showArchived ? "translate-x-4" : "translate-x-0.5"
-                }`} />
-              </button>
-            </label>
-          </FilterBarPopover>
+                <FilterBarFacet
+                  label="Assignee"
+                  options={[
+                    { value: "__unassigned", label: "No assignee" },
+                    ...agents.map((a: any) => ({ value: a.id, label: a.name })),
+                  ]}
+                  selected={viewState.assignees}
+                  onChange={(assignees) => updateView({ assignees })}
+                />
 
-          <FilterBarSort
-            options={[
-              { value: "title", label: "Title" },
-              { value: "created", label: "Created" },
-              { value: "updated", label: "Last Activity" },
-            ]}
-            field={viewState.sortField}
-            direction={viewState.sortDir}
-            onChange={(field, dir) => updateView({ sortField: field as SortField, sortDir: dir })}
-          />
+                <div className="border-t border-border" />
 
-          <FilterBarGroup
-            options={[
-              { value: "assignee", label: "Assignee" },
-              { value: "none", label: "None" },
-            ]}
-            value={viewState.groupBy}
-            onChange={(v) => updateView({ groupBy: v as GroupBy })}
-          />
-        </div>
-      </div>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Archive className="h-3.5 w-3.5" />
+                    Show archived only
+                  </span>
+                  <button
+                    role="switch"
+                    aria-checked={viewState.showArchived}
+                    onClick={() =>
+                      updateView({ showArchived: !viewState.showArchived })
+                    }
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
+                      viewState.showArchived
+                        ? "bg-primary border-primary"
+                        : "bg-muted border-border"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 rounded-full bg-background transition-transform ${
+                        viewState.showArchived
+                          ? "translate-x-4"
+                          : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </label>
+              </FilterBarPopover>
+
+              <FilterBarSort
+                options={[
+                  { value: "title", label: "Title" },
+                  { value: "created", label: "Created" },
+                  { value: "updated", label: "Last Activity" },
+                ]}
+                field={viewState.sortField}
+                direction={viewState.sortDir}
+                onChange={(field, dir) =>
+                  updateView({ sortField: field as SortField, sortDir: dir })
+                }
+              />
+
+              <FilterBarGroup
+                options={[
+                  { value: "assignee", label: "Assignee" },
+                  { value: "none", label: "None" },
+                ]}
+                value={viewState.groupBy}
+                onChange={(v) => updateView({ groupBy: v as GroupBy })}
+              />
+            </div>
+          </div>
         </>
       }
     >
@@ -442,7 +496,10 @@ function ThreadsPage() {
         <EmptyState
           icon={MessagesSquare}
           title="No threads match the current filters or search."
-          action={{ label: "New Thread", onClick: () => openNewThread(newThreadDefaults()) }}
+          action={{
+            label: "New Thread",
+            onClick: () => openNewThread(newThreadDefaults()),
+          }}
         />
       )}
 
@@ -462,7 +519,8 @@ function ThreadsPage() {
           }}
         />
       ) : (
-        filtered.length > 0 && groupedContent.map((group) => (
+        filtered.length > 0 &&
+        groupedContent.map((group) => (
           <Collapsible
             key={group.key}
             open={!viewState.collapsedGroups.includes(group.key)}

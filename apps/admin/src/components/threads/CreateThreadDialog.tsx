@@ -31,12 +31,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  ChevronDown,
-  Calendar,
-  Loader2,
-  User,
-} from "lucide-react";
+import { ChevronDown, Calendar, Loader2, User } from "lucide-react";
 import { AgentsListQuery, UpdateThreadMutation } from "@/lib/graphql-queries";
 
 // ---------------------------------------------------------------------------
@@ -59,7 +54,13 @@ const CreateThreadMutation = graphql(`
 // Constants
 // ---------------------------------------------------------------------------
 
-const STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"] as const;
+const STATUSES = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "in_review",
+  "blocked",
+] as const;
 
 const DRAFT_KEY = "thinkwork:thread-draft";
 const DEBOUNCE_MS = 800;
@@ -131,8 +132,10 @@ export function ThreadFormDialog({
 }: ThreadFormDialogProps) {
   const { tenantId } = useTenant();
 
-  const [{ fetching: creating }, createThread] = useMutation(CreateThreadMutation);
-  const [{ fetching: updatingThread }, updateThread] = useMutation(UpdateThreadMutation);
+  const [{ fetching: creating }, createThread] =
+    useMutation(CreateThreadMutation);
+  const [{ fetching: updatingThread }, updateThread] =
+    useMutation(UpdateThreadMutation);
   const fetching = mode === "create" ? creating : updatingThread;
 
   const [assigneeOpen, setAssigneeOpen] = useState(false);
@@ -150,7 +153,7 @@ export function ThreadFormDialog({
     pause: !tenantId || !open,
   });
 
-  const agents = agentsResult.data?.agents ?? [];
+  const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
 
   useEffect(() => {
     if (open) {
@@ -195,8 +198,10 @@ export function ThreadFormDialog({
 
   const filteredAgents = useMemo(
     () =>
-      agents.filter((a: any) =>
-        !assigneeSearch.trim() || a.name.toLowerCase().includes(assigneeSearch.toLowerCase()),
+      agents.filter(
+        (a: any) =>
+          !assigneeSearch.trim() ||
+          a.name.toLowerCase().includes(assigneeSearch.toLowerCase()),
       ),
     [agents, assigneeSearch],
   );
@@ -252,13 +257,19 @@ export function ThreadFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "Create Thread" : "Edit Thread"}</DialogTitle>
+          <DialogTitle>
+            {mode === "create" ? "Create Thread" : "Edit Thread"}
+          </DialogTitle>
         </DialogHeader>
 
         {mode === "create" && hasDraft && (
           <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
             <span>Draft restored</span>
-            <button type="button" className="text-xs underline" onClick={handleDiscard}>
+            <button
+              type="button"
+              className="text-xs underline"
+              onClick={handleDiscard}
+            >
               Discard
             </button>
           </div>
@@ -296,7 +307,10 @@ export function ThreadFormDialog({
                     <FormItem>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <button type="button" className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-accent/50 transition-colors"
+                          >
                             <StatusIcon status={field.value} />
                             <span>{statusLabel(field.value)}</span>
                             <ChevronDown className="h-3 w-3 text-muted-foreground" />
@@ -329,11 +343,24 @@ export function ThreadFormDialog({
                   name="agentId"
                   render={({ field }) => (
                     <FormItem>
-                      <Popover open={assigneeOpen} onOpenChange={(o) => { setAssigneeOpen(o); if (!o) setAssigneeSearch(""); }}>
+                      <Popover
+                        open={assigneeOpen}
+                        onOpenChange={(o) => {
+                          setAssigneeOpen(o);
+                          if (!o) setAssigneeSearch("");
+                        }}
+                      >
                         <PopoverTrigger asChild>
-                          <button type="button" className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-accent/50 transition-colors"
+                          >
                             <User className="h-3 w-3 text-muted-foreground" />
-                            <span>{selectedAgent ? (selectedAgent as any).name : "Assignee"}</span>
+                            <span>
+                              {selectedAgent
+                                ? (selectedAgent as any).name
+                                : "Assignee"}
+                            </span>
                             <ChevronDown className="h-3 w-3 text-muted-foreground" />
                           </button>
                         </PopoverTrigger>
@@ -352,7 +379,10 @@ export function ThreadFormDialog({
                                 "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent/50",
                                 !field.value && "bg-accent",
                               )}
-                              onClick={() => { field.onChange(""); setAssigneeOpen(false); }}
+                              onClick={() => {
+                                field.onChange("");
+                                setAssigneeOpen(false);
+                              }}
                             >
                               No assignee
                             </button>
@@ -364,7 +394,10 @@ export function ThreadFormDialog({
                                   "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent/50",
                                   field.value === agent.id && "bg-accent",
                                 )}
-                                onClick={() => { field.onChange(agent.id); setAssigneeOpen(false); }}
+                                onClick={() => {
+                                  field.onChange(agent.id);
+                                  setAssigneeOpen(false);
+                                }}
                               >
                                 {agent.name}
                               </button>
@@ -396,11 +429,14 @@ export function ThreadFormDialog({
                   )}
                 />
               </div>
-
             </DialogBody>
 
             <DialogFooter className="mt-4">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={fetching}>
@@ -409,8 +445,10 @@ export function ThreadFormDialog({
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {mode === "create" ? "Creating..." : "Saving..."}
                   </>
+                ) : mode === "create" ? (
+                  "Create Thread"
                 ) : (
-                  mode === "create" ? "Create Thread" : "Save Changes"
+                  "Save Changes"
                 )}
               </Button>
             </DialogFooter>
@@ -434,11 +472,15 @@ export function CreateThreadDialog() {
       mode="create"
       open={open}
       onOpenChange={() => closeDialog("newThread")}
-      initial={defaults ? {
-        title: defaults.title,
-        status: defaults.status,
-        agentId: defaults.agentId,
-      } : undefined}
+      initial={
+        defaults
+          ? {
+              title: defaults.title,
+              status: defaults.status,
+              agentId: defaults.agentId,
+            }
+          : undefined
+      }
     />
   );
 }

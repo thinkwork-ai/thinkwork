@@ -66,7 +66,7 @@ import {
 const BASE = {
   tenantId: "tenant-A",
   invokerUserId: "user-A",
-  mutationName: "createAgent",
+  mutationName: "updateTenantAgent",
   inputs: { slug: "marco" },
 };
 

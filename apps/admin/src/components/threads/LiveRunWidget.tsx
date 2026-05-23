@@ -68,11 +68,13 @@ export function LiveRunWidget({ threadId, tenantId }: LiveRunWidgetProps) {
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <Link
-                    to="/agents/$agentId"
-                    params={{ agentId: run.agentId }}
+                    to="/tenant-agent"
                     className="inline-flex hover:underline"
                   >
-                    <Identity name={run.agentName ?? run.agentId.slice(0, 8)} size="sm" />
+                    <Identity
+                      name={run.agentName ?? run.agentId.slice(0, 8)}
+                      size="sm"
+                    />
                   </Link>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-2 py-1 font-mono">
@@ -95,8 +97,7 @@ export function LiveRunWidget({ threadId, tenantId }: LiveRunWidgetProps) {
                     </button>
                   )}
                   <Link
-                    to="/agents/$agentId"
-                    params={{ agentId: run.agentId }}
+                    to="/tenant-agent"
                     className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-cyan-700 transition-colors hover:border-cyan-500/30 hover:text-cyan-600 dark:text-cyan-300"
                   >
                     Open run

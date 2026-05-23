@@ -16,8 +16,8 @@ describe("buildThreadBreadcrumbs", () => {
     });
 
     expect(crumbs).toEqual([
-      { label: "Agents", href: "/agents" },
-      { label: "Marco", href: "/agents/agent-42" },
+      { label: "Tenant agent", href: "/tenant-agent" },
+      { label: "Marco" },
       { label: "TW-7 Investigate the bug" },
     ]);
   });
@@ -28,7 +28,7 @@ describe("buildThreadBreadcrumbs", () => {
       fromAgentId: "agent-42",
     });
 
-    expect(crumbs[1]).toEqual({ label: "Agent", href: "/agents/agent-42" });
+    expect(crumbs[1]).toEqual({ label: "Agent" });
   });
 
   it("uses the default Threads breadcrumb when there is no Agent provenance", () => {

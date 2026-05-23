@@ -33,13 +33,6 @@ const baseSpace: CustomerOnboardingWorkflowSpace = {
       externalTaskTemplate: null,
     },
   ],
-  agentAssignments: [
-    {
-      agentId: "agent-coordinator",
-      localRole: "coordinator",
-      autoSubscribe: true,
-    },
-  ],
   integration: {
     id: "integration-1",
     writebackPolicy: "status_only",

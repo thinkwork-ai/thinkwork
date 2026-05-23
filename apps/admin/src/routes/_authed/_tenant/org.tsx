@@ -33,33 +33,55 @@ function OrgPage() {
 
   if (!tenantId) return <PageSkeleton />;
 
-  const agents = agentsResult.data?.agents ?? [];
+  const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
   const teams = teamsResult.data?.teams ?? [];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Organization" description="Team structure and agent hierarchy" />
+      <PageHeader
+        title="Organization"
+        description="Team structure and agent hierarchy"
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">
         <MetricCard label="Agents" value={agents.length} />
         <MetricCard label="Teams" value={teams.length} />
-        <MetricCard label="Total Members" value={teams.reduce((s, h) => s + h.users.length, 0)} />
+        <MetricCard
+          label="Total Members"
+          value={teams.reduce((s, h) => s + h.users.length, 0)}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle>Agents</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Agents</CardTitle>
+          </CardHeader>
           <CardContent>
             {agents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No agents registered.</p>
+              <p className="text-sm text-muted-foreground">
+                No agents registered.
+              </p>
             ) : (
               <div className="space-y-3">
                 {agents.map((agent) => (
-                  <div key={agent.id} className="flex items-center justify-between">
-                    <Identity name={agent.name} subtitle={agent.role ?? undefined} size="sm" />
+                  <div
+                    key={agent.id}
+                    className="flex items-center justify-between"
+                  >
+                    <Identity
+                      name={agent.name}
+                      subtitle={agent.role ?? undefined}
+                      size="sm"
+                    />
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{agent.type.toLowerCase()}</Badge>
-                      <StatusBadge status={agent.status.toLowerCase()} size="sm" />
+                      <Badge variant="outline">
+                        {agent.type.toLowerCase()}
+                      </Badge>
+                      <StatusBadge
+                        status={agent.status.toLowerCase()}
+                        size="sm"
+                      />
                     </div>
                   </div>
                 ))}
@@ -69,18 +91,26 @@ function OrgPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Teams</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Teams</CardTitle>
+          </CardHeader>
           <CardContent>
             {teams.length === 0 ? (
               <p className="text-sm text-muted-foreground">No teams created.</p>
             ) : (
               <div className="space-y-3">
                 {teams.map((t) => (
-                  <div key={team.id} className="flex items-center justify-between">
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between"
+                  >
                     <div>
                       <p className="text-sm font-medium">{team.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {team.agents.length} agent{team.agents.length !== 1 ? "s" : ""} · {team.users.length} user{team.users.length !== 1 ? "s" : ""}
+                        {team.agents.length} agent
+                        {team.agents.length !== 1 ? "s" : ""} ·{" "}
+                        {team.users.length} user
+                        {team.users.length !== 1 ? "s" : ""}
                       </p>
                     </div>
                     <StatusBadge status={team.status.toLowerCase()} size="sm" />

@@ -80,7 +80,7 @@ const INPUTS = { slug: "marco", role: "assistant", permissions: ["read"] };
 const BASE = {
   tenantId: "tenant-A",
   invokerUserId: "user-A",
-  mutationName: "createAgent",
+  mutationName: "updateTenantAgent",
   inputs: INPUTS,
 };
 

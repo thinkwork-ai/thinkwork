@@ -2,8 +2,8 @@
  * Shared authorization helpers for tenant-scoped resolvers.
  *
  * `requireTenantAdmin` encapsulates the owner-or-admin check that was
- * duplicated inline across several resolvers (e.g. `allTenantAgents.query.ts`
- * lines 30-40). Callers that need atomicity between the role check and a
+ * duplicated inline across tenant-scoped resolvers. Callers that need
+ * atomicity between the role check and a
  * subsequent write (e.g. last-owner invariant in tenant member mutations)
  * can pass a transaction handle as `dbOrTx`.
  *

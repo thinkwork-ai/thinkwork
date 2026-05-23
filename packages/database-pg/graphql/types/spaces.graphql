@@ -30,12 +30,6 @@ enum SpaceNotificationPreference {
   MUTED
 }
 
-enum SpaceAgentAssignmentStatus {
-  ACTIVE
-  PAUSED
-  ARCHIVED
-}
-
 enum SpaceIntegrationProvider {
   LASTMILE_TASKS
   WEBHOOK
@@ -75,9 +69,9 @@ type Space {
   agentAvailabilityPolicy: AWSJSON
   triggerConfig: AWSJSON
   emailTriggersEnabled: Boolean!
+  runtimeOverrides: SpaceRuntimeOverrides!
   renderDiagnostics: AWSJSON
   members: [SpaceMember!]!
-  agentAssignments: [SpaceAgentAssignment!]!
   knowledgeBases: [SpaceKnowledgeBase!]!
   mcpServers: [SpaceMcpServer!]!
   checklistTemplates: [SpaceChecklistTemplate!]!
@@ -96,22 +90,6 @@ type SpaceMember {
   user: User
   role: SpaceMemberRole!
   notificationPreference: SpaceNotificationPreference!
-  createdAt: AWSDateTime!
-  updatedAt: AWSDateTime!
-}
-
-type SpaceAgentAssignment {
-  id: ID!
-  tenantId: ID!
-  spaceId: ID!
-  agentId: ID!
-  agent: Agent
-  localRole: String
-  localInstructions: String
-  autoSubscribe: Boolean!
-  allowedCapabilities: AWSJSON
-  allowedTools: AWSJSON
-  status: SpaceAgentAssignmentStatus!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -203,6 +181,14 @@ type CustomerOnboardingLinkedTaskResult {
   syncStatus: LinkedTaskSyncStatus!
 }
 
+type SpaceRuntimeOverrides {
+  model: String
+  guardrailId: ID
+  budgetMonthlyCents: Int
+  budgetPaused: Boolean
+  sandbox: Boolean
+}
+
 input StartCustomerOnboardingInput {
   tenantId: ID!
   spaceId: ID
@@ -224,18 +210,6 @@ input UpdateSpaceInput {
   accessMode: SpaceAccessMode
 }
 
-input SetSpaceAgentAvailabilityInput {
-  tenantId: ID!
-  spaceId: ID!
-  agentId: ID!
-  enabled: Boolean!
-  localRole: String
-  localInstructions: String
-  autoSubscribe: Boolean
-  allowedCapabilities: AWSJSON
-  allowedTools: AWSJSON
-}
-
 input SetSpaceKnowledgeBasesInput {
   tenantId: ID!
   spaceId: ID!
@@ -247,6 +221,14 @@ input SetSpaceToolsInput {
   spaceId: ID!
   builtInToolSlugs: [String!]!
   mcpServerIds: [ID!]!
+}
+
+input SetSpaceRuntimeOverridesInput {
+  model: String
+  guardrailId: ID
+  budgetMonthlyCents: Int
+  budgetPaused: Boolean
+  sandbox: Boolean
 }
 
 extend type Query {
@@ -263,9 +245,10 @@ extend type Mutation {
   createSpace(input: CreateSpaceInput!): Space!
   updateSpace(input: UpdateSpaceInput!): Space!
   setSpaceEmailTriggers(spaceId: ID!, enabled: Boolean!): Space!
-  setSpaceAgentAvailability(
-    input: SetSpaceAgentAvailabilityInput!
-  ): SpaceAgentAssignment!
+  setSpaceRuntimeOverrides(
+    spaceId: ID!
+    input: SetSpaceRuntimeOverridesInput!
+  ): Space!
   setSpaceKnowledgeBases(
     input: SetSpaceKnowledgeBasesInput!
   ): [SpaceKnowledgeBase!]!

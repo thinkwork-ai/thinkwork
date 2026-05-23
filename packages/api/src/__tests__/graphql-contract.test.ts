@@ -60,9 +60,7 @@ describe("GraphQL Schema Contract", () => {
 
     const expectedQueries = [
       // Agents
-      "agent",
-      "agents",
-      "agentApiKeys",
+      "tenantAgent",
       "modelCatalog",
       // Threads
       "thread",
@@ -135,19 +133,25 @@ describe("GraphQL Schema Contract", () => {
   describe("Spaces contract", () => {
     const schema = buildSchema(loadFullSchema());
 
-    it("exposes space-local agent instructions separately from global agent prompt", () => {
+    it("exposes typed Space runtime overrides separately from the tenant agent baseline", () => {
       const space = schema.getType("Space");
-      const assignment = schema.getType("SpaceAgentAssignment");
+      const runtimeOverrides = schema.getType("SpaceRuntimeOverrides") as any;
       expect(space?.toString()).toBe("Space");
-      expect(assignment?.toString()).toBe("SpaceAgentAssignment");
       expect(
-        (assignment as any).getFields().localInstructions.type.toString(),
-      ).toBe("String");
-      expect((assignment as any).getFields().localRole.type.toString()).toBe(
-        "String",
+        space && (space as any).getFields().runtimeOverrides.type.toString(),
+      ).toBe("SpaceRuntimeOverrides!");
+      expect(runtimeOverrides.getFields().model.type.toString()).toBe("String");
+      expect(runtimeOverrides.getFields().guardrailId.type.toString()).toBe(
+        "ID",
       );
-      expect((assignment as any).getFields().agent.type.toString()).toBe(
-        "Agent",
+      expect(
+        runtimeOverrides.getFields().budgetMonthlyCents.type.toString(),
+      ).toBe("Int");
+      expect(runtimeOverrides.getFields().budgetPaused.type.toString()).toBe(
+        "Boolean",
+      );
+      expect(runtimeOverrides.getFields().sandbox.type.toString()).toBe(
+        "Boolean",
       );
     });
 
@@ -209,8 +213,7 @@ describe("GraphQL Schema Contract", () => {
 
     it("allows Agents to own runtime and policy fields without requiring a Template", () => {
       const agent = schema.getType("Agent") as any;
-      const createInput = schema.getType("CreateAgentInput") as any;
-      const updateInput = schema.getType("UpdateAgentInput") as any;
+      const updateInput = schema.getType("UpdateTenantAgentInput") as any;
 
       expect(agent.getFields().templateId).toBeUndefined();
       expect(agent.getFields().agentTemplate).toBeUndefined();
@@ -224,16 +227,14 @@ describe("GraphQL Schema Contract", () => {
       expect(agent.getFields().contextEngine.type.toString()).toBe("AWSJSON");
       expect(agent.getFields().budgetMonthlyCents.type.toString()).toBe("Int");
 
-      expect(createInput.getFields().templateId).toBeUndefined();
-      expect(createInput.getFields().model.type.toString()).toBe("String");
-      expect(createInput.getFields().guardrailId.type.toString()).toBe("ID");
-      expect(createInput.getFields().blockedTools.type.toString()).toBe(
-        "AWSJSON",
-      );
-
       expect(updateInput.getFields().templateId).toBeUndefined();
       expect(updateInput.getFields().runtime.type.toString()).toBe(
         "AgentRuntime",
+      );
+      expect(updateInput.getFields().model.type.toString()).toBe("String");
+      expect(updateInput.getFields().guardrailId.type.toString()).toBe("ID");
+      expect(updateInput.getFields().blockedTools.type.toString()).toBe(
+        "AWSJSON",
       );
       expect(updateInput.getFields().budgetMonthlyCents.type.toString()).toBe(
         "Int",
@@ -301,18 +302,15 @@ describe("GraphQL Schema Contract", () => {
       : [];
 
     const expectedMutations = [
-      // Agents
-      "createAgent",
-      "updateAgent",
-      "deleteAgent",
-      "setAgentCapabilities",
-      "setAgentSkills",
+      // Tenant agent
+      "updateTenantAgent",
       // Threads
       "createThread",
       "updateThread",
       "deleteThread",
       // Spaces
       "createSpace",
+      "setSpaceRuntimeOverrides",
       "startCustomerOnboarding",
       // Messages
       "sendMessage",

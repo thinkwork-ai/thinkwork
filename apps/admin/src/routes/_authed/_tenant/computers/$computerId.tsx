@@ -340,7 +340,7 @@ function ComputerDashboardTab({
     [threadsResult.data],
   );
   const totalCount = threadsResult.data?.threadsPaged?.totalCount ?? 0;
-  const agents = agentsResult.data?.agents ?? [];
+  const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
 
   const activeThreadIds = useActiveTurnsStore((s) => s._activeThreadIds);
   const inboxStatusFor = useCallback(

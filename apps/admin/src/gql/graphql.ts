@@ -133,18 +133,6 @@ export type Agent = {
   webSearch?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
-export type AgentApiKey = {
-  __typename?: "AgentApiKey";
-  agentId: Scalars["ID"]["output"];
-  createdAt: Scalars["AWSDateTime"]["output"];
-  id: Scalars["ID"]["output"];
-  keyPrefix: Scalars["String"]["output"];
-  lastUsedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  name?: Maybe<Scalars["String"]["output"]>;
-  revokedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  tenantId: Scalars["ID"]["output"];
-};
-
 export type AgentBudgetPolicy = {
   __typename?: "AgentBudgetPolicy";
   actionOnExceed: Scalars["String"]["output"];
@@ -195,20 +183,6 @@ export type AgentCount = {
   agentId: Scalars["ID"]["output"];
   agentName?: Maybe<Scalars["String"]["output"]>;
   count: Scalars["Int"]["output"];
-};
-
-export type AgentEmailCapability = {
-  __typename?: "AgentEmailCapability";
-  agentId: Scalars["ID"]["output"];
-  allowedSenders: Array<Scalars["String"]["output"]>;
-  emailAddress?: Maybe<Scalars["String"]["output"]>;
-  enabled: Scalars["Boolean"]["output"];
-  id: Scalars["ID"]["output"];
-  maxReplyTokenAgeDays: Scalars["Int"]["output"];
-  maxReplyTokenUses: Scalars["Int"]["output"];
-  rateLimitPerHour: Scalars["Int"]["output"];
-  replyTokensEnabled: Scalars["Boolean"]["output"];
-  vanityAddress?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type AgentKnowledgeBase = {
@@ -1015,49 +989,6 @@ export type CostSummary = {
   totalInputTokens: Scalars["Int"]["output"];
   totalOutputTokens: Scalars["Int"]["output"];
   totalUsd: Scalars["Float"]["output"];
-};
-
-export type CreateAgentApiKeyInput = {
-  agentId: Scalars["ID"]["input"];
-  name?: InputMaybe<Scalars["String"]["input"]>;
-};
-
-export type CreateAgentApiKeyResult = {
-  __typename?: "CreateAgentApiKeyResult";
-  apiKey: AgentApiKey;
-  plainTextKey: Scalars["String"]["output"];
-};
-
-export type CreateAgentInput = {
-  adapterConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  adapterType?: InputMaybe<Scalars["String"]["input"]>;
-  avatarUrl?: InputMaybe<Scalars["String"]["input"]>;
-  blockedTools?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  browser?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  budgetMonthlyCents?: InputMaybe<Scalars["Int"]["input"]>;
-  contextEngine?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  guardrailId?: InputMaybe<Scalars["ID"]["input"]>;
-  humanPairId?: InputMaybe<Scalars["ID"]["input"]>;
-  /**
-   * Optional client-supplied idempotency key. When provided, a retry with
-   * the same key returns the prior call's result without re-executing.
-   * Null/absent = server derives a key from canonicalized inputs.
-   * See packages/api/src/lib/idempotency.ts.
-   */
-  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
-  model?: InputMaybe<Scalars["String"]["input"]>;
-  name: Scalars["String"]["input"];
-  parentAgentId?: InputMaybe<Scalars["ID"]["input"]>;
-  reportsTo?: InputMaybe<Scalars["ID"]["input"]>;
-  role?: InputMaybe<Scalars["String"]["input"]>;
-  runtime?: InputMaybe<AgentRuntime>;
-  runtimeConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  sandbox?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  sendEmail?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
-  tenantId: Scalars["ID"]["input"];
-  type?: InputMaybe<AgentType>;
-  webSearch?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
 export type CreateArtifactInput = {
@@ -1992,7 +1923,6 @@ export type Mutation = {
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
-  claimVanityEmailAddress: AgentCapability;
   /**
    * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
    * Returns the job row (newly inserted or the in-flight dedupe hit).
@@ -2004,8 +1934,6 @@ export type Mutation = {
    * compile falls back to the env-default model.
    */
   compileWikiNow: WikiCompileJob;
-  createAgent: Agent;
-  createAgentApiKey: CreateAgentApiKeyResult;
   createArtifact: Artifact;
   /**
    * Queue an async export of audit events matching the filter. Validates:
@@ -2040,8 +1968,6 @@ export type Mutation = {
   decideInboxItem: InboxItem;
   decideRoutineApproval: InboxItem;
   delegateThread: Thread;
-  deleteAgent: Scalars["Boolean"]["output"];
-  deleteAgentBudgetPolicy: Scalars["Boolean"]["output"];
   deleteArtifact: Scalars["Boolean"]["output"];
   deleteBudgetPolicy: Scalars["Boolean"]["output"];
   deleteEvalRun: Scalars["Boolean"]["output"];
@@ -2099,7 +2025,6 @@ export type Mutation = {
   rejectOntologyChangeSet: OntologyChangeSet;
   rejectTenantEntityFact: TenantEntitySection;
   releaseThread: Thread;
-  releaseVanityEmailAddress: AgentCapability;
   removeInboxItemLink: Scalars["Boolean"]["output"];
   removeTeamAgent: Scalars["Boolean"]["output"];
   removeTeamUser: Scalars["Boolean"]["output"];
@@ -2117,7 +2042,6 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
-  revokeAgentApiKey: AgentApiKey;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
@@ -2126,17 +2050,12 @@ export type Mutation = {
   saveAppletState: AppletState;
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
-  setAgentBudgetPolicy: AgentBudgetPolicy;
-  /** Replace an agent's capabilities. idempotencyKey optional — see CreateAgentInput.idempotencyKey. */
-  setAgentCapabilities: Array<AgentCapability>;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
-  /** Replace an agent's skills. idempotencyKey optional — see CreateAgentInput.idempotencyKey. */
-  setAgentSkills: Array<AgentSkill>;
   setComputerAssignments: Array<ComputerAssignment>;
   setRoutineTrigger: RoutineTrigger;
-  setSpaceAgentAvailability: SpaceAgentAssignment;
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
+  setSpaceRuntimeOverrides: Space;
   setSpaceTools: Space;
   setUserComputerAssignments: Array<ComputerAssignment>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
@@ -2156,7 +2075,6 @@ export type Mutation = {
    * token endpoint directly.
    */
   testWebhook: WebhookDelivery;
-  toggleAgentEmailChannel: AgentCapability;
   triggerRoutineRun: RoutineExecution;
   /**
    * Uninstall a skill from a tenant (delete the `tenant_skills` row).
@@ -2168,10 +2086,6 @@ export type Mutation = {
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
   unregisterPushToken: Scalars["Boolean"]["output"];
-  updateAgent: Agent;
-  updateAgentEmailAllowlist: AgentCapability;
-  updateAgentRuntime: Agent;
-  updateAgentStatus: Agent;
   updateArtifact: Artifact;
   updateComputer: Computer;
   updateEvalTestCase: EvalTestCase;
@@ -2188,6 +2102,7 @@ export type Mutation = {
   updateSpace: Space;
   updateTeam: Team;
   updateTenant: Tenant;
+  updateTenantAgent: Agent;
   updateTenantCredential: TenantCredential;
   updateTenantMember: TenantMember;
   /**
@@ -2300,25 +2215,12 @@ export type MutationCheckoutThreadArgs = {
   input: CheckoutThreadInput;
 };
 
-export type MutationClaimVanityEmailAddressArgs = {
-  agentId: Scalars["ID"]["input"];
-  localPart: Scalars["String"]["input"];
-};
-
 export type MutationCompileWikiNowArgs = {
   forceNew?: InputMaybe<Scalars["Boolean"]["input"]>;
   modelId?: InputMaybe<Scalars["String"]["input"]>;
   ownerId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   userId?: InputMaybe<Scalars["ID"]["input"]>;
-};
-
-export type MutationCreateAgentArgs = {
-  input: CreateAgentInput;
-};
-
-export type MutationCreateAgentApiKeyArgs = {
-  input: CreateAgentApiKeyInput;
 };
 
 export type MutationCreateArtifactArgs = {
@@ -2406,14 +2308,6 @@ export type MutationDecideRoutineApprovalArgs = {
 
 export type MutationDelegateThreadArgs = {
   input: DelegateThreadInput;
-};
-
-export type MutationDeleteAgentArgs = {
-  id: Scalars["ID"]["input"];
-};
-
-export type MutationDeleteAgentBudgetPolicyArgs = {
-  agentId: Scalars["ID"]["input"];
 };
 
 export type MutationDeleteArtifactArgs = {
@@ -2676,10 +2570,6 @@ export type MutationReleaseThreadArgs = {
   input: ReleaseThreadInput;
 };
 
-export type MutationReleaseVanityEmailAddressArgs = {
-  agentId: Scalars["ID"]["input"];
-};
-
 export type MutationRemoveInboxItemLinkArgs = {
   id: Scalars["ID"]["input"];
 };
@@ -2737,10 +2627,6 @@ export type MutationResumeAgentWorkspaceRunArgs = {
   runId: Scalars["ID"]["input"];
 };
 
-export type MutationRevokeAgentApiKeyArgs = {
-  id: Scalars["ID"]["input"];
-};
-
 export type MutationRollbackThreadIdleLearningRunArgs = {
   runId: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -2776,26 +2662,9 @@ export type MutationSendMessageArgs = {
   input: SendMessageInput;
 };
 
-export type MutationSetAgentBudgetPolicyArgs = {
-  agentId: Scalars["ID"]["input"];
-  input: AgentBudgetPolicyInput;
-};
-
-export type MutationSetAgentCapabilitiesArgs = {
-  agentId: Scalars["ID"]["input"];
-  capabilities: Array<AgentCapabilityInput>;
-  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
-};
-
 export type MutationSetAgentKnowledgeBasesArgs = {
   agentId: Scalars["ID"]["input"];
   knowledgeBases: Array<AgentKnowledgeBaseInput>;
-};
-
-export type MutationSetAgentSkillsArgs = {
-  agentId: Scalars["ID"]["input"];
-  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
-  skills: Array<AgentSkillInput>;
 };
 
 export type MutationSetComputerAssignmentsArgs = {
@@ -2807,10 +2676,6 @@ export type MutationSetRoutineTriggerArgs = {
   routineId: Scalars["ID"]["input"];
 };
 
-export type MutationSetSpaceAgentAvailabilityArgs = {
-  input: SetSpaceAgentAvailabilityInput;
-};
-
 export type MutationSetSpaceEmailTriggersArgs = {
   enabled: Scalars["Boolean"]["input"];
   spaceId: Scalars["ID"]["input"];
@@ -2818,6 +2683,11 @@ export type MutationSetSpaceEmailTriggersArgs = {
 
 export type MutationSetSpaceKnowledgeBasesArgs = {
   input: SetSpaceKnowledgeBasesInput;
+};
+
+export type MutationSetSpaceRuntimeOverridesArgs = {
+  input: SetSpaceRuntimeOverridesInput;
+  spaceId: Scalars["ID"]["input"];
 };
 
 export type MutationSetSpaceToolsArgs = {
@@ -2861,11 +2731,6 @@ export type MutationTestWebhookArgs = {
   id: Scalars["ID"]["input"];
 };
 
-export type MutationToggleAgentEmailChannelArgs = {
-  agentId: Scalars["ID"]["input"];
-  enabled: Scalars["Boolean"]["input"];
-};
-
 export type MutationTriggerRoutineRunArgs = {
   input?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   routineId: Scalars["ID"]["input"];
@@ -2890,26 +2755,6 @@ export type MutationUnpauseAgentArgs = {
 
 export type MutationUnregisterPushTokenArgs = {
   token: Scalars["String"]["input"];
-};
-
-export type MutationUpdateAgentArgs = {
-  id: Scalars["ID"]["input"];
-  input: UpdateAgentInput;
-};
-
-export type MutationUpdateAgentEmailAllowlistArgs = {
-  agentId: Scalars["ID"]["input"];
-  allowedSenders: Array<Scalars["String"]["input"]>;
-};
-
-export type MutationUpdateAgentRuntimeArgs = {
-  id: Scalars["ID"]["input"];
-  runtime: AgentRuntime;
-};
-
-export type MutationUpdateAgentStatusArgs = {
-  id: Scalars["ID"]["input"];
-  status: AgentStatus;
 };
 
 export type MutationUpdateArtifactArgs = {
@@ -2988,6 +2833,11 @@ export type MutationUpdateTeamArgs = {
 export type MutationUpdateTenantArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateTenantInput;
+};
+
+export type MutationUpdateTenantAgentArgs = {
+  input: UpdateTenantAgentInput;
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationUpdateTenantCredentialArgs = {
@@ -3360,19 +3210,13 @@ export type Query = {
    * each gated mutation.
    */
   adminRoleCheck: AdminRoleCheckResult;
-  agent?: Maybe<Agent>;
-  agentApiKeys: Array<AgentApiKey>;
   agentBudgetStatus?: Maybe<BudgetStatus>;
   agentCostBreakdown: CostSummary;
-  agentEmailCapability?: Maybe<AgentEmailCapability>;
   agentPerformance: Array<AgentPerformance>;
   agentWorkspaceEvents: Array<AgentWorkspaceEvent>;
   agentWorkspaceReview?: Maybe<AgentWorkspaceReview>;
   agentWorkspaceReviews: Array<AgentWorkspaceReview>;
   agentWorkspaceRuns: Array<AgentWorkspaceRun>;
-  agentWorkspaces: Array<AgentWorkspace>;
-  agents: Array<Agent>;
-  allTenantAgents: Array<Agent>;
   applet?: Maybe<AppletPayload>;
   appletState?: Maybe<AppletState>;
   applets: AppletConnection;
@@ -3523,6 +3367,7 @@ export type Query = {
   team?: Maybe<Team>;
   teams: Array<Team>;
   tenant?: Maybe<Tenant>;
+  tenantAgent: Agent;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
   tenantEntityFacets: TenantEntityFacetConnection;
@@ -3614,14 +3459,6 @@ export type QueryAdminAppletsArgs = {
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
-export type QueryAgentArgs = {
-  id: Scalars["ID"]["input"];
-};
-
-export type QueryAgentApiKeysArgs = {
-  agentId: Scalars["ID"]["input"];
-};
-
 export type QueryAgentBudgetStatusArgs = {
   agentId: Scalars["ID"]["input"];
 };
@@ -3631,10 +3468,6 @@ export type QueryAgentCostBreakdownArgs = {
   from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
-};
-
-export type QueryAgentEmailCapabilityArgs = {
-  agentId: Scalars["ID"]["input"];
 };
 
 export type QueryAgentPerformanceArgs = {
@@ -3666,23 +3499,6 @@ export type QueryAgentWorkspaceRunsArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   status?: InputMaybe<Scalars["String"]["input"]>;
   targetPath?: InputMaybe<Scalars["String"]["input"]>;
-};
-
-export type QueryAgentWorkspacesArgs = {
-  agentId: Scalars["ID"]["input"];
-};
-
-export type QueryAgentsArgs = {
-  includeSystem?: InputMaybe<Scalars["Boolean"]["input"]>;
-  status?: InputMaybe<AgentStatus>;
-  tenantId: Scalars["ID"]["input"];
-  type?: InputMaybe<AgentType>;
-};
-
-export type QueryAllTenantAgentsArgs = {
-  includeSubAgents?: InputMaybe<Scalars["Boolean"]["input"]>;
-  includeSystem?: InputMaybe<Scalars["Boolean"]["input"]>;
-  tenantId: Scalars["ID"]["input"];
 };
 
 export type QueryAppletArgs = {
@@ -4081,6 +3897,10 @@ export type QueryTeamsArgs = {
 
 export type QueryTenantArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type QueryTenantAgentArgs = {
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type QueryTenantBySlugArgs = {
@@ -4714,22 +4534,18 @@ export type SetComputerAssignmentsInput = {
   computerId: Scalars["ID"]["input"];
 };
 
-export type SetSpaceAgentAvailabilityInput = {
-  agentId: Scalars["ID"]["input"];
-  allowedCapabilities?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  allowedTools?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  autoSubscribe?: InputMaybe<Scalars["Boolean"]["input"]>;
-  enabled: Scalars["Boolean"]["input"];
-  localInstructions?: InputMaybe<Scalars["String"]["input"]>;
-  localRole?: InputMaybe<Scalars["String"]["input"]>;
-  spaceId: Scalars["ID"]["input"];
-  tenantId: Scalars["ID"]["input"];
-};
-
 export type SetSpaceKnowledgeBasesInput = {
   knowledgeBases: Array<SpaceKnowledgeBaseInput>;
   spaceId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
+};
+
+export type SetSpaceRuntimeOverridesInput = {
+  budgetMonthlyCents?: InputMaybe<Scalars["Int"]["input"]>;
+  budgetPaused?: InputMaybe<Scalars["Boolean"]["input"]>;
+  guardrailId?: InputMaybe<Scalars["ID"]["input"]>;
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  sandbox?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
 export type SetSpaceToolsInput = {
@@ -4826,7 +4642,6 @@ export type SlackWorkspaceInstallStart = {
 export type Space = {
   __typename?: "Space";
   accessMode: SpaceAccessMode;
-  agentAssignments: Array<SpaceAgentAssignment>;
   agentAvailabilityPolicy?: Maybe<Scalars["AWSJSON"]["output"]>;
   builtInTools: Array<Scalars["String"]["output"]>;
   category?: Maybe<Scalars["String"]["output"]>;
@@ -4849,6 +4664,7 @@ export type Space = {
   name: Scalars["String"]["output"];
   prompt?: Maybe<Scalars["String"]["output"]>;
   renderDiagnostics?: Maybe<Scalars["AWSJSON"]["output"]>;
+  runtimeOverrides: SpaceRuntimeOverrides;
   slug: Scalars["String"]["output"];
   status: SpaceStatus;
   templateKey?: Maybe<Scalars["String"]["output"]>;
@@ -4862,29 +4678,6 @@ export type Space = {
 export enum SpaceAccessMode {
   Private = "PRIVATE",
   Public = "PUBLIC",
-}
-
-export type SpaceAgentAssignment = {
-  __typename?: "SpaceAgentAssignment";
-  agent?: Maybe<Agent>;
-  agentId: Scalars["ID"]["output"];
-  allowedCapabilities?: Maybe<Scalars["AWSJSON"]["output"]>;
-  allowedTools?: Maybe<Scalars["AWSJSON"]["output"]>;
-  autoSubscribe: Scalars["Boolean"]["output"];
-  createdAt: Scalars["AWSDateTime"]["output"];
-  id: Scalars["ID"]["output"];
-  localInstructions?: Maybe<Scalars["String"]["output"]>;
-  localRole?: Maybe<Scalars["String"]["output"]>;
-  spaceId: Scalars["ID"]["output"];
-  status: SpaceAgentAssignmentStatus;
-  tenantId: Scalars["ID"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
-};
-
-export enum SpaceAgentAssignmentStatus {
-  Active = "ACTIVE",
-  Archived = "ARCHIVED",
-  Paused = "PAUSED",
 }
 
 export type SpaceChecklistItem = {
@@ -5010,6 +4803,15 @@ export enum SpaceNotificationPreference {
   Muted = "MUTED",
   Subscribed = "SUBSCRIBED",
 }
+
+export type SpaceRuntimeOverrides = {
+  __typename?: "SpaceRuntimeOverrides";
+  budgetMonthlyCents?: Maybe<Scalars["Int"]["output"]>;
+  budgetPaused?: Maybe<Scalars["Boolean"]["output"]>;
+  guardrailId?: Maybe<Scalars["ID"]["output"]>;
+  model?: Maybe<Scalars["String"]["output"]>;
+  sandbox?: Maybe<Scalars["Boolean"]["output"]>;
+};
 
 export enum SpaceStatus {
   Active = "ACTIVE",
@@ -5686,30 +5488,6 @@ export type TraceEvent = {
   traceId: Scalars["String"]["output"];
 };
 
-export type UpdateAgentInput = {
-  adapterConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  adapterType?: InputMaybe<Scalars["String"]["input"]>;
-  avatarUrl?: InputMaybe<Scalars["String"]["input"]>;
-  blockedTools?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  browser?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  budgetMonthlyCents?: InputMaybe<Scalars["Int"]["input"]>;
-  contextEngine?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  guardrailId?: InputMaybe<Scalars["ID"]["input"]>;
-  humanPairId?: InputMaybe<Scalars["ID"]["input"]>;
-  model?: InputMaybe<Scalars["String"]["input"]>;
-  name?: InputMaybe<Scalars["String"]["input"]>;
-  parentAgentId?: InputMaybe<Scalars["ID"]["input"]>;
-  reportsTo?: InputMaybe<Scalars["ID"]["input"]>;
-  role?: InputMaybe<Scalars["String"]["input"]>;
-  runtime?: InputMaybe<AgentRuntime>;
-  runtimeConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  sandbox?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  sendEmail?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
-  type?: InputMaybe<AgentType>;
-  webSearch?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-};
-
 export type UpdateArtifactInput = {
   content?: InputMaybe<Scalars["String"]["input"]>;
   favoritedAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
@@ -5861,6 +5639,27 @@ export type UpdateTeamInput = {
   name?: InputMaybe<Scalars["String"]["input"]>;
   status?: InputMaybe<Scalars["String"]["input"]>;
   type?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type UpdateTenantAgentInput = {
+  adapterConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  adapterType?: InputMaybe<Scalars["String"]["input"]>;
+  avatarUrl?: InputMaybe<Scalars["String"]["input"]>;
+  blockedTools?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  browser?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  budgetMonthlyCents?: InputMaybe<Scalars["Int"]["input"]>;
+  budgetPaused?: InputMaybe<Scalars["Boolean"]["input"]>;
+  contextEngine?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  guardrailId?: InputMaybe<Scalars["ID"]["input"]>;
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  role?: InputMaybe<Scalars["String"]["input"]>;
+  runtime?: InputMaybe<AgentRuntime>;
+  runtimeConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  sandbox?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  sendEmail?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  webSearch?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
 export type UpdateTenantCredentialInput = {
@@ -6342,43 +6141,6 @@ export enum WorkspaceReviewKind {
   Unrouted = "UNROUTED",
 }
 
-export type AgentDetailQueryVariables = Exact<{
-  id: Scalars["ID"]["input"];
-}>;
-
-export type AgentDetailQuery = {
-  __typename?: "Query";
-  agent?: {
-    __typename?: "Agent";
-    id: string;
-    name: string;
-    slug?: string | null;
-  } | null;
-};
-
-export type CreateSubAgentMutationVariables = Exact<{
-  input: CreateAgentInput;
-}>;
-
-export type CreateSubAgentMutation = {
-  __typename?: "Mutation";
-  createAgent: {
-    __typename?: "Agent";
-    id: string;
-    name: string;
-    slug?: string | null;
-  };
-};
-
-export type DeleteSubAgentMutationVariables = Exact<{
-  id: Scalars["ID"]["input"];
-}>;
-
-export type DeleteSubAgentMutation = {
-  __typename?: "Mutation";
-  deleteAgent: boolean;
-};
-
 export type CreateThreadMutationVariables = Exact<{
   input: CreateThreadInput;
 }>;
@@ -6619,7 +6381,7 @@ export type AgentsListQueryVariables = Exact<{
 
 export type AgentsListQuery = {
   __typename?: "Query";
-  agents: Array<{
+  agent: {
     __typename?: "Agent";
     id: string;
     name: string;
@@ -6631,7 +6393,7 @@ export type AgentsListQuery = {
     budgetMonthlyCents?: number | null;
     avatarUrl?: string | null;
     createdAt: any;
-  }>;
+  };
   modelCatalog: Array<{
     __typename?: "ModelCatalogEntry";
     modelId: string;
@@ -6639,13 +6401,13 @@ export type AgentsListQuery = {
   }>;
 };
 
-export type AgentProfileDetailQueryVariables = Exact<{
-  id: Scalars["ID"]["input"];
+export type TenantAgentQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
 }>;
 
-export type AgentProfileDetailQuery = {
+export type TenantAgentQuery = {
   __typename?: "Query";
-  agent?: {
+  agent: {
     __typename?: "Agent";
     id: string;
     tenantId: string;
@@ -6703,95 +6465,31 @@ export type AgentProfileDetailQuery = {
       role?: string | null;
       status: AgentStatus;
     }> | null;
-  } | null;
-};
-
-export type CreateAgentMutationVariables = Exact<{
-  input: CreateAgentInput;
-}>;
-
-export type CreateAgentMutation = {
-  __typename?: "Mutation";
-  createAgent: {
-    __typename?: "Agent";
-    id: string;
-    name: string;
-    role?: string | null;
-    type: AgentType;
-    status: AgentStatus;
-    runtime: AgentRuntime;
-    budgetMonthlyCents?: number | null;
-    createdAt: any;
   };
 };
 
-export type AgentKnowledgeBasesQueryVariables = Exact<{
-  id: Scalars["ID"]["input"];
+export type UpdateTenantAgentMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  input: UpdateTenantAgentInput;
 }>;
 
-export type AgentKnowledgeBasesQuery = {
-  __typename?: "Query";
-  agent?: {
-    __typename?: "Agent";
-    knowledgeBases: Array<{
-      __typename?: "AgentKnowledgeBase";
-      id: string;
-      knowledgeBaseId: string;
-      enabled: boolean;
-      knowledgeBase?: {
-        __typename?: "KnowledgeBase";
-        id: string;
-        name: string;
-        description?: string | null;
-        status: string;
-      } | null;
-    }>;
-  } | null;
-};
-
-export type UpdateAgentMutationVariables = Exact<{
-  id: Scalars["ID"]["input"];
-  input: UpdateAgentInput;
-}>;
-
-export type UpdateAgentMutation = {
+export type UpdateTenantAgentMutation = {
   __typename?: "Mutation";
-  updateAgent: {
+  updateTenantAgent: {
     __typename?: "Agent";
     id: string;
     name: string;
     role?: string | null;
     type: AgentType;
     runtime: AgentRuntime;
+    model?: string | null;
+    guardrailId?: string | null;
     systemPrompt?: string | null;
     adapterType?: string | null;
     budgetMonthlyCents?: number | null;
+    sandbox?: any | null;
     updatedAt: any;
   };
-};
-
-export type UpdateAgentRuntimeMutationVariables = Exact<{
-  id: Scalars["ID"]["input"];
-  runtime: AgentRuntime;
-}>;
-
-export type UpdateAgentRuntimeMutation = {
-  __typename?: "Mutation";
-  updateAgentRuntime: {
-    __typename?: "Agent";
-    id: string;
-    runtime: AgentRuntime;
-    updatedAt: any;
-  };
-};
-
-export type DeleteAgentMutationVariables = Exact<{
-  id: Scalars["ID"]["input"];
-}>;
-
-export type DeleteAgentMutation = {
-  __typename?: "Mutation";
-  deleteAgent: boolean;
 };
 
 export type SpacesListQueryVariables = Exact<{
@@ -6809,27 +6507,6 @@ export type SpacesListQuery = {
     status: SpaceStatus;
     accessMode: SpaceAccessMode;
     updatedAt: any;
-  }>;
-};
-
-export type AgentSpaceAvailabilityQueryVariables = Exact<{
-  tenantId: Scalars["ID"]["input"];
-}>;
-
-export type AgentSpaceAvailabilityQuery = {
-  __typename?: "Query";
-  spaces: Array<{
-    __typename?: "Space";
-    id: string;
-    name: string;
-    slug: string;
-    kind: SpaceKind;
-    agentAssignments: Array<{
-      __typename?: "SpaceAgentAssignment";
-      id: string;
-      status: SpaceAgentAssignmentStatus;
-      agent?: { __typename?: "Agent"; id: string } | null;
-    }>;
   }>;
 };
 
@@ -6867,21 +6544,25 @@ export type UpdateSpaceMutation = {
   };
 };
 
-export type SetSpaceAgentAvailabilityMutationVariables = Exact<{
-  input: SetSpaceAgentAvailabilityInput;
+export type SetSpaceRuntimeOverridesMutationVariables = Exact<{
+  spaceId: Scalars["ID"]["input"];
+  input: SetSpaceRuntimeOverridesInput;
 }>;
 
-export type SetSpaceAgentAvailabilityMutation = {
+export type SetSpaceRuntimeOverridesMutation = {
   __typename?: "Mutation";
-  setSpaceAgentAvailability: {
-    __typename?: "SpaceAgentAssignment";
+  setSpaceRuntimeOverrides: {
+    __typename?: "Space";
     id: string;
-    agentId: string;
-    spaceId: string;
-    localRole?: string | null;
-    autoSubscribe: boolean;
-    allowedTools?: any | null;
-    status: SpaceAgentAssignmentStatus;
+    updatedAt: any;
+    runtimeOverrides: {
+      __typename?: "SpaceRuntimeOverrides";
+      model?: string | null;
+      guardrailId?: string | null;
+      budgetMonthlyCents?: number | null;
+      budgetPaused?: boolean | null;
+      sandbox?: boolean | null;
+    };
   };
 };
 
@@ -6901,6 +6582,14 @@ export type SpaceAdminDetailQuery = {
     status: SpaceStatus;
     accessMode: SpaceAccessMode;
     emailTriggersEnabled: boolean;
+    runtimeOverrides: {
+      __typename?: "SpaceRuntimeOverrides";
+      model?: string | null;
+      guardrailId?: string | null;
+      budgetMonthlyCents?: number | null;
+      budgetPaused?: boolean | null;
+      sandbox?: boolean | null;
+    };
   } | null;
 };
 
@@ -7015,61 +6704,6 @@ export type SetSpaceToolsMutation = {
       } | null;
     }>;
   };
-};
-
-export type UpdateAgentStatusMutationVariables = Exact<{
-  id: Scalars["ID"]["input"];
-  status: AgentStatus;
-}>;
-
-export type UpdateAgentStatusMutation = {
-  __typename?: "Mutation";
-  updateAgentStatus: {
-    __typename?: "Agent";
-    id: string;
-    status: AgentStatus;
-    updatedAt: any;
-  };
-};
-
-export type SetAgentCapabilitiesMutationVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-  capabilities: Array<AgentCapabilityInput> | AgentCapabilityInput;
-}>;
-
-export type SetAgentCapabilitiesMutation = {
-  __typename?: "Mutation";
-  setAgentCapabilities: Array<{
-    __typename?: "AgentCapability";
-    id: string;
-    capability: string;
-    enabled: boolean;
-  }>;
-};
-
-export type SetAgentBudgetPolicyMutationVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-  input: AgentBudgetPolicyInput;
-}>;
-
-export type SetAgentBudgetPolicyMutation = {
-  __typename?: "Mutation";
-  setAgentBudgetPolicy: {
-    __typename?: "AgentBudgetPolicy";
-    id: string;
-    limitUsd: number;
-    actionOnExceed: string;
-    enabled: boolean;
-  };
-};
-
-export type DeleteAgentBudgetPolicyMutationVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-}>;
-
-export type DeleteAgentBudgetPolicyMutation = {
-  __typename?: "Mutation";
-  deleteAgentBudgetPolicy: boolean;
 };
 
 export type ComputersListQueryVariables = Exact<{
@@ -7388,81 +7022,6 @@ export type ModelCatalogQuery = {
     inputCostPerMillion?: number | null;
     outputCostPerMillion?: number | null;
   }>;
-};
-
-export type AgentEmailCapabilityQueryVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-}>;
-
-export type AgentEmailCapabilityQuery = {
-  __typename?: "Query";
-  agentEmailCapability?: {
-    __typename?: "AgentEmailCapability";
-    id: string;
-    agentId: string;
-    enabled: boolean;
-    emailAddress?: string | null;
-    vanityAddress?: string | null;
-    allowedSenders: Array<string>;
-  } | null;
-};
-
-export type UpdateAgentEmailAllowlistMutationVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-  allowedSenders:
-    | Array<Scalars["String"]["input"]>
-    | Scalars["String"]["input"];
-}>;
-
-export type UpdateAgentEmailAllowlistMutation = {
-  __typename?: "Mutation";
-  updateAgentEmailAllowlist: {
-    __typename?: "AgentCapability";
-    id: string;
-    config?: any | null;
-    enabled: boolean;
-  };
-};
-
-export type ToggleAgentEmailChannelMutationVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-  enabled: Scalars["Boolean"]["input"];
-}>;
-
-export type ToggleAgentEmailChannelMutation = {
-  __typename?: "Mutation";
-  toggleAgentEmailChannel: {
-    __typename?: "AgentCapability";
-    id: string;
-    enabled: boolean;
-  };
-};
-
-export type ClaimVanityEmailAddressMutationVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-  localPart: Scalars["String"]["input"];
-}>;
-
-export type ClaimVanityEmailAddressMutation = {
-  __typename?: "Mutation";
-  claimVanityEmailAddress: {
-    __typename?: "AgentCapability";
-    id: string;
-    config?: any | null;
-  };
-};
-
-export type ReleaseVanityEmailAddressMutationVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-}>;
-
-export type ReleaseVanityEmailAddressMutation = {
-  __typename?: "Mutation";
-  releaseVanityEmailAddress: {
-    __typename?: "AgentCapability";
-    id: string;
-    config?: any | null;
-  };
 };
 
 export type KnowledgeBasesListQueryVariables = Exact<{
@@ -8840,58 +8399,6 @@ export type RemoveTenantMemberMutationVariables = Exact<{
 export type RemoveTenantMemberMutation = {
   __typename?: "Mutation";
   removeTenantMember: boolean;
-};
-
-export type AgentApiKeysQueryVariables = Exact<{
-  agentId: Scalars["ID"]["input"];
-}>;
-
-export type AgentApiKeysQuery = {
-  __typename?: "Query";
-  agentApiKeys: Array<{
-    __typename?: "AgentApiKey";
-    id: string;
-    tenantId: string;
-    agentId: string;
-    name?: string | null;
-    keyPrefix: string;
-    lastUsedAt?: any | null;
-    revokedAt?: any | null;
-    createdAt: any;
-  }>;
-};
-
-export type CreateAgentApiKeyMutationVariables = Exact<{
-  input: CreateAgentApiKeyInput;
-}>;
-
-export type CreateAgentApiKeyMutation = {
-  __typename?: "Mutation";
-  createAgentApiKey: {
-    __typename?: "CreateAgentApiKeyResult";
-    plainTextKey: string;
-    apiKey: {
-      __typename?: "AgentApiKey";
-      id: string;
-      agentId: string;
-      name?: string | null;
-      keyPrefix: string;
-      createdAt: any;
-    };
-  };
-};
-
-export type RevokeAgentApiKeyMutationVariables = Exact<{
-  id: Scalars["ID"]["input"];
-}>;
-
-export type RevokeAgentApiKeyMutation = {
-  __typename?: "Mutation";
-  revokeAgentApiKey: {
-    __typename?: "AgentApiKey";
-    id: string;
-    revokedAt?: any | null;
-  };
 };
 
 export type CostSummaryQueryVariables = Exact<{
@@ -10485,151 +9992,6 @@ export type OnEvalRunUpdatedSubscription = {
   } | null;
 };
 
-export const AgentDetailDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "AgentDetail" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "agent" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "name" } },
-                { kind: "Field", name: { kind: "Name", value: "slug" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AgentDetailQuery, AgentDetailQueryVariables>;
-export const CreateSubAgentDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "CreateSubAgent" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "CreateAgentInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "createAgent" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "name" } },
-                { kind: "Field", name: { kind: "Name", value: "slug" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  CreateSubAgentMutation,
-  CreateSubAgentMutationVariables
->;
-export const DeleteSubAgentDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "DeleteSubAgent" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "deleteAgent" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  DeleteSubAgentMutation,
-  DeleteSubAgentMutationVariables
->;
 export const CreateThreadDocument = {
   kind: "Document",
   definitions: [
@@ -11517,8 +10879,8 @@ export const AgentsListDocument = {
         selections: [
           {
             kind: "Field",
-            alias: { kind: "Name", value: "agents" },
-            name: { kind: "Name", value: "allTenantAgents" },
+            alias: { kind: "Name", value: "agent" },
+            name: { kind: "Name", value: "tenantAgent" },
             arguments: [
               {
                 kind: "Argument",
@@ -11564,17 +10926,20 @@ export const AgentsListDocument = {
     },
   ],
 } as unknown as DocumentNode<AgentsListQuery, AgentsListQueryVariables>;
-export const AgentProfileDetailDocument = {
+export const TenantAgentDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "query",
-      name: { kind: "Name", value: "AgentProfileDetail" },
+      name: { kind: "Name", value: "TenantAgent" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
           type: {
             kind: "NonNullType",
             type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
@@ -11586,14 +10951,15 @@ export const AgentProfileDetailDocument = {
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "agent" },
+            alias: { kind: "Name", value: "agent" },
+            name: { kind: "Name", value: "tenantAgent" },
             arguments: [
               {
                 kind: "Argument",
-                name: { kind: "Name", value: "id" },
+                name: { kind: "Name", value: "tenantId" },
                 value: {
                   kind: "Variable",
-                  name: { kind: "Name", value: "id" },
+                  name: { kind: "Name", value: "tenantId" },
                 },
               },
             ],
@@ -11744,172 +11110,21 @@ export const AgentProfileDetailDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<
-  AgentProfileDetailQuery,
-  AgentProfileDetailQueryVariables
->;
-export const CreateAgentDocument = {
+} as unknown as DocumentNode<TenantAgentQuery, TenantAgentQueryVariables>;
+export const UpdateTenantAgentDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "mutation",
-      name: { kind: "Name", value: "CreateAgent" },
+      name: { kind: "Name", value: "UpdateTenantAgent" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
           variable: {
             kind: "Variable",
-            name: { kind: "Name", value: "input" },
+            name: { kind: "Name", value: "tenantId" },
           },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "CreateAgentInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "createAgent" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "name" } },
-                { kind: "Field", name: { kind: "Name", value: "role" } },
-                { kind: "Field", name: { kind: "Name", value: "type" } },
-                { kind: "Field", name: { kind: "Name", value: "status" } },
-                { kind: "Field", name: { kind: "Name", value: "runtime" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "budgetMonthlyCents" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<CreateAgentMutation, CreateAgentMutationVariables>;
-export const AgentKnowledgeBasesDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "AgentKnowledgeBases" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "agent" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "knowledgeBases" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "knowledgeBaseId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "enabled" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "knowledgeBase" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "id" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "name" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "description" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "status" },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AgentKnowledgeBasesQuery,
-  AgentKnowledgeBasesQueryVariables
->;
-export const UpdateAgentDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "UpdateAgent" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
           type: {
             kind: "NonNullType",
             type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
@@ -11925,7 +11140,7 @@ export const UpdateAgentDocument = {
             kind: "NonNullType",
             type: {
               kind: "NamedType",
-              name: { kind: "Name", value: "UpdateAgentInput" },
+              name: { kind: "Name", value: "UpdateTenantAgentInput" },
             },
           },
         },
@@ -11935,14 +11150,14 @@ export const UpdateAgentDocument = {
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "updateAgent" },
+            name: { kind: "Name", value: "updateTenantAgent" },
             arguments: [
               {
                 kind: "Argument",
-                name: { kind: "Name", value: "id" },
+                name: { kind: "Name", value: "tenantId" },
                 value: {
                   kind: "Variable",
-                  name: { kind: "Name", value: "id" },
+                  name: { kind: "Name", value: "tenantId" },
                 },
               },
               {
@@ -11962,6 +11177,8 @@ export const UpdateAgentDocument = {
                 { kind: "Field", name: { kind: "Name", value: "role" } },
                 { kind: "Field", name: { kind: "Name", value: "type" } },
                 { kind: "Field", name: { kind: "Name", value: "runtime" } },
+                { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "guardrailId" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "systemPrompt" },
@@ -11971,75 +11188,7 @@ export const UpdateAgentDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "budgetMonthlyCents" },
                 },
-                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<UpdateAgentMutation, UpdateAgentMutationVariables>;
-export const UpdateAgentRuntimeDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "UpdateAgentRuntime" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "runtime" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "AgentRuntime" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "updateAgentRuntime" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "runtime" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "runtime" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "runtime" } },
+                { kind: "Field", name: { kind: "Name", value: "sandbox" } },
                 { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
               ],
             },
@@ -12049,48 +11198,9 @@ export const UpdateAgentRuntimeDocument = {
     },
   ],
 } as unknown as DocumentNode<
-  UpdateAgentRuntimeMutation,
-  UpdateAgentRuntimeMutationVariables
+  UpdateTenantAgentMutation,
+  UpdateTenantAgentMutationVariables
 >;
-export const DeleteAgentDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "DeleteAgent" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "deleteAgent" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<DeleteAgentMutation, DeleteAgentMutationVariables>;
 export const SpacesListDocument = {
   kind: "Document",
   definitions: [
@@ -12155,97 +11265,6 @@ export const SpacesListDocument = {
     },
   ],
 } as unknown as DocumentNode<SpacesListQuery, SpacesListQueryVariables>;
-export const AgentSpaceAvailabilityDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "AgentSpaceAvailability" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "tenantId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "spaces" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "tenantId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "tenantId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "status" },
-                value: { kind: "EnumValue", value: "ACTIVE" },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "includeAllForAdmin" },
-                value: { kind: "BooleanValue", value: true },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "name" } },
-                { kind: "Field", name: { kind: "Name", value: "slug" } },
-                { kind: "Field", name: { kind: "Name", value: "kind" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "agentAssignments" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "status" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "agent" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "id" },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AgentSpaceAvailabilityQuery,
-  AgentSpaceAvailabilityQueryVariables
->;
 export const CreateSpaceDocument = {
   kind: "Document",
   definitions: [
@@ -12358,14 +11377,25 @@ export const UpdateSpaceDocument = {
     },
   ],
 } as unknown as DocumentNode<UpdateSpaceMutation, UpdateSpaceMutationVariables>;
-export const SetSpaceAgentAvailabilityDocument = {
+export const SetSpaceRuntimeOverridesDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "mutation",
-      name: { kind: "Name", value: "SetSpaceAgentAvailability" },
+      name: { kind: "Name", value: "SetSpaceRuntimeOverrides" },
       variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "spaceId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
         {
           kind: "VariableDefinition",
           variable: {
@@ -12376,7 +11406,7 @@ export const SetSpaceAgentAvailabilityDocument = {
             kind: "NonNullType",
             type: {
               kind: "NamedType",
-              name: { kind: "Name", value: "SetSpaceAgentAvailabilityInput" },
+              name: { kind: "Name", value: "SetSpaceRuntimeOverridesInput" },
             },
           },
         },
@@ -12386,8 +11416,16 @@ export const SetSpaceAgentAvailabilityDocument = {
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "setSpaceAgentAvailability" },
+            name: { kind: "Name", value: "setSpaceRuntimeOverrides" },
             arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "spaceId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "spaceId" },
+                },
+              },
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "input" },
@@ -12401,18 +11439,33 @@ export const SetSpaceAgentAvailabilityDocument = {
               kind: "SelectionSet",
               selections: [
                 { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "agentId" } },
-                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
-                { kind: "Field", name: { kind: "Name", value: "localRole" } },
                 {
                   kind: "Field",
-                  name: { kind: "Name", value: "autoSubscribe" },
+                  name: { kind: "Name", value: "runtimeOverrides" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "model" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "guardrailId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "budgetMonthlyCents" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "budgetPaused" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sandbox" },
+                      },
+                    ],
+                  },
                 },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "allowedTools" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
               ],
             },
           },
@@ -12421,8 +11474,8 @@ export const SetSpaceAgentAvailabilityDocument = {
     },
   ],
 } as unknown as DocumentNode<
-  SetSpaceAgentAvailabilityMutation,
-  SetSpaceAgentAvailabilityMutationVariables
+  SetSpaceRuntimeOverridesMutation,
+  SetSpaceRuntimeOverridesMutationVariables
 >;
 export const SpaceAdminDetailDocument = {
   kind: "Document",
@@ -12470,6 +11523,32 @@ export const SpaceAdminDetailDocument = {
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "emailTriggersEnabled" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "runtimeOverrides" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "model" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "guardrailId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "budgetMonthlyCents" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "budgetPaused" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sandbox" },
+                      },
+                    ],
+                  },
                 },
               ],
             },
@@ -12918,283 +11997,6 @@ export const SetSpaceToolsDocument = {
 } as unknown as DocumentNode<
   SetSpaceToolsMutation,
   SetSpaceToolsMutationVariables
->;
-export const UpdateAgentStatusDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "UpdateAgentStatus" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "status" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "AgentStatus" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "updateAgentStatus" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "status" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "status" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "status" } },
-                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  UpdateAgentStatusMutation,
-  UpdateAgentStatusMutationVariables
->;
-export const SetAgentCapabilitiesDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SetAgentCapabilities" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "capabilities" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "ListType",
-              type: {
-                kind: "NonNullType",
-                type: {
-                  kind: "NamedType",
-                  name: { kind: "Name", value: "AgentCapabilityInput" },
-                },
-              },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "setAgentCapabilities" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "capabilities" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "capabilities" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "capability" } },
-                { kind: "Field", name: { kind: "Name", value: "enabled" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SetAgentCapabilitiesMutation,
-  SetAgentCapabilitiesMutationVariables
->;
-export const SetAgentBudgetPolicyDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SetAgentBudgetPolicy" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "AgentBudgetPolicyInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "setAgentBudgetPolicy" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "limitUsd" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "actionOnExceed" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "enabled" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SetAgentBudgetPolicyMutation,
-  SetAgentBudgetPolicyMutationVariables
->;
-export const DeleteAgentBudgetPolicyDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "DeleteAgentBudgetPolicy" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "deleteAgentBudgetPolicy" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  DeleteAgentBudgetPolicyMutation,
-  DeleteAgentBudgetPolicyMutationVariables
 >;
 export const ComputersListDocument = {
   kind: "Document",
@@ -14180,352 +12982,6 @@ export const ModelCatalogDocument = {
     },
   ],
 } as unknown as DocumentNode<ModelCatalogQuery, ModelCatalogQueryVariables>;
-export const AgentEmailCapabilityDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "AgentEmailCapability" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "agentEmailCapability" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "agentId" } },
-                { kind: "Field", name: { kind: "Name", value: "enabled" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "emailAddress" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "vanityAddress" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "allowedSenders" },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AgentEmailCapabilityQuery,
-  AgentEmailCapabilityQueryVariables
->;
-export const UpdateAgentEmailAllowlistDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "UpdateAgentEmailAllowlist" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "allowedSenders" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "ListType",
-              type: {
-                kind: "NonNullType",
-                type: {
-                  kind: "NamedType",
-                  name: { kind: "Name", value: "String" },
-                },
-              },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "updateAgentEmailAllowlist" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "allowedSenders" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "allowedSenders" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "config" } },
-                { kind: "Field", name: { kind: "Name", value: "enabled" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  UpdateAgentEmailAllowlistMutation,
-  UpdateAgentEmailAllowlistMutationVariables
->;
-export const ToggleAgentEmailChannelDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "ToggleAgentEmailChannel" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "enabled" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "Boolean" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "toggleAgentEmailChannel" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "enabled" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "enabled" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "enabled" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  ToggleAgentEmailChannelMutation,
-  ToggleAgentEmailChannelMutationVariables
->;
-export const ClaimVanityEmailAddressDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "ClaimVanityEmailAddress" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "localPart" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "String" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "claimVanityEmailAddress" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "localPart" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "localPart" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "config" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  ClaimVanityEmailAddressMutation,
-  ClaimVanityEmailAddressMutationVariables
->;
-export const ReleaseVanityEmailAddressDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "ReleaseVanityEmailAddress" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "releaseVanityEmailAddress" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "config" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  ReleaseVanityEmailAddressMutation,
-  ReleaseVanityEmailAddressMutationVariables
->;
 export const KnowledgeBasesListDocument = {
   kind: "Document",
   definitions: [
@@ -19489,190 +17945,6 @@ export const RemoveTenantMemberDocument = {
 } as unknown as DocumentNode<
   RemoveTenantMemberMutation,
   RemoveTenantMemberMutationVariables
->;
-export const AgentApiKeysDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "AgentApiKeys" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "agentApiKeys" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
-                { kind: "Field", name: { kind: "Name", value: "agentId" } },
-                { kind: "Field", name: { kind: "Name", value: "name" } },
-                { kind: "Field", name: { kind: "Name", value: "keyPrefix" } },
-                { kind: "Field", name: { kind: "Name", value: "lastUsedAt" } },
-                { kind: "Field", name: { kind: "Name", value: "revokedAt" } },
-                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AgentApiKeysQuery, AgentApiKeysQueryVariables>;
-export const CreateAgentApiKeyDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "CreateAgentApiKey" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "CreateAgentApiKeyInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "createAgentApiKey" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "apiKey" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "agentId" },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "name" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "keyPrefix" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "createdAt" },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "plainTextKey" },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  CreateAgentApiKeyMutation,
-  CreateAgentApiKeyMutationVariables
->;
-export const RevokeAgentApiKeyDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "RevokeAgentApiKey" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "revokeAgentApiKey" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "revokedAt" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  RevokeAgentApiKeyMutation,
-  RevokeAgentApiKeyMutationVariables
 >;
 export const CostSummaryDocument = {
   kind: "Document",

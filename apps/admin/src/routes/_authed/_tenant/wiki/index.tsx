@@ -370,8 +370,8 @@ export function WikiPage({
 
   const agents = useMemo(
     () =>
-      [...(agentsResult.data?.agents ?? [])].sort((a, b) =>
-        a.name.localeCompare(b.name),
+      [...(agentsResult.data?.agent ? [agentsResult.data.agent] : [])].sort(
+        (a, b) => a.name.localeCompare(b.name),
       ),
     [agentsResult.data],
   );

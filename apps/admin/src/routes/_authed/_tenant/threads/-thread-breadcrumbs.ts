@@ -25,7 +25,9 @@ export type Breadcrumb = {
 //   1. Explicit Agent provenance via `?fromAgent=...` — preserve the Agent
 //      breadcrumb when arriving from an agent page.
 //   2. Default — Threads root.
-export function buildThreadBreadcrumbs(input: ThreadBreadcrumbInput): Breadcrumb[] {
+export function buildThreadBreadcrumbs(
+  input: ThreadBreadcrumbInput,
+): Breadcrumb[] {
   const { thread, fromAgentId, fromAgentName } = input;
 
   const tail: Breadcrumb = {
@@ -36,8 +38,8 @@ export function buildThreadBreadcrumbs(input: ThreadBreadcrumbInput): Breadcrumb
 
   if (fromAgentId) {
     return [
-      { label: "Agents", href: "/agents" },
-      { label: fromAgentName ?? "Agent", href: `/agents/${fromAgentId}` },
+      { label: "Tenant agent", href: "/tenant-agent" },
+      { label: fromAgentName ?? "Agent" },
       tail,
     ];
   }

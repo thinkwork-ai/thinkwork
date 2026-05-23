@@ -5,7 +5,7 @@
  * This barrel creates all of them per-request.
  */
 
-import { createAgentLoaders } from "./resolvers/agents/loaders.js";
+import { createAgentLoaders } from "./resolvers/tenant-agent/loaders.js";
 import { createCoreLoaders } from "./resolvers/core/loaders.js";
 import { createThreadLoaders } from "./resolvers/threads/loaders.js";
 import { createCostLoaders } from "./resolvers/costs/loaders.js";
@@ -15,12 +15,12 @@ import { createMemoryLoaders } from "./resolvers/memory/loaders.js";
 export type DataLoaders = ReturnType<typeof createLoaders>;
 
 export function createLoaders() {
-	return {
-		...createAgentLoaders(),
-		...createCoreLoaders(),
-		...createThreadLoaders(),
-		...createCostLoaders(),
-		...createKnowledgeLoaders(),
-		...createMemoryLoaders(),
-	};
+  return {
+    ...createAgentLoaders(),
+    ...createCoreLoaders(),
+    ...createThreadLoaders(),
+    ...createCostLoaders(),
+    ...createKnowledgeLoaders(),
+    ...createMemoryLoaders(),
+  };
 }

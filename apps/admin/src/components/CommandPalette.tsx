@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   MessagesSquare,
   Inbox,
-  Bot,
   Repeat,
   BarChart3,
   Network,
@@ -35,7 +34,6 @@ const NAV_ITEMS = [
   { label: "Threads", to: "/threads", icon: MessagesSquare },
   { label: "Inbox", to: "/inbox", icon: Inbox },
   { label: "Artifacts", to: "/applets", icon: AppWindow },
-  { label: "Agents", to: "/agents", icon: Bot },
   { label: "Routines", to: "/automations/routines", icon: Repeat },
   { label: "Credentials", to: "/automations/credentials", icon: KeyRound },
   { label: "Analytics", to: "/analytics", icon: BarChart3 },
@@ -47,7 +45,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-  const { openNewThread, openNewAgent } = useDialog();
+  const { openNewThread } = useDialog();
 
   // Listen for Cmd+K / Ctrl+K
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -93,10 +91,6 @@ export function CommandPalette() {
           <CommandItem onSelect={() => runAction(() => openNewThread())}>
             <Plus className="mr-2 h-4 w-4" />
             New Thread
-          </CommandItem>
-          <CommandItem onSelect={() => runAction(() => openNewAgent())}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Agent
           </CommandItem>
         </CommandGroup>
 

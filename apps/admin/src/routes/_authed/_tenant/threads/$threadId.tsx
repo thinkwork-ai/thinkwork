@@ -347,7 +347,7 @@ function ThreadDetailPage() {
   const isComputerOwnedThread = Boolean(thread?.computerId);
   const threadComputerLabel = thread ? computerDisplayName(thread) : "Computer";
   const threadUserLabel = thread ? userDisplayName(thread) : "User";
-  const agents = agentsResult.data?.agents ?? [];
+  const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
 
   // ---- Derived data ----
   const agentMap = useMemo(() => {
@@ -871,8 +871,7 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
       ) : thread.agent ? (
         <PropRow label="Agent">
           <Link
-            to="/agents/$agentId"
-            params={{ agentId: thread.agent.id }}
+            to="/tenant-agent"
             className="flex items-center gap-1 hover:bg-accent rounded-md px-1 -mx-1 transition-colors"
           >
             <Identity
