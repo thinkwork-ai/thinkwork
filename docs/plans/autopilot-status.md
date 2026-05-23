@@ -14,14 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: implementing final unit
+- Status: PR open; monitoring CI
 - Active unit: U8 — Operator runbook + verification
 - Active branch: `codex/plan-b-u8-collapse-runbook`
 - Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u8-collapse-runbook`
 - Started: 2026-05-22
 - Latest merged PR: [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578)
-- Active PR: none yet
-- CI: not started for U8
+- Active PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579)
+- CI: pending
 
 ### Merge Log
 
@@ -38,6 +38,7 @@ Target branch: `main`
 - U1b CI recovery: PR [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578) first Migration Drift Precheck failed with `space_agent_assignments` and its indexes/constraints still present in dev. Applied `packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql` to dev with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`; scoped `db-migrate-manual.sh packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql` now reports every drop marker as `DROPPED`.
 - 2026-05-22 U8: Started the final runbook unit from `origin/main` after U1b merged. Scope is `docs/runbooks/collapse-agents-migration.md`, the documented `threads.agent_id` semantic comment, and this status ledger.
 - U8 local verification: `pnpm install`; touched-file Prettier check; `pnpm --filter @thinkwork/api typecheck`; `git diff --check`; consumer survey rerun and recorded in the runbook with the expected residual helper/comment hits.
+- U8 PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579) opened for CI.
 
 ### Progress Log
 
