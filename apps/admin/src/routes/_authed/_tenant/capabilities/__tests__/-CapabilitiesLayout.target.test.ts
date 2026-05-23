@@ -18,14 +18,14 @@ describe("capabilities layout", () => {
     expect(layoutSource).not.toContain("Skills and Tools");
   });
 
-  it("puts built-in tools first and hides unsupported plugins", () => {
+  it("renders built-in tools then MCP servers; the Skills tab is gone", () => {
     const builtinIndex = layoutSource.indexOf('value="builtin-tools"');
-    const skillsIndex = layoutSource.indexOf('value="skills"');
     const mcpIndex = layoutSource.indexOf('value="mcp-servers"');
 
     expect(builtinIndex).toBeGreaterThanOrEqual(0);
-    expect(skillsIndex).toBeGreaterThan(builtinIndex);
-    expect(mcpIndex).toBeGreaterThan(skillsIndex);
+    expect(mcpIndex).toBeGreaterThan(builtinIndex);
+    expect(layoutSource).not.toContain('value="skills"');
+    expect(layoutSource).not.toContain('to="/capabilities/skills"');
     expect(layoutSource).not.toContain('value="plugins"');
     expect(layoutSource).not.toContain('to="/capabilities/plugins"');
   });
