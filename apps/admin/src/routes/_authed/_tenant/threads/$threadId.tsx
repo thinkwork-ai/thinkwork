@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type DragEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useSubscription } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -46,10 +38,7 @@ import {
 } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import {
-  downloadThreadAttachment,
-  uploadThreadAttachmentsFromAdmin,
-} from "@/lib/thread-attachments-api";
+import { downloadThreadAttachment } from "@/lib/thread-attachments-api";
 import {
   ChevronDown,
   ChevronRight,
@@ -57,7 +46,6 @@ import {
   FileText,
   Lock,
   MoreHorizontal,
-  Paperclip,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
@@ -273,7 +261,6 @@ function ThreadDetailPage() {
   const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
   // detailTab removed — sections are now inline (Linear-style)
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [attachmentDragActive, setAttachmentDragActive] = useState(false);
   const [viewingArtifact, setViewingArtifact] = useState<any>(null);
   const urqlClient = useClient();
 
@@ -296,7 +283,6 @@ function ThreadDetailPage() {
     },
     [urqlClient],
   );
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ---- Queries ----
   const [threadResult, reexecuteThread] = useQuery({
@@ -431,44 +417,6 @@ function ThreadDetailPage() {
     navigate({ to: "/threads" });
   };
 
-  const uploadFiles = async (files: FileList | File[]) => {
-    const list = Array.from(files);
-    if (list.length === 0) return;
-    setAttachmentError(null);
-    try {
-      const result = await uploadThreadAttachmentsFromAdmin({
-        threadId,
-        files: list,
-      });
-      if (result.failures.length > 0) {
-        const first = result.failures[0]!;
-        setAttachmentError(
-          `${result.failures.length} upload failure(s): ${first.stage}: ${first.message}`,
-        );
-      }
-      if (result.uploaded.length > 0) {
-        reexecuteThread({ requestPolicy: "network-only" });
-      }
-    } catch (err) {
-      setAttachmentError(err instanceof Error ? err.message : "Upload failed");
-    }
-  };
-
-  const handleFilePicked = async (evt: ChangeEvent<HTMLInputElement>) => {
-    const files = evt.target.files;
-    if (!files || files.length === 0) return;
-    await uploadFiles(files);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleAttachmentDrop = async (evt: DragEvent<HTMLDivElement>) => {
-    evt.preventDefault();
-    setAttachmentDragActive(false);
-    const dropped = evt.dataTransfer?.files;
-    if (!dropped || dropped.length === 0) return;
-    await uploadFiles(dropped);
-  };
-
   const handleAttachmentClick = async (attachmentId: string) => {
     setAttachmentError(null);
     try {
@@ -479,30 +427,6 @@ function ThreadDetailPage() {
       );
     }
   };
-
-  const attachmentUploadButton = (
-    <>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-        className="hidden"
-        onChange={handleFilePicked}
-        multiple
-      />
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          "text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1",
-          attachmentDragActive && "text-primary",
-        )}
-      >
-        <Paperclip className="h-3 w-3" />
-        Upload attachment
-      </button>
-    </>
-  );
 
   const artifacts = (artifactsResult.data as any)?.artifacts ?? [];
 
@@ -637,16 +561,16 @@ function ThreadDetailPage() {
           </div>
 
           {/* Attachments */}
-          <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Attachments
-            </h3>
-            {attachmentList.map((attachment) => (
-              <div
-                key={attachment.id}
-                className="rounded-md border border-border bg-background p-2"
-              >
-                <div className="flex items-center justify-between gap-1">
+          {hasAttachments && (
+            <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Attachments
+              </h3>
+              {attachmentList.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="rounded-md border border-border bg-background p-2"
+                >
                   <button
                     type="button"
                     onClick={() => handleAttachmentClick(attachment.id)}
@@ -655,28 +579,19 @@ function ThreadDetailPage() {
                   >
                     {attachment.name ?? attachment.id}
                   </button>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-destructive shrink-0"
-                    title="Delete (not yet implemented)"
-                    disabled
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+                  <p className="text-[10px] text-muted-foreground">
+                    {attachment.mimeType ?? "unknown"}
+                    {attachment.sizeBytes
+                      ? ` · ${(attachment.sizeBytes / 1024).toFixed(1)} KB`
+                      : ""}
+                  </p>
                 </div>
-                <p className="text-[10px] text-muted-foreground">
-                  {attachment.mimeType ?? "unknown"}
-                  {attachment.sizeBytes
-                    ? ` · ${(attachment.sizeBytes / 1024).toFixed(1)} KB`
-                    : ""}
-                </p>
-              </div>
-            ))}
-            {attachmentUploadButton}
-            {attachmentError && (
-              <p className="text-xs text-destructive">{attachmentError}</p>
-            )}
-          </div>
+              ))}
+              {attachmentError && (
+                <p className="text-xs text-destructive">{attachmentError}</p>
+              )}
+            </div>
+          )}
 
           {/* Artifacts */}
           {artifacts.length > 0 && (
@@ -848,27 +763,9 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
       )}
 
       {thread.computerId ? (
-        <>
-          <PropRow label="Computer">
-            <Link
-              to="/computers/$computerId"
-              params={{ computerId: thread.computerId }}
-              className="flex min-w-0 items-center gap-1 hover:bg-accent rounded-md px-1 -mx-1 transition-colors"
-            >
-              <Badge variant="outline" className="min-w-0 truncate text-xs">
-                {computerDisplayName(thread)}
-              </Badge>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            </Link>
-          </PropRow>
-          <PropRow label="User">
-            <Identity
-              name={userDisplayName(thread)}
-              avatarUrl={thread.user?.image}
-              size="sm"
-            />
-          </PropRow>
-        </>
+        <PropRow label="User">
+          <span className="text-xs truncate">{userDisplayName(thread)}</span>
+        </PropRow>
       ) : thread.agent ? (
         <PropRow label="Agent">
           <Link
