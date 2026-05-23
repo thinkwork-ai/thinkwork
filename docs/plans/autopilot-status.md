@@ -20,8 +20,8 @@ Target branch: `main`
 - Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/u1-space-tools-tab-removal`
 - Started: 2026-05-23
 - Latest merged PR: none
-- Active PR: pending
-- CI: pending first PR
+- Active PR: [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585)
+- CI: pending
 
 ### Active Unit Notes
 
@@ -31,15 +31,15 @@ Target branch: `main`
 
 ### Progress Log
 
-| Date       | Unit | Branch                             | PR      | Status           | Verification                                                                                                                                           | Notes                                                                                                    |
-| ---------- | ---- | ---------------------------------- | ------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| 2026-05-23 | U1   | `codex/u1-space-tools-tab-removal` | Pending | Locally verified | Targeted route test, admin build, touched-file Prettier, and `git diff --check` passed; admin raw `tsc --noEmit` blocked by existing unrelated errors. | Removing `/spaces/$spaceId/tools` from route tree and chrome; preserving backend tools resolver surface. |
-| 2026-05-23 | U2   | Pending                            | Pending | Not started      | Pending                                                                                                                                                | Remove Advanced runtime UI.                                                                              |
-| 2026-05-23 | U3   | Pending                            | Pending | Not started      | Pending                                                                                                                                                | Rename Workspace tab label to Files and Description label to Instructions.                               |
-| 2026-05-23 | U4   | Pending                            | Pending | Not started      | Pending                                                                                                                                                | Add reserved slug constant and `renameTenantSlug`.                                                       |
-| 2026-05-23 | U5   | Pending                            | Pending | Not started      | Pending                                                                                                                                                | Add tenant slug picker and Settings rename surface.                                                      |
-| 2026-05-23 | U6   | Pending                            | Pending | Not started      | Pending                                                                                                                                                | Terraform per-tenant SES/DNS.                                                                            |
-| 2026-05-23 | U7   | Pending                            | Pending | Not started      | Pending                                                                                                                                                | New email parser/derivation and retirement notice copy.                                                  |
+| Date       | Unit | Branch                             | PR                                                           | Status      | Verification                                                                                                                                           | Notes                                                                                                    |
+| ---------- | ---- | ---------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| 2026-05-23 | U1   | `codex/u1-space-tools-tab-removal` | [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585) | PR open     | Targeted route test, admin build, touched-file Prettier, and `git diff --check` passed; admin raw `tsc --noEmit` blocked by existing unrelated errors. | Removing `/spaces/$spaceId/tools` from route tree and chrome; preserving backend tools resolver surface. |
+| 2026-05-23 | U2   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Remove Advanced runtime UI.                                                                              |
+| 2026-05-23 | U3   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Rename Workspace tab label to Files and Description label to Instructions.                               |
+| 2026-05-23 | U4   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Add reserved slug constant and `renameTenantSlug`.                                                       |
+| 2026-05-23 | U5   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Add tenant slug picker and Settings rename surface.                                                      |
+| 2026-05-23 | U6   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Terraform per-tenant SES/DNS.                                                                            |
+| 2026-05-23 | U7   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | New email parser/derivation and retirement notice copy.                                                  |
 
 ### CI Failures
 
