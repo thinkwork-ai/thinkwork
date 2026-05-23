@@ -91,6 +91,9 @@ export const threads_query = async (
     // When no channel specified (Inbox), exclude task-channel threads
     conditions.push(sql`${threads.channel} != 'task'`);
   }
+  // After the platform-agent migration, threads.agent_id is the tenant's
+  // canonical agent, so historical per-agent filters no longer partition
+  // tenant threads by retired agent identity.
   if (args.agentId) conditions.push(eq(threads.agent_id, args.agentId));
   if (args.computerId)
     conditions.push(eq(threads.computer_id, args.computerId));

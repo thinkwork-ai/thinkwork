@@ -14,19 +14,20 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: PR open; fixing CI
-- Active unit: U1b — Drop `space_agent_assignments`
-- Active branch: `codex/plan-b-u1b-drop-space-agent-assignments`
-- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u1b-drop-space-agent-assignments`
+- Status: PR open; CI passed; ready to squash merge
+- Active unit: U8 — Operator runbook + verification
+- Active branch: `codex/plan-b-u8-collapse-runbook`
+- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u8-collapse-runbook`
 - Started: 2026-05-22
-- Latest merged PR: [#1577](https://github.com/thinkwork-ai/thinkwork/pull/1577)
-- Active PR: [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578)
-- CI: first Migration Drift Precheck failed because dev still had `space_agent_assignments`; dev migration applied and rerun pending
+- Latest merged PR: [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578)
+- Active PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579)
+- CI: passed for PR [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579): CLA, lint, test, typecheck, verify
 
 ### Merge Log
 
 - 2026-05-22: U5/U7 grouped PR [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576) squash merged as `50ec4431c8c6f72e693b73eaa561eae9c77d1d57`; remote branch was already deleted by GitHub and local worktree/branch were removed. First CI run failed on stale admin-ops MCP `agents_*` tool-list expectations; fixed and all required checks passed before merge.
 - 2026-05-22: U6 PR [#1577](https://github.com/thinkwork-ai/thinkwork/pull/1577) squash merged as `23f061eef09b1779d1bef328c0875924af59c5fc`; remote branch was already deleted by GitHub and local worktree/branch were removed. All required checks passed.
+- 2026-05-22: U1b PR [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578) squash merged as `a6dcb48a858068306b01e6115550a72a9e2e4ace`; remote branch was already deleted by GitHub and local worktree/branch were removed. First Migration Drift Precheck failed because dev still had `space_agent_assignments`; applied `0125_drop_space_agent_assignments.sql` to dev, verified scoped drift reported all drop markers as `DROPPED`, and rerun CI passed.
 
 ### Active Unit Notes
 
@@ -35,6 +36,10 @@ Target branch: `main`
 - 2026-05-22 U1b: Started gated table-drop work after U3, U5/U7, and U6 merged. Pre-flight source grep for `space_agent_assignments|spaceAgentAssignments|setSpaceAgentAvailability` across API, Lambda, and admin source returned zero live consumer hits.
 - U1b local verification: `pnpm --filter @thinkwork/database-pg test __tests__/spaces-schema.test.ts __tests__/agent-template-removal-schema.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; scoped and full `db-migrate-manual.sh --dry-run` marker checks; source grep gate; TS/MD Prettier check; `git diff --check`.
 - U1b CI recovery: PR [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578) first Migration Drift Precheck failed with `space_agent_assignments` and its indexes/constraints still present in dev. Applied `packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql` to dev with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`; scoped `db-migrate-manual.sh packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql` now reports every drop marker as `DROPPED`.
+- 2026-05-22 U8: Started the final runbook unit from `origin/main` after U1b merged. Scope is `docs/runbooks/collapse-agents-migration.md`, the documented `threads.agent_id` semantic comment, and this status ledger.
+- U8 local verification: `pnpm install`; touched-file Prettier check; `pnpm --filter @thinkwork/api typecheck`; `git diff --check`; consumer survey rerun and recorded in the runbook with the expected residual helper/comment hits.
+- U8 PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579) opened for CI.
+- U8 CI: GitHub checks passed: CLA, lint, test, typecheck, verify.
 
 ### Progress Log
 
