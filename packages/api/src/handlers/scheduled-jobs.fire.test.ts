@@ -1,13 +1,13 @@
 /**
  * Verifies the manual-fire route routes agent-typed schedules to the linked
  * Computer's task queue and never to the legacy `agent_wakeup_requests` →
- * wakeup-processor → Flue path.
+ * wakeup-processor → Pi path.
  *
  * Regression context: a scheduled job whose underlying agent had
- * `runtime = "flue"` was being fired through wakeup-processor, which read
- * the agent's runtime column and dispatched to the Flue Lambda. Flue 400'd
+ * `runtime = "pi"` was being fired through wakeup-processor, which read
+ * the agent's runtime column and dispatched to the Pi Lambda. Pi 400'd
  * because the legacy `requested_by_actor_id` plumbing was missing too.
- * Automations must run on Computers (Strands) — never Flue.
+ * Automations must run on Computers (Strands) — never Pi.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -222,7 +222,7 @@ beforeEach(() => {
   mocks.updateAgents.mockResolvedValue([{ id: AGENT_ID }]);
 });
 
-describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)", () => {
+describe("scheduled-jobs handler — manual fire routes to Computer (never Pi)", () => {
   it("enqueues a computer_tasks row + ensures a Computer-attached thread", async () => {
     mocks.selectFromScheduledJobs.mockResolvedValue(schedRow());
 
@@ -260,7 +260,7 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
     );
 
     // Regression: zero entries into the legacy wakeup queue. This is the
-    // path that could land on Flue — must not be used for automations.
+    // path that could land on Pi — must not be used for automations.
     expect(mocks.insertIntoAgentWakeupRequests).not.toHaveBeenCalled();
   });
 

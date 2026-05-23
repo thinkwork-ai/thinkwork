@@ -811,7 +811,7 @@ async function fireScheduledJob(
     // Manual fires for agent-typed schedules MUST route through the linked
     // Computer's task queue — never through the legacy `agent_wakeup_requests`
     // path. The legacy path lands at wakeup-processor, which reads the
-    // agent's `runtime` column and can dispatch to the Flue Lambda; Flue is
+    // agent's `runtime` column and can dispatch to the Pi Lambda; Pi is
     // an experimental runtime that does not belong in any automation hot
     // path. The scheduled (cron) firing path in
     // `packages/lambda/job-trigger.ts` already routes through Computers —
@@ -876,7 +876,7 @@ async function fireScheduledJob(
     // Identity for the run: the firing operator is the actor. Without it
     // the Computer task lands with no `created_by_user_id`, which means
     // downstream skills/memory cannot scope to a human — the same defect
-    // that caused the Flue 400 in the legacy path.
+    // that caused the Pi 400 in the legacy path.
     if (!firingUserId) {
       return error("Manual fire requires an authenticated user identity.", 401);
     }

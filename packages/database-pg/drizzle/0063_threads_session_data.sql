@@ -1,10 +1,10 @@
--- Plan §005 U4 — add `threads.session_data jsonb` for Flue's `SessionStore`.
+-- Plan §005 U4 — add `threads.session_data jsonb` for Pi's `SessionStore`.
 --
 -- Hand-rolled (NOT registered in meta/_journal.json — applied via psql in
--- deploy.yml as a pre-Terraform-apply step so the agentcore-flue Lambda
+-- deploy.yml as a pre-Terraform-apply step so the non-Strands runtime Lambda
 -- never reads/writes a column the schema doesn't have).
 --
--- The column is nullable: pre-Flue threads coexist with NULL. Flue's
+-- The column is nullable: pre-Pi threads coexist with NULL. Pi's
 -- AuroraSessionStore.delete() also sets the column to NULL rather than
 -- dropping the thread row, so the post-state is the same as the pre-state
 -- whenever the column is empty.
@@ -18,6 +18,6 @@
 ALTER TABLE threads
   ADD COLUMN IF NOT EXISTS session_data jsonb;
 
--- No index — Flue keys exclusively on `threads.id` (the PK) plus
+-- No index — Pi keys exclusively on `threads.id` (the PK) plus
 -- `tenant_id` (existing `idx_threads_tenant_id`). Adding a GIN/BTREE index
 -- on a jsonb column we never query inside is wasted write amplification.

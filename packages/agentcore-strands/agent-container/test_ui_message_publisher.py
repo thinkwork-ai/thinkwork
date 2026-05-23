@@ -5,7 +5,7 @@ Pure-Python tests: no AppSync, no Bedrock, no Strands runtime. We pin:
 - The body-swap forcing function: U5 ships with `_inert_emit` as the
   default seam; U6's flip is the inversion of `get_ui_message_publisher_for_test`.
 - Per-Computer-thread capability gating: `ui_message_emit=False` keeps
-  `publish_part` a no-op, so non-Computer agents (Flue, sub-agents)
+  `publish_part` a no-op, so non-Computer agents (Pi, sub-agents)
   inherit the legacy `{text}` shape unchanged.
 - Wire-protocol conformance: every chunk we emit conforms to the
   contract spec at docs/specs/computer-ai-elements-contract-v1.md.
@@ -60,7 +60,7 @@ def test_ui_message_emit_false_short_circuits_to_inert():
         thread_id="thread-1",
         endpoint="https://x.example.com/graphql",
         api_key="key",
-        ui_message_emit=False,  # default; the value Flue + sub-agents pass
+        ui_message_emit=False,  # default; the value Pi + sub-agents pass
     )
     dispatch = publisher.publish_part(text_start("p1"))
     assert dispatch == {

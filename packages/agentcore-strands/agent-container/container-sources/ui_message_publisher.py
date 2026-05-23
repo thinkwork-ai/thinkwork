@@ -3,7 +3,7 @@
 Plan-012 U5. Inert by default — the factory closure accepts a per-Computer-
 thread `ui_message_emit` capability flag (NOT a runtime-wide env flag) and
 produces typed `UIMessageChunk` payloads only when that flag is True. Every
-non-Computer call site (Flue, sub-agent dispatch) leaves the flag at its
+non-Computer call site (Pi, sub-agent dispatch) leaves the flag at its
 default `False`, so this module ships zero behavior change for them.
 
 Wire format: each emitted chunk is a JSON object matching exactly one row
@@ -143,7 +143,7 @@ def make_ui_message_publisher_fn(
         api_key: AppSync API key for the publish mutation.
         ui_message_emit: Per-Computer-thread capability flag. Default
             `False` keeps the publisher inert; `True` switches to typed
-            UIMessage emission. Non-Computer callers (Flue, sub-agents)
+            UIMessage emission. Non-Computer callers (Pi, sub-agents)
             MUST leave this False.
         post_fn: Synchronous HTTP poster — defaults to urllib.request.
             Tests inject a fake.

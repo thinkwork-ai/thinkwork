@@ -502,10 +502,10 @@ async function getSkillRunInvokeFnName(
   if (_skillRunInvokeFnName[runtimeType] !== undefined) {
     return _skillRunInvokeFnName[runtimeType] ?? null;
   }
-  if (runtimeType === "flue") {
-    _skillRunInvokeFnName.flue =
-      process.env.AGENTCORE_FLUE_FUNCTION_NAME || null;
-    return _skillRunInvokeFnName.flue;
+  if (runtimeType === "pi") {
+    _skillRunInvokeFnName.pi =
+      process.env.AGENTCORE_PI_FUNCTION_NAME || null;
+    return _skillRunInvokeFnName.pi;
   }
   // Reuse the same Lambda as chat invocation — there's exactly one
   // agentcore-invoke Lambda, it just handles multiple envelope kinds.
@@ -789,6 +789,9 @@ export function agentToCamel(
       result[field] = (result[field] as string).toUpperCase();
     }
   }
+  if (result.runtime === "PI") {
+    result.runtime = "FLUE";
+  }
   return result;
 }
 
@@ -801,6 +804,9 @@ export function templateToCamel(
   }
   if (typeof result.runtime === "string") {
     result.runtime = (result.runtime as string).toUpperCase();
+    if (result.runtime === "PI") {
+      result.runtime = "FLUE";
+    }
   }
   return result;
 }

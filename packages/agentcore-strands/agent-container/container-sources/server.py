@@ -1110,7 +1110,7 @@ def _call_strands_agent(
 
             # Plan-012 U6: per-Computer-thread typed UIMessage emission.
             # Capability flag is per-invocation, NOT a runtime-wide env
-            # var — Flue and sub-agent dispatch leave ui_message_emit at
+            # var — Pi and sub-agent dispatch leave ui_message_emit at
             # False and continue using the legacy {text} envelope. The
             # Computer thread handler (chat-agent-invoke) is the
             # entrypoint that flips this to True.
@@ -3142,7 +3142,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             eval_tools_enabled=eval_tools_enabled,
             stream_thread_id=None if eval_mode else ticket_id or None,
             # Plan-012 U6: enable typed UIMessage emission for Computer
-            # threads only. Per-Computer-thread capability flag — Flue
+            # threads only. Per-Computer-thread capability flag — Pi
             # and sub-agent dispatch entrypoints leave this False and
             # continue using the legacy {text} envelope unchanged.
             # Gated on computer_id + computer_task_id so non-Computer

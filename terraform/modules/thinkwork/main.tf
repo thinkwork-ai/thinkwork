@@ -376,9 +376,9 @@ module "api" {
   api_auth_secret                               = var.api_auth_secret
   db_password                                   = var.db_password
   agentcore_function_name                       = module.agentcore.agentcore_function_name
-  agentcore_flue_function_name                  = module.agentcore_flue.agentcore_flue_function_name
+  agentcore_pi_function_name                    = module.agentcore_pi.agentcore_pi_function_name
   agentcore_function_arn                        = module.agentcore.agentcore_function_arn
-  agentcore_flue_function_arn                   = module.agentcore_flue.agentcore_flue_function_arn
+  agentcore_pi_function_arn                     = module.agentcore_pi.agentcore_pi_function_arn
   hindsight_endpoint                            = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                           = module.agentcore_memory.memory_id
   memory_engine                                 = local.resolved_memory_engine
@@ -477,15 +477,15 @@ module "agentcore" {
 }
 
 ################################################################################
-# AgentCore Flue — Plan §005 U2 splits the Flue Lambda + log group + IAM role
+# AgentCore Pi — Plan §005 U2 splits the Pi Lambda + log group + IAM role
 # + event-invoke config out of the Strands `agentcore-runtime` module into a
-# dedicated module so Flue can carry its own permissions surface independently.
+# dedicated module so Pi can carry its own permissions surface independently.
 # The shared ECR repo and async DLQ stay with `module.agentcore` and are
 # injected here.
 ################################################################################
 
-module "agentcore_flue" {
-  source = "../app/agentcore-flue"
+module "agentcore_pi" {
+  source = "../app/agentcore-pi"
 
   stage       = var.stage
   account_id  = var.account_id
@@ -504,61 +504,43 @@ module "agentcore_flue" {
   api_auth_secret = var.api_auth_secret
 
   # Plan §005 U4 — AuroraSessionStore uses the RDS Data API. Cluster ARN
-  # + secret come from the existing aurora-postgres module so Flue and
+  # + secret come from the existing aurora-postgres module so Pi and
   # graphql-http hit the same cluster + same credential rotation surface.
   db_cluster_arn = module.database.db_cluster_arn
   db_secret_arn  = module.database.graphql_db_secret_arn
 }
 
-# Plan §005 U2 — cross-module state migration. The Flue resources moved from
-# `module.agentcore` to `module.agentcore_flue`; the underlying AWS resource
-# attributes (function_name, log group name, ARN) are unchanged from U1, so
-# this is pure state-address realignment without destroy+create.
-#
-# Two `moved {}` blocks per resource form a CHAIN that covers both possible
-# starting states:
-#   * Stages that never applied U1 (operator-managed greenfield, or any
-#     stage that skipped the U1 deploy) have state at
-#     `module.agentcore.aws_*.agentcore_pi` — the first block migrates that
-#     to `module.agentcore.aws_*.agentcore_flue` (U1's destination), then
-#     the second block migrates THAT to the new module.
-#   * Stages that applied U1 (e.g. dev) have state at
-#     `module.agentcore.aws_*.agentcore_flue` — only the second block
-#     fires.
-#
-# Terraform follows the chain transitively. The earlier shape (both
-# blocks pointing directly at `module.agentcore_flue.…`) was rejected
-# with "Ambiguous move statements" because each destination can only have
-# one source — chaining through the intermediate disambiguates while still
-# covering both starting states.
+# Runtime identity rename: the former dedicated Flue module is now the Pi
+# module. Move existing state to the renamed module/resource addresses so the
+# deployed Lambda, role, log group, and invoke config are updated in place.
 moved {
-  from = module.agentcore.aws_cloudwatch_log_group.agentcore_pi
-  to   = module.agentcore.aws_cloudwatch_log_group.agentcore_flue
+  from = module.agentcore_flue.aws_cloudwatch_log_group.agentcore_flue
+  to   = module.agentcore_pi.aws_cloudwatch_log_group.agentcore_pi
 }
 
 moved {
-  from = module.agentcore.aws_cloudwatch_log_group.agentcore_flue
-  to   = module.agentcore_flue.aws_cloudwatch_log_group.agentcore_flue
+  from = module.agentcore_flue.aws_lambda_function.agentcore_flue
+  to   = module.agentcore_pi.aws_lambda_function.agentcore_pi
 }
 
 moved {
-  from = module.agentcore.aws_lambda_function.agentcore_pi
-  to   = module.agentcore.aws_lambda_function.agentcore_flue
+  from = module.agentcore_flue.aws_lambda_function_event_invoke_config.agentcore_flue
+  to   = module.agentcore_pi.aws_lambda_function_event_invoke_config.agentcore_pi
 }
 
 moved {
-  from = module.agentcore.aws_lambda_function.agentcore_flue
-  to   = module.agentcore_flue.aws_lambda_function.agentcore_flue
+  from = module.agentcore_flue.aws_iam_role.agentcore_flue
+  to   = module.agentcore_pi.aws_iam_role.agentcore_pi
 }
 
 moved {
-  from = module.agentcore.aws_lambda_function_event_invoke_config.agentcore_pi
-  to   = module.agentcore.aws_lambda_function_event_invoke_config.agentcore_flue
+  from = module.agentcore_flue.aws_iam_role_policy.agentcore_flue
+  to   = module.agentcore_pi.aws_iam_role_policy.agentcore_pi
 }
 
 moved {
-  from = module.agentcore.aws_lambda_function_event_invoke_config.agentcore_flue
-  to   = module.agentcore_flue.aws_lambda_function_event_invoke_config.agentcore_flue
+  from = module.agentcore_flue.aws_iam_role_policy.agentcore_flue_dlq_send
+  to   = module.agentcore_pi.aws_iam_role_policy.agentcore_pi_dlq_send
 }
 
 module "crons" {

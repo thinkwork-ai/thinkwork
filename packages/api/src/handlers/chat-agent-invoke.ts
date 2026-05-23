@@ -328,6 +328,16 @@ export function createDrizzleChatInvokeIdentityDeps(
   };
 }
 
+export function resolveChatInvocationRuntimeType(args: {
+  configuredRuntimeType: AgentRuntimeType;
+  computerId?: string | null;
+  computerTaskId?: string | null;
+}): AgentRuntimeType {
+  return args.computerId && args.computerTaskId
+    ? "strands"
+    : args.configuredRuntimeType;
+}
+
 export async function resolveChatInvokeIdentity(
   args: {
     threadId: string;
@@ -394,7 +404,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     //    shared `resolveAgentRuntimeConfig` helper does NOT own — it's specific
     //    to the triggering chat event. Human/user messages and user-created
     //    threads keep their direct actor. Connector-created threads use the
-    //    target agent's paired human as the trusted user context so Flue receives
+    //    target agent's paired human as the trusted user context so Pi receives
     //    the required user_id without giving generic wakeups a fake invoker.
     const identity = await resolveChatInvokeIdentity({
       threadId,
@@ -439,10 +449,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       throw err;
     }
 
-    const runtimeType: AgentRuntimeType =
-      event.computerId && event.computerTaskId
-        ? "strands"
-        : runtimeConfig.runtimeType;
+    const runtimeType = resolveChatInvocationRuntimeType({
+      configuredRuntimeType: runtimeConfig.runtimeType,
+      computerId: event.computerId,
+      computerTaskId: event.computerTaskId,
+    });
     const agentModel = runtimeConfig.templateModel;
     const tenantSlug = runtimeConfig.tenantSlug;
     const agentSlug = runtimeConfig.agentSlug;
@@ -679,7 +690,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       thread_id: threadId,
       // R15: only the actual human invoker (message sender / thread creator).
       // Connector-created threads are the narrow exception: they run as the
-      // target agent's paired human so Flue receives a user_id for memory/tools.
+      // target agent's paired human so Pi receives a user_id for memory/tools.
       // Generic wakeup-style runs still do not fall back to human_pair_id.
       user_id: currentUserId || undefined,
       trace_id: traceId,

@@ -26,8 +26,8 @@ env:
   STAGE: dev
 
 jobs:
-  # ── Flue agent smoke ────────────────────────────────────────────
-  # End-to-end check that the Flue AgentCore runtime responds to a real
+  # ── Pi agent smoke ────────────────────────────────────────────
+  # End-to-end check that the Pi AgentCore runtime responds to a real
   # invoke and the response includes a USER.md fingerprint. Catches LWA
   # routing, Bedrock IAM, Sonnet 4.5 inference-profile prefix, and the
   # missing workspace prompt loader class of bugs.
@@ -35,8 +35,8 @@ jobs:
   # Scope: dev only (uses Marco's tenant + agent IDs). Other stages
   # would need SMOKE_* env vars set; the wrapper script refuses to
   # run when STAGE != dev without those overrides.
-  flue-smoke-test:
-    name: Flue Smoke Test
+  pi-smoke-test:
+    name: Pi Smoke Test
     # Stage gating lives in the wrapper script, not the job conditional —
     # per feedback_gha_env_context_job_if, `if: env.X` at job-level silently
     # fails the entire workflow.
@@ -61,8 +61,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Run Flue smoke
-        run: bash scripts/post-deploy-smoke-flue.sh --stage ${{ env.STAGE }}
+      - name: Run Pi smoke
+        run: bash scripts/post-deploy-smoke-pi.sh --stage ${{ env.STAGE }}
 
   # ── Computer thread streaming smoke ─────────────────────────────
   # Exercises the deployed Python Strands Computer path end-to-end:

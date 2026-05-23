@@ -32,7 +32,7 @@ jobs:
       container: ${{ steps.filter.outputs.container }}
       container_source_sha: ${{ steps.container-source.outputs.sha }}
       strands_container_source_sha: ${{ steps.container-source.outputs.strands_sha }}
-      flue_container_source_sha: ${{ steps.container-source.outputs.flue_sha }}
+      pi_container_source_sha: ${{ steps.container-source.outputs.pi_sha }}
       runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
       computer_runtime: ${{ steps.filter.outputs.computer_runtime }}
       terraform: ${{ steps.filter.outputs.terraform }}
@@ -63,7 +63,7 @@ jobs:
               - 'packages/runbooks/runbooks/**'
             container:
               - 'packages/agentcore-strands/**'
-              - 'packages/agentcore-flue/**'
+              - 'packages/agentcore-pi/**'
               - 'packages/agentcore/**'
               # Build config changes count as container changes — a
               # platform or base-image tweak must rebuild even if no
@@ -93,13 +93,13 @@ jobs:
             packages/agentcore-strands \
             packages/agentcore \
             .github/workflows/deploy.yml)
-          FLUE_SHA=$(git log -1 --format=%H -- \
-            packages/agentcore-flue \
+          PI_SHA=$(git log -1 --format=%H -- \
+            packages/agentcore-pi \
             packages/agentcore \
             .github/workflows/deploy.yml)
           echo "sha=$STRANDS_SHA" >> "$GITHUB_OUTPUT"
           echo "strands_sha=$STRANDS_SHA" >> "$GITHUB_OUTPUT"
-          echo "flue_sha=$FLUE_SHA" >> "$GITHUB_OUTPUT"
+          echo "pi_sha=$PI_SHA" >> "$GITHUB_OUTPUT"
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -143,7 +143,7 @@ jobs:
             fi
           }
           check_runtime strands "${{ steps.container-source.outputs.strands_sha }}"
-          check_runtime flue "${{ steps.container-source.outputs.flue_sha }}"
+          check_runtime pi "${{ steps.container-source.outputs.pi_sha }}"
           echo "stale=$stale" >> "$GITHUB_OUTPUT"
 
   # ── Build Lambda zips ────────────────────────────────────────────
@@ -231,21 +231,21 @@ jobs:
           cache-to: type=gha,scope=amd64,mode=max
           provenance: false
 
-      - name: Build and push Flue amd64 (Lambda)
+      - name: Build and push Pi amd64 (Lambda)
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/agentcore-flue/agent-container/Dockerfile
+          file: packages/agentcore-pi/agent-container/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-flue
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:flue-latest
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:pi-latest
           build-args: |
             GIT_SHA=${{ github.sha }}
             BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=flue-amd64
-          cache-to: type=gha,scope=flue-amd64,mode=max
+          cache-from: type=gha,scope=pi-amd64
+          cache-to: type=gha,scope=pi-amd64,mode=max
           provenance: false
 
       - name: Build and push arm64 (AgentCore Runtime)
@@ -265,21 +265,21 @@ jobs:
           cache-to: type=gha,scope=arm64,mode=max
           provenance: false
 
-      - name: Build and push Flue arm64 (AgentCore Runtime)
+      - name: Build and push Pi arm64 (AgentCore Runtime)
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/agentcore-flue/agent-container/Dockerfile
+          file: packages/agentcore-pi/agent-container/Dockerfile
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-flue-arm64
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:flue-latest-arm64
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi-arm64
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:pi-latest-arm64
           build-args: |
             GIT_SHA=${{ github.sha }}
             BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=flue-arm64
-          cache-to: type=gha,scope=flue-arm64,mode=max
+          cache-from: type=gha,scope=pi-arm64
+          cache-to: type=gha,scope=pi-arm64,mode=max
           provenance: false
 
       - name: Update Lambda function code (x86_64)
@@ -292,20 +292,20 @@ jobs:
             --function-name thinkwork-${{ env.STAGE }}-agentcore \
             --region ${{ env.AWS_REGION }}
 
-      - name: Update Flue Lambda function code (x86_64)
+      - name: Update Pi Lambda function code (x86_64)
         run: |
           if aws lambda get-function \
-            --function-name thinkwork-${{ env.STAGE }}-agentcore-flue \
+            --function-name thinkwork-${{ env.STAGE }}-agentcore-pi \
             --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
             aws lambda update-function-code \
-              --function-name thinkwork-${{ env.STAGE }}-agentcore-flue \
-              --image-uri ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-flue \
+              --function-name thinkwork-${{ env.STAGE }}-agentcore-pi \
+              --image-uri ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi \
               --region ${{ env.AWS_REGION }}
             aws lambda wait function-updated \
-              --function-name thinkwork-${{ env.STAGE }}-agentcore-flue \
+              --function-name thinkwork-${{ env.STAGE }}-agentcore-pi \
               --region ${{ env.AWS_REGION }}
           else
-            echo "Flue Lambda function not found yet; terraform apply will create it from flue-latest."
+            echo "Pi Lambda function not found yet; terraform apply will create it from pi-latest."
           fi
 
       - name: Update AgentCore Runtime (arm64 variant)
@@ -350,12 +350,12 @@ jobs:
             --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
             --output json
 
-      - name: Create or update Flue AgentCore Runtime (arm64 variant)
+      - name: Create or update Pi AgentCore Runtime (arm64 variant)
         run: |
           set -euo pipefail
-          RUNTIME_NAME="thinkwork_${{ env.STAGE }}_flue"
-          SSM_NAME="/thinkwork/${{ env.STAGE }}/agentcore/runtime-id-flue"
-          NEW_IMAGE="${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-flue-arm64"
+          RUNTIME_NAME="thinkwork_${{ env.STAGE }}_pi"
+          SSM_NAME="/thinkwork/${{ env.STAGE }}/agentcore/runtime-id-pi"
+          NEW_IMAGE="${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi-arm64"
           RUNTIME_ID=$(aws ssm get-parameter \
             --name "$SSM_NAME" \
             --region ${{ env.AWS_REGION }} \
@@ -366,34 +366,34 @@ jobs:
               --query "agentRuntimes[?agentRuntimeName=='${RUNTIME_NAME}'].agentRuntimeId | [0]" \
               --output text 2>/dev/null || echo "")
           fi
-          # Flue's IAM role split out of the Strands `agentcore-role` in plan §005 U2.
+          # Pi's IAM role split out of the Strands `agentcore-role` in plan §005 U2.
           # The role is provisioned by terraform module
-          # `terraform/modules/app/agentcore-flue/main.tf` (resource
-          # `aws_iam_role.agentcore_flue`). On the FIRST deploy of this stage
+          # `terraform/modules/app/agentcore-pi/main.tf` (resource
+          # `aws_iam_role.agentcore_pi`). On the FIRST deploy of this stage
           # after the U2 module landed, terraform-apply creates the role —
           # but build-container runs BEFORE terraform-apply in the same
           # workflow run, so the role does not yet exist when this step
           # fires. The fallback below detects the missing role and reuses
           # the existing runtime's roleArn (which currently points at the
           # shared Strands role); the next deploy after terraform-apply
-          # creates the role will pick up the canonical Flue role on the
+          # creates the role will pick up the canonical Pi role on the
           # update path. New stages where the role doesn't exist AND no
           # runtime exists yet (greenfield) must run terraform-apply once
           # before this step can create the runtime.
-          DESIRED_ROLE_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/thinkwork-${{ env.STAGE }}-agentcore-flue-role"
+          DESIRED_ROLE_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/thinkwork-${{ env.STAGE }}-agentcore-pi-role"
           ROLE_ARN="$DESIRED_ROLE_ARN"
           if ! aws iam get-role \
-            --role-name "thinkwork-${{ env.STAGE }}-agentcore-flue-role" \
+            --role-name "thinkwork-${{ env.STAGE }}-agentcore-pi-role" \
             --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
             ROLE_ARN=""  # signal "use existing / skip creation"
-            echo "Flue IAM role not yet provisioned; will fall back to current runtime's role on the update path. Greenfield create path will fail loudly."
+            echo "Pi IAM role not yet provisioned; will fall back to current runtime's role on the update path. Greenfield create path will fail loudly."
           fi
           if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
             if [ -z "$ROLE_ARN" ]; then
-              echo "Cannot create greenfield Flue runtime: $DESIRED_ROLE_ARN does not exist. Run terraform-apply for the agentcore-flue module first to provision it, then retry."
+              echo "Cannot create greenfield Pi runtime: $DESIRED_ROLE_ARN does not exist. Run terraform-apply for the agentcore-pi module first to provision it, then retry."
               exit 1
             fi
-            echo "Creating Flue AgentCore runtime $RUNTIME_NAME with $NEW_IMAGE"
+            echo "Creating Pi AgentCore runtime $RUNTIME_NAME with $NEW_IMAGE"
             RUNTIME_ID=$(aws bedrock-agentcore-control create-agent-runtime \
               --region ${{ env.AWS_REGION }} \
               --agent-runtime-name "$RUNTIME_NAME" \
@@ -410,21 +410,21 @@ jobs:
               --overwrite \
               --region ${{ env.AWS_REGION }}
           else
-            echo "Updating Flue runtime $RUNTIME_ID to $NEW_IMAGE"
+            echo "Updating Pi runtime $RUNTIME_ID to $NEW_IMAGE"
             CURRENT=$(aws bedrock-agentcore-control get-agent-runtime \
               --region ${{ env.AWS_REGION }} \
               --agent-runtime-id "$RUNTIME_ID" \
               --output json)
-            # Plan §005 U2: force the role to the new agentcore-flue-role on
+            # Plan §005 U2: force the role to the new agentcore-pi-role on
             # every update so an existing dev runtime created in U1 against
-            # the shared `agentcore-role` reconciles to the canonical Flue
+            # the shared `agentcore-role` reconciles to the canonical Pi
             # role. Reading roleArn from CURRENT (the prior pattern) preserved
             # the stale role indefinitely. Fallback: when the new role does
             # not exist yet (terraform-apply hasn't run on this stage), keep
             # the runtime's CURRENT role so the update succeeds anyway.
             if [ -z "$ROLE_ARN" ]; then
               ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn')
-              echo "Reusing existing role: $ROLE_ARN (canonical Flue role will be adopted on the next deploy after terraform-apply creates it)"
+              echo "Reusing existing role: $ROLE_ARN (canonical Pi role will be adopted on the next deploy after terraform-apply creates it)"
             fi
             NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
             SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
@@ -439,7 +439,7 @@ jobs:
               --output json
           fi
 
-          echo "Flue AgentCore runtime visible:"
+          echo "Pi AgentCore runtime visible:"
           aws bedrock-agentcore-control get-agent-runtime \
             --region ${{ env.AWS_REGION }} \
             --agent-runtime-id "$RUNTIME_ID" \
@@ -504,10 +504,10 @@ jobs:
           terraform init
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
 
-      # Plan §005 U3 — agents.runtime backfill `pi` → `flue`. Runs BEFORE the
+      # Runtime rename backfill — agents.runtime `flue` → `pi`. Runs BEFORE the
       # Terraform apply that updates the dispatcher Lambda code so the new
-      # AgentRuntimeType union (`strands` | `flue`) never sees a `pi` value
-      # it can't route. Idempotent: WHERE runtime = 'pi' is a no-op once the
+      # AgentRuntimeType union (`strands` | `pi`) never sees a `flue` value
+      # it can't route. Idempotent: WHERE runtime = 'flue' is a no-op once the
       # rows are gone, so subsequent deploys are clean.
       #
       # Skips cleanly on greenfield (no existing terraform state → no DB
@@ -517,7 +517,7 @@ jobs:
       - name: Install psql (U3 backfill)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
 
-      - name: Backfill agents.runtime pi → flue (plan §005 U3)
+      - name: Backfill agents.runtime flue to pi
         working-directory: terraform/examples/greenfield
         run: |
           set -euo pipefail
@@ -525,7 +525,7 @@ jobs:
           DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
           DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
           if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
-            echo "Skipping pi → flue backfill: no existing DB outputs (greenfield apply)."
+            echo "Skipping flue → pi backfill: no existing DB outputs (greenfield apply)."
             exit 0
           fi
           DB_PASS=$(aws secretsmanager get-secret-value \
@@ -537,12 +537,12 @@ jobs:
           psql "$DATABASE_URL" \
             -v ON_ERROR_STOP=1 \
             --single-transaction \
-            -f ../../../packages/database-pg/drizzle/0062_migrate_pi_to_flue.sql
+            -f ../../../packages/database-pg/drizzle/0126_migrate_flue_to_pi.sql
 
       # Plan §005 U4 — adds threads.session_data jsonb so AuroraSessionStore
       # has a column to write into. Idempotent (`ADD COLUMN IF NOT EXISTS`),
       # so the same skip-on-greenfield short-circuit + repeat-run safety as
-      # the U3 step. Runs BEFORE terraform-apply so the agentcore-flue Lambda
+      # the U3 step. Runs BEFORE terraform-apply so the agentcore-pi Lambda
       # never picks up code that references a column the schema doesn't have
       # yet.
       - name: Add threads.session_data column (plan §005 U4)
@@ -690,7 +690,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update Strands and Flue AgentCore runtimes
+      - name: Update Strands and Pi AgentCore runtimes
         run: |
           set -euo pipefail
           REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/thinkwork-${{ env.STAGE }}-agentcore"
@@ -703,8 +703,8 @@ jobs:
           bash scripts/update-agentcore-runtime-image.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \
-            --runtime flue \
-            --image "${REPO}:${{ github.sha }}-flue-arm64" \
+            --runtime pi \
+            --image "${REPO}:${{ github.sha }}-pi-arm64" \
             --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
             --wait-seconds 900
 
@@ -1189,8 +1189,8 @@ jobs:
           bash scripts/post-deploy.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \
-            --runtime flue \
-            --min-source-sha ${{ needs.detect-changes.outputs.flue_container_source_sha }} \
+            --runtime pi \
+            --min-source-sha ${{ needs.detect-changes.outputs.pi_container_source_sha }} \
             --strict
 
       - name: Fat-folder composed-tree smoke
