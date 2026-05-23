@@ -14,20 +14,21 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: PR open; CI passed; ready to squash merge
-- Active unit: U8 — Operator runbook + verification
-- Active branch: `codex/plan-b-u8-collapse-runbook`
-- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u8-collapse-runbook`
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-22
 - Latest merged PR: [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578)
-- Active PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579)
-- CI: passed for PR [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579): CLA, lint, test, typecheck, verify
+- Active PR: none
+- CI: complete; final Plan B PR [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579) passed CLA, lint, test, typecheck, and verify before merge
 
 ### Merge Log
 
 - 2026-05-22: U5/U7 grouped PR [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576) squash merged as `50ec4431c8c6f72e693b73eaa561eae9c77d1d57`; remote branch was already deleted by GitHub and local worktree/branch were removed. First CI run failed on stale admin-ops MCP `agents_*` tool-list expectations; fixed and all required checks passed before merge.
 - 2026-05-22: U6 PR [#1577](https://github.com/thinkwork-ai/thinkwork/pull/1577) squash merged as `23f061eef09b1779d1bef328c0875924af59c5fc`; remote branch was already deleted by GitHub and local worktree/branch were removed. All required checks passed.
 - 2026-05-22: U1b PR [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578) squash merged as `a6dcb48a858068306b01e6115550a72a9e2e4ace`; remote branch was already deleted by GitHub and local worktree/branch were removed. First Migration Drift Precheck failed because dev still had `space_agent_assignments`; applied `0125_drop_space_agent_assignments.sql` to dev, verified scoped drift reported all drop markers as `DROPPED`, and rerun CI passed.
+- 2026-05-22: U8 PR [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579) squash merged as `f33233698a9834a24921295e34b23c58eda0a746`; remote branch was deleted and local worktree/branch were removed. All required checks passed.
 
 ### Active Unit Notes
 
@@ -40,6 +41,7 @@ Target branch: `main`
 - U8 local verification: `pnpm install`; touched-file Prettier check; `pnpm --filter @thinkwork/api typecheck`; `git diff --check`; consumer survey rerun and recorded in the runbook with the expected residual helper/comment hits.
 - U8 PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579) opened for CI.
 - U8 CI: GitHub checks passed: CLA, lint, test, typecheck, verify.
+- 2026-05-22 Plan B complete: all implementation units merged into `main`; no open blockers.
 
 ### Progress Log
 
