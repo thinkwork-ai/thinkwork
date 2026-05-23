@@ -14,14 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: PR open; fixing CI
+- Status: PR open; CI passed; ready to merge
 - Active unit: U5/U7 grouped — Tenant agent GraphQL, Space runtime overrides, and admin `/agents` retirement
 - Active branch: `codex/plan-b-u5-tenant-agent-graphql`
 - Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u5-tenant-agent-graphql`
 - Started: 2026-05-22
 - Latest merged PR: [#1575](https://github.com/thinkwork-ai/thinkwork/pull/1575)
 - Active PR: [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576)
-- CI: first run failed in `test` on stale admin-ops MCP expected `agents_*` tools; local focused fix passed and push pending
+- CI: all required checks passed after fixing stale admin-ops MCP tool-list expectations
 
 ### Progress Log
 
