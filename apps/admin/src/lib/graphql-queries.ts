@@ -37,6 +37,7 @@ export const TenantAgentQuery = graphql(`
       type
       status
       runtime
+      model
       budgetMonthlyCents
       systemPrompt
       avatarUrl
