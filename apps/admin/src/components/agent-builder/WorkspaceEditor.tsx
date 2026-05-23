@@ -34,12 +34,21 @@ import { Input } from "@/components/ui/input";
 import {
   agentBuilderApi,
   type ComposeSource,
+  type MoveResult,
   type Target,
 } from "@/lib/agent-builder-api";
 import { cn } from "@/lib/utils";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { toast } from "sonner";
 import { FileEditorPane } from "./FileEditorPane";
 import { FolderTree, buildWorkspaceTree } from "./FolderTree";
+import { shouldEmitDetachToast } from "@/lib/workspace-tree-actions";
 import { parseRoutingTable, type RoutingRow } from "./routing-table";
+
+export interface ClipboardItem {
+  path: string;
+  kind: "file" | "folder";
+}
 
 export type WorkspaceEditorMode =
   | "agent"
@@ -109,7 +118,42 @@ export function WorkspaceEditor({
   const [editValue, setEditValue] = useState("");
   const [loadingContent, setLoadingContent] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  // Per-node mutation tracking — paths in this set render with a spinner
+  // in place of their icon. Replaces the prior single-path `deletingPath`
+  // so concurrent deletes / moves can show their own per-row state.
+  const [mutatingPaths, setMutatingPaths] = useState<Set<string>>(new Set());
+  const beginMutation = useCallback((path: string) => {
+    setMutatingPaths((current) => {
+      const next = new Set(current);
+      next.add(path);
+      return next;
+    });
+  }, []);
+  const endMutation = useCallback((path: string) => {
+    setMutatingPaths((current) => {
+      const next = new Set(current);
+      next.delete(path);
+      return next;
+    });
+  }, []);
+
+  // Clipboard for cut/paste. Per the brainstorm: per-tree state, cleared
+  // on WorkspaceEditor remount (the `key`-based reset effect below
+  // already covers it implicitly because `clipboardItem` is local
+  // state).
+  const [clipboardItem, setClipboardItem] = useState<ClipboardItem | null>(
+    null,
+  );
+
+  // Tracks the most-recently-interacted tree row (file or folder) so
+  // keyboard shortcuts (Cmd+X / Cmd+V / Backspace) know what to act on
+  // without the user having to explicitly "select" a row.
+  const [focusedTreePath, setFocusedTreePath] = useState<string | null>(null);
+
+  // Tree scope ref — `useKeyboardShortcuts` reads `document.activeElement`
+  // and fires only when the active element is this ref's tree element or
+  // a descendant. Without scoping, Cmd+V would hijack paste globally.
+  const treeContainerRef = useRef<HTMLDivElement>(null);
   const [confirmingDeletePath, setConfirmingDeletePath] = useState<
     string | null
   >(null);
@@ -220,6 +264,7 @@ export function WorkspaceEditor({
       loadRequestId.current = requestId;
       const previousOpenFile = openFileRef.current;
       setOpenFile(filePath);
+      setFocusedTreePath(filePath);
       setLoadingContent(true);
       if (previousOpenFile !== filePath) {
         setContent("");
@@ -261,6 +306,7 @@ export function WorkspaceEditor({
   }, [initialFolder, files, openWorkspaceFile]);
 
   const toggleFolder = (path: string) => {
+    setFocusedTreePath(path);
     setExpandedFolders((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
@@ -268,6 +314,120 @@ export function WorkspaceEditor({
       return next;
     });
   };
+
+  // ─── Clipboard handlers (cut / paste) ──────────────────────────────────
+
+  const folderPaths = useMemo(() => collectFolderPathsFromFiles(files), [
+    files,
+  ]);
+  const isFolderPath = useCallback(
+    (path: string) => folderPaths.has(path),
+    [folderPaths],
+  );
+
+  const handleCut = useCallback(
+    (path: string, kindHint?: "file" | "folder") => {
+      const kind: "file" | "folder" =
+        kindHint ?? (isFolderPath(path) ? "folder" : "file");
+      setClipboardItem({ path, kind });
+    },
+    [isFolderPath],
+  );
+
+  const clearClipboard = useCallback(() => setClipboardItem(null), []);
+
+  const performMove = useCallback(
+    async (sourcePath: string, toFolder: string) => {
+      beginMutation(sourcePath);
+      let result: MoveResult;
+      try {
+        result = await agentBuilderApi.moveFile(
+          stableTarget,
+          sourcePath,
+          toFolder,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to move workspace path:", err);
+        toast.error(`Move failed: ${message}`);
+        endMutation(sourcePath);
+        return null;
+      }
+      endMutation(sourcePath);
+      await fetchFiles({ showLoading: false });
+      if (openFileRef.current === sourcePath) {
+        setOpenFile(result.destPath);
+        setFocusedTreePath(result.destPath);
+      }
+      const toastText = shouldEmitDetachToast({
+        movedCount: result.movedCount,
+        detachedPinnedCount: result.detachedPinnedCount,
+      });
+      if (toastText) toast.success(toastText);
+      return result;
+    },
+    [beginMutation, endMutation, stableTarget, fetchFiles],
+  );
+
+  const handlePaste = useCallback(
+    async (toFolder: string) => {
+      if (!clipboardItem) return;
+      const sourcePath = clipboardItem.path;
+      const result = await performMove(sourcePath, toFolder);
+      if (result) {
+        // R5/R9: success clears the clipboard; failure preserves it.
+        setClipboardItem(null);
+      }
+    },
+    [clipboardItem, performMove],
+  );
+
+  const handleDropMove = useCallback(
+    (sourcePath: string, toFolder: string) => {
+      // Drag-and-drop bypasses the clipboard but uses the same server
+      // action. Don't touch clipboardItem here — drag is its own
+      // gesture.
+      void performMove(sourcePath, toFolder);
+    },
+    [performMove],
+  );
+
+  const pasteIntoSelectedScope = useCallback(() => {
+    if (!clipboardItem) return;
+    // Determine target folder per the brainstorm:
+    //   - If a folder is focused: paste into it.
+    //   - If a file is focused: paste at the workspace root (AE7).
+    //   - If nothing focused: root.
+    const toFolder =
+      focusedTreePath && isFolderPath(focusedTreePath)
+        ? focusedTreePath
+        : "";
+    void handlePaste(toFolder);
+  }, [clipboardItem, focusedTreePath, isFolderPath, handlePaste]);
+
+  const cutFocused = useCallback(() => {
+    if (!focusedTreePath) return;
+    handleCut(focusedTreePath);
+  }, [focusedTreePath, handleCut]);
+
+  const deleteFocused = useCallback(() => {
+    if (!focusedTreePath) return;
+    const isFolder = isFolderPath(focusedTreePath);
+    setDeleteConfirmTarget({ path: focusedTreePath, isFolder });
+  }, [focusedTreePath, isFolderPath]);
+
+  useKeyboardShortcuts(
+    useMemo(
+      () => [
+        { key: "x", mod: true, handler: cutFocused },
+        { key: "v", mod: true, handler: pasteIntoSelectedScope },
+        { key: "Backspace", handler: deleteFocused },
+        { key: "Delete", handler: deleteFocused },
+      ],
+      [cutFocused, pasteIntoSelectedScope, deleteFocused],
+    ),
+    { scopeRef: treeContainerRef },
+  );
 
   const handleCreateFile = async () => {
     if (!newFilePath.trim()) return;
@@ -344,7 +504,7 @@ export function WorkspaceEditor({
     if (paths.length === 0) return;
 
     setConfirmingDeletePath(null);
-    setDeletingPath(path);
+    beginMutation(path);
     try {
       for (const filePath of paths) {
         await agentBuilderApi.deleteFile(stableTarget, filePath);
@@ -364,7 +524,7 @@ export function WorkspaceEditor({
     } catch (err) {
       console.error("Failed to delete workspace path:", err);
     } finally {
-      setDeletingPath(null);
+      endMutation(path);
     }
   };
 
@@ -433,11 +593,17 @@ export function WorkspaceEditor({
               <span>{files.length} files</span>
               <div className="flex items-center gap-1.5">{addMenu}</div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div
+              className="flex-1 overflow-y-auto outline-none"
+              ref={treeContainerRef}
+              tabIndex={-1}
+            >
               <FolderTree
                 nodes={tree}
                 selectedPath={openFile}
                 expandedFolders={expandedFolders}
+                mutatingPaths={mutatingPaths}
+                clipboardItem={clipboardItem}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
                 onSelect={openWorkspaceFile}
@@ -448,6 +614,10 @@ export function WorkspaceEditor({
                 onDelete={(path, isFolder) =>
                   setDeleteConfirmTarget({ path, isFolder })
                 }
+                onCut={handleCut}
+                onPaste={handlePaste}
+                onClearClipboard={clearClipboard}
+                onDropMove={handleDropMove}
               />
             </div>
           </div>
@@ -466,7 +636,7 @@ export function WorkspaceEditor({
                 value={editValue}
                 loading={loadingContent}
                 saving={saving}
-                deleting={deletingPath === openFile}
+                deleting={openFile !== null && mutatingPaths.has(openFile)}
                 confirmingDelete={confirmingDeletePath === openFile}
                 onChange={setEditValue}
                 onSave={handleSave}
@@ -567,7 +737,7 @@ export function WorkspaceEditor({
         files={files}
         deleting={
           deleteConfirmTarget !== null &&
-          deletingPath === deleteConfirmTarget.path
+          mutatingPaths.has(deleteConfirmTarget.path)
         }
         onCancel={() => setDeleteConfirmTarget(null)}
         onConfirm={async () => {
@@ -587,6 +757,23 @@ interface DeleteConfirmDialogProps {
   deleting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+}
+
+/**
+ * Derive the set of folder paths from a flat file list. Each file at
+ * `a/b/c.md` contributes `a` and `a/b` as folder paths. Used to
+ * classify a focused tree node as folder vs file without depending on
+ * the rendered tree state.
+ */
+function collectFolderPathsFromFiles(files: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const file of files) {
+    const parts = file.split("/").filter(Boolean);
+    for (let i = 0; i < parts.length - 1; i++) {
+      out.add(parts.slice(0, i + 1).join("/"));
+    }
+  }
+  return out;
 }
 
 function DeleteConfirmDialog({

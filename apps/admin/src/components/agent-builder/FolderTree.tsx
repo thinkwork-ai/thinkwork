@@ -1,4 +1,15 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { Loader2Icon } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -145,10 +156,27 @@ function sortNodes(nodes: TreeNode[]) {
   return nodes;
 }
 
+export interface ClipboardItem {
+  path: string;
+  kind: "file" | "folder";
+}
+
 export interface FolderTreeProps {
   nodes: TreeNode[];
   selectedPath: string | null;
   expandedFolders: Set<string>;
+  /**
+   * Paths currently undergoing a mutation (delete, move). Nodes in this
+   * set render with a spinner in place of their icon. Per-node, not
+   * global — other tree interactions stay responsive.
+   */
+  mutatingPaths?: Set<string>;
+  /**
+   * Single item currently cut. The matching node renders with a dashed
+   * border + reduced opacity, and folder/root context menus offer
+   * "Paste" while it is set. Pass `null` (or omit) when nothing is cut.
+   */
+  clipboardItem?: ClipboardItem | null;
   sourceFor: (path: string) => ComposeSource | undefined;
   updateAvailableFor: (path: string) => boolean;
   onSelect: (path: string) => void;
@@ -157,21 +185,94 @@ export interface FolderTreeProps {
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
+  /**
+   * Optional clipboard wiring. When provided, file + folder context
+   * menus show a "Cut" item, and folder + root context menus show
+   * "Paste" while `clipboardItem` is set.
+   */
+  onCut?: (path: string, kind: "file" | "folder") => void;
+  onPaste?: (toFolder: string) => void;
+  onClearClipboard?: () => void;
+  /**
+   * Called when a drag completes on a valid drop target. `sourcePath`
+   * is the dragged item; `toFolder` is the destination folder path
+   * (or `""` for the workspace root). The parent dispatches the actual
+   * move via the server `move` action. Optional — when omitted,
+   * drag-and-drop is functionally disabled even though the visual
+   * affordances still render.
+   */
+  onDropMove?: (sourcePath: string, toFolder: string) => void;
 }
 
+const ROOT_DROPPABLE_ID = "__root__";
+
 export function FolderTree(props: FolderTreeProps) {
-  const { nodes, selectedPath, expandedFolders, onSelect, onToggle } = props;
+  const {
+    nodes,
+    selectedPath,
+    expandedFolders,
+    clipboardItem,
+    onSelect,
+    onToggle,
+    onPaste,
+    onClearClipboard,
+    onNewFile,
+    onNewFolder,
+    onDropMove,
+  } = props;
 
   // Collect the set of folder paths so the AI Elements onSelect callback
   // can route folder-name clicks into onToggle (matching the existing UX
   // where clicking a folder row expands/collapses it).
   const folderPaths = useMemo(() => collectFolderPaths(nodes), [nodes]);
 
+  // dnd-kit sensors. Distance-4 activation prevents simple click events
+  // on the row from being interpreted as drags (the row's CollapsibleTrigger
+  // and selection button stay functional). KeyboardSensor gives the tree
+  // accessible drag-and-drop out of the box.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || !onDropMove) return;
+      const sourcePath = String(active.id);
+      const overId = String(over.id);
+      const toFolder = overId === ROOT_DROPPABLE_ID ? "" : overId;
+      // Drop onto self is a no-op.
+      if (sourcePath === toFolder) return;
+      onDropMove(sourcePath, toFolder);
+    },
+    [onDropMove],
+  );
+
   if (nodes.length === 0) {
+    // Render the empty state inside a context-menu trigger too so the
+    // operator can paste / create at the workspace root even when the
+    // tree is currently empty. Wrap in DndContext so dropping onto the
+    // root drop zone still works.
     return (
-      <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-        No files
-      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <RootDropZone>
+              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                No files
+              </div>
+            </RootDropZone>
+          </ContextMenuTrigger>
+          <RootContextMenu
+            clipboardItem={clipboardItem}
+            onPaste={onPaste}
+            onClearClipboard={onClearClipboard}
+            onNewFile={onNewFile}
+            onNewFolder={onNewFolder}
+          />
+        </ContextMenu>
+      </DndContext>
     );
   }
 
@@ -196,17 +297,103 @@ export function FolderTree(props: FolderTreeProps) {
   };
 
   return (
-    <FileTree
-      expanded={expandedFolders}
-      onExpandedChange={handleExpandedChange}
-      selectedPath={selectedPath ?? undefined}
-      onSelect={handleSelect}
-      className="rounded-none border-0 bg-transparent text-xs"
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <RootDropZone>
+            <FileTree
+              expanded={expandedFolders}
+              onExpandedChange={handleExpandedChange}
+              selectedPath={selectedPath ?? undefined}
+              onSelect={handleSelect}
+              className="rounded-none border-0 bg-transparent text-xs"
+            >
+              {nodes.map((node) => (
+                <FolderTreeItem key={node.path} node={node} {...props} />
+              ))}
+            </FileTree>
+          </RootDropZone>
+        </ContextMenuTrigger>
+        <RootContextMenu
+          clipboardItem={clipboardItem}
+          onPaste={onPaste}
+          onClearClipboard={onClearClipboard}
+          onNewFile={onNewFile}
+          onNewFolder={onNewFolder}
+        />
+      </ContextMenu>
+    </DndContext>
+  );
+}
+
+/**
+ * Workspace-root drop zone. Wraps the tree's content so dragging
+ * something onto empty space below the rows (or onto a non-folder
+ * region) drops it at the workspace root.
+ */
+function RootDropZone({ children }: { children: React.ReactNode }) {
+  const drop = useDroppable({
+    id: ROOT_DROPPABLE_ID,
+    data: { kind: "root" as const },
+  });
+  return (
+    <div
+      ref={drop.setNodeRef}
+      data-over={drop.isOver || undefined}
+      className="min-h-full"
+      // Native drag-over from the desktop is treated as a no-op so we
+      // don't accept arbitrary OS file drops — R13 says intra-tree only.
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) {
+          e.preventDefault();
+        }
+      }}
+      onDrop={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) {
+          e.preventDefault();
+        }
+      }}
     >
-      {nodes.map((node) => (
-        <FolderTreeItem key={node.path} node={node} {...props} />
-      ))}
-    </FileTree>
+      {children}
+    </div>
+  );
+}
+
+interface RootContextMenuProps {
+  clipboardItem?: ClipboardItem | null;
+  onPaste?: (toFolder: string) => void;
+  onClearClipboard?: () => void;
+  onNewFile: (parentPath: string) => void;
+  onNewFolder: (parentPath: string) => void;
+}
+
+function RootContextMenu({
+  clipboardItem,
+  onPaste,
+  onClearClipboard,
+  onNewFile,
+  onNewFolder,
+}: RootContextMenuProps) {
+  return (
+    <ContextMenuContent>
+      <ContextMenuItem onSelect={() => onNewFile("")}>New File</ContextMenuItem>
+      <ContextMenuItem onSelect={() => onNewFolder("")}>
+        New Folder
+      </ContextMenuItem>
+      {clipboardItem && onPaste ? (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => onPaste("")}>
+            Paste
+          </ContextMenuItem>
+          {onClearClipboard ? (
+            <ContextMenuItem onSelect={onClearClipboard}>
+              Clear clipboard
+            </ContextMenuItem>
+          ) : null}
+        </>
+      ) : null}
+    </ContextMenuContent>
   );
 }
 
@@ -214,33 +401,50 @@ function FolderTreeItem({
   node,
   selectedPath,
   expandedFolders,
+  mutatingPaths,
+  clipboardItem,
   sourceFor,
   updateAvailableFor,
   onAcceptUpdate,
   onNewFile,
   onNewFolder,
   onDelete,
+  onCut,
+  onPaste,
+  onClearClipboard,
 }: FolderTreeProps & {
   node: TreeNode;
 }) {
+  const isMutating = mutatingPaths?.has(node.path) ?? false;
+  const isCut = clipboardItem?.path === node.path;
+  const clipboardActive = Boolean(clipboardItem);
+
   if (node.isFolder) {
     // Synthetic agents/ group is a virtual UI grouping, not a real folder —
     // its path is __synthetic__/sub-agents which can't host files. Treat
     // creates from its context menu as workspace-root creates, and don't
-    // offer Delete on the grouping or on routed-but-empty entries.
+    // offer Delete / Cut / Paste on the grouping or on routed-but-empty
+    // entries (they have no real S3 prefix to act on).
     const contextParent = node.synthetic ? "" : node.path;
-    const canDelete = !node.synthetic && !node.missing;
+    const canMutate = !node.synthetic && !node.missing;
 
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <FileTreeFolder path={node.path} name={renderFolderLabel(node)}>
+          <FileTreeFolder
+            path={node.path}
+            name={renderFolderLabel(node)}
+            isMutating={isMutating}
+            isCut={isCut}
+          >
             {node.children.map((child) => (
               <FolderTreeItem
                 key={child.path}
                 node={child}
                 selectedPath={selectedPath}
                 expandedFolders={expandedFolders}
+                mutatingPaths={mutatingPaths}
+                clipboardItem={clipboardItem}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
                 onSelect={() => {}}
@@ -249,6 +453,9 @@ function FolderTreeItem({
                 onNewFile={onNewFile}
                 onNewFolder={onNewFolder}
                 onDelete={onDelete}
+                onCut={onCut}
+                onPaste={onPaste}
+                onClearClipboard={onClearClipboard}
                 nodes={[]}
               />
             ))}
@@ -270,7 +477,27 @@ function FolderTreeItem({
           <ContextMenuItem onSelect={() => onNewFolder(contextParent)}>
             New Folder
           </ContextMenuItem>
-          {canDelete ? (
+          {canMutate && onCut ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onSelect={() => onCut(node.path, "folder")}
+              >
+                Cut
+              </ContextMenuItem>
+            </>
+          ) : null}
+          {clipboardActive && onPaste && !node.synthetic ? (
+            <ContextMenuItem onSelect={() => onPaste(node.path)}>
+              Paste
+            </ContextMenuItem>
+          ) : null}
+          {clipboardActive && onClearClipboard ? (
+            <ContextMenuItem onSelect={onClearClipboard}>
+              Clear clipboard
+            </ContextMenuItem>
+          ) : null}
+          {canMutate ? (
             <>
               <ContextMenuSeparator />
               <ContextMenuItem
@@ -292,9 +519,14 @@ function FolderTreeItem({
   const updateAvailable = updateAvailableFor(node.path);
 
   const fileRow = updateAvailable ? (
-    <FileTreeFile path={node.path} name={node.name}>
+    <FileTreeFile
+      path={node.path}
+      name={node.name}
+      isMutating={isMutating}
+      isCut={isCut}
+    >
       <span className="size-4 shrink-0" />
-      <FileGlyph />
+      <FileGlyph isMutating={isMutating} />
       <span className="min-w-0 flex-1 truncate">{node.name}</span>
       <FileTreeActions>
         <InheritanceIndicator
@@ -315,13 +547,29 @@ function FolderTreeItem({
       </FileTreeActions>
     </FileTreeFile>
   ) : (
-    <FileTreeFile path={node.path} name={node.name} />
+    <FileTreeFile
+      path={node.path}
+      name={node.name}
+      isMutating={isMutating}
+      isCut={isCut}
+    />
   );
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{fileRow}</ContextMenuTrigger>
       <ContextMenuContent>
+        {onCut ? (
+          <ContextMenuItem onSelect={() => onCut(node.path, "file")}>
+            Cut
+          </ContextMenuItem>
+        ) : null}
+        {clipboardActive && onClearClipboard ? (
+          <ContextMenuItem onSelect={onClearClipboard}>
+            Clear clipboard
+          </ContextMenuItem>
+        ) : null}
+        {onCut ? <ContextMenuSeparator /> : null}
         <ContextMenuItem
           variant="destructive"
           onSelect={() => onDelete(node.path, false)}
@@ -345,7 +593,14 @@ function renderFolderLabel(node: TreeNode) {
   return node.name;
 }
 
-function FileGlyph() {
+function FileGlyph({ isMutating = false }: { isMutating?: boolean }) {
+  if (isMutating) {
+    return (
+      <span className="shrink-0 text-muted-foreground">
+        <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+      </span>
+    );
+  }
   return (
     <span className="shrink-0 text-muted-foreground">
       <svg

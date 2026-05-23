@@ -16,6 +16,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -1186,6 +1187,851 @@ describe("pinned-file write guard", () => {
 });
 
 // ─── 7. DELETE ───────────────────────────────────────────────────────────────
+
+describe("agent MOVE (Unit 1: single-file)", () => {
+  function adminAgentRows() {
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // resolveCallerFromAuth
+    pushDbRows([agentRow()]); // resolveAgentTarget: agents
+    pushDbRows([tenantRow()]); // resolveAgentTarget: tenants
+    pushDbRows([{ role: "admin" }]); // callerIsTenantAdmin
+  }
+
+  it("moves a single file into a folder and returns dest path + counts", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    // First ListObjectsV2 call: folder-vs-file detection on source — empty.
+    // Second call: destination sibling listing — empty (no collision).
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      destPath: "memory/notes.md",
+      movedCount: 1,
+      detachedPinnedCount: 0,
+    });
+    const copies = s3Mock.commandCalls(CopyObjectCommand);
+    expect(copies.length).toBe(1);
+    expect(copies[0].args[0].input.Key).toBe(
+      "tenants/acme/agents/marco/workspace/memory/notes.md",
+    );
+    expect(copies[0].args[0].input.CopySource).toBe(
+      "test-bucket/tenants/acme/agents/marco/workspace/notes.md",
+    );
+    const deletes = s3Mock.commandCalls(DeleteObjectCommand);
+    expect(deletes.length).toBe(1);
+    expect(deletes[0].args[0].input.Key).toBe(
+      "tenants/acme/agents/marco/workspace/notes.md",
+    );
+  });
+
+  it("auto-renames file on destination collision (extension preserved)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/notes.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/memory/notes.md" },
+        ],
+      });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "events/notes.md",
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.destPath).toBe("memory/notes (2).md");
+    const copies = s3Mock.commandCalls(CopyObjectCommand);
+    expect(copies[0].args[0].input.Key).toBe(
+      "tenants/acme/agents/marco/workspace/memory/notes (2).md",
+    );
+  });
+
+  it("auto-renames with the next available suffix when (2) is taken", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/notes.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/memory/notes.md" },
+          { Key: "tenants/acme/agents/marco/workspace/memory/notes (2).md" },
+        ],
+      });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "events/notes.md",
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.destPath).toBe("memory/notes (3).md");
+  });
+
+  it("moving a pinned file succeeds silently and reports detachedPinnedCount=1", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/GUARDRAILS.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "GUARDRAILS.md",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      destPath: "archive/GUARDRAILS.md",
+      movedCount: 1,
+      detachedPinnedCount: 1,
+    });
+  });
+
+  it("returns 400 when source and destination are identical", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+      })
+      .resolves({ Contents: [] });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+          toFolder: "",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/identical/i);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
+  });
+
+  it("rejects move with computerId target (Computer concept retired)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]); // resolveComputerTarget
+    pushDbRows([{ role: "admin" }]); // U31 role gate
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          computerId: COMPUTER_ID,
+          fromPath: "notes.md",
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/computer/i);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+  });
+
+  it("returns 404 for cross-tenant agent target (no existence leakage)", async () => {
+    authMockImpl.mockResolvedValue(authOk()); // tenant A
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ ...agentRow(), tenant_id: TENANT_B }]); // agent belongs to tenant B
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+  });
+
+  it("returns 403 when caller is not a tenant admin/owner", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]); // not admin
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+  });
+
+  it("triggers deriveAgentSkills when moving root AGENTS.md", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/AGENTS.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "AGENTS.md",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(deriveMockImpl).toHaveBeenCalledWith(
+      { tenantId: TENANT_A },
+      AGENT_ID,
+    );
+  });
+
+  it("triggers deriveAgentSkills when moving a sub-agent SKILL.md", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix:
+          "tenants/acme/agents/marco/workspace/skills/old-slug/SKILL.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/skills/new-slug/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "skills/old-slug/SKILL.md",
+          toFolder: "skills/new-slug",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT trigger deriveAgentSkills for plain-file moves", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(0);
+  });
+
+  it("returns 400 when fromPath is missing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          toFolder: "memory",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/fromPath/i);
+  });
+
+  it("returns 400 when toFolder is missing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/toFolder/i);
+  });
+});
+
+describe("agent MOVE (Unit 2: folder moves)", () => {
+  function adminAgentRows() {
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+  }
+
+  it("moves a folder of multiple files atomically; source disappears (no .gitkeep re-emit)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    // First ListObjectsV2 call: folder detection on source — returns
+    // the relative contents of the folder.
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/events/log.md" },
+          { Key: "tenants/acme/agents/marco/workspace/events/meeting.md" },
+          { Key: "tenants/acme/agents/marco/workspace/events/notes.md" },
+        ],
+      });
+    // Destination sibling listing — empty (no folder collision at "archive/").
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "events",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      destPath: "archive/events",
+      movedCount: 3,
+      detachedPinnedCount: 0,
+    });
+
+    const copies = s3Mock.commandCalls(CopyObjectCommand);
+    expect(copies.length).toBe(3);
+    expect(copies.map((c) => c.args[0].input.Key).sort()).toEqual([
+      "tenants/acme/agents/marco/workspace/archive/events/log.md",
+      "tenants/acme/agents/marco/workspace/archive/events/meeting.md",
+      "tenants/acme/agents/marco/workspace/archive/events/notes.md",
+    ]);
+
+    const deletes = s3Mock.commandCalls(DeleteObjectCommand);
+    expect(deletes.length).toBe(3);
+    expect(deletes.map((c) => c.args[0].input.Key).sort()).toEqual([
+      "tenants/acme/agents/marco/workspace/events/log.md",
+      "tenants/acme/agents/marco/workspace/events/meeting.md",
+      "tenants/acme/agents/marco/workspace/events/notes.md",
+    ]);
+
+    // Source folder should disappear from the tree after move (Finder
+    // semantics). We do NOT re-emit a .gitkeep sentinel at the source
+    // prefix — the operator expects the folder to be gone.
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("moves every object including manifest.json and .gitkeep (no operational-artifact filter)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    // A folder that contains a stray nested manifest.json. The earlier
+    // listPrefix-based implementation filtered these out and stranded
+    // them at the source. The unfiltered walk must include + delete.
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/earnest-falcon-947/",
+      })
+      .resolves({
+        Contents: [
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/AGENTS.md",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/CONTEXT.md",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/manifest.json",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/.gitkeep",
+          },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/agents/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "earnest-falcon-947",
+          toFolder: "agents",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      destPath: "agents/earnest-falcon-947",
+      movedCount: 4,
+    });
+
+    const copies = s3Mock.commandCalls(CopyObjectCommand);
+    expect(copies.map((c) => c.args[0].input.Key).sort()).toEqual([
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/.gitkeep",
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/AGENTS.md",
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/CONTEXT.md",
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/manifest.json",
+    ]);
+
+    const deletes = s3Mock.commandCalls(DeleteObjectCommand);
+    expect(deletes.map((c) => c.args[0].input.Key).sort()).toEqual([
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/.gitkeep",
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/AGENTS.md",
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/CONTEXT.md",
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/manifest.json",
+    ]);
+
+    // No .gitkeep re-emit at source — folder disappears entirely.
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("auto-renames the destination folder on collision", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/events/log.md" },
+        ],
+      });
+    // Destination already has an `events/` folder (any child under it is enough).
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({
+        Contents: [
+          {
+            Key: "tenants/acme/agents/marco/workspace/archive/events/old.md",
+          },
+        ],
+      });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "events",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.destPath).toBe("archive/events (2)");
+    const copies = s3Mock.commandCalls(CopyObjectCommand);
+    expect(copies[0].args[0].input.Key).toBe(
+      "tenants/acme/agents/marco/workspace/archive/events (2)/log.md",
+    );
+  });
+
+  it("triggers deriveAgentSkills exactly once when a moved folder contains AGENTS.md", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/sub/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/sub/AGENTS.md" },
+          { Key: "tenants/acme/agents/marco/workspace/sub/CONTEXT.md" },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "sub",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("triggers deriveAgentSkills exactly once even when many SKILL.md files move", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/skills/",
+      })
+      .resolves({
+        Contents: [
+          {
+            Key: "tenants/acme/agents/marco/workspace/skills/a/SKILL.md",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/skills/b/SKILL.md",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/skills/c/SKILL.md",
+          },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "skills",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT trigger deriveAgentSkills when no moved file is AGENTS.md or SKILL.md", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/notes/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/notes/a.md" },
+          { Key: "tenants/acme/agents/marco/workspace/notes/b.md" },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "notes",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(0);
+  });
+
+  it("rejects moving a folder into itself or a subfolder of itself with 400", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/projects/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/projects/sub/note.md" },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/projects/sub/",
+      })
+      .resolves({ Contents: [] });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "projects",
+          toFolder: "projects/sub",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/itself/i);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
+  });
+
+  it("does NOT delete source objects when a copy fails mid-walk (atomicity)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/events/a.md" },
+          { Key: "tenants/acme/agents/marco/workspace/events/b.md" },
+          { Key: "tenants/acme/agents/marco/workspace/events/c.md" },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+
+    // First copy succeeds, second fails — third never runs.
+    let copyCount = 0;
+    s3Mock.on(CopyObjectCommand).callsFake(() => {
+      copyCount++;
+      if (copyCount === 2) {
+        throw new Error("S3 copy intermittent failure");
+      }
+      return {};
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "events",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(500);
+    // No deletes should have fired since the copy phase failed.
+    expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
+    // No PutObject should fire on the copy-failure path.
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("returns partiallyDeleted when a delete fails mid-walk", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/events/a.md" },
+          { Key: "tenants/acme/agents/marco/workspace/events/b.md" },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+
+    let deleteCount = 0;
+    s3Mock.on(DeleteObjectCommand).callsFake(() => {
+      deleteCount++;
+      if (deleteCount === 2) {
+        throw new Error("S3 delete intermittent failure");
+      }
+      return {};
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "events",
+          toFolder: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toMatchObject({
+      ok: false,
+      partiallyDeleted: true,
+      destPath: "archive/events",
+      movedCount: 2,
+    });
+    // Both copies fired (full destination present).
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(2);
+    // Manifest regen was skipped on the partial path; no PutObject fires.
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+});
 
 describe("agent DELETE", () => {
   it("deletes the agent-scoped override and returns 200", async () => {

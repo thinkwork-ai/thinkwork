@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   filesForFolderDelete,
   normalizeFolderPath,
+  parentFolderOf,
   pathIsWithinFolder,
+  shouldEmitDetachToast,
   topLevelFolders,
   validateSubAgentSlug,
 } from "../workspace-tree-actions";
@@ -55,6 +57,38 @@ describe("workspace tree actions", () => {
         ]),
       ).sort(),
     ).toEqual(["expenses", "support"]);
+  });
+
+  describe("shouldEmitDetachToast", () => {
+    it("fires only for folder moves that detached pinned files (AE5)", () => {
+      expect(
+        shouldEmitDetachToast({ movedCount: 12, detachedPinnedCount: 3 }),
+      ).toBe("Moved 12 files. 3 files lost template inheritance.");
+    });
+
+    it("does not fire for single-file pinned moves (R20 carve-out)", () => {
+      expect(
+        shouldEmitDetachToast({ movedCount: 1, detachedPinnedCount: 1 }),
+      ).toBeNull();
+    });
+
+    it("does not fire when no pinned files were detached", () => {
+      expect(
+        shouldEmitDetachToast({ movedCount: 20, detachedPinnedCount: 0 }),
+      ).toBeNull();
+    });
+
+    it("uses singular wording when exactly one pinned file detached", () => {
+      expect(
+        shouldEmitDetachToast({ movedCount: 5, detachedPinnedCount: 1 }),
+      ).toBe("Moved 5 files. 1 file lost template inheritance.");
+    });
+  });
+
+  it("derives parent folder paths", () => {
+    expect(parentFolderOf("notes.md")).toBe("");
+    expect(parentFolderOf("memory/notes.md")).toBe("memory");
+    expect(parentFolderOf("a/b/c.md")).toBe("a/b");
   });
 
   it("validates sub-agent slugs before create", () => {
