@@ -130,6 +130,7 @@ import {
   normalizeAgentRuntimeType,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
+import { agentRuntimeToGraphqlEnum } from "./resolvers/tenant-agent/runtime.js";
 
 // Re-export everything resolvers need
 export {
@@ -784,14 +785,12 @@ export function agentToCamel(
   obj: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = snakeToCamel(obj);
-  for (const field of ["status", "type", "runtime"]) {
+  for (const field of ["status", "type"]) {
     if (typeof result[field] === "string") {
       result[field] = (result[field] as string).toUpperCase();
     }
   }
-  if (result.runtime === "PI") {
-    result.runtime = "FLUE";
-  }
+  result.runtime = agentRuntimeToGraphqlEnum(result.runtime);
   return result;
 }
 
@@ -802,12 +801,7 @@ export function templateToCamel(
   if (typeof result.templateKind === "string") {
     result.templateKind = (result.templateKind as string).toUpperCase();
   }
-  if (typeof result.runtime === "string") {
-    result.runtime = (result.runtime as string).toUpperCase();
-    if (result.runtime === "PI") {
-      result.runtime = "FLUE";
-    }
-  }
+  result.runtime = agentRuntimeToGraphqlEnum(result.runtime);
   return result;
 }
 
