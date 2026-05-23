@@ -98,6 +98,10 @@ import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
 import {
+  collectToolCosts,
+  type ToolCostRecord,
+} from "./runtime/tools/tool-costs.js";
+import {
   discoverWorkspaceSkills,
   formatWorkspaceSkills,
   type WorkspaceSkill,
@@ -144,6 +148,7 @@ export interface InvocationResponse {
     usage?: Usage;
     tools_called?: string[];
     tool_invocations?: ToolInvocationRecord[];
+    tool_costs?: ToolCostRecord[];
     hindsight_usage?: unknown[];
   };
   runtime: "pi";
@@ -158,6 +163,7 @@ export interface InvocationResponse {
   pi_retain?: PiRetainStatus;
   tools_called?: string[];
   tool_invocations?: ToolInvocationRecord[];
+  tool_costs?: ToolCostRecord[];
   hindsight_usage?: unknown[];
 }
 
@@ -539,6 +545,7 @@ export interface RunAgentLoopResult {
   modelId: string;
   toolsCalled: string[];
   toolInvocations: ToolInvocationRecord[];
+  toolCosts?: ToolCostRecord[];
 }
 
 export async function runAgentLoop(
@@ -614,6 +621,9 @@ export async function runAgentLoop(
     modelId: model.id,
     toolsCalled: [...toolsCalled],
     toolInvocations,
+    toolCosts: toolInvocations.flatMap((invocation) =>
+      collectToolCosts(invocation.result),
+    ),
   };
 }
 
@@ -873,6 +883,12 @@ function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> 
   const { payload, identity, result } = args;
   const runResult = result.status === "ok" ? result.runResult : null;
   const usage = runResult?.usage;
+  const toolCosts =
+    runResult?.toolCosts ??
+    runResult?.toolInvocations.flatMap((invocation) =>
+      collectToolCosts(invocation.result),
+    ) ??
+    [];
   const errorMessage =
     result.status === "error"
       ? result.error instanceof Error
@@ -920,6 +936,7 @@ function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> 
           usage: runResult.usage,
           tools_called: runResult.toolsCalled,
           tool_invocations: runResult.toolInvocations,
+          tool_costs: toolCosts,
           hindsight_usage: [],
         }
       : {
@@ -929,6 +946,41 @@ function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> 
           hindsight_usage: [],
         },
   };
+}
+
+function callbackUrlAllowed(
+  callbackUrl: string,
+  apiUrl: string,
+): { ok: true } | { ok: false; reason: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(callbackUrl);
+  } catch {
+    return { ok: false, reason: "invalid-url" };
+  }
+
+  const isLocalhost =
+    parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  if (parsed.protocol !== "https:" && !isLocalhost) {
+    return { ok: false, reason: "insecure-url" };
+  }
+
+  const trimmedApiUrl = apiUrl.trim();
+  if (!trimmedApiUrl) return { ok: true };
+
+  try {
+    const parsedApiUrl = new URL(trimmedApiUrl);
+    const apiIsLocalhost =
+      parsedApiUrl.hostname === "localhost" ||
+      parsedApiUrl.hostname === "127.0.0.1";
+    if (!apiIsLocalhost && parsed.origin !== parsedApiUrl.origin) {
+      return { ok: false, reason: "origin-mismatch" };
+    }
+  } catch {
+    return { ok: false, reason: "invalid-api-url" };
+  }
+
+  return { ok: true };
 }
 
 function isFinalizeCallbackConfigured(payload: Record<string, unknown>): boolean {
@@ -951,28 +1003,20 @@ export async function postFinalizeCallback(
 
   if (!callbackUrl || !callbackSecret || !threadTurnId) return false;
 
-  let parsed: URL;
-  try {
-    parsed = new URL(callbackUrl);
-  } catch {
+  const urlCheck = callbackUrlAllowed(
+    callbackUrl,
+    asString(payload.thinkwork_api_url),
+  );
+  if (!urlCheck.ok) {
     logStructured({
       level: "error",
-      event: "finalize_callback_invalid_url",
+      event:
+        urlCheck.reason === "invalid-url"
+          ? "finalize_callback_invalid_url"
+          : "finalize_callback_rejected_url",
       tenantId: identity.tenantId,
       threadId: identity.threadId,
-    });
-    return false;
-  }
-  if (
-    parsed.protocol !== "https:" &&
-    parsed.hostname !== "localhost" &&
-    parsed.hostname !== "127.0.0.1"
-  ) {
-    logStructured({
-      level: "error",
-      event: "finalize_callback_insecure_url",
-      tenantId: identity.tenantId,
-      threadId: identity.threadId,
+      reason: urlCheck.reason,
     });
     return false;
   }
@@ -1493,9 +1537,15 @@ export async function handleInvocation(
       usage: runResult.usage,
       tools_called: runResult.toolsCalled,
       tool_invocations: runResult.toolInvocations,
+      tool_costs:
+        runResult.toolCosts ??
+        runResult.toolInvocations.flatMap((invocation) =>
+          collectToolCosts(invocation.result),
+        ),
       hindsight_usage: hindsightUsage,
     },
   };
+  responseBody.tool_costs = responseBody.response.tool_costs;
   return { statusCode: 200, body: responseBody as unknown as Record<string, unknown> };
 }
 

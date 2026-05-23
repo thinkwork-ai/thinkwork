@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-bedrock-agentcore";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "typebox";
+import { buildAgentCoreBrowserCost } from "./tool-costs.js";
 
 const DEFAULT_BROWSER_IDENTIFIER = "aws.browser.v1";
 
@@ -62,21 +63,23 @@ export function buildBrowserAutomationTool(
       const url = validHttpUrl(String((params as { url?: unknown }).url ?? ""));
       const task = String((params as { task?: unknown }).task ?? "").trim();
       const started = Date.now();
-      const startResponse = await options.client.send(
-        new StartBrowserSessionCommand({
-          browserIdentifier,
-          name: `thinkwork-pi-${Date.now()}`,
-          sessionTimeoutSeconds: options.sessionTimeoutSeconds ?? 300,
-          viewPort: { width: 1280, height: 800 },
-          traceId: options.traceId,
-        }),
-      );
-      const sessionId = startResponse.sessionId;
-      if (!sessionId) {
-        throw new Error("AgentCore Browser did not return a session id.");
-      }
+      let sessionId: string | undefined;
 
       try {
+        const startResponse = await options.client.send(
+          new StartBrowserSessionCommand({
+            browserIdentifier,
+            name: `thinkwork-pi-${Date.now()}`,
+            sessionTimeoutSeconds: options.sessionTimeoutSeconds ?? 300,
+            viewPort: { width: 1280, height: 800 },
+            traceId: options.traceId,
+          }),
+        );
+        sessionId = startResponse.sessionId;
+        if (!sessionId) {
+          throw new Error("AgentCore Browser did not return a session id.");
+        }
+
         await options.client.send(
           new InvokeBrowserCommand({
             browserIdentifier,
@@ -108,6 +111,17 @@ export function buildBrowserAutomationTool(
         );
         const screenshotBytes =
           screenshot.result?.screenshot?.data?.byteLength ?? 0;
+        const durationMs = Date.now() - started;
+        const toolCosts = [
+          buildAgentCoreBrowserCost({
+            durationMs,
+            url,
+            task,
+            sessionId,
+            browserIdentifier,
+            screenshotBytes,
+          }),
+        ];
 
         return {
           content: [
@@ -126,17 +140,58 @@ export function buildBrowserAutomationTool(
             url,
             task,
             screenshot_bytes: screenshotBytes,
-            duration_ms: Date.now() - started,
+            duration_ms: durationMs,
+            tool_costs: toolCosts,
+          },
+        };
+      } catch (err) {
+        const durationMs = Date.now() - started;
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Browser Automation error: ${message}`,
+            },
+          ],
+          details: {
+            runtime: "pi",
+            ok: false,
+            browser_identifier: browserIdentifier,
+            session_id: sessionId,
+            url,
+            task,
+            duration_ms: durationMs,
+            error: "BrowserAutomationError",
+            error_message: message,
+            tool_costs: sessionId
+              ? [
+                  buildAgentCoreBrowserCost({
+                    durationMs,
+                    url,
+                    task,
+                    sessionId,
+                    browserIdentifier,
+                    error: message,
+                  }),
+                ]
+              : [],
           },
         };
       } finally {
-        await options.client.send(
-          new StopBrowserSessionCommand({
-            browserIdentifier,
-            sessionId,
-            traceId: options.traceId,
-          }),
-        );
+        if (sessionId) {
+          try {
+            await options.client.send(
+              new StopBrowserSessionCommand({
+                browserIdentifier,
+                sessionId,
+                traceId: options.traceId,
+              }),
+            );
+          } catch {
+            // The tool result is more useful than masking the browser evidence with cleanup failures.
+          }
+        }
       }
     },
   };

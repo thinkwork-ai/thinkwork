@@ -560,7 +560,7 @@ describe("postFinalizeCallback", () => {
 
     const ok = await postFinalizeCallback({
       payload: VALID_PAYLOAD({
-        finalize_callback_url: "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_url: "https://api.example.com/api/threads/thread-1/finalize",
         finalize_callback_secret: "secret",
         thread_turn_id: "turn-1",
       }),
@@ -579,7 +579,27 @@ describe("postFinalizeCallback", () => {
           content: "done",
           modelId: "amazon-bedrock/test-model",
           toolsCalled: ["execute_code"],
-          toolInvocations: [],
+          toolInvocations: [
+            {
+              id: "tool-1",
+              name: "browser_automation",
+              tool_name: "browser_automation",
+              runtime: "pi",
+              result: {
+                details: {
+                  tool_costs: [
+                    {
+                      provider: "agentcore_browser",
+                      event_type: "agentcore_browser_session",
+                      amount_usd: "0.000001",
+                      duration_ms: 42,
+                      metadata: { runtime: "pi" },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
         },
         latencyMs: 42,
       },
@@ -599,6 +619,12 @@ describe("postFinalizeCallback", () => {
       response: {
         runtime: "pi",
         tools_called: ["execute_code"],
+        tool_costs: [
+          expect.objectContaining({
+            provider: "agentcore_browser",
+            event_type: "agentcore_browser_session",
+          }),
+        ],
       },
     });
   });
@@ -615,7 +641,7 @@ describe("postFinalizeCallback", () => {
 
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
-        finalize_callback_url: "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_url: "https://api.example.com/api/threads/thread-1/finalize",
         finalize_callback_secret: "secret",
         thread_turn_id: "turn-1",
       }),
@@ -629,6 +655,46 @@ describe("postFinalizeCallback", () => {
       runtime: "pi",
     });
     expect(fetchCalls).toHaveLength(1);
+  });
+
+  it("rejects origin-mismatched finalize URLs before sending the bearer", async () => {
+    let fetchCalled = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      fetchCalled += 1;
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const ok = await postFinalizeCallback({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url:
+          "https://evil.example.com/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+      }),
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "tenant-1",
+        agentSlug: "agent-slug",
+        traceId: "trace-1",
+      },
+      result: {
+        status: "ok",
+        runResult: {
+          content: "done",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        },
+        latencyMs: 42,
+      },
+      fetchImpl,
+    });
+
+    expect(ok).toBe(false);
+    expect(fetchCalled).toBe(0);
   });
 });
 
