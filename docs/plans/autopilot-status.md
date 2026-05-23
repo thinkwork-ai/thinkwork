@@ -14,14 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: PR open; monitoring CI
+- Status: PR open; CI passed; ready to squash merge
 - Active unit: U8 — Operator runbook + verification
 - Active branch: `codex/plan-b-u8-collapse-runbook`
 - Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u8-collapse-runbook`
 - Started: 2026-05-22
 - Latest merged PR: [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578)
 - Active PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579)
-- CI: pending
+- CI: passed for PR [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579): CLA, lint, test, typecheck, verify
 
 ### Merge Log
 
@@ -39,6 +39,7 @@ Target branch: `main`
 - 2026-05-22 U8: Started the final runbook unit from `origin/main` after U1b merged. Scope is `docs/runbooks/collapse-agents-migration.md`, the documented `threads.agent_id` semantic comment, and this status ledger.
 - U8 local verification: `pnpm install`; touched-file Prettier check; `pnpm --filter @thinkwork/api typecheck`; `git diff --check`; consumer survey rerun and recorded in the runbook with the expected residual helper/comment hits.
 - U8 PR: [#1579](https://github.com/thinkwork-ai/thinkwork/pull/1579) opened for CI.
+- U8 CI: GitHub checks passed: CLA, lint, test, typecheck, verify.
 
 ### Progress Log
 
