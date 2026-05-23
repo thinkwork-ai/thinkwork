@@ -15,22 +15,25 @@ Target branch: `main`
 ### Run Status
 
 - Status: local verification passed; preparing PR
-- Active unit: U6 — Drop legacy per-agent vanity email branches
-- Active branch: `codex/plan-b-u6-retire-vanity-email`
-- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u6-retire-vanity-email`
+- Active unit: U1b — Drop `space_agent_assignments`
+- Active branch: `codex/plan-b-u1b-drop-space-agent-assignments`
+- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u1b-drop-space-agent-assignments`
 - Started: 2026-05-22
-- Latest merged PR: [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576)
+- Latest merged PR: [#1577](https://github.com/thinkwork-ai/thinkwork/pull/1577)
 - Active PR: none
 - CI: not opened yet; local verification passed
 
 ### Merge Log
 
 - 2026-05-22: U5/U7 grouped PR [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576) squash merged as `50ec4431c8c6f72e693b73eaa561eae9c77d1d57`; remote branch was already deleted by GitHub and local worktree/branch were removed. First CI run failed on stale admin-ops MCP `agents_*` tool-list expectations; fixed and all required checks passed before merge.
+- 2026-05-22: U6 PR [#1577](https://github.com/thinkwork-ai/thinkwork/pull/1577) squash merged as `23f061eef09b1779d1bef328c0875924af59c5fc`; remote branch was already deleted by GitHub and local worktree/branch were removed. All required checks passed.
 
 ### Active Unit Notes
 
 - 2026-05-22 U6: Removed outbound fallback to per-agent vanity/default addresses; `email-send` now requires active Space context. Legacy inbound `<slug>@agents.thinkwork.ai` addresses now send a retirement notice instead of enqueuing per-agent wakeups. Runtime send-email config and agent-email-send skill metadata no longer carry `$AGENT_EMAIL_ADDRESS`; the Strands direct send_email tool forwards active Space slugs from invocation env.
 - U6 local verification: focused API email/runtime tests; full `@thinkwork/api` test suite; `@thinkwork/api` typecheck; repo-wide typecheck/lint; Python send-email tool and skill tests; Ruff E/F check; Prettier check; `git diff --check`; `build-lambdas.sh email-send email-inbound wakeup-processor`.
+- 2026-05-22 U1b: Started gated table-drop work after U3, U5/U7, and U6 merged. Pre-flight source grep for `space_agent_assignments|spaceAgentAssignments|setSpaceAgentAvailability` across API, Lambda, and admin source returned zero live consumer hits.
+- U1b local verification: `pnpm --filter @thinkwork/database-pg test __tests__/spaces-schema.test.ts __tests__/agent-template-removal-schema.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; scoped and full `db-migrate-manual.sh --dry-run` marker checks; source grep gate; TS/MD Prettier check; `git diff --check`.
 
 ### Progress Log
 

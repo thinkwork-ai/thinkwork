@@ -3,7 +3,6 @@
 -- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0105_spaces_domain.sql
 -- creates: public.spaces
 -- creates: public.space_members
--- creates: public.space_agent_assignments
 -- creates: public.space_checklist_templates
 -- creates: public.space_checklist_items
 -- creates: public.space_integrations
@@ -13,9 +12,6 @@
 -- creates: public.uq_space_members_user
 -- creates: public.idx_space_members_tenant_user
 -- creates: public.idx_space_members_space
--- creates: public.uq_space_agent_assignments_agent
--- creates: public.idx_space_agent_assignments_agent
--- creates: public.idx_space_agent_assignments_space
 -- creates: public.uq_space_checklist_templates_key
 -- creates: public.idx_space_checklist_templates_space
 -- creates: public.uq_space_checklist_items_key
@@ -25,7 +21,6 @@
 -- creates: public.idx_space_integrations_space
 -- creates-function: public.enforce_space_child_tenant
 -- creates-trigger: public.space_members.space_members_tenant_guard
--- creates-trigger: public.space_agent_assignments.space_agent_assignments_tenant_guard
 -- creates-trigger: public.space_checklist_templates.space_checklist_templates_tenant_guard
 -- creates-trigger: public.space_checklist_items.space_checklist_items_tenant_guard
 -- creates-trigger: public.space_integrations.space_integrations_tenant_guard
@@ -37,10 +32,6 @@
 -- creates-constraint: public.space_members.space_members_user_id_users_id_fk
 -- creates-constraint: public.space_members.space_members_role_allowed
 -- creates-constraint: public.space_members.space_members_notification_preference_allowed
--- creates-constraint: public.space_agent_assignments.space_agent_assignments_tenant_id_tenants_id_fk
--- creates-constraint: public.space_agent_assignments.space_agent_assignments_space_id_spaces_id_fk
--- creates-constraint: public.space_agent_assignments.space_agent_assignments_agent_id_agents_id_fk
--- creates-constraint: public.space_agent_assignments.space_agent_assignments_status_allowed
 -- creates-constraint: public.space_checklist_templates.space_checklist_templates_tenant_id_tenants_id_fk
 -- creates-constraint: public.space_checklist_templates.space_checklist_templates_space_id_spaces_id_fk
 -- creates-constraint: public.space_checklist_items.space_checklist_items_tenant_id_tenants_id_fk

@@ -19,7 +19,6 @@ import {
   check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { agents } from "./agents.js";
 import { tenants, users } from "./core.js";
 import { guardrails } from "./guardrails.js";
 
@@ -130,52 +129,6 @@ export const spaceMembers = pgTable(
     check(
       "space_members_notification_preference_allowed",
       sql`${table.notification_preference} IN ('subscribed','mentions','muted')`,
-    ),
-  ],
-);
-
-export const spaceAgentAssignments = pgTable(
-  "space_agent_assignments",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    tenant_id: uuid("tenant_id")
-      .references(() => tenants.id, { onDelete: "cascade" })
-      .notNull(),
-    space_id: uuid("space_id")
-      .references(() => spaces.id, { onDelete: "cascade" })
-      .notNull(),
-    agent_id: uuid("agent_id")
-      .references(() => agents.id, { onDelete: "cascade" })
-      .notNull(),
-    local_role: text("local_role"),
-    local_instructions: text("local_instructions"),
-    auto_subscribe: boolean("auto_subscribe").notNull().default(true),
-    allowed_capabilities: jsonb("allowed_capabilities"),
-    allowed_tools: jsonb("allowed_tools"),
-    status: text("status").notNull().default("active"),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-    updated_at: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-  },
-  (table) => [
-    uniqueIndex("uq_space_agent_assignments_agent").on(
-      table.tenant_id,
-      table.space_id,
-      table.agent_id,
-    ),
-    index("idx_space_agent_assignments_agent").on(
-      table.tenant_id,
-      table.agent_id,
-    ),
-    index("idx_space_agent_assignments_space").on(table.space_id),
-    check(
-      "space_agent_assignments_status_allowed",
-      sql`${table.status} IN ('active','paused','archived')`,
     ),
   ],
 );
@@ -305,7 +258,6 @@ export const spacesRelations = relations(spaces, ({ one, many }) => ({
     references: [tenants.id],
   }),
   members: many(spaceMembers),
-  agentAssignments: many(spaceAgentAssignments),
   checklistTemplates: many(spaceChecklistTemplates),
   integrations: many(spaceIntegrations),
 }));
@@ -324,24 +276,6 @@ export const spaceMembersRelations = relations(spaceMembers, ({ one }) => ({
     references: [users.id],
   }),
 }));
-
-export const spaceAgentAssignmentsRelations = relations(
-  spaceAgentAssignments,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [spaceAgentAssignments.tenant_id],
-      references: [tenants.id],
-    }),
-    space: one(spaces, {
-      fields: [spaceAgentAssignments.space_id],
-      references: [spaces.id],
-    }),
-    agent: one(agents, {
-      fields: [spaceAgentAssignments.agent_id],
-      references: [agents.id],
-    }),
-  }),
-);
 
 export const spaceChecklistTemplatesRelations = relations(
   spaceChecklistTemplates,
