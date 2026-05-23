@@ -14,14 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: local verification passed; preparing PR
+- Status: PR open; fixing CI
 - Active unit: U1b — Drop `space_agent_assignments`
 - Active branch: `codex/plan-b-u1b-drop-space-agent-assignments`
 - Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u1b-drop-space-agent-assignments`
 - Started: 2026-05-22
 - Latest merged PR: [#1577](https://github.com/thinkwork-ai/thinkwork/pull/1577)
-- Active PR: none
-- CI: not opened yet; local verification passed
+- Active PR: [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578)
+- CI: first Migration Drift Precheck failed because dev still had `space_agent_assignments`; dev migration applied and rerun pending
 
 ### Merge Log
 
@@ -34,6 +34,7 @@ Target branch: `main`
 - U6 local verification: focused API email/runtime tests; full `@thinkwork/api` test suite; `@thinkwork/api` typecheck; repo-wide typecheck/lint; Python send-email tool and skill tests; Ruff E/F check; Prettier check; `git diff --check`; `build-lambdas.sh email-send email-inbound wakeup-processor`.
 - 2026-05-22 U1b: Started gated table-drop work after U3, U5/U7, and U6 merged. Pre-flight source grep for `space_agent_assignments|spaceAgentAssignments|setSpaceAgentAvailability` across API, Lambda, and admin source returned zero live consumer hits.
 - U1b local verification: `pnpm --filter @thinkwork/database-pg test __tests__/spaces-schema.test.ts __tests__/agent-template-removal-schema.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; scoped and full `db-migrate-manual.sh --dry-run` marker checks; source grep gate; TS/MD Prettier check; `git diff --check`.
+- U1b CI recovery: PR [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578) first Migration Drift Precheck failed with `space_agent_assignments` and its indexes/constraints still present in dev. Applied `packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql` to dev with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`; scoped `db-migrate-manual.sh packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql` now reports every drop marker as `DROPPED`.
 
 ### Progress Log
 
@@ -50,6 +51,7 @@ Target branch: `main`
 - 2026-05-22 U2 local dev apply: first `--apply` run failed with `column "tenant_id" does not exist` because `agent_operation_leases` is agent-scoped but not tenant-scoped. No DB rows committed; fixed the repoint target metadata and reran successfully. S3 copy rerun safety was hardened by treating identical target objects as already folded.
 - 2026-05-22 U2 local verification: FK survey found `retry_queue.agent_id` after the initial successful apply. Added the table to the script and reran `--apply`; it repaired 2 dev rows without emitting duplicate audit events.
 - 2026-05-22 U5/U7 PR [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576): first GitHub `test` run failed in `packages/lambda/__tests__/admin-ops-mcp.test.ts` because the curated tool-list assertion still expected retired `agents_*` MCP tools. Removed those stale expectations and verified with `pnpm --filter @thinkwork/lambda test -- __tests__/admin-ops-mcp.test.ts`.
+- 2026-05-22 U1b PR [#1578](https://github.com/thinkwork-ai/thinkwork/pull/1578): first Migration Drift Precheck failed because the new hand-rolled drop migration had not yet been applied to dev. Applied the migration to dev and verified the scoped drift reporter reports `DROPPED`.
 
 ### Blockers
 
