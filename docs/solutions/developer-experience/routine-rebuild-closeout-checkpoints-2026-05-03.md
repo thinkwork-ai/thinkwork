@@ -1,6 +1,7 @@
 ---
 title: "Routine rebuild closeout checkpoints"
 date: 2026-05-03
+last_updated: 2026-05-23
 category: developer-experience
 module: routines
 problem_type: developer_experience
@@ -54,6 +55,11 @@ Use this checkpoint sequence for future workflow features:
 4. Mark phase plans as `completed`, `superseded`, or still `active`.
 5. Add a compound doc for the lessons that future agents need before touching the area again.
 
+Plan B added one more closeout case: if the final implementation/runbook PR has
+to merge while the status ledger still says "ready to squash merge", open a
+small follow-up status-only PR rather than leaving the repo-local ledger stale.
+The ledger is future-session infrastructure, not incidental paperwork.
+
 ## Why This Matters
 
 Workflow products have multiple "sources of truth": authoring metadata, generated ASL, Step Functions versions and aliases, execution rows, step events, and UI-derived graph state. A successful manual or UI execution proves the runtime path, but it does not automatically prove the authoring model, mobile parity, agent tools, or observability loop.
@@ -104,5 +110,8 @@ Use the master plan to tell future agents exactly why the effort is or is not do
 - `docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md`
 - `docs/plans/2026-05-01-008-feat-routines-phase-e-cleanup-plan.md`
 - `docs/solutions/architecture-patterns/recipe-catalog-llm-dsl-validator-feedback-loop-2026-05-01.md`
+- `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`
+  — Plan B example where a final status-only PR corrected the autopilot ledger
+  after all implementation units had merged.
 - `docs/residual-review-findings/feat-routines-phase-d-mobile-parity.md`
 - `docs/residual-review-findings/feat-routines-phase-e-u15.md`

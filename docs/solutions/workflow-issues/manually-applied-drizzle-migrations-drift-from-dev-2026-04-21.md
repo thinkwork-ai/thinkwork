@@ -1,7 +1,7 @@
 ---
 module: packages/database-pg/drizzle
 date: 2026-04-21
-last_updated: 2026-04-26
+last_updated: 2026-05-23
 category: workflow-issues
 problem_type: workflow_issue
 component: database
@@ -48,11 +48,11 @@ The ThinkWork monorepo runs **two parallel migration tracks** in
 
 The unindexed-files inventory as of 2026-04-21:
 
-| File | In `_journal.json`? | Header declares "Apply manually"? |
-|---|---|---|
-| `0012_eval_seed_unique.sql` | No | No (no header at all) |
-| `0018_skill_runs.sql` | No | Yes, with `to_regclass` pre-flight |
-| `0019_webhook_skill_runs.sql` | No | Yes, with pre-flight invariants in prose |
+| File                          | In `_journal.json`? | Header declares "Apply manually"?        |
+| ----------------------------- | ------------------- | ---------------------------------------- |
+| `0012_eval_seed_unique.sql`   | No                  | No (no header at all)                    |
+| `0018_skill_runs.sql`         | No                  | Yes, with `to_regclass` pre-flight       |
+| `0019_webhook_skill_runs.sql` | No                  | Yes, with pre-flight invariants in prose |
 
 A numbering collision is also visible: `0018_agent_workspace_overlay.sql` IS
 in the journal (idx 17); `0018_skill_runs.sql` is NOT. Same ordinal, two
@@ -66,8 +66,8 @@ practice even journal-tracked migrations are applied manually via direct
 `psql`.
 
 **`deploy.yml` has no migration step at all.** Named explicitly in session
-`3fdbdb0c` on 2026-04-17: *"Confirmed — `deploy.yml` has no migration step at
-all. That's a real gap, not a deliberate choice."* The proposed fix (a
+`3fdbdb0c` on 2026-04-17: _"Confirmed — `deploy.yml` has no migration step at
+all. That's a real gap, not a deliberate choice."_ The proposed fix (a
 `drizzle-kit migrate` step gated on schema file changes) was documented in
 that session and never opened as a PR. (session history)
 
@@ -77,8 +77,8 @@ This is the **third** drift incident in five days:
 
 - **2026-04-17, migration 0008** (`0008_external_task_id_column.sql`, PR #146).
   Lambda deployed with code expecting `external_task_id`; migration never ran;
-  every `threads` query failed with `column does not exist`. User: *"did you
-  not run the database migration?"* Session `d1432838` confirmed the gap and
+  every `threads` query failed with `column does not exist`. User: _"did you
+  not run the database migration?"_ Session `d1432838` confirmed the gap and
   applied manually. Proposed deploy-gate fix was deferred. (session history)
 - **2026-04-18, migration 0012 collision** (`0012_eval_seed_unique.sql`).
   `pnpm db:generate` auto-assigned `0012` while an existing `0012_...sql` from
@@ -102,6 +102,14 @@ This is the **third** drift incident in five days:
   `0037_user_profile_operating_model.sql`, `0038_activation_sessions.sql`, and
   `0039_activation_apply_outbox.sql`; applying those additive migrations to dev
   and rerunning the failed jobs cleared the deploy.
+- **2026-05-22, migration 0125.** Plan B's gated
+  `0125_drop_space_agent_assignments.sql` drop reached PR #1578 after every live
+  consumer had moved to the platform-agent / Space-override model. GitHub's
+  Migration Drift Precheck still failed because dev retained
+  `space_agent_assignments`. Applying the scoped drop migration to dev, verifying
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql`
+  reported all markers as `DROPPED`, and rerunning CI cleared the gate. This was
+  the destructive-drop mirror of the additive drift incidents above.
 
 Three incidents, same root, same named-but-unshipped fix. The compound-
 engineering failure mode: the April 17 learning wasn't captured in
@@ -355,8 +363,8 @@ END $$;
 --> statement-breakpoint
 ```
 
-The error on 2026-04-21 would then have been *"apply 0018_skill_runs.sql
-first"* — not a CREATE INDEX mid-statement `relation does not exist` six
+The error on 2026-04-21 would then have been _"apply 0018_skill_runs.sql
+first"_ — not a CREATE INDEX mid-statement `relation does not exist` six
 statements into the migration.
 
 ### `scripts/db-migrate-manual.sh` (proposed)
@@ -428,3 +436,6 @@ checklist, would have caught 0018 before 0019's author typed `psql`.
 - auto memory `feedback_avoid_fire_and_forget_lambda_invokes` — adjacent
   pattern: surface errors at author time, not consumer time. Same spirit
   applied to migrations: apply before merge, not after.
+- `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`
+  — Plan B example combining manual migration drift, generated-client coupling,
+  destructive-drop gating, and final status-ledger closeout.
