@@ -1374,6 +1374,7 @@ export async function handleInvocation(
   const systemPromptBase = await composeSystemPrompt({
     payload: args.payload,
     workspaceDir: env.workspaceDir,
+    availableToolNames: bundle.tools.map((tool) => tool.name),
     workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
   });
   const systemPrompt = attachmentPreamble
