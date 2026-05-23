@@ -1208,6 +1208,9 @@ export async function handleInvocation(
         env.workspaceDir,
         s3,
         env.workspaceBucket,
+        {
+          workspacePrefix: asString(args.payload.rendered_workspace_prefix),
+        },
       );
     } catch (err) {
       logStructured({
