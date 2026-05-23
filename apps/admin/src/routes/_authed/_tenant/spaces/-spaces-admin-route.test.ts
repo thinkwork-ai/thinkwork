@@ -139,6 +139,14 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain("Created");
     expect(detailChromeSource).not.toContain("JsonPanel");
     expect(detailChromeSource).not.toContain("InfoPanel");
+    expect(detailChromeSource).not.toContain("Advanced runtime");
+    expect(detailChromeSource).not.toContain("Model override");
+    expect(detailChromeSource).not.toContain("Guardrail ID");
+    expect(detailChromeSource).not.toContain("Monthly budget cents");
+    expect(detailChromeSource).not.toContain("Budget paused");
+    expect(detailChromeSource).not.toContain("Sandbox");
+    expect(detailChromeSource).not.toContain("SetSpaceRuntimeOverrides");
+    expect(detailChromeSource).not.toContain("RuntimeOverrideSwitch");
   });
 
   it("keeps Configuration focused on editable user-facing fields", () => {
@@ -220,7 +228,6 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("query SpacesList");
     expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("mutation UpdateSpace");
-    expect(queriesSource).toContain("mutation SetSpaceRuntimeOverrides");
     expect(queriesSource).toContain("query SpaceAdminDetail");
     expect(queriesSource).toContain("mutation SetSpaceEmailTriggers");
     expect(queriesSource).toContain("query SpaceMemory");
@@ -235,7 +242,9 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).not.toContain("query SpaceTools");
     expect(queriesSource).not.toContain("mutation SetSpaceTools");
     expect(queriesSource).not.toContain("setSpaceTools(input");
-    expect(queriesSource).toContain("runtimeOverrides");
+    expect(queriesSource).not.toContain("mutation SetSpaceRuntimeOverrides");
+    expect(queriesSource).not.toContain("setSpaceRuntimeOverrides");
+    expect(queriesSource).not.toContain("runtimeOverrides");
     expect(spacesListQuerySource).not.toContain("agentAssignments");
     expect(queriesSource).not.toContain("localInstructions");
     expect(queriesSource).not.toContain("contextConfig");

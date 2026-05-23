@@ -147,25 +147,6 @@ export const UpdateSpaceMutation = graphql(`
   }
 `);
 
-export const SetSpaceRuntimeOverridesMutation = graphql(`
-  mutation SetSpaceRuntimeOverrides(
-    $spaceId: ID!
-    $input: SetSpaceRuntimeOverridesInput!
-  ) {
-    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {
-      id
-      runtimeOverrides {
-        model
-        guardrailId
-        budgetMonthlyCents
-        budgetPaused
-        sandbox
-      }
-      updatedAt
-    }
-  }
-`);
-
 export const SpaceAdminDetailQuery = graphql(`
   query SpaceAdminDetail($id: ID!) {
     space(id: $id) {
@@ -177,13 +158,6 @@ export const SpaceAdminDetailQuery = graphql(`
       status
       accessMode
       emailTriggersEnabled
-      runtimeOverrides {
-        model
-        guardrailId
-        budgetMonthlyCents
-        budgetPaused
-        sandbox
-      }
     }
   }
 `);

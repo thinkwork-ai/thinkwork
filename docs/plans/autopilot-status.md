@@ -15,31 +15,36 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U1. Remove Tools tab and admin code
-- Active branch: `codex/u1-space-tools-tab-removal`
-- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/u1-space-tools-tab-removal`
+- Active unit: U2. Remove Advanced runtime UI
+- Active branch: `codex/u2-remove-advanced-runtime-ui`
+- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/u2-remove-advanced-runtime-ui`
 - Started: 2026-05-23
-- Latest merged PR: none
-- Active PR: [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585)
-- CI: pending
+- Latest merged PR: [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585)
+- Active PR: pending
+- CI: pending U2 PR
+
+### Merge Log
+
+- 2026-05-23: U1 PR [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585) squash merged as `22184d74ccb3646c5370fbd72dcf412d7ab8a1eb`; remote branch deleted and local U1 worktree/branch removed. All required checks passed: CLA, lint, test, typecheck, verify.
 
 ### Active Unit Notes
 
 - 2026-05-23 U1: Removing the admin-only Space Tools tab, route file, and admin GraphQL documents. Backend `setSpaceTools` resolver/tests and underlying runtime policy surfaces remain intact per plan scope.
+- 2026-05-23 U2: Removing only the admin Advanced runtime section and admin GraphQL consumers. Backend `setSpaceRuntimeOverrides`, `SpaceRuntimeOverrides`, and the five `*_override` columns remain in place.
 - Prior context read: `AGENTS.md`, the active plan, `docs/solutions/best-practices/every-admin-mutation-requires-requiretenantadmin-2026-04-22.md`, and `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`.
-- Local verification so far: `pnpm install`; `pnpm --filter @thinkwork/admin build`; `pnpm --filter @thinkwork/admin exec vitest run src/routes/_authed/_tenant/spaces/-spaces-admin-route.test.ts`; `pnpm dlx prettier@3.8.2 --check ...`; `git diff --check`. `pnpm --filter @thinkwork/admin exec tsc --noEmit` is currently blocked by existing unrelated admin type errors across multiple files; U1-specific build and route test pass.
+- Local verification so far: `pnpm install`; `pnpm --filter @thinkwork/admin build`; `pnpm --filter @thinkwork/admin exec vitest run src/routes/_authed/_tenant/spaces/-spaces-admin-route.test.ts`; `pnpm dlx prettier@3.8.2 --check ...`; `git diff --check`. The U1 PR's required GitHub typecheck passed after local raw admin `tsc --noEmit` was blocked by existing unrelated direct-compiler errors.
 
 ### Progress Log
 
-| Date       | Unit | Branch                             | PR                                                           | Status      | Verification                                                                                                                                           | Notes                                                                                                    |
-| ---------- | ---- | ---------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| 2026-05-23 | U1   | `codex/u1-space-tools-tab-removal` | [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585) | PR open     | Targeted route test, admin build, touched-file Prettier, and `git diff --check` passed; admin raw `tsc --noEmit` blocked by existing unrelated errors. | Removing `/spaces/$spaceId/tools` from route tree and chrome; preserving backend tools resolver surface. |
-| 2026-05-23 | U2   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Remove Advanced runtime UI.                                                                              |
-| 2026-05-23 | U3   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Rename Workspace tab label to Files and Description label to Instructions.                               |
-| 2026-05-23 | U4   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Add reserved slug constant and `renameTenantSlug`.                                                       |
-| 2026-05-23 | U5   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Add tenant slug picker and Settings rename surface.                                                      |
-| 2026-05-23 | U6   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Terraform per-tenant SES/DNS.                                                                            |
-| 2026-05-23 | U7   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | New email parser/derivation and retirement notice copy.                                                  |
+| Date       | Unit | Branch                                | PR                                                           | Status           | Verification                                                                                                                                          | Notes                                                                                                                                                                 |
+| ---------- | ---- | ------------------------------------- | ------------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-23 | U1   | `codex/u1-space-tools-tab-removal`    | [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585) | Merged           | Required CI passed: CLA, lint, test, typecheck, verify. Local targeted route test, admin build, touched-file Prettier, and `git diff --check` passed. | Squash merged as `22184d74ccb3646c5370fbd72dcf412d7ab8a1eb`; removed `/spaces/$spaceId/tools` from route tree/chrome while preserving backend tools resolver surface. |
+| 2026-05-23 | U2   | `codex/u2-remove-advanced-runtime-ui` | Pending                                                      | Locally verified | Targeted route test, admin build, touched-file Prettier, and `git diff --check` passed.                                                               | Remove Advanced runtime UI; preserve backend runtime override resolver/type/columns.                                                                                  |
+| 2026-05-23 | U3   | Pending                               | Pending                                                      | Not started      | Pending                                                                                                                                               | Rename Workspace tab label to Files and Description label to Instructions.                                                                                            |
+| 2026-05-23 | U4   | Pending                               | Pending                                                      | Not started      | Pending                                                                                                                                               | Add reserved slug constant and `renameTenantSlug`.                                                                                                                    |
+| 2026-05-23 | U5   | Pending                               | Pending                                                      | Not started      | Pending                                                                                                                                               | Add tenant slug picker and Settings rename surface.                                                                                                                   |
+| 2026-05-23 | U6   | Pending                               | Pending                                                      | Not started      | Pending                                                                                                                                               | Terraform per-tenant SES/DNS.                                                                                                                                         |
+| 2026-05-23 | U7   | Pending                               | Pending                                                      | Not started      | Pending                                                                                                                                               | New email parser/derivation and retirement notice copy.                                                                                                               |
 
 ### CI Failures
 
