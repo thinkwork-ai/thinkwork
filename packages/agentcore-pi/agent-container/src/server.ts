@@ -966,13 +966,16 @@ function callbackUrlAllowed(
   }
 
   const trimmedApiUrl = apiUrl.trim();
-  if (!trimmedApiUrl) return { ok: true };
+  if (!trimmedApiUrl) return { ok: false, reason: "missing-api-url" };
 
   try {
     const parsedApiUrl = new URL(trimmedApiUrl);
     const apiIsLocalhost =
       parsedApiUrl.hostname === "localhost" ||
       parsedApiUrl.hostname === "127.0.0.1";
+    if (parsedApiUrl.protocol !== "https:" && !apiIsLocalhost) {
+      return { ok: false, reason: "insecure-api-url" };
+    }
     if (!apiIsLocalhost && parsed.origin !== parsedApiUrl.origin) {
       return { ok: false, reason: "origin-mismatch" };
     }

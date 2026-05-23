@@ -76,9 +76,12 @@ const ALL_CAPABILITIES: Capability[] = [
   "plain",
   "web_search",
   "execute_code",
-  "browser_automation",
   "hindsight",
   "mcp",
+];
+const SELECTABLE_CAPABILITIES: Capability[] = [
+  ...ALL_CAPABILITIES,
+  "browser_automation",
 ];
 
 function usage(exitCode = 2): never {
@@ -157,7 +160,7 @@ function parseArgs(): Args {
           .map((c) => c.trim())
           .filter(Boolean);
   for (const capability of capabilities) {
-    if (!ALL_CAPABILITIES.includes(capability as Capability)) {
+    if (!SELECTABLE_CAPABILITIES.includes(capability as Capability)) {
       console.error(`Unknown capability: ${capability}`);
       usage();
     }
@@ -433,13 +436,21 @@ function hasBrowserAutomationResult(
   invocation: Record<string, unknown>,
 ): boolean {
   const blob = invocationBlob(invocation);
-  if (/"ok"\s*:\s*false/.test(blob) || /BrowserAutomationError/.test(blob)) {
+  if (/"ok"\s*:\s*false/.test(blob) || /browserautomationerror/.test(blob)) {
     return false;
   }
   return (
     (blob.includes("browser_automation") || blob.includes("agentcore_browser")) &&
     /"session_id"\s*:\s*"[a-z0-9-]+"/.test(blob) &&
     /"screenshot_bytes"\s*:\s*[1-9]/.test(blob)
+  );
+}
+
+function hasBrowserCostRecord(turn: ThreadTurn): boolean {
+  const blob = JSON.stringify(turn.usageJson?.tool_costs ?? []).toLowerCase();
+  return (
+    blob.includes("agentcore_browser") &&
+    blob.includes("agentcore_browser_session")
   );
 }
 
@@ -577,6 +588,10 @@ function evaluate(
 
   if (!evidenceOk) {
     return { ...base, reason: `${capability}_result_evidence_missing` };
+  }
+
+  if (capability === "browser_automation" && !hasBrowserCostRecord(turn)) {
+    return { ...base, reason: "browser_tool_cost_evidence_missing" };
   }
 
   return {

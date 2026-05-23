@@ -696,6 +696,113 @@ describe("postFinalizeCallback", () => {
     expect(ok).toBe(false);
     expect(fetchCalled).toBe(0);
   });
+
+  it.each([
+    {
+      name: "malformed finalize URL",
+      overrides: { finalize_callback_url: "not-a-url" },
+    },
+    {
+      name: "non-localhost HTTP finalize URL",
+      overrides: {
+        finalize_callback_url: "http://api.example.com/api/threads/thread-1/finalize",
+      },
+    },
+    {
+      name: "missing API URL",
+      overrides: { thinkwork_api_url: "" },
+    },
+    {
+      name: "malformed API URL",
+      overrides: { thinkwork_api_url: "not-a-url" },
+    },
+    {
+      name: "non-localhost HTTP API URL",
+      overrides: { thinkwork_api_url: "http://api.example.com" },
+    },
+  ])("rejects unsafe finalize callback config: $name", async ({ overrides }) => {
+    let fetchCalled = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      fetchCalled += 1;
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const ok = await postFinalizeCallback({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url: "https://api.example.com/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+        ...overrides,
+      }),
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "tenant-1",
+        agentSlug: "agent-slug",
+        traceId: "trace-1",
+      },
+      result: {
+        status: "ok",
+        runResult: {
+          content: "done",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        },
+        latencyMs: 42,
+      },
+      fetchImpl,
+    });
+
+    expect(ok).toBe(false);
+    expect(fetchCalled).toBe(0);
+  });
+
+  it("allows localhost finalize callbacks for local runtime tests", async () => {
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const ok = await postFinalizeCallback({
+      payload: VALID_PAYLOAD({
+        thinkwork_api_url: "http://localhost:5174",
+        finalize_callback_url:
+          "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+      }),
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "tenant-1",
+        agentSlug: "agent-slug",
+        traceId: "trace-1",
+      },
+      result: {
+        status: "ok",
+        runResult: {
+          content: "done",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        },
+        latencyMs: 42,
+      },
+      fetchImpl,
+    });
+
+    expect(ok).toBe(true);
+    expect(fetchCalls).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,11 @@ import {
 } from "@aws-sdk/client-bedrock-agentcore";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "typebox";
-import { buildAgentCoreBrowserCost } from "./tool-costs.js";
+import { validateMcpUrl } from "../../handler-context.js";
+import {
+  buildAgentCoreBrowserCost,
+  sanitizeTelemetryUrl,
+} from "./tool-costs.js";
 
 const DEFAULT_BROWSER_IDENTIFIER = "aws.browser.v1";
 
@@ -17,14 +21,47 @@ function validHttpUrl(value: string): string {
   } catch {
     throw new Error("browser_automation requires a valid http(s) URL.");
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("browser_automation only supports http(s) URLs.");
+  if (parsed.protocol !== "https:") {
+    throw new Error("browser_automation only supports public HTTPS URLs.");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("browser_automation does not accept credential-bearing URLs.");
+  }
+  const validation = validateMcpUrl(parsed.toString());
+  if (!validation.ok) {
+    throw new Error(
+      `browser_automation rejected URL (${validation.reason ?? "invalid-url"}).`,
+    );
   }
   return parsed.toString();
 }
 
 async function wait(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+      function browserActionResult(
+  step: string,
+  response: unknown,
+): Record<string, unknown> {
+  const result = (response as { result?: Record<string, unknown> }).result;
+  const actionResult = result
+    ? Object.values(result).find(
+        (value) => value && typeof value === "object",
+      )
+    : null;
+  if (!actionResult || typeof actionResult !== "object") {
+    throw new Error(`${step} did not return an AgentCore Browser action result.`);
+  }
+  const record = actionResult as Record<string, unknown>;
+  if (record.status !== "SUCCESS") {
+    const error =
+      typeof record.error === "string" && record.error
+        ? `: ${record.error}`
+        : "";
+    throw new Error(`${step} failed${error}`);
+  }
+  return record;
 }
 
 export interface BrowserAutomationToolOptions {
@@ -47,10 +84,10 @@ export function buildBrowserAutomationTool(
     name: "browser_automation",
     label: "Browser",
     description:
-      "Open a managed AgentCore Browser session, navigate to a URL, and " +
+      "Open a managed AgentCore Browser session, navigate to a public HTTPS URL, and " +
       "capture evidence that the page loaded.",
     parameters: Type.Object({
-      url: Type.String({ description: "Starting http(s) URL." }),
+      url: Type.String({ description: "Starting public HTTPS URL." }),
       task: Type.Optional(
         Type.String({
           description:
@@ -61,9 +98,16 @@ export function buildBrowserAutomationTool(
     executionMode: "sequential",
     execute: async (_toolCallId, params) => {
       const url = validHttpUrl(String((params as { url?: unknown }).url ?? ""));
+      const telemetryUrl = sanitizeTelemetryUrl(url);
       const task = String((params as { task?: unknown }).task ?? "").trim();
       const started = Date.now();
       let sessionId: string | undefined;
+      let result:
+        | {
+            content: Array<{ type: "text"; text: string }>;
+            details: Record<string, unknown>;
+          }
+        | undefined;
 
       try {
         const startResponse = await options.client.send(
@@ -80,26 +124,35 @@ export function buildBrowserAutomationTool(
           throw new Error("AgentCore Browser did not return a session id.");
         }
 
-        await options.client.send(
-          new InvokeBrowserCommand({
-            browserIdentifier,
-            sessionId,
-            action: { keyShortcut: { keys: ["CTRL", "L"] } },
-          }),
+        browserActionResult(
+          "Focus browser address bar",
+          await options.client.send(
+            new InvokeBrowserCommand({
+              browserIdentifier,
+              sessionId,
+              action: { keyShortcut: { keys: ["CTRL", "L"] } },
+            }),
+          ),
         );
-        await options.client.send(
-          new InvokeBrowserCommand({
-            browserIdentifier,
-            sessionId,
-            action: { keyType: { text: url } },
-          }),
+        browserActionResult(
+          "Type browser URL",
+          await options.client.send(
+            new InvokeBrowserCommand({
+              browserIdentifier,
+              sessionId,
+              action: { keyType: { text: url } },
+            }),
+          ),
         );
-        await options.client.send(
-          new InvokeBrowserCommand({
-            browserIdentifier,
-            sessionId,
-            action: { keyPress: { key: "ENTER" } },
-          }),
+        browserActionResult(
+          "Submit browser URL",
+          await options.client.send(
+            new InvokeBrowserCommand({
+              browserIdentifier,
+              sessionId,
+              action: { keyPress: { key: "ENTER" } },
+            }),
+          ),
         );
         await wait(options.settleDelayMs ?? 3_000);
         const screenshot = await options.client.send(
@@ -109,8 +162,15 @@ export function buildBrowserAutomationTool(
             action: { screenshot: { format: "PNG" } },
           }),
         );
-        const screenshotBytes =
-          screenshot.result?.screenshot?.data?.byteLength ?? 0;
+        const screenshotResult = browserActionResult(
+          "Capture screenshot",
+          screenshot,
+        );
+        const screenshotBytes = (screenshotResult.data as Uint8Array | undefined)
+          ?.byteLength ?? 0;
+        if (screenshotBytes <= 0) {
+          throw new Error("Capture screenshot returned no image data.");
+        }
         const durationMs = Date.now() - started;
         const toolCosts = [
           buildAgentCoreBrowserCost({
@@ -123,12 +183,12 @@ export function buildBrowserAutomationTool(
           }),
         ];
 
-        return {
+        result = {
           content: [
             {
               type: "text",
               text:
-                `Opened ${url} in AgentCore Browser for Pi.` +
+                `Opened ${telemetryUrl} in AgentCore Browser for Pi.` +
                 (task ? ` Task: ${task}.` : "") +
                 ` Screenshot bytes: ${screenshotBytes}.`,
             },
@@ -137,7 +197,7 @@ export function buildBrowserAutomationTool(
             runtime: "pi",
             browser_identifier: browserIdentifier,
             session_id: sessionId,
-            url,
+            url: telemetryUrl,
             task,
             screenshot_bytes: screenshotBytes,
             duration_ms: durationMs,
@@ -147,7 +207,7 @@ export function buildBrowserAutomationTool(
       } catch (err) {
         const durationMs = Date.now() - started;
         const message = err instanceof Error ? err.message : String(err);
-        return {
+        result = {
           content: [
             {
               type: "text",
@@ -159,7 +219,7 @@ export function buildBrowserAutomationTool(
             ok: false,
             browser_identifier: browserIdentifier,
             session_id: sessionId,
-            url,
+            url: telemetryUrl,
             task,
             duration_ms: durationMs,
             error: "BrowserAutomationError",
@@ -188,11 +248,20 @@ export function buildBrowserAutomationTool(
                 traceId: options.traceId,
               }),
             );
-          } catch {
-            // The tool result is more useful than masking the browser evidence with cleanup failures.
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            if (result) {
+              result.details.cleanup_failed = true;
+              result.details.cleanup_error = message;
+              result.details.cleanup_trace_id = options.traceId;
+            }
           }
         }
       }
+      if (!result) {
+        throw new Error("browser_automation failed without a result payload.");
+      }
+      return result;
     },
   };
 }
