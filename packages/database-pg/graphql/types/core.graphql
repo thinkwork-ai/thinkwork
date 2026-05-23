@@ -257,6 +257,7 @@ extend type Mutation {
   bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
+  renameTenantSlug(tenantId: ID!, newSlug: String!): Tenant!
   """
   Platform-operator-only mutation — see UpdateTenantPolicyInput. Changes
   are audited in tenant_policy_events and must satisfy the compound

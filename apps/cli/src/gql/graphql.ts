@@ -2032,6 +2032,7 @@ export type Mutation = {
   removeTenantMember: Scalars["Boolean"]["output"];
   removeThreadDependency: Scalars["Boolean"]["output"];
   removeThreadLabel: Scalars["Boolean"]["output"];
+  renameTenantSlug: Tenant;
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   /**
@@ -2597,6 +2598,11 @@ export type MutationRemoveThreadDependencyArgs = {
 export type MutationRemoveThreadLabelArgs = {
   labelId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
+};
+
+export type MutationRenameTenantSlugArgs = {
+  newSlug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationReorderQuickActionsArgs = {

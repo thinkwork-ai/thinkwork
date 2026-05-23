@@ -172,6 +172,16 @@ export const SetSpaceEmailTriggersMutation = graphql(`
   }
 `);
 
+export const RenameTenantSlugMutation = graphql(`
+  mutation RenameTenantSlug($tenantId: ID!, $newSlug: String!) {
+    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {
+      id
+      slug
+      updatedAt
+    }
+  }
+`);
+
 export const SpaceMemoryQuery = graphql(`
   query SpaceMemory($id: ID!) {
     space(id: $id) {

@@ -4,6 +4,11 @@ import {
   invokeProvisionTenantSandbox,
   SandboxProvisioningConfigError,
 } from "../../../lib/sandbox-provisioning.js";
+import {
+  hasPgErrorCode,
+  tenantSlugError,
+  validateTenantSlug,
+} from "./tenantSlugValidation.js";
 
 export const createTenant = async (
   _parent: any,
@@ -11,14 +16,25 @@ export const createTenant = async (
   _ctx: GraphQLContext,
 ) => {
   const i = args.input;
-  const [row] = await db
-    .insert(tenants)
-    .values({
-      name: i.name,
-      slug: i.slug ?? generateSlug(),
-      plan: i.plan ?? "free",
-    })
-    .returning();
+  const slug = i.slug ?? generateSlug();
+  validateTenantSlug(slug);
+
+  let row;
+  try {
+    [row] = await db
+      .insert(tenants)
+      .values({
+        name: i.name,
+        slug,
+        plan: i.plan ?? "free",
+      })
+      .returning();
+  } catch (err) {
+    if (hasPgErrorCode(err, "23505")) {
+      throw tenantSlugError("Tenant slug is unavailable", "SLUG_UNAVAILABLE");
+    }
+    throw err;
+  }
 
   // Sandbox provisioning — plan Unit 6.
   //

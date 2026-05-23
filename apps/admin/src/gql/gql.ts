@@ -32,13 +32,11 @@ type Documents = {
   "\n  query SpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SpacesListDocument;
   "\n  mutation CreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.CreateSpaceDocument;
   "\n  mutation UpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      accessMode\n    }\n  }\n": typeof types.UpdateSpaceDocument;
-  "\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n": typeof types.SetSpaceRuntimeOverridesDocument;
-  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n": typeof types.SpaceAdminDetailDocument;
+  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n": typeof types.SpaceAdminDetailDocument;
   "\n  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {\n    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {\n      id\n      emailTriggersEnabled\n      updatedAt\n    }\n  }\n": typeof types.SetSpaceEmailTriggersDocument;
+  "\n  mutation RenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": typeof types.RenameTenantSlugDocument;
   "\n  query SpaceMemory($id: ID!) {\n    space(id: $id) {\n      id\n      knowledgeBases {\n        id\n        knowledgeBaseId\n        enabled\n        knowledgeBase {\n          id\n          name\n          status\n        }\n      }\n    }\n  }\n": typeof types.SpaceMemoryDocument;
   "\n  mutation SetSpaceKnowledgeBases($input: SetSpaceKnowledgeBasesInput!) {\n    setSpaceKnowledgeBases(input: $input) {\n      id\n      knowledgeBaseId\n      enabled\n      knowledgeBase {\n        id\n        name\n        status\n      }\n    }\n  }\n": typeof types.SetSpaceKnowledgeBasesDocument;
-  "\n  query SpaceTools($id: ID!) {\n    space(id: $id) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n": typeof types.SpaceToolsDocument;
-  "\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n": typeof types.SetSpaceToolsDocument;
   "\n  query ComputersList($tenantId: ID!) {\n    computers(tenantId: $tenantId) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.ComputersListDocument;
   "\n  query ComputerDetail($id: ID!) {\n    computer(id: $id) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      runtimeConfig\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdBy\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.ComputerDetailDocument;
   "\n  mutation CreateComputer($input: CreateComputerInput!) {\n    createComputer(input: $input) {\n      id\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      tenantId\n      ownerUserId\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CreateComputerDocument;
@@ -210,20 +208,16 @@ const documents: Documents = {
     types.CreateSpaceDocument,
   "\n  mutation UpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      accessMode\n    }\n  }\n":
     types.UpdateSpaceDocument,
-  "\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n":
-    types.SetSpaceRuntimeOverridesDocument,
-  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n":
+  "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n":
     types.SpaceAdminDetailDocument,
   "\n  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {\n    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {\n      id\n      emailTriggersEnabled\n      updatedAt\n    }\n  }\n":
     types.SetSpaceEmailTriggersDocument,
+  "\n  mutation RenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n":
+    types.RenameTenantSlugDocument,
   "\n  query SpaceMemory($id: ID!) {\n    space(id: $id) {\n      id\n      knowledgeBases {\n        id\n        knowledgeBaseId\n        enabled\n        knowledgeBase {\n          id\n          name\n          status\n        }\n      }\n    }\n  }\n":
     types.SpaceMemoryDocument,
   "\n  mutation SetSpaceKnowledgeBases($input: SetSpaceKnowledgeBasesInput!) {\n    setSpaceKnowledgeBases(input: $input) {\n      id\n      knowledgeBaseId\n      enabled\n      knowledgeBase {\n        id\n        name\n        status\n      }\n    }\n  }\n":
     types.SetSpaceKnowledgeBasesDocument,
-  "\n  query SpaceTools($id: ID!) {\n    space(id: $id) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n":
-    types.SpaceToolsDocument,
-  "\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n":
-    types.SetSpaceToolsDocument,
   "\n  query ComputersList($tenantId: ID!) {\n    computers(tenantId: $tenantId) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdAt\n      updatedAt\n    }\n  }\n":
     types.ComputersListDocument,
   "\n  query ComputerDetail($id: ID!) {\n    computer(id: $id) {\n      id\n      tenantId\n      ownerUserId\n      owner {\n        id\n        name\n        email\n      }\n      sourceAgent {\n        id\n        name\n        slug\n      }\n      name\n      slug\n      scope\n      status\n      desiredRuntimeStatus\n      runtimeStatus\n      runtimeConfig\n      liveWorkspaceRoot\n      efsAccessPointId\n      ecsServiceName\n      lastHeartbeatAt\n      lastActiveAt\n      budgetMonthlyCents\n      spentMonthlyCents\n      budgetPausedAt\n      budgetPausedReason\n      migratedFromAgentId\n      migrationMetadata\n      createdBy\n      createdAt\n      updatedAt\n    }\n  }\n":
@@ -618,20 +612,20 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n",
-): (typeof documents)["\n  mutation SetSpaceRuntimeOverrides(\n    $spaceId: ID!\n    $input: SetSpaceRuntimeOverridesInput!\n  ) {\n    setSpaceRuntimeOverrides(spaceId: $spaceId, input: $input) {\n      id\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n      updatedAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n",
-): (typeof documents)["\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n      runtimeOverrides {\n        model\n        guardrailId\n        budgetMonthlyCents\n        budgetPaused\n        sandbox\n      }\n    }\n  }\n"];
+  source: "\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n",
+): (typeof documents)["\n  query SpaceAdminDetail($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      accessMode\n      emailTriggersEnabled\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
   source: "\n  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {\n    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {\n      id\n      emailTriggersEnabled\n      updatedAt\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {\n    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {\n      id\n      emailTriggersEnabled\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation RenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation RenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -644,18 +638,6 @@ export function graphql(
 export function graphql(
   source: "\n  mutation SetSpaceKnowledgeBases($input: SetSpaceKnowledgeBasesInput!) {\n    setSpaceKnowledgeBases(input: $input) {\n      id\n      knowledgeBaseId\n      enabled\n      knowledgeBase {\n        id\n        name\n        status\n      }\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SetSpaceKnowledgeBases($input: SetSpaceKnowledgeBasesInput!) {\n    setSpaceKnowledgeBases(input: $input) {\n      id\n      knowledgeBaseId\n      enabled\n      knowledgeBase {\n        id\n        name\n        status\n      }\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query SpaceTools($id: ID!) {\n    space(id: $id) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n",
-): (typeof documents)["\n  query SpaceTools($id: ID!) {\n    space(id: $id) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n",
-): (typeof documents)["\n  mutation SetSpaceTools($input: SetSpaceToolsInput!) {\n    setSpaceTools(input: $input) {\n      id\n      builtInTools\n      mcpServers {\n        id\n        mcpServerId\n        enabled\n        mcpServer {\n          id\n          name\n          slug\n          enabled\n          status\n        }\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
