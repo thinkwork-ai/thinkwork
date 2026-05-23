@@ -66,6 +66,37 @@ describe("default agent routing", () => {
       wakeupRequestId: "wakeup-1",
     });
     expect(repository.wakeups).toEqual([]);
+    expect(repository.assignments).toEqual([
+      { tenantId: "tenant-1", threadId: "thread-1", agentId: "agent-1" },
+    ]);
+  });
+
+  it("assigns the resolved default agent to the thread before enqueueing", async () => {
+    const repository = makeRepository({ agentId: "platform-agent-1" });
+    await expect(
+      dispatchDefaultAgentTurn(
+        {
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          spaceId: "space-1",
+          messageId: "message-1",
+          content: "Use the configured runtime",
+        },
+        repository,
+      ),
+    ).resolves.toEqual({
+      agentId: "platform-agent-1",
+      enqueued: true,
+      wakeupRequestId: "wakeup-created",
+    });
+    expect(repository.assignments).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "platform-agent-1",
+      },
+    ]);
+    expect(repository.wakeups[0].agentId).toBe("platform-agent-1");
   });
 });
 
@@ -77,8 +108,14 @@ function makeRepository(
     wakeups: [] as Parameters<
       DefaultAgentRoutingRepository["createWakeup"]
     >[0][],
+    assignments: [] as Parameters<
+      DefaultAgentRoutingRepository["assignThreadDefaultAgent"]
+    >[0][],
     async loadDefaultAgent() {
       return defaultAgent;
+    },
+    async assignThreadDefaultAgent(input) {
+      repository.assignments.push(input);
     },
     async findExistingWakeup() {
       return existingWakeupId ? { id: existingWakeupId } : null;
@@ -89,6 +126,9 @@ function makeRepository(
     },
   } satisfies DefaultAgentRoutingRepository & {
     wakeups: Parameters<DefaultAgentRoutingRepository["createWakeup"]>[0][];
+    assignments: Parameters<
+      DefaultAgentRoutingRepository["assignThreadDefaultAgent"]
+    >[0][];
   };
   return repository;
 }

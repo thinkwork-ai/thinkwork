@@ -2,8 +2,8 @@
  * ThreadsTable — shared presentational component used by both the
  * `/threads` route (tenant scope) and the Computer Detail Dashboard tab
  * (computer scope). Renders one `<DataTable>` with the thread row
- * column definition, status icon, identifier, title, latest runtime/model,
- * user attribution, last-activity timestamp, and inbox indicator.
+ * column definition, status icon, identifier, title, runtime, model, user
+ * attribution, last-activity timestamp, and inbox indicator.
  *
  * Plan: docs/plans/2026-05-13-005-refactor-computer-detail-cleanup-and-
  *       shared-threads-table-plan.md (U5).
@@ -107,7 +107,7 @@ export function ThreadsTable({
   onUpdateThread,
   onRowClick,
   pagination,
-  hideHeader = true,
+  hideHeader = false,
   scrollable = false,
   scope: _scope = "tenant",
 }: ThreadsTableProps) {
@@ -118,13 +118,14 @@ export function ThreadsTable({
   const columns: ColumnDef<ThreadsTableItem>[] = useMemo(
     () => [
       {
-        id: "row",
+        id: "thread",
+        header: "Thread",
+        size: 620,
         cell: ({ row }) => {
           const thread = row.original;
-          const inboxStatus = inboxStatusFor(thread);
           const identifier = thread.identifier ?? `#${thread.number}`;
           return (
-            <div className="flex h-10 items-center gap-2 overflow-hidden pl-3 pr-3 text-sm sm:gap-3">
+            <div className="flex h-10 min-w-0 items-center gap-2 overflow-hidden pl-3 pr-3 text-sm sm:gap-3">
               <span className="flex shrink-0 items-center gap-2">
                 <span
                   className="shrink-0"
@@ -147,46 +148,94 @@ export function ThreadsTable({
               </span>
 
               <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-
-              <span className="ml-auto hidden shrink-0 items-center sm:flex">
-                <span className="flex w-[240px] shrink-0 items-center justify-end gap-1.5 px-2">
-                  {thread.lastRuntimeType ? (
-                    <Badge
-                      variant="secondary"
-                      className="max-w-[72px] truncate text-xs font-normal"
-                      title={`Runtime: ${formatRuntimeType(thread.lastRuntimeType)}`}
-                    >
-                      {formatRuntimeType(thread.lastRuntimeType)}
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                  {thread.lastModel && (
-                    <Badge
-                      variant="outline"
-                      className="max-w-[150px] truncate text-xs font-normal"
-                      title={`Model: ${thread.lastModel}`}
-                    >
-                      {formatModelId(thread.lastModel)}
-                    </Badge>
-                  )}
-                </span>
-                <span
-                  className="w-[140px] shrink-0 truncate px-2 text-right text-xs text-muted-foreground"
-                  title={threadUserLabel(thread)}
-                >
-                  {thread.computerId ? threadUserLabel(thread) : "—"}
-                </span>
-                <span className="w-[70px] text-right text-xs text-muted-foreground">
-                  {relativeTime(thread.lastActivityAt || thread.updatedAt)}
-                </span>
-                <span className="flex w-[20px] items-center justify-center">
-                  <InboxIndicator status={inboxStatus} />
-                </span>
-              </span>
             </div>
           );
         },
+      },
+      {
+        id: "runtime",
+        header: "Runtime",
+        size: 110,
+        cell: ({ row }) => {
+          const runtimeType = row.original.lastRuntimeType;
+          return (
+            <div className="flex h-10 items-center px-2">
+              {runtimeType ? (
+                <Badge
+                  variant="secondary"
+                  className="max-w-full truncate text-xs font-normal"
+                  title={`Runtime: ${formatRuntimeType(runtimeType)}`}
+                >
+                  {formatRuntimeType(runtimeType)}
+                </Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "model",
+        header: "Model",
+        size: 190,
+        cell: ({ row }) => {
+          const model = row.original.lastModel;
+          return (
+            <div className="flex h-10 items-center px-2">
+              {model ? (
+                <Badge
+                  variant="outline"
+                  className="max-w-full truncate text-xs font-normal"
+                  title={`Model: ${model}`}
+                >
+                  {formatModelId(model)}
+                </Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "user",
+        header: "User",
+        size: 150,
+        cell: ({ row }) => {
+          const label = threadUserLabel(row.original);
+          return (
+            <div
+              className="h-10 truncate px-2 text-sm leading-10 text-muted-foreground"
+              title={label}
+            >
+              {row.original.userId || row.original.user ? label : "—"}
+            </div>
+          );
+        },
+      },
+      {
+        id: "lastActivity",
+        header: "Last Activity",
+        size: 105,
+        cell: ({ row }) => (
+          <div className="h-10 truncate px-2 text-right text-sm leading-10 text-muted-foreground">
+            {formatThreadActivityTime(
+              row.original.lastActivityAt,
+              row.original.updatedAt,
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "inbox",
+        header: "",
+        size: 34,
+        cell: ({ row }) => (
+          <div className="flex h-10 items-center justify-center">
+            <InboxIndicator status={inboxStatusFor(row.original)} />
+          </div>
+        ),
       },
     ],
     [inboxStatusFor, onUpdateThread],
@@ -266,6 +315,14 @@ export function threadUserLabel(thread: ThreadsTableItem): string {
     thread.user?.email ||
     (thread.userId ? "Unknown User" : "Unknown User")
   );
+}
+
+function formatThreadActivityTime(primary: unknown, fallback: unknown): string {
+  const value = primary || fallback;
+  if (typeof value === "string" || value instanceof Date) {
+    return relativeTime(value);
+  }
+  return "—";
 }
 
 export function formatRuntimeType(runtimeType: string): string {

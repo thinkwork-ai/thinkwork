@@ -31,4 +31,10 @@ describe("createThread opening message mention routing", () => {
     expect(source).toContain("updated_at: openingMessageCreatedAt");
     expect(source).toContain("last_read_at: openingMessageCreatedAt");
   });
+
+  it("binds new non-computer threads to the tenant platform agent", () => {
+    expect(source).toContain("resolveDefaultThreadAgentId");
+    expect(source).toContain("const threadAgentId = threadComputer");
+    expect(source).toContain("agent_id: threadAgentId ?? undefined");
+  });
 });
