@@ -549,7 +549,7 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
 }
 
 resource "aws_iam_policy" "workspace_renderer_invoke" {
-  name        = "thinkwork-${var.stage}-workspace-renderer-invoke"
+  name        = "thinkwork-${var.stage}-workspace-renderer-invoke-managed"
   description = "Allow API Lambdas to invoke the workspace renderer."
 
   policy = jsonencode({
