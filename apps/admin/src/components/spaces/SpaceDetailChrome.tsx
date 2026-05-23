@@ -184,7 +184,7 @@ export function SpaceDetailChrome({
                 </TabsTrigger>
                 <TabsTrigger value="workspace" asChild className="px-4">
                   <Link to="/spaces/$spaceId/workspace" params={{ spaceId }}>
-                    Workspace
+                    Files
                   </Link>
                 </TabsTrigger>
                 <TabsTrigger value="memory" asChild className="px-4">
@@ -273,7 +273,7 @@ export function SpaceConfigurationPanel({
             </Select>
           </div>
           <div className="space-y-1.5 lg:col-span-2">
-            <Label htmlFor="space-description">Description</Label>
+            <Label htmlFor="space-description">Instructions</Label>
             <Textarea
               id="space-description"
               value={draft.description}

@@ -112,6 +112,8 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/workspace"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/memory"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/automations"');
+    expect(detailChromeSource).toContain("Files");
+    expect(detailChromeSource).not.toContain(">Workspace<");
     expect(detailRouteSource).toContain('to="/spaces/$spaceId/configuration"');
     expect(workspaceRouteSource).toContain("SpaceWorkspacePanel");
     expect(detailChromeSource).toContain("target={{ spaceId }}");
@@ -152,7 +154,8 @@ describe("Spaces admin routes", () => {
   it("keeps Configuration focused on editable user-facing fields", () => {
     expect(detailChromeSource).toContain("SpaceConfigurationPanel");
     expect(detailChromeSource).toContain("Name");
-    expect(detailChromeSource).toContain("Description");
+    expect(detailChromeSource).toContain("Instructions");
+    expect(detailChromeSource).not.toContain(">Description<");
     expect(detailChromeSource).toContain("Access");
     expect(detailChromeSource).toContain("SpaceEmailTriggersToggle");
     expect(detailChromeSource).toContain("emailTriggersEnabled");
