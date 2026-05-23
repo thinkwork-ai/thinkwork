@@ -6,7 +6,6 @@ import { getTableColumns, getTableName } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import {
-  spaceAgentAssignments,
   spaceChecklistItems,
   spaceChecklistTemplates,
   spaceIntegrations,
@@ -73,18 +72,10 @@ describe("Spaces schema", () => {
     expect(columns.render_diagnostics.notNull).toBe(false);
   });
 
-  it("models Space-local members, agents, MCP servers, checklists, and integrations", () => {
+  it("models Space-local members, MCP servers, checklists, and integrations", () => {
     expect(getTableName(spaceMembers)).toBe("space_members");
     expect(getTableColumns(spaceMembers).notification_preference.default).toBe(
       "subscribed",
-    );
-
-    expect(getTableName(spaceAgentAssignments)).toBe("space_agent_assignments");
-    expect(
-      getTableColumns(spaceAgentAssignments).local_instructions.notNull,
-    ).toBe(false);
-    expect(getTableColumns(spaceAgentAssignments).auto_subscribe.default).toBe(
-      true,
     );
 
     expect(getTableName(spaceMcpServers)).toBe("space_mcp_servers");
@@ -113,7 +104,6 @@ describe("Spaces schema", () => {
     for (const table of [
       "spaces",
       "space_members",
-      "space_agent_assignments",
       "space_checklist_templates",
       "space_checklist_items",
       "space_integrations",
@@ -239,7 +229,6 @@ describe("Spaces schema", () => {
     );
     for (const trigger of [
       "space_members_tenant_guard",
-      "space_agent_assignments_tenant_guard",
       "space_checklist_templates_tenant_guard",
       "space_checklist_items_tenant_guard",
       "space_integrations_tenant_guard",
@@ -248,7 +237,32 @@ describe("Spaces schema", () => {
     }
     expect(migration0105).toContain("space child tenant mismatch");
     expect(migration0105).toContain("space member tenant mismatch");
-    expect(migration0105).toContain("space agent assignment tenant mismatch");
     expect(migration0105).toContain("space checklist item tenant mismatch");
+  });
+
+  it("declares the manual drop migration for retired Space-agent assignments", () => {
+    const migration0125 = readFileSync(
+      join(HERE, "..", "drizzle", "0125_drop_space_agent_assignments.sql"),
+      "utf-8",
+    );
+
+    expect(migration0105).not.toMatch(
+      /--\s*creates:\s*public\.space_agent_assignments\b/,
+    );
+    expect(migration0125).toMatch(
+      /--\s*drops:\s*public\.space_agent_assignments\b/,
+    );
+    expect(migration0125).toContain(
+      "DROP TABLE IF EXISTS public.space_agent_assignments CASCADE",
+    );
+    expect(migration0125).toMatch(
+      /--\s*drops:\s*public\.uq_space_agent_assignments_agent\b/,
+    );
+    expect(migration0125).toMatch(
+      /--\s*drops:\s*public\.idx_space_agent_assignments_agent\b/,
+    );
+    expect(migration0125).toMatch(
+      /--\s*drops:\s*public\.idx_space_agent_assignments_space\b/,
+    );
   });
 });
