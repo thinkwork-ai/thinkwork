@@ -2,7 +2,7 @@
  * Source-grep structural coverage for ThreadsTable — admin's test
  * convention is filesystem-based assertion rather than DOM rendering
  * (no RTL is wired up). Verifies the component exposes the expected
- * surface and keeps the runtime/model list column wired so refactors
+ * surface and keeps the runtime/model columns wired so refactors
  * don't silently strip behavior.
  */
 
@@ -39,12 +39,14 @@ describe("ThreadsTable shared component", () => {
     expect(source).not.toContain("useSubscription(");
   });
 
-  it("renders runtime and model instead of the old agent column", () => {
+  it("renders runtime and model as separate columns instead of the old agent column", () => {
+    expect(source).toContain('header: "Runtime"');
+    expect(source).toContain('header: "Model"');
     expect(source).toContain('variant="outline"');
-    expect(source).toContain("threadUserLabel(thread)");
-    expect(source).toContain("thread.lastRuntimeType");
-    expect(source).toContain("thread.lastModel");
-    expect(source).toContain("formatModelId(thread.lastModel)");
+    expect(source).toContain("threadUserLabel(row.original)");
+    expect(source).toContain("row.original.lastRuntimeType");
+    expect(source).toContain("row.original.lastModel");
+    expect(source).toContain("formatModelId(model)");
     expect(source).not.toContain("assigneePickerIssueId");
     expect(source).not.toContain("Popover");
   });
@@ -56,9 +58,11 @@ describe("ThreadsTable shared component", () => {
     expect(source).toContain("Unknown User");
   });
 
-  it("renders Computer and User attribution as separate single-line columns", () => {
-    expect(source).toContain("w-[240px]");
-    expect(source).toContain("w-[140px]");
+  it("renders named table headers for the thread list", () => {
+    expect(source).toContain("hideHeader = false");
+    expect(source).toContain('header: "Thread"');
+    expect(source).toContain('header: "User"');
+    expect(source).toContain('header: "Last Activity"');
     expect(source).not.toContain("flex-col items-end");
   });
 

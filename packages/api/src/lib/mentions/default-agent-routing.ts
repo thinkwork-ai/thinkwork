@@ -1,10 +1,14 @@
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
   threadParticipants,
   threads,
 } from "@thinkwork/database-pg/schema";
+import {
+  PlatformAgentNotFoundError,
+  resolveTenantPlatformAgent,
+} from "../agents/tenant-platform-agent.js";
 
 export interface DefaultAgentTurnWakeup {
   tenantId: string;
@@ -23,6 +27,11 @@ export interface DefaultAgentRoutingRepository {
     tenantId: string;
     threadId: string;
   }): Promise<{ agentId: string } | null>;
+  assignThreadDefaultAgent(input: {
+    tenantId: string;
+    threadId: string;
+    agentId: string;
+  }): Promise<void>;
   findExistingWakeup(input: {
     tenantId: string;
     agentId: string;
@@ -56,6 +65,11 @@ export async function dispatchDefaultAgentTurn(
   const wakeup = buildDefaultAgentTurnWakeup({
     ...input,
     agentId: defaultAgent.agentId,
+  });
+  await repository.assignThreadDefaultAgent({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    agentId: wakeup.agentId,
   });
   const existing = await repository.findExistingWakeup({
     tenantId: wakeup.tenantId,
@@ -104,6 +118,29 @@ class DrizzleDefaultAgentRoutingRepository implements DefaultAgentRoutingReposit
   private readonly db = getDb();
 
   async loadDefaultAgent(input: { tenantId: string; threadId: string }) {
+    const [thread] = await this.db
+      .select({ agentId: threads.agent_id, computerId: threads.computer_id })
+      .from(threads)
+      .where(
+        and(
+          eq(threads.tenant_id, input.tenantId),
+          eq(threads.id, input.threadId),
+        ),
+      )
+      .limit(1);
+    if (!thread || thread.computerId) return null;
+    if (thread.agentId) return { agentId: thread.agentId };
+
+    try {
+      const platformAgent = await resolveTenantPlatformAgent(
+        input.tenantId,
+        this.db,
+      );
+      return { agentId: platformAgent.id };
+    } catch (error) {
+      if (!(error instanceof PlatformAgentNotFoundError)) throw error;
+    }
+
     const [participant] = await this.db
       .select({ agentId: threadParticipants.agent_id })
       .from(threadParticipants)
@@ -119,18 +156,25 @@ class DrizzleDefaultAgentRoutingRepository implements DefaultAgentRoutingReposit
       .orderBy(asc(threadParticipants.created_at), asc(threadParticipants.id))
       .limit(1);
     if (participant?.agentId) return { agentId: participant.agentId };
+    return null;
+  }
 
-    const [thread] = await this.db
-      .select({ agentId: threads.agent_id })
-      .from(threads)
+  async assignThreadDefaultAgent(input: {
+    tenantId: string;
+    threadId: string;
+    agentId: string;
+  }) {
+    await this.db
+      .update(threads)
+      .set({ agent_id: input.agentId })
       .where(
         and(
           eq(threads.tenant_id, input.tenantId),
           eq(threads.id, input.threadId),
+          isNull(threads.agent_id),
+          isNull(threads.computer_id),
         ),
-      )
-      .limit(1);
-    return thread?.agentId ? { agentId: thread.agentId } : null;
+      );
   }
 
   async findExistingWakeup(input: {

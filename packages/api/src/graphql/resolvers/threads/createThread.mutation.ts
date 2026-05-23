@@ -31,6 +31,10 @@ import {
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
 import { canPostToSpace } from "../spaces/shared.js";
+import {
+  PlatformAgentNotFoundError,
+  resolveTenantPlatformAgent,
+} from "../../../lib/agents/tenant-platform-agent.js";
 
 export const createThread = async (
   _parent: any,
@@ -100,6 +104,9 @@ export const createThread = async (
     requesterUserId: createdByType === "user" ? createdById : null,
     requestedComputerId: i.computerId ?? null,
   });
+  const threadAgentId = threadComputer
+    ? null
+    : (i.agentId ?? (await resolveDefaultThreadAgentId(i.tenantId)));
 
   // PRD-09 §9.4.4: Agent-created thread validation
   if (createdByType === "agent" && createdById) {
@@ -156,7 +163,7 @@ export const createThread = async (
       .insert(threads)
       .values({
         tenant_id: i.tenantId,
-        agent_id: threadComputer ? null : i.agentId,
+        agent_id: threadAgentId ?? undefined,
         computer_id: threadComputer?.id,
         space_id: threadSpace.id,
         user_id: createdByType === "user" ? createdById : undefined,
@@ -290,6 +297,15 @@ export const createThread = async (
 
   return threadToCamel(row);
 };
+
+async function resolveDefaultThreadAgentId(tenantId: string) {
+  try {
+    return (await resolveTenantPlatformAgent(tenantId)).id;
+  } catch (error) {
+    if (error instanceof PlatformAgentNotFoundError) return null;
+    throw error;
+  }
+}
 
 async function persistOpeningMessageMentions(input: {
   tenantId: string;
