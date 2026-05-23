@@ -548,6 +548,28 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
   })
 }
 
+resource "aws_iam_policy" "workspace_renderer_invoke" {
+  name        = "thinkwork-${var.stage}-workspace-renderer-invoke"
+  description = "Allow API Lambdas to invoke the workspace renderer."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["lambda:InvokeFunction"]
+      Resource = [
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer",
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer:*",
+      ]
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_workspace_renderer_invoke" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.workspace_renderer_invoke.arn
+}
+
 resource "aws_iam_policy" "thread_idle_memory_learning_invoke" {
   name        = "thinkwork-${var.stage}-thread-idle-memory-learning-invoke"
   description = "Allow API job-trigger Lambda to invoke requester idle memory learning worker."

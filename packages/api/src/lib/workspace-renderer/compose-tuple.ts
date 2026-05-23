@@ -171,7 +171,7 @@ export async function renderWorkspaceTuple(
       `No renderable agent workspace files found at ${agentPrefix}.`,
     );
   }
-  if (spaceSource.objects.length === 0) {
+  if (!isDefaultSpace(tuple) && spaceSource.objects.length === 0) {
     throw new WorkspaceRenderError(
       "SpaceSourcesNotFound",
       `No renderable Space source files found at ${spacePrefix}.`,
