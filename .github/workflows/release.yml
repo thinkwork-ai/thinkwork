@@ -115,40 +115,40 @@ jobs:
           cache-to: type=gha,scope=release-strands-arm64,mode=max
           provenance: false
 
-      - name: Build and push AgentCore Flue amd64
-        id: flue-amd64
+      - name: Build and push AgentCore Pi amd64
+        id: pi-amd64
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/agentcore-flue/agent-container/Dockerfile
+          file: packages/agentcore-pi/agent-container/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-flue-amd64
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-flue-amd64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-pi-amd64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-pi-amd64
           build-args: |
             GIT_SHA=${{ github.sha }}
             BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=release-flue-amd64
-          cache-to: type=gha,scope=release-flue-amd64,mode=max
+          cache-from: type=gha,scope=release-pi-amd64
+          cache-to: type=gha,scope=release-pi-amd64,mode=max
           provenance: false
 
-      - name: Build and push AgentCore Flue arm64
-        id: flue-arm64
+      - name: Build and push AgentCore Pi arm64
+        id: pi-arm64
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/agentcore-flue/agent-container/Dockerfile
+          file: packages/agentcore-pi/agent-container/Dockerfile
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-flue-arm64
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-flue-arm64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-pi-arm64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-pi-arm64
           build-args: |
             GIT_SHA=${{ github.sha }}
             BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=release-flue-arm64
-          cache-to: type=gha,scope=release-flue-arm64,mode=max
+          cache-from: type=gha,scope=release-pi-arm64
+          cache-to: type=gha,scope=release-pi-arm64,mode=max
           provenance: false
 
       - name: Build Computer runtime TypeScript
@@ -184,8 +184,8 @@ jobs:
             --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
             --image "name=agentcore-strands-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-strands-amd64,digest=${{ steps.strands-amd64.outputs.digest }},architecture=amd64" \
             --image "name=agentcore-strands-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-strands-arm64,digest=${{ steps.strands-arm64.outputs.digest }},architecture=arm64" \
-            --image "name=agentcore-flue-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-flue-amd64,digest=${{ steps.flue-amd64.outputs.digest }},architecture=amd64" \
-            --image "name=agentcore-flue-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-flue-arm64,digest=${{ steps.flue-arm64.outputs.digest }},architecture=arm64" \
+            --image "name=agentcore-pi-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-amd64,digest=${{ steps.pi-amd64.outputs.digest }},architecture=amd64" \
+            --image "name=agentcore-pi-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-arm64,digest=${{ steps.pi-arm64.outputs.digest }},architecture=arm64" \
             --image "name=computer-runtime-arm64,repository=${COMPUTER_RUNTIME_REPOSITORY},tag=${GITHUB_REF_NAME}-arm64,digest=${{ steps.computer-runtime-arm64.outputs.digest }},architecture=arm64"
 
       - name: Upload deployable release assets

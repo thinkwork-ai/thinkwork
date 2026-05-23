@@ -52,7 +52,7 @@ export type UIMessageChunk = AiUIMessageChunk<unknown, Record<string, unknown>>;
 
 /**
  * Legacy `{text}`-shape envelope produced by the pre-typed `appsync_publisher`
- * Python path and by non-Computer agents (Flue, sub-agents) sharing the
+ * Python path and by non-Computer agents (Pi, sub-agents) sharing the
  * AgentCore runtime. The AppSync chunk parser detects this shape and routes
  * it to the legacy text-append fallback in `ui-message-merge.ts`. Once the
  * Phase 2 cleanup of plan-012 retires the legacy path entirely, this type

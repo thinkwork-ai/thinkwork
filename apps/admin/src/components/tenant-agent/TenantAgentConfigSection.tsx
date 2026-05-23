@@ -1,12 +1,19 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation } from "urql";
 import { ModelSelect } from "@/components/agents/ModelSelect";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AgentRuntime,
   type TenantAgentQuery,
   type UpdateTenantAgentInput,
 } from "@/gql/graphql";
@@ -23,37 +30,22 @@ export function TenantAgentConfigSection({
   agent: TenantAgent;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState(agent.name);
-  const [role, setRole] = useState(agent.role ?? "");
   const [model, setModel] = useState(agent.model ?? "");
-  const [budgetMonthlyCents, setBudgetMonthlyCents] = useState(
-    agent.budgetMonthlyCents?.toString() ?? "",
-  );
+  const [runtime, setRuntime] = useState<AgentRuntime>(agent.runtime);
   const [{ fetching }, updateTenantAgent] = useMutation(
     UpdateTenantAgentMutation,
   );
 
   useEffect(() => {
-    setName(agent.name);
-    setRole(agent.role ?? "");
     setModel(agent.model ?? "");
-    setBudgetMonthlyCents(agent.budgetMonthlyCents?.toString() ?? "");
+    setRuntime(agent.runtime);
   }, [agent]);
-
-  const budgetValue = useMemo(() => {
-    const trimmed = budgetMonthlyCents.trim();
-    if (!trimmed) return null;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
-  }, [budgetMonthlyCents]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const input: UpdateTenantAgentInput = {
-      name: name.trim(),
-      role: role.trim() || null,
       model: model || null,
-      budgetMonthlyCents: budgetValue,
+      runtime,
     };
 
     const result = await updateTenantAgent({ tenantId, input });
@@ -73,39 +65,28 @@ export function TenantAgentConfigSection({
       <section className="rounded-md border p-4">
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="tenant-agent-name">Name</Label>
-            <Input
-              id="tenant-agent-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="tenant-agent-role">Role</Label>
-            <Input
-              id="tenant-agent-role"
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
             <Label htmlFor="tenant-agent-model">Model</Label>
             <ModelSelect value={model} onValueChange={setModel} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="tenant-agent-budget">Monthly budget cents</Label>
-            <Input
-              id="tenant-agent-budget"
-              inputMode="numeric"
-              value={budgetMonthlyCents}
-              onChange={(event) => setBudgetMonthlyCents(event.target.value)}
-              placeholder="Inherit account default"
-            />
+            <Label htmlFor="tenant-agent-runtime">Runtime</Label>
+            <Select
+              value={runtime}
+              onValueChange={(value) => setRuntime(value as AgentRuntime)}
+            >
+              <SelectTrigger id="tenant-agent-runtime" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={AgentRuntime.Strands}>Strands</SelectItem>
+                <SelectItem value={AgentRuntime.Flue}>Pi</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </section>
       <div className="flex justify-end">
-        <Button type="submit" disabled={fetching || !name.trim()}>
+        <Button type="submit" disabled={fetching}>
           {fetching ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (

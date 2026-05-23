@@ -44,15 +44,15 @@ locals {
     # rejects every call, which is the safe default pre-rollout.
     THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
     AGENTCORE_FUNCTION_NAME            = var.agentcore_function_name
-    AGENTCORE_FLUE_FUNCTION_NAME       = var.agentcore_flue_function_name
+    AGENTCORE_PI_FUNCTION_NAME         = var.agentcore_pi_function_name
     # SSM parameter names for the Bedrock AgentCore Runtime IDs (one per
     # runtime type). deploy.yml's "Update AgentCore Runtimes" job writes
     # these in `update-agentcore-runtime-image.sh`. eval-runner reads them
     # via `loadRuntimeId(runtimeType)` to start a Bedrock-control-plane
-    # invocation against the right runtime — pre-U3 the flue path was
+    # invocation against the right runtime — pre-U3 the pi path was
     # dead because the env var was never wired here.
     AGENTCORE_RUNTIME_SSM_STRANDS    = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
-    AGENTCORE_RUNTIME_SSM_FLUE       = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
+    AGENTCORE_RUNTIME_SSM_PI         = "/thinkwork/${var.stage}/agentcore/runtime-id-pi"
     WORKSPACE_RENDERER_FUNCTION_NAME = "thinkwork-${var.stage}-api-workspace-renderer"
     WORKSPACE_BUCKET                 = var.bucket_name
     HINDSIGHT_ENDPOINT               = var.hindsight_endpoint
@@ -724,7 +724,7 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
   maximum_event_age_in_seconds = 3600
 }
 
-# Per-turn auto-retain: the runtime (Strands + Flue) Event-invokes
+# Per-turn auto-retain: the runtime (Strands + Pi) Event-invokes
 # memory-retain after every chat turn. AWS Lambda's default async-retry
 # policy is 2 attempts; without overriding it, a transient failure on the
 # canonical-transcript fetch or adapter write retries the entire writeback

@@ -2,7 +2,7 @@
 # Create an AgentCore Runtime for a given SST stage.
 #
 # Usage:
-#   bash scripts/create-runtime.sh --stage main --runtime flue
+#   bash scripts/create-runtime.sh --stage main --runtime pi
 #   bash scripts/create-runtime.sh --stage ericodom --runtime chat
 #
 # The --stage flag determines resource names:
@@ -37,16 +37,20 @@ fi
 
 # Validate runtime type
 case "$RUNTIME" in
-  chat|code|flue|sdk|strands) ;;
+  chat|code|pi|sdk|strands) ;;
   *)
-    echo "Error: --runtime must be 'chat', 'code', 'flue', 'sdk', or 'strands' (got '$RUNTIME')"
+    echo "Error: --runtime must be 'chat', 'code', 'pi', 'sdk', or 'strands' (got '$RUNTIME')"
     exit 1
     ;;
 esac
 
 ACCOUNT_ID="487219502366"
 ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/thinkwork-${STAGE}-agentcore"
-ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-role"
+if [[ "$RUNTIME" == "pi" ]]; then
+  ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-pi-role"
+else
+  ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-role"
+fi
 RUNTIME_NAME="${RUNTIME_NAME:-thinkwork-${STAGE}-runtime-${RUNTIME}}"
 
 # Type-specific SSM path

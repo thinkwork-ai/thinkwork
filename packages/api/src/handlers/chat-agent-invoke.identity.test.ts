@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   renderWorkspaceTupleForInvoke,
   resolveChatInvokeIdentity,
+  resolveChatInvocationRuntimeType,
   type ChatInvokeIdentityDeps,
 } from "./chat-agent-invoke.js";
 
@@ -112,6 +113,35 @@ describe("resolveChatInvokeIdentity", () => {
       source: "none",
     });
     expect(subject.loadAgentHumanPair).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveChatInvocationRuntimeType", () => {
+  it("uses the configured Pi runtime for normal agent turns", () => {
+    expect(
+      resolveChatInvocationRuntimeType({
+        configuredRuntimeType: "pi",
+      }),
+    ).toBe("pi");
+  });
+
+  it("forces Computer-backed turns onto Strands", () => {
+    expect(
+      resolveChatInvocationRuntimeType({
+        configuredRuntimeType: "pi",
+        computerId: "computer-1",
+        computerTaskId: "task-1",
+      }),
+    ).toBe("strands");
+  });
+
+  it("does not force Strands unless both Computer identifiers are present", () => {
+    expect(
+      resolveChatInvocationRuntimeType({
+        configuredRuntimeType: "pi",
+        computerId: "computer-1",
+      }),
+    ).toBe("pi");
   });
 });
 

@@ -218,8 +218,8 @@ variable "agentcore_function_name" {
   default     = ""
 }
 
-variable "agentcore_flue_function_name" {
-  description = "Flue AgentCore Lambda function name (for direct SDK invoke); empty until the Flue runtime is provisioned for the stage."
+variable "agentcore_pi_function_name" {
+  description = "Pi AgentCore Lambda function name (for direct SDK invoke); empty until the Pi runtime is provisioned for the stage."
   type        = string
   default     = ""
 }
@@ -230,8 +230,8 @@ variable "agentcore_function_arn" {
   default     = ""
 }
 
-variable "agentcore_flue_function_arn" {
-  description = "Flue AgentCore Lambda function ARN (used to grant lambda:InvokeFunction)"
+variable "agentcore_pi_function_arn" {
+  description = "Pi AgentCore Lambda function ARN (used to grant lambda:InvokeFunction)"
   type        = string
   default     = ""
 }

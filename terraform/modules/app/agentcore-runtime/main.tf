@@ -152,9 +152,9 @@ resource "aws_iam_role" "agentcore" {
 }
 
 resource "aws_iam_role_policy" "agentcore" {
-  # Sibling policy: ../agentcore-flue/main.tf `aws_iam_role_policy.agentcore_flue`.
+  # Sibling policy: ../agentcore-pi/main.tf `aws_iam_role_policy.agentcore_pi`.
   # The two policies share ~83% of statements (S3, Bedrock, AgentCore Memory,
-  # Code Interpreter, Logs, X-Ray, ECR, SSM, MemoryRetain). Flue adds Aurora
+  # Code Interpreter, Logs, X-Ray, ECR, SSM, MemoryRetain). Pi adds Aurora
   # Data API + Secrets Manager for U4 SessionStore. Keep both surfaces in
   # sync for shared statements.
   name = "agentcore-permissions"
@@ -466,9 +466,7 @@ output "agentcore_async_dlq_url" {
   value       = aws_sqs_queue.agentcore_async_dlq.url
 }
 
-# Plan §005 U1 → U2 — the `agentcore_flue` resources that previously lived here
-# (renamed from `agentcore_pi` in U1) moved out to `../agentcore-flue/main.tf` in
-# U2. Cross-module state migration is declared in `terraform/modules/thinkwork/main.tf`
-# via `moved {}` blocks at the parent composition layer. The U1 in-module `moved`
-# blocks (`agentcore_pi` → `agentcore_flue`) were applied on the U1 deploy and
-# are no longer needed here — the resources have left the module entirely.
+# The dedicated non-Strands runtime now lives in `../agentcore-pi/main.tf`.
+# Cross-module state migration for the Flue-module to Pi-module rename is
+# declared in `terraform/modules/thinkwork/main.tf` via parent-level `moved {}`
+# blocks.

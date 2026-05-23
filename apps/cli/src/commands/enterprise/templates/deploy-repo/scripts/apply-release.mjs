@@ -138,16 +138,16 @@ async function updateAgentCoreRuntimes() {
     "text",
   ]);
 
-  for (const runtime of ["strands", "flue"]) {
+  for (const runtime of ["strands", "pi"]) {
     const image = copied.find(
       (item) => item.runtime === runtime && item.architecture === "arm64",
     );
     if (!image) continue;
     const runtimeId = findAgentCoreRuntimeId({ stage, runtime, region });
     if (!runtimeId) {
-      if (runtime === "flue") {
+      if (runtime === "pi") {
         updates.push(
-          createFlueAgentCoreRuntime({
+          createPiAgentCoreRuntime({
             stage,
             region,
             accountId,
@@ -204,11 +204,11 @@ function findAgentCoreRuntimeId({ stage, runtime, region }) {
   return listed && listed !== "None" ? listed : "";
 }
 
-function createFlueAgentCoreRuntime({ stage, region, accountId, imageUri }) {
+function createPiAgentCoreRuntime({ stage, region, accountId, imageUri }) {
   if (!accountId) {
-    throw new Error("AWS account ID is required to create the Flue runtime");
+    throw new Error("AWS account ID is required to create the Pi runtime");
   }
-  const runtimeNameValue = `thinkwork_${stage}_flue`;
+  const runtimeNameValue = `thinkwork_${stage}_pi`;
   const runtimeId = awsText([
     "bedrock-agentcore-control",
     "create-agent-runtime",
@@ -219,7 +219,7 @@ function createFlueAgentCoreRuntime({ stage, region, accountId, imageUri }) {
     "--agent-runtime-artifact",
     `containerConfiguration={containerUri=${imageUri}}`,
     "--role-arn",
-    canonicalAgentCoreRoleArn({ stage, runtime: "flue", accountId }),
+    canonicalAgentCoreRoleArn({ stage, runtime: "pi", accountId }),
     "--network-configuration",
     "networkMode=PUBLIC",
     "--protocol-configuration",
@@ -236,7 +236,7 @@ function createFlueAgentCoreRuntime({ stage, region, accountId, imageUri }) {
     "ssm",
     "put-parameter",
     "--name",
-    `/thinkwork/${stage}/agentcore/runtime-id-flue`,
+    `/thinkwork/${stage}/agentcore/runtime-id-pi`,
     "--value",
     runtimeId,
     "--type",
@@ -245,9 +245,9 @@ function createFlueAgentCoreRuntime({ stage, region, accountId, imageUri }) {
     "--region",
     region,
   ]);
-  waitForAgentCoreRuntime({ runtime: "flue", runtimeId, region, imageUri });
+  waitForAgentCoreRuntime({ runtime: "pi", runtimeId, region, imageUri });
   return {
-    runtime: "flue",
+    runtime: "pi",
     status: "created",
     image: imageUri,
     runtimeId,
@@ -369,8 +369,8 @@ function waitForAgentCoreRuntime({
 
 function canonicalAgentCoreRoleArn({ stage, runtime, accountId }) {
   const roleName =
-    runtime === "flue"
-      ? `thinkwork-${stage}-agentcore-flue-role`
+    runtime === "pi"
+      ? `thinkwork-${stage}-agentcore-pi-role`
       : `thinkwork-${stage}-agentcore-role`;
   return `arn:aws:iam::${accountId}:role/${roleName}`;
 }
@@ -567,7 +567,7 @@ async function sha256File(path) {
 }
 
 function runtimeName(name) {
-  if (name.includes("flue")) return "flue";
+  if (name.includes("pi")) return "pi";
   if (name.includes("strands")) return "strands";
   return name;
 }
