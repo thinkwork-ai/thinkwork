@@ -197,6 +197,7 @@ export type AgentPerformance = {
   errorCount: Scalars['Int']['output'];
   invocationCount: Scalars['Int']['output'];
   p95DurationMs: Scalars['Float']['output'];
+  runtimeType?: Maybe<Scalars['String']['output']>;
   totalCostUsd: Scalars['Float']['output'];
   totalInputTokens: Scalars['Int']['output'];
   totalOutputTokens: Scalars['Int']['output'];
@@ -5507,6 +5508,7 @@ export type Thread = {
   lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastReadAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastResponsePreview?: Maybe<Scalars['String']['output']>;
+  lastRuntimeType?: Maybe<Scalars['String']['output']>;
   lastTurnCompletedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lifecycleStatus?: Maybe<ThreadLifecycleStatus>;
   messages: MessageConnection;
@@ -5699,6 +5701,7 @@ export type ThreadTurn = {
   resultJson?: Maybe<Scalars['AWSJSON']['output']>;
   retryAttempt?: Maybe<Scalars['Int']['output']>;
   routineId?: Maybe<Scalars['ID']['output']>;
+  runtimeType?: Maybe<Scalars['String']['output']>;
   sessionIdAfter?: Maybe<Scalars['String']['output']>;
   sessionIdBefore?: Maybe<Scalars['String']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
@@ -5768,6 +5771,7 @@ export type TraceEvent = {
   inputTokens?: Maybe<Scalars['Int']['output']>;
   model?: Maybe<Scalars['String']['output']>;
   outputTokens?: Maybe<Scalars['Int']['output']>;
+  runtimeType?: Maybe<Scalars['String']['output']>;
   threadId?: Maybe<Scalars['ID']['output']>;
   traceId: Scalars['String']['output'];
 };

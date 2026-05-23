@@ -15,6 +15,7 @@ export const threadTraces = async (_parent: any, args: any, _ctx: GraphQLContext
 			threadId: costEvents.thread_id,
 			agentId: costEvents.agent_id,
 			agentName: agents.name,
+			runtimeType: costEvents.runtime_type,
 			model: costEvents.model,
 			inputTokens: costEvents.input_tokens,
 			outputTokens: costEvents.output_tokens,

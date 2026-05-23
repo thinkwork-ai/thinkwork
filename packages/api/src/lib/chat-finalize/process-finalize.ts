@@ -75,6 +75,7 @@ export async function processFinalize(
     trace_id: traceId,
     user_message: userMessage = "",
     agent_model: agentModel = null,
+    runtime_type: payloadRuntimeType = null,
     agent_slug: agentSlug = null,
     agent_name: agentName = null,
     duration_ms: durationMs,
@@ -93,7 +94,7 @@ export async function processFinalize(
     .update(threadTurns)
     .set({ finalized_at: new Date() })
     .where(and(eq(threadTurns.id, turnId), isNull(threadTurns.finalized_at)))
-    .returning({ id: threadTurns.id });
+    .returning({ id: threadTurns.id, runtimeType: threadTurns.runtime_type });
   if (claimed.length === 0) {
     console.log(
       `[chat-finalize] Idempotent — turn ${turnId} already finalized; skipping`,
@@ -117,6 +118,10 @@ export async function processFinalize(
 
   // ---- Completed-turn finalize chain ----------------------------------
   const invokeResult = payload.response ?? {};
+  const responseRuntimeType =
+    typeof invokeResult.runtime === "string" ? invokeResult.runtime : null;
+  const runtimeType =
+    payloadRuntimeType || responseRuntimeType || claimed[0]?.runtimeType || null;
 
   // 1. Response text + guardrail-block detection
   const responseData = invokeResult as Record<string, unknown>;
@@ -170,6 +175,7 @@ export async function processFinalize(
       threadId,
       traceId,
       bedrockRequestIds,
+      runtimeType,
     });
     await checkBudgetAndPause(tenantId, agentId);
 
@@ -231,12 +237,15 @@ export async function processFinalize(
             thread_id: threadId || undefined,
             request_id: crypto.randomUUID(),
             event_type: String(tc.event_type || "tool_cost"),
+            runtime_type: runtimeType || undefined,
             amount_usd: String(tc.amount_usd || "0.000000"),
             provider: String(tc.provider || "unknown"),
             duration_ms: (tc.duration_ms as number) || null,
             trace_id: traceId || undefined,
-            metadata:
-              (tc.metadata as Record<string, unknown> | undefined) ?? {},
+            metadata: {
+              ...((tc.metadata as Record<string, unknown> | undefined) ?? {}),
+              ...(runtimeType ? { runtime_type: runtimeType } : {}),
+            },
           })
           .onConflictDoNothing();
       }
@@ -249,6 +258,7 @@ export async function processFinalize(
   // 5. Update thread_turn as succeeded
   const turnUsage = {
     duration_ms: durationMs,
+    runtime_type: runtimeType,
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     cached_read_tokens: usage.cachedReadTokens,
@@ -267,7 +277,11 @@ export async function processFinalize(
       .set({
         status: "succeeded",
         finished_at: new Date(),
-        result_json: { response: responseText.slice(0, 10000) },
+        runtime_type: runtimeType || undefined,
+        result_json: {
+          response: responseText.slice(0, 10000),
+          runtime: runtimeType || undefined,
+        },
         usage_json: turnUsage,
       })
       .where(eq(threadTurns.id, turnId));

@@ -95,6 +95,8 @@ import {
   type RetainPayloadInput,
 } from "./runtime/tools/memory-retain-client.js";
 import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
+import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
+import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
 import {
   discoverWorkspaceSkills,
   formatWorkspaceSkills,
@@ -414,6 +416,30 @@ export async function assembleTools(
   });
   if (runSkill) tools.push(runSkill);
 
+  const sandboxInterpreterId = asString(args.payload.sandbox_interpreter_id);
+  if (sandboxInterpreterId) {
+    const sandboxFactory = resolveSandboxFactory(
+      args.payload as { sandbox_interpreter_id: string },
+      {
+        client: args.agentCoreClient,
+      },
+    );
+    tools.push(buildExecuteCodeTool({ sandboxFactory, cleanup }));
+  } else if (args.payload.sandbox_status === "ready") {
+    throw new Error(
+      "Pi sandbox status is ready but `sandbox_interpreter_id` is missing.",
+    );
+  }
+
+  if (args.payload.browser_automation_enabled === true) {
+    tools.push(
+      buildBrowserAutomationTool({
+        client: args.agentCoreClient,
+        traceId: asString(args.payload.trace_id) || undefined,
+      }),
+    );
+  }
+
   // Memory (U6) — engine selector lives in env.
   if (args.env.memoryEngine === "managed") {
     if (args.env.agentCoreMemoryId) {
@@ -610,9 +636,9 @@ export async function runAgentLoop(
 //     run_skill envelope. A leaked API_AUTH_SECRET alone cannot forge a
 //     completion for a different tenant.
 //   - This callback ONLY fires for skill_run invocations (those carrying
-//     `skill_run_id` + `completion_hmac_secret` in the payload). Plain
-//     chat-turn invocations are completed by chat-agent-invoke once it
-//     receives the /invocations response — Pi must not double-write.
+//     `skill_run_id` + `completion_hmac_secret` in the payload). Chat-turn
+//     invocations use the chat-finalize callback when Event-mode dispatch
+//     supplies one; otherwise this remains a no-op for direct debug calls.
 // ---------------------------------------------------------------------------
 
 export interface SkillRunContext {
@@ -701,7 +727,9 @@ export async function postCompletion(
     args.attemptTimeoutMs ?? DEFAULT_COMPLETION_ATTEMPT_TIMEOUT_MS;
 
   if (!runContext) {
-    // Chat-turn invocation — chat-agent-invoke owns the writeback. Nothing to do.
+    // Chat-turn invocation — chat-finalize owns the writeback when configured.
+    // Direct debug invocations do not carry skill-run ids, so there is nothing
+    // for the skill completion endpoint to update.
     return;
   }
   if (!secrets.apiUrl || !secrets.apiAuthSecret) {
@@ -819,6 +847,186 @@ export async function postCompletion(
     runId: runContext.runId,
     attempts: totalAttempts,
   });
+}
+
+export interface FinalizeCallbackArgs {
+  payload: Record<string, unknown>;
+  identity: IdentitySnapshot;
+  result:
+    | { status: "ok"; runResult: RunAgentLoopResult; latencyMs: number }
+    | { status: "error"; error: unknown; latencyMs: number };
+  fetchImpl: typeof fetch;
+  attemptTimeoutMs?: number;
+}
+
+function usageNumber(usage: unknown, ...keys: string[]): number {
+  if (!usage || typeof usage !== "object") return 0;
+  const obj = usage as Record<string, unknown>;
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> {
+  const { payload, identity, result } = args;
+  const runResult = result.status === "ok" ? result.runResult : null;
+  const usage = runResult?.usage;
+  const errorMessage =
+    result.status === "error"
+      ? result.error instanceof Error
+        ? result.error.message
+        : String(result.error)
+      : undefined;
+
+  return {
+    thread_turn_id: asString(payload.thread_turn_id),
+    tenant_id: identity.tenantId,
+    agent_id: identity.agentId,
+    thread_id: identity.threadId,
+    trace_id: asString(payload.trace_id) || undefined,
+    user_message: asString(payload.message),
+    agent_model: runResult?.modelId || asString(payload.model) || null,
+    runtime_type: "pi",
+    agent_slug: asString(payload.instance_id) || null,
+    agent_name: asString(payload.agent_name) || null,
+    duration_ms: result.latencyMs,
+    status: result.status === "ok" ? "completed" : "failed",
+    error_message: errorMessage,
+    computer_id: asString(payload.computer_id) || null,
+    computer_task_id: asString(payload.computer_task_id) || null,
+    usage: {
+      model: runResult?.modelId || asString(payload.model) || null,
+      input_tokens: usageNumber(usage, "inputTokens", "input", "prompt_tokens"),
+      output_tokens: usageNumber(
+        usage,
+        "outputTokens",
+        "output",
+        "completion_tokens",
+      ),
+      cached_read_tokens: usageNumber(
+        usage,
+        "cachedReadTokens",
+        "cacheRead",
+        "cached_read_tokens",
+      ),
+    },
+    response: runResult
+      ? {
+          content: runResult.content,
+          runtime: "pi",
+          model: runResult.modelId,
+          usage: runResult.usage,
+          tools_called: runResult.toolsCalled,
+          tool_invocations: runResult.toolInvocations,
+          hindsight_usage: [],
+        }
+      : {
+          runtime: "pi",
+          tools_called: [],
+          tool_invocations: [],
+          hindsight_usage: [],
+        },
+  };
+}
+
+function isFinalizeCallbackConfigured(payload: Record<string, unknown>): boolean {
+  return Boolean(
+    asString(payload.finalize_callback_url) &&
+      asString(payload.finalize_callback_secret) &&
+      asString(payload.thread_turn_id),
+  );
+}
+
+export async function postFinalizeCallback(
+  args: FinalizeCallbackArgs,
+): Promise<boolean> {
+  const { payload, identity, fetchImpl } = args;
+  const callbackUrl = asString(payload.finalize_callback_url);
+  const callbackSecret = asString(payload.finalize_callback_secret);
+  const threadTurnId = asString(payload.thread_turn_id);
+  const attemptTimeoutMs =
+    args.attemptTimeoutMs ?? DEFAULT_COMPLETION_ATTEMPT_TIMEOUT_MS;
+
+  if (!callbackUrl || !callbackSecret || !threadTurnId) return false;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(callbackUrl);
+  } catch {
+    logStructured({
+      level: "error",
+      event: "finalize_callback_invalid_url",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+    });
+    return false;
+  }
+  if (
+    parsed.protocol !== "https:" &&
+    parsed.hostname !== "localhost" &&
+    parsed.hostname !== "127.0.0.1"
+  ) {
+    logStructured({
+      level: "error",
+      event: "finalize_callback_insecure_url",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+    });
+    return false;
+  }
+
+  const body = JSON.stringify(buildFinalizeBody(args));
+  const totalAttempts = COMPLETION_RETRY_DELAYS_MS.length + 1;
+  for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(callbackUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${callbackSecret}`,
+        },
+        body,
+        signal: AbortSignal.timeout(attemptTimeoutMs),
+      });
+      if (response.ok) return true;
+      logStructured({
+        level: response.status >= 500 ? "warn" : "error",
+        event: "finalize_callback_non_2xx",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        statusCode: response.status,
+        attempt,
+      });
+      if (response.status >= 400 && response.status < 500) return false;
+    } catch (err) {
+      logStructured({
+        level: "warn",
+        event: "finalize_callback_failed",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        attempt,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    if (attempt < totalAttempts - 1) {
+      const baseDelay = COMPLETION_RETRY_DELAYS_MS[attempt] ?? 0;
+      const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1);
+      const delay = Math.max(0, Math.round(baseDelay + jitter));
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  logStructured({
+    level: "error",
+    event: "finalize_callback_exhausted",
+    tenantId: identity.tenantId,
+    threadId: identity.threadId,
+    threadTurnId,
+    attempts: totalAttempts,
+  });
+  return false;
 }
 
 /**
@@ -956,35 +1164,6 @@ export async function handleInvocation(
   const workspaceSkills = await discoverSkills(env.workspaceDir);
 
   const agentCoreClient = deps.agentCoreClientFactory();
-
-  // Sandbox factory — read it before tools so a missing
-  // `sandbox_interpreter_id` fails fast (per U8: contract violation, not a
-  // runtime fallback).
-  // The current placeholder dispatch (in-process Agent loop) does not invoke
-  // the sandbox itself — U16 attaches it when worker isolation lands. We
-  // still resolve it here so the contract is enforced at U9 time.
-  try {
-    resolveSandboxFactory(args.payload as { sandbox_interpreter_id: string }, {
-      client: agentCoreClient,
-    });
-  } catch (err) {
-    logStructured({
-      level: "error",
-      event: "sandbox_resolution_failed",
-      tenantId: identity.tenantId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return {
-      statusCode: 500,
-      body: {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Sandbox factory resolution failed.",
-        runtime: "pi",
-      },
-    };
-  }
 
   // SessionStore — instantiate so failures surface here, BEFORE the agent
   // loop spends LLM tokens. The current placeholder dispatch reads no
@@ -1183,11 +1362,24 @@ export async function handleInvocation(
   const latencyMs = Date.now() - start;
 
   // Skill-run invocations carry a runId + HMAC; chat-turn invocations don't.
-  // postCompletion is a no-op for the latter — chat-agent-invoke owns the
-  // chat-turn writeback.
+  // Chat turns use the finalize callback when configured.
   const runContext = extractSkillRunContext(args.payload);
 
   if (runError !== undefined || !runResult) {
+    if (isFinalizeCallbackConfigured(args.payload)) {
+      const finalized = await postFinalizeCallback({
+        payload: args.payload,
+        identity,
+        result: { status: "error", error: runError, latencyMs },
+        fetchImpl,
+      });
+      if (finalized) {
+        return {
+          statusCode: 200,
+          body: { ok: true, finalize_dispatched: true, runtime: "pi" },
+        };
+      }
+    }
     // Try to fire the completion callback (status=error). 401 from the
     // callback throws — that's an auth-config bug we want loud, not a
     // silent failure on top of a turn failure.
@@ -1246,6 +1438,28 @@ export async function handleInvocation(
       threadId: identity.threadId,
       error: retainOutcome.error,
     });
+  }
+
+  if (isFinalizeCallbackConfigured(args.payload)) {
+    const finalized = await postFinalizeCallback({
+      payload: args.payload,
+      identity,
+      result: { status: "ok", runResult, latencyMs },
+      fetchImpl,
+    });
+    if (finalized) {
+      return {
+        statusCode: 200,
+        body: { ok: true, finalize_dispatched: true, runtime: "pi" },
+      };
+    }
+    return {
+      statusCode: 500,
+      body: {
+        error: "Pi finalize callback failed; retrying invocation.",
+        runtime: "pi",
+      },
+    };
   }
 
   await postCompletion({

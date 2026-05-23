@@ -119,6 +119,12 @@ function formatInvocationSource(source: unknown): string | null {
   );
 }
 
+function formatRuntimeType(runtimeType: unknown): string | null {
+  if (typeof runtimeType !== "string") return null;
+  const trimmed = runtimeType.trim();
+  return trimmed ? trimmed.toUpperCase() : null;
+}
+
 // ─── Turn Events ────────────────────────────────────────────────────────────
 
 function TurnEvents({ runId }: { runId: string }) {
@@ -851,6 +857,13 @@ function TurnRow({
   } | null>(null);
   const usage = parseJsonField(turn.usageJson);
   const result = parseJsonField(turn.resultJson);
+  const resultResponse =
+    result?.response && typeof result.response === "object"
+      ? (result.response as Record<string, unknown>)
+      : null;
+  const runtimeLabel = formatRuntimeType(
+    turn.runtimeType || result?.runtime || resultResponse?.runtime,
+  );
   const cfg = statusConfig[turn.status] || statusConfig.failed;
 
   const durationMs = usage?.duration_ms as number | undefined;
@@ -895,6 +908,12 @@ function TurnRow({
           {turn.retryAttempt > 0 && (
             <Badge variant="secondary" className="text-[10px]">
               retry #{turn.retryAttempt}
+            </Badge>
+          )}
+
+          {runtimeLabel && (
+            <Badge variant="outline" className="font-mono text-[10px]">
+              {runtimeLabel}
             </Badge>
           )}
 
@@ -949,6 +968,7 @@ function TurnRow({
             {turn.invocationSource && (
               <span>Source: {turn.invocationSource}</span>
             )}
+            {runtimeLabel && <span>Runtime: {runtimeLabel}</span>}
           </div>
 
           {/* Error */}

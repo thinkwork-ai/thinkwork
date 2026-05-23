@@ -2592,6 +2592,7 @@ def _build_finalize_payload(
         "trace_id": payload.get("trace_id") or None,
         "user_message": payload.get("message") or "",
         "agent_model": result.get("model") or payload.get("model") or None,
+        "runtime_type": payload.get("runtime_type") or result.get("runtime") or "strands",
         "agent_slug": payload.get("instance_id") or None,
         "agent_name": payload.get("agent_name") or None,
         "duration_ms": duration_ms,
@@ -2612,6 +2613,7 @@ def _build_finalize_payload(
             # OpenAI-shape choices[].message.content is what chat-finalize's
             # extractResponseText() walks; preserve the shape verbatim.
             "choices": result.get("choices"),
+            "runtime": payload.get("runtime_type") or result.get("runtime") or "strands",
             "tool_invocations": result.get("tool_invocations") or [],
             "tools_called": result.get("tools_called") or [],
             "tool_costs": result.get("tool_costs") or [],

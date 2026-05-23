@@ -1,21 +1,18 @@
 /**
  * Plan §005 U8 — Resolve a Pi `SandboxFactory` from an invocation payload.
  *
- * Pi's invocation payload carries `sandbox_interpreter_id` — the
+ * When Code Interpreter is enabled, Pi's invocation payload carries
+ * `sandbox_interpreter_id` — the
  * AgentCore Code Interpreter id resolved by
  * `packages/api/src/lib/sandbox-preflight.ts` per-tenant before
  * chat-agent-invoke fires. The Pi trusted-handler reads that id
  * from the payload and constructs the connector that the agent loop
  * (and `session.task()` sub-agents) will use as their default sandbox.
  *
- * No SSM lookup. No callback. The id is part of the payload contract
- * because sandbox-preflight is the canonical per-tenant resolution
- * path — re-resolving from the runtime container would duplicate
- * tenant-scoping logic and add latency to every invocation.
- *
- * Shipped INERT in U8: `server.ts` does not call this helper yet.
- * U9's handler shell wires it in alongside the rest of the Pi
- * runtime construction (SessionStore, MCP wiring, tools).
+ * No SSM lookup. No callback. The id is part of the execute_code tool
+ * registration contract because sandbox-preflight is the canonical per-tenant
+ * resolution path — re-resolving from the runtime container would duplicate
+ * tenant-scoping logic and add latency to sandbox-enabled invocations.
  */
 
 import type { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
@@ -33,7 +30,7 @@ export interface PiInvocationPayload {
   /**
    * Per-tenant AgentCore Code Interpreter id. Set by
    * `packages/api/src/lib/sandbox-preflight.ts` upstream of
-   * chat-agent-invoke. Required — its absence is a contract violation.
+   * chat-agent-invoke when execute_code should be registered.
    */
   sandbox_interpreter_id: string;
 }

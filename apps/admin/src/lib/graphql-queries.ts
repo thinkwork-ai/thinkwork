@@ -642,6 +642,7 @@ export const ThreadsListQuery = graphql(`
       costSummary
       lastActivityAt
       lastTurnCompletedAt
+      lastRuntimeType
       lastReadAt
       archivedAt
       createdAt
@@ -1903,6 +1904,7 @@ export const ThreadTurnsForThreadQuery = graphql(`
       triggerName
       threadId
       turnNumber
+      runtimeType
       status
       startedAt
       finishedAt
@@ -2773,6 +2775,7 @@ export const ThreadTracesQuery = graphql(`
       threadId
       agentId
       agentName
+      runtimeType
       model
       inputTokens
       outputTokens

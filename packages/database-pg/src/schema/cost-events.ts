@@ -36,6 +36,7 @@ export const costEvents = pgTable(
 		thread_id: uuid("thread_id"),
 		request_id: text("request_id").notNull(),
 		event_type: text("event_type").notNull(), // 'llm' | 'agentcore_compute'
+		runtime_type: text("runtime_type"),
 		amount_usd: numeric("amount_usd", { precision: 12, scale: 6 }).notNull(),
 		model: text("model"),
 		provider: text("provider"),
@@ -63,6 +64,7 @@ export const costEvents = pgTable(
 			table.event_type,
 		),
 		index("idx_cost_events_thread").on(table.thread_id),
+		index("idx_cost_events_runtime").on(table.tenant_id, table.runtime_type),
 		index("idx_cost_events_trace").on(table.trace_id),
 	],
 );

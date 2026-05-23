@@ -4,6 +4,7 @@ import {
 	scheduledJobs, threadTurns, costEvents,
 	snakeToCamel,
 } from "../../utils.js";
+import { withRuntimeType } from "./threadTurnRuntime.js";
 
 export const threadTurns_ = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const conditions = [eq(threadTurns.tenant_id, args.tenantId)];
@@ -20,6 +21,7 @@ export const threadTurns_ = async (_parent: any, args: any, ctx: GraphQLContext)
 			trigger_id: threadTurns.trigger_id,
 			agent_id: threadTurns.agent_id,
 			thread_id: threadTurns.thread_id,
+			runtime_type: threadTurns.runtime_type,
 			routine_id: threadTurns.routine_id,
 			invocation_source: threadTurns.invocation_source,
 			trigger_detail: threadTurns.trigger_detail,
@@ -73,7 +75,7 @@ export const threadTurns_ = async (_parent: any, args: any, ctx: GraphQLContext)
 	}
 
 	return rows.map((r) => ({
-		...snakeToCamel(r),
+		...withRuntimeType(snakeToCamel(r)),
 		totalCost: r.wakeup_request_id ? (runCostMap.get(r.wakeup_request_id) ?? null) : null,
 	}));
 };
