@@ -333,9 +333,7 @@ export function resolveChatInvocationRuntimeType(args: {
   computerId?: string | null;
   computerTaskId?: string | null;
 }): AgentRuntimeType {
-  return args.computerId && args.computerTaskId
-    ? "strands"
-    : args.configuredRuntimeType;
+  return args.configuredRuntimeType;
 }
 
 export async function resolveChatInvokeIdentity(

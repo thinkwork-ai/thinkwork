@@ -125,17 +125,17 @@ describe("resolveChatInvocationRuntimeType", () => {
     ).toBe("pi");
   });
 
-  it("forces Computer-backed turns onto Strands", () => {
+  it("uses the configured Pi runtime for Computer-backed turns", () => {
     expect(
       resolveChatInvocationRuntimeType({
         configuredRuntimeType: "pi",
         computerId: "computer-1",
         computerTaskId: "task-1",
       }),
-    ).toBe("strands");
+    ).toBe("pi");
   });
 
-  it("does not force Strands unless both Computer identifiers are present", () => {
+  it("keeps using the configured runtime when only one Computer identifier is present", () => {
     expect(
       resolveChatInvocationRuntimeType({
         configuredRuntimeType: "pi",
