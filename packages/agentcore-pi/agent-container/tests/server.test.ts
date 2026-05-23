@@ -130,6 +130,37 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
+  it("passes rendered_workspace_prefix through to workspace bootstrap", async () => {
+    process.env.WORKSPACE_BUCKET = "thinkwork-files-test";
+
+    const bootstrapCalls: unknown[][] = [];
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        rendered_workspace_prefix:
+          "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+      }),
+      deps: makeDeps({
+        bootstrapWorkspaceImpl: (async (...args: unknown[]) => {
+          bootstrapCalls.push(args);
+          return {
+            synced: 0,
+            deleted: 0,
+            total: 0,
+            prefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+          };
+        }) as never,
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(bootstrapCalls).toHaveLength(1);
+    expect(bootstrapCalls[0]?.[0]).toBe("tenant-1");
+    expect(bootstrapCalls[0]?.[1]).toBe("agent-slug");
+    expect(bootstrapCalls[0]?.[5]).toEqual({
+      workspacePrefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+    });
+  });
+
   it("stages message attachments, exposes them in the prompt, and adds file_read", async () => {
     let seenSystemPrompt = "";
     let seenTools: AgentTool<any>[] = [];
@@ -1106,6 +1137,7 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
 interface MakeDepsOptions {
   connectMcpServerFactory?: ConnectMcpServerFn;
   runAgentLoop?: typeof import("../src/server.js").runAgentLoop;
+  bootstrapWorkspaceImpl?: typeof import("../src/runtime/bootstrap-workspace.js").bootstrapWorkspace;
   fetchImpl?: typeof fetch;
   stageMessageAttachmentsImpl?: typeof import("../src/runtime/message-attachments.js").stageMessageAttachments;
   /** Hook fired after the agent loop finally block (before returning). */
@@ -1138,7 +1170,8 @@ function makeDeps(opts: MakeDepsOptions = {}) {
     sessionStoreFactory: () => ({}) as never,
     fetchImpl: opts.fetchImpl,
     runAgentLoop: opts.runAgentLoop ?? stubAgentLoop,
-    bootstrapWorkspaceImpl: (async () => {}) as never,
+    bootstrapWorkspaceImpl:
+      opts.bootstrapWorkspaceImpl ?? ((async () => {}) as never),
     stageMessageAttachmentsImpl: opts.stageMessageAttachmentsImpl,
     discoverWorkspaceSkillsImpl: (async () => []) as never,
     onHandlerComplete: opts.onHandlerComplete,

@@ -1,10 +1,12 @@
 /**
- * Workspace bootstrap — flat S3 sync of the agent's prefix to local disk.
+ * Workspace bootstrap — flat S3 sync of a scoped workspace prefix to local disk.
  *
  * Per docs/plans/2026-04-27-003 (materialize-at-write-time): the runtime
- * reads only the agent's S3 prefix. There is no overlay walk, no template
- * fallback, no read-time substitution. Bootstrap is "list the prefix,
- * download every file."
+ * reads one already-materialized S3 prefix. There is no overlay walk, no
+ * template fallback, no read-time substitution. Bootstrap is "list the prefix,
+ * download every file." Most invocations use the rendered Agent + Space + User
+ * workspace prefix prepared by the API; legacy invocations fall back to the
+ * agent's raw workspace prefix.
  *
  * TypeScript port of the Strands `bootstrap_workspace.py` helper —
  * intentionally identical contract so an agent invoked on either runtime
@@ -32,10 +34,57 @@ export interface BootstrapResult {
   synced: number;
   deleted: number;
   total: number;
+  prefix: string;
+}
+
+export interface BootstrapWorkspaceOptions {
+  workspacePrefix?: string;
 }
 
 function agentPrefix(tenantSlug: string, agentSlug: string): string {
   return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+}
+
+function normalizeRenderedWorkspacePrefix(
+  tenantSlug: string,
+  agentSlug: string,
+  workspacePrefix: string,
+): string {
+  const trimmed = workspacePrefix.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("/") || trimmed.includes("\\")) {
+    throw new Error("rendered_workspace_prefix must be a relative S3 prefix.");
+  }
+
+  const normalized = trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    throw new Error("rendered_workspace_prefix contains an unsafe path segment.");
+  }
+
+  const allowedPrefix = `tenants/${tenantSlug}/rendered/${agentSlug}/`;
+  if (!normalized.startsWith(allowedPrefix)) {
+    throw new Error(
+      "rendered_workspace_prefix is outside the expected tenant/agent scope.",
+    );
+  }
+
+  return normalized;
+}
+
+function resolveWorkspacePrefix(
+  tenantSlug: string,
+  agentSlug: string,
+  options: BootstrapWorkspaceOptions = {},
+): string {
+  const renderedPrefix = options.workspacePrefix
+    ? normalizeRenderedWorkspacePrefix(
+        tenantSlug,
+        agentSlug,
+        options.workspacePrefix,
+      )
+    : "";
+  return renderedPrefix || agentPrefix(tenantSlug, agentSlug);
 }
 
 async function listAgentKeys(
@@ -96,8 +145,9 @@ export async function bootstrapWorkspace(
   localDir: string,
   s3: S3Client,
   bucket: string,
+  options: BootstrapWorkspaceOptions = {},
 ): Promise<BootstrapResult> {
-  const prefix = agentPrefix(tenantSlug, agentSlug);
+  const prefix = resolveWorkspacePrefix(tenantSlug, agentSlug, options);
   const remote = await listAgentKeys(s3, bucket, prefix);
   const remoteSet = new Set(remote);
 
@@ -132,7 +182,7 @@ export async function bootstrapWorkspace(
   // Best-effort orphan-dir cleanup so deletions don't leave empty trees.
   await pruneEmptyDirs(localDir, localDir);
 
-  return { synced, deleted, total: remote.length };
+  return { synced, deleted, total: remote.length, prefix };
 }
 
 async function pruneEmptyDirs(root: string, dir: string): Promise<void> {

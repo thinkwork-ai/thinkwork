@@ -18,20 +18,21 @@ import {
 import { bootstrapWorkspace } from "../src/runtime/bootstrap-workspace.js";
 
 const PREFIX = "tenants/acme/agents/marco/workspace/";
+const RENDERED_PREFIX = "tenants/acme/rendered/marco/sales/eric/";
 // aws-sdk-client-mock's middleware-stack types and @aws-sdk/client-s3
 // drift on minor SDK version bumps; the runtime behavior is correct
 // regardless of the mismatch surfaced at the type level.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const s3Mock = mockClient(S3Client as any) as any;
 
-function stubRemote(files: Record<string, string>) {
+function stubRemote(files: Record<string, string>, prefix = PREFIX) {
   s3Mock.on(ListObjectsV2Command).resolves({
-    Contents: Object.keys(files).map((rel) => ({ Key: PREFIX + rel })),
+    Contents: Object.keys(files).map((rel) => ({ Key: prefix + rel })),
     IsTruncated: false,
   } as never);
   for (const [rel, body] of Object.entries(files)) {
     const bytes = new TextEncoder().encode(body);
-    s3Mock.on(GetObjectCommand, { Key: PREFIX + rel }).resolves({
+    s3Mock.on(GetObjectCommand, { Key: prefix + rel }).resolves({
       Body: {
         transformToByteArray: async () => bytes,
       } as unknown as never,
@@ -79,7 +80,12 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
 
     const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test");
 
-    expect(result).toEqual({ synced: 3, deleted: 0, total: 3 });
+    expect(result).toEqual({
+      synced: 3,
+      deleted: 0,
+      total: 3,
+      prefix: PREFIX,
+    });
     const files = await readFiles(tmp);
     expect(files["AGENTS.md"]).toBe("# Marco of Acme");
     expect(files["IDENTITY.md"]).toBe("I am Marco.");
@@ -149,6 +155,59 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
 
     const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test");
 
-    expect(result).toEqual({ synced: 0, deleted: 0, total: 0 });
+    expect(result).toEqual({ synced: 0, deleted: 0, total: 0, prefix: PREFIX });
+  });
+
+  it("syncs the rendered Agent + Space + User workspace when provided", async () => {
+    stubRemote(
+      {
+        "AGENTS.md": "# Marco in Sales",
+        "USER.md": "- Name: Eric Odom",
+        "space/SPACE.md": "# Sales",
+      },
+      RENDERED_PREFIX,
+    );
+
+    const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: RENDERED_PREFIX,
+    });
+
+    expect(result).toEqual({
+      synced: 3,
+      deleted: 0,
+      total: 3,
+      prefix: RENDERED_PREFIX,
+    });
+    const files = await readFiles(tmp);
+    expect(files["USER.md"]).toBe("- Name: Eric Odom");
+    expect(files["space/SPACE.md"]).toBe("# Sales");
+  });
+
+  it("rejects rendered workspace prefixes outside the tenant/agent scope", async () => {
+    await expect(
+      bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+        workspacePrefix: "tenants/other/rendered/marco/sales/eric/",
+      }),
+    ).rejects.toThrow("outside the expected tenant/agent scope");
+
+    await expect(
+      bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+        workspacePrefix: "tenants/acme/rendered/other-agent/sales/eric/",
+      }),
+    ).rejects.toThrow("outside the expected tenant/agent scope");
+  });
+
+  it("rejects unsafe rendered workspace prefixes", async () => {
+    await expect(
+      bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+        workspacePrefix: "/tenants/acme/rendered/marco/sales/eric/",
+      }),
+    ).rejects.toThrow("relative S3 prefix");
+
+    await expect(
+      bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+        workspacePrefix: "tenants/acme/rendered/marco/../eric/",
+      }),
+    ).rejects.toThrow("unsafe path segment");
   });
 });
