@@ -26,9 +26,23 @@ function stubWindow(origin: string): { navigations: string[] } {
   return { navigations };
 }
 
+function stubSessionStorage(): Map<string, string> {
+  const storage = new Map<string, string>();
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      removeItem: (key: string) => storage.delete(key),
+      setItem: (key: string, value: string) => storage.set(key, value),
+    },
+  });
+  return storage;
+}
+
 afterEach(() => {
   // Drop the stub so test isolation holds.
   delete (globalThis as { window?: unknown }).window;
+  delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
 });
 
 describe("getGoogleSignInUrl", () => {
@@ -57,5 +71,39 @@ describe("signOut", () => {
     // Cognito LogoutURLs allowlist contains bare origins; the `_authed` route
     // guard bounces the unauthenticated user to /sign-in once they land.
     expect(target.searchParams.get("logout_uri")).toBe("https://admin.example");
+  });
+});
+
+describe("post-auth redirects", () => {
+  it("stores and consumes safe relative redirect paths", async () => {
+    const storage = stubSessionStorage();
+    const { consumePostAuthRedirect, rememberPostAuthRedirect } =
+      await import("./auth");
+
+    rememberPostAuthRedirect("/onboarding/welcome?session_id=cs_test_123");
+
+    expect(storage.get("thinkwork:post-auth-redirect")).toBe(
+      "/onboarding/welcome?session_id=cs_test_123",
+    );
+    expect(consumePostAuthRedirect()).toBe(
+      "/onboarding/welcome?session_id=cs_test_123",
+    );
+    expect(storage.has("thinkwork:post-auth-redirect")).toBe(false);
+  });
+
+  it("ignores unsafe post-auth redirect paths", async () => {
+    const storage = stubSessionStorage();
+    const { consumePostAuthRedirect, rememberPostAuthRedirect } =
+      await import("./auth");
+
+    rememberPostAuthRedirect("https://evil.example");
+    expect(storage.has("thinkwork:post-auth-redirect")).toBe(false);
+
+    rememberPostAuthRedirect("//evil.example");
+    expect(storage.has("thinkwork:post-auth-redirect")).toBe(false);
+
+    storage.set("thinkwork:post-auth-redirect", "//evil.example");
+    expect(consumePostAuthRedirect("/dashboard")).toBe("/dashboard");
+    expect(storage.has("thinkwork:post-auth-redirect")).toBe(false);
   });
 });
