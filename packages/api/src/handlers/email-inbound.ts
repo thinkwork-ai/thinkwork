@@ -252,7 +252,7 @@ async function sendLegacyAddressRetirementNotice(input: {
                 `Your email to ${input.recipientEmail} was not delivered.`,
                 "",
                 "Thinkwork agent email addresses now use Space addresses in the form:",
-                "space-slug@tenant-slug.thinkwork.ai",
+                "tenant-slug.space-slug@agents.thinkwork.ai",
                 "",
                 "Please contact the recipient for the current Space email address and resend your message there.",
                 "",

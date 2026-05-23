@@ -1,7 +1,7 @@
-const SPACE_EMAIL_BASE_DOMAIN = "thinkwork.ai";
+const SPACE_EMAIL_BASE_DOMAIN = "agents.thinkwork.ai";
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
-const SPACE_RECIPIENT_PATTERN = /^([a-z0-9-]+)@([a-z0-9-]+)\.thinkwork\.ai$/;
-const LEGACY_SPACE_EMAIL_SUBDOMAIN = "agents";
+const SPACE_RECIPIENT_PATTERN =
+  /^([a-z0-9-]+)\.([a-z0-9-]+)@agents\.thinkwork\.ai$/;
 
 export function deriveSpaceAddress(input: {
   tenantSlug: string;
@@ -17,7 +17,7 @@ export function deriveSpaceAddress(input: {
   if (!SLUG_PATTERN.test(spaceSlug)) {
     throw new Error(`Invalid Space slug for Space email address: ${spaceSlug}`);
   }
-  return `${spaceSlug}@${tenantSlug}.${SPACE_EMAIL_BASE_DOMAIN}`;
+  return `${tenantSlug}.${spaceSlug}@${SPACE_EMAIL_BASE_DOMAIN}`;
 }
 
 export function parseSpaceRecipient(
@@ -25,7 +25,6 @@ export function parseSpaceRecipient(
 ): { tenantSlug: string; spaceSlug: string } | null {
   const match = fullAddress.trim().toLowerCase().match(SPACE_RECIPIENT_PATTERN);
   if (!match) return null;
-  const [, spaceSlug, tenantSlug] = match;
-  if (tenantSlug === LEGACY_SPACE_EMAIL_SUBDOMAIN) return null;
+  const [, tenantSlug, spaceSlug] = match;
   return { tenantSlug, spaceSlug };
 }

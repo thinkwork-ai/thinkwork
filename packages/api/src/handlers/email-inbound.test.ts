@@ -192,7 +192,7 @@ describe("email-inbound routing", () => {
       [{ id: "user-eric" }],
     );
 
-    await handler(emailEvent("finance@acme.thinkwork.ai"));
+    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).toHaveBeenCalledWith({
       tenantId: "tenant-acme",
@@ -218,7 +218,7 @@ describe("email-inbound routing", () => {
       },
     ]);
 
-    await handler(emailEvent("finance@acme.thinkwork.ai"));
+    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
@@ -239,7 +239,7 @@ describe("email-inbound routing", () => {
       [],
     );
 
-    await handler(emailEvent("finance@acme.thinkwork.ai"));
+    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
@@ -269,7 +269,7 @@ describe("email-inbound routing", () => {
       ],
     );
 
-    await handler(emailEvent("finance@acme.thinkwork.ai"));
+    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toEqual(
@@ -337,7 +337,7 @@ describe("email-inbound routing", () => {
       [{ count: 0 }],
     );
 
-    await handler(emailEvent("finance@acme.thinkwork.ai"));
+    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toEqual(
@@ -373,24 +373,24 @@ describe("email-inbound routing", () => {
       },
     ]);
 
-    await handler(emailEvent("finance@acme.thinkwork.ai"));
+    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
   });
 
-  it("sends a retirement notice for legacy tenant-dot-space addresses", async () => {
-    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
+  it("sends a retirement notice for old tenant subdomain Space addresses", async () => {
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
     expect(mockSesSend).toHaveBeenCalledOnce();
     const command = mockSesSend.mock.calls[0][0];
     expect(command.input.Message.Body.Text.Data).toContain(
-      "Your email to acme.finance@agents.thinkwork.ai was not delivered.",
+      "Your email to finance@acme.thinkwork.ai was not delivered.",
     );
     expect(command.input.Message.Body.Text.Data).toContain(
-      "space-slug@tenant-slug.thinkwork.ai",
+      "tenant-slug.space-slug@agents.thinkwork.ai",
     );
   });
 
@@ -411,7 +411,7 @@ describe("email-inbound routing", () => {
       },
     });
     expect(command.input.Message.Body.Text.Data).toContain(
-      "space-slug@tenant-slug.thinkwork.ai",
+      "tenant-slug.space-slug@agents.thinkwork.ai",
     );
   });
 });
