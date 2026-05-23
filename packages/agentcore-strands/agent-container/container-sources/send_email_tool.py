@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import urllib.error
 import urllib.request
@@ -69,6 +70,8 @@ def build_send_email_tool(
     agent_id = str(send_email_config.get("agentId") or "")
     tenant_id = str(send_email_config.get("tenantId") or "")
     default_thread_id = str(send_email_config.get("threadId") or "")
+    active_space_tenant_slug = os.environ.get("ACTIVE_SPACE_TENANT_SLUG", "")
+    active_space_slug = os.environ.get("ACTIVE_SPACE_SLUG", "")
     inbound_message_id = str(send_email_config.get("inboundMessageId") or "")
     inbound_from = str(send_email_config.get("inboundFrom") or "")
     inbound_body = str(send_email_config.get("inboundBody") or "")
@@ -131,6 +134,9 @@ def build_send_email_tool(
             "subject": subject,
             "body": body,
         }
+        if active_space_tenant_slug and active_space_slug:
+            payload["spaceTenantSlug"] = active_space_tenant_slug
+            payload["spaceSlug"] = active_space_slug
         resolved_thread_id = thread_id or default_thread_id
         if resolved_thread_id:
             payload["threadId"] = resolved_thread_id

@@ -177,7 +177,7 @@ describe("email-send HTTP agent invocation", () => {
     });
   });
 
-  it("falls back to the configured legacy address when Space context is missing", async () => {
+  it("rejects sends when Space context is missing", async () => {
     selectRows.push(
       [{ id: agentId, tenant_id: tenantId, slug: "finance-agent" }],
       [{ enabled: true, config: { vanityAddress: "legacy-finance" } }],
@@ -192,16 +192,12 @@ describe("email-send HTTP agent invocation", () => {
       }),
     );
 
-    expect(result).toMatchObject({ statusCode: 200 });
-    const command = mockSesSend.mock.calls[0][0];
-    expect(command.input.Source).toBe("legacy-finance@agents.thinkwork.ai");
-    const rawMessage = Buffer.from(command.input.RawMessage.Data).toString(
-      "utf8",
+    expect(result).toMatchObject({ statusCode: 400 });
+    expect(JSON.parse(result.body as string).error).toContain(
+      "Active Space email context is required",
     );
-    expect(rawMessage).toContain("From: legacy-finance@agents.thinkwork.ai");
-    expect(rawMessage).toContain(
-      "Reply-To: legacy-finance@agents.thinkwork.ai",
-    );
+    expect(mockSesSend).not.toHaveBeenCalled();
+    expect(insertedReplyTokens).toHaveLength(0);
   });
 
   it("does not persist a reply token when SES rejects the send", async () => {

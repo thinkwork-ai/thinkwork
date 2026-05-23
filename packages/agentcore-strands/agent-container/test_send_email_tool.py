@@ -7,6 +7,8 @@ import send_email_tool
 
 def test_send_email_tool_posts_to_platform_api(monkeypatch):
     calls = []
+    monkeypatch.setenv("ACTIVE_SPACE_TENANT_SLUG", "acme")
+    monkeypatch.setenv("ACTIVE_SPACE_SLUG", "finance")
 
     def fake_post_json(url, *, headers, payload):
         calls.append((url, headers, payload))
@@ -35,6 +37,8 @@ def test_send_email_tool_posts_to_platform_api(monkeypatch):
     assert calls[0][2]["agentId"] == "agent-1"
     assert calls[0][2]["to"] == "user@example.com"
     assert calls[0][2]["threadId"] == "thread-1"
+    assert calls[0][2]["spaceTenantSlug"] == "acme"
+    assert calls[0][2]["spaceSlug"] == "finance"
     assert costs[0]["event_type"] == "send_email"
 
 

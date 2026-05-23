@@ -103,7 +103,6 @@ export type WebSearchConfig = WebSearchRuntimeConfig;
 export interface SendEmailConfig {
   agentId: string;
   tenantId: string;
-  agentEmailAddress: string;
   apiUrl: string;
   apiSecret: string;
 }
@@ -556,21 +555,6 @@ export async function resolveAgentRuntimeConfig(
   const browserCapability = capabilityRows.find(
     (row) => row.capability === BROWSER_AUTOMATION_CAPABILITY,
   );
-  const emailCapability = capabilityRows.find(
-    (row) => row.capability === "email_channel",
-  );
-  const emailConfig =
-    (emailCapability?.config as Record<string, unknown> | undefined) ?? {};
-  const vanityAddress =
-    typeof emailConfig.vanityAddress === "string" && emailConfig.vanityAddress
-      ? `${emailConfig.vanityAddress}@agents.thinkwork.ai`
-      : null;
-  const agentEmailAddress =
-    vanityAddress ||
-    (typeof emailConfig.emailAddress === "string"
-      ? emailConfig.emailAddress
-      : "") ||
-    `${agentSlug}@agents.thinkwork.ai`;
   const browserAutomationEnabled =
     !blockedTools.includes(BROWSER_AUTOMATION_CAPABILITY) &&
     (browserCapability
@@ -581,7 +565,6 @@ export async function resolveAgentRuntimeConfig(
       ? {
           agentId: opts.agentId,
           tenantId: opts.tenantId,
-          agentEmailAddress,
           apiUrl: thinkworkApiUrl,
           apiSecret: thinkworkApiSecret,
         }
