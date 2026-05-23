@@ -1591,7 +1591,7 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     pushDbRows([{ role: "admin" }]);
   }
 
-  it("moves a folder of multiple files atomically and re-emits .gitkeep at source", async () => {
+  it("moves a folder of multiple files atomically; source disappears (no .gitkeep re-emit)", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     // First ListObjectsV2 call: folder detection on source — returns
@@ -1652,12 +1652,83 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
       "tenants/acme/agents/marco/workspace/events/notes.md",
     ]);
 
-    // .gitkeep is re-emitted at the now-empty source prefix.
-    const puts = s3Mock.commandCalls(PutObjectCommand);
-    expect(puts.length).toBe(1);
-    expect(puts[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/events/.gitkeep",
+    // Source folder should disappear from the tree after move (Finder
+    // semantics). We do NOT re-emit a .gitkeep sentinel at the source
+    // prefix — the operator expects the folder to be gone.
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("moves every object including manifest.json and .gitkeep (no operational-artifact filter)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    // A folder that contains a stray nested manifest.json. The earlier
+    // listPrefix-based implementation filtered these out and stranded
+    // them at the source. The unfiltered walk must include + delete.
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/earnest-falcon-947/",
+      })
+      .resolves({
+        Contents: [
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/AGENTS.md",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/CONTEXT.md",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/manifest.json",
+          },
+          {
+            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/.gitkeep",
+          },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/agents/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "earnest-falcon-947",
+          toFolder: "agents",
+        }),
+      ),
     );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      destPath: "agents/earnest-falcon-947",
+      movedCount: 4,
+    });
+
+    const copies = s3Mock.commandCalls(CopyObjectCommand);
+    expect(copies.map((c) => c.args[0].input.Key).sort()).toEqual([
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/.gitkeep",
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/AGENTS.md",
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/CONTEXT.md",
+      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/manifest.json",
+    ]);
+
+    const deletes = s3Mock.commandCalls(DeleteObjectCommand);
+    expect(deletes.map((c) => c.args[0].input.Key).sort()).toEqual([
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/.gitkeep",
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/AGENTS.md",
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/CONTEXT.md",
+      "tenants/acme/agents/marco/workspace/earnest-falcon-947/manifest.json",
+    ]);
+
+    // No .gitkeep re-emit at source — folder disappears entirely.
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
   it("auto-renames the destination folder on collision", async () => {
@@ -1904,7 +1975,7 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     expect(res.statusCode).toBe(500);
     // No deletes should have fired since the copy phase failed.
     expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
-    // And we did not advance to the .gitkeep re-emit either.
+    // No PutObject should fire on the copy-failure path.
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
@@ -1957,7 +2028,7 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     });
     // Both copies fired (full destination present).
     expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(2);
-    // Manifest regen / .gitkeep emit were skipped on the partial path.
+    // Manifest regen was skipped on the partial path; no PutObject fires.
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 });

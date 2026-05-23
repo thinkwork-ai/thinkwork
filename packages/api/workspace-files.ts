@@ -1467,7 +1467,10 @@ async function handleMove(
   }
 
   // Folder detection: a source path is a folder if listing its prefix
-  // (with trailing slash) returns at least one object.
+  // (with trailing slash) returns at least one object. Use the
+  // unfiltered listing — a folder whose only contents are operational
+  // artifacts (manifest.json etc.) is still a folder and must be moved
+  // as one.
   // `target` is narrowed to `WritableMoveTarget` here — Computer was
   // rejected above — but TypeScript can't propagate the narrowing across
   // the function boundary, so we forward a cast.
@@ -1475,7 +1478,9 @@ async function handleMove(
     ...deps,
     target: target as WritableMoveTarget,
   };
-  const folderListing = await listPrefix(target.key(cleanFrom) + "/");
+  const folderListing = await listAllObjectsUnfiltered(
+    target.key(cleanFrom) + "/",
+  );
   if (folderListing.length > 0) {
     return await handleFolderMove(
       moveDeps,
@@ -1716,20 +1721,12 @@ async function handleFolderMove(
     });
   }
 
-  // Phase 3: re-emit `.gitkeep` at the now-empty source prefix so the
-  // folder identity survives on S3. (Without this, an empty prefix
-  // disappears from `ListObjectsV2` and the folder vanishes from the
-  // tree — which is fine for "moved out and gone" semantics, but breaks
-  // the expectation that the source path still resolves until the user
-  // explicitly deletes it.)
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucket(),
-      Key: sourcePrefix + ".gitkeep",
-      Body: "",
-      ContentType: "application/octet-stream",
-    }),
-  );
+  // Source folder is now fully empty (every object copied and deleted,
+  // including any operational artifacts and existing `.gitkeep` that
+  // travelled with the move). We do NOT re-emit a sentinel at the
+  // source — Finder-style semantics: a moved folder disappears from
+  // the source location. Future operator-driven creates can recreate
+  // the folder at that path explicitly.
 
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
@@ -2170,6 +2167,44 @@ async function listPrefix(prefix: string): Promise<string[]> {
       if (!rel) continue;
       if (rel === "manifest.json") continue;
       if (rel === "_defaults_version") continue;
+      paths.push(rel);
+    }
+    continuationToken = resp.IsTruncated
+      ? resp.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+  return paths;
+}
+
+/**
+ * List every S3 object under the prefix without filtering operational
+ * artifacts (manifest.json, _defaults_version). Used by folder-aware
+ * mutations (`handleFolderMove`, folder-existence probes) that need to
+ * see — and act on — every byte in the prefix, including nested
+ * manifest files that ended up there by historical drift or by user
+ * placement.
+ *
+ * `listPrefix` filters those artifacts because the file-tree UI uses
+ * the listing as its data source and shouldn't show system files; the
+ * filter is wrong for any operation that has to faithfully relocate or
+ * remove every object.
+ */
+async function listAllObjectsUnfiltered(prefix: string): Promise<string[]> {
+  const paths: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const resp = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket(),
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const obj of resp.Contents ?? []) {
+      if (!obj.Key) continue;
+      if (!obj.Key.startsWith(prefix)) continue;
+      const rel = obj.Key.slice(prefix.length);
+      if (!rel) continue;
       paths.push(rel);
     }
     continuationToken = resp.IsTruncated

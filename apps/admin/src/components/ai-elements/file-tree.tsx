@@ -385,34 +385,44 @@ export const FileTreeFile = ({
     ? { transform: CSS.Translate.toString(drag.transform) }
     : undefined;
 
+  // Mirrors FileTreeFolder's two-div structure: outer div hosts the
+  // role/tabIndex + any parent slot (ContextMenuTrigger asChild),
+  // inner div owns dnd-kit's drag listeners and the click handler.
+  // Without this split, a context-menu trigger wrapping the file row
+  // merges its pointer-handlers onto the same div as dnd-kit's
+  // listeners and the long-press handler swallows pointerdown before
+  // dnd-kit can activate a drag — files become un-draggable.
   return (
     <FileTreeFileContext.Provider value={fileContextValue}>
       <div
-        ref={drag.setNodeRef}
-        style={dragStyle}
-        data-dragging={drag.isDragging || undefined}
-        {...drag.attributes}
-        {...drag.listeners}
-        className={cn(
-          "group/file-tree-file flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
-          isSelected && "bg-muted",
-          isCut && "border border-dashed border-muted-foreground/40 opacity-50",
-          drag.isDragging && "opacity-50",
-          className,
-        )}
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
+        className={cn("group/file-tree-file", className)}
         role="treeitem"
         tabIndex={0}
         {...props}
       >
-        {children ?? (
-          <>
-            <span className="size-4 shrink-0" />
-            <FileTreeIcon>{resolvedIcon}</FileTreeIcon>
-            <FileTreeName>{name}</FileTreeName>
-          </>
-        )}
+        <div
+          ref={drag.setNodeRef}
+          style={dragStyle}
+          data-dragging={drag.isDragging || undefined}
+          {...drag.attributes}
+          {...drag.listeners}
+          className={cn(
+            "flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
+            isSelected && "bg-muted",
+            isCut && "border border-dashed border-muted-foreground/40 opacity-50",
+            drag.isDragging && "opacity-50",
+          )}
+          onClick={handleClick}
+          onKeyDown={handleKeyDown}
+        >
+          {children ?? (
+            <>
+              <span className="size-4 shrink-0" />
+              <FileTreeIcon>{resolvedIcon}</FileTreeIcon>
+              <FileTreeName>{name}</FileTreeName>
+            </>
+          )}
+        </div>
       </div>
     </FileTreeFileContext.Provider>
   );
