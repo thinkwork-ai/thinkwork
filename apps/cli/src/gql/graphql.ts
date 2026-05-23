@@ -5506,6 +5506,7 @@ export type Thread = {
   isBlocked: Scalars['Boolean']['output'];
   labels?: Maybe<Scalars['AWSJSON']['output']>;
   lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastModel?: Maybe<Scalars['String']['output']>;
   lastReadAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastResponsePreview?: Maybe<Scalars['String']['output']>;
   lastRuntimeType?: Maybe<Scalars['String']['output']>;

@@ -2,8 +2,8 @@
  * Source-grep structural coverage for ThreadsTable — admin's test
  * convention is filesystem-based assertion rather than DOM rendering
  * (no RTL is wired up). Verifies the component exposes the expected
- * surface and keeps the popover + handlers wired so refactors don't
- * silently strip behavior.
+ * surface and keeps the runtime/model list column wired so refactors
+ * don't silently strip behavior.
  */
 
 import { readFileSync } from "node:fs";
@@ -23,6 +23,8 @@ describe("ThreadsTable shared component", () => {
     expect(source).toContain("export type ThreadInboxStatus");
     expect(source).toContain("export interface ThreadsTableProps");
     expect(source).toContain("export function computeThreadInboxStatus");
+    expect(source).toContain("export function formatRuntimeType");
+    expect(source).toContain("export function formatModelId");
   });
 
   it("passes thread handlers through props (no embedded state owner)", () => {
@@ -37,13 +39,14 @@ describe("ThreadsTable shared component", () => {
     expect(source).not.toContain("useSubscription(");
   });
 
-  it("renders the assignee picker for non-Computer-owned threads", () => {
-    expect(source).toContain("thread.computerId ? (");
-    expect(source).toContain('Badge variant="outline"');
-    expect(source).toContain("threadComputerLabel(thread)");
+  it("renders runtime and model instead of the old agent column", () => {
+    expect(source).toContain('variant="outline"');
     expect(source).toContain("threadUserLabel(thread)");
-    expect(source).toContain("assigneePickerIssueId");
-    expect(source).toContain("Popover");
+    expect(source).toContain("thread.lastRuntimeType");
+    expect(source).toContain("thread.lastModel");
+    expect(source).toContain("formatModelId(thread.lastModel)");
+    expect(source).not.toContain("assigneePickerIssueId");
+    expect(source).not.toContain("Popover");
   });
 
   it("exports attribution label helpers for shared Computer rows", () => {
@@ -54,8 +57,8 @@ describe("ThreadsTable shared component", () => {
   });
 
   it("renders Computer and User attribution as separate single-line columns", () => {
-    expect(source).toContain('w-[170px]');
-    expect(source).toContain('w-[140px]');
+    expect(source).toContain("w-[240px]");
+    expect(source).toContain("w-[140px]");
     expect(source).not.toContain("flex-col items-end");
   });
 

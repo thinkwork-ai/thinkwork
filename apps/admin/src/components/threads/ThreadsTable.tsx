@@ -2,35 +2,27 @@
  * ThreadsTable — shared presentational component used by both the
  * `/threads` route (tenant scope) and the Computer Detail Dashboard tab
  * (computer scope). Renders one `<DataTable>` with the thread row
- * column definition, status icon, identifier, title, assignee picker
- * popover, last-activity timestamp, and inbox indicator.
+ * column definition, status icon, identifier, title, latest runtime/model,
+ * user attribution, last-activity timestamp, and inbox indicator.
  *
  * Plan: docs/plans/2026-05-13-005-refactor-computer-detail-cleanup-and-
  *       shared-threads-table-plan.md (U5).
  *
  * Data + handlers come in as props; the parent owns the GraphQL query,
  * pagination state, sort state, and the underlying mutation. The
- * popover state (`assigneePickerIssueId`, `assigneeSearch`) is internal
- * since it's UI-only and would just be noise in the parent.
- *
  * `scope` exists as a single explicit toggle for future divergence —
  * v1 keeps the column set identical between scopes per user direction
  * ("EXACT same datatable that the Threads page uses, just filtered by
  * the Computer").
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Lock, User } from "lucide-react";
+import { Lock } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { StatusIcon } from "@/components/threads/StatusIcon";
-import { cn, relativeTime } from "@/lib/utils";
+import { relativeTime } from "@/lib/utils";
 
 export type ThreadsTableItem = {
   readonly id: string;
@@ -62,6 +54,8 @@ export type ThreadsTableItem = {
   readonly checkoutRunId?: string | null;
   readonly lastActivityAt?: unknown;
   readonly lastTurnCompletedAt?: unknown;
+  readonly lastRuntimeType?: string | null;
+  readonly lastModel?: string | null;
   readonly lastReadAt?: unknown;
   readonly archivedAt?: unknown;
   readonly createdAt: unknown;
@@ -109,7 +103,6 @@ export interface ThreadsTableProps {
 
 export function ThreadsTable({
   items,
-  agents,
   inboxStatusFor,
   onUpdateThread,
   onRowClick,
@@ -118,24 +111,6 @@ export function ThreadsTable({
   scrollable = false,
   scope: _scope = "tenant",
 }: ThreadsTableProps) {
-  const [assigneePickerIssueId, setAssigneePickerIssueId] = useState<
-    string | null
-  >(null);
-  const [assigneeSearch, setAssigneeSearch] = useState("");
-
-  const assignThread = useCallback(
-    (threadId: string, agentId: string | null) => {
-      // Mirror the original route's handler shape: when the picker emits
-      // an agentId, the mutation sets assigneeType=AGENT (or clears both
-      // when null). Computer-owned threads can't reach this path because
-      // the picker isn't rendered for them.
-      onUpdateThread(threadId, { agentId });
-      setAssigneePickerIssueId(null);
-      setAssigneeSearch("");
-    },
-    [onUpdateThread],
-  );
-
   // Memoize the column definition — closure deps are the popover-state setters
   // (stable via useState) plus the prop callbacks. Without this, every parent
   // render rebuilds the entire column array on the highest-traffic admin page.
@@ -174,106 +149,28 @@ export function ThreadsTable({
               <span className="min-w-0 flex-1 truncate">{thread.title}</span>
 
               <span className="ml-auto hidden shrink-0 items-center sm:flex">
-                {thread.computerId ? (
-                  <span
-                    className="flex w-[170px] shrink-0 items-center justify-end px-2 py-1"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                  >
+                <span className="flex w-[240px] shrink-0 items-center justify-end gap-1.5 px-2">
+                  {thread.lastRuntimeType ? (
+                    <Badge
+                      variant="secondary"
+                      className="max-w-[72px] truncate text-xs font-normal"
+                      title={`Runtime: ${formatRuntimeType(thread.lastRuntimeType)}`}
+                    >
+                      {formatRuntimeType(thread.lastRuntimeType)}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                  {thread.lastModel && (
                     <Badge
                       variant="outline"
-                      className="max-w-full truncate text-xs"
-                      title={threadComputerLabel(thread)}
+                      className="max-w-[150px] truncate text-xs font-normal"
+                      title={`Model: ${thread.lastModel}`}
                     >
-                      {threadComputerLabel(thread)}
+                      {formatModelId(thread.lastModel)}
                     </Badge>
-                  </span>
-                ) : (
-                  <Popover
-                    open={assigneePickerIssueId === thread.id}
-                    onOpenChange={(open) => {
-                      setAssigneePickerIssueId(open ? thread.id : null);
-                      if (!open) setAssigneeSearch("");
-                    }}
-                  >
-                    <PopoverTrigger asChild>
-                      <button
-                        className="flex w-[160px] shrink-0 items-center justify-center rounded-md px-2 py-1 transition-colors hover:bg-accent/50"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                      >
-                        {thread.agent ? (
-                          <Badge variant="outline" className="text-xs">
-                            {thread.agent.name}
-                          </Badge>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
-                              <User className="h-3 w-3" />
-                            </span>
-                            Assignee
-                          </span>
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-56 p-1"
-                      align="end"
-                      onClick={(e) => e.stopPropagation()}
-                      onPointerDownOutside={() => setAssigneeSearch("")}
-                    >
-                      <input
-                        className="mb-1 w-full border-b border-border bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground/50"
-                        placeholder="Search agents..."
-                        value={assigneeSearch}
-                        onChange={(e) => setAssigneeSearch(e.target.value)}
-                        autoFocus
-                      />
-                      <div className="max-h-48 overflow-y-auto overscroll-contain">
-                        <button
-                          className={cn(
-                            "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent/50",
-                            !thread.agentId && "bg-accent",
-                          )}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            assignThread(thread.id, null);
-                          }}
-                        >
-                          No assignee
-                        </button>
-                        {agents
-                          .filter((agent) => {
-                            if (!assigneeSearch.trim()) return true;
-                            return agent.name
-                              .toLowerCase()
-                              .includes(assigneeSearch.toLowerCase());
-                          })
-                          .map((agent) => (
-                            <button
-                              key={agent.id}
-                              className={cn(
-                                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent/50",
-                                thread.agentId === agent.id && "bg-accent",
-                              )}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                assignThread(thread.id, agent.id);
-                              }}
-                            >
-                              <span>{agent.name}</span>
-                            </button>
-                          ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
+                  )}
+                </span>
                 <span
                   className="w-[140px] shrink-0 truncate px-2 text-right text-xs text-muted-foreground"
                   title={threadUserLabel(thread)}
@@ -292,14 +189,7 @@ export function ThreadsTable({
         },
       },
     ],
-    [
-      agents,
-      assigneePickerIssueId,
-      assigneeSearch,
-      inboxStatusFor,
-      onUpdateThread,
-      assignThread,
-    ],
+    [inboxStatusFor, onUpdateThread],
   );
 
   return (
@@ -376,4 +266,22 @@ export function threadUserLabel(thread: ThreadsTableItem): string {
     thread.user?.email ||
     (thread.userId ? "Unknown User" : "Unknown User")
   );
+}
+
+export function formatRuntimeType(runtimeType: string): string {
+  const normalized = runtimeType.trim().toLowerCase();
+  if (normalized === "pi") return "Pi";
+  if (normalized === "strands") return "Strands";
+  return runtimeType.trim();
+}
+
+export function formatModelId(modelId: string): string {
+  const trimmed = modelId.trim();
+  const afterSlash = trimmed.includes("/")
+    ? trimmed.split("/").pop()!
+    : trimmed;
+  return afterSlash
+    .replace(/^us\.anthropic\./, "")
+    .replace(/-\d{8,}/, "")
+    .replace(/-v\d+:\d+$/, "");
 }

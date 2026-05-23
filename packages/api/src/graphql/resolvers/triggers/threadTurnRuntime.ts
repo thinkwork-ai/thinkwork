@@ -10,11 +10,19 @@ function normalizeRuntimeType(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeModel(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function runtimeFromJson(value: unknown): string | null {
   const obj = asObject(value);
   if (!obj) return null;
 
-  const direct = normalizeRuntimeType(obj.runtimeType ?? obj.runtime_type ?? obj.runtime);
+  const direct = normalizeRuntimeType(
+    obj.runtimeType ?? obj.runtime_type ?? obj.runtime,
+  );
   if (direct) return direct;
 
   const response = asObject(obj.response);
@@ -23,12 +31,36 @@ function runtimeFromJson(value: unknown): string | null {
   );
 }
 
-export function runtimeTypeFromTurn(row: Record<string, unknown>): string | null {
+export function runtimeTypeFromTurn(
+  row: Record<string, unknown>,
+): string | null {
   return (
     normalizeRuntimeType(row.runtimeType ?? row.runtime_type) ??
     runtimeFromJson(row.contextSnapshot ?? row.context_snapshot) ??
     runtimeFromJson(row.resultJson ?? row.result_json) ??
     runtimeFromJson(row.usageJson ?? row.usage_json)
+  );
+}
+
+function modelFromJson(value: unknown): string | null {
+  const obj = asObject(value);
+  if (!obj) return null;
+
+  const direct = normalizeModel(obj.model ?? obj.modelId ?? obj.model_id);
+  if (direct) return direct;
+
+  const response = asObject(obj.response);
+  return normalizeModel(
+    response?.model ?? response?.modelId ?? response?.model_id,
+  );
+}
+
+export function modelFromTurn(row: Record<string, unknown>): string | null {
+  return (
+    normalizeModel(row.model ?? row.modelId ?? row.model_id) ??
+    modelFromJson(row.contextSnapshot ?? row.context_snapshot) ??
+    modelFromJson(row.usageJson ?? row.usage_json) ??
+    modelFromJson(row.resultJson ?? row.result_json)
   );
 }
 

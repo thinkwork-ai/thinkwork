@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { runtimeTypeFromTurn, withRuntimeType } from "./threadTurnRuntime.js";
+import {
+  modelFromTurn,
+  runtimeTypeFromTurn,
+  withRuntimeType,
+} from "./threadTurnRuntime.js";
 
 describe("thread turn runtime helpers", () => {
   it("prefers the persisted runtime_type column", () => {
@@ -22,5 +26,18 @@ describe("thread turn runtime helpers", () => {
         resultJson: { response: { runtime: "pi" } },
       }).runtimeType,
     ).toBe("pi");
+  });
+
+  it("extracts the model from turn snapshots", () => {
+    expect(
+      modelFromTurn({
+        context_snapshot: { model: "us.anthropic.claude-haiku-4-5-v1:0" },
+      }),
+    ).toBe("us.anthropic.claude-haiku-4-5-v1:0");
+    expect(
+      modelFromTurn({
+        usageJson: { response: { modelId: "openai.gpt-oss-120b-1:0" } },
+      }),
+    ).toBe("openai.gpt-oss-120b-1:0");
   });
 });
