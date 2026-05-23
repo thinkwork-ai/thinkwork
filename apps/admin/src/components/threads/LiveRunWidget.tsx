@@ -68,7 +68,7 @@ export function LiveRunWidget({ threadId, tenantId }: LiveRunWidgetProps) {
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <Link
-                    to="/tenant-agent"
+                    to="/agent"
                     className="inline-flex hover:underline"
                   >
                     <Identity
@@ -97,7 +97,7 @@ export function LiveRunWidget({ threadId, tenantId }: LiveRunWidgetProps) {
                     </button>
                   )}
                   <Link
-                    to="/tenant-agent"
+                    to="/agent"
                     className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-cyan-700 transition-colors hover:border-cyan-500/30 hover:text-cyan-600 dark:text-cyan-300"
                   >
                     Open run

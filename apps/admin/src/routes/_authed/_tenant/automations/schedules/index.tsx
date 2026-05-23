@@ -439,7 +439,7 @@ function ScheduledJobsPage() {
   const breadcrumbs = useMemo(() => {
     if (type === "agent" && agentId) {
       return [
-        { label: "Tenant agent", href: "/tenant-agent" },
+        { label: "Agent", href: "/agent" },
         { label: agentName ?? "Agent" },
         { label: "Automations" },
       ];

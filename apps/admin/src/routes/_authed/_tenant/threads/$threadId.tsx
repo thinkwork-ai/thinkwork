@@ -871,7 +871,7 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
       ) : thread.agent ? (
         <PropRow label="Agent">
           <Link
-            to="/tenant-agent"
+            to="/agent"
             className="flex items-center gap-1 hover:bg-accent rounded-md px-1 -mx-1 transition-colors"
           >
             <Identity

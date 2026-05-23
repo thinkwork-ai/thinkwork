@@ -38,7 +38,7 @@ export function buildThreadBreadcrumbs(
 
   if (fromAgentId) {
     return [
-      { label: "Tenant agent", href: "/tenant-agent" },
+      { label: "Agent", href: "/agent" },
       { label: fromAgentName ?? "Agent" },
       tail,
     ];

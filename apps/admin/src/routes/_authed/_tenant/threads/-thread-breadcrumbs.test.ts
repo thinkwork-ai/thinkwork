@@ -16,7 +16,7 @@ describe("buildThreadBreadcrumbs", () => {
     });
 
     expect(crumbs).toEqual([
-      { label: "Tenant agent", href: "/tenant-agent" },
+      { label: "Agent", href: "/agent" },
       { label: "Marco" },
       { label: "TW-7 Investigate the bug" },
     ]);

@@ -14,18 +14,18 @@ import { HumanProfileSection } from "@/components/humans/HumanProfileSection";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export const Route = createFileRoute("/_authed/_tenant/people/$humanId")({
-  component: HumanDetailPage,
+export const Route = createFileRoute("/_authed/_tenant/users/$userId")({
+  component: UserDetailPage,
 });
 
-type HumanDetailTab = "configuration" | "workspace";
+type UserDetailTab = "configuration" | "files";
 
-function HumanDetailPage() {
-  const { humanId } = Route.useParams();
+function UserDetailPage() {
+  const { userId } = Route.useParams();
   const { tenantId } = useTenant();
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<HumanDetailTab>("configuration");
+  const [tab, setTab] = useState<UserDetailTab>("configuration");
 
   const [result, reexecute] = useQuery({
     query: TenantMembersListQuery,
@@ -35,13 +35,13 @@ function HumanDetailPage() {
   });
 
   const member = useMemo(
-    () => result.data?.tenantMembers?.find((m) => m.id === humanId),
-    [result.data, humanId],
+    () => result.data?.tenantMembers?.find((m) => m.id === userId),
+    [result.data, userId],
   );
 
-  const humanName = member?.user?.name ?? member?.user?.email ?? "Person";
+  const userName = member?.user?.name ?? member?.user?.email ?? "User";
 
-  useBreadcrumbs([{ label: "People", href: "/people" }, { label: humanName }]);
+  useBreadcrumbs([{ label: "Users", href: "/users" }, { label: userName }]);
 
   if (!tenantId || (result.fetching && !result.data)) {
     return <PageSkeleton />;
@@ -53,14 +53,14 @@ function HumanDetailPage() {
     member.principalType.toUpperCase() !== "USER"
   ) {
     return (
-      <PageLayout header={<PageHeader title="Person not found" />}>
+      <PageLayout header={<PageHeader title="User not found" />}>
         <EmptyState
           icon={Users}
-          title="This person could not be loaded"
+          title="This user could not be loaded"
           description="They may have been removed from the tenant."
           action={{
-            label: "Back to People",
-            onClick: () => navigate({ to: "/people" }),
+            label: "Back to Users",
+            onClick: () => navigate({ to: "/users" }),
           }}
         />
       </PageLayout>
@@ -86,7 +86,7 @@ function HumanDetailPage() {
           <div className="grid items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
             <div className="min-w-0">
               <h1 className="truncate text-2xl font-bold leading-tight tracking-tight text-foreground">
-                {humanName}
+                {userName}
               </h1>
               <p className="truncate text-sm text-muted-foreground">
                 {member.user.email}
@@ -95,14 +95,14 @@ function HumanDetailPage() {
             <div className="flex justify-start lg:justify-center">
               <Tabs
                 value={tab}
-                onValueChange={(value) => setTab(value as HumanDetailTab)}
+                onValueChange={(value) => setTab(value as UserDetailTab)}
               >
                 <TabsList>
                   <TabsTrigger value="configuration" className="px-4">
                     Configuration
                   </TabsTrigger>
-                  <TabsTrigger value="workspace" className="px-4">
-                    Workspace
+                  <TabsTrigger value="files" className="px-4">
+                    Files
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -111,14 +111,12 @@ function HumanDetailPage() {
           </div>
         </div>
       }
-      contentClassName={
-        tab === "workspace" ? "overflow-hidden pb-4" : undefined
-      }
+      contentClassName={tab === "files" ? "overflow-hidden pb-4" : undefined}
     >
       <Tabs
         value={tab}
-        onValueChange={(value) => setTab(value as HumanDetailTab)}
-        className={tab === "workspace" ? "h-full min-h-0" : undefined}
+        onValueChange={(value) => setTab(value as UserDetailTab)}
+        className={tab === "files" ? "h-full min-h-0" : undefined}
       >
         <TabsContent value="configuration">
           <div className="max-w-[760px]">
@@ -138,7 +136,7 @@ function HumanDetailPage() {
             />
           </div>
         </TabsContent>
-        <TabsContent value="workspace" className="min-h-0">
+        <TabsContent value="files" className="min-h-0">
           <WorkspaceEditor
             target={{ userId: member.user.id }}
             mode="context"
