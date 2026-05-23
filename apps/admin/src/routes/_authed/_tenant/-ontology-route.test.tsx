@@ -13,11 +13,9 @@ describe("ontology studio route", () => {
   it("registers Ontology under the agentic OS navigation group", () => {
     expect(sidebarSource).toContain('label: "Ontology"');
     expect(sidebarSource).toContain('to: "/ontology"');
-    expect(sidebarSource).toContain("IconBolt");
-    expect(sidebarSource).toContain(
-      '{ to: "/capabilities", icon: IconBolt, label: "Tools" }',
-    );
-    expect(sidebarSource.indexOf('label: "Tools"')).toBeLessThan(
+    expect(sidebarSource).not.toContain('to: "/capabilities"');
+    expect(sidebarSource).not.toContain('label: "Tools"');
+    expect(sidebarSource.indexOf('label: "Spaces"')).toBeLessThan(
       sidebarSource.indexOf('label: "Memory"'),
     );
     expect(sidebarSource.indexOf('label: "Memory"')).toBeLessThan(

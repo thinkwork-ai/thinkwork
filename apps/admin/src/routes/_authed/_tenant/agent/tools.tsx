@@ -50,7 +50,7 @@ import {
 } from "@/lib/builtin-tools-api";
 
 export const Route = createFileRoute(
-  "/_authed/_tenant/capabilities/builtin-tools",
+  "/_authed/_tenant/agent/tools",
 )({
   component: BuiltinToolsPage,
 });
@@ -429,7 +429,7 @@ function BuiltinToolsPage() {
   const tenantSlug = tenant?.slug;
   const tenantId = tenant?.id;
   useBreadcrumbs([
-    { label: "Tools", href: "/capabilities" },
+    { label: "Agent", href: "/agent" },
     { label: "Built-in Tools" },
   ]);
 
@@ -799,7 +799,7 @@ function ConfigureDialog({
 
 // ---------------------------------------------------------------------------
 // Policy-gated info dialog — read-only view for built-ins controlled by
-// template/agent policy instead of provider API keys.
+// tenant and platform-agent policy instead of provider API keys.
 // ---------------------------------------------------------------------------
 
 function PolicyGatedInfoDialog({

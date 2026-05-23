@@ -19,7 +19,7 @@ import {
   AppWindow,
   Bot,
 } from "lucide-react";
-import { IconBolt, IconPlanet } from "@tabler/icons-react";
+import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
@@ -251,7 +251,6 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agent", icon: Bot, label: "Agent" },
     { to: "/spaces", icon: IconPlanet, label: "Spaces" },
-    { to: "/capabilities", icon: IconBolt, label: "Tools" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/ontology", icon: Network, label: "Ontology" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
