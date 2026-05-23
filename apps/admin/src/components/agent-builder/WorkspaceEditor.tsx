@@ -336,10 +336,8 @@ export function WorkspaceEditor({
 
   const clearClipboard = useCallback(() => setClipboardItem(null), []);
 
-  const handlePaste = useCallback(
-    async (toFolder: string) => {
-      if (!clipboardItem) return;
-      const sourcePath = clipboardItem.path;
+  const performMove = useCallback(
+    async (sourcePath: string, toFolder: string) => {
       beginMutation(sourcePath);
       let result: MoveResult;
       try {
@@ -353,17 +351,10 @@ export function WorkspaceEditor({
         console.error("Failed to move workspace path:", err);
         toast.error(`Move failed: ${message}`);
         endMutation(sourcePath);
-        // R9: failed paste keeps the clipboard intact so the user can
-        // retry without re-cutting.
-        return;
+        return null;
       }
       endMutation(sourcePath);
-      setClipboardItem(null);
-      // R5/R9: success clears the clipboard. Refresh the file list to
-      // reflect both source removal and the destination's final path.
       await fetchFiles({ showLoading: false });
-      // If the active editor pane was showing the moved file, retarget
-      // it to the new path so the operator's tab stays in sync.
       if (openFileRef.current === sourcePath) {
         setOpenFile(result.destPath);
         setFocusedTreePath(result.destPath);
@@ -373,14 +364,32 @@ export function WorkspaceEditor({
         detachedPinnedCount: result.detachedPinnedCount,
       });
       if (toastText) toast.success(toastText);
+      return result;
     },
-    [
-      clipboardItem,
-      beginMutation,
-      endMutation,
-      stableTarget,
-      fetchFiles,
-    ],
+    [beginMutation, endMutation, stableTarget, fetchFiles],
+  );
+
+  const handlePaste = useCallback(
+    async (toFolder: string) => {
+      if (!clipboardItem) return;
+      const sourcePath = clipboardItem.path;
+      const result = await performMove(sourcePath, toFolder);
+      if (result) {
+        // R5/R9: success clears the clipboard; failure preserves it.
+        setClipboardItem(null);
+      }
+    },
+    [clipboardItem, performMove],
+  );
+
+  const handleDropMove = useCallback(
+    (sourcePath: string, toFolder: string) => {
+      // Drag-and-drop bypasses the clipboard but uses the same server
+      // action. Don't touch clipboardItem here — drag is its own
+      // gesture.
+      void performMove(sourcePath, toFolder);
+    },
+    [performMove],
   );
 
   const pasteIntoSelectedScope = useCallback(() => {
@@ -608,6 +617,7 @@ export function WorkspaceEditor({
                 onCut={handleCut}
                 onPaste={handlePaste}
                 onClearClipboard={clearClipboard}
+                onDropMove={handleDropMove}
               />
             </div>
           </div>

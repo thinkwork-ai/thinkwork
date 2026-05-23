@@ -1,5 +1,15 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Loader2Icon } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -183,7 +193,18 @@ export interface FolderTreeProps {
   onCut?: (path: string, kind: "file" | "folder") => void;
   onPaste?: (toFolder: string) => void;
   onClearClipboard?: () => void;
+  /**
+   * Called when a drag completes on a valid drop target. `sourcePath`
+   * is the dragged item; `toFolder` is the destination folder path
+   * (or `""` for the workspace root). The parent dispatches the actual
+   * move via the server `move` action. Optional — when omitted,
+   * drag-and-drop is functionally disabled even though the visual
+   * affordances still render.
+   */
+  onDropMove?: (sourcePath: string, toFolder: string) => void;
 }
+
+const ROOT_DROPPABLE_ID = "__root__";
 
 export function FolderTree(props: FolderTreeProps) {
   const {
@@ -197,6 +218,7 @@ export function FolderTree(props: FolderTreeProps) {
     onClearClipboard,
     onNewFile,
     onNewFolder,
+    onDropMove,
   } = props;
 
   // Collect the set of folder paths so the AI Elements onSelect callback
@@ -204,25 +226,53 @@ export function FolderTree(props: FolderTreeProps) {
   // where clicking a folder row expands/collapses it).
   const folderPaths = useMemo(() => collectFolderPaths(nodes), [nodes]);
 
+  // dnd-kit sensors. Distance-4 activation prevents simple click events
+  // on the row from being interpreted as drags (the row's CollapsibleTrigger
+  // and selection button stay functional). KeyboardSensor gives the tree
+  // accessible drag-and-drop out of the box.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || !onDropMove) return;
+      const sourcePath = String(active.id);
+      const overId = String(over.id);
+      const toFolder = overId === ROOT_DROPPABLE_ID ? "" : overId;
+      // Drop onto self is a no-op.
+      if (sourcePath === toFolder) return;
+      onDropMove(sourcePath, toFolder);
+    },
+    [onDropMove],
+  );
+
   if (nodes.length === 0) {
     // Render the empty state inside a context-menu trigger too so the
     // operator can paste / create at the workspace root even when the
-    // tree is currently empty.
+    // tree is currently empty. Wrap in DndContext so dropping onto the
+    // root drop zone still works.
     return (
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-            No files
-          </div>
-        </ContextMenuTrigger>
-        <RootContextMenu
-          clipboardItem={clipboardItem}
-          onPaste={onPaste}
-          onClearClipboard={onClearClipboard}
-          onNewFile={onNewFile}
-          onNewFolder={onNewFolder}
-        />
-      </ContextMenu>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <RootDropZone>
+              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                No files
+              </div>
+            </RootDropZone>
+          </ContextMenuTrigger>
+          <RootContextMenu
+            clipboardItem={clipboardItem}
+            onPaste={onPaste}
+            onClearClipboard={onClearClipboard}
+            onNewFile={onNewFile}
+            onNewFolder={onNewFolder}
+          />
+        </ContextMenu>
+      </DndContext>
     );
   }
 
@@ -247,30 +297,65 @@ export function FolderTree(props: FolderTreeProps) {
   };
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div>
-          <FileTree
-            expanded={expandedFolders}
-            onExpandedChange={handleExpandedChange}
-            selectedPath={selectedPath ?? undefined}
-            onSelect={handleSelect}
-            className="rounded-none border-0 bg-transparent text-xs"
-          >
-            {nodes.map((node) => (
-              <FolderTreeItem key={node.path} node={node} {...props} />
-            ))}
-          </FileTree>
-        </div>
-      </ContextMenuTrigger>
-      <RootContextMenu
-        clipboardItem={clipboardItem}
-        onPaste={onPaste}
-        onClearClipboard={onClearClipboard}
-        onNewFile={onNewFile}
-        onNewFolder={onNewFolder}
-      />
-    </ContextMenu>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <RootDropZone>
+            <FileTree
+              expanded={expandedFolders}
+              onExpandedChange={handleExpandedChange}
+              selectedPath={selectedPath ?? undefined}
+              onSelect={handleSelect}
+              className="rounded-none border-0 bg-transparent text-xs"
+            >
+              {nodes.map((node) => (
+                <FolderTreeItem key={node.path} node={node} {...props} />
+              ))}
+            </FileTree>
+          </RootDropZone>
+        </ContextMenuTrigger>
+        <RootContextMenu
+          clipboardItem={clipboardItem}
+          onPaste={onPaste}
+          onClearClipboard={onClearClipboard}
+          onNewFile={onNewFile}
+          onNewFolder={onNewFolder}
+        />
+      </ContextMenu>
+    </DndContext>
+  );
+}
+
+/**
+ * Workspace-root drop zone. Wraps the tree's content so dragging
+ * something onto empty space below the rows (or onto a non-folder
+ * region) drops it at the workspace root.
+ */
+function RootDropZone({ children }: { children: React.ReactNode }) {
+  const drop = useDroppable({
+    id: ROOT_DROPPABLE_ID,
+    data: { kind: "root" as const },
+  });
+  return (
+    <div
+      ref={drop.setNodeRef}
+      data-over={drop.isOver || undefined}
+      className="min-h-full"
+      // Native drag-over from the desktop is treated as a no-op so we
+      // don't accept arbitrary OS file drops — R13 says intra-tree only.
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) {
+          e.preventDefault();
+        }
+      }}
+      onDrop={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) {
+          e.preventDefault();
+        }
+      }}
+    >
+      {children}
+    </div>
   );
 }
 

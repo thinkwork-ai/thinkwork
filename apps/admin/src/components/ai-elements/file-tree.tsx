@@ -18,9 +18,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 interface FileTreeContextType {
   expandedPaths: Set<string>;
@@ -128,6 +131,27 @@ const FileTreeFolderContext = createContext<FileTreeFolderContextType>({
   path: "",
 });
 
+/**
+ * Auto-expand a hovered drop target after sustained hover. When `isOver`
+ * stays true for `delayMs`, calls `expand()` so the user can drop into
+ * nested folders without manually expanding first. Cancels if the
+ * pointer leaves before the delay elapses. No-op if `expanded` is
+ * already true.
+ */
+function useAutoExpandOnHover(opts: {
+  isOver: boolean;
+  expanded: boolean;
+  expand: () => void;
+  delayMs?: number;
+}) {
+  const { isOver, expanded, expand, delayMs = 600 } = opts;
+  useEffect(() => {
+    if (!isOver || expanded) return;
+    const t = setTimeout(expand, delayMs);
+    return () => clearTimeout(t);
+  }, [isOver, expanded, expand, delayMs]);
+}
+
 export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
   path: string;
   /**
@@ -173,6 +197,30 @@ export const FileTreeFolder = ({
   const isExpanded = expandedPaths.has(path);
   const isSelected = selectedPath === path;
 
+  // dnd-kit wiring. The folder row is BOTH a draggable (the operator
+  // can pick it up and drop it elsewhere) AND a droppable (other rows
+  // can be dropped onto it). When no DndContext ancestor exists, the
+  // hooks return inert defaults — no behavior change for non-dnd
+  // callers.
+  const drag = useDraggable({
+    id: path,
+    data: { kind: "folder" as const, path },
+  });
+  const drop = useDroppable({
+    id: path,
+    data: { kind: "folder" as const, path },
+  });
+
+  const expandCallback = useCallback(() => togglePath(path), [
+    togglePath,
+    path,
+  ]);
+  useAutoExpandOnHover({
+    isOver: drop.isOver,
+    expanded: isExpanded,
+    expand: expandCallback,
+  });
+
   const handleOpenChange = useCallback(() => {
     togglePath(path);
   }, [togglePath, path]);
@@ -186,6 +234,18 @@ export const FileTreeFolder = ({
     [isExpanded, name, path],
   );
 
+  const setRowRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      drag.setNodeRef(el);
+      drop.setNodeRef(el);
+    },
+    [drag.setNodeRef, drop.setNodeRef],
+  );
+
+  const dragStyle = drag.transform
+    ? { transform: CSS.Translate.toString(drag.transform) }
+    : undefined;
+
   return (
     <FileTreeFolderContext.Provider value={folderContextValue}>
       <Collapsible onOpenChange={handleOpenChange} open={isExpanded}>
@@ -196,10 +256,18 @@ export const FileTreeFolder = ({
           {...props}
         >
           <div
+            ref={setRowRef}
+            style={dragStyle}
+            data-over={drop.isOver || undefined}
+            data-dragging={drag.isDragging || undefined}
+            {...drag.attributes}
+            {...drag.listeners}
             className={cn(
               "flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
               isSelected && "bg-muted",
               isCut && "border border-dashed border-muted-foreground/40 opacity-50",
+              drop.isOver && "ring-2 ring-blue-500",
+              drag.isDragging && "opacity-50",
             )}
           >
             <CollapsibleTrigger asChild>
@@ -287,6 +355,11 @@ export const FileTreeFile = ({
   const { selectedPath, onSelect } = useContext(FileTreeContext);
   const isSelected = selectedPath === path;
 
+  const drag = useDraggable({
+    id: path,
+    data: { kind: "file" as const, path },
+  });
+
   const handleClick = useCallback(() => {
     onSelect?.(path);
   }, [onSelect, path]);
@@ -308,13 +381,23 @@ export const FileTreeFile = ({
     icon ?? <FileIcon className="size-4 text-muted-foreground" />
   );
 
+  const dragStyle = drag.transform
+    ? { transform: CSS.Translate.toString(drag.transform) }
+    : undefined;
+
   return (
     <FileTreeFileContext.Provider value={fileContextValue}>
       <div
+        ref={drag.setNodeRef}
+        style={dragStyle}
+        data-dragging={drag.isDragging || undefined}
+        {...drag.attributes}
+        {...drag.listeners}
         className={cn(
           "group/file-tree-file flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
           isSelected && "bg-muted",
           isCut && "border border-dashed border-muted-foreground/40 opacity-50",
+          drag.isDragging && "opacity-50",
           className,
         )}
         onClick={handleClick}
