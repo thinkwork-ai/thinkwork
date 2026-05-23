@@ -31,6 +31,7 @@ import { verifyReplyToken, hashToken } from "../lib/email-tokens.js";
 import { createColdContactThread } from "../lib/email/cold-contact-trigger.js";
 import { parseSpaceRecipient } from "../lib/email/space-address.js";
 import { enqueueComputerThreadTurn } from "../lib/computers/thread-cutover.js";
+import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 
 const WORKSPACE_BUCKET =
   process.env.EMAIL_INBOUND_BUCKET || process.env.WORKSPACE_BUCKET || "";
@@ -432,13 +433,14 @@ async function resolveAgentById(agentId: string) {
       tenant_id: agents.tenant_id,
       name: agents.name,
       slug: agents.slug,
+      send_email: agents.send_email,
     })
     .from(agents)
     .where(eq(agents.id, agentId));
   return agent ?? null;
 }
 
-async function resolveEmailCapability(agentId: string) {
+async function resolveLegacyEmailCapability(agentId: string) {
   const [emailCap] = await db
     .select()
     .from(agentCapabilities)
@@ -470,14 +472,21 @@ async function enqueueReplyWakeup(input: {
     );
     return;
   }
-  const emailCap = await resolveEmailCapability(agent.id);
-  if (!emailCap || !emailCap.enabled) {
+  const sendEmailResult = validateTemplateSendEmail(agent.send_email);
+  const sendEmailEnabled = sendEmailResult.ok
+    ? sendEmailResult.value?.enabled === true
+    : false;
+  if (!sendEmailEnabled) {
     console.log(
       `[email-inbound] reply_rejected:email_disabled agent=${agent.id}`,
     );
     return;
   }
-  const config = (emailCap.config as Record<string, unknown>) || {};
+  const emailCap = await resolveLegacyEmailCapability(agent.id);
+  const config =
+    emailCap && emailCap.enabled !== false
+      ? (emailCap.config as Record<string, unknown>) || {}
+      : {};
   if (!(await checkWakeupRateLimit(agent.id, agent.tenant_id, config))) return;
 
   await insertWakeupRequest({

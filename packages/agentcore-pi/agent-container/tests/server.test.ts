@@ -991,6 +991,52 @@ describe("assembleTools — Pi built-in tools", () => {
       "browser_automation",
     );
   });
+
+  it("registers send_email when send email config is present", async () => {
+    const bundle = await assembleTools({
+      payload: {
+        tenant_slug: "acme",
+        send_email_config: {
+          apiUrl: "https://api.example.com",
+          apiSecret: "test-secret",
+          agentId: "agent-1",
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+        },
+        turn_context: { spaceSlug: "finance" },
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+    });
+
+    expect(bundle.tools.map((tool) => tool.name)).toContain("send_email");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { generateReplyToken } from "../lib/email-tokens.js";
 import { deriveSpaceAddress } from "../lib/email/space-address.js";
+import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 
 const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 
@@ -138,6 +139,7 @@ export async function handler(
     .select({
       id: agents.id,
       tenant_id: agents.tenant_id,
+      send_email: agents.send_email,
     })
     .from(agents)
     .where(eq(agents.id, req.agentId));
@@ -149,7 +151,22 @@ export async function handler(
     };
   }
 
-  // Look up email capability
+  const sendEmailResult = validateTemplateSendEmail(agent.send_email);
+  const sendEmailEnabled = sendEmailResult.ok
+    ? sendEmailResult.value?.enabled === true
+    : false;
+  if (!sendEmailEnabled) {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({
+        error: "Send Email not enabled for this agent",
+      }),
+    };
+  }
+
+  // Legacy capability rows no longer gate Send Email. The runtime config and
+  // Space tool policy decide whether the tool is injected, but older rows may
+  // still carry reply-token limits that this endpoint should honor.
   const [emailCap] = await db
     .select()
     .from(agentCapabilities)
@@ -160,16 +177,10 @@ export async function handler(
       ),
     );
 
-  if (!emailCap || !emailCap.enabled) {
-    return {
-      statusCode: 403,
-      body: JSON.stringify({
-        error: "Email channel not enabled for this agent",
-      }),
-    };
-  }
-
-  const config = (emailCap.config as Record<string, unknown>) || {};
+  const config =
+    emailCap && emailCap.enabled !== false
+      ? (emailCap.config as Record<string, unknown>) || {}
+      : {};
   let spaceAddress: string | null;
   try {
     spaceAddress = deriveSpaceAddressFromRequest(req);
