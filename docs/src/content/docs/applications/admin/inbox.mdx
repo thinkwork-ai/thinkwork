@@ -3,7 +3,7 @@ title: Admin — Inbox
 description: The approval queue for agent-requested human-in-the-loop actions. Approve, reject, or request revision on sensitive agent operations.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The Inbox is the approval queue for agent-requested human-in-the-loop actions. Agents can be configured to request human approval before performing sensitive operations — configuration changes, knowledge-base uploads, destructive tool calls — and those requests land here in `PENDING` state.
 
@@ -16,12 +16,12 @@ This is the seam between automation and oversight: agents do work autonomously u
 
 The list is split into two tabs: **Pending** and **Resolved**. Each row shows:
 
-| Column | What it shows |
-|---|---|
-| Request | Type icon, title, and an optional revision-version badge |
-| Type | A badge for the request category (config change, knowledge upload, tool invocation, etc.) |
-| Status | Icon + label — PENDING, APPROVED, REJECTED, REVISION_REQUESTED |
-| Requested | Relative time since the agent opened the request |
+| Column    | What it shows                                                                             |
+| --------- | ----------------------------------------------------------------------------------------- |
+| Request   | Type icon, title, and an optional revision-version badge                                  |
+| Type      | A badge for the request category (config change, knowledge upload, tool invocation, etc.) |
+| Status    | Icon + label — PENDING, APPROVED, REJECTED, REVISION_REQUESTED                            |
+| Requested | Relative time since the agent opened the request                                          |
 
 Title search filters both tabs. The counts in the tab headers show pending + resolved counts without firing additional queries — they're computed from the same `InboxItemsListQuery` response and split client-side.
 
@@ -49,12 +49,12 @@ The right sidebar carries the item's metadata: status, type, revision, entity ty
 
 Four buttons appear in the item header when the item is actionable (`PENDING` or `REVISION_REQUESTED`):
 
-| Button | Effect |
-|---|---|
-| **Approve** | `ApproveInboxItemMutation` — the agent's action proceeds |
-| **Reject** | `RejectInboxItemMutation` — the agent is notified and the action does not execute |
-| **Request Revision** | Opens a prompt for review notes, then fires `RequestRevisionMutation` |
-| **Resubmit** | Only visible on a revision path — `ResubmitInboxItemMutation` |
+| Button               | Effect                                                                            |
+| -------------------- | --------------------------------------------------------------------------------- |
+| **Approve**          | `ApproveInboxItemMutation` — the agent's action proceeds                          |
+| **Reject**           | `RejectInboxItemMutation` — the agent is notified and the action does not execute |
+| **Request Revision** | Opens a prompt for review notes, then fires `RequestRevisionMutation`             |
+| **Resubmit**         | Only visible on a revision path — `ResubmitInboxItemMutation`                     |
 
 Each mutation triggers a refetch of the item detail so the UI reflects the new state immediately.
 
@@ -105,11 +105,11 @@ The materialization is idempotent: replaying the same `review.requested` event f
 
 When an operator decides on a `type='workspace_review'` inbox item, the inbox mutation dispatches the matching workspace review action against the linked run. The inbox item's status updates and the run's lifecycle advances in the same call:
 
-| Inbox action      | Workspace effect                                                                                                   |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Approve           | `acceptAgentWorkspaceReview` — run resumes with approval; `workspace_event` wakeup is enqueued.                    |
-| Reject            | `cancelAgentWorkspaceReview` — run is marked `cancelled`; no wakeup.                                               |
-| Request revision  | `resumeAgentWorkspaceRun` with the review notes carried as `responseMarkdown` — run resumes; agent reads the notes and addresses them in its next turn. |
+| Inbox action     | Workspace effect                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approve          | `acceptAgentWorkspaceReview` — run resumes with approval; `workspace_event` wakeup is enqueued.                                                         |
+| Reject           | `cancelAgentWorkspaceReview` — run is marked `cancelled`; no wakeup.                                                                                    |
+| Request revision | `resumeAgentWorkspaceRun` with the review notes carried as `responseMarkdown` — run resumes; agent reads the notes and addresses them in its next turn. |
 
 Operators only call the inbox mutations; the dispatch happens server-side. The legacy requester-agent wakeup that fires for other inbox types is skipped for `workspace_review` because the workspace review action handles run state directly.
 
@@ -163,6 +163,7 @@ The CLI scaffolds `thinkwork inbox list / get / approve / reject / request-revis
 ## Related pages
 
 - [Threads](/applications/admin/threads/) — inbox items usually link back to a parent thread
-- [Agents](/applications/admin/agents/) — configure which actions require approval per agent template
+- [Tenant Agent](/applications/admin/agents/) — configure platform-agent workspace and sub-agent folders
+- [Spaces](/applications/admin/spaces/) — configure Space context that can produce review work
 - [Security Center](/applications/admin/security-center/) — policy and guardrail enforcement
 - [Control (concept)](/concepts/control/) — the product model for approvals and controls

@@ -57,6 +57,7 @@ export default defineConfig({
                 },
               ],
             },
+            { label: "Spaces", slug: "concepts/spaces" },
             {
               label: "Computers",
               collapsed: true,
@@ -355,10 +356,14 @@ export default defineConfig({
                       ],
                     },
                     {
-                      label: "Agents",
+                      label: "Platform",
                       collapsed: true,
                       items: [
-                        { label: "Agents", slug: "applications/admin/agents" },
+                        {
+                          label: "Tenant Agent",
+                          slug: "applications/admin/agents",
+                        },
+                        { label: "Spaces", slug: "applications/admin/spaces" },
                         {
                           label: "Agent Templates",
                           slug: "applications/admin/agent-templates",

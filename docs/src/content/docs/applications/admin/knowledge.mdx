@@ -24,19 +24,19 @@ Company Brain keeps source inspection and source routing close together. Operato
 
 ## Tabs
 
-| Tab | Purpose |
-|---|---|
-| Memory | Browse and search retained memory records; view the Hindsight graph when available |
-| Pages | Inspect compiled pages and graph/search output |
-| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status |
-| Sources | Configure and verify the source layer used by `query_context` |
+| Tab             | Purpose                                                                            |
+| --------------- | ---------------------------------------------------------------------------------- |
+| Memory          | Browse and search retained memory records; view the Hindsight graph when available |
+| Pages           | Inspect compiled pages and graph/search output                                     |
+| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status                              |
+| Sources         | Configure and verify the source layer used by `query_context`                      |
 
 The old standalone routes redirect into the matching tab:
 
-| Old route | Current route |
-|---|---|
-| `/memory` | `/knowledge/memory` |
-| `/wiki` | `/knowledge/wiki` |
+| Old route          | Current route                |
+| ------------------ | ---------------------------- |
+| `/memory`          | `/knowledge/memory`          |
+| `/wiki`            | `/knowledge/wiki`            |
 | `/knowledge-bases` | `/knowledge/knowledge-bases` |
 
 ## Sources Query Test
@@ -72,4 +72,5 @@ Template configuration can choose which tenant-approved sources participate by d
 - [Company Brain Context API](/api/context-engine/) — shared `query_context` contract and runtime tool behavior
 - [Memory Facet](/applications/admin/memory/) — details of the Memory tab behavior
 - [Knowledge Bases](/applications/admin/knowledge-bases/) — Bedrock KB management
-- [Agents](/applications/admin/agents/) — per-agent workspace and Company Brain attachments
+- [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent workspace
+- [Spaces](/applications/admin/spaces/) — Space-scoped workspace, tools, memory, and knowledge context

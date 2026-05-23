@@ -1,11 +1,11 @@
 ---
 title: Routing and Metadata
-description: How inbound integration events become threads — the normalization path, channel-specific metadata, and how Computers and managed Agents see source context.
+description: How inbound integration events become Space-scoped threads — the normalization path, channel-specific metadata, and how the tenant platform agent sees source context.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-When a Slack message, a GitHub issue comment, or an inbound Linear issue arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that the Computer or delegated managed Agent can write back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Integrations](/concepts/integrations)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes structured work. The metadata that carries through is what makes the **Security** operating guarantee work at the integration boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
+When a Slack message, a GitHub issue comment, an inbound email, or another provider event arrives, ThinkWork has to do three things: figure out which thread it belongs to, resolve the [Space](/concepts/spaces/) that should own the work, and preserve enough context that the tenant platform agent can write back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Integrations](/concepts/integrations)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes structured work. The metadata that carries through is what makes the **Security** operating guarantee work at the integration boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
 
 ## The routing question
 
@@ -13,7 +13,7 @@ Every inbound integration event answers the same three routing questions before 
 
 1. **Does a thread already exist for this external conversation?** A Slack threaded reply should land in the same ThinkWork thread as the original message, not a new one.
 2. **If yes, is that thread still open?** A reply to a `DONE` thread should reopen it, not silently drop.
-3. **If no thread exists, which shared Computer should receive the new one?** The inbound event may name a target, or the tenant may have a default routing rule.
+3. **If no thread exists, which Space should receive the new one?** The inbound event may name a Space directly, as email addresses do, or the tenant may have a routing rule.
 
 Each integration runtime runs through those questions before creating or updating a thread. The answers live in channel-specific metadata.
 
@@ -53,7 +53,8 @@ Every thread has a `metadata` JSON column. Channel determines what that column h
 ```json
 {
   "fromAddress": "customer@example.com",
-  "toAddress": "support@tenant.thinkwork.ai",
+  "toAddress": "acme.support@agents.thinkwork.ai",
+  "spaceId": "sp_123",
   "subject": "Re: Deploy failing",
   "messageId": "<abc@example.com>",
   "inReplyTo": "<xyz@example.com>",
@@ -61,7 +62,7 @@ Every thread has a `metadata` JSON column. Channel determines what that column h
 }
 ```
 
-SES inbound lookup uses `inReplyTo` and `references` to stitch replies into existing threads via standard email threading rules. A reply to a closed thread reopens it.
+SES inbound lookup first resolves the Space from `<tenant-slug>.<space-slug>@agents.thinkwork.ai`, then uses `inReplyTo` and `references` to stitch replies into existing threads via standard email threading rules. A reply to a closed thread reopens it.
 
 ### `TASK`
 
@@ -82,15 +83,15 @@ Task integrations update the thread's metadata on every external state change so
 Internal channels have simpler metadata:
 
 - `AUTO` carries the `scheduleId` or `triggerId` that fired, plus the Step Functions execution ARN for the run.
-- `CHAT` carries `createdByUserId` and, for threads started from the mobile app, any workspace id.
+- `CHAT` carries `createdByUserId` and, for threads started from the mobile app, the selected Space id.
 
 ## How to configure it
 
-Routing is configured per integration in the relevant admin surface, such as [private extension](/applications/admin/) for Linear tracker work or [Webhooks](/applications/admin/webhooks/) for custom inbound events. The thread side of routing — which Computer owns a new thread, what channel a thread starts in, and what metadata follows it — is downstream of the integration configuration.
+Routing is configured per integration in the relevant admin surface, such as [Webhooks](/applications/admin/webhooks/) for custom inbound events. The thread side of routing — which Space owns a new thread, what channel a thread starts in, and what metadata follows it — is downstream of the integration configuration.
 
 ### What's tenant-scoped (admin web)
 
-- **Target Computer per integration.** Every integration that creates work needs a target shared Computer. When inbound routing finds no more-specific match, the new thread and task route there. The Computer can handle the work directly or delegate to a managed Agent or routine.
+- **Target Space per integration.** Every integration that creates work needs a Space. When inbound routing finds no more-specific match, the new thread routes there and invokes the tenant platform agent in that Space context.
 - **Routing rules per integration.** A list of predicate-to-target rules evaluated in order. Predicates can be: `@-mention`, `channel = #engineering`, `from-domain = customer.com`, `label = bug`, or provider-specific fields. Define rules in the provider's admin surface. The first matching rule wins; if none match, the integration's target Computer runs.
 - **Reopen behavior.** Whether a closed thread should reopen on a new inbound event in the same external conversation is on by default and channel-aware (Slack `threadTs`, GitHub issue id, Email `inReplyTo` chain). To disable per-channel — e.g., to force a new thread on every email even if `inReplyTo` matches — set the integration's reopen mode to `disabled`.
 - **Signing secret rotation.** Each integration's webhook signing secret lives in the tenant credential vault. Rotate it from the provider's admin surface; active integration runtimes pick up the new value from deployed configuration. See [Integrations → credential vault](/concepts/integrations#credential-vault).
@@ -108,28 +109,29 @@ Here's the full path of an inbound Slack message becoming a thread turn.
 2. **Webhook signature verified.** The Slack integration runtime validates the `X-Slack-Signature` header against the tenant credential vault.
 3. **Event normalized.** The raw Slack event (nested, full of implementation detail) is mapped to a `NormalizedEvent` — the integration-agnostic shape the thread path consumes.
 4. **Routing check.** The integration queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
-5. **Target resolution.** For a new thread, the Lambda picks an assigned shared Computer target: the target of an @-mention, a channel binding, or the integration default. For an existing thread, the selected Computer already owns the work.
+5. **Target resolution.** For a new thread, the Lambda picks a Space target: the target of an @-mention, a channel binding, or the integration default. For an existing thread, the selected Space already owns the work.
 6. **Message persisted.** A new `thread_message` row lands with role=`user`, the Slack user's name, and the full Slack event stored in `metadata` for audit.
-7. **Computer invoked.** The Computer runtime is fired asynchronously. It sees the thread, the new message, and the channel-specific metadata.
-8. **Reply or delegation.** The Computer handles the work or delegates to a managed Agent. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
+7. **Tenant platform agent invoked.** The managed runtime is fired asynchronously. It sees the thread, the new message, the selected Space context, and the channel-specific metadata.
+8. **Reply or delegation.** The platform agent handles the work or delegates to a sub-agent folder. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
 
-Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, the Computer task/delegation shows tool calls and memory reads, requester identity is preserved, and the outbound Slack response is logged with its Slack message id.
+Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, Space context is visible on the thread, tool calls and memory reads are recorded, requester identity is preserved, and the outbound Slack response is logged with its Slack message id.
 
-## Why Computers and managed Agents see metadata
+## Why the tenant agent sees metadata
 
-When ThinkWork assembles context for a Computer task or delegated managed-Agent turn, it includes thread metadata as structured context. That's how a `reply_via_slack` tool knows to post into `threadTs = "1708..."` without the worker itself having to parse or pass around raw provider state.
+When ThinkWork assembles context for a managed turn, it includes thread metadata as structured context. That's how a `reply_via_slack` tool knows to post into `threadTs = "1708..."` without the agent itself having to parse or pass around raw provider state.
 
 This is the system boundary made useful: the worker is channel-agnostic in its reasoning, but channel-aware in its tools.
 
 ## Known limits
 
-- **No cross-channel routing rules.** A rule like "route any GitHub issue mentioning `@on-call` to the ops Computer _and_ the PagerDuty integration" requires two separate routing setups today.
+- **No cross-channel routing rules.** A rule like "route any GitHub issue mentioning `@on-call` to the ops Space _and_ the PagerDuty integration" requires two separate routing setups today.
 - **Thread merging is manual.** If a customer emails and then follows up on Slack, the two threads stay separate. An operator can mark one as a duplicate, but the system doesn't auto-merge.
 - **Webhook replay isn't idempotent at the event level.** A integration Lambda deduping on provider-specific event ids is the right fix; today it happens inconsistently across providers.
 
 ## Related pages
 
 - [Threads (overview)](/concepts/threads/) — the universal container
+- [Spaces](/concepts/spaces/) — Space-scoped context and runtime policy
 - [Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — status, channel, priority
 - [Integrations](/concepts/integrations) — the integrations that produce these events
 - [Admin: Threads](/applications/admin/threads/) — where metadata is visible in the UI

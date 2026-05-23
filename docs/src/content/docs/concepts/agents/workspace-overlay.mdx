@@ -3,11 +3,18 @@ title: Workspace Overlay
 description: How an agent's workspace files compose from agent overrides, the template, and tenant defaults — the inheritance chain, placeholder substitution, pinned guardrail files, and accept-template-update flow.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
+
+<Aside type="note">
+  This page describes the historical agent/template/tenant workspace overlay.
+  The current user-facing model is tenant agent plus Space workspace. Use the
+  overlay details here for legacy/template-backed flows and implementation
+  context; use [Spaces](/concepts/spaces/) for current runtime workrooms.
+</Aside>
 
 Every managed agent in ThinkWork reads a set of workspace files at invocation time — `SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, and others. These files describe the agent's personality, its human partner, platform rules, and guardrail policy. They are the harness's per-agent personality + policy layer — what shapes an agent's voice in a way the template's structural config cannot, and what carries policy that must travel with the agent rather than the integration or thread.
 
-The **workspace overlay** is the composition model that resolves those files at read time. Instead of each agent holding its own forked copy of every file, the overlay walks a three-layer inheritance chain (agent → template → tenant) and returns the first hit — with per-file substitution and per-file class rules layered on top. Two operating guarantees land here: **Reliability** (every agent on the same template inherits identical defaults, so personality stays consistent across the fleet unless an agent explicitly overrides) and **Security** (the three guardrail-class files — `GUARDRAILS.md`, `PLATFORM.md`, `CAPABILITIES.md` — are *pinned*: a template-side change requires per-agent **Accept update** review before propagating, so no template editor can quietly widen what an agent is allowed to do without per-agent operator sign-off).
+The **workspace overlay** is the composition model that resolves those files at read time. Instead of each agent holding its own forked copy of every file, the overlay walks a three-layer inheritance chain (agent → template → tenant) and returns the first hit — with per-file substitution and per-file class rules layered on top. Two operating guarantees land here: **Reliability** (every agent on the same template inherits identical defaults, so personality stays consistent across the fleet unless an agent explicitly overrides) and **Security** (the three guardrail-class files — `GUARDRAILS.md`, `PLATFORM.md`, `CAPABILITIES.md` — are _pinned_: a template-side change requires per-agent **Accept update** review before propagating, so no template editor can quietly widen what an agent is allowed to do without per-agent operator sign-off).
 
 This page explains the operator-facing mental model. An [implementation appendix](#implementation) at the end covers the composer, S3 key layout, and resolver shapes for contributors.
 
@@ -34,7 +41,10 @@ request: agent → IDENTITY.md
 Edits to higher layers propagate to every downstream reader without any explicit sync step. Edit the tenant default; every agent that inherits it sees the change on next invocation. Edit the template; every agent on that template sees it. No per-agent rewrites, no copy-on-create.
 
 <Aside type="note">
-Pre-overlay, agent creation copied every template file into the agent's own S3 prefix. That made every later template edit a manual multi-agent sync. The overlay model deletes that step — inheritance is resolved at read time instead.
+  Pre-overlay, agent creation copied every template file into the agent's own S3
+  prefix. That made every later template edit a manual multi-agent sync. The
+  overlay model deletes that step — inheritance is resolved at read time
+  instead.
 </Aside>
 
 ## File classes
@@ -71,12 +81,12 @@ Pre-assignment, `USER.md` renders with every `{{HUMAN_*}}` placeholder as an em-
 
 Open any agent and click **Workspace**. The tree shows every file the composer would resolve for that agent, with small right-justified icons signaling where each file comes from:
 
-| Icon | Meaning |
-|---|---|
-| Filled purple dot | Overridden — an agent-scoped edit |
-| Blue layout icon | Inherited from the template |
-| Muted stack icon | Inherited from tenant defaults |
-| Amber alert | Pinned file has a template update available |
+| Icon              | Meaning                                     |
+| ----------------- | ------------------------------------------- |
+| Filled purple dot | Overridden — an agent-scoped edit           |
+| Blue layout icon  | Inherited from the template                 |
+| Muted stack icon  | Inherited from tenant defaults              |
+| Amber alert       | Pinned file has a template update available |
 
 **To override a file**, click any inherited file, edit in the CodeMirror pane, save. The next list shows the purple dot against that file.
 
@@ -94,13 +104,13 @@ The tenant defaults live separately at `/agent-templates/defaults` and affect ev
 
 Seven placeholder tokens are substituted at read time for live files and at write time for `USER.md`:
 
-| Placeholder | Source |
-|---|---|
-| `{{AGENT_NAME}}` | `agents.name` |
-| `{{TENANT_NAME}}` | `tenants.name` |
-| `{{HUMAN_NAME}}` | paired user's `users.name` |
-| `{{HUMAN_EMAIL}}` | paired user's `users.email` |
-| `{{HUMAN_TITLE}}` | paired user's `user_profiles.title` |
+| Placeholder          | Source                                 |
+| -------------------- | -------------------------------------- |
+| `{{AGENT_NAME}}`     | `agents.name`                          |
+| `{{TENANT_NAME}}`    | `tenants.name`                         |
+| `{{HUMAN_NAME}}`     | paired user's `users.name`             |
+| `{{HUMAN_EMAIL}}`    | paired user's `users.email`            |
+| `{{HUMAN_TITLE}}`    | paired user's `user_profiles.title`    |
 | `{{HUMAN_TIMEZONE}}` | paired user's `user_profiles.timezone` |
 | `{{HUMAN_PRONOUNS}}` | paired user's `user_profiles.pronouns` |
 
@@ -148,7 +158,8 @@ The 11 canonical default files (`SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS
 
 ## Related pages
 
-- [Admin — Agents](/applications/admin/agents/) — operator workflow for the Workspace tab
+- [Admin — Tenant Agent](/applications/admin/agents/) — current platform-agent workspace workflow
+- [Admin — Spaces](/applications/admin/spaces/) — current Space workspace workflow
 - [Admin — Agent Templates](/applications/admin/agent-templates/) — operator workflow for the template's Workspace tab
 - [Workspace Orchestration](/concepts/agents/workspace-orchestration/) — eventful workspace prefixes for async folder-native work
 - [Templates](/concepts/agents/templates/) — how templates fit into the broader reuse model
@@ -229,15 +240,15 @@ The version store is the invariant that makes pinned-file resolution stable: onc
 
 ### Related code
 
-| File | Role |
-|---|---|
-| `packages/api/src/lib/workspace-overlay.ts` | Composer |
-| `packages/api/src/lib/placeholder-substitution.ts` | Value sanitize + token substitute |
-| `packages/api/src/lib/pinned-versions.ts` | `initializePinnedVersions`, version-store writes |
-| `packages/api/src/lib/user-md-writer.ts` | Unit 6 — USER.md write-at-assignment |
-| `packages/api/workspace-files.ts` | REST Lambda |
-| `packages/api/src/graphql/resolvers/agents/acceptTemplateUpdate.mutation.ts` | Single-agent accept |
-| `packages/api/src/graphql/resolvers/templates/acceptTemplateUpdateBulk.mutation.ts` | Bulk accept |
-| `packages/api/src/graphql/resolvers/agents/agentPinStatus.query.ts` | Pin status read |
-| `packages/agentcore-strands/agent-container/workspace_composer_client.py` | Strands-side HTTP client |
-| `packages/workspace-defaults/` | Canonical default content + file-class constants |
+| File                                                                                | Role                                             |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `packages/api/src/lib/workspace-overlay.ts`                                         | Composer                                         |
+| `packages/api/src/lib/placeholder-substitution.ts`                                  | Value sanitize + token substitute                |
+| `packages/api/src/lib/pinned-versions.ts`                                           | `initializePinnedVersions`, version-store writes |
+| `packages/api/src/lib/user-md-writer.ts`                                            | Unit 6 — USER.md write-at-assignment             |
+| `packages/api/workspace-files.ts`                                                   | REST Lambda                                      |
+| `packages/api/src/graphql/resolvers/agents/acceptTemplateUpdate.mutation.ts`        | Single-agent accept                              |
+| `packages/api/src/graphql/resolvers/templates/acceptTemplateUpdateBulk.mutation.ts` | Bulk accept                                      |
+| `packages/api/src/graphql/resolvers/agents/agentPinStatus.query.ts`                 | Pin status read                                  |
+| `packages/agentcore-strands/agent-container/workspace_composer_client.py`           | Strands-side HTTP client                         |
+| `packages/workspace-defaults/`                                                      | Canonical default content + file-class constants |

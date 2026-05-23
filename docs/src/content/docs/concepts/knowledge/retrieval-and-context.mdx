@@ -3,7 +3,7 @@ title: Source Routing
 description: How thread history, knowledge bases, memory, compiled pages, workspace files, and approved tools come together through Company Brain at turn time.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, Company Brain assembles context from eligible sources, budgets them against the model's context window, and decides what to include vs. truncate. This source routing is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop): the moment the harness decides what the model gets to see.
 
@@ -64,10 +64,14 @@ When the retrieval layer produces more content than the budget allows, it trunca
 3. Recalled memories and wiki pages get summarized (first 2–3 lines of each) before being included.
 4. Older thread history is summarized or dropped.
 
-This priority is tunable per agent template via the `memoryConfig` and `toolConfig` fields. An agent that should lean heavily on retrieved documents sets a higher KB topK; an agent that should lean on memory sets a higher memory recall count.
+This priority is tunable through the runtime configuration surfaces that feed the current turn. In Space-aware operation, tune retrieval behavior for the Space that needs it: a Space that should lean heavily on retrieved documents uses a higher KB topK, while a Space that should lean on memory uses a higher memory recall count where exposed.
 
 <Aside type="tip">
-  If an agent's responses feel "forgetful," check the context budget before adding more sources. The common failure mode is adding a wiki on top of a big KB on top of long memory recall — each source is good individually, but together they starve the response budget. Better to tune each down than to stuff them all.
+  If an agent's responses feel "forgetful," check the context budget before
+  adding more sources. The common failure mode is adding a wiki on top of a big
+  KB on top of long memory recall — each source is good individually, but
+  together they starve the response budget. Better to tune each down than to
+  stuff them all.
 </Aside>
 
 ## Why this matters to keep separate
@@ -82,10 +86,10 @@ It's tempting to collapse everything into one big "just feed the model context" 
 
 A distinction that bites people:
 
-- **Short-term context** = thread history. It's the canonical record of what happened *in this conversation*. The model reads it verbatim (within budget).
+- **Short-term context** = thread history. It's the canonical record of what happened _in this conversation_. The model reads it verbatim (within budget).
 - **Long-term memory** = facts recalled from prior work. The model reads these as selective summaries, not verbatim chat logs.
 
-Long-term memory should never masquerade as the thread record. If an operator asks "what did the agent say in thread X," the answer is in the thread's turn rows, not in the memory adapter. Memory is *derived* context; the thread is *canonical* record.
+Long-term memory should never masquerade as the thread record. If an operator asks "what did the agent say in thread X," the answer is in the thread's turn rows, not in the memory adapter. Memory is _derived_ context; the thread is _canonical_ record.
 
 ## Known limits
 

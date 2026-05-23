@@ -3,7 +3,7 @@ title: Control
 description: Guardrails, budgets, usage tracking, and audit — how ThinkWork enforces boundaries on agent behavior and proves what happened after the fact.
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid } from "@astrojs/starlight/components";
 
 Control is the harness's governance layer — the component that turns ThinkWork from a demo into a production system, and the load-bearing implementation of the four operating guarantees ([Reliability, Efficiency, Security, Traceability](/architecture/#the-four-operating-guarantees)). It answers two questions that every real deployment has to answer:
 
@@ -14,16 +14,16 @@ Both matter equally. A system that only enforces boundaries is a black box; a sy
 
 ## Operating guarantees implemented
 
-The five governance controls below map 1:N to the four operating guarantees. The guarantees are the *language* a buyer or operator can grab onto; the controls are the *implementation* that ships in the admin web. Every guarantee has at least one shipping control behind it.
+The five governance controls below map 1:N to the four operating guarantees. The guarantees are the _language_ a buyer or operator can grab onto; the controls are the _implementation_ that ships in the admin web. Every guarantee has at least one shipping control behind it.
 
-| Guarantee | What it commits to | Shipping controls |
-|---|---|---|
-| **Reliability** | Fault recovery, idempotent writes, behavior consistent under the same inputs. | Approved agent capabilities (templates pin model + guardrails so behavior is reproducible); Security + accuracy evaluations (regression detection per template version). |
-| **Efficiency** | Token budgets, per-agent spend caps, low-latency interactive paths. | Cost control and analysis (per-turn cost capture, per-agent budget enforcement that pauses at threshold). |
-| **Security** | Per-agent capability grants, sandboxed execution, I/O filtering for prompt injection and PII. | Runs in your AWS (the harness deploys into customer VPC; data, IAM, and network stay in the customer's account); Approved agent capabilities (Bedrock Guardrails attached at the template level — content filters, topic filters, PII redaction, prompt-injection detection via Strands `safety.py`); Security + accuracy evaluations. |
-| **Traceability** | End-to-end traces per turn, explainable decisions, auditable state. | Runs in your AWS (audit log lives in customer's S3, partitioned by tenant, no delete permission on the Lambda role); Centralized management (one admin console aggregates threads, turns, cost, guardrail activations, and audit events under the same `threadId`/`turnId` keys so incident reconstruction is one query). |
+| Guarantee        | What it commits to                                                                            | Shipping controls                                                                                                                                                                                                                                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reliability**  | Fault recovery, idempotent writes, behavior consistent under the same inputs.                 | Approved agent capabilities (templates pin model + guardrails so behavior is reproducible); Security + accuracy evaluations (regression detection per template version).                                                                                                                                                               |
+| **Efficiency**   | Token budgets, Space spend caps, low-latency interactive paths.                               | Cost control and analysis (per-turn cost capture, Space/tenant budget enforcement that pauses at threshold).                                                                                                                                                                                                                           |
+| **Security**     | Per-agent capability grants, sandboxed execution, I/O filtering for prompt injection and PII. | Runs in your AWS (the harness deploys into customer VPC; data, IAM, and network stay in the customer's account); Approved agent capabilities (Bedrock Guardrails attached at the template level — content filters, topic filters, PII redaction, prompt-injection detection via Strands `safety.py`); Security + accuracy evaluations. |
+| **Traceability** | End-to-end traces per turn, explainable decisions, auditable state.                           | Runs in your AWS (audit log lives in customer's S3, partitioned by tenant, no delete permission on the Lambda role); Centralized management (one admin console aggregates threads, turns, cost, guardrail activations, and audit events under the same `threadId`/`turnId` keys so incident reconstruction is one query).              |
 
-The mapping is 1:N — most controls implement more than one guarantee — because the guarantees are *qualities* the harness commits to, and the controls are *mechanisms* that often serve multiple qualities at once. "Runs in your AWS" is simultaneously a Security boundary (your IAM, not ours) and a Traceability mechanism (your audit log, your retention policy). That's intentional.
+The mapping is 1:N — most controls implement more than one guarantee — because the guarantees are _qualities_ the harness commits to, and the controls are _mechanisms_ that often serve multiple qualities at once. "Runs in your AWS" is simultaneously a Security boundary (your IAM, not ours) and a Traceability mechanism (your audit log, your retention policy). That's intentional.
 
 ## Why Control scales differently than demos
 
@@ -41,16 +41,20 @@ Control is the concept that bundles those three concerns together. One place to 
 
 <CardGrid>
   <Card title="Guardrails" icon="shield-check">
-    Bedrock Guardrails applied at model invocation time — topic filters, content filters, PII redaction, grounding checks — referenced from templates so the boundary applies to every agent on the template.
+    Bedrock Guardrails applied at model invocation time — topic filters, content
+    filters, PII redaction, grounding checks — referenced from templates so the
+    boundary applies to every agent on the template.
   </Card>
   <Card title="Budgets, Usage, and Audit" icon="seti:settings">
-    Per-turn cost capture from OTel spans, tenant-level budget enforcement that can suspend agents when thresholds hit, and an append-only audit log for every invocation.
+    Per-turn cost capture from OTel spans, tenant-level budget enforcement that
+    can suspend agents when thresholds hit, and an append-only audit log for
+    every invocation.
   </Card>
 </CardGrid>
 
 ## How Control interacts with the rest of the system
 
-Control doesn't own agents, threads, or memory. It *wraps* them:
+Control doesn't own agents, threads, or memory. It _wraps_ them:
 
 - **Guardrails** hook into the Strands invocation path. When AgentCore assembles context and calls Bedrock, the guardrail evaluator runs before the response is returned to the thread. A blocked response becomes a visible event in the thread timeline — agents don't get a silently-edited response without the system recording that it happened.
 - **Budgets** hook into the turn accounting path. Every turn's cost is captured from OpenTelemetry spans that AgentCore emits (input tokens × model rate + output tokens × model rate + tool call costs). A tenant-level budget cap, when hit, flips the agent's status to `PAUSED` rather than silently continuing.

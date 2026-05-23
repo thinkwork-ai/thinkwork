@@ -1,97 +1,75 @@
 ---
-title: Runtime Selection
-description: How ThinkWork chooses between the Strands and Pi AgentCore runtimes for managed agents, and how operators should use the selector.
+title: Runtime Configuration
+description: How ThinkWork resolves tenant-agent defaults and Space runtime overrides for managed turns.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-Runtime selection is the managed-agent switch that chooses which AgentCore container executes a turn. ThinkWork currently supports two managed runtimes:
+Runtime configuration determines which model, guardrail, budget state, and sandbox settings the managed runtime uses for a turn. In the current Space architecture, operators do not normally choose a runtime per top-level managed agent. They configure:
 
-| Runtime | Status | Use when |
-|---|---|---|
-| **Strands** | Default, stable | You want the proven production path with the full current tool surface. Existing agents stay here unless changed. |
-| **Pi** | Parallel runtime substrate | You want to test ThinkWork's Pi-based agent loop on real agents while keeping the same threads, memory, tools, audit, and deployment boundary. |
+- **Tenant agent defaults** on [Admin — Tenant Agent](/applications/admin/agents/).
+- **Space runtime overrides** on [Admin — Spaces](/applications/admin/spaces/).
 
-Both runtimes are **managed** in the ThinkWork sense: they run inside your AWS account on Bedrock AgentCore, use your Bedrock access, read the same Aurora records, publish through the same thread pipeline, and write the same audit/cost surfaces. Pi is not a connected-agent webhook and it is not vendor-hosted.
+## Resolution order
 
-## Why there are two runtimes
+For a managed turn, ThinkWork resolves runtime settings like this:
 
-Strands is the original ThinkWork managed runtime. It is mature, Python-based, and already integrated with the ThinkWork tool surface.
+```text
+Space override
+  -> tenant platform-agent default
+  -> deployment/runtime fallback
+```
 
-Pi is a second AgentCore runtime substrate. It exists so ThinkWork can evaluate a more customizable agent loop without replacing the stable runtime or forcing every agent to migrate. The point is parallel production learning: operators can route a canary agent to Pi, observe behavior under real traffic, and move it back to Strands if needed.
+If a Space leaves a field empty, it inherits the tenant agent value. This is the intended common case.
 
-<Aside type="note">
-Strands remains the default. Existing agents and templates continue to run on Strands unless their runtime selector is changed explicitly.
+## Tenant agent defaults
+
+The tenant agent carries the broad defaults:
+
+- Model.
+- Monthly budget.
+- Sandbox.
+- System prompt and role.
+- Baseline workspace files.
+
+Set these conservatively. They are the values every Space receives unless it explicitly overrides them.
+
+## Space overrides
+
+A Space can override:
+
+| Override             | Use when                                                                     |
+| -------------------- | ---------------------------------------------------------------------------- |
+| Model                | The Space needs a cheaper, faster, or stronger model than the tenant default |
+| Guardrail id         | The Space needs a stricter or specialized guardrail                          |
+| Monthly budget cents | The Space needs a local spending cap                                         |
+| Budget paused        | The Space should stop accepting new paid work while other Spaces continue    |
+| Sandbox              | The Space needs different code-execution constraints                         |
+
+Space overrides apply to new turns in that Space. In-flight turns finish with the configuration they already loaded.
+
+<Aside type="tip">
+  Prefer inheritance until a Space has a concrete reason to differ. Empty fields
+  are easier to operate than copied defaults because they continue to follow
+  tenant-agent changes.
 </Aside>
 
-## Where the selector lives
+## Managed runtime substrate
 
-The selector is stored on both records that define managed-agent behavior:
+The managed runtime runs on Bedrock AgentCore inside your AWS account. Earlier versions of the docs described a visible Strands/Pi selector on individual agents and templates. That selector is no longer the primary user-facing control for normal tenant operation.
 
-- **Agent** — `agents.runtime`, the per-agent runtime override.
-- **Template** — `agent_templates.runtime`, the default runtime for agents created from that template.
+For user-facing operations, think in terms of **tenant-agent defaults plus Space overrides**. Runtime substrate differences are deployment and migration concerns unless a specific screen exposes them.
 
-At invocation time, the dispatcher resolves the agent and template, normalizes the runtime value, and chooses the matching AgentCore function:
+## Failure and fallback behavior
 
-```
-agent.runtime ?? template.runtime ?? "strands"
-        |
-        v
-runtime = "strands" | "pi"
-        |
-        v
-AGENTCORE_FUNCTION_NAME or AGENTCORE_PI_FUNCTION_NAME
-        |
-        v
-Bedrock AgentCore runtime invocation
-```
-
-This means the runtime switch is an invocation-time decision, not a deployment-time decision. Changing an agent from Strands to Pi affects the next turn; an in-flight turn finishes on the runtime that was selected when it started.
-
-## What stays the same
-
-Switching a managed agent from Strands to Pi does not create a new agent identity. These surfaces stay stable:
-
-- Thread history and thread ids.
-- Agent id, slug, template link, and workspace overlay.
-- Knowledge-base assignments.
-- Memory and compounding-memory context.
-- MCP server configuration and integration credentials resolved by the dispatcher.
-- AppSync response delivery, audit records, and cost/evaluation surfaces.
-
-The runtime is only the loop that executes the turn. The harness state remains ThinkWork-owned.
-
-## What can differ
-
-The implementation language and loop internals differ:
-
-- **Strands runtime** lives in `packages/agentcore-strands/agent-container/` and uses Python + Strands.
-- **Pi runtime** lives in `packages/agentcore-pi/agent-container/` and uses Node.js + Pi.
-
-Tool parity is the goal, but new tools should be evaluated per runtime. When a tool only exists in one runtime, the selector should keep affected agents on the supported runtime until the other implementation lands.
-
-## Operator workflow
-
-Use runtime selection like a canary control:
-
-1. Keep the production fleet on Strands.
-2. Create or choose one low-risk agent for Pi validation.
-3. Set that agent's runtime to Pi.
-4. Send real but controlled traffic through the agent.
-5. Compare success rate, latency, tool behavior, memory recall, and answer quality against a Strands reference.
-6. Move the agent back to Strands if the Pi runtime misbehaves.
-
-For templates, set the runtime when you want newly-created agents from that template to start on Pi. For one-off validation, prefer changing a single agent first.
-
-## Failure modes
-
-If an agent is set to `pi` in a stage where the Pi runtime function is not provisioned, the dispatcher returns a structured "Pi runtime not yet provisioned in this stage" error. It does not silently fall back to Strands, because silent fallback would make runtime tests impossible to trust.
-
-If the runtime value is missing or unrecognized, ThinkWork normalizes to Strands. This protects older records created before runtime selection existed.
+- Missing Space override: inherit the tenant agent value.
+- Missing tenant agent value: use the deployment/runtime fallback.
+- Unavailable model or guardrail: the turn fails with a configuration error rather than silently using an unrelated setting.
+- Budget paused: new work in that scope is blocked until the pause is cleared.
 
 ## Related pages
 
-- [Managed Agents](/concepts/agents/managed-agents/) — how managed invocations run
-- [Templates](/concepts/agents/templates/) — the default configuration layer for agent fleets
-- [Admin: Agents](/applications/admin/agents/) — where operators manage individual agents
-- [Admin: Agent Templates](/applications/admin/agent-templates/) — where operators manage template defaults
+- [Agents](/concepts/agents/) — tenant platform agent model
+- [Spaces](/concepts/spaces/) — Space context and policy
+- [Admin — Tenant Agent](/applications/admin/agents/) — default configuration
+- [Admin — Spaces](/applications/admin/spaces/) — Space overrides

@@ -3,7 +3,7 @@ title: Admin — Threads
 description: The admin app's thread list and detail views — Kanban and grouped-table layouts, filters, inline editing, live subscriptions, traces, artifacts, and the turn-level audit.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Threads are the canonical record of work in ThinkWork. Every user chat, every integration-driven conversation, every scheduled automation turn lands in a thread. The admin app's Threads surface is where operators and authors browse those threads, filter them, change their state, and drill into the per-turn audit that explains exactly what happened on any given message.
 
@@ -33,7 +33,10 @@ Filter state, sort state, group state, and which groups are collapsed are all pe
 Most filters push to the server — the `ThreadsPagedQuery` takes status, priority, archived, and search variables and returns a paginated response with a total count. One filter is applied client-side: **assignee**. The query fetches the page based on the other filters, and the assignee filter is applied after the results land.
 
 <Aside type="caution">
-Because assignee filtering happens after pagination, a filtered page can show fewer rows than the page size if the assignee matches only some of the rows on that page. This is a known quirk, not a bug — the total-count field still reflects the pre-assignee-filter count.
+  Because assignee filtering happens after pagination, a filtered page can show
+  fewer rows than the page size if the assignee matches only some of the rows on
+  that page. This is a known quirk, not a bug — the total-count field still
+  reflects the pre-assignee-filter count.
 </Aside>
 
 ### Live subscriptions
@@ -84,15 +87,15 @@ The detail view subscribes to the same two subscriptions as the list, filtered t
 
 Threads move through a small lifecycle:
 
-| Status | Meaning |
-|---|---|
-| `BACKLOG` | Captured but not yet scheduled |
-| `TODO` | Ready to be picked up |
-| `IN_PROGRESS` | Currently being worked on |
-| `IN_REVIEW` | Waiting on human review (often tied to an Inbox approval) |
-| `BLOCKED` | Stuck on a dependency or error |
-| `DONE` | Completed |
-| `CANCELLED` | Abandoned |
+| Status        | Meaning                                                   |
+| ------------- | --------------------------------------------------------- |
+| `BACKLOG`     | Captured but not yet scheduled                            |
+| `TODO`        | Ready to be picked up                                     |
+| `IN_PROGRESS` | Currently being worked on                                 |
+| `IN_REVIEW`   | Waiting on human review (often tied to an Inbox approval) |
+| `BLOCKED`     | Stuck on a dependency or error                            |
+| `DONE`        | Completed                                                 |
+| `CANCELLED`   | Abandoned                                                 |
 
 Priority is a separate axis: `CRITICAL`, `URGENT`, `HIGH`, `MEDIUM`, `LOW`.
 
@@ -126,7 +129,8 @@ Beyond the explicit status, an additional **inbox status** is computed for each 
 ## Related pages
 
 - [Inbox](/applications/admin/inbox/) — the approval queue for agent-requested human-in-the-loop actions
-- [Agents](/applications/admin/agents/) — the agent roster; agents own their threads
+- [Tenant Agent](/applications/admin/agents/) — the platform agent that runs managed turns
+- [Spaces](/applications/admin/spaces/) — the workrooms that scope thread context
 - [Artifacts](/applications/admin/artifacts/) — tenant-wide view of thread-generated artifacts
 - [Analytics](/applications/admin/analytics/) — aggregate metrics over threads
 - [Threads (concept)](/concepts/threads/) — the underlying thread model

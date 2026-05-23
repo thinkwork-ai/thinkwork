@@ -1,208 +1,135 @@
 ---
 title: Managed Agents
-description: A walking tour of what happens when a managed agent runs — runtime selection, context assembly, Bedrock invocation, tool execution, and streaming back — plus why managed does not mean vendor-hosted.
+description: A walking tour of how the tenant platform agent runs inside your AWS account with Space context, Bedrock invocation, tool execution, audit, and streaming.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-Managed agents are the default ThinkWork runtime path — the harness's Planning + Action layer in [PPAF](/architecture/#the-ppaf-agent-loop). ThinkWork runs the agent loop for you inside your AWS account on **Bedrock AgentCore**. Strands is the stable default runtime; Pi is a second managed runtime that can be selected per agent or template. The runtime path gives you consistent thread integration, streaming, and auditability without you building any of that yourself, and it's the load-bearing implementation of two operating guarantees: **Reliability** (every turn resolves agent + template state freshly, so behavior is reproducible and a config rotation propagates without a deploy) and **Security** (Bedrock guardrails attach at model-invocation time so the boundary is non-bypassable, and tool capability grants are template-pinned so a compromised skill pack can't widen the agent's reach).
+Managed agents are the default ThinkWork runtime path — the harness's Planning + Action layer in [PPAF](/architecture/#the-ppaf-agent-loop). ThinkWork runs the tenant platform agent inside your AWS account on **Bedrock AgentCore**, then applies the current [Space](/concepts/spaces/) context for each turn.
 
-The important distinction is that **managed does not mean vendor-hosted**. ThinkWork makes running an agent easy, but the Lambda container is in your account, the thread state is in your Aurora cluster, the model invocation goes to your Bedrock endpoint, and the audit log lives in your S3 bucket. Nothing phones home; nothing depends on a ThinkWork SaaS control plane.
+The important distinction is that **managed does not mean vendor-hosted**. The runtime container is in your account, thread state is in your Aurora cluster, model invocation goes to your Bedrock endpoint, and audit logs live in your S3 bucket.
 
 ## A walking tour of one invocation
 
-From "user sends a message" to "agent response streams back," end to end.
-
 ### 1 — The trigger
 
-A new message lands in a thread assigned to a managed agent. How it got there doesn't matter — could be a chat from the mobile app, an inbound Slack event mapped by the Slack integration, or an automation's scheduled run. The message row is written to Aurora; an AppSync mutation fires; a message also lands on an SQS queue that the AgentCore runtime consumes.
+A new message lands in a Space-scoped thread. It could be a mobile chat message, inbound Space email, Slack event, GitHub webhook, or scheduled automation. The message is persisted and an invocation is queued for the tenant platform agent.
 
-### 2 — Runtime dispatch
+### 2 — Configuration resolution
 
-The dispatcher resolves the assigned agent and template, reads the runtime selector, and invokes the matching AgentCore runtime function. If the selector is missing or unrecognized, the dispatcher uses Strands. If the selector is `pi` but the Pi function is not provisioned in the stage, the dispatcher returns a structured error instead of silently falling back.
+The dispatcher resolves:
 
-See [Runtime Selection](/concepts/agents/runtime-selection/) for the selection model.
+- Tenant id and caller context.
+- The thread and Space.
+- The tenant platform agent.
+- Space runtime overrides.
+- Tenant agent defaults for any unset override.
+
+See [Runtime Configuration](/concepts/agents/runtime-selection/) for the resolution model.
 
 ### 3 — Container invocation
 
-The selected AgentCore runtime receives the invocation. If this is the first invocation in a while, the container cold starts — including pulling the image from ECR, initializing the runtime loop, and opening any needed clients. Warm invocations start much faster.
+The managed runtime receives the invocation. If the container is cold, it initializes clients and runtime libraries. Warm invocations start faster.
 
-The Strands container is Python-based and preloaded with:
+The runtime is preloaded with the ThinkWork runtime library for:
 
-- Python 3.12
-- Strands agent framework
-- Boto3 (Bedrock, S3, SSM, Secrets Manager clients)
-- httpx (for skill HTTP tools and MCP)
-- psycopg3 (Aurora connection)
-- The ThinkWork runtime library — tool registration, memory read/write, context assembly, OTel instrumentation
+- Tool registration.
+- MCP and built-in tool access.
+- Memory and Company Brain context assembly.
+- Workspace file loading.
+- Bedrock invocation.
+- OpenTelemetry instrumentation.
+- Thread message and audit writes.
 
-The Pi container is Node.js-based and runs the Pi loop while preserving the same invocation envelope and response contract. Both runtime images are built and deployed by CI.
+### 4 — Space context assembly
 
-Lambda memory is configured at deployment time.
+Before calling the model, the runtime assembles context from:
 
-### 4 — Agent and template resolution
+- **Thread history** — recent messages and turns from the current thread.
+- **Tenant agent workspace** — baseline instructions and shared files.
+- **Space workspace** — local runbooks, procedures, customer or project context, and Space-specific instructions.
+- **Knowledge and memory** — Space-scoped and tenant-approved sources.
+- **Channel metadata** — Slack, GitHub, email, task, automation, or chat context.
 
-The runtime receives the normalized agent and template configuration. From the agent row it gets the template id, system prompt, assigned skill packs, assigned knowledge bases, and runtime selector. From the template row it gets the model id, guardrail id, inference params, tool config, and default runtime.
+The system prompt comes from the tenant platform agent baseline plus the rendered Space context.
 
-Agent state is resolved *every invocation*. That matters: if an operator updated the template's `modelId` five seconds ago, this invocation already sees the new model. There is no cache that could serve stale config.
+### 5 — Bedrock invocation
 
-### 5 — Context assembly
-
-Before calling the model, AgentCore assembles the context. Four sources feed in:
-
-- **Thread history.** The most recent turns from the thread, windowed to fit alongside everything else.
-- **Document retrieval.** If the agent has knowledge bases attached, each gets queried for the top-K most-similar chunks given the user's message. Results are merged.
-- **Long-term memory recall.** If the agent has long-term memory configured, the memory adapter is queried for relevant prior facts — this is Hindsight or AgentCore Memory, depending on the deployment.
-- **Compounding-memory wiki.** If the agent has a wiki, the recall tool surfaces relevant pages. Often this is faster and more precise than raw memory search because the pages are pre-organized.
-
-All four pieces get stitched into the structured input that goes to Bedrock's `converse` API. The system prompt comes from the template base + the agent-specific prompt; the user message is the latest message in the thread; the retrieved content is added as tool context or `<knowledge>` blocks.
-
-### 6 — Bedrock invocation
-
-AgentCore calls `bedrock-runtime.converse` with the assembled context, the configured model id, and — critically — the configured `guardrailIdentifier`. The guardrail evaluator runs *inside* the Bedrock call, not as a wrapper around it. That's what makes the boundary non-bypassable.
+The runtime calls Bedrock with the resolved model and guardrail settings. Guardrails attach at the model invocation boundary rather than as a prompt-only wrapper.
 
 The model returns either a direct response or a tool-use request.
 
-### 7 — The runtime loop
+### 6 — Tool loop
 
-If the model requested a tool, the selected runtime orchestrates the handshake:
+If the model requests a tool:
 
-1. The runtime looks up the requested tool in its registry (built-in + skill-pack-provided + MCP-connected).
-2. The tool is invoked — could be a local Python function, an HTTP call to an external API, or an MCP call to a remote server.
-3. The tool's output is added to the conversation and sent back to the model.
-4. The model may request more tools, or produce a final response.
+1. The runtime looks up the tool in the registry available to the Space.
+2. The tool runs as a built-in tool, skill-backed tool, or MCP call.
+3. The tool result is added to the turn.
+4. The model continues until it produces a final response or hits a configured stop condition.
 
-OpenTelemetry spans wrap every tool invocation and every model call, capturing input tokens, output tokens, and latency. Those spans become the raw material for per-turn cost capture downstream.
+Space tool availability matters here: a tool registered at the tenant level is only useful in a turn when the current Space allows it.
 
-### 8 — Response and streaming
+### 7 — Response and streaming
 
-When the model produces its final response, AgentCore:
+When the model produces a response, the runtime:
 
-1. Writes a new `thread_message` row with role=`assistant`.
-2. Writes a `thread_turn` row with the aggregated turn data (tool calls, memory reads, cost, duration).
-3. Publishes an AppSync mutation so subscribed clients see the new message live.
-4. If streaming is enabled, chunk-by-chunk updates stream via AppSync throughout step 6; the final message is just the completion marker.
+1. Writes an assistant message.
+2. Writes the turn record with tool calls, memory reads, cost, and duration.
+3. Publishes updates through AppSync.
+4. Streams partial text to connected clients when streaming is active.
 
-### 9 — Post-turn side effects
+### 8 — Post-turn side effects
 
-A few things happen after the turn completes but before the Lambda returns:
+After the turn completes:
 
-- **Memory retention.** If AgentCore Memory is the adapter, a retention event fires so background strategies (summaries, preferences, semantic facts) can extract what's worth remembering.
-- **Company Brain page compile enqueue.** If compiled pages are enabled, a compile job gets queued on a 5-minute dedupe bucket (see [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/)).
-- **Audit record.** An NDJSON record of the full invocation lands in the audit S3 bucket.
-- **Cost reducer.** The OTel spans emit; the cost reducer picks them up off the CloudWatch stream and writes a `thread_turn_costs` row.
-
-Then the Lambda returns. Total wall time for a warm invocation with a typical context: 2–10 seconds depending on model + tool calls.
+- Memory retention can record useful facts.
+- Company Brain compile work can be queued.
+- Audit records are written.
+- Cost spans are reduced into cost rows.
 
 ## Why this shape matters
 
-A few things about this model that aren't obvious until you've operated it for a while:
-
-- **Agent state resolution every turn.** No stale config. No deploy needed to rotate a model.
-- **Tool config lives in the template.** A skill pack upload doesn't change what an agent can do; the template's `toolConfig` governs that. This matters for security — an attacker who somehow uploads a malicious skill pack still needs the template's tool flag to be on.
-- **Every turn is observable twice.** From the thread side (narrative timeline) and from the execution side (OTel spans + audit record). Debugging is pleasant because the data is there.
-- **Cold starts are visible.** A 3–5s cold start on the first turn after a quiet period is normal and expected. Set user expectations accordingly.
-
-## What a managed agent includes (reference)
-
-Every managed agent has:
-
-- A **model** chosen through its template.
-- A **runtime** selected on the agent or inherited from the template (`strands` by default, `pi` when explicitly selected).
-- A **system prompt** stored on the agent record.
-- Optional **skill packs** — the agent's capabilities.
-- Optional **knowledge bases** — what it retrieves from.
-- Optional **long-term memory** — the adapter behavior is configured on the template.
-- Optional **compiled Company Brain pages** — derived context on top of long-term memory.
-- **Control settings** inherited from the template — guardrails, rate limits, budgets.
-
-<Aside type="note">
-  Company Brain is the umbrella context layer in ThinkWork. Knowledge bases, memory, compiled pages, workspace files, and approved tools are different inputs into that layer — all can feed the same turn, and the harness handles assembly without the agent's author wiring it up.
-</Aside>
+- **One platform-agent identity.** Operators do not need to manage a fleet of top-level managed-agent records.
+- **Space-local behavior.** Context, tools, memory, automations, email triggers, and runtime overrides live where the work happens.
+- **Every turn resolves fresh config.** Tenant-agent changes and Space override changes apply to new turns without a redeploy.
+- **Audit stays unified.** Threads, turns, tool calls, cost, and channel metadata all attach to the same durable thread model.
 
 ## When to use managed agents
 
 Managed agents are the best fit when you want:
 
 - Bedrock-native deployment in your own AWS account.
-- A standard runtime across many agents.
+- A standard runtime path across Spaces.
 - Tight integration with threads, memory, automations, and controls.
-- Simple operations for internal tools and production workflows.
-- The operational benefits — guardrail integration, per-turn cost, fleet rotation, audit — that the managed path bakes in.
+- Tenant-wide defaults with Space-specific overrides.
+- Per-turn cost, audit, streaming, and guardrail integration.
 
-Use [connected agents](/concepts/agents/) instead when you already have an external runtime you want ThinkWork to orchestrate around rather than replace.
+Use [connected agents](/concepts/agents/) when you already run an external agent service and want ThinkWork's threads, auth, audit, and control plane around it.
 
-## How to configure it
+## Configuration layers
 
-Managed agents are configured at three layers — the agent record, the template the agent references, and the deployment-level Lambda settings. The split matters: most operator-side knobs live on the template (so they propagate fleet-wide), only a few are agent-scoped, and a small set of cross-cutting infrastructure dials are deployment-scoped (Terraform).
+| Layer        | Examples                                                                      |
+| ------------ | ----------------------------------------------------------------------------- |
+| Tenant Agent | Name, role, default model, budget, sandbox, system prompt, baseline workspace |
+| Space        | Workspace files, tools, memory, automations, email trigger, runtime overrides |
+| Deployment   | Runtime image, memory, networking, environment variables, Bedrock access      |
 
-### Agent-scoped (admin web)
-
-Per-agent settings at [Admin: Agents](/applications/admin/agents/):
-
-- **System prompt.** The agent-specific instructions, written into the `system` block on every Bedrock call. This is the most-touched per-agent dial; templates seed it but agents typically diverge over time.
-- **Runtime.** Which AgentCore runtime executes the next turn. Strands is the stable default; Pi is the parallel runtime substrate. Changing the runtime affects new turns, not turns already in flight.
-- **Skill packs assigned.** Which capability bundles this specific agent can call. Seeded from the template at agent creation; editable per-agent thereafter (see [Templates: Inheritance and overrides](/concepts/agents/templates/#inheritance-and-overrides)).
-- **Knowledge bases assigned.** Same shape — seeded, then per-agent editable.
-- **Status.** `created / active / suspended / archived`. Suspension is usually automatic (budget reconciler hits a cap), but operators can flip status manually.
-- **Compounding-memory wiki.** Whether this specific agent participates in the wiki pipeline. Off by default; turn on per-agent for assistants whose memory benefits from cross-thread pages.
-
-### Template-scoped (admin web, propagates fleet-wide)
-
-The configuration layer where most production work happens. See [Templates](/concepts/agents/templates/) for the full surface; the dials that matter for the managed runtime:
-
-- **Model id.** Which Bedrock model the runtime calls. Changing this rotates the model on every agent that references the template — no deploy.
-- **Default runtime.** Which AgentCore runtime newly-created agents from this template use unless overridden per agent.
-- **Guardrail id + version.** The Bedrock Guardrail attached at the model invocation. Non-bypassable.
-- **Inference parameters.** Max output tokens, temperature, top-p, and any other Bedrock `converse` params.
-- **Tool config.** Which tool categories the agent's runtime registry should include — SQL, S3, web search, MCP-connected tools, built-in tools. Disabled categories are absent from the registry, not gated by prompt.
-- **Memory adapter + recall config.** Hindsight or AgentCore Memory; how many recalls per turn; which memory strategies run.
-- **Per-turn tool-call cap.** The safety valve against runaway tool loops.
-- **Budget cap.** Monthly spend limit; whether hitting it auto-suspends agents on the template.
-
-### Deployment-scoped (Terraform / CLI)
-
-- **Lambda memory.** 3GB by default (≈ 2 vCPUs); raise via the AgentCore Lambda config when consistently CPU-bound.
-- **Provisioned concurrency.** Off by default; set per-stage if cold-start latency on the first turn after a quiet period is unacceptable for your interactive paths.
-- **VPC config.** AgentCore runs in your VPC by default. Subnets, security groups, NAT egress all configured in the foundation Terraform module.
-- **Environment variables.** Bedrock endpoint, Aurora connection params, KMS keys, audit S3 bucket — all wired via Terraform; the runtime resolves them at boot.
-- **Container image versions.** ThinkWork ships Strands and Pi as versioned AgentCore container images; deployments pin to specific tags. Upgrading is a `thinkwork deploy` step, not an admin-web setting.
-
-### When the defaults are wrong
-
-The defaults — 3GB Lambda, no provisioned concurrency, no VPC overrides — are calibrated for a single-tenant pilot with bursty traffic. They deviate as you scale:
-
-- A high-RPS production agent benefits from provisioned concurrency on the AgentCore Lambda; cold-start cost amortizes badly when every minute has multiple cold starts.
-- A long-running tool-heavy agent (think research routines that fan out 30+ tool calls) benefits from larger Lambda memory; the 15-minute Lambda max execution time is a hard ceiling either way.
-- A regulated tenant may want VPC subnets without NAT egress, with a Bedrock VPC endpoint instead — keeps inference traffic inside the VPC boundary.
-
-For all three, the configuration knobs above are sufficient — none of them require a code change.
+Templates and older per-agent records can still appear in migration, authoring, or audit flows. For normal operation, start with Tenant Agent and Spaces.
 
 ## Known limits
 
-- **Lambda max execution time is 15 minutes.** A single turn can't run longer than that. For longer work, use a routine with multiple steps.
-- **Max container image size is 10GB.** Not a practical limit for typical skill packs, but very large reference corpora shouldn't ride in the image.
-- **Cold starts add 3–5s to the first turn.** For latency-sensitive internal tools, keep Lambda warmed or route through a provisioned-concurrency configuration.
-- **No per-invocation model override.** The template's model id is authoritative; per-turn model switching would require a different template assignment.
-- **Runtime changes do not rewrite history.** Existing threads, memories, and audit records stay attached to the same agent; only subsequent invocations use the new runtime.
+- In-flight turns keep the configuration they loaded at start.
+- Space runtime fields only override the fields they set; empty fields inherit from the tenant agent.
+- Long-running tool-heavy turns still obey the runtime's execution ceiling.
+- If a model or guardrail referenced by the tenant agent or Space is unavailable in the deployment, the turn fails with a configuration error rather than silently changing policy.
 
 ## Related pages
 
-- [Agents (overview)](/concepts/agents/) — managed vs. connected
-- [Runtime Selection](/concepts/agents/runtime-selection/) — Strands vs. Pi routing
-- [Templates](/concepts/agents/templates/) — the live-configuration reuse layer (model, guardrail, budget)
-- [Skills](/concepts/agents/skills/) — the capability reuse layer (tools + instructions)
-- [Company Brain](/concepts/knowledge/) — the context layer managed agents read
-- [Control](/concepts/control/) — how guardrails, budgets, and audit wrap the managed path
-- [Architecture](/architecture/) — where AgentCore fits in the deployment
-
-## Under the hood
-
-The managed runtimes live in two sibling packages:
-
-- `packages/agentcore-strands/agent-container/` — Python container built on the Strands agent framework.
-- `packages/agentcore-pi/agent-container/` — Node.js container built around the Pi loop.
-
-Both are deployed as AgentCore container images. The API dispatcher reads the agent/template runtime selector, chooses the runtime function, and passes the normalized invocation envelope through. The selected runtime assembles or consumes context from the memory + knowledge layers, calls Bedrock with the template's guardrail applied, orchestrates tool use, and writes turns + messages back to the thread.
-
-For the code path, start in `packages/agentcore/` for the runtime itself and `packages/api/src/lib/memory/` for the memory adapter contract the runtime calls. Template and agent row shapes are defined in the operational database schema (`packages/database-pg/drizzle/`).
+- [Agents](/concepts/agents/) — tenant platform agent and connected runtime overview
+- [Spaces](/concepts/spaces/) — contextual workrooms
+- [Runtime Configuration](/concepts/agents/runtime-selection/) — tenant defaults and Space overrides
+- [Admin — Tenant Agent](/applications/admin/agents/) — operator defaults
+- [Admin — Spaces](/applications/admin/spaces/) — Space configuration
+- [Company Brain](/concepts/knowledge/) — the context layer
+- [Control](/concepts/control/) — guardrails, budgets, and audit

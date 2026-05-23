@@ -1,0 +1,89 @@
+---
+title: Spaces
+description: Spaces are contextual workrooms that give the tenant platform agent local workspace, tools, memory, automations, channels, and runtime policy.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A Space is a contextual workroom for the tenant platform agent. It answers: **where is this work happening, who can participate, what context should the agent see, which tools are available, and what runtime policy applies here?**
+
+Spaces are the product layer that replaced most top-level per-agent specialization. Instead of creating a different managed agent for every project, team, or customer, operators create Spaces and let the tenant platform agent inherit or override runtime settings per Space.
+
+## What a Space contains
+
+| Area              | Purpose                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| Identity          | Name, slug, description, status                                        |
+| Access            | Public or private membership                                           |
+| Workspace         | Files and runbooks local to the workroom                               |
+| Tools             | Built-in tools and MCP server availability for the Space               |
+| Memory            | Space-scoped retained knowledge                                        |
+| Automations       | Recurring or event-driven work in that Space                           |
+| Email             | Space address and cold-contact trigger toggle                          |
+| Runtime overrides | Optional model, guardrail, budget, paused state, and sandbox overrides |
+
+The tenant platform agent provides the baseline. The Space supplies local context and policy.
+
+## Runtime inheritance
+
+Every Space can leave runtime fields empty. Empty means **inherit from the tenant platform agent**.
+
+```text
+Space override ?? tenant agent default
+```
+
+This applies to:
+
+- Model.
+- Guardrail id.
+- Monthly budget.
+- Budget paused state.
+- Sandbox.
+
+Use inheritance for normal Spaces. Use overrides when the Space has a materially different risk, cost, or tool profile.
+
+## Space email addresses
+
+Spaces receive cold-contact email at:
+
+```text
+<tenant-slug>.<space-slug>@agents.thinkwork.ai
+```
+
+Cold-contact email creates or resumes work in that Space when email triggers are enabled. Private Spaces only accept cold-contact email from Space members. Archived Spaces do not accept new cold-contact email.
+
+Token-bearing replies to agent-initiated email are different: they continue to work even when cold-contact triggers are disabled, so existing conversations do not break.
+
+<Aside type="note">
+  Legacy per-agent addresses are retired. New inbound email should target a
+  Space address.
+</Aside>
+
+## Spaces and threads
+
+Threads are still the durable work container. A Space gives a thread its context.
+
+Examples:
+
+- A mobile chat starts in a Space selected by the user.
+- An inbound email to a Space address creates an `EMAIL-` thread in that Space.
+- A scheduled automation wakes the tenant platform agent in its configured Space.
+- A Slack or GitHub integration can create work in the Space selected by the integration routing rule.
+
+Thread audit can still show the tenant platform agent id, but the Space tells you why the agent had the context and policy it used.
+
+## Spaces and sub-agents
+
+Spaces and sub-agents solve different problems.
+
+Use a **Space** for context, membership, memory, tools, channels, automations, or runtime policy.
+
+Use a **sub-agent folder** for a reusable specialty the platform agent may delegate to across Spaces.
+
+## Related pages
+
+- [Admin — Spaces](/applications/admin/spaces/) — operator UI
+- [Agents](/concepts/agents/) — tenant platform agent and sub-agent folders
+- [Threads](/concepts/threads/) — durable work container
+- [Runtime Configuration](/concepts/agents/runtime-selection/) — tenant defaults and Space overrides
+- [Mobile — Threads & Chat](/applications/mobile/threads-and-chat/) — end-user chat in Spaces

@@ -1,14 +1,14 @@
 ---
 title: Budgets, Usage, and Audit
-description: Per-turn cost capture via OTel spans, tenant budget enforcement that pauses agents when thresholds hit, and the append-only audit log that makes incident reconstruction possible.
+description: Per-turn cost capture via OTel spans, tenant and Space budget enforcement, and the append-only audit log that makes incident reconstruction possible.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The second half of Control is about knowing what happened and bounding how much it cost — the **Efficiency** and **Traceability** operating guarantees in concrete shipping form. Three intertwined concerns:
 
 - **Usage tracking** — per-turn cost, broken down by input tokens, output tokens, and tool call overhead. Efficiency at the per-decision level: every model dollar is attached to the turn that produced it, not aggregated into an opaque monthly invoice.
-- **Budgets** — tenant and per-agent spend limits that actually *suspend* agents when hit, not just warn. Efficiency as enforcement: the harness pauses execution before a runaway loop compounds into real money.
+- **Budgets** — tenant defaults and Space-specific spend limits that can pause new work when thresholds hit, not just warn. Efficiency as enforcement: the harness pauses execution before a runaway loop compounds into real money.
 - **Audit** — the durable, append-only record of every invocation that makes "what did the agent see, decide, and do?" answerable months later. Traceability at full fidelity: stored in the customer's S3 bucket with no delete permission on the Lambda role, partitioned by tenant + date, queryable for a single operation.
 
 They share one spine: every turn has an id, and every cost record, budget check, and audit entry references that same id.
@@ -28,27 +28,30 @@ A cost reducer — running async off the span stream — converts each span into
 The admin app's analytics surface reads from this table and caches results in the `useCostStore` — a Zustand store that the dashboard and analytics pages share so neither re-fetches cost data on navigation.
 
 <Aside type="tip">
-  Per-turn cost is the granularity that matters for debugging a runaway agent. "Agent X spent $50 today" isn't actionable; "turn `T-01HQ...` spent $12 because it looped 40 tool calls" is. The turn-detail view surfaces this breakdown inline.
+  Per-turn cost is the granularity that matters for debugging a runaway agent.
+  "Agent X spent $50 today" isn't actionable; "turn `T-01HQ...` spent $12
+  because it looped 40 tool calls" is. The turn-detail view surfaces this
+  breakdown inline.
 </Aside>
 
 ## Budget enforcement
 
-Budgets are configured per agent template (fleet-wide cap) and per tenant (global cap):
+Budgets are configured at the tenant-agent baseline and can be overridden per Space:
 
-- **Per-template** — "agents on this template can spend at most $50 per agent per month."
+- **Per-Space** — "work in this Space can spend at most $50 per month."
 - **Per-tenant** — "this tenant's total spend across all agents can't exceed $5,000 per month."
 
 Enforcement runs on a schedule, not at turn-start time. An EventBridge rule fires a budget reconciler Lambda every 15 minutes. The reconciler:
 
-1. Computes month-to-date spend per agent and per tenant from `thread_turn_costs`.
+1. Computes month-to-date spend per Space, tenant platform agent, and tenant from `thread_turn_costs`.
 2. Compares against the configured caps.
-3. Transitions any agent over its per-template cap to `PAUSED` status.
-4. Transitions every agent in a tenant that's over its tenant cap to `PAUSED`.
+3. Marks over-budget Spaces as paused for new work.
+4. Pauses tenant-level agent work when the tenant cap is exceeded.
 5. Writes a `budget_enforced` audit record for each pause.
 
 Why reconciliation instead of turn-time blocking: the cost of every turn is known at span-close time, not span-open time, and ThinkWork doesn't want to pre-emptively reserve budget (which is a different and uglier problem). The 15-minute reconciler is the explicit tradeoff — budgets are enforced eventually, not instantaneously, with the expectation that the cap is set with some headroom.
 
-Unpausing is an operator action (admin app → agent detail → Resume) or an automatic reset at the start of the next billing period.
+Unpausing is an operator action in the relevant Space or tenant-agent configuration, or an automatic reset at the start of the next billing period when configured.
 
 ## The audit log
 
@@ -80,13 +83,13 @@ You don't need the live database. You don't need the agent to still exist. You d
 Worth being honest about:
 
 - **Read operations are not audited.** Listing threads, viewing a dashboard, or reading a wiki page doesn't write to the audit log. Only state-changing operations do.
-- **Bedrock's own logs.** AWS CloudTrail records every Bedrock API call separately. ThinkWork's audit log records the *ThinkWork-level* invocation, not the raw Bedrock API call.
-- **Model prompts verbatim aren't stored forever by default.** The audit record stores the *assembled context* — the structured pieces of it — not every token of the final rendered prompt. This is a tradeoff: full prompt text would ~double the audit volume. The assembled context is enough for reconstruction in almost all cases; if full prompts are needed for compliance, there's a deployment flag to enable verbose prompt capture.
+- **Bedrock's own logs.** AWS CloudTrail records every Bedrock API call separately. ThinkWork's audit log records the _ThinkWork-level_ invocation, not the raw Bedrock API call.
+- **Model prompts verbatim aren't stored forever by default.** The audit record stores the _assembled context_ — the structured pieces of it — not every token of the final rendered prompt. This is a tradeoff: full prompt text would ~double the audit volume. The assembled context is enough for reconstruction in almost all cases; if full prompts are needed for compliance, there's a deployment flag to enable verbose prompt capture.
 
 ## Known limits
 
 - **Budget enforcement is eventually-consistent (15 min).** A misbehaving agent can exceed its cap by a meaningful amount before the reconciler catches it. Set caps with headroom.
-- **No per-user budgets.** Budgets are per-template and per-tenant. A runaway end user hammering one agent will eat the whole tenant's budget if the template cap is higher than the single-user expected load.
+- **No per-user budgets.** Budgets are Space/tenant scoped. A runaway end user hammering one Space can eat that Space's budget if the cap is higher than the single-user expected load.
 - **No budget alerts pre-enforcement.** The reconciler pauses agents; it doesn't warn operators at 80%. A Slack/email notification path is a planned follow-up.
 - **Cost numbers are estimates.** Per-turn cost uses published Bedrock pricing, which doesn't account for cross-region overages, on-demand vs. provisioned throughput, or reserved capacity. The numbers are directionally correct for budgeting; the canonical cost record is the AWS bill.
 
@@ -94,15 +97,15 @@ Worth being honest about:
 
 - [Control (overview)](/concepts/control/) — where this fits
 - [Guardrails](/concepts/control/guardrails/) — the other half of Control
-- [Admin: Analytics](/applications/admin/analytics/) — the operator view of tenant and per-agent spend
+- [Admin: Analytics](/applications/admin/analytics/) — the operator view of tenant, Space, and agent spend where available
 - [Admin: Security Center](/applications/admin/security-center/) — guardrail events and incident review
 - [Architecture](/architecture/) — where audit storage lives in the deployment
 
 ## Under the hood
 
 - **Cost capture.** The AgentCore runtime (in `packages/agentcore-strands/agent-container/`) instruments every turn with OpenTelemetry spans. A downstream reducer turns those spans into per-turn cost rows in the operational database.
-- **Budget enforcement.** The budget handler in `packages/api/src/handlers/budgets.ts` runs on a schedule, computes month-to-date spend against template caps, and pauses agents that are over cap.
-- **Pause mechanism.** Pause is a simple status transition on the agent row; admin and mobile surfaces react to the change via real-time subscriptions.
+- **Budget enforcement.** The budget handler runs on a schedule, computes month-to-date spend against configured caps, and pauses over-budget scopes.
+- **Pause mechanism.** Space-level pause is stored with Space runtime overrides; tenant-level pause is stored with the platform-agent budget state. Admin and mobile surfaces react to the change via real-time subscriptions.
 - **Audit storage.** NDJSON records land in an append-only S3 bucket provisioned by the ThinkWork Terraform module, with IAM denying deletes on the writer role. Lifecycle + retention is configurable per deployment.
 
 For the admin operator views of analytics and budgets, see [Admin: Analytics](/applications/admin/analytics/) and [Admin: Security Center](/applications/admin/security-center/).

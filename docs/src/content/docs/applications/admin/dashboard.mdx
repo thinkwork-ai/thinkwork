@@ -3,7 +3,7 @@ title: Admin — Dashboard
 description: The admin app's landing page — metric cards, recent activity, recent threads, and drill-in dialogs for runs and threads.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The Dashboard is the operator's day-one landing page. It's designed to answer one question: "Is the tenant healthy right now?" — not to replace the drill-in pages for threads, agents, or analytics.
 
@@ -15,13 +15,13 @@ The layout is simple: five metric cards across the top, then two paginated lists
 
 ### Metric cards
 
-| Card | What it shows |
-|---|---|
-| **Agents Online** | Count of agents currently in `IDLE` or `BUSY` status |
-| **Open Threads** | Count of threads not in `DONE` or `CANCELLED` |
+| Card                | What it shows                                         |
+| ------------------- | ----------------------------------------------------- |
+| **Agents Online**   | Count of agents currently in `IDLE` or `BUSY` status  |
+| **Open Threads**    | Count of threads not in `DONE` or `CANCELLED`         |
 | **Recent Activity** | Count of runs and thread updates in the last 24 hours |
-| **Spend (MTD)** | Month-to-date spend from the cost store |
-| **Cost / Event** | Average cost per turn event over the period |
+| **Spend (MTD)**     | Month-to-date spend from the cost store               |
+| **Cost / Event**    | Average cost per turn event over the period           |
 
 Cost metrics come from the same `useCostStore` (Zustand) that the [Analytics](/applications/admin/analytics/) page uses, so the dashboard does not re-fetch cost data on every navigation — it reads from the already-hydrated store.
 
@@ -52,7 +52,11 @@ The dashboard fires four GraphQL queries on mount:
 Cost metrics come from the `useCostStore` hook which internally fetches `/api/cost` (a REST endpoint) the first time it's used in the session.
 
 <Aside type="note">
-The activity feed is currently constructed client-side by merging runs and thread updates, sorting by timestamp, and trimming to a page. A dedicated activity-feed resolver is a known TODO — the file carries a `// TODO: Wire to a real activity feed query when available` comment. Until that lands, the feed is computed from two queries rather than one.
+  The activity feed is currently constructed client-side by merging runs and
+  thread updates, sorting by timestamp, and trimming to a page. A dedicated
+  activity-feed resolver is a known TODO — the file carries a `// TODO: Wire to
+  a real activity feed query when available` comment. Until that lands, the feed
+  is computed from two queries rather than one.
 </Aside>
 
 ## Pagination and refresh behavior
@@ -70,11 +74,12 @@ The dashboard is always within a few seconds of reality. Operators do not need t
 
 - **No dedicated activity-feed query.** Client-side merge of runs and threads is the current implementation. A real feed query would let the dashboard show more than just the intersection of runs + thread updates.
 - **Cost metrics can be undefined on first render.** The `useCostStore` hydrates asynchronously; components render `?? 0` placeholders until it lands. This flashes zeros for a tick on cold load.
-- **No per-metric drill-in.** Clicking "Agents Online" does not navigate anywhere. The drill-in for agents is [Agents](/applications/admin/agents/); for threads it's [Threads](/applications/admin/threads/); for spend it's [Analytics](/applications/admin/analytics/).
+- **No per-metric drill-in.** Clicking platform-agent metrics does not navigate anywhere. The drill-in for tenant agent configuration is [Tenant Agent](/applications/admin/agents/); for Space-scoped work it's [Spaces](/applications/admin/spaces/); for threads it's [Threads](/applications/admin/threads/); for spend it's [Analytics](/applications/admin/analytics/).
 
 ## Related pages
 
 - [Threads](/applications/admin/threads/) — the full thread list and detail views
-- [Agents](/applications/admin/agents/) — the agent roster
+- [Tenant Agent](/applications/admin/agents/) — the platform-agent baseline
+- [Spaces](/applications/admin/spaces/) — Space-scoped workrooms
 - [Analytics](/applications/admin/analytics/) — deeper views of activity, cost, and performance
 - [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) — the layout the dashboard renders inside

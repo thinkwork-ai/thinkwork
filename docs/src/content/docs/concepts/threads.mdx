@@ -5,11 +5,11 @@ description: The universal work container in ThinkWork. Every conversation, auto
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
-A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a integration, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** operating guarantee.
+A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from an integration, a scheduled automation turn, an inbound Space email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the tenant platform agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** operating guarantee.
 
 That choice is load-bearing. Most agent systems split "chat" from "workflows" from "integrations" into three code paths, three sets of UI affordances, and three state machines. ThinkWork deliberately doesn't. There is one container, and it carries enough metadata — channel, prefix, routing context — to specialize behavior per source without splitting the container itself.
 
-This page is the conceptual deep dive: why threads exist in this shape, what a thread actually holds, how the lifecycle works, and the invariants you can rely on. For the admin UI around threads, see [Admin: Threads](/applications/admin/threads/). For the mobile chat surface, see [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/). For the GraphQL schema, see the [API reference](/api/graphql/).
+This page is the conceptual deep dive: why threads exist in this shape, what a thread actually holds, how Spaces shape thread context, how the lifecycle works, and the invariants you can rely on. For the admin UI around threads, see [Admin: Threads](/applications/admin/threads/). For the mobile chat surface, see [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/). For the GraphQL schema, see the [API reference](/api/graphql/).
 
 ## Why threads exist
 
@@ -52,6 +52,8 @@ Thread
 
 **Metadata** holds channel-specific routing and replay context — the Slack thread id that lets outbound replies land in the right conversation, the GitHub issue number that identifies an issue, the email `Message-Id` that implements email threading standards.
 
+**Space context** identifies the workroom that shaped the turn. The Space determines local workspace files, tools, memory, automations, email trigger behavior, and runtime overrides. Historical records may still expose an `agent_id`, but after the platform-agent migration that id points to the tenant platform agent; the Space is the useful context boundary.
+
 ### Messages vs. turns — why both exist
 
 This distinction trips people up on first read. Consider a single user message: _"what's my calendar look like next Tuesday?"_
@@ -69,14 +71,14 @@ If the user asks a follow-up, that's another message plus another turn, same thr
 
 Every thread has a channel set at creation time. Channel determines the prefix and which system produced the work:
 
-| Channel  | Prefix    | How work arrives                           | How agents reply                                                 |
-| -------- | --------- | ------------------------------------------ | ---------------------------------------------------------------- |
-| `CHAT`   | `CHAT-`   | User sends message in admin or mobile app  | Streamed back to the app over a real-time subscription           |
-| `AUTO`   | `AUTO-`   | Scheduler or event trigger fires           | Response recorded on the thread; optional tool-call side-effects |
+| Channel  | Prefix    | How work arrives                             | How agents reply                                                 |
+| -------- | --------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| `CHAT`   | `CHAT-`   | User sends message in admin or mobile app    | Streamed back to the app over a real-time subscription           |
+| `AUTO`   | `AUTO-`   | Scheduler or event trigger fires             | Response recorded on the thread; optional tool-call side-effects |
 | `SLACK`  | `SLACK-`  | Inbound Slack event to the Slack integration | Reply posted back to the originating Slack channel/thread        |
-| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment)        | Comment posted via the GitHub API                                |
-| `EMAIL`  | `EMAIL-`  | Inbound email                              | Reply sent; `In-Reply-To` / `References` preserved               |
-| `TASK`   | `TASK-`   | External task system webhook               | Task state normalized back to the external system                |
+| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment)          | Comment posted via the GitHub API                                |
+| `EMAIL`  | `EMAIL-`  | Inbound email to a Space address             | Reply sent; `In-Reply-To` / `References` preserved               |
+| `TASK`   | `TASK-`   | External task system webhook                 | Task state normalized back to the external system                |
 
 The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn't just cosmetic — it's the first thing humans and tools read when orienting to a thread:
 
@@ -88,7 +90,7 @@ The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn
 
 Channel support has three seams: a new channel value in the thread model, an inbound handler that maps provider events into the thread model, and an outbound handler that knows how to reply via the provider's API. The shape is the same for every channel; each integration fills it in.
 
-Integration-origin threads also carry provider metadata, such as Linear issue id, integration execution id, Computer task id, and provider writeback state. The channel tells operators what kind of source created the thread; the metadata ties the visible thread back to the durable integration lifecycle.
+Integration-origin threads also carry provider metadata, such as Linear issue id, integration execution id, Space id, Computer task id, and provider writeback state. The channel tells operators what kind of source created the thread; the Space and metadata tie the visible thread back to the durable integration lifecycle.
 
 ## Reopen, don't recreate
 
@@ -152,7 +154,7 @@ Threads have a small, deliberate configuration surface. Most of the day-to-day k
 Per-tenant configuration lives at [Admin: Threads](/applications/admin/threads/) and the surrounding tenant settings:
 
 - **Default channel routing.** Which integrations create threads under which channel prefixes. Defaults to one prefix per integration; override only when you split a integration across multiple business contexts (e.g., two Slack workspaces routed to the same tenant).
-- **Status auto-transitions.** Off by default. Status is written only by explicit mutations — agent activity, operator action, or integration event (see "The status lifecycle" above). If you want `IN_PROGRESS → DONE` on agent reply, that's a per-agent template setting, not a thread setting.
+- **Status auto-transitions.** Off by default. Status is written only by explicit mutations — agent activity, operator action, or integration event (see "The status lifecycle" above). If you want `IN_PROGRESS → DONE` on agent reply, configure that behavior in the runtime/Space workflow that owns the thread, not as a generic thread setting.
 - **Default priority on inbound.** Defaults to `MEDIUM`. Per-channel overrides are configured at the integration level (e.g., "PagerDuty webhooks default to `URGENT`").
 - **Retention defaults.** Threads themselves are durable indefinitely (see "Retention and archival"); retention windows on the audit log are configured separately at the deployment level.
 - **Review queues.** Which statuses route into which operator queues. `IN_REVIEW` and `BLOCKED` ship as queues by default; the admin Threads route lets you add more.
@@ -190,18 +192,19 @@ This is automatic. The Slack integration watches `thread_ts` (Slack's thread tim
 
 The pattern matters because it makes ThinkWork stateful from the user's perspective without you writing any state-management code. For the deeper lifecycle, see [Lifecycle and Types](/concepts/threads/lifecycle-and-types/).
 
-### Route an inbound email into an automation thread
+### Route an inbound email into a Space
 
-A different pattern: an inbound email shouldn't always land in a chat thread for an operator to respond to. Sometimes the right destination is an automation — for example, a vendor invoice email that should kick off an "extract amount, file in finance system" workflow.
+A different pattern: an inbound email should land in the Space named by its recipient address. Sometimes that Space is conversational; sometimes it has automations that process the message.
 
 The Email integration handles this by reading the `To:` address:
 
 1. **Inbound email.** SES delivers the email to the inbound bucket; the integration Lambda reads the new object.
-2. **Route by recipient.** If `To:` matches a configured `AUTO` channel mapping (e.g., `invoices@agents.thinkwork.ai`), the integration creates an `AUTO-<ULID>` thread instead of an `EMAIL-<ULID>` thread, attaches the email body as the first message, and tags the thread with the target [automation](/concepts/automations/) recipe.
-3. **Automation runs.** Step Functions picks up the `AUTO` thread and executes the recipe — extract data, call downstream tool, write back the result.
-4. **Status closes.** The automation marks the thread `DONE`. Inbound emails that follow up are matched on `Message-Id` chain and reopen the same thread, just like Slack.
+2. **Route by recipient.** If `To:` matches `<tenant-slug>.<space-slug>@agents.thinkwork.ai`, the integration resolves the Space.
+3. **Check trigger policy.** Cold-contact delivery is accepted only when the Space's email triggers are enabled. Private Spaces additionally require the sender to be a Space member. Archived Spaces reject new cold-contact email.
+4. **Create or reopen.** The integration creates an `EMAIL-<ULID>` thread in that Space, or reopens an existing one using the `Message-Id` / `In-Reply-To` / `References` chain.
+5. **Invoke in Space context.** The tenant platform agent runs with that Space's workspace, tools, memory, automations, and runtime overrides.
 
-The point: the same thread container carries the work whether a human is the audience or an automation is. Operators who want visibility into automation runs read them from the same admin Threads view they use for chat.
+The point: the same thread container carries the work whether the source is chat, email, automation, or an integration. Operators who want visibility read it from the same admin Threads view.
 
 ## Concurrency and ordering
 
@@ -248,6 +251,7 @@ The mobile app has no delete surface at all. End-users archive, operators can de
 
 - [Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — the channel model in more depth
 - [Routing and Metadata](/concepts/threads/routing-and-metadata/) — how inbound events map into the thread model
+- [Spaces](/concepts/spaces/) — how thread context and runtime policy are scoped
 - [Admin: Threads](/applications/admin/threads/) — the operator view: Kanban, table, filters, detail, audit
 - [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/) — the end-user view
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — what runs inside a turn
