@@ -3,14 +3,16 @@ import {
   createSubAgentWorkspaceFiles,
   getWorkspaceFile,
   listWorkspaceFiles,
+  moveWorkspaceFile,
   putWorkspaceFile,
   type ComposeSource,
+  type MoveResult,
   type Target,
   type WorkspaceFileMeta,
 } from "@/lib/workspace-files-api";
 import { getIdToken } from "@/lib/auth";
 
-export type { ComposeSource, Target, WorkspaceFileMeta };
+export type { ComposeSource, MoveResult, Target, WorkspaceFileMeta };
 
 export async function createSubAgent(
   agentId: string,
@@ -272,6 +274,7 @@ export const agentBuilderApi = {
   getFile: getWorkspaceFile,
   putFile: putWorkspaceFile,
   deleteFile: deleteWorkspaceFile,
+  moveFile: moveWorkspaceFile,
   createSubAgent,
   importBundle,
 };

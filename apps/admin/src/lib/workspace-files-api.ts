@@ -116,3 +116,41 @@ export async function createSubAgentWorkspaceFiles(
 export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
   await request({ action: "regenerate-map", agentId });
 }
+
+export interface MoveResult {
+  /** Final destination path after collision-aware auto-rename. */
+  destPath: string;
+  /** Number of objects moved (1 for files, N for folders). */
+  movedCount: number;
+  /** Pinned files that lost template inheritance as part of the move. */
+  detachedPinnedCount: number;
+  /**
+   * Set to true when the source was partially deleted after a successful
+   * copy phase. The client should refetch the file list — both the
+   * source and destination may have content.
+   */
+  partiallyDeleted?: boolean;
+}
+
+/**
+ * Move a file or folder to a different folder within the same workspace.
+ * The server performs an atomic copy + delete in a single Lambda
+ * invocation. Folder moves walk the entire source prefix. On
+ * destination collision, the basename is auto-renamed (`notes.md` →
+ * `notes (2).md`); the final path is returned in `destPath`.
+ *
+ * `toFolder` is a folder path relative to the workspace root. Pass `""`
+ * to move to the root.
+ */
+export async function moveWorkspaceFile(
+  target: Target,
+  fromPath: string,
+  toFolder: string,
+): Promise<MoveResult> {
+  return (await request({
+    action: "move",
+    ...target,
+    fromPath,
+    toFolder,
+  })) as MoveResult;
+}
