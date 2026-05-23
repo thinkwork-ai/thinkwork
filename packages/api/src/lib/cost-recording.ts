@@ -170,6 +170,7 @@ export interface RecordCostParams {
 	outputText?: string;
 	threadId?: string;
 	traceId?: string;
+	runtimeType?: string | null;
 	bedrockRequestIds?: string[];
 	/**
 	 * Tag this row in cost_events.metadata.source. Defaults to
@@ -227,6 +228,7 @@ export async function recordCostEvents(
 			agent_id: params.agentId || undefined,
 			request_id: params.requestId,
 			event_type: "llm",
+			runtime_type: params.runtimeType || undefined,
 			amount_usd: llmCost.toFixed(6),
 			model: params.model,
 			provider: deriveProvider(params.model),
@@ -238,6 +240,7 @@ export async function recordCostEvents(
 			metadata: {
 				source,
 				estimated,
+				...(params.runtimeType ? { runtime_type: params.runtimeType } : {}),
 				...(params.bedrockRequestIds?.length ? { bedrock_request_ids: params.bedrockRequestIds } : {}),
 			},
 		});
@@ -249,11 +252,15 @@ export async function recordCostEvents(
 			agent_id: params.agentId || undefined,
 			request_id: params.requestId,
 			event_type: "agentcore_compute",
+			runtime_type: params.runtimeType || undefined,
 			amount_usd: computeCost.toFixed(6),
 			duration_ms: params.durationMs,
 			thread_id: params.threadId || undefined,
 			trace_id: params.traceId || undefined,
-			metadata: { source },
+			metadata: {
+				source,
+				...(params.runtimeType ? { runtime_type: params.runtimeType } : {}),
+			},
 		});
 	}
 

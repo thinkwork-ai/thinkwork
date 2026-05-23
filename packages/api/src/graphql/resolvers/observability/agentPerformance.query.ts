@@ -17,6 +17,7 @@ export const agentPerformance = async (_parent: any, args: any, _ctx: GraphQLCon
 		.select({
 			agentId: costEvents.agent_id,
 			agentName: sql<string>`MAX(${agents.name})`,
+			runtimeType: costEvents.runtime_type,
 			invocationCount: sql<number>`COUNT(DISTINCT ${costEvents.request_id})::int`,
 			avgDurationMs: sql<number>`COALESCE(AVG(${costEvents.duration_ms}), 0)::float`,
 			p95DurationMs: sql<number>`COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ${costEvents.duration_ms}), 0)::float`,
@@ -33,13 +34,14 @@ export const agentPerformance = async (_parent: any, args: any, _ctx: GraphQLCon
 				lte(costEvents.created_at, to),
 			),
 		)
-		.groupBy(costEvents.agent_id)
+		.groupBy(costEvents.agent_id, costEvents.runtime_type)
 		.orderBy(sql`COALESCE(SUM(amount_usd), 0) DESC`);
 
 	// Derive error counts from thread_turns (separate query to avoid cross-join)
 	const errorRows = await db
 		.select({
 			agentId: threadTurns.agent_id,
+			runtimeType: threadTurns.runtime_type,
 			errorCount: sql<number>`COUNT(*)::int`,
 		})
 		.from(threadTurns)
@@ -51,12 +53,14 @@ export const agentPerformance = async (_parent: any, args: any, _ctx: GraphQLCon
 				lte(threadTurns.created_at, to),
 			),
 		)
-		.groupBy(threadTurns.agent_id);
+		.groupBy(threadTurns.agent_id, threadTurns.runtime_type);
 
-	const errorMap = new Map(errorRows.map((r) => [r.agentId, r.errorCount]));
+	const errorMap = new Map(
+		errorRows.map((r) => [`${r.agentId ?? ""}:${r.runtimeType ?? ""}`, r.errorCount]),
+	);
 
 	return rows.map((r) => ({
 		...r,
-		errorCount: errorMap.get(r.agentId) || 0,
+		errorCount: errorMap.get(`${r.agentId ?? ""}:${r.runtimeType ?? ""}`) || 0,
 	}));
 };

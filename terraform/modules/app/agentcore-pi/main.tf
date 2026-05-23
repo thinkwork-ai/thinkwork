@@ -111,6 +111,25 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         Resource = "*"
       },
       {
+        # Browser Automation (browser_automation tool). Mirrors the Strands
+        # runtime permissions so Pi can open managed AgentCore Browser sessions
+        # when the built-in browser capability is enabled for an agent.
+        Sid    = "AgentCoreBrowser"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:StartBrowserSession",
+          "bedrock-agentcore:StopBrowserSession",
+          "bedrock-agentcore:GetBrowserSession",
+          "bedrock-agentcore:ListBrowserSessions",
+          "bedrock-agentcore:InvokeBrowser",
+          "bedrock-agentcore:UpdateBrowserStream",
+        ]
+        Resource = [
+          "arn:aws:bedrock-agentcore:${var.region}:aws:browser/aws.browser.v1",
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:browser/*",
+        ]
+      },
+      {
         # AgentCore Code Interpreter — Pi's primary sandbox per the FR-9a
         # integration spike (`packages/pi-aws/connectors/agentcore-
         # codeinterpreter.ts`). Per-tenant interpreters live under

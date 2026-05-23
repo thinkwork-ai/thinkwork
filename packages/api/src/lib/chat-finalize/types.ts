@@ -21,6 +21,8 @@ export interface FinalizePayload {
   user_message?: string;
   /** Optional model id reported by the runtime (drives cost lookup). */
   agent_model?: string | null;
+  /** Runtime substrate used for this turn; also persisted on thread_turns/cost_events. */
+  runtime_type?: string | null;
   /** Agent slug — used as the Hindsight bank id when recording Hindsight cost. */
   agent_slug?: string | null;
   /** Agent display name — used in cost notifications + push body title. */
@@ -40,6 +42,7 @@ export interface FinalizePayload {
     content?: string;
     output?: string;
     text?: string;
+    runtime?: string;
     choices?: unknown;
     /** Tool invocations with optional genui_data for UI render. */
     tool_invocations?: Array<Record<string, unknown>>;

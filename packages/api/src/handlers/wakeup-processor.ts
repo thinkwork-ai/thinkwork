@@ -905,12 +905,16 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       wakeup_request_id: wakeup.id,
       invocation_source: wakeup.source,
       trigger_detail: wakeup.trigger_detail,
+      runtime_type: runtimeType,
       status: "running",
       started_at: now,
       last_activity_at: now,
       retry_attempt: retryAttempt,
       origin_turn_id: originTurnId,
-      context_snapshot: wakeup.payload as Record<string, unknown> | undefined,
+      context_snapshot: {
+        ...((wakeup.payload as Record<string, unknown> | undefined) ?? {}),
+        runtime_type: runtimeType,
+      },
       thread_id: runThreadId || undefined,
       turn_number: turnNumber || undefined,
     })
@@ -1639,6 +1643,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         outputText: responseText,
         threadId: runThreadId,
         traceId,
+        runtimeType,
       });
       await checkBudgetAndPause(wakeup.tenant_id, wakeup.agent_id);
 
@@ -1673,6 +1678,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               thread_id: runThreadId || undefined,
               request_id: crypto.randomUUID(),
               event_type: String(tc.event_type || "tool_cost"),
+              runtime_type: runtimeType,
               amount_usd: String(tc.amount_usd || "0.000000"),
               provider: String(tc.provider || "unknown"),
               duration_ms: (tc.duration_ms as number) || null,
@@ -1791,6 +1797,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             outputText: loopResponseText,
             threadId: runThreadId,
             traceId,
+            runtimeType,
           });
         } catch {}
 
@@ -1851,6 +1858,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         result_json: { response: responseText.slice(0, 10000) },
         usage_json: {
           duration_ms: durationMs,
+          runtime_type: runtimeType,
           input_tokens: usage.inputTokens,
           output_tokens: usage.outputTokens,
           cached_read_tokens: usage.cachedReadTokens,

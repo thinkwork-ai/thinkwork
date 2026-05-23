@@ -42,6 +42,11 @@ function shortenModel(model: string | null): string {
     .replace(/-v\d+:\d+$/, "");
 }
 
+function formatRuntime(runtimeType: string | null | undefined): string {
+  const trimmed = runtimeType?.trim();
+  return trimmed ? trimmed.toUpperCase() : "--";
+}
+
 interface ThreadTracesProps {
   threadId: string;
   tenantId: string;
@@ -71,6 +76,7 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
           <TableRow>
             <TableHead className="w-20">Time</TableHead>
             <TableHead className="w-20">Agent</TableHead>
+            <TableHead className="w-20">Runtime</TableHead>
             <TableHead className="w-36">Model</TableHead>
             <TableHead className="w-20 text-right">In</TableHead>
             <TableHead className="w-20 text-right">Out</TableHead>
@@ -87,6 +93,11 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
               </TableCell>
               <TableCell className="text-xs font-medium truncate">
                 {trace.agentName || "--"}
+              </TableCell>
+              <TableCell className="text-xs">
+                <Badge variant="outline" className="font-mono text-[10px]">
+                  {formatRuntime(trace.runtimeType)}
+                </Badge>
               </TableCell>
               <TableCell className="text-xs text-muted-foreground truncate" title={trace.model || ""}>
                 {shortenModel(trace.model ?? null)}

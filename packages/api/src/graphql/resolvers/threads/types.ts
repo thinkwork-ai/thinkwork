@@ -4,6 +4,7 @@ import {
   eq,
   and,
   asc,
+  desc,
   lt,
   sql,
   inArray,
@@ -21,6 +22,7 @@ import {
   snakeToCamel,
 } from "../../utils.js";
 import { artifactToCamelWithPayload } from "../artifacts/payload.js";
+import { runtimeTypeFromTurn } from "../triggers/threadTurnRuntime.js";
 
 const THREAD_PARTICIPANT_ENUM_FIELDS = new Set([
   "participantType",
@@ -176,6 +178,30 @@ export const threadTypeResolvers = {
   lastActivityAt: async (thread: any, _args: any, ctx: GraphQLContext) => {
     if (thread.lastActivityAt) return thread.lastActivityAt;
     return ctx.loaders.threadLastActivityAt.load(thread.id);
+  },
+  lastRuntimeType: async (thread: any) => {
+    const direct = thread.lastRuntimeType ?? thread.last_runtime_type;
+    if (typeof direct === "string" && direct.trim().length > 0) return direct;
+
+    const threadTenantId = thread.tenantId ?? thread.tenant_id ?? null;
+    const conditions = [eq(threadTurns.thread_id, thread.id)];
+    if (typeof threadTenantId === "string" && threadTenantId.length > 0) {
+      conditions.push(eq(threadTurns.tenant_id, threadTenantId));
+    }
+
+    const [row] = await db
+      .select({
+        runtime_type: threadTurns.runtime_type,
+        context_snapshot: threadTurns.context_snapshot,
+        result_json: threadTurns.result_json,
+        usage_json: threadTurns.usage_json,
+      })
+      .from(threadTurns)
+      .where(and(...conditions))
+      .orderBy(desc(sql`COALESCE(${threadTurns.started_at}, ${threadTurns.created_at})`))
+      .limit(1);
+
+    return row ? runtimeTypeFromTurn(row) : null;
   },
   costSummary: async (thread: any) => {
     const directCosts = await db

@@ -501,10 +501,18 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             agent_id: agentId,
             thread_id: threadId,
             invocation_source: "chat_message",
+            runtime_type: runtimeType,
             status: "running",
             started_at: new Date(),
             last_activity_at: new Date(),
             turn_number: turnNumber,
+            context_snapshot: {
+              runtime_type: runtimeType,
+              model: agentModel,
+              agent_slug: agentSlug || undefined,
+              space_id: spaceId || undefined,
+              dispatcher: "chat-agent-invoke",
+            },
           })
           .returning({ id: threadTurns.id });
         turnId = turnRow?.id;

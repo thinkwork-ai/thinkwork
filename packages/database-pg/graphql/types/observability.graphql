@@ -5,6 +5,7 @@ type TraceEvent {
   threadId: ID
   agentId: ID
   agentName: String
+  runtimeType: String
   model: String
   inputTokens: Int
   outputTokens: Int
@@ -17,6 +18,7 @@ type TraceEvent {
 type AgentPerformance {
   agentId: ID!
   agentName: String!
+  runtimeType: String
   invocationCount: Int!
   errorCount: Int!
   avgDurationMs: Float!

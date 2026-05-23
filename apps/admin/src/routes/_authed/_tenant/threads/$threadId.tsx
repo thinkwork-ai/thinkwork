@@ -782,6 +782,7 @@ interface ThreadPropertiesProps {
     readonly completedAt?: string | null;
     readonly cancelledAt?: string | null;
     readonly checkoutRunId?: string | null;
+    readonly lastRuntimeType?: string | null;
     readonly costSummary?: number | null;
     readonly messages?: {
       readonly edges?: ReadonlyArray<{
@@ -883,6 +884,14 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
           </Link>
         </PropRow>
       ) : null}
+
+      {thread.lastRuntimeType && (
+        <PropRow label="Runtime">
+          <Badge variant="outline" className="font-mono text-[10px] uppercase">
+            {thread.lastRuntimeType}
+          </Badge>
+        </PropRow>
+      )}
 
       {thread.checkoutRunId && (
         <PropRow label="Checkout">

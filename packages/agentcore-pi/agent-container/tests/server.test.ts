@@ -10,6 +10,7 @@ import {
   assembleTools,
   handleInvocation,
   postCompletion,
+  postFinalizeCallback,
 } from "../src/server.js";
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
@@ -82,13 +83,24 @@ describe("handleInvocation — payload validation", () => {
     expect(result.body.error).toMatch(/non-empty `message`/);
   });
 
-  it("returns 500 when sandbox_interpreter_id is missing (contract violation)", async () => {
+  it("continues without execute_code when sandbox_interpreter_id is missing", async () => {
+    let toolNames: string[] = [];
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({ sandbox_interpreter_id: "" }),
-      deps: makeDeps(),
+      deps: makeDeps({
+        runAgentLoop: async ({ tools }) => {
+          toolNames = tools.map((tool) => tool.name);
+          return {
+            content: "stub response",
+            modelId: "amazon-bedrock/test-model",
+            toolsCalled: toolNames,
+            toolInvocations: [],
+          };
+        },
+      }),
     });
-    expect(result.statusCode).toBe(500);
-    expect(result.body.error).toMatch(/sandbox_interpreter_id/);
+    expect(result.statusCode).toBe(200);
+    expect(toolNames).not.toContain("execute_code");
   });
 });
 
@@ -535,6 +547,91 @@ describe("postCompletion", () => {
   });
 });
 
+describe("postFinalizeCallback", () => {
+  it("posts the Pi runtime finalize payload with runtime_type", async () => {
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const ok = await postFinalizeCallback({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url: "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+      }),
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "tenant-1",
+        agentSlug: "agent-slug",
+        traceId: "trace-1",
+      },
+      result: {
+        status: "ok",
+        runResult: {
+          content: "done",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: ["execute_code"],
+          toolInvocations: [],
+        },
+        latencyMs: 42,
+      },
+      fetchImpl,
+    });
+
+    expect(ok).toBe(true);
+    expect(fetchCalls).toHaveLength(1);
+    const [, init] = fetchCalls[0]!;
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer secret");
+    const body = JSON.parse(String(init?.body));
+    expect(body).toMatchObject({
+      thread_turn_id: "turn-1",
+      runtime_type: "pi",
+      status: "completed",
+      response: {
+        runtime: "pi",
+        tools_called: ["execute_code"],
+      },
+    });
+  });
+
+  it("chat-turn invocations use finalize callback instead of returning a synchronous assistant body", async () => {
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url: "http://localhost:5174/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+      }),
+      deps: makeDeps({ fetchImpl }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({
+      ok: true,
+      finalize_dispatched: true,
+      runtime: "pi",
+    });
+    expect(fetchCalls).toHaveLength(1);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // MCP wire format — handle scheme is the only Authorization that crosses.
 // ---------------------------------------------------------------------------
@@ -594,6 +691,88 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
     expect(serialised).not.toContain("FakeJwt");
     expect(serialised).not.toContain("DoNotEcho");
     bundle.handleStore.clear();
+  });
+});
+
+describe("assembleTools — Pi built-in tools", () => {
+  it("registers execute_code when the sandbox interpreter id is present", async () => {
+    const cleanup: Array<() => Promise<void>> = [];
+    const bundle = await assembleTools({
+      payload: {
+        sandbox_interpreter_id: "thinkwork_test_sandbox-AAA",
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup,
+      handleStore: new HandleStore(),
+    });
+
+    expect(bundle.tools.map((tool) => tool.name)).toContain("execute_code");
+  });
+
+  it("registers browser_automation when browser automation is enabled", async () => {
+    const bundle = await assembleTools({
+      payload: {
+        browser_automation_enabled: true,
+        trace_id: "trace-1",
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+    });
+
+    expect(bundle.tools.map((tool) => tool.name)).toContain(
+      "browser_automation",
+    );
   });
 });
 

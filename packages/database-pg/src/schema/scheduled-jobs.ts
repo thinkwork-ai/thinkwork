@@ -105,6 +105,7 @@ export const threadTurns = pgTable(
     wakeup_request_id: uuid("wakeup_request_id"),
     thread_id: uuid("thread_id"),
     turn_number: integer("turn_number"),
+    runtime_type: text("runtime_type"),
     status: text("status").notNull().default("queued"), // queued | running | succeeded | failed | cancelled | timed_out | skipped
     kind: text("kind").notNull().default("agent_turn"), // agent_turn | system_event (escalate/delegate); see U2 of docs/plans/2026-04-24-002-refactor-thread-detail-pre-launch-cleanup-plan.md
     started_at: timestamp("started_at", { withTimezone: true }),
@@ -154,6 +155,7 @@ export const threadTurns = pgTable(
     ),
     index("idx_thread_turns_trigger").on(table.trigger_id),
     index("idx_thread_turns_status").on(table.tenant_id, table.status),
+    index("idx_thread_turns_runtime").on(table.tenant_id, table.runtime_type),
     index("idx_thread_turns_kind").on(table.kind),
     index("idx_thread_turns_thread").on(table.thread_id),
     index("idx_thread_turns_webhook").on(table.webhook_id),
