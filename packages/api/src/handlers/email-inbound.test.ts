@@ -191,7 +191,7 @@ describe("email-inbound routing", () => {
       [{ id: "user-eric" }],
     );
 
-    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).toHaveBeenCalledWith({
       tenantId: "tenant-acme",
@@ -217,7 +217,7 @@ describe("email-inbound routing", () => {
       },
     ]);
 
-    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
@@ -238,7 +238,7 @@ describe("email-inbound routing", () => {
       [],
     );
 
-    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
@@ -268,7 +268,7 @@ describe("email-inbound routing", () => {
       ],
     );
 
-    await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toEqual(
@@ -322,10 +322,25 @@ describe("email-inbound routing", () => {
       },
     ]);
 
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
+
+    expect(createColdContactThread).not.toHaveBeenCalled();
+    expect(insertedRows).toHaveLength(0);
+  });
+
+  it("sends a retirement notice for legacy tenant-dot-space addresses", async () => {
     await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
+    expect(mockSesSend).toHaveBeenCalledOnce();
+    const command = mockSesSend.mock.calls[0][0];
+    expect(command.input.Message.Body.Text.Data).toContain(
+      "Your email to acme.finance@agents.thinkwork.ai was not delivered.",
+    );
+    expect(command.input.Message.Body.Text.Data).toContain(
+      "space-slug@tenant-slug.thinkwork.ai",
+    );
   });
 
   it("sends a retirement notice for legacy per-agent addresses", async () => {
@@ -345,7 +360,7 @@ describe("email-inbound routing", () => {
       },
     });
     expect(command.input.Message.Body.Text.Data).toContain(
-      "tenant-slug.space-slug@agents.thinkwork.ai",
+      "space-slug@tenant-slug.thinkwork.ai",
     );
   });
 });

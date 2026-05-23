@@ -9,9 +9,7 @@ const source = readFileSync(
 describe("SpaceEmailTriggersToggle", () => {
   it("derives and displays the per-Space email address", () => {
     expect(source).toContain("deriveSpaceEmailAddress(tenantSlug, space.slug)");
-    expect(source).toContain(
-      "`${tenantSlug}.${spaceSlug}@agents.thinkwork.ai`",
-    );
+    expect(source).toContain("`${spaceSlug}@${tenantSlug}.thinkwork.ai`");
     expect(source).toContain("Cold-contact delivery to");
     expect(source).toContain("Copy Space email address");
   });

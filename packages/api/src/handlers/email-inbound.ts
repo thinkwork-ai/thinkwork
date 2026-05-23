@@ -29,7 +29,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { verifyReplyToken, hashToken } from "../lib/email-tokens.js";
 import { createColdContactThread } from "../lib/email/cold-contact-trigger.js";
-import { parseSpaceAddress } from "../lib/email/space-address.js";
+import { parseSpaceRecipient } from "../lib/email/space-address.js";
 import { enqueueComputerThreadTurn } from "../lib/computers/thread-cutover.js";
 
 const WORKSPACE_BUCKET =
@@ -56,7 +56,7 @@ async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
   const mail = sesNotification.mail;
   const sesMessageId = mail.messageId;
 
-  const recipient = parseAgentsRecipient(sesNotification.receipt.recipients);
+  const recipient = parseThinkworkRecipient(sesNotification.receipt.recipients);
   if (!recipient) return;
 
   const senderEmail = extractEmailAddress(mail.source || "");
@@ -68,7 +68,7 @@ async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
   const parsedEmail = await fetchEmailBody(mail, sesMessageId);
   const replyTokenHeader = getHeader(mail, "x-thinkwork-reply-token");
   const inReplyTo = parsedEmail.inReplyTo || getHeader(mail, "in-reply-to");
-  const spaceAddress = parseSpaceAddress(recipient.localPart);
+  const spaceAddress = parseSpaceRecipient(recipient.recipientEmail);
 
   let inReplyToRoute: Awaited<ReturnType<typeof consumeTokenByInReplyTo>>;
   try {
@@ -145,22 +145,21 @@ async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseAgentsRecipient(recipients: string[] | undefined) {
+function parseThinkworkRecipient(recipients: string[] | undefined) {
   if (!recipients || recipients.length === 0) {
     console.log("[email-inbound] No recipients, dropping");
     return null;
   }
 
   const recipientEmail = recipients[0].toLowerCase();
-  const slugMatch = recipientEmail.match(/^([^@]+)@agents\.thinkwork\.ai$/);
-  if (!slugMatch) {
+  if (!/^[^@\s]+@[^@\s]+\.thinkwork\.ai$/.test(recipientEmail)) {
     console.log(
-      `[email-inbound] Non-agents.thinkwork.ai recipient: ${recipientEmail}, dropping`,
+      `[email-inbound] Non-thinkwork.ai recipient: ${recipientEmail}, dropping`,
     );
     return null;
   }
 
-  return { recipientEmail, localPart: slugMatch[1] };
+  return { recipientEmail };
 }
 
 function getHeader(
@@ -252,7 +251,7 @@ async function sendLegacyAddressRetirementNotice(input: {
                 `Your email to ${input.recipientEmail} was not delivered.`,
                 "",
                 "Thinkwork agent email addresses now use Space addresses in the form:",
-                "tenant-slug.space-slug@agents.thinkwork.ai",
+                "space-slug@tenant-slug.thinkwork.ai",
                 "",
                 "Please contact the recipient for the current Space email address and resend your message there.",
                 "",

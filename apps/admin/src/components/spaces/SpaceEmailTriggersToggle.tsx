@@ -133,5 +133,5 @@ export function SpaceEmailTriggersToggle({
 }
 
 function deriveSpaceEmailAddress(tenantSlug: string, spaceSlug: string) {
-  return `${tenantSlug}.${spaceSlug}@agents.thinkwork.ai`;
+  return `${spaceSlug}@${tenantSlug}.thinkwork.ai`;
 }
