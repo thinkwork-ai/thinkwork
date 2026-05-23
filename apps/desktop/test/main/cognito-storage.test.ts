@@ -50,6 +50,19 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+async function waitForFile(
+  path: string,
+  expected: boolean,
+  timeoutMs = 250,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if ((await fileExists(path)) === expected) return;
+    await sleep(5);
+  }
+  expect(await fileExists(path)).toBe(expected);
+}
+
 describe("SafeStorageCognitoStorage", () => {
   let userDataDir: string;
   let warnings: unknown[];
@@ -90,7 +103,7 @@ describe("SafeStorageCognitoStorage", () => {
     const storage = await createStorage();
 
     storage.setItem("foo", "bar");
-    await sleep(20);
+    await waitForFile(storage.vaultPath, true);
 
     const vault = JSON.parse((await readFile(storage.vaultPath)).toString());
     expect(vault).toEqual({ foo: "bar" });
@@ -103,7 +116,7 @@ describe("SafeStorageCognitoStorage", () => {
     for (let i = 0; i < 10; i += 1) {
       storage.setItem(`key-${i}`, `value-${i}`);
     }
-    await sleep(20);
+    await waitForFile(storage.vaultPath, true);
 
     expect(safeStorage.encryptCalls()).toBe(1);
     expect(storage.getItem("key-9")).toBe("value-9");
@@ -188,11 +201,11 @@ describe("SafeStorageCognitoStorage", () => {
     const storage = await createStorage();
 
     storage.setItem("foo", "bar");
-    await sleep(20);
+    await waitForFile(storage.vaultPath, true);
     expect(await fileExists(storage.vaultPath)).toBe(true);
 
     storage.clear();
-    await sleep(20);
+    await waitForFile(storage.vaultPath, false);
 
     expect(storage.getItem("foo")).toBeNull();
     expect(await fileExists(storage.vaultPath)).toBe(false);

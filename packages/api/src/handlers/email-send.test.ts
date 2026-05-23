@@ -155,14 +155,14 @@ describe("email-send HTTP agent invocation", () => {
     expect(result).toMatchObject({ statusCode: 200 });
     expect(mockSesSend).toHaveBeenCalledOnce();
     const command = mockSesSend.mock.calls[0][0];
-    expect(command.input.Source).toBe("acme.finance@agents.thinkwork.ai");
+    expect(command.input.Source).toBe("finance@acme.thinkwork.ai");
     expect(command.input.Destinations).toEqual(["recipient@example.com"]);
 
     const rawMessage = Buffer.from(command.input.RawMessage.Data).toString(
       "utf8",
     );
-    expect(rawMessage).toContain("From: acme.finance@agents.thinkwork.ai");
-    expect(rawMessage).toContain("Reply-To: acme.finance@agents.thinkwork.ai");
+    expect(rawMessage).toContain("From: finance@acme.thinkwork.ai");
+    expect(rawMessage).toContain("Reply-To: finance@acme.thinkwork.ai");
     expect(rawMessage).toContain("X-Thinkwork-Reply-Token:");
 
     expect(insertedReplyTokens).toHaveLength(1);
