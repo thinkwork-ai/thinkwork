@@ -65,3 +65,14 @@ db_password = "CHANGE_ME_strong_password_here"
 # variable. NEVER put the token in this file.
 # www_domain         = "thinkwork.ai"
 # cloudflare_zone_id = "your-cloudflare-zone-id"
+
+# Tenant-scoped Space email addresses (optional).
+# Keep the legacy agents.thinkwork.ai domain configured until retirement
+# notices are no longer needed, then add tenant slugs before announcing
+# <space>@<tenant>.thinkwork.ai addresses. Terraform creates one SES receiving
+# identity and delegated Route53 subzone per tenant slug, then publishes NS
+# delegation records in the Cloudflare parent zone above.
+#
+# ses_inbound_domain = "agents.thinkwork.ai"
+# ses_parent_domain = "thinkwork.ai"
+# tenant_slugs      = ["dev"]

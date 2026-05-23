@@ -422,13 +422,25 @@ variable "stripe_price_ids_json" {
 }
 
 # ---------------------------------------------------------------------------
-# SES inbound email (delegated subzone — Option A)
+# SES inbound email (delegated tenant subzones — Option A)
 # ---------------------------------------------------------------------------
 
-variable "ses_inbound_domain" {
-  description = "Subdomain used for agent email (e.g. agents.thinkwork.ai). Terraform creates a delegated Route53 hosted zone for this name, manages the SES domain identity + DKIM CNAMEs + MX in that zone, and wires an SES receipt rule that stores inbound mail in S3 and invokes the email-inbound Lambda. Leave empty to skip all SES inbound resources. After first apply, paste the `ses_inbound_name_servers` output as NS records at whatever hosts the parent domain."
+variable "ses_parent_domain" {
+  description = "Parent domain used for tenant email subdomains (e.g. thinkwork.ai). Leave empty to skip SES inbound resources."
   type        = string
   default     = ""
+}
+
+variable "ses_inbound_domain" {
+  description = "Legacy delegated subdomain used for agent email (e.g. agents.thinkwork.ai). Kept until legacy-address retirement notices are no longer needed."
+  type        = string
+  default     = ""
+}
+
+variable "ses_tenant_slugs" {
+  description = "Tenant slugs to provision as SES receiving subdomains under ses_parent_domain. Each slug creates <slug>.<ses_parent_domain>."
+  type        = set(string)
+  default     = []
 }
 
 variable "ses_manage_active_rule_set" {
