@@ -653,6 +653,8 @@ jobs:
             -var "www_domain=${{ vars.WWW_DOMAIN }}" \
             -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
             -var "ses_inbound_domain=agents.thinkwork.ai" \
+            -var "ses_parent_domain=thinkwork.ai" \
+            -var 'tenant_slugs=["academic-bobcat-897","sleek-squirrel-230"]' \
             -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{}' }}" \
             -var "agentcore_code_interpreter_id=${{ vars.AGENTCORE_CODE_INTERPRETER_ID || '' }}" \
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
