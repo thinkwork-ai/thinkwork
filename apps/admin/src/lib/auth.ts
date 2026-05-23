@@ -61,13 +61,21 @@ export function signIn(
       newPasswordRequired: () => {
         if (newPassword) {
           // Pass empty attributes — avoids "non-writable attributes" errors
-          user.completeNewPasswordChallenge(newPassword, {}, {
-            onSuccess: (session) => resolve(session),
-            onFailure: (err) => reject(err),
-          });
+          user.completeNewPasswordChallenge(
+            newPassword,
+            {},
+            {
+              onSuccess: (session) => resolve(session),
+              onFailure: (err) => reject(err),
+            },
+          );
         } else {
           // Signal that a new password is needed
-          reject(Object.assign(new Error("New password required"), { code: "NewPasswordRequired" }));
+          reject(
+            Object.assign(new Error("New password required"), {
+              code: "NewPasswordRequired",
+            }),
+          );
         }
       },
     });
@@ -200,15 +208,13 @@ export function getCurrentSession(): Promise<CognitoUserSession | null> {
       return;
     }
 
-    user.getSession(
-      (err: Error | null, session: CognitoUserSession | null) => {
-        if (err || !session || !session.isValid()) {
-          resolve(null);
-          return;
-        }
-        resolve(session);
-      },
-    );
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session || !session.isValid()) {
+        resolve(null);
+        return;
+      }
+      resolve(session);
+    });
   });
 }
 
@@ -253,12 +259,10 @@ export function getCurrentUser(): AuthUser | null {
 
   let authUser: AuthUser | null = null;
 
-  user.getSession(
-    (err: Error | null, session: CognitoUserSession | null) => {
-      if (err || !session || !session.isValid()) return;
-      authUser = parseIdToken(session);
-    },
-  );
+  user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+    if (err || !session || !session.isValid()) return;
+    authUser = parseIdToken(session);
+  });
 
   // Fallback: parse id token directly from localStorage (OAuth sessions)
   if (!authUser) {
@@ -324,13 +328,31 @@ export function getGoogleSignInUrl(): string {
   return `${getCognitoDomainBase()}/oauth2/authorize?${params.toString()}`;
 }
 
+const POST_AUTH_REDIRECT_KEY = "thinkwork:post-auth-redirect";
+
+export function rememberPostAuthRedirect(path: string): void {
+  if (!path.startsWith("/") || path.startsWith("//")) return;
+  sessionStorage.setItem(POST_AUTH_REDIRECT_KEY, path);
+}
+
+export function consumePostAuthRedirect(fallback = "/dashboard"): string {
+  const stored = sessionStorage.getItem(POST_AUTH_REDIRECT_KEY);
+  sessionStorage.removeItem(POST_AUTH_REDIRECT_KEY);
+  if (!stored || !stored.startsWith("/") || stored.startsWith("//")) {
+    return fallback;
+  }
+  return stored;
+}
+
 interface OAuthTokens {
   id_token: string;
   access_token: string;
   refresh_token: string;
 }
 
-export async function exchangeCodeForSession(code: string): Promise<OAuthTokens> {
+export async function exchangeCodeForSession(
+  code: string,
+): Promise<OAuthTokens> {
   const redirectUri = `${window.location.origin}/auth/callback`;
   const base = getCognitoDomainBase();
 
@@ -361,7 +383,13 @@ export function storeTokensInCognitoStorage(tokens: OAuthTokens): void {
   const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
 
   localStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
-  localStorage.setItem(`${prefix}.${username}.accessToken`, tokens.access_token);
-  localStorage.setItem(`${prefix}.${username}.refreshToken`, tokens.refresh_token);
+  localStorage.setItem(
+    `${prefix}.${username}.accessToken`,
+    tokens.access_token,
+  );
+  localStorage.setItem(
+    `${prefix}.${username}.refreshToken`,
+    tokens.refresh_token,
+  );
   localStorage.setItem(`${prefix}.LastAuthUser`, username);
 }
