@@ -1,6 +1,7 @@
 ---
 title: Substrate-first inert→live seam-swap pattern for multi-PR feature arcs
 date: 2026-05-08
+last_updated: 2026-05-23
 category: architecture-patterns
 module: "packages/api, packages/lambda, packages/database-pg, terraform/modules/data, terraform/modules/app, apps/admin"
 problem_type: architecture_pattern
@@ -44,7 +45,7 @@ The failure modes this pattern defends against — calibrated against real prior
 - **All-or-nothing rollback.** A monolithic PR means reverting the UI also reverts the Terraform. Independent PRs allow each layer to revert without disturbing the others.
 - **Hidden deployment ordering constraints.** If the SQS queue doesn't exist when the Lambda code referencing `COMPLIANCE_EXPORTS_QUEUE_URL` deploys, the mutation throws deterministically — but only if the env var resolution path is loud. Substrate-first makes the constraint explicit.
 - **Silent multi-week dark periods.** (session history) Between 2026-04-17 and 2026-04-23 ~13 PRs building the sandbox substrate merged green in CI, but none exercised on dev — the AgentCore runtime was pinned to a stale arm64 image while CI built amd64. The gap surfaced only when a human ran the first real end-to-end invocation. Substrate-first with operator-visible inert states catches this class of bug at deploy time, not weeks later.
-- **Stub-and-replace anti-pattern.** (session history) Earlier arcs tried shipping a stub that got *replaced wholesale* in PR-2. This invalidated the stub's tests on swap day and forced re-review of the same surface area. The fix: the seam contract stays stable across both PRs; only the body is swapped.
+- **Stub-and-replace anti-pattern.** (session history) Earlier arcs tried shipping a stub that got _replaced wholesale_ in PR-2. This invalidated the stub's tests on swap day and forced re-review of the same surface area. The fix: the seam contract stays stable across both PRs; only the body is swapped.
 - **Review fatigue on mega-PRs.** Each layer has different reviewers, different blast-radius reasoning, different test strategies.
 
 ---
@@ -138,6 +139,14 @@ Apply this pattern when **all three** of the following are true:
 
 **Do not apply** for 1–2-PR features where substrate and consumer are small enough to be reviewed together. The pattern's overhead (smoke-gate updates, forcing-function tests, two deploy cycles) is not justified for a single GraphQL field + resolver pair.
 
+**Generated-client caveat:** substrate-first splitting only works when each PR can
+still build independently. Plan B found the counterexample: deleting per-agent
+GraphQL producer fields made admin/CLI generated documents invalid until the
+consumer retirement landed too. In that case, grouping the producer deletion and
+dependent UI/CLI retirement was safer than forcing a pure substrate/consumer
+split. See
+[`platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`](../workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md).
+
 ---
 
 ## Examples
@@ -170,4 +179,5 @@ Apply this pattern when **all three** of the following are true:
 - Memory: `feedback_smoke_pin_dispatch_status_in_response` — complementary deploy-gate discipline; surface dispatch status in the response payload.
 - Memory: `project_async_retry_idempotency_lessons` — DLQ + CAS + `MaximumRetryAttempts=0` for non-idempotent SQS loops; the throw-don't-no-op rule depends on DLQ visibility.
 - [`docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`](../workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md) — destructive-migration guard that applies at the substrate layer's teardown tail (after the live seam is confirmed).
+- [`docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`](../workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md) — generated-client coupling caveat for multi-PR refactors that retire GraphQL producer fields and UI/CLI consumers together.
 - [`docs/compliance/`](../../compliance/) — module documentation for the compliance arc this pattern produced.

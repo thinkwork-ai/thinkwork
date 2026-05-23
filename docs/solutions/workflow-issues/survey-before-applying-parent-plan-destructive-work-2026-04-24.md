@@ -1,6 +1,7 @@
 ---
 title: Survey live consumers before applying parent-plan destructive work
 date: 2026-04-24
+last_updated: 2026-05-23
 category: workflow-issues
 module: thread-detail-cleanup
 problem_type: workflow_issue
@@ -96,6 +97,7 @@ Run the consumer survey before:
 **After — survey-first narrowing:**
 
 > Plan U5 says drop `thread_comments`, `artifacts`, `message_artifacts`. Survey:
+>
 > - `rg -l 'thread_comments' packages/api/src/ apps/ packages/database-pg/graphql/` → empty. Orphaned.
 > - `rg -l 'artifacts\b' packages/api/src/` → 4+ resolver files in `resolvers/artifacts/`. Live.
 > - `grep -rn 'type Artifact|durableArtifact' packages/database-pg/graphql/types/` → canonical type still defined. Live.
@@ -107,7 +109,8 @@ Run the consumer survey before:
 
 ## Related
 
-- `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md` — sibling drift failure mode. That doc covers *forward* drift (declared migrations not yet applied). This doc covers *reverse* drift (parent plan declares dropping things that are still load-bearing). Cross-link.
+- `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md` — sibling drift failure mode. That doc covers _forward_ drift (declared migrations not yet applied). This doc covers _reverse_ drift (parent plan declares dropping things that are still load-bearing). Cross-link.
+- `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md` — fresh Plan B example of the same rule: `space_agent_assignments` was dropped only after a source survey proved runtime, API, CLI, admin, GraphQL, and migration consumers had moved to the platform-agent / Space-override model.
 - `docs/solutions/best-practices/probe-every-pipeline-stage-before-tuning-2026-04-20.md` — same methodological spirit ("inspect the live data before touching the knob"), different domain.
 - `docs/solutions/patterns/retire-thinkwork-admin-skill-2026-04-24.md` — same shape on the prevention side: a "count live consumers" SQL block applied to skill retirement instead of schema retirement.
 - PR #558 — narrowed U5 migration that prompted this learning.
