@@ -4,19 +4,16 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   Bot,
-  Loader2,
   Pause,
   Play,
   Plus,
   Repeat,
-  Save,
   Webhook as WebhookIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
-import { ModelSelect } from "@/components/agents/ModelSelect";
 import { SpaceEmailTriggersToggle } from "@/components/spaces/SpaceEmailTriggersToggle";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -36,7 +33,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { WebhookFormDialog } from "@/components/webhooks/WebhookFormDialog";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
@@ -44,7 +40,6 @@ import { type SpaceAdminDetailQuery as SpaceAdminDetailQueryResult } from "@/gql
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 import {
   KnowledgeBasesListQuery,
-  SetSpaceRuntimeOverridesMutation,
   SpaceMemoryQuery,
   SetSpaceKnowledgeBasesMutation,
   SpaceAdminDetailQuery,
@@ -239,37 +234,6 @@ export function SpaceConfigurationPanel({
 }) {
   const { tenant } = useTenant();
   const tenantSlug = tenant?.slug ?? "";
-  const [runtimeDraft, setRuntimeDraft] = useState(() =>
-    runtimeOverridesDraft(space),
-  );
-  const [{ fetching: savingOverrides }, setSpaceRuntimeOverrides] = useMutation(
-    SetSpaceRuntimeOverridesMutation,
-  );
-
-  useEffect(() => {
-    setRuntimeDraft(runtimeOverridesDraft(space));
-  }, [space]);
-
-  async function saveRuntimeOverrides() {
-    const result = await setSpaceRuntimeOverrides({
-      spaceId: space.id,
-      input: {
-        model: runtimeDraft.model || null,
-        guardrailId: runtimeDraft.guardrailId || null,
-        budgetMonthlyCents: parseNullableInteger(
-          runtimeDraft.budgetMonthlyCents,
-        ),
-        budgetPaused: runtimeDraft.budgetPaused,
-        sandbox: runtimeDraft.sandbox,
-      },
-    });
-    if (result.error) {
-      toast.error(`Could not save runtime overrides: ${result.error.message}`);
-      return;
-    }
-    toast.success("Runtime overrides saved.");
-    refreshSpace();
-  }
 
   return (
     <div className="space-y-4">
@@ -334,149 +298,6 @@ export function SpaceConfigurationPanel({
         }}
         onSaved={refreshSpace}
       />
-      <section className="rounded-md border p-4">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <h3 className="text-sm font-semibold">Advanced runtime</h3>
-            <p className="text-xs text-muted-foreground">
-              Leave fields empty to inherit from the tenant agent.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            onClick={saveRuntimeOverrides}
-            disabled={savingOverrides}
-          >
-            {savingOverrides ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            Save
-          </Button>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="space-runtime-model">Model override</Label>
-            <ModelSelect
-              value={runtimeDraft.model}
-              onValueChange={(model) =>
-                setRuntimeDraft((current) => ({ ...current, model }))
-              }
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="space-runtime-guardrail">Guardrail ID</Label>
-            <Input
-              id="space-runtime-guardrail"
-              value={runtimeDraft.guardrailId}
-              onChange={(event) =>
-                setRuntimeDraft((current) => ({
-                  ...current,
-                  guardrailId: event.target.value,
-                }))
-              }
-              placeholder="Inherit from tenant agent"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="space-runtime-budget">Monthly budget cents</Label>
-            <Input
-              id="space-runtime-budget"
-              inputMode="numeric"
-              value={runtimeDraft.budgetMonthlyCents}
-              onChange={(event) =>
-                setRuntimeDraft((current) => ({
-                  ...current,
-                  budgetMonthlyCents: event.target.value,
-                }))
-              }
-              placeholder="Inherit from tenant agent"
-            />
-          </div>
-          <RuntimeOverrideSwitch
-            id="space-runtime-budget-paused"
-            label="Budget paused"
-            value={runtimeDraft.budgetPaused}
-            onChange={(budgetPaused) =>
-              setRuntimeDraft((current) => ({ ...current, budgetPaused }))
-            }
-          />
-          <RuntimeOverrideSwitch
-            id="space-runtime-sandbox"
-            label="Sandbox"
-            value={runtimeDraft.sandbox}
-            onChange={(sandbox) =>
-              setRuntimeDraft((current) => ({ ...current, sandbox }))
-            }
-          />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-type RuntimeOverridesDraft = {
-  model: string;
-  guardrailId: string;
-  budgetMonthlyCents: string;
-  budgetPaused: boolean | null;
-  sandbox: boolean | null;
-};
-
-function runtimeOverridesDraft(space: Space): RuntimeOverridesDraft {
-  const overrides = space.runtimeOverrides;
-  return {
-    model: overrides.model ?? "",
-    guardrailId: overrides.guardrailId ?? "",
-    budgetMonthlyCents: overrides.budgetMonthlyCents?.toString() ?? "",
-    budgetPaused: overrides.budgetPaused ?? null,
-    sandbox: overrides.sandbox ?? null,
-  };
-}
-
-function parseNullableInteger(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
-}
-
-function RuntimeOverrideSwitch({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: boolean | null;
-  onChange: (value: boolean | null) => void;
-}) {
-  const inherited = value === null;
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
-      <div>
-        <Label htmlFor={id}>{label}</Label>
-        <p className="text-xs text-muted-foreground">
-          {inherited ? "Inherit from tenant agent" : "Override enabled"}
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => onChange(null)}
-        >
-          Inherit
-        </Button>
-        <Switch
-          id={id}
-          checked={Boolean(value)}
-          onCheckedChange={(checked) => onChange(checked)}
-        />
-      </div>
     </div>
   );
 }
