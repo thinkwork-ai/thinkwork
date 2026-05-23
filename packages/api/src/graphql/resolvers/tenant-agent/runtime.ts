@@ -9,3 +9,11 @@ export function parseAgentRuntimeInput(value: unknown): "strands" | "pi" {
     extensions: { code: "BAD_USER_INPUT" },
   });
 }
+
+export function agentRuntimeToGraphqlEnum(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const normalized = value.toLowerCase();
+  if (normalized === "pi" || normalized === "flue") return "FLUE";
+  if (normalized === "strands") return "STRANDS";
+  return value.toUpperCase();
+}
