@@ -2032,6 +2032,7 @@ export type Mutation = {
   removeTenantMember: Scalars["Boolean"]["output"];
   removeThreadDependency: Scalars["Boolean"]["output"];
   removeThreadLabel: Scalars["Boolean"]["output"];
+  renameTenantSlug: Tenant;
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   /**
@@ -2597,6 +2598,11 @@ export type MutationRemoveThreadDependencyArgs = {
 export type MutationRemoveThreadLabelArgs = {
   labelId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
+};
+
+export type MutationRenameTenantSlugArgs = {
+  newSlug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationReorderQuickActionsArgs = {
@@ -6544,28 +6550,6 @@ export type UpdateSpaceMutation = {
   };
 };
 
-export type SetSpaceRuntimeOverridesMutationVariables = Exact<{
-  spaceId: Scalars["ID"]["input"];
-  input: SetSpaceRuntimeOverridesInput;
-}>;
-
-export type SetSpaceRuntimeOverridesMutation = {
-  __typename?: "Mutation";
-  setSpaceRuntimeOverrides: {
-    __typename?: "Space";
-    id: string;
-    updatedAt: any;
-    runtimeOverrides: {
-      __typename?: "SpaceRuntimeOverrides";
-      model?: string | null;
-      guardrailId?: string | null;
-      budgetMonthlyCents?: number | null;
-      budgetPaused?: boolean | null;
-      sandbox?: boolean | null;
-    };
-  };
-};
-
 export type SpaceAdminDetailQueryVariables = Exact<{
   id: Scalars["ID"]["input"];
 }>;
@@ -6582,14 +6566,6 @@ export type SpaceAdminDetailQuery = {
     status: SpaceStatus;
     accessMode: SpaceAccessMode;
     emailTriggersEnabled: boolean;
-    runtimeOverrides: {
-      __typename?: "SpaceRuntimeOverrides";
-      model?: string | null;
-      guardrailId?: string | null;
-      budgetMonthlyCents?: number | null;
-      budgetPaused?: boolean | null;
-      sandbox?: boolean | null;
-    };
   } | null;
 };
 
@@ -6604,6 +6580,21 @@ export type SetSpaceEmailTriggersMutation = {
     __typename?: "Space";
     id: string;
     emailTriggersEnabled: boolean;
+    updatedAt: any;
+  };
+};
+
+export type RenameTenantSlugMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  newSlug: Scalars["String"]["input"];
+}>;
+
+export type RenameTenantSlugMutation = {
+  __typename?: "Mutation";
+  renameTenantSlug: {
+    __typename?: "Tenant";
+    id: string;
+    slug: string;
     updatedAt: any;
   };
 };
@@ -6650,60 +6641,6 @@ export type SetSpaceKnowledgeBasesMutation = {
       status: string;
     } | null;
   }>;
-};
-
-export type SpaceToolsQueryVariables = Exact<{
-  id: Scalars["ID"]["input"];
-}>;
-
-export type SpaceToolsQuery = {
-  __typename?: "Query";
-  space?: {
-    __typename?: "Space";
-    id: string;
-    builtInTools: Array<string>;
-    mcpServers: Array<{
-      __typename?: "SpaceMcpServer";
-      id: string;
-      mcpServerId: string;
-      enabled: boolean;
-      mcpServer?: {
-        __typename?: "SpaceTenantMcpServer";
-        id: string;
-        name: string;
-        slug: string;
-        enabled: boolean;
-        status: string;
-      } | null;
-    }>;
-  } | null;
-};
-
-export type SetSpaceToolsMutationVariables = Exact<{
-  input: SetSpaceToolsInput;
-}>;
-
-export type SetSpaceToolsMutation = {
-  __typename?: "Mutation";
-  setSpaceTools: {
-    __typename?: "Space";
-    id: string;
-    builtInTools: Array<string>;
-    mcpServers: Array<{
-      __typename?: "SpaceMcpServer";
-      id: string;
-      mcpServerId: string;
-      enabled: boolean;
-      mcpServer?: {
-        __typename?: "SpaceTenantMcpServer";
-        id: string;
-        name: string;
-        slug: string;
-        enabled: boolean;
-        status: string;
-      } | null;
-    }>;
-  };
 };
 
 export type ComputersListQueryVariables = Exact<{
@@ -11377,106 +11314,6 @@ export const UpdateSpaceDocument = {
     },
   ],
 } as unknown as DocumentNode<UpdateSpaceMutation, UpdateSpaceMutationVariables>;
-export const SetSpaceRuntimeOverridesDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SetSpaceRuntimeOverrides" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "spaceId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "SetSpaceRuntimeOverridesInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "setSpaceRuntimeOverrides" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "spaceId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "spaceId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "runtimeOverrides" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "model" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "guardrailId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "budgetMonthlyCents" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "budgetPaused" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "sandbox" },
-                      },
-                    ],
-                  },
-                },
-                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SetSpaceRuntimeOverridesMutation,
-  SetSpaceRuntimeOverridesMutationVariables
->;
 export const SpaceAdminDetailDocument = {
   kind: "Document",
   definitions: [
@@ -11523,32 +11360,6 @@ export const SpaceAdminDetailDocument = {
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "emailTriggersEnabled" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "runtimeOverrides" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "model" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "guardrailId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "budgetMonthlyCents" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "budgetPaused" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "sandbox" },
-                      },
-                    ],
-                  },
                 },
               ],
             },
@@ -11638,6 +11449,81 @@ export const SetSpaceEmailTriggersDocument = {
 } as unknown as DocumentNode<
   SetSpaceEmailTriggersMutation,
   SetSpaceEmailTriggersMutationVariables
+>;
+export const RenameTenantSlugDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "RenameTenantSlug" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "newSlug" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "renameTenantSlug" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "newSlug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "newSlug" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  RenameTenantSlugMutation,
+  RenameTenantSlugMutationVariables
 >;
 export const SpaceMemoryDocument = {
   kind: "Document",
@@ -11796,207 +11682,6 @@ export const SetSpaceKnowledgeBasesDocument = {
 } as unknown as DocumentNode<
   SetSpaceKnowledgeBasesMutation,
   SetSpaceKnowledgeBasesMutationVariables
->;
-export const SpaceToolsDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "SpaceTools" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "space" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "id" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "builtInTools" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "mcpServers" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "mcpServerId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "enabled" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "mcpServer" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "id" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "name" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "slug" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "enabled" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "status" },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<SpaceToolsQuery, SpaceToolsQueryVariables>;
-export const SetSpaceToolsDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SetSpaceTools" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "SetSpaceToolsInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "setSpaceTools" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "builtInTools" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "mcpServers" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "mcpServerId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "enabled" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "mcpServer" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "id" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "name" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "slug" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "enabled" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "status" },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SetSpaceToolsMutation,
-  SetSpaceToolsMutationVariables
 >;
 export const ComputersListDocument = {
   kind: "Document",

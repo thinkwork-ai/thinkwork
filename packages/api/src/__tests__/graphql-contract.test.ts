@@ -304,6 +304,8 @@ describe("GraphQL Schema Contract", () => {
     const expectedMutations = [
       // Tenant agent
       "updateTenantAgent",
+      // Core
+      "renameTenantSlug",
       // Threads
       "createThread",
       "updateThread",
