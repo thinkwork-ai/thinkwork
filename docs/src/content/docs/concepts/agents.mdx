@@ -1,163 +1,104 @@
 ---
 title: Agents
-description: Delegated managed workers run by ThinkWork inside your AWS account, connected agents that bring their own runtime, and how agents plug into Computers, threads, memory, and integrations.
+description: "The ThinkWork agent framework: one tenant platform agent, Space-scoped context, folder-based sub-agents, and connected runtimes."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-An agent in ThinkWork is now best understood as a **delegated worker**: a named runtime with a defined model, tools, guardrails, and knowledge scope. Agents can still receive messages in threads, but the primary work surface is the [Computer](/concepts/computers/) — a durable shared workspace and orchestrator that can call tools directly or delegate specialized jobs to agents.
+An agent in ThinkWork is the runtime actor that reads a thread, plans the next step, calls tools, and writes the result back. The current managed-agent model is centered on a **single tenant platform agent** rather than a roster of separate top-level managed agents.
 
-Agents read assembled context (the harness's [Perception phase](/architecture/#the-ppaf-agent-loop)), decide what to do (Planning), call tools (Action), and write back into the thread, where the turn's outcome becomes the Feedback the next turn perceives. Reliability and Security operating guarantees land here: templates pin model + guardrail behavior so two agents on the same template produce reproducible work, and capability grants determine which tools a given agent can ever fire.
-
-<Aside type="note">
-  The product model has shifted away from user-specific Agents and personal
-  Computers. Operators manage shared Computers, users are assigned access, and
-  each request carries requester context for personalization. Historical
-  user-paired Agents can still be migrated into Computers when they are backed
-  by Computer Templates and have an unambiguous human owner.
-</Aside>
-
-ThinkWork supports two kinds of agents — **managed** and **connected** — and the difference is about _who owns the inference runtime_, not about what capabilities the agent has.
-
-## Managed vs. connected
-
-**Managed agents** are the default. ThinkWork runs them on **Bedrock AgentCore** inside _your_ AWS account. Strands is the default managed runtime; Pi is a second managed runtime substrate for agents that you explicitly route to it. You get a consistent execution model, thread integration, streaming, auditability, and cost tracking without building your own orchestration.
-
-The important distinction: managed does not mean vendor-hosted. ThinkWork makes running an agent easy; the harness, state, memory, guardrails, audit, and data still live inside your deployment boundary. Your tenants' data never leaves your AWS account.
-
-**Connected agents** let you plug an existing runtime — your own Python service, a LangChain or LlamaIndex app, a custom container, a third-party hosted agent — into the ThinkWork thread and control plane. ThinkWork still handles auth, thread persistence, real-time updates, and the admin UI. You provide the inference logic.
-
-A connected agent registers a webhook. When a message arrives in a thread assigned to it, ThinkWork POSTs the thread context to your endpoint; your runtime produces a response in the standard message format and posts it back.
+The tenant platform agent supplies the baseline identity, model, budget, sandbox, system prompt, and workspace. [Spaces](/concepts/spaces/) supply the local workroom: project context, membership, tools, memory, automations, email address, and optional runtime overrides.
 
 <Aside type="note">
-  Connected agents are the right choice when you already have agent
-  infrastructure and want ThinkWork's thread system, integrations, memory, and
-  admin surfaces *on top of* it without migrating your runtime. They're the
-  wrong choice when you want the managed benefits (guardrail integration,
-  per-turn cost capture, fleet-wide template rotation) — those only apply to the
-  managed path.
+  If older docs, URLs, or records mention `/agents` or individual managed-agent
+  ids, treat them as legacy compatibility surfaces. Current managed work flows
+  through the tenant platform agent plus Space context.
 </Aside>
 
-Both kinds of agents show up identically in the admin app, the mobile app, the thread list, and the audit log. An operator sees "Agent X replied in thread Y" the same way regardless of where the inference ran.
+## The current model
 
-## Managed runtime choices
+ThinkWork separates three layers:
 
-Managed agents can run on either runtime:
+| Layer                 | Purpose                                                            | Operator surface                                    |
+| --------------------- | ------------------------------------------------------------------ | --------------------------------------------------- |
+| Tenant platform agent | Tenant-wide baseline identity and instructions                     | [Admin — Tenant Agent](/applications/admin/agents/) |
+| Space                 | Contextual workroom with local policy, tools, memory, and channels | [Admin — Spaces](/applications/admin/spaces/)       |
+| Sub-agent folder      | Specialty behavior delegated by the platform agent                 | Tenant Agent → Sub-agents                           |
 
-- **Strands** — the stable default runtime and the path existing agents use unless changed.
-- **Pi** — a parallel AgentCore runtime for testing and operating Pi-backed agents without leaving the ThinkWork harness.
+This keeps the operational model small. Operators tune the platform agent once, create Spaces for distinct work contexts, and add sub-agent folders only when a specialty needs its own instructions.
 
-The selected runtime is stored on the agent and template records. The dispatcher reads that selector at invocation time and routes the turn to the matching AgentCore runtime. Threads, memory, workspace files, integrations, audit, and client delivery stay the same across both runtimes.
+## What the tenant platform agent owns
 
-See [Runtime Selection](/concepts/agents/runtime-selection/) for the operator model.
+The tenant agent owns the broad defaults:
 
-## What a managed agent has
+- Name and role.
+- Default Bedrock model.
+- Default monthly budget.
+- Default sandbox behavior.
+- Baseline system prompt.
+- Baseline workspace files.
+- Folder-based sub-agent definitions.
 
-Every managed agent is a record that references:
+These are tenant defaults, not project details. If a Space needs a different model, guardrail, budget, paused state, or sandbox mode, set a Space runtime override and leave the tenant default stable.
 
-- A **template** (see below) — model, guardrail, inference parameters, memory behavior.
-- A **system prompt** — the agent-specific instructions, stored on the agent record.
-- Optional **skill packs** — bundled capabilities the agent can call.
-- Optional **knowledge bases** — documents the agent retrieves from at turn time.
-- Optional **integrations + MCP servers** — external tool surfaces the agent is allowed to use.
+## What Spaces own
 
-The agent itself is thin. Most of what determines how it behaves lives on the **template** it references. Computers use the same template system, but Computer Templates describe shared workspace/orchestrator capabilities while Agent Templates describe delegated workers.
+A Space gives the platform agent its immediate context. Spaces can carry:
 
-## Templates: where the real configuration lives
+- Workspace files and runbooks.
+- Public or private membership.
+- Built-in tools and MCP server availability.
+- Knowledge bases and Space-scoped memory.
+- Automations.
+- Email triggers.
+- Runtime overrides.
 
-Templates are the reuse layer for agent configuration. Rather than setting model, guardrails, budgets, and tool config per agent — and watching them drift over time — you set them once on a template and assign agents to it.
+When a thread starts in a Space, ThinkWork invokes the tenant platform agent with the Space context rendered into the runtime workspace. The thread still has one agent identity for audit and cost accounting, but the behavior is shaped by the Space.
 
-When you update the template, every agent on it picks up the change on the next invocation. That's how ThinkWork handles fleet-wide model rotations, guardrail policy tightening, or budget cap changes: one write, many agents.
+## Sub-agents
 
-See [Templates](/concepts/agents/templates/) for the live-configuration layer, [Computers](/concepts/computers/) for the durable workspace model, and [Skills](/concepts/agents/skills/) for the reusable-capability layer.
+Sub-agents are authored as folders under the tenant agent's `subagents` workspace area. A sub-agent folder contains the instructions and supporting files for a specialty the platform agent can delegate to.
 
-## How a turn runs (managed path)
+Use sub-agents for durable specialties such as research, triage, QA, drafting, or customer onboarding. Use a Space when the difference is context, access, channel, memory, or runtime policy.
 
-When a message arrives in a thread assigned to a managed agent:
+## Managed and connected runtimes
 
-```
-Thread message → API Gateway → runtime dispatcher
-                                        │
-                                        ▼
-                              Load agent + template
-                                        │
-                                        ▼
-                              Choose Strands or Pi
-                                        │
-                                        ▼
-                              Assemble context
-                              (history + docs + memory + wiki)
-                                        │
-                                        ▼
-                              Bedrock Converse (guardrail applied)
-                                        │
-                                        ▼
-                              Runtime loop: tool calls, reasoning, response
-                                        │
-                                        ▼
-                              Write turn + messages back to thread
-                                        │
-                                        ▼
-                              AppSync subscription → client
-```
+Most tenants use the managed runtime path: ThinkWork runs the tenant platform agent on Bedrock AgentCore inside your AWS account. The harness, state, memory, guardrails, audit, and data stay inside your deployment boundary.
 
-The selected runtime runs the inner agent loop — tool calling, multi-step reasoning, and response generation. ThinkWork provides everything surrounding it: thread state, memory access, template-driven model config, guardrail enforcement, cost capture, integration-provided tools.
+Connected agents still exist for bring-your-own-runtime integrations. They are useful when you already operate an external agent service and want ThinkWork's threads, auth, audit, and control plane around it. Connected agents are registered through [Agent Invites](/applications/admin/agent-invites/), not through the tenant platform agent page.
 
-See [Managed Agents](/concepts/agents/managed-agents/) for the runtime model in depth.
+## How a turn runs
 
-## Agent lifecycle
+When a user message, email, automation, or integration event creates work:
 
-An agent record moves through a small state machine:
-
-```
-created → active → suspended → archived
+```text
+Thread event
+  -> resolve tenant and Space
+  -> load tenant platform agent
+  -> apply Space runtime overrides or inherit tenant defaults
+  -> render tenant + Space workspace context
+  -> invoke managed runtime
+  -> write messages, turns, cost, audit, and tool events back to the thread
+  -> publish updates to admin and mobile clients
 ```
 
-- **created** — Agent exists but has never been invoked.
-- **active** — Agent is accepting messages.
-- **suspended** — Agent is paused. Usually set by the budget reconciler when a spend cap is hit, but operators can also suspend manually.
-- **archived** — Agent is retired. Read-only; visible for audit but won't receive messages.
+The Space can change what context and tools the agent sees. It does not create a separate top-level managed-agent identity for every workroom.
 
-Suspended agents stop _on the next invocation boundary_. An in-flight turn when suspension happens finishes; subsequent messages get a "this agent is suspended" error until an operator resumes it.
+## Templates after the Space architecture
 
-## How agents relate to the rest of the system
+Templates remain useful authoring infrastructure, especially for reusable workspace and tool patterns. They are no longer the main day-to-day surface for tuning managed-agent identity across a fleet of top-level agents.
 
-Agents don't own threads, memory, or integrations — they _use_ them. Every concept is composable:
+For normal operation:
 
-- **Threads** — agents act inside threads, not outside them. See [Threads](/concepts/threads/).
-- **Company Brain** — agents read knowledge bases, recall memory, use compiled pages, and search approved sources. They do not define what Company Brain is. See [Company Brain](/concepts/knowledge/).
-- **Integrations** — MCP tool integrations expose external capabilities the agent can call during a turn. See [Integrations](/concepts/integrations).
-- **Control** — guardrails wrap agent invocations; budgets cap their spend; audit records everything they do. See [Control](/concepts/control/).
-
-<Aside type="tip">
-  When you start with ThinkWork, read the concepts in this order:
-  [Threads](/concepts/threads/), [Agents](/concepts/agents/), [Company
-  Brain](/concepts/knowledge/), [Integrations](/concepts/integrations). Once
-  those four are clear, Control and Automations layer cleanly on top.
-</Aside>
+- Configure the baseline in [Admin — Tenant Agent](/applications/admin/agents/).
+- Configure local context and overrides in [Admin — Spaces](/applications/admin/spaces/).
+- Use templates where the UI still exposes reusable authoring or migration flows.
 
 ## Related pages
 
-- [Managed Agents](/concepts/agents/managed-agents/) — the AgentCore managed-runtime model in detail
-- [Computers](/concepts/computers/) — durable shared workspace and orchestration model
-- [Runtime Selection](/concepts/agents/runtime-selection/) — choosing Strands or Pi per agent/template
-- [Templates](/concepts/agents/templates/) — fleet-wide configuration (model, guardrail, budget, tool surface)
-- [Workspace Overlay](/concepts/agents/workspace-overlay/) — how agent, template, and tenant workspace files compose
-- [Workspace Orchestration](/concepts/agents/workspace-orchestration/) — async folder-native work through S3 workspace events
-- [Skills](/concepts/agents/skills/) — reusable capability packs the Agent Skills spec portably describes
-- [Admin: Agents](/applications/admin/agents/) — the operator surface for managing agents
-- [Admin: Computers](/applications/admin/computers/) — the operator surface for Computers
-- [Admin: Agent Templates](/applications/admin/agent-templates/) — templates live here
-- [Admin: Agent Invites](/applications/admin/agent-invites/) — how to connect a BYOB runtime to ThinkWork
-
-## Under the hood
-
-### Model selection
-
-Managed agents use Amazon Bedrock for inference. Any model available in your region through Bedrock can be referenced, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first for each model. Model id is set at the template level, not per-agent — that's how a fleet-wide rotation is one update.
-
-### Connected-agent webhook contract
-
-Connected agents register a webhook URL. ThinkWork POSTs a payload with the thread id, canonical message history, optional retrieved memory, and channel-specific metadata. The connected runtime is expected to respond with a message in the same shape.
-
-The exact contract and auth model are covered in [Admin: Agent Invites](/applications/admin/agent-invites/), which also documents how to issue an invite token that authorizes a BYOB runtime. For the GraphQL shape of the agent object itself, see the [API reference](/api/graphql/).
+- [Spaces](/concepts/spaces/) — contextual workrooms
+- [Admin — Tenant Agent](/applications/admin/agents/) — tenant platform-agent configuration
+- [Admin — Spaces](/applications/admin/spaces/) — Space configuration and runtime overrides
+- [Runtime Configuration](/concepts/agents/runtime-selection/) — how tenant defaults and Space overrides resolve
+- [Managed Agents](/concepts/agents/managed-agents/) — runtime internals
+- [Agent Invites](/applications/admin/agent-invites/) — connected runtime registration

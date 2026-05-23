@@ -1,9 +1,9 @@
 ---
 title: Admin — Analytics
-description: Activity, Cost, and Performance views for the tenant — thread turns over time, LLM/infra/tools cost breakdowns, per-agent latency, and budget tracking.
+description: Activity, Cost, and Performance views for the tenant — thread turns over time, LLM/infra/tools cost breakdowns, platform-agent and Space spend, and budget tracking.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The Analytics page is the operator's tenant-wide view into what the tenant is doing and what it's spending. Three tabs — **Activity**, **Cost**, **Performance** — switch between views built from the same underlying aggregates.
 
@@ -12,7 +12,7 @@ The Analytics page is the operator's tenant-wide view into what the tenant is do
 
 ## Layout
 
-A single top-of-page tab toggle switches between the three views. The Performance view also has an agent selector that scopes the charts to a single agent. All charts are rendered with [Recharts](https://recharts.org).
+A single top-of-page tab toggle switches between the three views. Some deployments still expose an agent selector for legacy cost/performance rows; current managed work should be interpreted through the tenant platform agent and Space context. All charts are rendered with [Recharts](https://recharts.org).
 
 ## Activity view
 
@@ -35,22 +35,22 @@ The Cost view is the money conversation. It's backed by **server-side aggregatio
 
 Six cards across the top:
 
-| Card | Value |
-|---|---|
-| **Total Spend** | Sum across LLM, infrastructure, and tools for the period |
-| **LLM** | Spend on model inference |
-| **Infra** | Spend on underlying compute (Lambda, Aurora, S3) |
-| **Tools** | Spend on tool invocations (MCP calls, built-in tools, integrations) |
-| **Invocations** | Count of turn events in the period |
-| **Cost / Event** | Total spend divided by invocations |
+| Card             | Value                                                               |
+| ---------------- | ------------------------------------------------------------------- |
+| **Total Spend**  | Sum across LLM, infrastructure, and tools for the period            |
+| **LLM**          | Spend on model inference                                            |
+| **Infra**        | Spend on underlying compute (Lambda, Aurora, S3)                    |
+| **Tools**        | Spend on tool invocations (MCP calls, built-in tools, integrations) |
+| **Invocations**  | Count of turn events in the period                                  |
+| **Cost / Event** | Total spend divided by invocations                                  |
 
 ### Trend chart
 
 A stacked bar chart across the last 30 days, split into LLM / Infra / Tools bands. The chart uses `CostTimeSeriesQuery` with `$days: 30`.
 
-### Agent budget table
+### Budget table
 
-A per-agent table with columns for name, total spend this period, percent of budget used, and a status badge (`ok`, `warning`, `over`). Budgets are resolved via `BudgetStatusQuery`, which reads per-template budget policies.
+A budget table shows the configured spending scopes that the backend exposes for the tenant. In current Space-aware deployments, Space budget rows are the most useful local signal; legacy rows may still show the tenant platform agent or historical agent/template scopes.
 
 ### Cost by model
 
@@ -58,14 +58,14 @@ A breakdown table: model name, total spend, input tokens, output tokens. Model n
 
 ### Queries
 
-| Query | Purpose |
-|---|---|
-| `CostSummaryQuery($tenantId)` | Top-of-page metric cards |
-| `CostByAgentQuery($tenantId)` | Per-agent budget table |
-| `CostByModelQuery($tenantId)` | Cost by model table |
-| `CostTimeSeriesQuery($tenantId, $days)` | Trend chart |
-| `BudgetStatusQuery($tenantId)` | Budget percent used / status badges |
-| `ModelCatalogQuery` | Human-readable model labels |
+| Query                                   | Purpose                                                    |
+| --------------------------------------- | ---------------------------------------------------------- |
+| `CostSummaryQuery($tenantId)`           | Top-of-page metric cards                                   |
+| `CostByAgentQuery($tenantId)`           | Legacy agent/platform-agent cost table where still exposed |
+| `CostByModelQuery($tenantId)`           | Cost by model table                                        |
+| `CostTimeSeriesQuery($tenantId, $days)` | Trend chart                                                |
+| `BudgetStatusQuery($tenantId)`          | Budget percent used / status badges                        |
+| `ModelCatalogQuery`                     | Human-readable model labels                                |
 
 ### Zustand caching
 
@@ -73,9 +73,9 @@ Cost data is held in `useCostStore` (Zustand) so the Dashboard and Analytics pag
 
 ## Performance view
 
-The Performance view answers "which agents are slow, which agents fail, and where are the tokens going?"
+The Performance view answers "which runtime scopes are slow, which fail, and where are the tokens going?"
 
-The page takes an agent selector first — there's no all-agents aggregate here because the chart shapes would lose their meaning across heterogeneous agents. Pick an agent and the view shows:
+The page may take an agent or runtime-scope selector first. Pick the tenant platform agent or exposed scope and the view shows:
 
 - Latency percentiles (p50 / p95 / p99) over time
 - Token usage (input and output) over time
@@ -89,16 +89,16 @@ Queries for performance pull from thread traces or the audit log's cost events d
 
 1. Open Analytics → Cost
 2. Look at the Total Spend metric card and compare to the tenant's monthly budget
-3. Check the Agent budget table for any row in `warning` or `over` status
-4. If an agent is over budget, click through to its [Agents](/applications/admin/agents/) detail page and either adjust its template's budget cap or pause the agent
+3. Check the budget table for any row in `warning` or `over` status
+4. If a Space is over budget, open [Spaces](/applications/admin/spaces/) and adjust or pause that Space's runtime budget; if the tenant baseline is over budget, review [Tenant Agent](/applications/admin/agents/)
 
-### Answer "which agent is eating tokens?"
+### Answer "which Space is eating tokens?"
 
 1. Open Analytics → Cost
-2. Scroll to the "Cost by Agent" table
+2. Scroll to the cost breakdown table
 3. Sort by total spend descending
 4. The top row is the top spender
-5. Cross-reference in Performance view to see whether it's high volume or high per-turn cost
+5. Cross-reference in Performance view and [Threads](/applications/admin/threads/) to see whether it's high volume or high per-turn cost
 
 ### Answer "is anything slower than usual?"
 
@@ -112,20 +112,21 @@ Queries for performance pull from thread traces or the audit log's cost events d
 
 - **Cost aggregates** — computed server-side from a `cost_events` or similar per-turn table, rolled up into `cost_aggregates` materialized views. The UI never sees raw cost rows.
 - **Activity counts** — client-side aggregation from the thread and turn queries
-- **Budget status** — derived server-side from per-template budget policies and current-period spend
+- **Budget status** — derived server-side from Space, tenant-agent, and tenant budget policies where available
 - **Model catalog** — a static catalog maintained alongside the tenant configuration
 
 ## Known limits
 
 - **Activity is client-computed.** For tenants with tens of thousands of daily turns, the Activity view can be slow to render. A server-side activity aggregate is on the [Roadmap](/roadmap/).
-- **Performance view is shallow.** It shows one agent at a time and lacks a cross-agent comparison. A fuller performance dashboard is a future improvement.
-- **Cost attribution is per-agent only.** There's no per-thread or per-user chargeback view; see [Roadmap → Holistic cost tracking](/roadmap/#holistic-cost-tracking).
+- **Performance view is shallow.** It shows one scope at a time and lacks a full cross-Space comparison. A fuller performance dashboard is a future improvement.
+- **Cost attribution is still evolving.** Some deployments expose legacy per-agent rows before full Space chargeback is available; see [Roadmap → Holistic cost tracking](/roadmap/#holistic-cost-tracking).
 - **No custom date ranges.** The trend chart is fixed to 30 days; longer or shorter windows aren't exposed in the UI.
 
 ## Related pages
 
 - [Dashboard](/applications/admin/dashboard/) — the quick-glance metric cards that the Analytics page backs
 - [Threads](/applications/admin/threads/) — drill into the specific turns that drove a number
-- [Agents](/applications/admin/agents/) — per-agent metrics and budget adjustments
+- [Tenant Agent](/applications/admin/agents/) — platform-agent defaults
+- [Spaces](/applications/admin/spaces/) — Space runtime budget overrides
 - [Budgets, Usage, and Audit (concept)](/concepts/control/budgets-usage-and-audit/) — the control layer
 - [Roadmap](/roadmap/) — what's coming next in cost tracking and eval UI

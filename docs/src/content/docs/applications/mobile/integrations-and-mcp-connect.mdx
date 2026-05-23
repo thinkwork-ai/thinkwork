@@ -83,7 +83,7 @@ Users don't normally see the token-refresh flow — it runs automatically throug
 
 ## Why integrations and MCP are separate screens
 
-The admin-side distinction (built-in tools vs MCP servers) flows through to the mobile app as two separate screens. The practical reason is that integrations are a **tenant-curated, named set** — a small number of providers the tenant's operators decided to support — while MCP servers are **assigned per agent** and can grow freely as the tenant adds new tool surfaces. Collapsing them into one screen would conflate two different mental models.
+The admin-side distinction (built-in tools vs MCP servers) flows through to the mobile app as two separate screens. The practical reason is that integrations are a **tenant-curated, named set** — a small number of providers the tenant's operators decided to support — while MCP servers are runtime tools made available through tenant, template, or Space policy and can grow freely as the tenant adds new tool surfaces. Collapsing them into one screen would conflate two different mental models.
 
 For users, the rule is simple:
 

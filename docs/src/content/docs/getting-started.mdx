@@ -3,7 +3,7 @@ title: Getting Started
 description: Install the CLI, deploy ThinkWork into your AWS account, and send your first agent message in under 15 minutes.
 ---
 
-import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
 
 This guide is for self-hosting **the open Agent Harness** in your own AWS account — the leftmost door of the [three-tier deployment ladder](/#one-harness-three-deployment-models) (ThinkWork open / ThinkWork for Business / ThinkWork Enterprise). Everything deploys entirely into your AWS account. No SaaS control plane, no shared infrastructure, no black-box hosted harness. The code runs in your VPC, data lives in your Aurora database, and models run through your Bedrock endpoint.
 
@@ -20,7 +20,9 @@ Before you start, make sure you have:
 - **Bedrock model access** — enable at least one Claude model (e.g. `anthropic.claude-3-5-sonnet-20241022-v2:0`) in your target region
 
 <Aside type="tip">
-Run `aws sts get-caller-identity` to confirm your credentials are working before you proceed. The CLI will fail early with a clear error if credentials are missing, but it's faster to check now.
+  Run `aws sts get-caller-identity` to confirm your credentials are working
+  before you proceed. The CLI will fail early with a clear error if credentials
+  are missing, but it's faster to check now.
 </Aside>
 
 ## Step 1 — Install the CLI
@@ -53,7 +55,9 @@ thinkwork login --keys --profile thinkwork    # enter fresh access keys
 ```
 
 <Aside type="note">
-This step does **not** sign you into a deployed stack — it only tells the CLI which AWS identity to use for provisioning. You'll sign into the stack in [Step 7](#step-7--sign-in-to-the-deployed-stack) after it's up.
+  This step does **not** sign you into a deployed stack — it only tells the CLI
+  which AWS identity to use for provisioning. You'll sign into the stack in
+  [Step 7](#step-7--sign-in-to-the-deployed-stack) after it's up.
 </Aside>
 
 ## Step 3 — Initialize a deployment
@@ -95,7 +99,9 @@ additionally provision the Hindsight ECS service for semantic +
 entity-graph retrieval alongside it.
 
 <Aside type="caution">
-Do not commit `db_password` to source control. Use a secrets manager or environment variable injection in CI. See [Configuration Reference](/deploy/configuration/) for all available variables.
+  Do not commit `db_password` to source control. Use a secrets manager or
+  environment variable injection in CI. See [Configuration
+  Reference](/deploy/configuration/) for all available variables.
 </Aside>
 
 ## Step 4 — Deploy
@@ -210,6 +216,7 @@ thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant acme
 ```
 
 This stores the static `api_auth_secret` (from `terraform.tfvars` / the `graphql-http` Lambda env) plus a tenant slug. No browser needed.
+
 </Aside>
 
 ## Step 8 — Invoke your first agent
@@ -234,18 +241,20 @@ curl -X POST https://xyz789.execute-api.us-east-1.amazonaws.com/graphql \
   }'
 
 # 2. Send a message
+
 curl -X POST https://xyz789.execute-api.us-east-1.amazonaws.com/graphql \
-  -H "Authorization: Bearer $TOKEN" \
+ -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "mutation SendMessage($input: SendMessageInput!) { sendMessage(input: $input) { id body role } }",
-    "variables": {
-      "input": {
-        "threadId": "CHAT-0001",
-        "body": "What can you help me with?"
-      }
-    }
-  }'
+"variables": {
+"input": {
+"threadId": "CHAT-0001",
+"body": "What can you help me with?"
+}
+}
+}'
+
 ```
 </TabItem>
 <TabItem label="Admin App">
@@ -256,8 +265,10 @@ Navigate to your Admin App URL, sign in with your Cognito user, click **New Thre
 ## What's next
 
 - Read [Concepts: Threads](/concepts/threads/) to understand the universal work container
-- Read [Concepts: Agents](/concepts/agents/) to understand how AgentCore, Bedrock, templates, and skill packs fit together
+- Read [Concepts: Spaces](/concepts/spaces/) to understand how contextual workrooms shape each thread
+- Read [Concepts: Agents](/concepts/agents/) to understand the tenant platform agent, AgentCore, Bedrock, sub-agent folders, and connected runtimes
 - Read [Concepts: Memory](/concepts/knowledge/) to understand document knowledge, long-term memory, and retrieval context
 - Read [Concepts: Integrations](/concepts/integrations) to see how ThinkWork connects to external channels, events, and MCP-based tool systems
 - See [Deploy: Greenfield](/deploy/greenfield/) for a detailed walkthrough of what gets created
 - See [Deploy: BYO Infrastructure](/deploy/byo/) if you want to bring your own VPC, database, or Cognito
+```

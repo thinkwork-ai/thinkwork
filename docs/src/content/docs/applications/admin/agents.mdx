@@ -1,212 +1,103 @@
 ---
-title: Admin — Agents
-description: The delegated-agent roster plus runtime, template, Company Brain, and automation configuration. Computers own user workspaces; Agents provide reusable managed-worker capabilities.
+title: Admin — Tenant Agent
+description: "Configure the tenant platform agent baseline: identity, model, budget, sandbox, system prompt, workspace files, and sub-agent folders."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-The Agents surface is where operators and authors build, configure, and iterate on delegated workers in a ThinkWork tenant. Computers are the primary shared workspace/orchestrator surface; Agents are reusable managed workers that Computers, threads, automations, or operators can invoke for focused work.
+The Tenant Agent page is the operator surface for the **one platform agent every tenant runs through**. It replaces the older per-agent roster as the day-to-day managed-agent control plane.
 
-For shared runtime state, persistent workspace files, assignments, and migration from old user-paired Agents, use [Admin — Computers](/applications/admin/computers/).
+**Route:** `/tenant-agent`
+**Legacy routes:** `/agents/*` routes are retired or redirect to the current platform-agent model.
 
-## The agent list
+Use this page to set the tenant-wide agent baseline. Use [Spaces](/applications/admin/spaces/) to give that baseline different workrooms, tools, memory, automations, email addresses, and runtime overrides.
 
-**Route:** `/agents`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/index.tsx`
+<Aside type="note">
+  ThinkWork no longer asks operators to maintain a fleet of top-level managed
+  agents. A thread runs through the tenant platform agent, then receives its
+  context from the Space that owns the work. Space-specific model, guardrail,
+  budget, and sandbox overrides live on the Space configuration page.
+</Aside>
 
-The list is a `DataTable` with search, sort, and a pair of top-right buttons: **New Managed Agent** (opens a dialog) and **Invite BYOB** (creates an invite token for a bring-your-own-runtime agent; see [Agent Invites](/applications/admin/agent-invites/)).
+## What the tenant agent controls
 
-Each row carries:
+The tenant agent is the default runtime identity for the tenant. Its configuration supplies the fallback values a Space inherits when the Space has not set an override.
 
-| Column     | Notes                                                                                                                       |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Name       | Cloud vs BYOB icon next to the name — BYOB agents use runtimes other than the two ThinkWork-managed ones (`sdk`, `strands`) |
-| Status     | `IDLE`, `BUSY`, `PAUSED`, or `STOPPED` as a `StatusBadge`                                                                   |
-| Template   | The linked agent template name, if any                                                                                      |
-| Human pair | The user this agent is paired with (for single-user agents)                                                                 |
-| Budget     | Monthly cap from the template's budget policy                                                                               |
-| Heartbeat  | Relative time since the agent last reported in                                                                              |
+The Config tab exposes:
 
-The list is driven by `AgentsListQuery`. An `OnAgentStatusChangedSubscription` re-executes the query whenever any agent transitions states — creates, deletes, pauses, resumes — so the roster stays live.
+| Field                | What it changes                                                          |
+| -------------------- | ------------------------------------------------------------------------ |
+| Name                 | The display name used in operator surfaces and thread context            |
+| Role                 | The default job description for the tenant platform agent                |
+| Model                | The fallback Bedrock model for Spaces that inherit from the tenant agent |
+| Monthly budget cents | The fallback monthly budget cap                                          |
+| Sandbox              | The fallback code-sandbox mode                                           |
+| System prompt        | The baseline instructions loaded before Space context                    |
 
-### Creating a new agent
+Changes apply to new turns. An in-flight turn finishes with the configuration it loaded when the turn started.
 
-**Route:** `/agents/new` (redirect only)
+## Tabs
 
-The `/agents/new` route is a stub: its `beforeLoad` hook throws `redirect({ to: "/agents" })` and the actual creation happens inside the **New Agent** dialog opened via `useDialog().openNewAgent()`. The dialog captures the agent name, template, runtime, and optional budget metadata, then fires `CreateAgentMutation` and navigates to the new detail page on success.
+### Config
 
-The runtime selector controls which managed AgentCore runtime executes the agent's turns:
+The Config tab is where operators tune the tenant-wide defaults. Keep this layer broad: it should describe what the platform agent is for across the tenant, not the details of a single project, customer, workflow, or channel.
 
-- **Strands** — stable default.
-- **Pi** — parallel Pi runtime substrate.
+Good tenant-agent settings answer questions such as:
 
-When the operator chooses a template, the dialog uses that template's default runtime as the starting value. Operators can still override it per agent. See [Runtime Selection](/concepts/agents/runtime-selection/) for the model.
+- What role should the platform agent play for this company?
+- Which default model should normal Spaces inherit?
+- What broad safety and budget defaults should apply before a Space narrows them?
+- What instructions should every Space receive before local context is added?
 
-Most operators create agents from Agent Templates rather than from scratch. Computer Templates create or migrate Computers instead — see [Agent Templates](/applications/admin/agent-templates/).
-
-## The agent detail page
-
-**Route:** `/agents/:agentId`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId.tsx`
-
-The detail page hosts the agent's overview metrics plus a nested tab router for the child tabs.
-
-### Overview layout
-
-- **Smart breadcrumbs** — if the agent is a sub-agent (has `parentAgentId`), the breadcrumb trail includes the parent name and a "Workspaces" link back to the parent's Workspaces tab. If the agent is top-level, the trail is just Agents → (this agent).
-- **`AgentMetrics`** — a card grid with API call count, threads, spend, and other derived stats
-- **`AgentActivity`** — a filtered activity feed showing runs and threads belonging to this agent. The tenant-wide queries are re-used and filtered client-side to this agent id.
-- **`AgentHeaderBadges`** — status, type, runtime, template link, budget, heartbeat
-- **Action buttons** — edit agent (opens `AgentFormDialog`), rollback (opens `AgentRollbackButton`'s dropdown of prior configurations to restore)
-
-Directly under the overview sits a **`TabsPanel`** that routes into six sub-pages, each a separate file under `agents/$agentId_.<tab>.tsx`.
-
-## Detail tabs
-
-### Skills
-
-**Route:** `/agents/:agentId/skills`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.skills.tsx`
-
-The Skills tab manages which skills are installed on this specific agent. A `DataTable` shows the enabled skills with columns for name, description, enable toggle, and a configuration-status indicator (configured / needs setup / not needed).
-
-Installing a skill opens a dialog that lets the operator pick from the tenant-installed catalog and fill any required credential fields. The dialog uses the REST skills API (`listCatalog`, `installSkillToAgent`, `saveSkillCredentials`) rather than GraphQL. Skill catalog management itself lives on the [Skills Catalog](/applications/admin/skills-catalog/) page.
-
-The agent-level skill assignment is persisted via `SetAgentSkillsMutation`. Skills inherited from the agent's template appear alongside directly-assigned skills and can be toggled independently.
-
-### Company Brain Attachments
-
-**Route:** `/agents/:agentId/knowledge`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.knowledge.tsx`
-
-This legacy route is where knowledge bases are attached to or detached from this agent. Retrieval is scoped per-agent: an agent can only retrieve from knowledge bases it has been explicitly given access to. The tenant-level Company Brain surface lives at [Admin — Company Brain](/applications/admin/knowledge/).
-
-The table lists every knowledge base currently attached with a status badge and an enable checkbox. An "Add Knowledge Base" button opens a side panel (`KnowledgeBasesPanel`) that shows the tenant's full KB list so the operator can pick additional bases to attach. Changes persist via `SetAgentKnowledgeBasesMutation`.
-
-Knowledge base creation, document upload, and sync status live on the [Company Brain](/applications/admin/knowledge/) page's Knowledge Bases tab.
-
-### Memory
-
-**Route:** `/agents/:agentId/memory`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.memory.tsx`
-
-The Memory tab is a per-agent version of the tenant-wide [Company Brain](/applications/admin/knowledge/) Memory tab, scoped to this agent's namespace. Two view modes:
-
-- **Table** — searchable, editable list of memory records with columns for topic, content, updated time, and row-level actions
-- **Graph** — a force-graph visualization of memory records and their topic relationships, useful for finding clusters and orphans
-
-Clicking a row opens a detail sheet with the full content parsed from the `<topic name="...">content</topic>` XML format. From the sheet, operators can edit content (`UpdateMemoryRecordMutation`) or delete a record (`DeleteMemoryRecordMutation`).
-
-Whether edits are actually permitted depends on the memory backend. AgentCore managed memory records are immutable by default; Hindsight-backed records are fully editable. The tab checks `MemorySystemConfigQuery` at load time to decide.
-
-### Sub-agents
-
-**Route:** `/agents/:agentId/sub-agents`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.sub-agents.tsx`
-
-Sub-agents are child agents that this agent can delegate to at runtime. The tab shows a table of current sub-agents with name, role, model, and a delete action. Clicking a sub-agent navigates into its own detail page.
-
-The "Create Sub-agent" dialog captures a name, slug, role, and model selection. Model options are hardcoded as a curated list (Haiku, Sonnet, Nova variants). The slug auto-fills from the name as the user types. Submission fires `CreateSubAgentMutation` and, on delete, `DeleteSubAgentMutation`.
+Project-specific context belongs in a Space. Specialty behaviors belong in sub-agent folders or Space workspace files.
 
 ### Workspace
 
-**Route:** `/agents/:agentId/workspace`  
-**File:** `agents/$agentId_.workspace.tsx`
+The Workspace tab shows files the tenant platform agent reads as part of its baseline context. These files are the tenant layer of the runtime workspace. Use them for shared operating principles, standing instructions, and reusable context that should apply across Spaces.
 
-The Workspace tab is an agent's composed file view — `SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, `memory/*.md`, and any agent-scoped customizations. The file list is the **composed view** from the [workspace overlay](/concepts/agents/workspace-overlay/): every file the agent would read at invocation time, drawn from the agent layer, the template layer, or tenant defaults.
+Do not put Space-specific procedures here if they only apply to one workroom. Put those files on the Space workspace instead so other Spaces do not inherit irrelevant instructions.
 
-**Layout:**
+### Sub-agents
 
-- **Left sidebar** — collapsible folder/file tree. Files that inherit cleanly from the template or tenant defaults show no icon — that's the common case. Non-default state gets a right-justified indicator:
-  - Filled purple dot — agent-scoped override
-  - Amber alert — pinned guardrail file has a template update available
-- **Right pane** — CodeMirror markdown editor (vscodeDark). Header banner describes what the file is for (pulled from a static `FILE_DESCRIPTIONS` map — `SOUL.md` → "Core personality", etc.).
-- **Toolbar** — add file, add folder (with templates like `docs/`, `memory/`), Bootstrap (populate defaults for a fresh agent).
+The Sub-agents tab is a workspace editor opened at the `subagents` folder. Sub-agents are now authored as folder-based specialties under the tenant agent instead of as separate top-level agent records.
 
-**Tasks on this tab:**
+A sub-agent folder should carry the focused context a specialty needs: role, instructions, and supporting files. The tenant platform agent can delegate to those specialties at runtime while preserving a single platform-agent identity for the tenant.
 
-- **Override an inherited file** — click any file showing the blue or muted icon, edit, save. The icon flips to the filled purple dot and the composer now serves the agent-scoped bytes instead of the template.
-- **Revert an override** — open the overridden file, click the trash icon. The agent-scoped object is deleted; the file re-inherits from template or defaults.
-- **Accept a pinned template update** — when `GUARDRAILS.md` / `PLATFORM.md` / `CAPABILITIES.md` shows the amber alert, click **Review**. A side-by-side dialog shows the current pinned content vs. the latest template bytes. Confirm to advance the pin and delete any local override.
-- **Create an ad-hoc file** — use **Add** to create files under arbitrary paths (e.g. `docs/procedures/onboarding.md`). These are agent-only; no template equivalent exists, so they always show the purple dot.
+## How Spaces use the tenant agent
 
-File operations go through `POST /api/workspaces/files`, which fronts the [composer](/concepts/agents/workspace-overlay/#implementation). Pinned-file writes without the accept flag return 403 — the Review button is the canonical path.
+Spaces are contextual workrooms. A Space supplies:
 
-The generic file API intentionally rejects direct writes to workspace orchestration paths such as `work/inbox/`, `review/`, `work/runs/*/events/`, `events/intents/`, and `events/audit/`. Those paths go through [workspace orchestration](/concepts/agents/workspace-orchestration/) writers so the platform can validate the target folder, create canonical events, and preserve audit ordering.
+- Membership and access mode.
+- Workspace files for that context.
+- Tools, MCP servers, knowledge bases, memory, and automations.
+- Optional runtime overrides for model, guardrail, monthly budget, paused state, and sandbox.
+- A Space email address for inbound work.
 
-### Workspaces (sub-agents)
+When a Space leaves a runtime override empty, it inherits from the tenant agent. This keeps common defaults in one place while still letting high-risk or high-volume Spaces tighten their own settings.
 
-**Route:** `/agents/:agentId/workspaces`  
-**File:** `agents/$agentId_.workspaces.tsx`
+## Email behavior
 
-A separate feature from the Workspace tab above. "Workspaces" (plural) lists **sub-agent** workspaces that the parent agent can delegate to — each is a specialized focus area with its own `{workspace-slug}/CONTEXT.md`, skill set, and model. Not related to the overlay; see [Sub-agents](#sub-agents) above for the underlying model.
+Per-agent vanity addresses have been retired. Inbound cold-contact email starts at the Space layer.
 
-### Scheduled Jobs
+Space email addresses use this format:
 
-**Route:** `/agents/:agentId/scheduled-jobs`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index.tsx`
+```text
+<tenant-slug>.<space-slug>@agents.thinkwork.ai
+```
 
-Per-agent scheduled jobs — cron, rate, and one-shot triggers that invoke this specific agent. The tab is thin: it delegates to an `AgentScheduledJobs` component that renders the job list and create / edit dialogs.
-
-This is distinct from the tenant-wide [Automations](/applications/admin/automations/) page, which covers all triggers across all agents and routines. The per-agent view is a filtered slice tied to the current agent.
-
-## Agent state
-
-Agent status is a small enum backed by the `OnAgentStatusChangedSubscription`:
-
-| Status    | Meaning                                                    |
-| --------- | ---------------------------------------------------------- |
-| `IDLE`    | Running, waiting for work                                  |
-| `BUSY`    | Currently executing a turn                                 |
-| `PAUSED`  | Admin-paused, will not accept new turns but can be resumed |
-| `STOPPED` | Terminated                                                 |
-
-Pausing and resuming are manual operator actions. Stopping is typically followed by deletion.
-
-Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent), standalone agents, and future types like `TEAM_AGENT`.
-
-## Workflows
-
-### Create a new delegated agent from a template
-
-1. Open [Agent Templates](/applications/admin/agent-templates/)
-2. Filter to Agent Templates
-3. Click "Use this template" on the template row
-4. Fill the name, slug, and any config overrides
-5. Submit — the new agent is created with the template's skills, KB assignments, MCP servers, and guardrails
-6. Land on the new agent's detail page
-
-### Iterate on an existing agent
-
-1. Open `/agents` and click into the agent
-2. Edit fields via `AgentFormDialog`, including the runtime selector, or change configuration per-tab (add a skill, attach a KB, tune memory)
-3. Changes persist via per-tab mutations; the subscription keeps other connected admin clients in sync
-4. Use the Rollback button to revert to a prior configuration if the changes break something
-
-### Delegate work to sub-agents
-
-1. Open the parent agent's **Sub-agents** tab
-2. Create a sub-agent with a role description (e.g. "handles customer support triage")
-3. At runtime, the parent agent can hand off a turn to the sub-agent through its built-in delegation tool
-4. The sub-agent runs in its own thread with its own skills, knowledge, and memory
+Cold-contact delivery is accepted only when email triggers are enabled for that Space. Token-bearing replies to agent-initiated emails continue to work regardless of the toggle so existing conversations can continue.
 
 ## Known limits
 
-- **Agent creation redirects** — the `/agents/new` route is a stub; the dialog is the real entry point.
-- **Runtime flips apply to new turns** — an in-flight turn finishes on the runtime selected when it started. The next turn uses the newly selected runtime.
-- **`/workspace` and `/workspaces` are different features** — singular is the overlay file tree, plural is the sub-agent delegation surface. Linked from different places in the UI.
-- **Memory edits depend on backend** — AgentCore records are read-only; Hindsight records are editable.
-- **Activity feed is client-filtered** — the agent detail page filters the tenant-wide queries rather than issuing agent-scoped ones, which is fine for small tenants but can be slow at scale.
+- The old agent roster is no longer the primary managed-agent workflow. Use `/tenant-agent` and `/spaces`.
+- Historical thread records may still carry an `agent_id`, but after migration that id points at the tenant platform agent. It no longer distinguishes separate top-level managed agents.
+- If the page says no tenant agent is available, the tenant has not completed the platform-agent migration or the current user cannot read the tenant agent.
 
 ## Related pages
 
-- [Agent Templates](/applications/admin/agent-templates/) — reusable bundles + explicit sync flow
-- [Computers](/applications/admin/computers/) — durable shared workspace and runtime surface
-- [Runtime Selection](/concepts/agents/runtime-selection/) — Strands/Pi managed-runtime routing
-- [Agent Invites](/applications/admin/agent-invites/) — BYOB runtime registration
-- [Skills Catalog](/applications/admin/skills-catalog/) — where the skills installed here come from
-- [Tenant MCP Servers](/applications/admin/mcp-servers/) — MCP tool assignment source
-- [Admin — Company Brain](/applications/admin/knowledge/) — tenant-wide Memory, Pages, Knowledge Bases, and Sources view
-- [Workspace Overlay (concept)](/concepts/agents/workspace-overlay/) — inheritance, pinning, accept-update flow
-- [Workspace Orchestration (concept)](/concepts/agents/workspace-orchestration/) — async folder-native work and protected orchestration prefixes
-- [Agents (concept)](/concepts/agents/) — the underlying agent model
+- [Admin — Spaces](/applications/admin/spaces/) — Space configuration, workspace, tools, memory, automations, runtime overrides, and email triggers
+- [Agents (concept)](/concepts/agents/) — the platform-agent model
+- [Spaces (concept)](/concepts/spaces/) — Spaces as contextual workrooms
+- [Runtime Configuration](/concepts/agents/runtime-selection/) — tenant-agent defaults and Space overrides
+- [Skills Catalog](/applications/admin/skills-catalog/) — reusable workspace skills
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) — tenant-level MCP registrations

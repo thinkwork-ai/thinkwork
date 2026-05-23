@@ -11,34 +11,34 @@ ThinkWork v1 is a working, production-deployable Agent Harness. It is not a fini
 
 These features are complete and supported in v1:
 
-| Feature                                                                  | Status |
-| ------------------------------------------------------------------------ | ------ |
-| Managed agents (AgentCore + Bedrock)                                     | Stable |
-| ThinkWork Computers (product surface + migration foundation)             | Beta   |
-| Pi managed runtime substrate (parallel AgentCore runtime)                | Beta   |
-| Connected agents (BYO runtime webhook)                                   | Stable |
-| Templates (Computer Templates + Agent Templates)                         | Stable |
-| Skill packs (SKILL.md → S3 → invoke-time loading)                        | Stable |
-| Threads + channels (CHAT, AUTO, EMAIL, SLACK, GITHUB)                    | Stable |
-| AgentCore managed memory with automatic per-turn retention (always on)   | Stable |
-| Hindsight memory add-on (`enable_hindsight = true`, ECS Fargate)         | Beta   |
-| Knowledge Bases (Bedrock KB + document upload)                           | Stable |
-| Slack integration                                                          | Stable |
-| GitHub integration                                                         | Stable |
-| Google Workspace integration (Gmail + Calendar)                            | Beta   |
+| Feature                                                                      | Status |
+| ---------------------------------------------------------------------------- | ------ |
+| Managed agents (AgentCore + Bedrock)                                         | Stable |
+| ThinkWork Computers (product surface + migration foundation)                 | Beta   |
+| Pi managed runtime substrate (parallel AgentCore runtime)                    | Beta   |
+| Connected agents (BYO runtime webhook)                                       | Stable |
+| Templates (Computer Templates + Agent Templates)                             | Stable |
+| Skill packs (SKILL.md → S3 → invoke-time loading)                            | Stable |
+| Threads + channels (CHAT, AUTO, EMAIL, SLACK, GITHUB)                        | Stable |
+| AgentCore managed memory with automatic per-turn retention (always on)       | Stable |
+| Hindsight memory add-on (`enable_hindsight = true`, ECS Fargate)             | Beta   |
+| Knowledge Bases (Bedrock KB + document upload)                               | Stable |
+| Slack integration                                                            | Stable |
+| GitHub integration                                                           | Stable |
+| Google Workspace integration (Gmail + Calendar)                              | Beta   |
 | private extension tracker integration (Computer-first pickup + PR writeback) | Beta   |
-| Tenant credential vault (KMS-backed provider credentials)                | Stable |
-| Scheduled automations (EventBridge + Step Functions)                     | Stable |
-| Event-driven automations                                                 | Beta   |
-| Guardrails (Bedrock Guardrails integration)                              | Stable |
-| Budgets and usage tracking (turn-level)                                  | Stable |
-| Audit logging (S3 NDJSON)                                                | Stable |
-| Admin web app (React/Vite)                                               | Beta   |
-| CLI (`thinkwork-cli`)                                                    | Beta   |
-| Terraform module (`thinkwork-ai/thinkwork/aws`)                          | Beta   |
-| BYO VPC, database, Cognito                                               | Stable |
-| Evaluations (in-app authoring, runs, scoring)                            | Beta   |
-| Multi-tenancy (Postgres RLS)                                             | Stable |
+| Tenant credential vault (KMS-backed provider credentials)                    | Stable |
+| Scheduled automations (EventBridge + Step Functions)                         | Stable |
+| Event-driven automations                                                     | Beta   |
+| Guardrails (Bedrock Guardrails integration)                                  | Stable |
+| Budgets and usage tracking (turn-level)                                      | Stable |
+| Audit logging (S3 NDJSON)                                                    | Stable |
+| Admin web app (React/Vite)                                                   | Beta   |
+| CLI (`thinkwork-cli`)                                                        | Beta   |
+| Terraform module (`thinkwork-ai/thinkwork/aws`)                              | Beta   |
+| BYO VPC, database, Cognito                                                   | Stable |
+| Evaluations (in-app authoring, runs, scoring)                                | Beta   |
+| Multi-tenancy (Postgres RLS)                                                 | Stable |
 
 <Aside type="note">
   "Beta" means the feature works and is deployed in production by early users,
@@ -64,7 +64,7 @@ A multi-step research automation that uses Step Functions loops to iteratively s
 
 ### Holistic cost tracking
 
-Per-tenant, per-agent, per-thread cost tracking with dashboards, cost attribution, and chargeback reports. The current implementation tracks token counts and estimates costs per turn but doesn't aggregate them into a reporting-friendly data model.
+Per-tenant, per-Space, per-platform-agent, and per-thread cost tracking with dashboards, cost attribution, and chargeback reports. The current implementation tracks token counts and estimates costs per turn but doesn't fully aggregate them into a reporting-friendly data model.
 
 **Not in v1 because:** Turn-level tracking is sufficient for most v1 use cases. The reporting layer requires Aurora schema additions and an analytics query layer.
 

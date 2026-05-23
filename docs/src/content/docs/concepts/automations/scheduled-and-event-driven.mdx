@@ -3,7 +3,7 @@ title: Scheduled and Event-driven
 description: Two entry points into ThinkWork automations — cron-like schedules via AWS Scheduler and event triggers via EventBridge — plus the provisioning chain that turns a user-defined schedule into live infrastructure.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Automations start from one of two entry points: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both converge on whichever execution path the trigger's target dictates — a single-turn agent invocation lands in an `AUTO-` thread, a multi-step routine lands as a `routine_executions` row with step-event logging. The difference is all at the front; the downstream model is uniform within its shape. Routing both entry points through the same execution layer is what gives the **Traceability** operating guarantee its consistency at the automation tier — a scheduled monthly digest and an event-triggered triage flow look identical in the audit log, identical in the cost ledger, identical in the operator's queue.
 
@@ -18,7 +18,7 @@ Every schedule in ThinkWork has:
 - A **cron or rate expression.**
 - A **target** — which agent to invoke, with which prompt, against which thread scope.
 - A **start and optional end window.**
-- A **tenant + owner scope** — schedules are tenant-scoped, and usually per-agent.
+- A **tenant + Space scope** — schedules are tenant-scoped and usually run in a specific Space.
 
 Schedules are created and managed in the admin app (Scheduled Jobs surface) or via the GraphQL `createScheduledJob` mutation.
 

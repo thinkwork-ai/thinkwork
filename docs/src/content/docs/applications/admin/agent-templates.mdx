@@ -1,23 +1,32 @@
 ---
 title: Admin — Agent Templates
-description: Reusable Computer Template and Agent Template bundles - runtime, model, built-in tool opt-ins, workspace files, MCP servers, guardrails - plus the explicit sync flow that propagates changes.
+description: Reusable and legacy template bundles for Computer and agent authoring infrastructure. Tenant Agent and Spaces are the primary current operation surfaces.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-Templates are reusable configuration bundles for either Computers or delegated Agents. A template defines the default runtime, model, built-in tool opt-ins, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
+Templates are reusable configuration bundles for Computer and agent authoring infrastructure. They still exist for supported template flows, but they are no longer the primary place operators tune the managed-agent runtime. For day-to-day operation, configure tenant-wide defaults in [Tenant Agent](/applications/admin/agents/) and local context or runtime policy in [Spaces](/applications/admin/spaces/).
+
+<Aside type="note">
+  Older template docs described fleet-wide rotation across many top-level
+  managed agents. The current model is one tenant platform agent plus Spaces.
+  Use this page for template UI that still exists; use Tenant Agent and Spaces
+  for current runtime behavior.
+</Aside>
+
+A template can define defaults such as model, built-in tool opt-ins, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and workspace files where the template UI still owns that flow.
 
 Template kind matters:
 
 - **Computer Templates** create or migrate user-owned [Computers](/concepts/computers/). They describe the durable workspace/orchestrator.
-- **Agent Templates** create delegated managed Agents. They describe reusable workers that Computers, threads, and automations can invoke.
+- **Agent Templates** describe reusable or legacy bundles for delegated-agent authoring infrastructure.
 
 Templates propagate to linked agents via two distinct mechanisms depending on what changed:
 
 - **Configuration fields** (built-in tool opt-ins, KBs, MCP servers, guardrails, model, system prompt, budget) — propagated via the explicit **Sync** flow described later on this page. Operators review per-agent diffs and confirm.
 - **Workspace files** (`SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, etc.) — propagated via the [workspace overlay](/concepts/agents/workspace-overlay/). Live-class files update on next invocation with no sync step; guardrail-class files require a per-agent **Accept update** review; `USER.md` is rewritten server-side on human reassignment.
 
-This is how fleet-wide configuration gets managed in ThinkWork without having to touch every Computer or delegated Agent individually.
+This is how template-backed authoring flows stay reusable. It is separate from Space runtime overrides, which are the current way to tune model, guardrail, budget, paused state, and sandbox for a workroom.
 
 ## The template list
 
@@ -26,20 +35,20 @@ This is how fleet-wide configuration gets managed in ThinkWork without having to
 
 The list is a searchable table showing every template in the tenant. The tabs filter by **All**, **Computer Templates**, and **Agent Templates**.
 
-| Column | Notes |
-|---|---|
-| Name | Display name |
-| Description | Short summary |
-| Category | Author-chosen category tag |
-| Kind | Computer Template or Agent Template |
-| Runtime | Default managed runtime for agents created from the template (`Strands` or `Pi`) |
-| Model | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.) |
-| Source | Where the template came from (built-in, tenant-created, imported) |
-| Skill count | How many skills are attached |
-| Published | Badge showing whether the template is publishable to child agents |
-| Action | Computer Templates link to Computers; Agent Templates open the create-agent dialog |
+| Column      | Notes                                                                                              |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| Name        | Display name                                                                                       |
+| Description | Short summary                                                                                      |
+| Category    | Author-chosen category tag                                                                         |
+| Kind        | Computer Template or Agent Template                                                                |
+| Runtime     | Default managed runtime for agents created from the template (`Strands` or `Pi`)                   |
+| Model       | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.)                            |
+| Source      | Where the template came from (built-in, tenant-created, imported)                                  |
+| Skill count | How many skills are attached                                                                       |
+| Published   | Badge showing whether the template is publishable to child agents                                  |
+| Action      | Computer Templates link to Computers; Agent Templates expose supported legacy or authoring actions |
 
-The backing query is `AgentTemplatesListQuery`. The create-agent-from-template flow fires `CreateAgentFromTemplateMutation` only for Agent Templates. Computer creation and migration are handled from the Computers surface and migration CLI.
+The backing query is `AgentTemplatesListQuery`. Computer creation and migration are handled from the Computers surface and migration CLI. Where an Agent Template still exposes a create-agent action, treat it as legacy or authoring infrastructure rather than the primary path for new managed-agent specialization.
 
 ## The template detail
 
@@ -78,12 +87,12 @@ Below the main form, the template detail page lists every agent currently linked
 
 The Configuration tab carries compact cards for the built-in tools that are controlled per template. These cards do not install workspace skills; they set JSON configuration fields on the template that the runtime config resolver reads before every turn.
 
-| Card | Template field | Runtime tool | Extra gates |
-|---|---|---|---|
-| Code Sandbox | `sandbox` | `execute_code` | Tenant `sandbox_enabled`; Code Interpreter provisioning |
-| Browser Automation | `browser` | `browser_automation` | Agent-level capability overrides can enable or disable individual agents |
-| Web Search | `webSearch` / `web_search` | `web_search` | Tenant Web Search provider row must be configured and enabled |
-| Send Email | `sendEmail` / `send_email` | `send_email` | Agent email channel controls sending address and delivery policy |
+| Card               | Template field             | Runtime tool         | Extra gates                                                              |
+| ------------------ | -------------------------- | -------------------- | ------------------------------------------------------------------------ |
+| Code Sandbox       | `sandbox`                  | `execute_code`       | Tenant `sandbox_enabled`; Code Interpreter provisioning                  |
+| Browser Automation | `browser`                  | `browser_automation` | Agent-level capability overrides can enable or disable individual agents |
+| Web Search         | `webSearch` / `web_search` | `web_search`         | Tenant Web Search provider row must be configured and enabled            |
+| Send Email         | `sendEmail` / `send_email` | `send_email`         | Agent email channel controls sending address and delivery policy         |
 
 #### Code Sandbox card
 
@@ -127,7 +136,7 @@ The Configuration tab includes the template's runtime selector:
 - **Strands** — the stable default managed runtime.
 - **Pi** — the parallel managed runtime substrate for Pi-backed canaries and agents.
 
-The template runtime is the default for agents created from the template. Existing agents can carry their own runtime value, so changing a template's runtime is primarily a future-agent default unless a sync or per-agent edit changes linked agents. See [Runtime Selection](/concepts/agents/runtime-selection/) for the invocation-time routing model.
+The template runtime is retained for template-backed flows. It is not the primary user-facing control for normal Space operation. See [Runtime Configuration](/concepts/agents/runtime-selection/) for tenant-agent defaults and Space overrides.
 
 ## The Workspace tab
 
@@ -150,7 +159,10 @@ Workspace skills are editable files in this tree. Built-in tools are not workspa
 For the tenant-wide defaults that every template inherits from, see `/agent-templates/defaults` (the **Default Workspace** page).
 
 <Aside type="note">
-The template's Workspace tab does **not** show a per-file source badge, because by definition every file listed here is at the template layer. The operator-facing distinction matters on the _agent's_ Workspace tab, where the same file could come from the agent override, the template, or the defaults.
+  The template's Workspace tab does **not** show a per-file source badge,
+  because by definition every file listed here is at the template layer. The
+  operator-facing distinction matters on the _agent's_ Workspace tab, where the
+  same file could come from the agent override, the template, or the defaults.
 </Aside>
 
 ## The sync flow
@@ -163,7 +175,10 @@ Sync is **explicit**. When an operator edits a template, the linked agents do no
 The review page uses an `AgentSyncCard` per agent. Each card carries the current config vs the template config and an individual "Sync this agent" button. The top of the page also has a "Sync All" button that fires `SyncTemplateToAllAgentsMutation` — a single mutation that applies the template to all linked agents server-side and returns `{ agentsSynced, agentsFailed }`.
 
 <Aside type="note">
-The explicit sync step is a deliberate design choice. Auto-propagating template changes would make fleet-wide mistakes trivially easy to ship — "I tweaked the system prompt and now 47 agents misbehave." Making operators review and confirm keeps fleet operations reviewable.
+  The explicit sync step is a deliberate design choice. Auto-propagating
+  template changes would make fleet-wide mistakes trivially easy to ship — "I
+  tweaked the system prompt and now 47 agents misbehave." Making operators
+  review and confirm keeps fleet operations reviewable.
 </Aside>
 
 After the sync mutation resolves, a toast notifies the operator of success or partial failure. The linked agents list refetches so the cards reflect the new state.
@@ -242,10 +257,11 @@ Template history is not currently versioned — rollback means editing forward. 
 
 ## Related pages
 
-- [Agents](/applications/admin/agents/) — the per-agent detail pages that inherit from templates
-- [Runtime Selection](/concepts/agents/runtime-selection/) — Strands/Pi runtime routing
+- [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent defaults
+- [Spaces](/applications/admin/spaces/) — Space-specific context and runtime overrides
+- [Runtime Configuration](/concepts/agents/runtime-selection/) — tenant-agent defaults and Space overrides
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB agent registration
 - [Skills Catalog](/applications/admin/skills-catalog/) — the skills added to templates
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — the MCP servers assigned to templates
 - [Security Center](/applications/admin/security-center/) — guardrails assigned to templates
-- [Agents (concept)](/concepts/agents/) — the product model behind templates
+- [Agents (concept)](/concepts/agents/) — the current tenant platform-agent model
