@@ -42,7 +42,11 @@
  */
 
 import http from "node:http";
-import { Agent, type AgentEvent, type AgentTool } from "@mariozechner/pi-agent-core";
+import {
+  Agent,
+  type AgentEvent,
+  type AgentTool,
+} from "@mariozechner/pi-agent-core";
 import type {
   AssistantMessage,
   Message,
@@ -50,9 +54,7 @@ import type {
   Usage,
 } from "@mariozechner/pi-ai";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
-import {
-  BedrockAgentCoreClient,
-} from "@aws-sdk/client-bedrock-agentcore";
+import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 
@@ -278,7 +280,8 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
     if (!item || typeof item !== "object") return [];
     const record = item as Record<string, unknown>;
     const url = asString(record.url);
-    const serverName = asString(record.name) || asString(record.serverName) || url;
+    const serverName =
+      asString(record.name) || asString(record.serverName) || url;
     const auth =
       record.auth && typeof record.auth === "object"
         ? (record.auth as Record<string, unknown>)
@@ -321,9 +324,7 @@ export interface HandlerDependencies {
    * Optional override for the SessionStore constructor (tests inject fakes).
    * Production callers omit this and the default `AuroraSessionStore` runs.
    */
-  sessionStoreFactory?: (
-    opts: AuroraSessionStoreOptions,
-  ) => AuroraSessionStore;
+  sessionStoreFactory?: (opts: AuroraSessionStoreOptions) => AuroraSessionStore;
   /**
    * Optional override for the completion-callback HTTP fetch (tests inject
    * fakes). Production uses native `fetch` at invocation time.
@@ -587,7 +588,9 @@ export async function runAgentLoop(
       });
     }
     if (event.type === "tool_execution_end") {
-      const existing = toolInvocations.find((item) => item.id === event.toolCallId);
+      const existing = toolInvocations.find(
+        (item) => item.id === event.toolCallId,
+      );
       const finished = new Date().toISOString();
       if (existing) {
         existing.result = event.result;
@@ -613,7 +616,9 @@ export async function runAgentLoop(
   await agent.prompt(args.message);
   const assistant = [...agent.state.messages]
     .reverse()
-    .find((message): message is AssistantMessage => message.role === "assistant");
+    .find(
+      (message): message is AssistantMessage => message.role === "assistant",
+    );
 
   return {
     content: textFromAssistant(assistant),
@@ -785,7 +790,10 @@ export async function postCompletion(
     status,
     ...(failureReason !== null ? { failureReason } : {}),
   });
-  const signature = computeCompletionHmac(runContext.runId, runContext.hmacSecret);
+  const signature = computeCompletionHmac(
+    runContext.runId,
+    runContext.hmacSecret,
+  );
 
   const totalAttempts = COMPLETION_RETRY_DELAYS_MS.length + 1;
   for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
@@ -879,7 +887,9 @@ function usageNumber(usage: unknown, ...keys: string[]): number {
   return 0;
 }
 
-function buildFinalizeBody(args: FinalizeCallbackArgs): Record<string, unknown> {
+function buildFinalizeBody(
+  args: FinalizeCallbackArgs,
+): Record<string, unknown> {
   const { payload, identity, result } = args;
   const runResult = result.status === "ok" ? result.runResult : null;
   const usage = runResult?.usage;
@@ -986,11 +996,13 @@ function callbackUrlAllowed(
   return { ok: true };
 }
 
-function isFinalizeCallbackConfigured(payload: Record<string, unknown>): boolean {
+function isFinalizeCallbackConfigured(
+  payload: Record<string, unknown>,
+): boolean {
   return Boolean(
     asString(payload.finalize_callback_url) &&
-      asString(payload.finalize_callback_secret) &&
-      asString(payload.thread_turn_id),
+    asString(payload.finalize_callback_secret) &&
+    asString(payload.thread_turn_id),
   );
 }
 
@@ -1311,10 +1323,7 @@ export async function handleInvocation(
     return {
       statusCode: 500,
       body: {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Pi tool assembly failed.",
+        error: err instanceof Error ? err.message : "Pi tool assembly failed.",
         runtime: "pi",
       },
     };
@@ -1449,8 +1458,7 @@ export async function handleInvocation(
     return {
       statusCode: 500,
       body: {
-        error:
-          runError instanceof Error ? runError.message : String(runError),
+        error: runError instanceof Error ? runError.message : String(runError),
         runtime: "pi",
       },
     };
@@ -1549,7 +1557,10 @@ export async function handleInvocation(
     },
   };
   responseBody.tool_costs = responseBody.response.tool_costs;
-  return { statusCode: 200, body: responseBody as unknown as Record<string, unknown> };
+  return {
+    statusCode: 200,
+    body: responseBody as unknown as Record<string, unknown>,
+  };
 }
 
 // ---------------------------------------------------------------------------

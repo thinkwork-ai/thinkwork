@@ -153,7 +153,7 @@ This is the expected new-file shape. The implementing agent may adjust helper fi
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 sequenceDiagram
@@ -197,12 +197,14 @@ sequenceDiagram
 **Dependencies:** None.
 
 **Files:**
+
 - Modify: `packages/agentcore-pi/agent-container/src/server.ts`
 - Modify: `packages/agentcore-pi/agent-container/src/runtime/sandbox-factory.ts`
 - Test: `packages/agentcore-pi/agent-container/tests/server.test.ts`
 - Test: `packages/agentcore-pi/agent-container/tests/sandbox-factory.test.ts`
 
 **Approach:**
+
 - Stop calling `resolveSandboxFactory` unconditionally before `assembleTools`.
 - Treat `sandbox_status`, `sandbox_reason`, and `sandbox_interpreter_id` as preflight output, not a mandatory global Pi payload.
 - Register no `execute_code` tool when sandbox was not requested by effective policy.
@@ -213,11 +215,13 @@ sequenceDiagram
 **Execution note:** Start with characterization coverage around current missing-sandbox behavior before changing the handler.
 
 **Patterns to follow:**
+
 - `packages/api/src/lib/sandbox-preflight.ts`
 - `packages/api/src/handlers/chat-agent-invoke.ts`
 - `packages/agentcore-strands/agent-container/container-sources/server.py`
 
 **Test scenarios:**
+
 - Happy path: payload with no sandbox fields and no Browser flag returns a successful Pi response and does not expose `execute_code` or `browser_automation`.
 - Happy path: payload with `sandbox_status: "ready"` and a valid interpreter id registers `execute_code`.
 - Edge case: payload with `sandbox_status: "ready"` but blank interpreter id returns a clear 500 contract error.
@@ -226,6 +230,7 @@ sequenceDiagram
 - Integration: existing MCP and Hindsight tool registration still works when Browser/Sandbox fields are absent.
 
 **Verification:**
+
 - Pi can run a plain chat-turn payload without `sandbox_interpreter_id`.
 - Pi's assembled tools match API-resolved policy states instead of runtime defaults.
 
@@ -240,6 +245,7 @@ sequenceDiagram
 **Dependencies:** U1.
 
 **Files:**
+
 - Create: `packages/agentcore-pi/agent-container/src/runtime/tools/execute-code.ts`
 - Create: `packages/agentcore-pi/agent-container/tests/execute-code-tool.test.ts`
 - Modify: `packages/agentcore-pi/agent-container/src/server.ts`
@@ -247,6 +253,7 @@ sequenceDiagram
 - Test: `packages/pi-aws/connectors/agentcore-codeinterpreter.test.ts`
 
 **Approach:**
+
 - Build a Pi `AgentTool` named `execute_code` with a compact parameter schema centered on Python code and an optional timeout hint.
 - Use `@thinkwork/pi-aws` for Start/Invoke/Stop mechanics and stream parsing. Tighten that connector only where needed to preserve `structuredContent`, `content[]`, exit code, stdout, stderr, and exception-member events.
 - Hold session state in the per-invocation tool closure and push one cleanup callback into the existing Pi cleanup array. Multiple calls in one turn reuse the same session.
@@ -255,6 +262,7 @@ sequenceDiagram
 - Return a structured object aligned with Strands `SandboxResult`, including truncation flags and known error classes.
 
 **Patterns to follow:**
+
 - `packages/agentcore-strands/agent-container/container-sources/sandbox_tool.py`
 - `packages/agentcore-strands/agent-container/test_sandbox_tool.py`
 - `packages/pi-aws/connectors/agentcore-codeinterpreter.ts`
@@ -262,6 +270,7 @@ sequenceDiagram
 - `packages/api/src/handlers/sandbox-invocation-log.ts`
 
 **Test scenarios:**
+
 - Covers AE1. Happy path: one `execute_code` call prints `385`, returns `ok: true`, stdout contains `385`, exit status is success, and Pi records tool evidence.
 - Happy path: two `execute_code` calls in one turn reuse one AgentCore session and stop it exactly once during cleanup.
 - Covers AE2. Error path: quota denied returns `SandboxCapExceeded` and does not call StartCodeInterpreterSession.
@@ -272,6 +281,7 @@ sequenceDiagram
 - Integration: tool invocation metadata includes `execute_code`, arguments, result, success/error state, started/finished timestamps, and runtime `pi`.
 
 **Verification:**
+
 - Pi unit tests prove session lifecycle, stream parsing, quota-before-spend, audit best effort, and result shape.
 - The deployed Pi capability smoke for `execute_code` can pass using persisted `thread_turns.usage_json.tool_invocations`.
 
@@ -286,6 +296,7 @@ sequenceDiagram
 **Dependencies:** U1.
 
 **Files:**
+
 - Create: `packages/agentcore-pi/agent-container/src/runtime/tools/browser-automation.ts`
 - Create: `packages/agentcore-pi/agent-container/src/runtime/tools/tool-costs.ts`
 - Create: `packages/agentcore-pi/agent-container/tests/browser-automation-tool.test.ts`
@@ -294,6 +305,7 @@ sequenceDiagram
 - Modify: `packages/agentcore-pi/agent-container/Dockerfile`
 
 **Approach:**
+
 - Build a Pi `AgentTool` named `browser_automation` with `url` and `task` parameters. Keep the user-facing promise at "perform this browser task and summarize the result."
 - Prefer the AgentCore TypeScript Browser SDK's Playwright path for Node-side session creation and CDP automation. Add the minimal runtime dependencies required by that SDK.
 - Keep a dependency probe at tool construction. When Browser is enabled but dependencies/credentials are missing, register a stub that returns a clear unavailable result and emits an unavailable event.
@@ -302,12 +314,14 @@ sequenceDiagram
 - Emit split `tool_costs`: `agentcore_browser_session` for Browser substrate and `nova_act_browser_automation` only when a high-level Nova engine is actually used.
 
 **Patterns to follow:**
+
 - `packages/agentcore-strands/agent-container/container-sources/browser_automation_tool.py`
 - `packages/agentcore-strands/agent-container/test_browser_automation_tool.py`
 - `terraform/modules/app/agentcore-runtime/main.tf`
 - AWS Browser TypeScript SDK examples linked in External References.
 
 **Test scenarios:**
+
 - Covers AE3. Happy path: enabled Browser tool starts a fake Browser session, navigates to a deterministic page, returns bounded text, closes the session, and records `browser_automation`.
 - Covers AE4. Happy path: completed Browser run emits an AgentCore Browser cost row with tenant/thread/agent metadata, duration, URL, task summary, and success state.
 - Error path: missing SDK/dependency returns a clear unavailable result and no uncaught exception.
@@ -317,6 +331,7 @@ sequenceDiagram
 - Integration: when Browser is effectively blocked, Pi does not register `browser_automation` even if the runtime package supports it.
 
 **Verification:**
+
 - Pi Browser unit tests prove session lifecycle, unavailable states, cost rows, and event capture.
 - A deployed Browser smoke can prove AgentCore Browser session creation and persisted tool evidence.
 
@@ -331,6 +346,7 @@ sequenceDiagram
 **Dependencies:** U2, U3.
 
 **Files:**
+
 - Create: `packages/agentcore-pi/agent-container/src/runtime/chat-finalize.ts`
 - Create: `packages/agentcore-pi/agent-container/tests/chat-finalize.test.ts`
 - Modify: `packages/agentcore-pi/agent-container/src/server.ts`
@@ -338,6 +354,7 @@ sequenceDiagram
 - Test: `packages/api/src/lib/chat-finalize/process-finalize.test.ts`
 
 **Approach:**
+
 - Parse `finalize_callback_url`, `finalize_callback_secret`, and `thread_turn_id` from the invocation payload.
 - When finalizer fields are present, POST a `FinalizePayload` with `status`, `duration_ms`, `response.content`, `response.tool_invocations`, `response.tools_called`, `response.tool_costs`, `usage`, tenant/agent/thread ids, and trace context.
 - Keep the synchronous response body for direct/eval harnesses that omit finalizer fields.
@@ -347,12 +364,14 @@ sequenceDiagram
 - Ensure tool costs collected by U3 and future built-ins appear both top-level and under `response.tool_costs` so `process-finalize` can persist them without runtime-specific branches.
 
 **Patterns to follow:**
+
 - `packages/agentcore-strands/agent-container/test_finalize_callback.py`
 - `packages/api/src/lib/chat-finalize/types.ts`
 - `packages/api/src/lib/chat-finalize/process-finalize.ts`
 - `packages/agentcore-pi/agent-container/src/server.ts` completion callback retry shape for skill runs.
 
 **Test scenarios:**
+
 - Happy path: successful Pi turn posts a finalizer payload with response content, `execute_code`, `browser_automation`, and tool cost rows.
 - Happy path: direct invocation without finalizer fields still returns the normal synchronous body.
 - Error path: agent-loop failure posts `status: "failed"` with bounded error text when finalizer fields are present.
@@ -362,6 +381,7 @@ sequenceDiagram
 - Integration: `process-finalize` persists Pi `tool_invocations`, `tools_called`, and `tool_costs` identically to Strands.
 
 **Verification:**
+
 - Event-mode Pi chat turns no longer depend on `chat-agent-invoke` waiting for a synchronous Lambda response.
 - Persisted `thread_turns.usage_json` contains Pi Browser and Sandbox evidence after finalization.
 
@@ -376,6 +396,7 @@ sequenceDiagram
 **Dependencies:** U2, U3, U4.
 
 **Files:**
+
 - Modify: `terraform/modules/app/agentcore-pi/main.tf`
 - Modify: `terraform/modules/app/agentcore-pi/README.md`
 - Modify: `terraform/modules/thinkwork/main.tf`
@@ -383,6 +404,7 @@ sequenceDiagram
 - Test: `packages/agentcore-pi/agent-container/tests/execute-code-tool.test.ts`
 
 **Approach:**
+
 - Mirror the Strands Browser IAM statement in `terraform/modules/app/agentcore-pi/main.tf`: Start/Get/List/Stop browser sessions plus automation/live-view stream actions and both system/custom browser ARN shapes.
 - Confirm the existing Pi Code Interpreter IAM statement matches current AWS SDK actions and resource shapes.
 - Add Browser runtime environment variables needed by the Pi tool module, such as Browser engine, estimate defaults, and Nova Act parameter name only if the Pi implementation uses them.
@@ -390,17 +412,20 @@ sequenceDiagram
 - Wire only the terraform variables/env values that the implemented Browser module actually consumes.
 
 **Patterns to follow:**
+
 - `terraform/modules/app/agentcore-runtime/main.tf`
 - `packages/agentcore-pi/agent-container/Dockerfile`
 - `docs/solutions/integration-issues/agentcore-runtime-role-missing-code-interpreter-perms-2026-04-24.md`
 
 **Test scenarios:**
+
 - Config: Browser IAM policy includes all actions used by the Pi Browser module and scopes to AgentCore Browser resources.
 - Config: Pi Docker/package changes include the Browser SDK and do not remove existing MCP/Hindsight/Code Interpreter dependencies.
 - Error path: missing Browser permission produces a recognizable runtime error in the Browser tool result and logs, not a silent missing-tool response.
 - Regression: Strands terraform and runtime package behavior are unchanged.
 
 **Verification:**
+
 - Terraform diff shows Pi Browser permissions without modifying Strands permissions except for comments if needed.
 - Pi image can build with the Browser dependency set and existing Pi tests still pass.
 
@@ -415,12 +440,14 @@ sequenceDiagram
 **Dependencies:** U2, U3, U4, U5.
 
 **Files:**
+
 - Modify: `packages/api/scripts/pi-runtime-capability-smoke.ts`
 - Modify: `scripts/post-deploy-smoke-pi.sh`
 - Modify: `scripts/smoke/spaces-surface-smoke.mjs`
 - Test: `packages/api/src/__tests__/pi-runtime-capability-smoke.test.ts`
 
 **Approach:**
+
 - Add `browser_automation` to the Pi capability smoke, including a prompt that forces exactly one Browser call against a deterministic target.
 - Add evidence checks for persisted `thread_turns.usage_json.tool_invocations`, Browser event/cost metadata, and assistant response token.
 - Add a combined readiness scenario that exercises `execute_code` and `browser_automation` in a Pi-runtime agent turn or in two back-to-back turns on the same agent, depending on model reliability.
@@ -428,11 +455,13 @@ sequenceDiagram
 - Extend the Spaces surface smoke with a Pi runtime option so the test starts from the app-facing route, not only a direct GraphQL harness.
 
 **Patterns to follow:**
+
 - `packages/api/scripts/pi-runtime-capability-smoke.ts`
 - `scripts/smoke/spaces-surface-smoke.mjs`
 - `packages/api/test/integration/sandbox/sandbox-pilot.e2e.test.ts`
 
 **Test scenarios:**
+
 - Covers AE1. Execute-code smoke passes only when persisted tool evidence includes successful `execute_code` and expected stdout/result.
 - Covers AE3. Browser smoke passes only when persisted tool evidence includes successful `browser_automation` and Browser session/event evidence.
 - Covers AE4. Browser smoke can require at least one Browser tool cost row when the stage is configured for cost persistence.
@@ -440,6 +469,7 @@ sequenceDiagram
 - Error path: finalizer does not run, leaving the turn queued/running; smoke reports finalizer/persistence failure rather than generic timeout.
 
 **Verification:**
+
 - Deployed dev smoke provides the evidence needed to decide whether the core ThinkWork agent can be dogfooded on Pi.
 - Failures point to runtime registration, AWS tool execution, finalizer persistence, or smoke target separately.
 
@@ -454,23 +484,28 @@ sequenceDiagram
 **Dependencies:** U6.
 
 **Files:**
+
 - Create or modify: `docs/runbooks/pi-runtime-capability-smoke.md`
 - Modify: `docs/plans/2026-05-23-004-feat-pi-browser-sandbox-parity-plan.md` only if implementation discovers plan-level changes during execution
 - Modify: `packages/agentcore-pi/README.md` if present after implementation, otherwise `terraform/modules/app/agentcore-pi/README.md`
 
 **Approach:**
+
 - Document how to select Pi for an agent, what Browser/Sandbox effective policy must be enabled, and what smoke evidence proves readiness.
 - Record known limitations: no cross-turn Code Interpreter persistence, no raw browser primitives, Browser cost estimates when exact usage is unavailable, and Pi remains opt-in until readiness evidence is accepted.
 - Include a short troubleshooting matrix for missing tool, AccessDenied, finalizer not posting, Browser dependency unavailable, quota exceeded, and no persisted cost rows.
 
 **Patterns to follow:**
+
 - Existing runbooks under `docs/runbooks/`
 - `terraform/modules/app/agentcore-pi/README.md`
 
 **Test scenarios:**
+
 - Test expectation: none - this is documentation, but every command/path/example should be checked against the implemented names before the PR is opened.
 
 **Verification:**
+
 - A platform engineer can reproduce the readiness smoke from the runbook without reading the implementation PR.
 
 ---
@@ -507,17 +542,17 @@ sequenceDiagram
 
 ## Risks & Dependencies
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| AgentCore Browser TypeScript SDK shape differs from the AWS article or is too heavy for the Lambda image | Medium | High | Hide Browser mechanics behind `browser-automation.ts`; keep an internal bridge contingency without changing the Pi tool contract. |
-| Pi finalizer mismatch leaves Spaces/admin turns running forever | Medium | High | Implement finalizer parity before deployed smoke; add success and failure finalizer tests. |
-| Finalizer callback URL could leak bearer auth if blindly trusted | Low | High | Validate HTTPS and same-origin against `THINKWORK_API_URL` before sending the bearer secret. |
-| Unconditional sandbox validation keeps breaking non-sandbox Pi agents | High | Medium | U1 changes missing sandbox fields from global contract violation to policy-aware registration. |
-| IAM is incomplete for Browser | Medium | High | Mirror Strands Browser IAM in Pi terraform and include an AccessDenied troubleshooting path in tests/runbook. |
-| Tool call evidence is present but cost rows are dropped | Medium | Medium | Include `tool_costs` in both Pi response and finalizer `response`, and add finalize persistence assertions. |
-| Browser smoke is flaky due to public site variability | Medium | Medium | Prefer a deterministic ThinkWork-controlled page; assert on AgentCore session/event evidence rather than page text alone. |
-| Sandbox quota/audit calls add latency or fail closed too aggressively | Low | Medium | Keep quota before session start, use bounded timeouts, and surface structured `SandboxCapExceeded` with clear reason. |
-| Strands regression through shared config changes | Low | High | Keep Strands runtime code unchanged and run existing Strands Browser/Sandbox tests as regression coverage. |
+| Risk                                                                                                     | Likelihood | Impact | Mitigation                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------- | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| AgentCore Browser TypeScript SDK shape differs from the AWS article or is too heavy for the Lambda image | Medium     | High   | Hide Browser mechanics behind `browser-automation.ts`; keep an internal bridge contingency without changing the Pi tool contract. |
+| Pi finalizer mismatch leaves Spaces/admin turns running forever                                          | Medium     | High   | Implement finalizer parity before deployed smoke; add success and failure finalizer tests.                                        |
+| Finalizer callback URL could leak bearer auth if blindly trusted                                         | Low        | High   | Validate HTTPS and same-origin against `THINKWORK_API_URL` before sending the bearer secret.                                      |
+| Unconditional sandbox validation keeps breaking non-sandbox Pi agents                                    | High       | Medium | U1 changes missing sandbox fields from global contract violation to policy-aware registration.                                    |
+| IAM is incomplete for Browser                                                                            | Medium     | High   | Mirror Strands Browser IAM in Pi terraform and include an AccessDenied troubleshooting path in tests/runbook.                     |
+| Tool call evidence is present but cost rows are dropped                                                  | Medium     | Medium | Include `tool_costs` in both Pi response and finalizer `response`, and add finalize persistence assertions.                       |
+| Browser smoke is flaky due to public site variability                                                    | Medium     | Medium | Prefer a deterministic ThinkWork-controlled page; assert on AgentCore session/event evidence rather than page text alone.         |
+| Sandbox quota/audit calls add latency or fail closed too aggressively                                    | Low        | Medium | Keep quota before session start, use bounded timeouts, and surface structured `SandboxCapExceeded` with clear reason.             |
+| Strands regression through shared config changes                                                         | Low        | High   | Keep Strands runtime code unchanged and run existing Strands Browser/Sandbox tests as regression coverage.                        |
 
 ---
 

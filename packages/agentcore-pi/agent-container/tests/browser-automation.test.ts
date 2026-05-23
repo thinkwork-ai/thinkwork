@@ -5,9 +5,12 @@ function browserResultFor(command: {
   input?: { action?: Record<string, unknown> };
 }): unknown {
   const action = command.input?.action ?? {};
-  if ("keyShortcut" in action) return { result: { keyShortcut: { status: "SUCCESS" } } };
-  if ("keyType" in action) return { result: { keyType: { status: "SUCCESS" } } };
-  if ("keyPress" in action) return { result: { keyPress: { status: "SUCCESS" } } };
+  if ("keyShortcut" in action)
+    return { result: { keyShortcut: { status: "SUCCESS" } } };
+  if ("keyType" in action)
+    return { result: { keyType: { status: "SUCCESS" } } };
+  if ("keyPress" in action)
+    return { result: { keyPress: { status: "SUCCESS" } } };
   return {
     result: {
       screenshot: {
@@ -22,19 +25,21 @@ describe("buildBrowserAutomationTool", () => {
   it("starts AgentCore Browser, navigates, captures a screenshot, and stops", async () => {
     const commandNames: string[] = [];
     const client = {
-      send: vi.fn(async (command: {
-        constructor: { name: string };
-        input?: { action?: Record<string, unknown> };
-      }) => {
-        commandNames.push(command.constructor.name);
-        if (command.constructor.name === "StartBrowserSessionCommand") {
-          return { sessionId: "session-1" };
-        }
-        if (command.constructor.name === "InvokeBrowserCommand") {
-          return browserResultFor(command);
-        }
-        return {};
-      }),
+      send: vi.fn(
+        async (command: {
+          constructor: { name: string };
+          input?: { action?: Record<string, unknown> };
+        }) => {
+          commandNames.push(command.constructor.name);
+          if (command.constructor.name === "StartBrowserSessionCommand") {
+            return { sessionId: "session-1" };
+          }
+          if (command.constructor.name === "InvokeBrowserCommand") {
+            return browserResultFor(command);
+          }
+          return {};
+        },
+      ),
     };
     const tool = buildBrowserAutomationTool({
       client: client as never,
@@ -111,33 +116,35 @@ describe("buildBrowserAutomationTool", () => {
   it("returns structured evidence and stops the session when a browser action fails", async () => {
     const commandNames: string[] = [];
     const client = {
-      send: vi.fn(async (command: {
-        constructor: { name: string };
-        input?: { action?: Record<string, unknown> };
-      }) => {
-        commandNames.push(command.constructor.name);
-        if (command.constructor.name === "StartBrowserSessionCommand") {
-          return { sessionId: "session-1" };
-        }
-        if (
-          command.constructor.name === "InvokeBrowserCommand" &&
-          command.input?.action &&
-          "keyType" in command.input.action
-        ) {
-          return {
-            result: {
-              keyType: {
-                status: "FAILED",
-                error: "keyboard input failed",
+      send: vi.fn(
+        async (command: {
+          constructor: { name: string };
+          input?: { action?: Record<string, unknown> };
+        }) => {
+          commandNames.push(command.constructor.name);
+          if (command.constructor.name === "StartBrowserSessionCommand") {
+            return { sessionId: "session-1" };
+          }
+          if (
+            command.constructor.name === "InvokeBrowserCommand" &&
+            command.input?.action &&
+            "keyType" in command.input.action
+          ) {
+            return {
+              result: {
+                keyType: {
+                  status: "FAILED",
+                  error: "keyboard input failed",
+                },
               },
-            },
-          };
-        }
-        if (command.constructor.name === "InvokeBrowserCommand") {
-          return browserResultFor(command);
-        }
-        return {};
-      }),
+            };
+          }
+          if (command.constructor.name === "InvokeBrowserCommand") {
+            return browserResultFor(command);
+          }
+          return {};
+        },
+      ),
     };
     const tool = buildBrowserAutomationTool({
       client: client as never,
@@ -174,18 +181,20 @@ describe("buildBrowserAutomationTool", () => {
 
   it("preserves the tool result when browser cleanup fails", async () => {
     const client = {
-      send: vi.fn(async (command: {
-        constructor: { name: string };
-        input?: { action?: Record<string, unknown> };
-      }) => {
-        if (command.constructor.name === "StartBrowserSessionCommand") {
-          return { sessionId: "session-1" };
-        }
-        if (command.constructor.name === "InvokeBrowserCommand") {
-          return browserResultFor(command);
-        }
-        throw new Error("stop failed");
-      }),
+      send: vi.fn(
+        async (command: {
+          constructor: { name: string };
+          input?: { action?: Record<string, unknown> };
+        }) => {
+          if (command.constructor.name === "StartBrowserSessionCommand") {
+            return { sessionId: "session-1" };
+          }
+          if (command.constructor.name === "InvokeBrowserCommand") {
+            return browserResultFor(command);
+          }
+          throw new Error("stop failed");
+        },
+      ),
     };
     const tool = buildBrowserAutomationTool({
       client: client as never,

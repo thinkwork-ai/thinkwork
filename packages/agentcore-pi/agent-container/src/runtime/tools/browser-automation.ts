@@ -25,7 +25,9 @@ function validHttpUrl(value: string): string {
     throw new Error("browser_automation only supports public HTTPS URLs.");
   }
   if (parsed.username || parsed.password) {
-    throw new Error("browser_automation does not accept credential-bearing URLs.");
+    throw new Error(
+      "browser_automation does not accept credential-bearing URLs.",
+    );
   }
   const validation = validateMcpUrl(parsed.toString());
   if (!validation.ok) {
@@ -40,18 +42,18 @@ async function wait(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-      function browserActionResult(
+function browserActionResult(
   step: string,
   response: unknown,
 ): Record<string, unknown> {
   const result = (response as { result?: Record<string, unknown> }).result;
   const actionResult = result
-    ? Object.values(result).find(
-        (value) => value && typeof value === "object",
-      )
+    ? Object.values(result).find((value) => value && typeof value === "object")
     : null;
   if (!actionResult || typeof actionResult !== "object") {
-    throw new Error(`${step} did not return an AgentCore Browser action result.`);
+    throw new Error(
+      `${step} did not return an AgentCore Browser action result.`,
+    );
   }
   const record = actionResult as Record<string, unknown>;
   if (record.status !== "SUCCESS") {
@@ -166,8 +168,8 @@ export function buildBrowserAutomationTool(
           "Capture screenshot",
           screenshot,
         );
-        const screenshotBytes = (screenshotResult.data as Uint8Array | undefined)
-          ?.byteLength ?? 0;
+        const screenshotBytes =
+          (screenshotResult.data as Uint8Array | undefined)?.byteLength ?? 0;
         if (screenshotBytes <= 0) {
           throw new Error("Capture screenshot returned no image data.");
         }

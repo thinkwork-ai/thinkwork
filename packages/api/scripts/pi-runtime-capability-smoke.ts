@@ -403,10 +403,7 @@ function hasWebSearchResult(invocation: Record<string, unknown>): boolean {
         result_count?: unknown;
         results?: unknown;
       };
-      if (
-        typeof parsed.result_count === "number" &&
-        parsed.result_count > 0
-      ) {
+      if (typeof parsed.result_count === "number" && parsed.result_count > 0) {
         return true;
       }
       if (Array.isArray(parsed.results) && parsed.results.length > 0) {
@@ -440,7 +437,8 @@ function hasBrowserAutomationResult(
     return false;
   }
   return (
-    (blob.includes("browser_automation") || blob.includes("agentcore_browser")) &&
+    (blob.includes("browser_automation") ||
+      blob.includes("agentcore_browser")) &&
     /"session_id"\s*:\s*"[a-z0-9-]+"/.test(blob) &&
     /"screenshot_bytes"\s*:\s*[1-9]/.test(blob)
   );
@@ -454,9 +452,7 @@ function hasBrowserCostRecord(turn: ThreadTurn): boolean {
   );
 }
 
-function hasHindsightResult(
-  invocation: Record<string, unknown>,
-): boolean {
+function hasHindsightResult(invocation: Record<string, unknown>): boolean {
   const blob = invocationBlob(invocation);
   return /(hindsight_recall|hindsight_reflect)/.test(blob);
 }

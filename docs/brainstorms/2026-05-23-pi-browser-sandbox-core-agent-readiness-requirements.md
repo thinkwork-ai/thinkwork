@@ -122,13 +122,13 @@ This work is not a broad runtime re-decision. Strands remains supported. The goa
 
 ## Dependencies / Assumptions
 
-- *[Verified by code read]* `chat-agent-invoke` already sends `browser_automation_enabled` and sandbox preflight fields in the invocation payload.
-- *[Verified by code read]* Pi already bridges MCP server configs into Pi `AgentTool[]` and records tool execution metadata from Pi events.
-- *[Verified by code read]* Pi currently resolves `sandbox_interpreter_id` but comments state the current agent loop does not invoke the sandbox itself yet.
-- *[Verified by code read]* Strands registers `execute_code` from `SANDBOX_INTERPRETER_ID` and registers `browser_automation` when Browser Automation is enabled.
-- *[Verified by existing solution docs]* AgentCore Code Interpreter stream events use an MCP-style result envelope; Pi must preserve that parser lesson rather than rediscovering it.
-- *[Assumption]* The current Node AWS SDK surface for Bedrock AgentCore Code Interpreter is sufficient for Pi parity. Planning should verify method names and event shapes against tests and deployed smoke.
-- *[Assumption]* Browser Automation can be ported to a TypeScript/Pi tool without changing the v1 product promise. If the AgentCore Browser client is Python-only in practice, planning may choose a thin internal service/MCP bridge, but the runtime-visible behavior must remain the same.
+- _[Verified by code read]_ `chat-agent-invoke` already sends `browser_automation_enabled` and sandbox preflight fields in the invocation payload.
+- _[Verified by code read]_ Pi already bridges MCP server configs into Pi `AgentTool[]` and records tool execution metadata from Pi events.
+- _[Verified by code read]_ Pi currently resolves `sandbox_interpreter_id` but comments state the current agent loop does not invoke the sandbox itself yet.
+- _[Verified by code read]_ Strands registers `execute_code` from `SANDBOX_INTERPRETER_ID` and registers `browser_automation` when Browser Automation is enabled.
+- _[Verified by existing solution docs]_ AgentCore Code Interpreter stream events use an MCP-style result envelope; Pi must preserve that parser lesson rather than rediscovering it.
+- _[Assumption]_ The current Node AWS SDK surface for Bedrock AgentCore Code Interpreter is sufficient for Pi parity. Planning should verify method names and event shapes against tests and deployed smoke.
+- _[Assumption]_ Browser Automation can be ported to a TypeScript/Pi tool without changing the v1 product promise. If the AgentCore Browser client is Python-only in practice, planning may choose a thin internal service/MCP bridge, but the runtime-visible behavior must remain the same.
 
 ---
 
