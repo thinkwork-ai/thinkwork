@@ -1417,12 +1417,20 @@ interface MoveSuccessPayload {
   detachedPinnedCount: number;
 }
 
+// Move helpers operate on non-Computer targets (rejected upstream by
+// `handleMove`). This narrowed alias removes the need to repeatedly
+// pass `.prefix` and `.key` separately to the helpers.
+type WritableMoveTarget = Exclude<Target, ComputerTarget>;
+interface MoveHandlerDeps extends HandlerDeps {
+  target: WritableMoveTarget;
+}
+
 async function handleMove(
   deps: HandlerDeps,
   fromPath: string,
   toFolder: string,
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
+  const { target } = deps;
 
   if (target.kind === "computer") {
     return json(400, {
@@ -1458,16 +1466,33 @@ async function handleMove(
     });
   }
 
-  // Folder detection: is the source path a prefix that contains objects?
-  // Folder branch ships in U2; this unit returns 501 to keep the contract
-  // explicit until then.
+  // Folder detection: a source path is a folder if listing its prefix
+  // (with trailing slash) returns at least one object.
+  // `target` is narrowed to `WritableMoveTarget` here — Computer was
+  // rejected above — but TypeScript can't propagate the narrowing across
+  // the function boundary, so we forward a cast.
+  const moveDeps: MoveHandlerDeps = {
+    ...deps,
+    target: target as WritableMoveTarget,
+  };
   const folderListing = await listPrefix(target.key(cleanFrom) + "/");
   if (folderListing.length > 0) {
-    return json(501, {
-      ok: false,
-      error: "Folder moves are not yet implemented (Unit 2).",
-    });
+    return await handleFolderMove(
+      moveDeps,
+      cleanFrom,
+      cleanToFolder,
+      folderListing,
+    );
   }
+  return await handleSingleFileMove(moveDeps, cleanFrom, cleanToFolder);
+}
+
+async function handleSingleFileMove(
+  deps: MoveHandlerDeps,
+  cleanFrom: string,
+  cleanToFolder: string,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
 
   // Compute destination with collision-resolved name.
   const fromBase = pathBasename(cleanFrom);
@@ -1563,6 +1588,177 @@ async function handleMove(
     ok: true,
     destPath: finalDest,
     movedCount: 1,
+    detachedPinnedCount,
+  };
+  return json(200, payload);
+}
+
+async function handleFolderMove(
+  deps: MoveHandlerDeps,
+  cleanFrom: string,
+  cleanToFolder: string,
+  folderListing: string[],
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+
+  // Compute the destination folder name with collision resolution
+  // against folder siblings at the destination level.
+  const folderName = pathBasename(cleanFrom);
+  const desiredDest = joinFolderPath(cleanToFolder, folderName);
+  if (desiredDest === cleanFrom) {
+    return json(400, {
+      ok: false,
+      error: "Source and destination are identical",
+    });
+  }
+
+  const occupied = await listImmediateChildren(
+    target.prefix,
+    target.key,
+    cleanToFolder,
+  );
+  const finalFolderName = resolveCollisionName(folderName, occupied, true);
+  const finalDestPath = joinFolderPath(cleanToFolder, finalFolderName);
+
+  const sourcePrefix = target.key(cleanFrom) + "/";
+  const destPrefix = target.key(finalDestPath) + "/";
+
+  // Reject moving a folder into itself (or into a subfolder of itself).
+  // Without this guard, the copy phase would create cycles when the
+  // destination prefix is contained within the source prefix.
+  if (destPrefix.startsWith(sourcePrefix)) {
+    return json(400, {
+      ok: false,
+      error: "Cannot move a folder into itself or a subfolder of itself",
+    });
+  }
+
+  // Destination-side path validation (same checks the file path runs).
+  if (
+    target.kind === "agent" &&
+    isProtectedOrchestrationWritePath(finalDestPath)
+  ) {
+    return json(403, {
+      ok: false,
+      error: "use orchestration writer",
+    });
+  }
+  if (target.kind === "user" && !isVisibleUserContextPath(finalDestPath)) {
+    return json(403, {
+      ok: false,
+      error: "Destination is not editable from this surface.",
+    });
+  }
+
+  // Phase 1: copy every object under the source prefix to the destination
+  // prefix, preserving relative paths. We copy all-before-any-delete so
+  // that a copy failure mid-walk leaves the source intact and the user
+  // can retry without partial data loss.
+  //
+  // Pinned-file accounting note: `isPinnedWorkspacePath` only matches
+  // the three root-level PINNED_FILES (GUARDRAILS.md, PLATFORM.md,
+  // CAPABILITIES.md). Folder moves therefore always report
+  // `detachedPinnedCount: 0` in practice — those root files cannot be
+  // inside any subfolder being moved. The field stays in the response
+  // for shape parity with single-file moves; a richer
+  // template-inheritance-aware detach metric is a follow-up.
+  let detachedPinnedCount = 0;
+  let touchesAgentsMd = false;
+  let touchesSkillMd = false;
+
+  for (const rel of folderListing) {
+    const sourceKey = sourcePrefix + rel;
+    const destKey = destPrefix + rel;
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: bucket(),
+        CopySource: s3CopySource(sourceKey),
+        Key: destKey,
+      }),
+    );
+    const sourceRelPath = cleanFrom + "/" + rel;
+    if (target.kind === "agent" && isPinnedWorkspacePath(sourceRelPath)) {
+      detachedPinnedCount++;
+    }
+    if (pathBasename(sourceRelPath) === "AGENTS.md") touchesAgentsMd = true;
+    if (isSkillMarkerPath(sourceRelPath)) touchesSkillMd = true;
+  }
+
+  // Phase 2: delete every source object. We accumulate per-object delete
+  // failures so the user gets a meaningful error rather than a generic
+  // 500 — the destination is already populated, so the operator's
+  // recovery path is "refresh the file list and clean up the source".
+  const deleteFailures: string[] = [];
+  for (const rel of folderListing) {
+    const sourceKey = sourcePrefix + rel;
+    try {
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: bucket(), Key: sourceKey }),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      deleteFailures.push(`${rel}: ${message}`);
+    }
+  }
+
+  if (deleteFailures.length > 0) {
+    // Partial-delete: surface to the client without trusting that
+    // manifest regen / derive will run on a coherent tree.
+    return json(500, {
+      ok: false,
+      error:
+        `Move partially completed: ${deleteFailures.length} source object(s) could not be deleted. ` +
+        `Refresh and clean up the source folder.`,
+      partiallyDeleted: true,
+      destPath: finalDestPath,
+      movedCount: folderListing.length,
+      detachedPinnedCount,
+    });
+  }
+
+  // Phase 3: re-emit `.gitkeep` at the now-empty source prefix so the
+  // folder identity survives on S3. (Without this, an empty prefix
+  // disappears from `ListObjectsV2` and the folder vanishes from the
+  // tree — which is fine for "moved out and gone" semantics, but breaks
+  // the expectation that the source path still resolves until the user
+  // explicitly deletes it.)
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: sourcePrefix + ".gitkeep",
+      Body: "",
+      ContentType: "application/octet-stream",
+    }),
+  );
+
+  if (target.kind === "agent") {
+    await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+
+    if (touchesAgentsMd || touchesSkillMd) {
+      try {
+        const result = await deriveAgentSkills({ tenantId }, target.agentId);
+        const summary =
+          `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
+          `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
+          `removed=${result.removedSlugs.join(",") || "-"}`;
+        console.log(`[derive-agent-skills] folder-move ${summary}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(
+          `[derive-agent-skills] folder-move derive failed: ${message}`,
+        );
+        return json(500, {
+          ok: false,
+          error: "Move succeeded but agent_skills derive failed: " + message,
+        });
+      }
+    }
+  }
+
+  const payload: MoveSuccessPayload = {
+    ok: true,
+    destPath: finalDestPath,
+    movedCount: folderListing.length,
     detachedPinnedCount,
   };
   return json(200, payload);
