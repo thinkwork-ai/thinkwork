@@ -139,12 +139,14 @@ memories land in both stores.
 
 ## Email (SES)
 
-| Variable                | Type   | Default               | Description                                                                                                    |
-| ----------------------- | ------ | --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `ses_from_address`      | string | `""`                  | From address for outbound email (e.g. `agents@thinkwork.example.com`). Must be verified in SES.                |
-| `ses_configuration_set` | string | `"thinkwork-{stage}"` | SES configuration set name for email event tracking.                                                           |
-| `ses_inbound_enabled`   | bool   | `false`               | Whether to configure SES inbound email (creates EMAIL- threads from inbound mail).                             |
-| `ses_inbound_domain`    | string | `""`                  | Domain to receive inbound email (e.g. `mail.thinkwork.example.com`). Required if `ses_inbound_enabled = true`. |
+| Variable                | Type        | Default               | Description                                                                                                                      |
+| ----------------------- | ----------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `ses_parent_domain`     | string      | `""`                  | Parent domain for tenant-scoped Space email addresses (e.g. `thinkwork.example.com`). Leave empty to skip SES inbound resources. |
+| `ses_tenant_slugs`      | set(string) | `[]`                  | Tenant slugs to provision as SES receiving subdomains under `ses_parent_domain`, one identity per tenant slug.                   |
+| `ses_inbound_domain`    | string      | `""`                  | Legacy delegated inbound domain (e.g. `agents.thinkwork.example.com`). Keep configured until legacy-address retirement ends.     |
+| `ses_from_address`      | string      | `""`                  | From address for non-Space outbound email. Must be verified in SES.                                                              |
+| `ses_configuration_set` | string      | `"thinkwork-{stage}"` | SES configuration set name for email event tracking.                                                                             |
+| `ses_inbound_enabled`   | bool        | `false`               | Whether to configure SES inbound email (creates EMAIL- threads from inbound mail).                                               |
 
 ## Knowledge Base
 
@@ -223,9 +225,11 @@ cognito_callback_urls = [
 google_oauth_client_id     = "abc.apps.googleusercontent.com"
 google_oauth_client_secret = var.google_oauth_secret
 
-ses_from_address    = "agents@agents.example.com"
+ses_from_address    = "system@thinkwork.example.com"
 ses_inbound_enabled = true
-ses_inbound_domain  = "mail.agents.example.com"
+ses_inbound_domain  = "agents.thinkwork.example.com" # legacy retirement notices
+ses_parent_domain   = "thinkwork.example.com"
+ses_tenant_slugs    = ["acme", "support"]
 
 agentcore_reserved_concurrency = 50
 

@@ -154,10 +154,22 @@ variable "cloudflare_zone_id" {
   default     = ""
 }
 
-variable "ses_inbound_domain" {
-  description = "Subdomain for agent email (e.g. agents.thinkwork.ai). Terraform creates a delegated Route53 hosted zone, SES domain identity + DKIM, MX record, and receipt rule. Leave empty to skip SES inbound resources."
+variable "ses_parent_domain" {
+  description = "Parent domain for tenant-scoped Space email addresses (e.g. thinkwork.ai). Leave empty to skip SES inbound resources."
   type        = string
   default     = ""
+}
+
+variable "ses_inbound_domain" {
+  description = "Legacy delegated subdomain for agent email (e.g. agents.thinkwork.ai). Keep configured until legacy-address retirement notices are no longer needed."
+  type        = string
+  default     = ""
+}
+
+variable "tenant_slugs" {
+  description = "Tenant slugs to provision as SES receiving subdomains under ses_parent_domain. Each slug creates <slug>.<ses_parent_domain>."
+  type        = set(string)
+  default     = []
 }
 
 variable "stripe_price_ids_json" {
@@ -436,8 +448,10 @@ module "thinkwork" {
   computer_sandbox_certificate_arn        = local.www_dns_enabled ? aws_acm_certificate_validation.computer_sandbox[0].certificate_arn : ""
   computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.app_domain},https://${local.admin_domain}" : ""
 
-  # SES inbound email subdomain (delegated Route53 subzone).
+  # SES inbound email subdomains (delegated Route53 subzones).
   ses_inbound_domain = var.ses_inbound_domain
+  ses_parent_domain  = var.ses_parent_domain
+  ses_tenant_slugs   = var.tenant_slugs
 
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to
@@ -520,16 +534,35 @@ module "www_dns" {
 ################################################################################
 # SES Inbound DNS Delegation
 #
-# The ses-email module creates a Route53 hosted zone for var.ses_inbound_domain
-# (e.g. agents.thinkwork.ai). For the subzone to resolve, the parent zone
-# (thinkwork.ai at Cloudflare) must carry NS records pointing at the 4 AWS name
-# servers. New Route53 zones always return exactly 4 name servers, so we can
-# hardcode count = 4 without hitting "count value is not known" at plan time.
+# The ses-email module keeps the legacy Route53 hosted zone for
+# var.ses_inbound_domain (e.g. agents.thinkwork.ai) and creates one Route53
+# hosted zone for each tenant subdomain (e.g. dev.thinkwork.ai). For those
+# subzones to resolve, the parent zone (thinkwork.ai at Cloudflare) must carry
+# NS records pointing each subdomain at its 4 AWS name servers. New Route53
+# zones always return exactly 4 name servers, so we can hardcode range(4)
+# without hitting "for_each value is not known" at plan time.
 #
-# Without this delegation, terraform creates the Route53 zone and the MX/DKIM
-# records inside it, but the outside world asks Cloudflare for agents.thinkwork.ai
-# and gets NXDOMAIN because Cloudflare doesn't know to delegate.
+# Without this delegation, terraform creates the Route53 zones and the MX/DKIM
+# records inside them, but the outside world asks Cloudflare for
+# <tenant>.thinkwork.ai and gets NXDOMAIN because Cloudflare doesn't know to
+# delegate.
 ################################################################################
+
+resource "cloudflare_record" "tenant_email_ns" {
+  for_each = var.ses_parent_domain != "" && var.cloudflare_zone_id != "" ? {
+    for pair in setproduct(sort(tolist(var.tenant_slugs)), range(4)) : "${pair[0]}-${pair[1]}" => {
+      slug  = pair[0]
+      index = pair[1]
+    }
+  } : {}
+
+  zone_id = var.cloudflare_zone_id
+  name    = "${each.value.slug}.${var.ses_parent_domain}"
+  content = module.thinkwork.ses_tenant_name_servers[each.value.slug][each.value.index]
+  type    = "NS"
+  ttl     = 300
+  proxied = false
+}
 
 resource "cloudflare_record" "agents_ns" {
   count = var.ses_inbound_domain != "" && var.cloudflare_zone_id != "" ? 4 : 0
@@ -743,18 +776,28 @@ output "www_bucket_name" {
   value       = module.thinkwork.www_bucket_name
 }
 
+output "ses_inbound_zone_ids" {
+  description = "Route53 hosted zone IDs for tenant email subdomains, keyed by tenant slug"
+  value       = module.thinkwork.ses_inbound_zone_ids
+}
+
 output "ses_inbound_zone_id" {
-  description = "Route53 hosted zone ID for the email subdomain (null when ses_inbound_domain is not set)"
+  description = "Route53 hosted zone ID for the legacy email subdomain (null when ses_inbound_domain is not set)"
   value       = module.thinkwork.ses_inbound_zone_id
 }
 
+output "ses_tenant_name_servers" {
+  description = "Name servers for delegated tenant email subzones, keyed by tenant slug. Published to Cloudflare when cloudflare_zone_id is set."
+  value       = module.thinkwork.ses_tenant_name_servers
+}
+
 output "ses_inbound_name_servers" {
-  description = "Name servers for the delegated email subzone. Paste these as NS records at the registrar that hosts the parent domain (Google Domains for thinkwork.ai) before SES can verify."
+  description = "Name servers for the legacy delegated email subzone."
   value       = module.thinkwork.ses_inbound_name_servers
 }
 
 output "ses_inbound_mx_target" {
-  description = "MX target host for the email subdomain. Already written into the subzone by Terraform — informational."
+  description = "MX target host for tenant email subdomains. Already written into each subzone by Terraform — informational."
   value       = module.thinkwork.ses_inbound_mx_target
 }
 

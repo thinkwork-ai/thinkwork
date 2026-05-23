@@ -257,18 +257,28 @@ output "www_bucket_name" {
 }
 
 # SES inbound email
+output "ses_inbound_zone_ids" {
+  description = "Route53 hosted zone IDs for tenant email subdomains, keyed by tenant slug"
+  value       = module.ses.zone_ids
+}
+
 output "ses_inbound_zone_id" {
-  description = "Route53 hosted zone ID for the email subdomain (null when ses_inbound_domain is not set)"
+  description = "Route53 hosted zone ID for the legacy email subdomain (null when ses_inbound_domain is not set)"
   value       = module.ses.zone_id
 }
 
+output "ses_tenant_name_servers" {
+  description = "Name servers for delegated tenant email subzones, keyed by tenant slug. Publish each set as NS records at the parent domain host before SES can verify."
+  value       = module.ses.tenant_name_servers
+}
+
 output "ses_inbound_name_servers" {
-  description = "Name servers for the delegated email subzone. Paste these as NS records at the registrar that hosts the parent domain (e.g. Google Domains) before SES can verify."
+  description = "Name servers for the legacy delegated email subzone. Keep until legacy-address retirement notices are no longer needed."
   value       = module.ses.name_servers
 }
 
 output "ses_inbound_mx_target" {
-  description = "MX target host for the email subdomain. Terraform already writes this into the subzone — this output is informational."
+  description = "MX target host for tenant email subdomains. Terraform already writes this into each subzone — this output is informational."
   value       = module.ses.mx_target
 }
 

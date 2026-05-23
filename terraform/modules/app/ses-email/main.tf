@@ -1,15 +1,19 @@
 ################################################################################
 # SES Email — App Module
 #
-# Wires up inbound and outbound email for a delegated subdomain
-# (e.g. agents.thinkwork.ai). The module:
+# Wires up inbound and outbound email for a legacy delegated subdomain
+# (e.g. agents.thinkwork.ai) plus delegated tenant subdomains
+# (e.g. acme.thinkwork.ai). The module:
 #
-#   1. Creates a Route53 hosted zone for the subdomain (Option A — delegated
-#      subzone). The operator pastes the output name servers at whatever hosts
-#      the parent domain (Google, Squarespace, Cloudflare, etc.).
-#   2. Creates the SES domain identity + DKIM tokens.
-#   3. Writes the SES verification TXT, DKIM CNAMEs, and an MX record into the
-#      new subzone.
+#   1. Keeps the legacy Route53 hosted zone for agents.thinkwork.ai when
+#      configured, and creates one Route53 hosted zone per tenant subdomain
+#      (Option A — delegated subzones). The operator publishes each output
+#      name-server set at whatever hosts the parent domain (Cloudflare, Google,
+#      etc.).
+#   2. Creates SES domain identities + DKIM token sets for the configured
+#      legacy domain and each tenant subdomain.
+#   3. Writes SES verification TXT, DKIM CNAME, and MX records into the matching
+#      subzone.
 #   4. Creates an SES receipt rule set that stores inbound mail in S3 at
 #      `email/inbound/<sesMessageId>` and invokes the email-inbound Lambda.
 ################################################################################
@@ -30,10 +34,22 @@ variable "region" {
   default     = "us-east-1"
 }
 
-variable "email_domain" {
-  description = "Subdomain used for agent email (e.g. agents.thinkwork.ai). Leave empty to skip all SES resources."
+variable "parent_domain" {
+  description = "Parent domain for tenant email subdomains (e.g. thinkwork.ai). Leave empty to skip all SES resources."
   type        = string
   default     = ""
+}
+
+variable "email_domain" {
+  description = "Legacy delegated subdomain used for agent email (e.g. agents.thinkwork.ai). Kept until legacy-address retirement notices are no longer needed."
+  type        = string
+  default     = ""
+}
+
+variable "tenant_slugs" {
+  description = "Tenant slugs to provision as SES receiving subdomains under parent_domain. Each slug creates <slug>.<parent_domain>."
+  type        = set(string)
+  default     = []
 }
 
 variable "inbound_bucket_name" {
@@ -61,7 +77,22 @@ variable "manage_active_rule_set" {
 }
 
 locals {
-  enabled       = var.email_domain != ""
+  tenant_slugs   = toset(var.tenant_slugs)
+  legacy_enabled = var.email_domain != ""
+  tenant_enabled = var.parent_domain != "" && length(local.tenant_slugs) > 0
+  enabled        = local.legacy_enabled || local.tenant_enabled
+
+  tenant_domains = {
+    for slug in local.tenant_slugs : slug => "${slug}.${var.parent_domain}"
+  }
+
+  tenant_dkim_records = local.tenant_enabled ? {
+    for pair in setproduct(sort(tolist(local.tenant_slugs)), range(3)) : "${pair[0]}-${pair[1]}" => {
+      slug  = pair[0]
+      index = pair[1]
+    }
+  } : {}
+
   inbound_smtp  = "inbound-smtp.${var.region}.amazonaws.com"
   rule_set_name = "thinkwork-${var.stage}-email-rules"
   has_lambda    = var.email_inbound_fn_arn != ""
@@ -69,11 +100,11 @@ locals {
 }
 
 ################################################################################
-# Route53 — delegated subzone for the agent email subdomain
+# Route53 — delegated subzones for legacy + tenant email subdomains
 ################################################################################
 
 resource "aws_route53_zone" "agents" {
-  count = local.enabled ? 1 : 0
+  count = local.legacy_enabled ? 1 : 0
   name  = var.email_domain
 
   tags = {
@@ -82,26 +113,47 @@ resource "aws_route53_zone" "agents" {
   }
 }
 
+resource "aws_route53_zone" "tenant" {
+  for_each = local.tenant_enabled ? local.tenant_domains : {}
+  name     = each.value
+
+  tags = {
+    Name       = "thinkwork-${var.stage}-${each.key}-email-zone"
+    Stage      = var.stage
+    TenantSlug = each.key
+  }
+}
+
 ################################################################################
-# SES Domain Identity + DKIM
+# SES Domain Identities + DKIM for legacy + tenant subdomains
 ################################################################################
 
 resource "aws_ses_domain_identity" "main" {
-  count  = local.enabled ? 1 : 0
+  count  = local.legacy_enabled ? 1 : 0
   domain = var.email_domain
 }
 
 resource "aws_ses_domain_dkim" "main" {
-  count  = local.enabled ? 1 : 0
+  count  = local.legacy_enabled ? 1 : 0
   domain = aws_ses_domain_identity.main[0].domain
 }
 
+resource "aws_ses_domain_identity" "tenant" {
+  for_each = local.tenant_enabled ? local.tenant_domains : {}
+  domain   = each.value
+}
+
+resource "aws_ses_domain_dkim" "tenant" {
+  for_each = local.tenant_enabled ? local.tenant_domains : {}
+  domain   = aws_ses_domain_identity.tenant[each.key].domain
+}
+
 ################################################################################
-# DNS records in the subzone — verification TXT, DKIM CNAMEs, MX
+# DNS records in legacy + tenant subzones — verification TXT, DKIM CNAMEs, MX
 ################################################################################
 
 resource "aws_route53_record" "ses_verification" {
-  count   = local.enabled ? 1 : 0
+  count   = local.legacy_enabled ? 1 : 0
   zone_id = aws_route53_zone.agents[0].zone_id
   name    = "_amazonses.${var.email_domain}"
   type    = "TXT"
@@ -109,8 +161,17 @@ resource "aws_route53_record" "ses_verification" {
   records = [aws_ses_domain_identity.main[0].verification_token]
 }
 
+resource "aws_route53_record" "tenant_ses_verification" {
+  for_each = local.tenant_enabled ? local.tenant_domains : {}
+  zone_id  = aws_route53_zone.tenant[each.key].zone_id
+  name     = "_amazonses.${each.value}"
+  type     = "TXT"
+  ttl      = 600
+  records  = [aws_ses_domain_identity.tenant[each.key].verification_token]
+}
+
 resource "aws_route53_record" "dkim" {
-  count   = local.enabled ? 3 : 0
+  count   = local.legacy_enabled ? 3 : 0
   zone_id = aws_route53_zone.agents[0].zone_id
   name    = "${aws_ses_domain_dkim.main[0].dkim_tokens[count.index]}._domainkey.${var.email_domain}"
   type    = "CNAME"
@@ -118,13 +179,31 @@ resource "aws_route53_record" "dkim" {
   records = ["${aws_ses_domain_dkim.main[0].dkim_tokens[count.index]}.dkim.amazonses.com"]
 }
 
+resource "aws_route53_record" "tenant_dkim" {
+  for_each = local.tenant_dkim_records
+  zone_id  = aws_route53_zone.tenant[each.value.slug].zone_id
+  name     = "${aws_ses_domain_dkim.tenant[each.value.slug].dkim_tokens[each.value.index]}._domainkey.${local.tenant_domains[each.value.slug]}"
+  type     = "CNAME"
+  ttl      = 600
+  records  = ["${aws_ses_domain_dkim.tenant[each.value.slug].dkim_tokens[each.value.index]}.dkim.amazonses.com"]
+}
+
 resource "aws_route53_record" "mx" {
-  count   = local.enabled ? 1 : 0
+  count   = local.legacy_enabled ? 1 : 0
   zone_id = aws_route53_zone.agents[0].zone_id
   name    = var.email_domain
   type    = "MX"
   ttl     = 600
   records = ["10 ${local.inbound_smtp}"]
+}
+
+resource "aws_route53_record" "tenant_mx" {
+  for_each = local.tenant_enabled ? local.tenant_domains : {}
+  zone_id  = aws_route53_zone.tenant[each.key].zone_id
+  name     = each.value
+  type     = "MX"
+  ttl      = 600
+  records  = ["10 ${local.inbound_smtp}"]
 }
 
 ################################################################################
@@ -154,7 +233,7 @@ resource "aws_ses_receipt_rule" "inbound" {
   count         = local.enabled ? 1 : 0
   name          = "thinkwork-${var.stage}-inbound-email"
   rule_set_name = aws_ses_receipt_rule_set.main[0].rule_set_name
-  recipients    = [var.email_domain]
+  recipients    = []
   enabled       = true
   scan_enabled  = true
 
@@ -183,28 +262,56 @@ resource "aws_ses_receipt_rule" "inbound" {
 # Outputs
 ################################################################################
 
+output "ses_domain_identity_arns" {
+  description = "SES domain identity ARNs by tenant slug"
+  value = {
+    for slug, identity in aws_ses_domain_identity.tenant : slug => identity.arn
+  }
+}
+
 output "ses_domain_identity_arn" {
-  description = "SES domain identity ARN"
-  value       = local.enabled ? aws_ses_domain_identity.main[0].arn : null
+  description = "Legacy SES domain identity ARN"
+  value       = local.legacy_enabled ? aws_ses_domain_identity.main[0].arn : null
+}
+
+output "tenant_dkim_tokens" {
+  description = "DKIM tokens by tenant slug (already written as CNAMEs in each subzone)"
+  value = {
+    for slug, dkim in aws_ses_domain_dkim.tenant : slug => dkim.dkim_tokens
+  }
 }
 
 output "dkim_tokens" {
-  description = "DKIM tokens (already written as CNAMEs in the subzone)"
-  value       = local.enabled ? aws_ses_domain_dkim.main[0].dkim_tokens : []
+  description = "Legacy DKIM tokens (already written as CNAMEs in the legacy subzone)"
+  value       = local.legacy_enabled ? aws_ses_domain_dkim.main[0].dkim_tokens : []
+}
+
+output "zone_ids" {
+  description = "Route53 hosted zone IDs by tenant slug"
+  value = {
+    for slug, zone in aws_route53_zone.tenant : slug => zone.zone_id
+  }
 }
 
 output "zone_id" {
-  description = "Route53 hosted zone ID for the email subdomain"
-  value       = local.enabled ? aws_route53_zone.agents[0].zone_id : null
+  description = "Legacy Route53 hosted zone ID"
+  value       = local.legacy_enabled ? aws_route53_zone.agents[0].zone_id : null
+}
+
+output "tenant_name_servers" {
+  description = "Name servers by tenant slug. Publish each set as NS records at the parent domain host before SES can verify."
+  value = {
+    for slug, zone in aws_route53_zone.tenant : slug => zone.name_servers
+  }
 }
 
 output "name_servers" {
-  description = "Name servers for the delegated email subzone. Paste these as NS records at the registrar that hosts the parent domain (e.g. Google Domains) before SES can verify."
-  value       = local.enabled ? aws_route53_zone.agents[0].name_servers : []
+  description = "Legacy email subzone name servers"
+  value       = local.legacy_enabled ? aws_route53_zone.agents[0].name_servers : []
 }
 
 output "mx_target" {
-  description = "MX target host for the email subdomain"
+  description = "MX target host for each tenant email subdomain"
   value       = local.enabled ? local.inbound_smtp : null
 }
 

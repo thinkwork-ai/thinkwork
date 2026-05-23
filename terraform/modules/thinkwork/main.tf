@@ -590,10 +590,12 @@ module "hindsight" {
 module "ses" {
   source = "../app/ses-email"
 
-  stage        = var.stage
-  account_id   = var.account_id
-  region       = var.region
-  email_domain = var.ses_inbound_domain
+  stage         = var.stage
+  account_id    = var.account_id
+  region        = var.region
+  email_domain  = var.ses_inbound_domain
+  parent_domain = var.ses_parent_domain
+  tenant_slugs  = var.ses_tenant_slugs
 
   inbound_bucket_name   = module.s3.bucket_name
   email_inbound_fn_arn  = module.api.email_inbound_fn_arn
