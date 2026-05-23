@@ -72,6 +72,7 @@ type Thread {
   archivedAt: AWSDateTime
   lastTurnCompletedAt: AWSDateTime
   lastRuntimeType: String
+  lastModel: String
   lastResponsePreview: String
   lastReadAt: AWSDateTime
   createdByType: String

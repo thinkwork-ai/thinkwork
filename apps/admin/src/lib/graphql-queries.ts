@@ -643,6 +643,7 @@ export const ThreadsListQuery = graphql(`
       lastActivityAt
       lastTurnCompletedAt
       lastRuntimeType
+      lastModel
       lastReadAt
       archivedAt
       createdAt
@@ -707,6 +708,8 @@ export const ThreadsPagedQuery = gql`
         costSummary
         lastActivityAt
         lastTurnCompletedAt
+        lastRuntimeType
+        lastModel
         lastReadAt
         archivedAt
         createdAt

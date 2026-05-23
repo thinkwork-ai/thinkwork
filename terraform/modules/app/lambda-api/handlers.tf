@@ -45,19 +45,11 @@ locals {
     THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
     AGENTCORE_FUNCTION_NAME            = var.agentcore_function_name
     AGENTCORE_PI_FUNCTION_NAME         = var.agentcore_pi_function_name
-    # SSM parameter names for the Bedrock AgentCore Runtime IDs (one per
-    # runtime type). deploy.yml's "Update AgentCore Runtimes" job writes
-    # these in `update-agentcore-runtime-image.sh`. eval-runner reads them
-    # via `loadRuntimeId(runtimeType)` to start a Bedrock-control-plane
-    # invocation against the right runtime — pre-U3 the pi path was
-    # dead because the env var was never wired here.
-    AGENTCORE_RUNTIME_SSM_STRANDS    = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
-    AGENTCORE_RUNTIME_SSM_PI         = "/thinkwork/${var.stage}/agentcore/runtime-id-pi"
-    WORKSPACE_RENDERER_FUNCTION_NAME = "thinkwork-${var.stage}-api-workspace-renderer"
-    WORKSPACE_BUCKET                 = var.bucket_name
-    HINDSIGHT_ENDPOINT               = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID              = var.agentcore_memory_id
-    MEMORY_ENGINE                    = var.memory_engine
+    WORKSPACE_RENDERER_FUNCTION_NAME   = "thinkwork-${var.stage}-api-workspace-renderer"
+    WORKSPACE_BUCKET                   = var.bucket_name
+    HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
+    MEMORY_ENGINE                      = var.memory_engine
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where
@@ -255,6 +247,12 @@ locals {
     "eval-runner" = {
       EVAL_FANOUT_QUEUE_URL                = local.eval_fanout_queue_url
       EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS = "20"
+      # SSM parameter names for the Bedrock AgentCore Runtime IDs (one per
+      # runtime type). deploy.yml's "Update AgentCore Runtimes" job writes
+      # these in `update-agentcore-runtime-image.sh`; eval-runner reads them
+      # via `loadRuntimeId(runtimeType)` to start the correct runtime.
+      AGENTCORE_RUNTIME_SSM_STRANDS = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
+      AGENTCORE_RUNTIME_SSM_PI      = "/thinkwork/${var.stage}/agentcore/runtime-id-pi"
     }
     "eval-worker" = {
       EVAL_FANOUT_QUEUE_URL     = local.eval_fanout_queue_url
