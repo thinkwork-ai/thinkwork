@@ -25,6 +25,17 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   userName: "Eric",
 };
 
+const DEFAULT_SPACE_TUPLE: ResolvedWorkspaceRenderTuple = {
+  ...TUPLE,
+  spaceId: "default-space",
+  spaceSlug: "default",
+  spaceName: "Default",
+  spaceKind: "default",
+  spacePrompt: null,
+  spaceToolPolicy: {},
+  spaceMcpPolicy: {},
+};
+
 class FakeRepository implements WorkspaceTupleRepository {
   constructor(private readonly tuple: ResolvedWorkspaceRenderTuple | null) {}
 
@@ -226,5 +237,38 @@ describe("renderWorkspaceTuple", () => {
         },
       ),
     ).rejects.toMatchObject({ code: "SpaceSourcesNotFound" });
+  });
+
+  it("renders agent and user context for an empty default Space", async () => {
+    const store = new FakeStore(seedObjects());
+    store.deletePrefix("tenants/acme/spaces/board-pack/source/");
+
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "default-space" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(DEFAULT_SPACE_TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    expect(result.cacheStatus).toBe("miss");
+    expect(result.renderedPrefix).toBe(
+      "tenants/acme/rendered/finance-agent/default/eric/",
+    );
+    expect(result.writtenFiles).toContain("USER.md");
+    expect(result.writtenFiles).toContain("SPACE.md");
+    expect(result.writtenFiles).not.toContain("space/SPACE.md");
+
+    const renderedUser = store.puts.find((put) =>
+      put.key.endsWith("/USER.md"),
+    )?.content;
+    expect(renderedUser).toBe("# User\n");
+
+    const renderedSpace = store.puts.find((put) =>
+      put.key.endsWith("/SPACE.md"),
+    )?.content;
+    expect(renderedSpace).toContain("# Default");
   });
 });
