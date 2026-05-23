@@ -77,14 +77,12 @@ def test_outbound_variant_declared_and_drops_inbound_vars() -> None:
     variants = data.get("mode_variants")
     assert isinstance(variants, dict) and "outbound" in variants
     outbound = variants["outbound"]
-    for key in ("THINKWORK_API_URL", "THINKWORK_API_SECRET", "AGENT_ID", "AGENT_EMAIL_ADDRESS"):
+    for key in ("THINKWORK_API_URL", "THINKWORK_API_SECRET", "AGENT_ID"):
         assert key in outbound["requires_env"]
     for optional_key in ("ACTIVE_SPACE_TENANT_SLUG", "ACTIVE_SPACE_SLUG"):
         assert optional_key not in outbound["requires_env"]
     for forbidden in ("INBOUND_MESSAGE_ID", "INBOUND_SUBJECT", "INBOUND_FROM", "INBOUND_BODY"):
-        assert forbidden not in outbound["requires_env"], (
-            f"outbound must relax {forbidden}"
-        )
+        assert forbidden not in outbound["requires_env"], f"outbound must relax {forbidden}"
 
 
 def test_outbound_variant_forbids_threading_fields() -> None:
@@ -115,7 +113,6 @@ def send_env(monkeypatch):
     monkeypatch.setenv("THINKWORK_API_URL", "https://api.test.example")
     monkeypatch.setenv("THINKWORK_API_SECRET", "test-secret")
     monkeypatch.setenv("AGENT_ID", "00000000-0000-4000-8000-000000000001")
-    monkeypatch.setenv("AGENT_EMAIL_ADDRESS", "agent@agents.test.example")
     monkeypatch.setenv("TENANT_ID", "tenant-1")
     yield
 
@@ -176,13 +173,15 @@ def test_active_space_context_forwarded_when_available(send_env, monkeypatch) ->
 
 def test_outbound_mode_rejects_threading_fields(send_env) -> None:
     mod = _load_send_module()
-    result = json.loads(mod.send_email(
-        to=["recipient@example.com"],
-        subject="Re: something",
-        body="hi",
-        in_reply_to="<abc@msg>",
-        mode="outbound",
-    ))
+    result = json.loads(
+        mod.send_email(
+            to=["recipient@example.com"],
+            subject="Re: something",
+            body="hi",
+            in_reply_to="<abc@msg>",
+            mode="outbound",
+        )
+    )
     assert "error" in result
     assert "outbound" in result["error"]
 
@@ -213,9 +212,7 @@ def test_reply_mode_still_supports_threading_fields(send_env) -> None:
 
 def test_unknown_mode_rejected(send_env) -> None:
     mod = _load_send_module()
-    result = json.loads(mod.send_email(
-        to=["a@b.com"], subject="s", body="b", mode="weird"
-    ))
+    result = json.loads(mod.send_email(to=["a@b.com"], subject="s", body="b", mode="weird"))
     assert "error" in result
     assert "Unknown mode" in result["error"]
 
@@ -230,7 +227,6 @@ def test_outbound_survives_missing_inbound_env(monkeypatch) -> None:
     monkeypatch.setenv("THINKWORK_API_URL", "https://api.test.example")
     monkeypatch.setenv("THINKWORK_API_SECRET", "test-secret")
     monkeypatch.setenv("AGENT_ID", "00000000-0000-4000-8000-000000000001")
-    monkeypatch.setenv("AGENT_EMAIL_ADDRESS", "agent@agents.test.example")
 
     mod = _load_send_module()
 
@@ -238,10 +234,12 @@ def test_outbound_survives_missing_inbound_env(monkeypatch) -> None:
         return _fake_response('{"messageId":"m-3","status":"sent"}')
 
     with mock.patch("urllib.request.urlopen", fake_urlopen):
-        result = json.loads(mod.send_email(
-            to=["r@example.com"],
-            subject="Scheduled brief",
-            body="...",
-            mode="outbound",
-        ))
+        result = json.loads(
+            mod.send_email(
+                to=["r@example.com"],
+                subject="Scheduled brief",
+                body="...",
+                mode="outbound",
+            )
+        )
     assert result["status"] == "sent"

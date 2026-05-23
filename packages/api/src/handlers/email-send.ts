@@ -138,7 +138,6 @@ export async function handler(
     .select({
       id: agents.id,
       tenant_id: agents.tenant_id,
-      slug: agents.slug,
     })
     .from(agents)
     .where(eq(agents.id, req.agentId));
@@ -171,9 +170,6 @@ export async function handler(
   }
 
   const config = (emailCap.config as Record<string, unknown>) || {};
-  const vanityAddress = config.vanityAddress
-    ? `${config.vanityAddress}@agents.thinkwork.ai`
-    : null;
   let spaceAddress: string | null;
   try {
     spaceAddress = deriveSpaceAddressFromRequest(req);
@@ -188,11 +184,16 @@ export async function handler(
       }),
     };
   }
-  const emailAddress =
-    spaceAddress ||
-    vanityAddress ||
-    (config.emailAddress as string) ||
-    `${agent.slug}@agents.thinkwork.ai`;
+  if (!spaceAddress) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error:
+          "Active Space email context is required. Provide spaceTenantSlug and spaceSlug.",
+      }),
+    };
+  }
+  const emailAddress = spaceAddress;
   const maxReplyTokenAgeDays = (config.maxReplyTokenAgeDays as number) || 7;
   const maxReplyTokenUses = (config.maxReplyTokenUses as number) || 3;
 

@@ -8,7 +8,6 @@ import urllib.error
 API_URL = os.environ.get("THINKWORK_API_URL", "")
 API_SECRET = os.environ.get("THINKWORK_API_SECRET", "")
 AGENT_ID = os.environ.get("AGENT_ID", "")
-AGENT_EMAIL = os.environ.get("AGENT_EMAIL_ADDRESS", "")
 ACTIVE_SPACE_TENANT_SLUG = os.environ.get("ACTIVE_SPACE_TENANT_SLUG", "")
 ACTIVE_SPACE_SLUG = os.environ.get("ACTIVE_SPACE_SLUG", "")
 TENANT_ID = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
@@ -46,9 +45,9 @@ def send_email(
     if mode not in ("reply", "outbound"):
         return json.dumps({"error": f"Unknown mode {mode!r}. Use 'reply' or 'outbound'."})
     if mode == "outbound" and (in_reply_to or quoted_from or quoted_body):
-        return json.dumps({
-            "error": "mode='outbound' forbids in_reply_to, quoted_from, and quoted_body"
-        })
+        return json.dumps(
+            {"error": "mode='outbound' forbids in_reply_to, quoted_from, and quoted_body"}
+        )
 
     if not to:
         return json.dumps({"error": "At least one recipient is required"})
@@ -59,7 +58,6 @@ def send_email(
 
     payload = {
         "agentId": AGENT_ID,
-        "from": AGENT_EMAIL or f"{AGENT_ID}@agents.thinkwork.ai",
         "to": ", ".join(to),
         "subject": subject,
         "body": body,

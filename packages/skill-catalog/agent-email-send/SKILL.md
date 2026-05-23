@@ -29,7 +29,6 @@ requires_env:
   - THINKWORK_API_URL
   - THINKWORK_API_SECRET
   - AGENT_ID
-  - AGENT_EMAIL_ADDRESS
   - INBOUND_MESSAGE_ID
   - INBOUND_SUBJECT
   - INBOUND_FROM
@@ -45,7 +44,6 @@ mode_variants:
       - THINKWORK_API_URL
       - THINKWORK_API_SECRET
       - AGENT_ID
-      - AGENT_EMAIL_ADDRESS
     triggers: []
     forbidden_fields:
       - in_reply_to
@@ -66,14 +64,13 @@ mode_variants:
 
 ## Your Email Address
 
-Your email address is the active Space address when `$ACTIVE_SPACE_TENANT_SLUG` and `$ACTIVE_SPACE_SLUG` are available: `$ACTIVE_SPACE_TENANT_SLUG.$ACTIVE_SPACE_SLUG@agents.thinkwork.ai`. Older invocations that do not include active Space context fall back to `$AGENT_EMAIL_ADDRESS`. Recipients can reply directly to the address used for the sent message.
+Your email address is the active Space address when `$ACTIVE_SPACE_TENANT_SLUG` and `$ACTIVE_SPACE_SLUG` are available: `$ACTIVE_SPACE_TENANT_SLUG.$ACTIVE_SPACE_SLUG@agents.thinkwork.ai`. Invocations without active Space context cannot send email because per-agent addresses are retired. Recipients can reply directly to the Space address used for the sent message.
 
 ## Sending an Email
 
-Use the `send_email` tool to send emails. You MUST always include your `agent_id` and `agent_email_address` from your configuration:
+Use the `send_email` tool to send emails. You MUST always include your `agent_id` from your configuration:
 
 - **agent_id**: `$AGENT_ID`
-- **agent_email_address**: `$AGENT_EMAIL_ADDRESS`
 
 **Important:** The `agent_id` must be the UUID value from `$AGENT_ID`, not a slug or name.
 

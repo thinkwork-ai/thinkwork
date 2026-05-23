@@ -14,14 +14,23 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: PR open; CI passed; ready to merge
-- Active unit: U5/U7 grouped — Tenant agent GraphQL, Space runtime overrides, and admin `/agents` retirement
-- Active branch: `codex/plan-b-u5-tenant-agent-graphql`
-- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u5-tenant-agent-graphql`
+- Status: local verification passed; preparing PR
+- Active unit: U6 — Drop legacy per-agent vanity email branches
+- Active branch: `codex/plan-b-u6-retire-vanity-email`
+- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/plan-b-u6-retire-vanity-email`
 - Started: 2026-05-22
-- Latest merged PR: [#1575](https://github.com/thinkwork-ai/thinkwork/pull/1575)
-- Active PR: [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576)
-- CI: all required checks passed after fixing stale admin-ops MCP tool-list expectations
+- Latest merged PR: [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576)
+- Active PR: none
+- CI: not opened yet; local verification passed
+
+### Merge Log
+
+- 2026-05-22: U5/U7 grouped PR [#1576](https://github.com/thinkwork-ai/thinkwork/pull/1576) squash merged as `50ec4431c8c6f72e693b73eaa561eae9c77d1d57`; remote branch was already deleted by GitHub and local worktree/branch were removed. First CI run failed on stale admin-ops MCP `agents_*` tool-list expectations; fixed and all required checks passed before merge.
+
+### Active Unit Notes
+
+- 2026-05-22 U6: Removed outbound fallback to per-agent vanity/default addresses; `email-send` now requires active Space context. Legacy inbound `<slug>@agents.thinkwork.ai` addresses now send a retirement notice instead of enqueuing per-agent wakeups. Runtime send-email config and agent-email-send skill metadata no longer carry `$AGENT_EMAIL_ADDRESS`; the Strands direct send_email tool forwards active Space slugs from invocation env.
+- U6 local verification: focused API email/runtime tests; full `@thinkwork/api` test suite; `@thinkwork/api` typecheck; repo-wide typecheck/lint; Python send-email tool and skill tests; Ruff E/F check; Prettier check; `git diff --check`; `build-lambdas.sh email-send email-inbound wakeup-processor`.
 
 ### Progress Log
 

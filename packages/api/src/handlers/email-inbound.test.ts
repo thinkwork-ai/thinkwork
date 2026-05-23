@@ -6,6 +6,7 @@ const {
   db,
   enqueueComputerThreadTurn,
   insertedRows,
+  mockSesSend,
   parsedEmail,
   resetMocks,
   selectRows,
@@ -14,6 +15,7 @@ const {
   const inserts: Array<{ table: unknown; values: unknown }> = [];
   const coldContact = vi.fn();
   const enqueue = vi.fn();
+  const sesSend = vi.fn();
   const parsed = {
     subject: "Space email",
     text: "Hello from email",
@@ -56,6 +58,7 @@ const {
     },
     enqueueComputerThreadTurn: enqueue,
     insertedRows: inserts,
+    mockSesSend: sesSend,
     parsedEmail: parsed,
     resetMocks: () => {
       rows.length = 0;
@@ -63,6 +66,8 @@ const {
       coldContact.mockReset();
       coldContact.mockResolvedValue({ threadId: "thread-email-1" });
       enqueue.mockReset();
+      sesSend.mockReset();
+      sesSend.mockResolvedValue({ MessageId: "notice-1" });
       parsed.subject = "Space email";
       parsed.text = "Hello from email";
       parsed.messageId = "<source@example.com>";
@@ -143,6 +148,15 @@ vi.mock("@aws-sdk/client-s3", () => ({
     async send() {
       return { Body: { transformToString: async () => "raw email" } };
     }
+  },
+}));
+
+vi.mock("@aws-sdk/client-ses", () => ({
+  SESClient: class {
+    send = mockSesSend;
+  },
+  SendEmailCommand: class {
+    constructor(public input: unknown) {}
   },
 }));
 
@@ -314,44 +328,25 @@ describe("email-inbound routing", () => {
     expect(insertedRows).toHaveLength(0);
   });
 
-  it("preserves the legacy per-agent allowlist branch", async () => {
-    selectRows.push(
-      [
-        {
-          id: "agent-marco",
-          tenant_id: "tenant-acme",
-          name: "Marco",
-          slug: "marco",
-        },
-      ],
-      [
-        {
-          enabled: true,
-          config: { allowedSenders: ["eric@acme.com"] },
-        },
-      ],
-      [{ count: 0 }],
-      [{ count: 0 }],
-    );
-
+  it("sends a retirement notice for legacy per-agent addresses", async () => {
     await handler(emailEvent("marco@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
-    expect(insertedRows).toEqual([
-      expect.objectContaining({
-        values: expect.objectContaining({
-          agent_id: "agent-marco",
-          tenant_id: "tenant-acme",
-          source: "email_received",
-          payload: expect.objectContaining({
-            body: "Hello from email",
-            from: "eric@acme.com",
-            isFromAllowlist: true,
-            subject: "Space email",
-          }),
-        }),
-      }),
-    ]);
+    expect(insertedRows).toHaveLength(0);
+    expect(mockSesSend).toHaveBeenCalledOnce();
+    const command = mockSesSend.mock.calls[0][0];
+    expect(command.input).toMatchObject({
+      Source: "noreply@agents.thinkwork.ai",
+      Destination: { ToAddresses: ["eric@acme.com"] },
+      Message: {
+        Subject: {
+          Data: "This Thinkwork agent email address has changed",
+        },
+      },
+    });
+    expect(command.input.Message.Body.Text.Data).toContain(
+      "tenant-slug.space-slug@agents.thinkwork.ai",
+    );
   });
 });
 

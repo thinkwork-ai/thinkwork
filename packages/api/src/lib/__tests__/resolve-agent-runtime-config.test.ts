@@ -291,8 +291,8 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.sendEmailConfig).toMatchObject({
       agentId: AGENT_ID,
       tenantId: TENANT_ID,
-      agentEmailAddress: "ada@agents.thinkwork.ai",
     });
+    expect(cfg.sendEmailConfig).not.toHaveProperty("agentEmailAddress");
   });
 
   it("uses the agent runtime selector when present", async () => {

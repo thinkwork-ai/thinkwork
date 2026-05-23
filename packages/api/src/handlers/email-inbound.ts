@@ -3,13 +3,13 @@
  *
  * Invoked directly by SES receipt rule (not API Gateway).
  * Flow: SES event → parse recipient → validate reply/cold-contact gates →
- *       append to a thread or enqueue the compatible legacy wakeup.
+ *       append to a thread or create a cold-contact Space thread.
  *
  * Security model:
  *   Ring 1: Reply Token — HMAC-signed tokens for agent-initiated conversations
  *   Ring 2: Cold-contact gate — enabled Space + tenant user + private membership
- *   Ring 3: Legacy allowlist/rate limit — preserved for per-agent addresses
- *   Unauthorized → silent drop (no bounce = no info leakage)
+ *   Legacy per-agent addresses get an explicit retirement notice.
+ *   Unauthorized Space/reply traffic → silent drop (no bounce = no info leakage)
  */
 
 import type { SESEvent } from "aws-lambda";
@@ -134,15 +134,10 @@ async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
     return;
   }
 
-  await processLegacyAgentInbound({
-    localPart: recipient.localPart,
+  await sendLegacyAddressRetirementNotice({
+    recipientEmail: recipient.recipientEmail,
     senderEmail,
-    replyTokenHeader,
-    sesMessageId,
     subject: parsedEmail.subject,
-    textBody: parsedEmail.textBody,
-    s3Key: parsedEmail.s3Key,
-    originalMessageId: parsedEmail.originalMessageId,
   });
 }
 
@@ -231,77 +226,52 @@ async function fetchEmailBody(
   return { s3Key, subject, textBody, originalMessageId, inReplyTo };
 }
 
-async function processLegacyAgentInbound(input: {
-  localPart: string;
+async function sendLegacyAddressRetirementNotice(input: {
+  recipientEmail: string;
   senderEmail: string;
-  replyTokenHeader: string;
-  sesMessageId: string;
   subject: string;
-  textBody: string;
-  s3Key: string;
-  originalMessageId: string;
 }) {
-  const agent = await resolveAgentForLocalPart(input.localPart);
-  if (!agent) {
-    console.log(
-      `[email-inbound] No agent found for local-part: ${input.localPart}, silent drop`,
+  console.log(
+    `[email-inbound] legacy_agent_address_retired recipient=${input.recipientEmail} sender=${input.senderEmail}`,
+  );
+  try {
+    const { SESClient, SendEmailCommand } = await import("@aws-sdk/client-ses");
+    const ses = new SESClient({});
+    await ses.send(
+      new SendEmailCommand({
+        Source: "noreply@agents.thinkwork.ai",
+        Destination: { ToAddresses: [input.senderEmail] },
+        Message: {
+          Subject: {
+            Data: "This Thinkwork agent email address has changed",
+            Charset: "UTF-8",
+          },
+          Body: {
+            Text: {
+              Data: [
+                `Your email to ${input.recipientEmail} was not delivered.`,
+                "",
+                "Thinkwork agent email addresses now use Space addresses in the form:",
+                "tenant-slug.space-slug@agents.thinkwork.ai",
+                "",
+                "Please contact the recipient for the current Space email address and resend your message there.",
+                "",
+                input.subject ? `Original subject: ${input.subject}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              Charset: "UTF-8",
+            },
+          },
+        },
+      }),
     );
-    return;
-  }
-
-  const emailCap = await resolveEmailCapability(agent.id);
-  if (!emailCap || !emailCap.enabled) {
-    console.log(
-      `[email-inbound] Email channel disabled for agent ${agent.id}, silent drop`,
+  } catch (err) {
+    console.error(
+      "[email-inbound] Failed to send legacy-address retirement notice:",
+      err,
     );
-    return;
   }
-
-  const config = (emailCap.config as Record<string, unknown>) || {};
-  const allowedSenders = (config.allowedSenders as string[]) || [];
-  const isAllowlisted = checkAllowlist(input.senderEmail, allowedSenders);
-  let replyTokenContextId: string | null = null;
-  let replyTokenContextType: string | null = null;
-
-  if (!isAllowlisted) {
-    if (input.replyTokenHeader) {
-      const tokenResult = await verifyAndConsumeToken(
-        input.replyTokenHeader,
-        agent.id,
-        input.senderEmail,
-      );
-      if (tokenResult) {
-        replyTokenContextId = tokenResult.contextId;
-        replyTokenContextType = tokenResult.contextType;
-      } else {
-        console.log(
-          `[email-inbound] Invalid reply token from ${input.senderEmail} to ${input.localPart}, silent drop`,
-        );
-        return;
-      }
-    } else {
-      console.log(
-        `[email-inbound] Unauthorized sender ${input.senderEmail} to ${input.localPart}, silent drop`,
-      );
-      return;
-    }
-  }
-
-  if (!(await checkWakeupRateLimit(agent.id, agent.tenant_id, config))) return;
-
-  await insertWakeupRequest({
-    tenantId: agent.tenant_id,
-    agentId: agent.id,
-    senderEmail: input.senderEmail,
-    sesMessageId: input.sesMessageId,
-    subject: input.subject,
-    textBody: input.textBody,
-    s3Key: input.s3Key,
-    originalMessageId: input.originalMessageId,
-    replyTokenContextId,
-    replyTokenContextType,
-    isAllowlisted,
-  });
 }
 
 async function processColdContact(input: {
@@ -454,43 +424,6 @@ async function appendReplyToThread(input: {
     `[email-inbound] reply_thread_turn_enqueued thread=${input.threadId} sender=${input.senderEmail} subject="${input.subject}"`,
   );
   return true;
-}
-
-async function resolveAgentForLocalPart(localPart: string) {
-  let [agent] = await db
-    .select({
-      id: agents.id,
-      tenant_id: agents.tenant_id,
-      name: agents.name,
-      slug: agents.slug,
-    })
-    .from(agents)
-    .where(eq(agents.slug, localPart));
-
-  if (!agent) {
-    const [vanityMatch] = await db
-      .select({ agent_id: agentCapabilities.agent_id })
-      .from(agentCapabilities)
-      .where(
-        and(
-          eq(agentCapabilities.capability, "email_channel"),
-          sql`${agentCapabilities.config}->>'vanityAddress' = ${localPart}`,
-        ),
-      );
-    if (vanityMatch) {
-      [agent] = await db
-        .select({
-          id: agents.id,
-          tenant_id: agents.tenant_id,
-          name: agents.name,
-          slug: agents.slug,
-        })
-        .from(agents)
-        .where(eq(agents.id, vanityMatch.agent_id));
-    }
-  }
-
-  return agent ?? null;
 }
 
 async function resolveAgentById(agentId: string) {
@@ -673,29 +606,6 @@ function logColdContactReject(
   console.log(
     `[email-inbound] cold_contact_rejected:${reason} tenant=${input.tenantSlug} space=${input.spaceSlug} sender=${input.senderEmail} ses=${input.sesMessageId}`,
   );
-}
-
-/**
- * Check if sender is on the allowlist (case-insensitive).
- * Supports wildcard domain matching (*@company.com).
- */
-function checkAllowlist(sender: string, allowedSenders: string[]): boolean {
-  const senderLower = sender.toLowerCase();
-
-  for (const allowed of allowedSenders) {
-    const pattern = allowed.toLowerCase();
-
-    // Exact match
-    if (senderLower === pattern) return true;
-
-    // Wildcard domain match (*@domain.com)
-    if (pattern.startsWith("*@")) {
-      const domain = pattern.slice(2);
-      if (senderLower.endsWith(`@${domain}`)) return true;
-    }
-  }
-
-  return false;
 }
 
 /**
