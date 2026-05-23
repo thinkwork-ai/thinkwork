@@ -106,6 +106,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   agents: {
     id: "agents.id",
     name: "agents.name",
+    send_email: "agents.send_email",
     slug: "agents.slug",
     tenant_id: "agents.tenant_id",
   },
@@ -301,6 +302,56 @@ describe("email-inbound routing", () => {
           values: expect.objectContaining({
             agent_id: "agent-finance",
             source: "email_received",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("enqueues non-thread reply wakeups without a legacy email_channel capability row", async () => {
+    parsedEmail.inReplyTo = "<ses-outbound-1>";
+    selectRows.push(
+      [
+        {
+          id: "token-1",
+          agent_id: "agent-finance",
+          context_id: "agent-finance",
+          context_type: "agent",
+          recipient_email: "eric@acme.com",
+          use_count: 0,
+          max_uses: 3,
+          expires_at: new Date(Date.now() + 60_000),
+        },
+      ],
+      [
+        {
+          id: "agent-finance",
+          tenant_id: "tenant-acme",
+          name: "Finance Agent",
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
+      [],
+      [{ count: 0 }],
+      [{ count: 0 }],
+    );
+
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
+
+    expect(createColdContactThread).not.toHaveBeenCalled();
+    expect(insertedRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            agent_id: "agent-finance",
+            source: "email_received",
+            status: "queued",
+            payload: expect.objectContaining({
+              from: "eric@acme.com",
+              replyTokenContextId: "agent-finance",
+              replyTokenContextType: "agent",
+            }),
           }),
         }),
       ]),

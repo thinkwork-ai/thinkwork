@@ -56,6 +56,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: "agents.id",
     slug: "agents.slug",
     tenant_id: "agents.tenant_id",
+    send_email: "agents.send_email",
   },
   agentCapabilities: {
     agent_id: "agentCapabilities.agent_id",
@@ -127,7 +128,14 @@ describe("email-send HTTP agent invocation", () => {
 
   it("sends from the active Space address and persists the reply token", async () => {
     selectRows.push(
-      [{ id: agentId, tenant_id: tenantId, slug: "finance-agent" }],
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
       [
         {
           enabled: true,
@@ -177,9 +185,46 @@ describe("email-send HTTP agent invocation", () => {
     });
   });
 
+  it("does not require a legacy email_channel capability row", async () => {
+    selectRows.push([
+      {
+        id: agentId,
+        tenant_id: tenantId,
+        slug: "finance-agent",
+        send_email: { enabled: true },
+      },
+    ]);
+
+    const result = await handler(
+      emailSendEvent({
+        agentId,
+        to: "recipient@example.com",
+        subject: "Quarterly close",
+        body: "Here is the brief.",
+        threadId: "thread-finance",
+        spaceTenantSlug: "acme",
+        spaceSlug: "finance",
+      }),
+    );
+
+    expect(result).toMatchObject({ statusCode: 200 });
+    expect(mockSesSend).toHaveBeenCalledOnce();
+    expect(insertedReplyTokens[0]).toMatchObject({
+      max_uses: 3,
+      tenant_id: tenantId,
+    });
+  });
+
   it("rejects sends when Space context is missing", async () => {
     selectRows.push(
-      [{ id: agentId, tenant_id: tenantId, slug: "finance-agent" }],
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
       [{ enabled: true, config: { vanityAddress: "legacy-finance" } }],
     );
 
@@ -202,7 +247,14 @@ describe("email-send HTTP agent invocation", () => {
 
   it("does not persist a reply token when SES rejects the send", async () => {
     selectRows.push(
-      [{ id: agentId, tenant_id: tenantId, slug: "finance-agent" }],
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
       [{ enabled: true, config: {} }],
     );
     mockSesSend.mockRejectedValueOnce(new Error("SES unavailable"));
@@ -224,7 +276,14 @@ describe("email-send HTTP agent invocation", () => {
 
   it("rejects malformed Space slugs before sending", async () => {
     selectRows.push(
-      [{ id: agentId, tenant_id: tenantId, slug: "finance-agent" }],
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
       [{ enabled: true, config: {} }],
     );
 
@@ -242,6 +301,35 @@ describe("email-send HTTP agent invocation", () => {
     expect(result).toMatchObject({ statusCode: 400 });
     expect(JSON.parse(result.body ?? "{}").error).toContain(
       "Invalid tenant slug",
+    );
+    expect(mockSesSend).not.toHaveBeenCalled();
+    expect(insertedReplyTokens).toHaveLength(0);
+  });
+
+  it("rejects sends when agent send_email config is disabled", async () => {
+    selectRows.push([
+      {
+        id: agentId,
+        tenant_id: tenantId,
+        slug: "finance-agent",
+        send_email: null,
+      },
+    ]);
+
+    const result = await handler(
+      emailSendEvent({
+        agentId,
+        to: "recipient@example.com",
+        subject: "Quarterly close",
+        body: "Here is the brief.",
+        spaceTenantSlug: "acme",
+        spaceSlug: "finance",
+      }),
+    );
+
+    expect(result).toMatchObject({ statusCode: 403 });
+    expect(JSON.parse(result.body ?? "{}").error).toContain(
+      "Send Email not enabled",
     );
     expect(mockSesSend).not.toHaveBeenCalled();
     expect(insertedReplyTokens).toHaveLength(0);

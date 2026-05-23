@@ -99,6 +99,7 @@ import {
 import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
+import { buildSendEmailTool } from "./runtime/tools/send-email.js";
 import {
   collectToolCosts,
   type ToolCostRecord,
@@ -445,6 +446,20 @@ export async function assembleTools(
         traceId: asString(args.payload.trace_id) || undefined,
       }),
     );
+  }
+
+  if (
+    typeof args.payload.send_email_config === "object" &&
+    args.payload.send_email_config
+  ) {
+    const sendEmailTool = buildSendEmailTool({
+      sendEmailConfig: args.payload.send_email_config as Record<
+        string,
+        unknown
+      >,
+      payload: args.payload,
+    });
+    if (sendEmailTool) tools.push(sendEmailTool);
   }
 
   // Memory (U6) — engine selector lives in env.
