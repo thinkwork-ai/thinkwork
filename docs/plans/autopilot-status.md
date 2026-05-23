@@ -6,6 +6,49 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Space Detail Polish and Tenant-Scoped Space Email Addresses
+
+Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-23-002-feat-space-detail-polish-and-tenant-scoped-email-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: U1. Remove Tools tab and admin code
+- Active branch: `codex/u1-space-tools-tab-removal`
+- Active worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/u1-space-tools-tab-removal`
+- Started: 2026-05-23
+- Latest merged PR: none
+- Active PR: [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585)
+- CI: pending
+
+### Active Unit Notes
+
+- 2026-05-23 U1: Removing the admin-only Space Tools tab, route file, and admin GraphQL documents. Backend `setSpaceTools` resolver/tests and underlying runtime policy surfaces remain intact per plan scope.
+- Prior context read: `AGENTS.md`, the active plan, `docs/solutions/best-practices/every-admin-mutation-requires-requiretenantadmin-2026-04-22.md`, and `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`.
+- Local verification so far: `pnpm install`; `pnpm --filter @thinkwork/admin build`; `pnpm --filter @thinkwork/admin exec vitest run src/routes/_authed/_tenant/spaces/-spaces-admin-route.test.ts`; `pnpm dlx prettier@3.8.2 --check ...`; `git diff --check`. `pnpm --filter @thinkwork/admin exec tsc --noEmit` is currently blocked by existing unrelated admin type errors across multiple files; U1-specific build and route test pass.
+
+### Progress Log
+
+| Date       | Unit | Branch                             | PR                                                           | Status      | Verification                                                                                                                                           | Notes                                                                                                    |
+| ---------- | ---- | ---------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| 2026-05-23 | U1   | `codex/u1-space-tools-tab-removal` | [#1585](https://github.com/thinkwork-ai/thinkwork/pull/1585) | PR open     | Targeted route test, admin build, touched-file Prettier, and `git diff --check` passed; admin raw `tsc --noEmit` blocked by existing unrelated errors. | Removing `/spaces/$spaceId/tools` from route tree and chrome; preserving backend tools resolver surface. |
+| 2026-05-23 | U2   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Remove Advanced runtime UI.                                                                              |
+| 2026-05-23 | U3   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Rename Workspace tab label to Files and Description label to Instructions.                               |
+| 2026-05-23 | U4   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Add reserved slug constant and `renameTenantSlug`.                                                       |
+| 2026-05-23 | U5   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Add tenant slug picker and Settings rename surface.                                                      |
+| 2026-05-23 | U6   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | Terraform per-tenant SES/DNS.                                                                            |
+| 2026-05-23 | U7   | Pending                            | Pending                                                      | Not started | Pending                                                                                                                                                | New email parser/derivation and retirement notice copy.                                                  |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None currently.
+
 ## Current Run: Single Platform Agent and Space Runtime Overrides
 
 Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-22-005-refactor-single-platform-agent-and-space-runtime-overrides-plan.md`
