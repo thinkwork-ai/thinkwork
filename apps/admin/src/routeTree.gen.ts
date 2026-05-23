@@ -22,7 +22,6 @@ import { Route as AuthedTenantOrgRouteImport } from "./routes/_authed/_tenant/or
 import { Route as AuthedTenantOntologyRouteImport } from "./routes/_authed/_tenant/ontology";
 import { Route as AuthedTenantKnowledgeRouteImport } from "./routes/_authed/_tenant/knowledge";
 import { Route as AuthedTenantDashboardRouteImport } from "./routes/_authed/_tenant/dashboard";
-import { Route as AuthedTenantCapabilitiesRouteImport } from "./routes/_authed/_tenant/capabilities";
 import { Route as AuthedTenantBillingRouteImport } from "./routes/_authed/_tenant/billing";
 import { Route as AuthedTenantAnalyticsRouteImport } from "./routes/_authed/_tenant/analytics";
 import { Route as AuthedTenantAgentRouteImport } from "./routes/_authed/_tenant/agent";
@@ -44,7 +43,6 @@ import { Route as AuthedTenantInboxIndexRouteImport } from "./routes/_authed/_te
 import { Route as AuthedTenantEvaluationsIndexRouteImport } from "./routes/_authed/_tenant/evaluations/index";
 import { Route as AuthedTenantComputersIndexRouteImport } from "./routes/_authed/_tenant/computers/index";
 import { Route as AuthedTenantComplianceIndexRouteImport } from "./routes/_authed/_tenant/compliance/index";
-import { Route as AuthedTenantCapabilitiesIndexRouteImport } from "./routes/_authed/_tenant/capabilities/index";
 import { Route as AuthedTenantAutomationsIndexRouteImport } from "./routes/_authed/_tenant/automations/index";
 import { Route as AuthedTenantArtifactsIndexRouteImport } from "./routes/_authed/_tenant/artifacts/index";
 import { Route as AuthedTenantAppletsIndexRouteImport } from "./routes/_authed/_tenant/applets/index";
@@ -66,17 +64,16 @@ import { Route as AuthedTenantInboxInboxItemIdRouteImport } from "./routes/_auth
 import { Route as AuthedTenantExtensionsExtensionIdRouteImport } from "./routes/_authed/_tenant/extensions/$extensionId";
 import { Route as AuthedTenantEvaluationsRunIdRouteImport } from "./routes/_authed/_tenant/evaluations/$runId";
 import { Route as AuthedTenantComputersComputerIdRouteImport } from "./routes/_authed/_tenant/computers/$computerId";
-import { Route as AuthedTenantCapabilitiesMcpServersRouteImport } from "./routes/_authed/_tenant/capabilities/mcp-servers";
-import { Route as AuthedTenantCapabilitiesBuiltinToolsRouteImport } from "./routes/_authed/_tenant/capabilities/builtin-tools";
 import { Route as AuthedTenantAppletsAppIdRouteImport } from "./routes/_authed/_tenant/applets/$appId";
 import { Route as AuthedTenantAnalyticsPerformanceRouteImport } from "./routes/_authed/_tenant/analytics/performance";
 import { Route as AuthedTenantAnalyticsCostRouteImport } from "./routes/_authed/_tenant/analytics/cost";
 import { Route as AuthedTenantAnalyticsActivityRouteImport } from "./routes/_authed/_tenant/analytics/activity";
+import { Route as AuthedTenantAgentToolsRouteImport } from "./routes/_authed/_tenant/agent/tools";
+import { Route as AuthedTenantAgentMcpServersRouteImport } from "./routes/_authed/_tenant/agent/mcp-servers";
 import { Route as AuthedTenantAgentFilesRouteImport } from "./routes/_authed/_tenant/agent/files";
 import { Route as AuthedTenantAgentConfigRouteImport } from "./routes/_authed/_tenant/agent/config";
 import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from "./routes/_authed/_tenant/evaluations/studio/index";
 import { Route as AuthedTenantComplianceExportsIndexRouteImport } from "./routes/_authed/_tenant/compliance/exports/index";
-import { Route as AuthedTenantCapabilitiesPluginsIndexRouteImport } from "./routes/_authed/_tenant/capabilities/plugins/index";
 import { Route as AuthedTenantAutomationsWebhooksIndexRouteImport } from "./routes/_authed/_tenant/automations/webhooks/index";
 import { Route as AuthedTenantAutomationsSchedulesIndexRouteImport } from "./routes/_authed/_tenant/automations/schedules/index";
 import { Route as AuthedTenantAutomationsRoutinesIndexRouteImport } from "./routes/_authed/_tenant/automations/routines/index";
@@ -89,7 +86,6 @@ import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from "./r
 import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from "./routes/_authed/_tenant/evaluations/studio/new";
 import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/$testCaseId";
 import { Route as AuthedTenantComplianceEventsEventIdRouteImport } from "./routes/_authed/_tenant/compliance/events.$eventId";
-import { Route as AuthedTenantCapabilitiesPluginsUploadIdRouteImport } from "./routes/_authed/_tenant/capabilities/plugins/$uploadId";
 import { Route as AuthedTenantAutomationsWebhooksWebhookIdRouteImport } from "./routes/_authed/_tenant/automations/webhooks/$webhookId";
 import { Route as AuthedTenantAutomationsSchedulesScheduledJobIdRouteImport } from "./routes/_authed/_tenant/automations/schedules/$scheduledJobId";
 import { Route as AuthedTenantAutomationsRoutinesNewRouteImport } from "./routes/_authed/_tenant/automations/routines/new";
@@ -161,12 +157,6 @@ const AuthedTenantDashboardRoute = AuthedTenantDashboardRouteImport.update({
   path: "/dashboard",
   getParentRoute: () => AuthedTenantRoute,
 } as any);
-const AuthedTenantCapabilitiesRoute =
-  AuthedTenantCapabilitiesRouteImport.update({
-    id: "/capabilities",
-    path: "/capabilities",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
 const AuthedTenantBillingRoute = AuthedTenantBillingRouteImport.update({
   id: "/billing",
   path: "/billing",
@@ -283,12 +273,6 @@ const AuthedTenantComplianceIndexRoute =
     id: "/",
     path: "/",
     getParentRoute: () => AuthedTenantComplianceRouteRoute,
-  } as any);
-const AuthedTenantCapabilitiesIndexRoute =
-  AuthedTenantCapabilitiesIndexRouteImport.update({
-    id: "/",
-    path: "/",
-    getParentRoute: () => AuthedTenantCapabilitiesRoute,
   } as any);
 const AuthedTenantAutomationsIndexRoute =
   AuthedTenantAutomationsIndexRouteImport.update({
@@ -414,18 +398,6 @@ const AuthedTenantComputersComputerIdRoute =
     path: "/computers/$computerId",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantCapabilitiesMcpServersRoute =
-  AuthedTenantCapabilitiesMcpServersRouteImport.update({
-    id: "/mcp-servers",
-    path: "/mcp-servers",
-    getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any);
-const AuthedTenantCapabilitiesBuiltinToolsRoute =
-  AuthedTenantCapabilitiesBuiltinToolsRouteImport.update({
-    id: "/builtin-tools",
-    path: "/builtin-tools",
-    getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any);
 const AuthedTenantAppletsAppIdRoute =
   AuthedTenantAppletsAppIdRouteImport.update({
     id: "/applets/$appId",
@@ -450,6 +422,17 @@ const AuthedTenantAnalyticsActivityRoute =
     path: "/activity",
     getParentRoute: () => AuthedTenantAnalyticsRoute,
   } as any);
+const AuthedTenantAgentToolsRoute = AuthedTenantAgentToolsRouteImport.update({
+  id: "/tools",
+  path: "/tools",
+  getParentRoute: () => AuthedTenantAgentRoute,
+} as any);
+const AuthedTenantAgentMcpServersRoute =
+  AuthedTenantAgentMcpServersRouteImport.update({
+    id: "/mcp-servers",
+    path: "/mcp-servers",
+    getParentRoute: () => AuthedTenantAgentRoute,
+  } as any);
 const AuthedTenantAgentFilesRoute = AuthedTenantAgentFilesRouteImport.update({
   id: "/files",
   path: "/files",
@@ -471,12 +454,6 @@ const AuthedTenantComplianceExportsIndexRoute =
     id: "/exports/",
     path: "/exports/",
     getParentRoute: () => AuthedTenantComplianceRouteRoute,
-  } as any);
-const AuthedTenantCapabilitiesPluginsIndexRoute =
-  AuthedTenantCapabilitiesPluginsIndexRouteImport.update({
-    id: "/plugins/",
-    path: "/plugins/",
-    getParentRoute: () => AuthedTenantCapabilitiesRoute,
   } as any);
 const AuthedTenantAutomationsWebhooksIndexRoute =
   AuthedTenantAutomationsWebhooksIndexRouteImport.update({
@@ -550,12 +527,6 @@ const AuthedTenantComplianceEventsEventIdRoute =
     path: "/events/$eventId",
     getParentRoute: () => AuthedTenantComplianceRouteRoute,
   } as any);
-const AuthedTenantCapabilitiesPluginsUploadIdRoute =
-  AuthedTenantCapabilitiesPluginsUploadIdRouteImport.update({
-    id: "/plugins/$uploadId",
-    path: "/plugins/$uploadId",
-    getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any);
 const AuthedTenantAutomationsWebhooksWebhookIdRoute =
   AuthedTenantAutomationsWebhooksWebhookIdRouteImport.update({
     id: "/automations/webhooks/$webhookId",
@@ -612,7 +583,6 @@ export interface FileRoutesByFullPath {
   "/agent": typeof AuthedTenantAgentRouteWithChildren;
   "/analytics": typeof AuthedTenantAnalyticsRouteWithChildren;
   "/billing": typeof AuthedTenantBillingRoute;
-  "/capabilities": typeof AuthedTenantCapabilitiesRouteWithChildren;
   "/dashboard": typeof AuthedTenantDashboardRoute;
   "/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
   "/ontology": typeof AuthedTenantOntologyRoute;
@@ -620,12 +590,12 @@ export interface FileRoutesByFullPath {
   "/settings": typeof AuthedTenantSettingsRoute;
   "/agent/config": typeof AuthedTenantAgentConfigRoute;
   "/agent/files": typeof AuthedTenantAgentFilesRoute;
+  "/agent/mcp-servers": typeof AuthedTenantAgentMcpServersRoute;
+  "/agent/tools": typeof AuthedTenantAgentToolsRoute;
   "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
   "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
   "/applets/$appId": typeof AuthedTenantAppletsAppIdRoute;
-  "/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
-  "/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
   "/computers/$computerId": typeof AuthedTenantComputersComputerIdRoute;
   "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/extensions/$extensionId": typeof AuthedTenantExtensionsExtensionIdRoute;
@@ -647,7 +617,6 @@ export interface FileRoutesByFullPath {
   "/applets/": typeof AuthedTenantAppletsIndexRoute;
   "/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
   "/automations/": typeof AuthedTenantAutomationsIndexRoute;
-  "/capabilities/": typeof AuthedTenantCapabilitiesIndexRoute;
   "/compliance/": typeof AuthedTenantComplianceIndexRoute;
   "/computers/": typeof AuthedTenantComputersIndexRoute;
   "/evaluations/": typeof AuthedTenantEvaluationsIndexRoute;
@@ -670,7 +639,6 @@ export interface FileRoutesByFullPath {
   "/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
   "/automations/schedules/$scheduledJobId": typeof AuthedTenantAutomationsSchedulesScheduledJobIdRoute;
   "/automations/webhooks/$webhookId": typeof AuthedTenantAutomationsWebhooksWebhookIdRoute;
-  "/capabilities/plugins/$uploadId": typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
   "/compliance/events/$eventId": typeof AuthedTenantComplianceEventsEventIdRoute;
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
@@ -683,7 +651,6 @@ export interface FileRoutesByFullPath {
   "/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/automations/schedules/": typeof AuthedTenantAutomationsSchedulesIndexRoute;
   "/automations/webhooks/": typeof AuthedTenantAutomationsWebhooksIndexRoute;
-  "/capabilities/plugins/": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
   "/compliance/exports/": typeof AuthedTenantComplianceExportsIndexRoute;
   "/evaluations/studio/": typeof AuthedTenantEvaluationsStudioIndexRoute;
   "/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
@@ -703,12 +670,12 @@ export interface FileRoutesByTo {
   "/settings": typeof AuthedTenantSettingsRoute;
   "/agent/config": typeof AuthedTenantAgentConfigRoute;
   "/agent/files": typeof AuthedTenantAgentFilesRoute;
+  "/agent/mcp-servers": typeof AuthedTenantAgentMcpServersRoute;
+  "/agent/tools": typeof AuthedTenantAgentToolsRoute;
   "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
   "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
   "/applets/$appId": typeof AuthedTenantAppletsAppIdRoute;
-  "/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
-  "/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
   "/computers/$computerId": typeof AuthedTenantComputersComputerIdRoute;
   "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/extensions/$extensionId": typeof AuthedTenantExtensionsExtensionIdRoute;
@@ -730,7 +697,6 @@ export interface FileRoutesByTo {
   "/applets": typeof AuthedTenantAppletsIndexRoute;
   "/artifacts": typeof AuthedTenantArtifactsIndexRoute;
   "/automations": typeof AuthedTenantAutomationsIndexRoute;
-  "/capabilities": typeof AuthedTenantCapabilitiesIndexRoute;
   "/compliance": typeof AuthedTenantComplianceIndexRoute;
   "/computers": typeof AuthedTenantComputersIndexRoute;
   "/evaluations": typeof AuthedTenantEvaluationsIndexRoute;
@@ -753,7 +719,6 @@ export interface FileRoutesByTo {
   "/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
   "/automations/schedules/$scheduledJobId": typeof AuthedTenantAutomationsSchedulesScheduledJobIdRoute;
   "/automations/webhooks/$webhookId": typeof AuthedTenantAutomationsWebhooksWebhookIdRoute;
-  "/capabilities/plugins/$uploadId": typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
   "/compliance/events/$eventId": typeof AuthedTenantComplianceEventsEventIdRoute;
   "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
@@ -766,7 +731,6 @@ export interface FileRoutesByTo {
   "/automations/routines": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/automations/schedules": typeof AuthedTenantAutomationsSchedulesIndexRoute;
   "/automations/webhooks": typeof AuthedTenantAutomationsWebhooksIndexRoute;
-  "/capabilities/plugins": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
   "/compliance/exports": typeof AuthedTenantComplianceExportsIndexRoute;
   "/evaluations/studio": typeof AuthedTenantEvaluationsStudioIndexRoute;
   "/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
@@ -786,7 +750,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/agent": typeof AuthedTenantAgentRouteWithChildren;
   "/_authed/_tenant/analytics": typeof AuthedTenantAnalyticsRouteWithChildren;
   "/_authed/_tenant/billing": typeof AuthedTenantBillingRoute;
-  "/_authed/_tenant/capabilities": typeof AuthedTenantCapabilitiesRouteWithChildren;
   "/_authed/_tenant/dashboard": typeof AuthedTenantDashboardRoute;
   "/_authed/_tenant/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
   "/_authed/_tenant/ontology": typeof AuthedTenantOntologyRoute;
@@ -794,12 +757,12 @@ export interface FileRoutesById {
   "/_authed/_tenant/settings": typeof AuthedTenantSettingsRoute;
   "/_authed/_tenant/agent/config": typeof AuthedTenantAgentConfigRoute;
   "/_authed/_tenant/agent/files": typeof AuthedTenantAgentFilesRoute;
+  "/_authed/_tenant/agent/mcp-servers": typeof AuthedTenantAgentMcpServersRoute;
+  "/_authed/_tenant/agent/tools": typeof AuthedTenantAgentToolsRoute;
   "/_authed/_tenant/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/_authed/_tenant/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
   "/_authed/_tenant/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
   "/_authed/_tenant/applets/$appId": typeof AuthedTenantAppletsAppIdRoute;
-  "/_authed/_tenant/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
-  "/_authed/_tenant/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
   "/_authed/_tenant/computers/$computerId": typeof AuthedTenantComputersComputerIdRoute;
   "/_authed/_tenant/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/_authed/_tenant/extensions/$extensionId": typeof AuthedTenantExtensionsExtensionIdRoute;
@@ -821,7 +784,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/applets/": typeof AuthedTenantAppletsIndexRoute;
   "/_authed/_tenant/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
   "/_authed/_tenant/automations/": typeof AuthedTenantAutomationsIndexRoute;
-  "/_authed/_tenant/capabilities/": typeof AuthedTenantCapabilitiesIndexRoute;
   "/_authed/_tenant/compliance/": typeof AuthedTenantComplianceIndexRoute;
   "/_authed/_tenant/computers/": typeof AuthedTenantComputersIndexRoute;
   "/_authed/_tenant/evaluations/": typeof AuthedTenantEvaluationsIndexRoute;
@@ -844,7 +806,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
   "/_authed/_tenant/automations/schedules/$scheduledJobId": typeof AuthedTenantAutomationsSchedulesScheduledJobIdRoute;
   "/_authed/_tenant/automations/webhooks/$webhookId": typeof AuthedTenantAutomationsWebhooksWebhookIdRoute;
-  "/_authed/_tenant/capabilities/plugins/$uploadId": typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
   "/_authed/_tenant/compliance/events/$eventId": typeof AuthedTenantComplianceEventsEventIdRoute;
   "/_authed/_tenant/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
   "/_authed/_tenant/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
@@ -857,7 +818,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/automations/routines/": typeof AuthedTenantAutomationsRoutinesIndexRoute;
   "/_authed/_tenant/automations/schedules/": typeof AuthedTenantAutomationsSchedulesIndexRoute;
   "/_authed/_tenant/automations/webhooks/": typeof AuthedTenantAutomationsWebhooksIndexRoute;
-  "/_authed/_tenant/capabilities/plugins/": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
   "/_authed/_tenant/compliance/exports/": typeof AuthedTenantComplianceExportsIndexRoute;
   "/_authed/_tenant/evaluations/studio/": typeof AuthedTenantEvaluationsStudioIndexRoute;
   "/_authed/_tenant/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
@@ -876,7 +836,6 @@ export interface FileRouteTypes {
     | "/agent"
     | "/analytics"
     | "/billing"
-    | "/capabilities"
     | "/dashboard"
     | "/knowledge"
     | "/ontology"
@@ -884,12 +843,12 @@ export interface FileRouteTypes {
     | "/settings"
     | "/agent/config"
     | "/agent/files"
+    | "/agent/mcp-servers"
+    | "/agent/tools"
     | "/analytics/activity"
     | "/analytics/cost"
     | "/analytics/performance"
     | "/applets/$appId"
-    | "/capabilities/builtin-tools"
-    | "/capabilities/mcp-servers"
     | "/computers/$computerId"
     | "/evaluations/$runId"
     | "/extensions/$extensionId"
@@ -911,7 +870,6 @@ export interface FileRouteTypes {
     | "/applets/"
     | "/artifacts/"
     | "/automations/"
-    | "/capabilities/"
     | "/compliance/"
     | "/computers/"
     | "/evaluations/"
@@ -934,7 +892,6 @@ export interface FileRouteTypes {
     | "/automations/routines/new"
     | "/automations/schedules/$scheduledJobId"
     | "/automations/webhooks/$webhookId"
-    | "/capabilities/plugins/$uploadId"
     | "/compliance/events/$eventId"
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
@@ -947,7 +904,6 @@ export interface FileRouteTypes {
     | "/automations/routines/"
     | "/automations/schedules/"
     | "/automations/webhooks/"
-    | "/capabilities/plugins/"
     | "/compliance/exports/"
     | "/evaluations/studio/"
     | "/evaluations/studio/edit/$testCaseId"
@@ -967,12 +923,12 @@ export interface FileRouteTypes {
     | "/settings"
     | "/agent/config"
     | "/agent/files"
+    | "/agent/mcp-servers"
+    | "/agent/tools"
     | "/analytics/activity"
     | "/analytics/cost"
     | "/analytics/performance"
     | "/applets/$appId"
-    | "/capabilities/builtin-tools"
-    | "/capabilities/mcp-servers"
     | "/computers/$computerId"
     | "/evaluations/$runId"
     | "/extensions/$extensionId"
@@ -994,7 +950,6 @@ export interface FileRouteTypes {
     | "/applets"
     | "/artifacts"
     | "/automations"
-    | "/capabilities"
     | "/compliance"
     | "/computers"
     | "/evaluations"
@@ -1017,7 +972,6 @@ export interface FileRouteTypes {
     | "/automations/routines/new"
     | "/automations/schedules/$scheduledJobId"
     | "/automations/webhooks/$webhookId"
-    | "/capabilities/plugins/$uploadId"
     | "/compliance/events/$eventId"
     | "/evaluations/studio/$testCaseId"
     | "/evaluations/studio/new"
@@ -1030,7 +984,6 @@ export interface FileRouteTypes {
     | "/automations/routines"
     | "/automations/schedules"
     | "/automations/webhooks"
-    | "/capabilities/plugins"
     | "/compliance/exports"
     | "/evaluations/studio"
     | "/evaluations/studio/edit/$testCaseId"
@@ -1049,7 +1002,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/agent"
     | "/_authed/_tenant/analytics"
     | "/_authed/_tenant/billing"
-    | "/_authed/_tenant/capabilities"
     | "/_authed/_tenant/dashboard"
     | "/_authed/_tenant/knowledge"
     | "/_authed/_tenant/ontology"
@@ -1057,12 +1009,12 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/settings"
     | "/_authed/_tenant/agent/config"
     | "/_authed/_tenant/agent/files"
+    | "/_authed/_tenant/agent/mcp-servers"
+    | "/_authed/_tenant/agent/tools"
     | "/_authed/_tenant/analytics/activity"
     | "/_authed/_tenant/analytics/cost"
     | "/_authed/_tenant/analytics/performance"
     | "/_authed/_tenant/applets/$appId"
-    | "/_authed/_tenant/capabilities/builtin-tools"
-    | "/_authed/_tenant/capabilities/mcp-servers"
     | "/_authed/_tenant/computers/$computerId"
     | "/_authed/_tenant/evaluations/$runId"
     | "/_authed/_tenant/extensions/$extensionId"
@@ -1084,7 +1036,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/applets/"
     | "/_authed/_tenant/artifacts/"
     | "/_authed/_tenant/automations/"
-    | "/_authed/_tenant/capabilities/"
     | "/_authed/_tenant/compliance/"
     | "/_authed/_tenant/computers/"
     | "/_authed/_tenant/evaluations/"
@@ -1107,7 +1058,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/automations/routines/new"
     | "/_authed/_tenant/automations/schedules/$scheduledJobId"
     | "/_authed/_tenant/automations/webhooks/$webhookId"
-    | "/_authed/_tenant/capabilities/plugins/$uploadId"
     | "/_authed/_tenant/compliance/events/$eventId"
     | "/_authed/_tenant/evaluations/studio/$testCaseId"
     | "/_authed/_tenant/evaluations/studio/new"
@@ -1120,7 +1070,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/automations/routines/"
     | "/_authed/_tenant/automations/schedules/"
     | "/_authed/_tenant/automations/webhooks/"
-    | "/_authed/_tenant/capabilities/plugins/"
     | "/_authed/_tenant/compliance/exports/"
     | "/_authed/_tenant/evaluations/studio/"
     | "/_authed/_tenant/evaluations/studio/edit/$testCaseId"
@@ -1228,13 +1177,6 @@ declare module "@tanstack/react-router" {
       path: "/dashboard";
       fullPath: "/dashboard";
       preLoaderRoute: typeof AuthedTenantDashboardRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
-    "/_authed/_tenant/capabilities": {
-      id: "/_authed/_tenant/capabilities";
-      path: "/capabilities";
-      fullPath: "/capabilities";
-      preLoaderRoute: typeof AuthedTenantCapabilitiesRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/billing": {
@@ -1384,13 +1326,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantComplianceIndexRouteImport;
       parentRoute: typeof AuthedTenantComplianceRouteRoute;
     };
-    "/_authed/_tenant/capabilities/": {
-      id: "/_authed/_tenant/capabilities/";
-      path: "/";
-      fullPath: "/capabilities/";
-      preLoaderRoute: typeof AuthedTenantCapabilitiesIndexRouteImport;
-      parentRoute: typeof AuthedTenantCapabilitiesRoute;
-    };
     "/_authed/_tenant/automations/": {
       id: "/_authed/_tenant/automations/";
       path: "/automations";
@@ -1538,20 +1473,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantComputersComputerIdRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/capabilities/mcp-servers": {
-      id: "/_authed/_tenant/capabilities/mcp-servers";
-      path: "/mcp-servers";
-      fullPath: "/capabilities/mcp-servers";
-      preLoaderRoute: typeof AuthedTenantCapabilitiesMcpServersRouteImport;
-      parentRoute: typeof AuthedTenantCapabilitiesRoute;
-    };
-    "/_authed/_tenant/capabilities/builtin-tools": {
-      id: "/_authed/_tenant/capabilities/builtin-tools";
-      path: "/builtin-tools";
-      fullPath: "/capabilities/builtin-tools";
-      preLoaderRoute: typeof AuthedTenantCapabilitiesBuiltinToolsRouteImport;
-      parentRoute: typeof AuthedTenantCapabilitiesRoute;
-    };
     "/_authed/_tenant/applets/$appId": {
       id: "/_authed/_tenant/applets/$appId";
       path: "/applets/$appId";
@@ -1580,6 +1501,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantAnalyticsActivityRouteImport;
       parentRoute: typeof AuthedTenantAnalyticsRoute;
     };
+    "/_authed/_tenant/agent/tools": {
+      id: "/_authed/_tenant/agent/tools";
+      path: "/tools";
+      fullPath: "/agent/tools";
+      preLoaderRoute: typeof AuthedTenantAgentToolsRouteImport;
+      parentRoute: typeof AuthedTenantAgentRoute;
+    };
+    "/_authed/_tenant/agent/mcp-servers": {
+      id: "/_authed/_tenant/agent/mcp-servers";
+      path: "/mcp-servers";
+      fullPath: "/agent/mcp-servers";
+      preLoaderRoute: typeof AuthedTenantAgentMcpServersRouteImport;
+      parentRoute: typeof AuthedTenantAgentRoute;
+    };
     "/_authed/_tenant/agent/files": {
       id: "/_authed/_tenant/agent/files";
       path: "/files";
@@ -1607,13 +1542,6 @@ declare module "@tanstack/react-router" {
       fullPath: "/compliance/exports/";
       preLoaderRoute: typeof AuthedTenantComplianceExportsIndexRouteImport;
       parentRoute: typeof AuthedTenantComplianceRouteRoute;
-    };
-    "/_authed/_tenant/capabilities/plugins/": {
-      id: "/_authed/_tenant/capabilities/plugins/";
-      path: "/plugins";
-      fullPath: "/capabilities/plugins/";
-      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsIndexRouteImport;
-      parentRoute: typeof AuthedTenantCapabilitiesRoute;
     };
     "/_authed/_tenant/automations/webhooks/": {
       id: "/_authed/_tenant/automations/webhooks/";
@@ -1699,13 +1627,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantComplianceEventsEventIdRouteImport;
       parentRoute: typeof AuthedTenantComplianceRouteRoute;
     };
-    "/_authed/_tenant/capabilities/plugins/$uploadId": {
-      id: "/_authed/_tenant/capabilities/plugins/$uploadId";
-      path: "/plugins/$uploadId";
-      fullPath: "/capabilities/plugins/$uploadId";
-      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRouteImport;
-      parentRoute: typeof AuthedTenantCapabilitiesRoute;
-    };
     "/_authed/_tenant/automations/webhooks/$webhookId": {
       id: "/_authed/_tenant/automations/webhooks/$webhookId";
       path: "/automations/webhooks/$webhookId";
@@ -1781,12 +1702,16 @@ const AuthedTenantComplianceRouteRouteWithChildren =
 interface AuthedTenantAgentRouteChildren {
   AuthedTenantAgentConfigRoute: typeof AuthedTenantAgentConfigRoute;
   AuthedTenantAgentFilesRoute: typeof AuthedTenantAgentFilesRoute;
+  AuthedTenantAgentMcpServersRoute: typeof AuthedTenantAgentMcpServersRoute;
+  AuthedTenantAgentToolsRoute: typeof AuthedTenantAgentToolsRoute;
   AuthedTenantAgentIndexRoute: typeof AuthedTenantAgentIndexRoute;
 }
 
 const AuthedTenantAgentRouteChildren: AuthedTenantAgentRouteChildren = {
   AuthedTenantAgentConfigRoute: AuthedTenantAgentConfigRoute,
   AuthedTenantAgentFilesRoute: AuthedTenantAgentFilesRoute,
+  AuthedTenantAgentMcpServersRoute: AuthedTenantAgentMcpServersRoute,
+  AuthedTenantAgentToolsRoute: AuthedTenantAgentToolsRoute,
   AuthedTenantAgentIndexRoute: AuthedTenantAgentIndexRoute,
 };
 
@@ -1810,32 +1735,6 @@ const AuthedTenantAnalyticsRouteChildren: AuthedTenantAnalyticsRouteChildren = {
 const AuthedTenantAnalyticsRouteWithChildren =
   AuthedTenantAnalyticsRoute._addFileChildren(
     AuthedTenantAnalyticsRouteChildren,
-  );
-
-interface AuthedTenantCapabilitiesRouteChildren {
-  AuthedTenantCapabilitiesBuiltinToolsRoute: typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
-  AuthedTenantCapabilitiesMcpServersRoute: typeof AuthedTenantCapabilitiesMcpServersRoute;
-  AuthedTenantCapabilitiesIndexRoute: typeof AuthedTenantCapabilitiesIndexRoute;
-  AuthedTenantCapabilitiesPluginsUploadIdRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
-  AuthedTenantCapabilitiesPluginsIndexRoute: typeof AuthedTenantCapabilitiesPluginsIndexRoute;
-}
-
-const AuthedTenantCapabilitiesRouteChildren: AuthedTenantCapabilitiesRouteChildren =
-  {
-    AuthedTenantCapabilitiesBuiltinToolsRoute:
-      AuthedTenantCapabilitiesBuiltinToolsRoute,
-    AuthedTenantCapabilitiesMcpServersRoute:
-      AuthedTenantCapabilitiesMcpServersRoute,
-    AuthedTenantCapabilitiesIndexRoute: AuthedTenantCapabilitiesIndexRoute,
-    AuthedTenantCapabilitiesPluginsUploadIdRoute:
-      AuthedTenantCapabilitiesPluginsUploadIdRoute,
-    AuthedTenantCapabilitiesPluginsIndexRoute:
-      AuthedTenantCapabilitiesPluginsIndexRoute,
-  };
-
-const AuthedTenantCapabilitiesRouteWithChildren =
-  AuthedTenantCapabilitiesRoute._addFileChildren(
-    AuthedTenantCapabilitiesRouteChildren,
   );
 
 interface AuthedTenantKnowledgeKnowledgeBasesRouteChildren {
@@ -1883,7 +1782,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentRoute: typeof AuthedTenantAgentRouteWithChildren;
   AuthedTenantAnalyticsRoute: typeof AuthedTenantAnalyticsRouteWithChildren;
   AuthedTenantBillingRoute: typeof AuthedTenantBillingRoute;
-  AuthedTenantCapabilitiesRoute: typeof AuthedTenantCapabilitiesRouteWithChildren;
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute;
   AuthedTenantKnowledgeRoute: typeof AuthedTenantKnowledgeRouteWithChildren;
   AuthedTenantOntologyRoute: typeof AuthedTenantOntologyRoute;
@@ -1945,7 +1843,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentRoute: AuthedTenantAgentRouteWithChildren,
   AuthedTenantAnalyticsRoute: AuthedTenantAnalyticsRouteWithChildren,
   AuthedTenantBillingRoute: AuthedTenantBillingRoute,
-  AuthedTenantCapabilitiesRoute: AuthedTenantCapabilitiesRouteWithChildren,
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
   AuthedTenantKnowledgeRoute: AuthedTenantKnowledgeRouteWithChildren,
   AuthedTenantOntologyRoute: AuthedTenantOntologyRoute,

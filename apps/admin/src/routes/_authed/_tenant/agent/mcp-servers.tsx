@@ -51,7 +51,7 @@ import {
 } from "@/lib/mcp-api";
 
 export const Route = createFileRoute(
-  "/_authed/_tenant/capabilities/mcp-servers",
+  "/_authed/_tenant/agent/mcp-servers",
 )({
   component: McpServersPage,
 });
@@ -160,7 +160,7 @@ function McpServersPage() {
   const tenantSlug = tenant?.slug;
   const tenantId = tenant?.id;
   useBreadcrumbs([
-    { label: "Tools", href: "/capabilities" },
+    { label: "Agent", href: "/agent" },
     { label: "MCP Servers" },
   ]);
 
@@ -326,7 +326,7 @@ function AddServerDialog({
           <DialogTitle>Register MCP Server</DialogTitle>
           <DialogDescription>
             Add an external MCP server to your tenant. Once registered, you can
-            assign it to agent templates.
+            make it available to the tenant platform agent.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
