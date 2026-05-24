@@ -409,20 +409,32 @@ def _build_system_prompt(
                 logger.warning("Failed to read %s: %s", rel_path, e)
         logger.info("Profile-aware prompt: loaded %d workspace files", len(parts))
     else:
-        # Legacy: load all known workspace files.
-        # AGENTS.md (the map) and CONTEXT.md (the router) are always loaded when present.
-        # They replace SKILL.md injection by providing a catalog of available skills/tools.
-        for filename in [
-            "SOUL.md",
-            "IDENTITY.md",
-            "USER.md",
-            "AGENTS.md",
-            "CONTEXT.md",
-            "TOOLS.md",
-        ]:
+        # Legacy: load all known prompt files in a single deliberate order.
+        # See packages/agentcore-pi/agent-container/src/runtime/system-prompt.ts
+        # for the rationale (LLM attention is strongest at start + end; the
+        # navigation map and safety floor go up front; PLATFORM and
+        # MEMORY_GUIDE sit toward the back where the model still reads them
+        # but doesn't anchor on them). Pi and Strands MUST stay in sync.
+        #
+        # CAPABILITIES.md was dropped from this loader on 2026-05-24 — its
+        # content was duplicate-platform-rules + conditional tool guidance
+        # better handled by PLATFORM.md and the dynamic runtime tool policy.
+        from install_skills import SYSTEM_WORKSPACE_DIR
+        prompt_files = [
+            ("AGENTS.md", WORKSPACE_DIR),
+            ("GUARDRAILS.md", SYSTEM_WORKSPACE_DIR),
+            ("SOUL.md", WORKSPACE_DIR),
+            ("IDENTITY.md", WORKSPACE_DIR),
+            ("USER.md", WORKSPACE_DIR),
+            ("CONTEXT.md", WORKSPACE_DIR),
+            ("PLATFORM.md", SYSTEM_WORKSPACE_DIR),
+            ("MEMORY_GUIDE.md", SYSTEM_WORKSPACE_DIR),
+            ("TOOLS.md", WORKSPACE_DIR),
+        ]
+        for filename, base_dir in prompt_files:
             if suppress_user_md and filename == "USER.md":
                 continue
-            filepath = os.path.join(WORKSPACE_DIR, filename)
+            filepath = os.path.join(base_dir, filename)
             if os.path.isfile(filepath):
                 try:
                     with open(filepath) as f:
@@ -475,28 +487,14 @@ def _build_system_prompt(
     now = datetime.now(ZoneInfo("America/Chicago"))
     parts.insert(0, f"Current date: {now.strftime('%A, %B %d, %Y')} ({now.strftime('%Z')})")
 
-    # Prepend system workspace files (after date, before org workspace)
-    from install_skills import SYSTEM_WORKSPACE_DIR
-
-    system_parts = []
-    for filename in ["PLATFORM.md", "CAPABILITIES.md", "GUARDRAILS.md", "MEMORY_GUIDE.md"]:
-        filepath = os.path.join(SYSTEM_WORKSPACE_DIR, filename)
-        if os.path.isfile(filepath):
-            try:
-                with open(filepath) as f:
-                    content = f.read().strip()
-                if content:
-                    system_parts.append(content)
-            except Exception as e:
-                logger.warning("Failed to read system file %s: %s", filename, e)
-    if system_parts:
-        # Insert system files after date (index 0) but before workspace files
-        for i, sp in enumerate(system_parts):
-            parts.insert(1 + i, sp)
-        logger.info("Loaded %d system workspace files", len(system_parts))
+    # System workspace files (PLATFORM / GUARDRAILS / MEMORY_GUIDE) are now
+    # interleaved into the main prompt_files list above in their intended
+    # positions, not prepended as a contiguous block. CAPABILITIES.md was
+    # retired from the loader on 2026-05-24.
 
     if _USER_CONTEXT_CACHE and _USER_CONTEXT_CACHE.body.strip():
-        insert_at = 1 + len(system_parts)
+        # User-context block goes right after the date line (index 0).
+        insert_at = 1
         parts.insert(insert_at, _USER_CONTEXT_CACHE.body.strip())
         user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
         tenant_id = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
