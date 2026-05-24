@@ -572,41 +572,22 @@ export class HindsightAdapter implements MemoryAdapter {
   private async resolveReadBankIds(
     ownerId: string,
     tenantId?: string,
-    activeSpace?: NonNullable<RecallRequest["hindsight"]>["activeSpace"],
   ): Promise<string[]> {
     const primaryBankId = await this.resolveBankId(ownerId);
-    const spaceBankId = this.resolveSpaceBankId(activeSpace);
     const legacyBankIds = await this.resolveLegacyBankIds(ownerId, tenantId);
     return uniqueStrings(
-      [primaryBankId, spaceBankId, ...legacyBankIds].filter(
-        (value): value is string => Boolean(value),
+      [primaryBankId, ...legacyBankIds].filter((value): value is string =>
+        Boolean(value),
       ),
     );
   }
 
   private async resolveRecallBankIds(req: RecallRequest): Promise<string[]> {
     if (req.hindsight?.includeLegacyBanks === true) {
-      return this.resolveReadBankIds(
-        req.ownerId,
-        req.tenantId,
-        req.hindsight.activeSpace,
-      );
+      return this.resolveReadBankIds(req.ownerId, req.tenantId);
     }
     const primaryBankId = await this.resolveBankId(req.ownerId);
-    return uniqueStrings(
-      [
-        primaryBankId,
-        this.resolveSpaceBankId(req.hindsight?.activeSpace),
-      ].filter((value): value is string => Boolean(value)),
-    );
-  }
-
-  private resolveSpaceBankId(
-    activeSpace?: NonNullable<RecallRequest["hindsight"]>["activeSpace"],
-  ): string | null {
-    const spaceId = activeSpace?.spaceId;
-    if (!spaceId || activeSpace?.isDefault === true) return null;
-    return `space_${spaceId}`;
+    return [primaryBankId];
   }
 
   private async resolveLegacyBankIds(

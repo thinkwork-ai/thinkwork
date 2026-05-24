@@ -1,13 +1,12 @@
 /**
  * Tests for derive-agent-skills.
  *
- * Workspace skill folders are the activation source:
- * Any workspace path ending in `skills/<slug>/SKILL.md` produces one
- * `agent_skills` row.
- * AGENTS.md references are documentation only.
+ * Workspace skill folders are the compatibility sync source for agent_skills:
+ * any workspace path ending in `skills/<slug>/SKILL.md` produces one
+ * `agent_skills` row. Runtime activation still tree-walks workspace files.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { readWorkspaceMock, dbState, resetDbState } = vi.hoisted(() => {
   type DbState = {
@@ -123,12 +122,12 @@ beforeEach(() => {
   readWorkspaceMock.mockReset();
 });
 
-describe("deriveAgentSkills — workspace skill folders", () => {
-  it("derives rows from root and sub-agent workspace skill markers", async () => {
+describe("deriveAgentSkills compatibility sync", () => {
+  it("derives rows from root and nested workspace skill markers", async () => {
     readWorkspaceMock.mockResolvedValue([
       workspaceEntry("AGENTS.md"),
       workspaceEntry("skills/approve-receipt/SKILL.md"),
-      workspaceEntry("sales/skills/tag-vendor/SKILL.md"),
+      workspaceEntry("workspaces/sales/skills/tag-vendor/SKILL.md"),
       workspaceEntry("skills/empty/README.md"),
     ]);
     pushSelect([]);
@@ -140,8 +139,8 @@ describe("deriveAgentSkills — workspace skill folders", () => {
     expect(result.addedSlugs).toEqual(["approve-receipt", "tag-vendor"]);
     expect(result.removedSlugs).toEqual([]);
     expect(result.agentsMdPathsScanned).toEqual([
-      "sales/skills/tag-vendor/SKILL.md",
       "skills/approve-receipt/SKILL.md",
+      "workspaces/sales/skills/tag-vendor/SKILL.md",
     ]);
     expect(dbState.transactionInvocations).toBe(1);
     expect(dbState.insertCalls[0].values).toEqual([
@@ -156,21 +155,6 @@ describe("deriveAgentSkills — workspace skill folders", () => {
         skill_id: "tag-vendor",
       },
     ]);
-  });
-
-  it("ignores AGENTS.md-only skill references", async () => {
-    readWorkspaceMock.mockResolvedValue([
-      workspaceEntry("AGENTS.md"),
-      workspaceEntry("sales/AGENTS.md"),
-    ]);
-    pushSelect([{ skill_id: "orphaned-route-skill" }]);
-    pushSelect([{ tenant_id: TENANT }]);
-
-    const result = await deriveAgentSkills(ctx(), AGENT_ID, deriveOpts);
-
-    expect(result.addedSlugs).toEqual([]);
-    expect(result.removedSlugs).toEqual(["orphaned-route-skill"]);
-    expect(dbState.deleteCalls).toHaveLength(1);
   });
 
   it("returns changed:false and skips the transaction when sets already match", async () => {
@@ -189,7 +173,7 @@ describe("deriveAgentSkills — workspace skill folders", () => {
     expect(dbState.deleteCalls).toHaveLength(0);
   });
 
-  it("ignores built-in tool markers because those are configured outside workspace skills", async () => {
+  it("ignores built-in tool markers because they are configured outside workspace skills", async () => {
     readWorkspaceMock.mockResolvedValue([
       workspaceEntry("skills/web-search/SKILL.md"),
       workspaceEntry("skills/agent-email-send/SKILL.md"),
@@ -242,7 +226,7 @@ describe("deriveAgentSkills — workspace skill folders", () => {
   });
 });
 
-describe("deriveAgentSkills — failures", () => {
+describe("deriveAgentSkills failures", () => {
   it("propagates workspace reader failures", async () => {
     readWorkspaceMock.mockRejectedValue(
       new Error("Agent missing-agent not found in tenant tenant-a"),

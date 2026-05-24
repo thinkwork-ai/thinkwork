@@ -1,40 +1,10 @@
 /**
- * derive-agent-skills (Plan §008 U11).
+ * derive-agent-skills compatibility sync.
  *
- * Recompute the `agent_skills` set for an agent from first-class workspace
- * skill folders. Presence of any path ending in
- * `skills/<slug>/SKILL.md` is the activation signal; AGENTS.md skill routing
- * rows are documentation only.
- *
- * **Direction inversion.** The Fat-folder world made workspace files the
- * canonical authoring surface and `agent_skills` a derived lookup. Skills are
- * now real workspace folders, so the file → DB direction derives directly
- * from the filesystem rather than from AGENTS.md tables.
- *
- * **What derive owns.** Set membership only — which slugs have rows. The
- * non-skill columns (`config`, `permissions`, `rate_limit_rpm`,
- * `model_override`, `enabled`) continue to be authored exclusively by
- * `setAgentSkills` until U21 reroutes them onto AGENTS.md row metadata.
- * Derive uses `onConflictDoNothing` to preserve those fields on rows that
- * already exist; it inserts new rows with schema defaults and deletes rows
- * whose slug no longer has a `SKILL.md` in the workspace tree.
- *
- * **Trigger.** `workspace-files.ts` `handlePut` / `handleDelete` (agent
- * branch) calls this function whenever a workspace skill `SKILL.md` marker
- * changes. Catalog installs call it directly because they bypass the
- * workspace-files Lambda.
- *
- * **No-op detection.** When the derived set already matches the existing
- * set (slugs only — column metadata is out of scope), this function returns
- * `{ changed: false, ... }` without opening a transaction. This breaks the
- * write → derive loop: the second derive sees no membership change and exits
- * cleanly.
- *
- * **Failure surface.** DB errors are re-thrown; the caller returns 500 to the
- * client. The S3 write has already succeeded at that point — that's
- * intentional. We don't have S3 versioning + atomic-rename to undo the file
- * write, so the contract is "workspace skill file is on disk; agent_skills is
- * stale; the next skill-file write retries derive."
+ * Runtime activation now walks `skills/<slug>/SKILL.md` directly from the
+ * workspace tree, so `agent_skills` is no longer the invocation source of truth.
+ * Keep this table synchronized during the transition because admin/config/auth
+ * surfaces still use it for metadata and permissions.
  */
 
 import { and, agents, agentSkills, db, eq, inArray } from "../graphql/utils.js";
@@ -46,9 +16,6 @@ import {
 import { tenants } from "@thinkwork/database-pg/schema";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 
-// Replaces the workspace-overlay composer's read-time list+read.
-// Per docs/plans/2026-04-27-003: the agent prefix is the source of
-// truth; we list it and GET the files we need directly.
 export interface ComposeContext {
   tenantId: string;
 }
@@ -116,32 +83,16 @@ async function _readAgentPrefixFiles(
 }
 
 export interface DeriveResult {
-  /**
-   * True iff the derived skill *set membership* differed from the existing
-   * set and the DB was written. `addedSlugs` reflects set-membership
-   * changes — not row creation count: derive uses `onConflictDoNothing`,
-   * so a slug that already had a row keeps its existing metadata and is
-   * NOT counted as added on subsequent calls.
-   */
   changed: boolean;
-  /** Slugs newly added to the membership set (sorted alphabetically). */
   addedSlugs: string[];
-  /** Slugs removed from the membership set (sorted alphabetically). */
   removedSlugs: string[];
-  /** Skill marker paths found in the workspace, in the order scanned. */
   agentsMdPathsScanned: string[];
-  /** Per-file parser warnings (skipped reserved/invalid rows). */
   warnings: string[];
 }
 
 const SKILL_MD_PATH_RE = /(?:^|\/)skills\/([^/]+)\/SKILL\.md$/;
 
 export interface DeriveOptions {
-  /**
-   * Override the workspace reader. Defaults to reading skill `SKILL.md` files
-   * from the agent's S3 prefix. Tests inject a fake to avoid spinning S3 + DB
-   * for the slug lookup.
-   */
   readAgentsMdFiles?: (
     tenantId: string,
     agentId: string,
@@ -160,10 +111,6 @@ export async function deriveAgentSkills(
   opts: DeriveOptions = {},
 ): Promise<DeriveResult> {
   const reader = opts.readAgentsMdFiles ?? _defaultAgentsMdReader;
-  // Filter inside derive so an injected reader that returns the full
-  // workspace tree (test fixtures often do) still ends up scanning only
-  // workspace skill markers. The default reader pre-filters; this is a
-  // no-op belt-and-suspenders in production.
   const skillEntries = (await reader(ctx.tenantId, agentId))
     .filter((entry) => SKILL_MD_PATH_RE.test(entry.path))
     .sort((a, b) => a.path.localeCompare(b.path));
@@ -210,10 +157,6 @@ export async function deriveAgentSkills(
   }
 
   await db.transaction(async (tx) => {
-    // Insert new slugs only — onConflictDoNothing preserves the
-    // permissions/config/rate_limit_rpm/model_override/enabled columns
-    // on rows that already exist (those rows are owned by
-    // setAgentSkills until U21).
     if (addedSlugs.length > 0) {
       await tx
         .insert(agentSkills)

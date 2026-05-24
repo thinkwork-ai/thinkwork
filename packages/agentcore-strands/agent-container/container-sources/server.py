@@ -1103,13 +1103,6 @@ def _call_strands_agent(
 
         memory_tools.set_turn_memory_context(
             user_id=os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", ""),
-            active_space_id=os.environ.get("ACTIVE_SPACE_ID", ""),
-            active_space_slug=os.environ.get("ACTIVE_SPACE_SLUG", ""),
-            active_space_is_default=(
-                os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "").lower()
-                in ("1", "true", "yes")
-                or os.environ.get("ACTIVE_SPACE_SLUG", "") == "default"
-            ),
         )
         tools.extend([memory_tools.remember, memory_tools.recall, memory_tools.forget])
         logger.info("Managed memory tools registered: remember, recall, forget")
@@ -1500,22 +1493,10 @@ def _call_strands_agent(
             hs_endpoint = os.environ.get("HINDSIGHT_ENDPOINT", "")
             hs_user = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
             hs_space_id = os.environ.get("ACTIVE_SPACE_ID", "")
-            hs_space_slug = os.environ.get("ACTIVE_SPACE_SLUG", "")
-            hs_space_is_default = (
-                os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "").lower()
-                in ("1", "true", "yes")
-                or hs_space_slug == "default"
-            )
             hs_read_banks = []
             if hs_user:
                 hs_read_banks.append(f"user_{hs_user}")
-            if hs_space_id and not hs_space_is_default:
-                hs_read_banks.append(f"space_{hs_space_id}")
-            hs_bank = (
-                f"space_{hs_space_id}"
-                if hs_space_id and not hs_space_is_default
-                else (f"user_{hs_user}" if hs_user else "")
-            )
+            hs_bank = f"user_{hs_user}" if hs_user else ""
             hs_tenant = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
             hs_assistant = os.environ.get("_ASSISTANT_ID", "")
             hs_stage = os.environ.get("STAGE", "") or "unknown"

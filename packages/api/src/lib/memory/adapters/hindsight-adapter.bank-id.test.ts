@@ -14,7 +14,7 @@ const USER_ID = "4dee701a-c17b-46fe-9f38-a333d4c3fad0";
 const TENANT_ID = "0015953e-aa13-4cab-8398-2e70f73dda63";
 const SPACE_ID = "c9f50dd6-5616-4812-b2ac-81b8d130f795";
 
-describe("HindsightAdapter active Space bank ids", () => {
+describe("HindsightAdapter user-only bank ids", () => {
   beforeEach(() => {
     executeMock.mockReset();
   });
@@ -23,7 +23,7 @@ describe("HindsightAdapter active Space bank ids", () => {
     vi.unstubAllGlobals();
   });
 
-  it("recalls from the user bank and the non-default Space bank", async () => {
+  it("recalls from the user bank only when a non-default Space is active", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ memory_units: [] }),
@@ -49,7 +49,6 @@ describe("HindsightAdapter active Space bank ids", () => {
 
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
       `https://hindsight.example/v1/default/banks/user_${USER_ID}/memories/recall`,
-      `https://hindsight.example/v1/default/banks/space_${SPACE_ID}/memories/recall`,
     ]);
     expect(executeMock).not.toHaveBeenCalled();
   });
@@ -83,7 +82,7 @@ describe("HindsightAdapter active Space bank ids", () => {
     ]);
   });
 
-  it("keeps legacy fan-out while adding the active Space bank", async () => {
+  it("keeps legacy fan-out without adding the active Space bank", async () => {
     executeMock.mockResolvedValueOnce({
       rows: [
         {
@@ -119,7 +118,6 @@ describe("HindsightAdapter active Space bank ids", () => {
 
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
       `https://hindsight.example/v1/default/banks/user_${USER_ID}/memories/recall`,
-      `https://hindsight.example/v1/default/banks/space_${SPACE_ID}/memories/recall`,
       "https://hindsight.example/v1/default/banks/fleet-caterpillar-456/memories/recall",
       "https://hindsight.example/v1/default/banks/marco/memories/recall",
       "https://hindsight.example/v1/default/banks/c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c/memories/recall",
