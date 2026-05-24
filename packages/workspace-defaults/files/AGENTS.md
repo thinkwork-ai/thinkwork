@@ -208,6 +208,11 @@ workspaces/          specialist workspace folders
 
 No skills discovered yet.
 
+## Routing
+
+| Task | Go to | Read | Skills |
+| ---- | ----- | ---- | ------ |
+
 ## Quick Navigation
 
 - Start with `CONTEXT.md` for the agent's top-level scope.

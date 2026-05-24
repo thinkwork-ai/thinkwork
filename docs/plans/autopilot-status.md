@@ -21,7 +21,7 @@ Target branch: `main`
 - Started: 2026-05-24
 - Latest merged PR: [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664)
 - Active PR: [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667)
-- CI: PR 1 passed; PR 2 pending
+- CI: PR 1 passed; PR 2 rerun pending after parser-compatibility fix
 
 ### Active Unit Notes
 
@@ -29,18 +29,19 @@ Target branch: `main`
 - Created isolated PR 2 worktree from merged `origin/main`.
 - PR 2 follows the plan rollout sequence: U3, U4, and U5 ship together as the workspace-defaults substrate.
 - Added `docs/runbooks/folder-canon-default-files-retirement-2026-05-24.md` to document the future per-tenant defaults-prefix cleanup; no S3 mutation was run.
+- PR 2 first CI `test` run failed because the admin routing-table parser test still expects a `## Routing` table in the canonical `AGENTS.md` fixture. Restored a minimal empty routing table as a transitional compatibility surface and verified the focused admin test locally.
 - Consumer survey found live references outside the plan's initial scope, especially mobile Personalize/Profile and `packages/computer-runtime`; U24 must not delete legacy defaults until those consumers are updated, retired, or explicitly proven harmless.
 
 ### Progress Log
 
-| Date       | Unit     | Branch                                  | PR                                                           | Status     | Verification                                                                                                                                                                                  | Notes                                                           |
-| ---------- | -------- | --------------------------------------- | ------------------------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| 2026-05-24 | U1/U2    | `codex/folder-agent-preflight`          | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | Merged     | Required CI passed: CLA, lint, test, typecheck, and verify.                                                                                                                                   | Added supersession callouts and pre-retirement consumer survey. |
-| 2026-05-24 | U3/U4/U5 | `codex/folder-agent-defaults-substrate` | [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667) | CI pending | `pnpm install`; workspace-defaults test/build; focused API pin/bootstrap/workspace-files tests; API typecheck; repo typecheck/lint; touched-file Prettier; `git diff --check` passed locally. | Consolidating root contracts into AGENTS.md substrate.          |
+| Date       | Unit     | Branch                                  | PR                                                           | Status         | Verification                                                                                                                                                                                                                    | Notes                                                           |
+| ---------- | -------- | --------------------------------------- | ------------------------------------------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| 2026-05-24 | U1/U2    | `codex/folder-agent-preflight`          | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | Merged         | Required CI passed: CLA, lint, test, typecheck, and verify.                                                                                                                                                                     | Added supersession callouts and pre-retirement consumer survey. |
+| 2026-05-24 | U3/U4/U5 | `codex/folder-agent-defaults-substrate` | [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667) | CI fix pending | `pnpm install`; workspace-defaults test/build; focused API pin/bootstrap/workspace-files tests; focused admin routing-table test; API typecheck; repo typecheck/lint; touched-file Prettier; `git diff --check` passed locally. | Consolidating root contracts into AGENTS.md substrate.          |
 
 ### CI Failures
 
-- None yet for this run.
+- 2026-05-24: U3/U4/U5 PR [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667) first `test` check failed in `apps/admin/src/components/agent-builder/__tests__/routing-table.test.ts` because the canonical workspace-defaults `AGENTS.md` fixture no longer had a `## Routing` section. Restored a minimal empty routing table in the generated default contract to preserve parser compatibility during the transition.
 
 ### Blockers
 
