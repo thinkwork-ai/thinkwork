@@ -30,7 +30,7 @@ The sandbox is *not* the right tool when:
 - **You want to ship a general-purpose REPL to end users.** It's an agent-facing tool, not an IDE. There is no out-of-turn persistence.
 - **You need OAuth-ed API work.** Posting to Slack or opening a GitHub issue belongs in a composable-skill integration script that the agent calls as its own tool. Those scripts carry per-user credentials cleanly; the sandbox doesn't.
 - **You're on a regulated compliance tier.** The v1 substrate is explicitly **not HIPAA-certified**; regulated tenants have `sandbox_enabled = false` as the platform default. See the residual-threat list below.
-- **You need long-running compute.** Each turn creates a fresh session, runs one or a few `execute_code` calls, and stops the session. If you need minutes of compute, reach for [Routines](/concepts/automations/routines-and-execution-model/) or a background job.
+- **You need long-running compute.** Each turn creates a fresh session, runs one or a few `execute_code` calls, and stops the session. If you need minutes of compute, reach for routines or a background job.
 
 <Aside type="tip">
   The calibration question: "does this computation need to read or produce structured data that wouldn't fit in a chat response?" If yes, sandbox. If the answer is a paragraph of text, the model handles it directly.
