@@ -1,8 +1,8 @@
 /**
  * Per-tenant catalog tables that back the apps/spaces Customize page's
- * Available / Discover sections for Workflows. Skills already
- * have `tenant_skills` and MCP servers already have `tenant_mcp_servers`;
- * this table fills the missing workflow catalog.
+ * Available / Discover sections for Workflows. Skills now live in the S3
+ * skill catalog and workspace `skills/` folders, while MCP servers already
+ * have `tenant_mcp_servers`; this table fills the missing workflow catalog.
  *
  * Plan: docs/plans/2026-05-09-006-feat-computer-customization-page-plan.md U9.
  */
