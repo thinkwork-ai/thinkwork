@@ -204,13 +204,37 @@ function routingTableContainsGoTo(markdown: string, goTo: string): boolean {
 
 async function readS3Text(bucket: string, key: string): Promise<string | null> {
   try {
+    return await readS3TextIfExists(bucket, key);
+  } catch {
+    return null;
+  }
+}
+
+async function readS3TextIfExists(
+  bucket: string,
+  key: string,
+): Promise<string | null> {
+  try {
     const resp = await s3.send(
       new GetObjectCommand({ Bucket: bucket, Key: key }),
     );
     return (await resp.Body?.transformToString("utf-8")) ?? null;
-  } catch {
-    return null;
+  } catch (err) {
+    if (isS3NotFound(err)) return null;
+    throw err;
   }
+}
+
+function isS3NotFound(err: unknown): boolean {
+  const name = (err as { name?: string })?.name;
+  const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata
+    ?.httpStatusCode;
+  return (
+    name === "NoSuchKey" ||
+    name === "NotFound" ||
+    name === "NoSuchBucket" ||
+    status === 404
+  );
 }
 
 async function writeS3Text(
@@ -345,7 +369,10 @@ function contextAnnotation(content: string): string | null {
 function annotationForTreePath(
   path: string,
   contextByFolder: Map<string, string>,
+  annotationOverrides: Map<string, string> = new Map(),
 ): string | null {
+  const override = annotationOverrides.get(path);
+  if (override) return override;
   const fixed = ROOT_ANNOTATIONS.get(path);
   if (fixed) return fixed;
   const context = contextByFolder.get(path);
@@ -356,26 +383,29 @@ function renderTreeLabel(
   node: TreeNode,
   path: string,
   contextByFolder: Map<string, string>,
+  annotationOverrides: Map<string, string>,
 ): string {
   const displayName = node.kind === "directory" ? `${node.name}/` : node.name;
   const annotation = annotationForTreePath(
     node.kind === "directory" ? `${path}/` : path,
     contextByFolder,
+    annotationOverrides,
   );
   return annotation ? `${displayName} ← ${annotation}` : displayName;
 }
 
 function renderWorkspaceTree(
-  agentSlug: string,
+  rootLabel: string,
   objectPaths: string[],
   contextByFolder: Map<string, string>,
+  annotationOverrides: Map<string, string> = new Map(),
 ): string {
-  const root = createTreeNode(agentSlug, "directory");
+  const root = createTreeNode(rootLabel, "directory");
   for (const path of objectPaths) {
     addTreePath(root, path);
   }
 
-  const lines = [`${agentSlug}/`];
+  const lines = [`${rootLabel}/`];
   function walk(node: TreeNode, prefix: string, pathPrefix: string): void {
     const children = sortedTreeChildren(node);
     children.forEach((child, index) => {
@@ -383,7 +413,12 @@ function renderWorkspaceTree(
       const branch = isLast ? "└──" : "├──";
       const childPath = pathPrefix ? `${pathPrefix}/${child.name}` : child.name;
       lines.push(
-        `${prefix}${branch} ${renderTreeLabel(child, childPath, contextByFolder)}`,
+        `${prefix}${branch} ${renderTreeLabel(
+          child,
+          childPath,
+          contextByFolder,
+          annotationOverrides,
+        )}`,
       );
       if (child.kind === "directory") {
         walk(child, `${prefix}${isLast ? "    " : "│   "}`, childPath);
@@ -418,9 +453,27 @@ export function replaceDerivedAgentsMdSections(
   return rendered;
 }
 
+export function replaceMarkdownSection(
+  markdown: string,
+  sectionName: string,
+  body: string,
+): string {
+  const sectionRange = findSectionBodyRange(markdown, sectionName);
+  if (sectionRange) {
+    return (
+      markdown.slice(0, sectionRange.start) +
+      body +
+      markdown.slice(sectionRange.end)
+    );
+  }
+
+  const suffix = markdown.endsWith("\n") ? "" : "\n";
+  return `${markdown}${suffix}\n---\n\n## ${sectionName}${body}`;
+}
+
 function findSectionBodyRange(
   markdown: string,
-  sectionName: DerivedSectionName,
+  sectionName: string,
 ): { start: number; end: number } | null {
   const headingPattern = new RegExp(
     `(^|\\n)## ${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(?:\\r?\\n|$)`,
@@ -1118,6 +1171,143 @@ export async function normalizeAgentsMd(agentId: string): Promise<void> {
   );
 }
 
+/**
+ * Refresh only the `## Folder Structure` section of a selected CONTEXT.md,
+ * scoped to the clicked file's containing folder.
+ */
+export async function generateContextFolderStructure(
+  agentId: string,
+  contextPath: string,
+): Promise<void> {
+  if (!isContextMdPath(contextPath)) {
+    throw new Error("generate-folder-structure requires a CONTEXT.md path");
+  }
+
+  const context = await loadWorkspaceMapRenderContext(agentId);
+  if (!context) return;
+
+  const existingContextMd = await readS3TextIfExists(
+    context.bucket,
+    `${context.prefix}${contextPath}`,
+  );
+  const seedContextMd =
+    existingContextMd && existingContextMd.trim()
+      ? existingContextMd
+      : seedContextMarkdown(context.agentName, contextPath);
+  const nextContextMd = replaceMarkdownSection(
+    seedContextMd,
+    "Folder Structure",
+    renderScopedContextFolderStructureBody({
+      agentSlug: context.agentSlug,
+      contextPath,
+      workspaceObjectPaths: context.workspaceObjectPaths,
+      contextByFolder: context.contextByFolder,
+    }),
+  );
+
+  if (existingContextMd === nextContextMd) {
+    console.log(
+      `[workspace-map] Skipped CONTEXT.md folder structure refresh for ${contextPath}: content unchanged`,
+    );
+    return;
+  }
+
+  await writeS3Text(
+    context.bucket,
+    `${context.prefix}${contextPath}`,
+    nextContextMd,
+  );
+  await regenerateAgentsMdDerivedSections(agentId);
+  const { regenerateManifest } = await import("./workspace-manifest.js");
+  await regenerateManifest(
+    context.bucket,
+    context.tenantSlug,
+    context.agentSlug,
+  );
+  console.log(
+    `[workspace-map] Refreshed CONTEXT.md folder structure for ${context.agentSlug}/${contextPath}`,
+  );
+}
+
+function isContextMdPath(path: string): boolean {
+  return path.split("/").filter(Boolean).at(-1) === "CONTEXT.md";
+}
+
+function parentFolder(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
+
+function humanizeFolderName(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function seedContextMarkdown(agentName: string, contextPath: string): string {
+  const folder = parentFolder(contextPath);
+  const title = folder
+    ? humanizeFolderName(folder.split("/").at(-1) ?? folder)
+    : `${agentName} — Context`;
+  return `# ${title}\n`;
+}
+
+function renderScopedContextFolderStructureBody(args: {
+  agentSlug: string;
+  contextPath: string;
+  workspaceObjectPaths: string[];
+  contextByFolder: Map<string, string>;
+}): string {
+  const folder = parentFolder(args.contextPath);
+  const rootLabel = folder
+    ? (folder.split("/").at(-1) ?? folder)
+    : args.agentSlug;
+  const scopedObjectPaths = scopeWorkspaceObjectPaths(
+    args.workspaceObjectPaths,
+    folder,
+  );
+  if (!scopedObjectPaths.includes("CONTEXT.md")) {
+    scopedObjectPaths.push("CONTEXT.md");
+  }
+  const scopedContextByFolder = scopeContextAnnotations(
+    args.contextByFolder,
+    folder,
+  );
+  return renderFolderStructureBody(
+    rootLabel,
+    scopedObjectPaths,
+    scopedContextByFolder,
+    new Map([["CONTEXT.md", "You are here"]]),
+  );
+}
+
+function scopeWorkspaceObjectPaths(paths: string[], folder: string): string[] {
+  if (!folder) return paths;
+  const prefix = `${folder}/`;
+  return paths
+    .filter((path) => path.startsWith(prefix))
+    .map((path) => path.slice(prefix.length))
+    .filter(Boolean);
+}
+
+function scopeContextAnnotations(
+  contextByFolder: Map<string, string>,
+  folder: string,
+): Map<string, string> {
+  if (!folder) return contextByFolder;
+  const scoped = new Map<string, string>();
+  const prefix = `${folder}/`;
+  for (const [contextFolder, content] of contextByFolder) {
+    if (!contextFolder.startsWith(prefix)) continue;
+    const relative = contextFolder.slice(prefix.length);
+    if (relative) scoped.set(relative, content);
+  }
+  return scoped;
+}
+
 // ---------------------------------------------------------------------------
 // Renderers
 // ---------------------------------------------------------------------------
@@ -1164,11 +1354,13 @@ function renderFolderStructureBody(
   agentSlug: string,
   workspaceObjectPaths: string[],
   contextByFolder: Map<string, string>,
+  annotationOverrides: Map<string, string> = new Map(),
 ): string {
   return `\n\`\`\`\n${renderWorkspaceTree(
     agentSlug,
     workspaceObjectPaths,
     contextByFolder,
+    annotationOverrides,
   )}\n\`\`\`\n`;
 }
 

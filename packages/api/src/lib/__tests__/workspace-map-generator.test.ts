@@ -36,7 +36,7 @@ const { state, s3Calls, mockRegenerateManifest } = vi.hoisted(() => ({
       mcp_server: string | null;
       triggers: string[] | null;
     }>,
-    s3GetResponses: new Map<string, string | null>(),
+    s3GetResponses: new Map<string, string | null | Error>(),
     listObjectsResponses: [] as string[],
   },
   s3Calls: {
@@ -62,6 +62,9 @@ vi.mock("@aws-sdk/client-s3", () => ({
       if (name === "GetObjectCommand") {
         s3Calls.gets.push(key);
         const value = state.s3GetResponses.get(key);
+        if (value instanceof Error) {
+          throw value;
+        }
         if (value === undefined || value === null) {
           throw new Error("NoSuchKey");
         }
@@ -179,6 +182,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import {
+  generateContextFolderStructure,
   normalizeAgentsMd,
   regenerateAgentsMdDerivedSections,
   regenerateWorkspaceMap,
@@ -210,6 +214,13 @@ function lastWrittenAgentsMd(): string | null {
   const put = [...s3Calls.puts]
     .reverse()
     .find((p) => p.key === `${PREFIX}AGENTS.md`);
+  return put?.body ?? null;
+}
+
+function lastWritten(path: string): string | null {
+  const put = [...s3Calls.puts]
+    .reverse()
+    .find((p) => p.key === `${PREFIX}${path}`);
   return put?.body ?? null;
 }
 
@@ -361,6 +372,147 @@ describe("normalizeAgentsMd", () => {
     expect(written).not.toContain("not markdown at all");
     expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("generateContextFolderStructure", () => {
+  it("replaces only the nested CONTEXT.md folder structure from that folder down", async () => {
+    state.listObjectsResponses = [
+      "AGENTS.md",
+      "CONTEXT.md",
+      "community/CONTEXT.md",
+      "community/docs/platforms.md",
+      "community/docs/.gitkeep",
+      "community/content/newsletters/welcome.md",
+      "community/content/templates/CONTEXT.md",
+      "sales/CONTEXT.md",
+    ];
+    state.s3GetResponses.set(
+      `${PREFIX}community/CONTEXT.md`,
+      [
+        "# Community",
+        "",
+        "## What This Workspace Is",
+        "",
+        "Custom prose stays.",
+        "",
+        "## Folder Structure",
+        "stale tree",
+        "",
+        "## Skills & Tools for This Workspace",
+        "",
+        "Keep this table.",
+      ].join("\n"),
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}community/content/templates/CONTEXT.md`,
+      "# Templates\n\nReusable content patterns.",
+    );
+
+    await generateContextFolderStructure("agent-1", "community/CONTEXT.md");
+
+    const written = lastWritten("community/CONTEXT.md") ?? "";
+    expect(written).toContain("# Community");
+    expect(written).toContain("Custom prose stays.");
+    expect(written).toContain("Keep this table.");
+    expect(written).not.toContain("stale tree");
+    expect(written).toContain("community/");
+    expect(written).toContain("CONTEXT.md ← You are here");
+    expect(written).toContain("content/");
+    expect(written).toContain("templates/ ← Templates");
+    expect(written).toContain("platforms.md");
+    expect(written).not.toContain("sales/");
+    expect(written).not.toContain(".gitkeep");
+  });
+
+  it("seeds a blank nested CONTEXT.md and appends a folder structure section", async () => {
+    state.listObjectsResponses = [
+      "earnest-falcon-947/CONTEXT.md",
+      "earnest-falcon-947/skills/renewal-prep/SKILL.md",
+    ];
+    state.s3GetResponses.set(`${PREFIX}earnest-falcon-947/CONTEXT.md`, "");
+
+    await generateContextFolderStructure(
+      "agent-1",
+      "earnest-falcon-947/CONTEXT.md",
+    );
+
+    const written = lastWritten("earnest-falcon-947/CONTEXT.md") ?? "";
+    expect(written).toContain("# Earnest Falcon 947");
+    expect(written).toContain("## Folder Structure");
+    expect(written).toContain("earnest-falcon-947/");
+    expect(written).toContain("CONTEXT.md ← You are here");
+    expect(written).toContain("renewal-prep/");
+  });
+
+  it("renders root CONTEXT.md from the full workspace subtree", async () => {
+    state.listObjectsResponses = [
+      "CONTEXT.md",
+      "community/CONTEXT.md",
+      "community/docs/platforms.md",
+      "memory/lessons.md",
+    ];
+    state.s3GetResponses.set(`${PREFIX}CONTEXT.md`, "# Root Context\n");
+    state.s3GetResponses.set(`${PREFIX}community/CONTEXT.md`, "# Community\n");
+
+    await generateContextFolderStructure("agent-1", "CONTEXT.md");
+
+    const written = lastWritten("CONTEXT.md") ?? "";
+    expect(written).toContain("acme-daily-digest/");
+    expect(written).toContain("CONTEXT.md ← You are here");
+    expect(written).toContain("community/ ← Community");
+    expect(written).toContain("memory/ ← Long-lived agent memory");
+  });
+
+  it("appends a folder structure section when nonblank CONTEXT.md lacks one", async () => {
+    state.listObjectsResponses = [
+      "community/CONTEXT.md",
+      "community/docs/platforms.md",
+    ];
+    state.s3GetResponses.set(
+      `${PREFIX}community/CONTEXT.md`,
+      "# Community\n\n## What This Workspace Is\n\nExisting prose.\n",
+    );
+
+    await generateContextFolderStructure("agent-1", "community/CONTEXT.md");
+
+    const written = lastWritten("community/CONTEXT.md") ?? "";
+    expect(written).toContain("Existing prose.");
+    expect(written).toContain("---\n\n## Folder Structure");
+    expect(written).toContain("platforms.md");
+  });
+
+  it("rethrows non-not-found reads before writing a seeded CONTEXT.md", async () => {
+    state.listObjectsResponses = ["community/CONTEXT.md"];
+    const err = new Error("access denied");
+    err.name = "AccessDenied";
+    state.s3GetResponses.set(`${PREFIX}community/CONTEXT.md`, err);
+
+    await expect(
+      generateContextFolderStructure("agent-1", "community/CONTEXT.md"),
+    ).rejects.toThrow("access denied");
+    expect(lastWritten("community/CONTEXT.md")).toBeNull();
+  });
+
+  it("surfaces manifest regeneration failures after writing", async () => {
+    state.listObjectsResponses = ["community/CONTEXT.md"];
+    state.s3GetResponses.set(`${PREFIX}community/CONTEXT.md`, "# Community\n");
+    mockRegenerateManifest
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("manifest down"));
+
+    await expect(
+      generateContextFolderStructure("agent-1", "community/CONTEXT.md"),
+    ).rejects.toThrow("manifest down");
+    expect(lastWritten("community/CONTEXT.md")).toContain(
+      "CONTEXT.md ← You are here",
+    );
+  });
+
+  it("rejects non-CONTEXT.md paths", async () => {
+    await expect(
+      generateContextFolderStructure("agent-1", "community/README.md"),
+    ).rejects.toThrow("CONTEXT.md path");
   });
 });
 

@@ -674,6 +674,47 @@ export function WorkspaceEditor({
     ],
   );
 
+  const handleGenerateFolderStructure = useCallback(
+    async (path: string) => {
+      if (!path.endsWith("CONTEXT.md") || !("agentId" in stableTarget)) return;
+      beginMutation(path);
+      const isOpenTarget = openFileRef.current === path;
+      if (isOpenTarget) setLoadingContent(true);
+      try {
+        if (isOpenTarget && editValue !== content) {
+          await agentBuilderApi.putFile(stableTarget, path, editValue);
+          setContent(editValue);
+          setEditValue(editValue);
+        }
+        await agentBuilderApi.generateFolderStructure(
+          stableTarget.agentId,
+          path,
+        );
+        await fetchFiles({ showLoading: false });
+        if (openFileRef.current === path) {
+          await openWorkspaceFile(path);
+        }
+        toast.success("Generated folder structure.");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to generate folder structure:", err);
+        toast.error(`Generate folder structure failed: ${message}`);
+      } finally {
+        if (openFileRef.current === path) setLoadingContent(false);
+        endMutation(path);
+      }
+    },
+    [
+      beginMutation,
+      content,
+      editValue,
+      endMutation,
+      fetchFiles,
+      openWorkspaceFile,
+      stableTarget,
+    ],
+  );
+
   const handleConfirmDelete = (path: string) => {
     setConfirmingDeletePath(path);
   };
@@ -760,6 +801,11 @@ export function WorkspaceEditor({
                 onRename={startRename}
                 onRegenerateMap={
                   "agentId" in stableTarget ? handleRegenerateMap : undefined
+                }
+                onGenerateFolderStructure={
+                  "agentId" in stableTarget
+                    ? handleGenerateFolderStructure
+                    : undefined
                 }
                 inlineEdit={inlineEdit}
                 onInlineEditChange={setInlineEditValue}

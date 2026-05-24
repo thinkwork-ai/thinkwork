@@ -187,6 +187,7 @@ export interface FolderTreeProps {
   onDelete: (path: string, isFolder: boolean) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
   onRegenerateMap?: (path: string) => void;
+  onGenerateFolderStructure?: (path: string) => void;
   inlineEdit?: InlineEditState | null;
   onInlineEditChange?: (value: string) => void;
   onInlineEditCommit?: () => void;
@@ -454,6 +455,7 @@ function FolderTreeItem(
     onDelete,
     onRename,
     onRegenerateMap,
+    onGenerateFolderStructure,
     onCut,
     onPaste,
     onClearClipboard,
@@ -508,6 +510,7 @@ function FolderTreeItem(
                 onDelete={onDelete}
                 onRename={onRename}
                 onRegenerateMap={onRegenerateMap}
+                onGenerateFolderStructure={onGenerateFolderStructure}
                 onCut={onCut}
                 onPaste={onPaste}
                 onClearClipboard={onClearClipboard}
@@ -591,6 +594,8 @@ function FolderTreeItem(
   const updateAvailable = updateAvailableFor(node.path);
   const fileLabel = isRenaming ? <InlineNameInput {...props} /> : node.name;
   const canRegenerateMap = node.path === "AGENTS.md" && onRegenerateMap;
+  const canGenerateFolderStructure =
+    node.name === "CONTEXT.md" && onGenerateFolderStructure;
 
   const fileRow =
     updateAvailable && !isRenaming ? (
@@ -634,11 +639,20 @@ function FolderTreeItem(
     <ContextMenu>
       <ContextMenuTrigger asChild>{fileRow}</ContextMenuTrigger>
       <ContextMenuContent>
-        {canRegenerateMap ? (
+        {canRegenerateMap || canGenerateFolderStructure ? (
           <>
-            <ContextMenuItem onSelect={() => canRegenerateMap(node.path)}>
-              Regenerate Map
-            </ContextMenuItem>
+            {canRegenerateMap ? (
+              <ContextMenuItem onSelect={() => canRegenerateMap(node.path)}>
+                Regenerate Map
+              </ContextMenuItem>
+            ) : null}
+            {canGenerateFolderStructure ? (
+              <ContextMenuItem
+                onSelect={() => canGenerateFolderStructure(node.path)}
+              >
+                Generate Folder Structure
+              </ContextMenuItem>
+            ) : null}
             <ContextMenuSeparator />
           </>
         ) : null}

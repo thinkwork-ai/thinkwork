@@ -6,7 +6,7 @@
  * the bearer path is gone — every caller sends a Cognito ID token.
  *
  * Request shape (Unit 5):
- *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "normalize-map" | "update-identity-field",
+ *   { action: "get" | "list" | "put" | "delete" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
  *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
@@ -22,6 +22,7 @@
  *   list → { ok: true, files: Array<{ path, source, sha256, overridden }> }
  *   put  → { ok: true }
  *   delete → { ok: true }
+ *   generate-folder-structure → { ok: true }
  *   regenerate-map → { ok: true }
  *   normalize-map → { ok: true }
  *   errors → { ok: false, error }
@@ -53,6 +54,7 @@ import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth
 import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
 import {
   appendRoutingRowIfMissing,
+  generateContextFolderStructure,
   normalizeAgentsMd,
   regenerateAgentsMdDerivedSections,
 } from "./src/lib/workspace-map-generator.js";
@@ -434,6 +436,7 @@ const WRITE_ACTIONS = new Set([
   "move",
   "rename",
   "create-sub-agent",
+  "generate-folder-structure",
   "regenerate-map",
   "normalize-map",
   "update-identity-field",
@@ -2237,6 +2240,47 @@ async function handleRegenerateMap(
   return json(200, { ok: true });
 }
 
+async function handleGenerateFolderStructure(
+  deps: HandlerDeps,
+  path: string,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "agent") {
+    return json(400, {
+      ok: false,
+      error: "generate-folder-structure requires agentId",
+    });
+  }
+  if (deps.auth.authType === "apikey") {
+    if (!deps.auth.agentId || deps.auth.agentId !== target.agentId) {
+      return json(403, {
+        ok: false,
+        error:
+          "Service-auth callers must present x-agent-id matching the target agent",
+      });
+    }
+  }
+
+  let cleanPath: string;
+  try {
+    cleanPath = normalizeWorkspacePath(path);
+  } catch (err) {
+    return json(400, {
+      ok: false,
+      error: err instanceof Error ? err.message : "Invalid workspace path",
+    });
+  }
+  if (cleanPath.split("/").filter(Boolean).at(-1) !== "CONTEXT.md") {
+    return json(400, {
+      ok: false,
+      error: "generate-folder-structure requires a CONTEXT.md path",
+    });
+  }
+
+  await generateContextFolderStructure(target.agentId, cleanPath);
+  return json(200, { ok: true });
+}
+
 async function handleNormalizeMap(
   deps: HandlerDeps,
 ): Promise<APIGatewayProxyResult> {
@@ -2483,6 +2527,15 @@ export async function handler(
       }
       case "regenerate-map":
         return await handleRegenerateMap(deps);
+      case "generate-folder-structure": {
+        if (!body.path) {
+          return json(400, {
+            ok: false,
+            error: "path is required for generate-folder-structure",
+          });
+        }
+        return await handleGenerateFolderStructure(deps, body.path);
+      }
       case "normalize-map":
         return await handleNormalizeMap(deps);
       case "rematerialize":
