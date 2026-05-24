@@ -76,6 +76,17 @@ import {
   type McpServerConfig,
 } from "./mcp.js";
 import { createConnectMcpServer } from "./mcp-connect.js";
+import {
+  McpToolRegistry,
+  validateDirectTools,
+  type DirectToolsMismatch,
+} from "./mcp-registry.js";
+import { buildMcpProxyTool } from "./mcp-proxy.js";
+import {
+  readMcpJson,
+  McpJsonError,
+  type McpJsonConfig,
+} from "./runtime/mcp-json.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildHindsightTools } from "./tools/hindsight.js";
 import { buildMemoryTools } from "./tools/memory.js";
@@ -164,6 +175,19 @@ export interface InvocationResponse {
    * silently no-ops.
    */
   pi_retain?: PiRetainStatus;
+  /**
+   * Plan §006 U4 — pinning field for the MCP proxy substrate. True when
+   * the inert (or future live) `mcp` AgentTool was registered for this
+   * invocation. The post-deploy smoke asserts this field is a boolean so
+   * a regression that drops the field (e.g., a response-builder rewrite
+   * that forgets to surface it) fails the smoke even before U5 makes
+   * the proxy actually useful. The full transition path is:
+   *   - PR-1 (U3 + U4): field present, value tracks proxy registration
+   *   - PR-2 (U5):      value is true on every invocation with MCP configs,
+   *                     and a sibling `mcp_proxy_used: true` lands when the
+   *                     proxy's call mode was exercised at least once.
+   */
+  mcp_proxy_registered?: boolean;
   tools_called?: string[];
   tool_invocations?: ToolInvocationRecord[];
   tool_costs?: ToolCostRecord[];
@@ -367,6 +391,15 @@ export interface AssembledToolBundle {
   cleanup: Array<() => Promise<void>>;
   workspaceSkills: WorkspaceSkill[];
   handleStore: HandleStore;
+  /**
+   * Plan §006 U4 — true when the inert `mcp` proxy AgentTool was added to
+   * `tools` for this invocation. Surfaced onto the response payload as
+   * `mcp_proxy_registered` so the post-deploy smoke can pin the
+   * registration substrate. False when no MCP configs were present after
+   * URL validation (no proxy needed when there's nothing to gateway to —
+   * avoids polluting the agent's tool list when MCP is unused).
+   */
+  mcpProxyRegistered: boolean;
 }
 
 export interface AssembleToolsArgs {
@@ -394,6 +427,43 @@ export interface AssembleToolsArgs {
    * trusted-handler / MCP-connect / buildMcpTools triangle.
    */
   handleStore: HandleStore;
+  /**
+   * Plan §006 U4 — parsed mcp.json workspace config (directTools allowlist
+   * plus any future per-server fields). The trusted handler reads the
+   * file post-bootstrap; this argument is the parsed result. An empty
+   * `directTools` array means no boot-time allowlist validation runs
+   * and every MCP tool is reachable only through the proxy.
+   */
+  mcpJsonConfig: McpJsonConfig;
+  /**
+   * Plan §006 U4 — per-invocation registry the MCP build path populates
+   * with each (server, tool) pair. The proxy AgentTool reads from this
+   * registry for list/search/call. Always allocated by the caller —
+   * never module-level — so per-invocation isolation is preserved
+   * alongside the HandleStore.
+   */
+  mcpRegistry: McpToolRegistry;
+}
+
+/**
+ * Plan §006 U4 — thrown by `assembleTools` when an `mcp.json` directTools
+ * entry references a (server, tool) the live MCP registry did not surface
+ * after connect. The trusted handler catches this in its outer try/catch
+ * and surfaces a structured 500 response so the operator sees the
+ * mismatch in the agent's first turn instead of silent demotion.
+ */
+export class DirectToolsValidationError extends Error {
+  constructor(public readonly missing: DirectToolsMismatch[]) {
+    const summary = missing
+      .map((m) =>
+        m.reason === "server_not_configured"
+          ? `${m.server}/${m.tool} (server not configured)`
+          : `${m.server}/${m.tool} (server lists: [${m.availableTools.join(", ")}])`,
+      )
+      .join("; ");
+    super(`directTools_validation_failed: ${summary}`);
+    this.name = "DirectToolsValidationError";
+  }
 }
 
 /**
@@ -533,10 +603,67 @@ export async function assembleTools(
         error: err instanceof Error ? err.message : String(err),
       });
     },
+    // Plan §006 U4 — populate the per-invocation registry as part of the
+    // existing tools/list pass. No extra network round-trip.
+    registry: args.mcpRegistry,
   });
   tools.push(...mcpTools);
 
-  return { tools, cleanup, workspaceSkills: args.workspaceSkills, handleStore };
+  // Plan §006 U4 — boot-time validation of the directTools allowlist
+  // against the live registry. Hard-fail (throw → outer catch in
+  // handleInvocation drains cleanup + returns 500) so a typo or a
+  // renamed MCP tool surfaces in the agent's first turn instead of
+  // silently demoting the entry to proxy-only.
+  let mcpProxyRegistered = false;
+  if (validatedConfigs.length > 0) {
+    const directToolsResult = validateDirectTools(
+      args.mcpJsonConfig.directTools,
+      args.mcpRegistry,
+    );
+    if (!directToolsResult.ok) {
+      // Log a structured tenant-scoped event with a bounded shape so
+      // operators see the mismatch in CloudWatch without echoing the
+      // entire availableTools array into the log message (already on
+      // the error throw the agent sees).
+      logStructured({
+        level: "error",
+        event: "directtools_validation_failed",
+        tenantId: args.identity.tenantId,
+        userId: args.identity.userId,
+        missingCount: directToolsResult.missing.length,
+        missing: directToolsResult.missing.map((m) => ({
+          server: m.server,
+          tool: m.tool,
+          reason: m.reason,
+          availableToolCount: m.availableTools.length,
+        })),
+      });
+      throw new DirectToolsValidationError(directToolsResult.missing);
+    }
+
+    // Plan §006 U4 — register the inert proxy AgentTool. U5 swaps the
+    // execute body for the live list/search/call dispatcher. We only
+    // ship the proxy when MCP configs are present (validatedConfigs > 0):
+    // there's no reason for the model to see a `mcp` tool when there's
+    // nothing to gateway to, and gating here mitigates the inert-pattern
+    // model-context cost on agents without MCP wiring.
+    tools.push(
+      buildMcpProxyTool({
+        mode: "inert",
+        registry: args.mcpRegistry,
+        connectMcpServer: args.connectMcpServer,
+      }),
+    );
+    mcpProxyRegistered = true;
+  }
+
+  return {
+    tools,
+    cleanup,
+    workspaceSkills: args.workspaceSkills,
+    handleStore,
+    mcpProxyRegistered,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1240,6 +1367,35 @@ export async function handleInvocation(
 
   const workspaceSkills = await discoverSkills(env.workspaceDir);
 
+  // Plan §006 U4 — read mcp.json from the bootstrapped workspace. A
+  // malformed file aborts the invocation with a structured 500 (same
+  // path tool-assembly failures take) so the operator sees the parse
+  // error in the agent's first turn instead of silently disabling
+  // directTools validation.
+  let mcpJsonConfig: McpJsonConfig;
+  try {
+    mcpJsonConfig = await readMcpJson(env.workspaceDir);
+  } catch (err) {
+    if (err instanceof McpJsonError) {
+      logStructured({
+        level: "error",
+        event: "mcp_json_invalid",
+        tenantId: identity.tenantId,
+        agentSlug: identity.agentSlug,
+        error: err.message,
+      });
+      return {
+        statusCode: 500,
+        body: {
+          error: err.message,
+          runtime: "pi",
+        },
+      };
+    }
+    throw err;
+  }
+  const mcpRegistry = new McpToolRegistry();
+
   const agentCoreClient = deps.agentCoreClientFactory();
 
   // SessionStore — instantiate so failures surface here, BEFORE the agent
@@ -1308,6 +1464,8 @@ export async function handleInvocation(
       sessionStoreFactory,
       cleanup,
       handleStore,
+      mcpJsonConfig,
+      mcpRegistry,
     });
   } catch (err) {
     // U16 — assembleTools may have minted handles into `handleStore`
@@ -1556,6 +1714,10 @@ export async function handleInvocation(
     pi_retain: retainOutcome.error
       ? { retained: retainOutcome.retained, error: retainOutcome.error }
       : { retained: retainOutcome.retained },
+    // Plan §006 U4 — pin the proxy substrate. Always present as a boolean
+    // so the smoke can assert the field shape regardless of whether the
+    // current scenario carries MCP configs.
+    mcp_proxy_registered: bundle.mcpProxyRegistered,
     tools_called: runResult.toolsCalled,
     tool_invocations: runResult.toolInvocations,
     hindsight_usage: hindsightUsage,
