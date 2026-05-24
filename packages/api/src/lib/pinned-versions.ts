@@ -4,7 +4,7 @@
  * Called by createAgentFromTemplate (Unit 8) when a new agent is created,
  * and by the migration handler (Unit 10) when backfilling existing agents.
  *
- * For each pinned-class path (GUARDRAILS.md / PLATFORM.md / CAPABILITIES.md):
+ * For each pinned-class path (currently GUARDRAILS.md):
  *
  *   1. Resolve the current template-base bytes by walking
  *      `_catalog/{template}/workspace/` → `_catalog/defaults/workspace/`

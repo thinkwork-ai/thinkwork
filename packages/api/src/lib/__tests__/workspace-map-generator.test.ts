@@ -449,7 +449,7 @@ describe("normalizeAgentsMd", () => {
     const written = lastWrittenAgentsMd();
     expect(written).toContain("# AGENTS.md");
     expect(written).toContain("## Routing");
-    expect(written).toContain("## Naming conventions");
+    expect(written).toContain("## ID & Naming Conventions");
     expect(written).toContain("## Folder Structure");
     expect(written).toContain("memory/");
     expect(written).not.toContain("not markdown at all");
@@ -909,10 +909,7 @@ describe("generateContextFolderStructureForSpace", () => {
       `${SPACE_PREFIX}CONTEXT.md`,
       "# Sales — Context\n",
     );
-    state.s3GetResponses.set(
-      `${SPACE_PREFIX}memory/CONTEXT.md`,
-      "# Memory\n",
-    );
+    state.s3GetResponses.set(`${SPACE_PREFIX}memory/CONTEXT.md`, "# Memory\n");
 
     await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
 
@@ -990,9 +987,7 @@ describe("generateContextFolderStructureForSpace", () => {
 
     await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
 
-    expect(
-      s3Calls.puts.some((p) => p.key.endsWith("AGENTS.md")),
-    ).toBe(false);
+    expect(s3Calls.puts.some((p) => p.key.endsWith("AGENTS.md"))).toBe(false);
   });
 
   it("rejects non-CONTEXT.md paths", async () => {

@@ -4092,6 +4092,50 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     );
     expect(res.statusCode).toBe(200);
   });
+
+  it("PUT on retired PLATFORM.md does NOT require acceptTemplateUpdate", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "PLATFORM.md",
+          content: "override",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("PUT on retired CAPABILITIES.md does NOT require acceptTemplateUpdate", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "CAPABILITIES.md",
+          content: "override",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
 });
 
 // ─── 9. workspace skill marker derive wiring ────────────────────────────────
