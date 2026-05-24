@@ -1,13 +1,6 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import {
-  agentSkills,
-  and,
-  computers,
-  db,
-  eq,
-  ne,
-} from "../../utils.js";
+import { agentSkills, and, computers, db, eq, ne } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
 import { isBuiltinToolSlug } from "../../../lib/builtin-tool-slugs.js";
@@ -72,9 +65,7 @@ export async function disableSkill(
   if (!agentId) {
     // Disable is idempotent end-to-end. With no primary agent there is no
     // `agent_skills` row that could possibly be enabled, so the disable
-    // contract is already satisfied. Return true silently rather than
-    // mirror enableSkill's CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND error —
-    // enable can't proceed (nowhere to write), disable has nothing to do.
+    // contract is already satisfied.
     return true;
   }
 
@@ -82,10 +73,7 @@ export async function disableSkill(
     .update(agentSkills)
     .set({ enabled: false })
     .where(
-      and(
-        eq(agentSkills.agent_id, agentId),
-        eq(agentSkills.skill_id, skillId),
-      ),
+      and(eq(agentSkills.agent_id, agentId), eq(agentSkills.skill_id, skillId)),
     );
 
   await renderWorkspaceAfterCustomize("disableSkill", agentId, computer.id);
