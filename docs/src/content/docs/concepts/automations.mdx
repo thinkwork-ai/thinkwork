@@ -57,8 +57,6 @@ A routine is composed from a small vocabulary of recipes — `http_request`, `au
 
 `python` is the escape hatch for behavior no recipe covers. It runs in an AgentCore code-interpreter sandbox with an explicit env-var allowlist; the `routine-task-python` wrapper offloads stdout/stderr to S3 with a 4KB inline preview so a 10MB python step doesn't blow Step Functions' 256KB state-payload limit.
 
-See [Routines and Execution Model](/concepts/automations/routines-and-execution-model/) for the full recipe catalog, the chat-builder authoring flow, the publish path, and how step events become the run-detail graph.
-
 ## The run shape — single-turn
 
 ```
@@ -128,6 +126,5 @@ For agent-level failures inside a routine, the run-detail UI's step panel surfac
 ## Related pages
 
 - [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — the two entry points in detail
-- [Routines and Execution Model](/concepts/automations/routines-and-execution-model/) — recipes, ASL, the chat builder, and the run-detail surface
 - [Admin: Automations](/applications/admin/automations/) — the operator UI for routines, schedules, webhooks
 - [Architecture](/architecture/) — where EventBridge, Scheduler, and Step Functions fit in the deploy

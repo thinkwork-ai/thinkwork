@@ -59,21 +59,6 @@ export default defineConfig({
             },
             { label: "Spaces", slug: "concepts/spaces" },
             {
-              label: "Computers",
-              collapsed: true,
-              items: [
-                { label: "Overview", slug: "concepts/computers" },
-                {
-                  label: "App Artifact UI",
-                  slug: "concepts/computers/app-artifact-ui",
-                },
-                {
-                  label: "Runbooks",
-                  slug: "concepts/computers/runbooks",
-                },
-              ],
-            },
-            {
               label: "Agents",
               collapsed: true,
               items: [
@@ -191,10 +176,6 @@ export default defineConfig({
                   label: "Scheduled and Event-driven",
                   slug: "concepts/automations/scheduled-and-event-driven",
                 },
-                {
-                  label: "Routines and Execution Model",
-                  slug: "concepts/automations/routines-and-execution-model",
-                },
               ],
             },
           ],
@@ -287,7 +268,6 @@ export default defineConfig({
                 { label: "GraphQL Schema", slug: "api/graphql" },
                 { label: "Compiled Pages", slug: "api/compounding-memory" },
                 { label: "Company Brain Context", slug: "api/context-engine" },
-                { label: "Runbooks", slug: "reference/runbooks" },
               ],
             },
             {
