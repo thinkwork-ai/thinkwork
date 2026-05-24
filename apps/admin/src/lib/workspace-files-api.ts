@@ -38,6 +38,18 @@ export interface WorkspaceFileMeta {
   overridden: boolean;
 }
 
+export class WorkspaceFilesApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(input: { status: number; code?: string; message: string }) {
+    super(input.message);
+    this.name = "WorkspaceFilesApiError";
+    this.status = input.status;
+    this.code = input.code;
+  }
+}
+
 async function request(body: Record<string, unknown>): Promise<unknown> {
   const token = await getIdToken();
   if (!token) throw new Error("Not authenticated");
@@ -51,12 +63,15 @@ async function request(body: Record<string, unknown>): Promise<unknown> {
   });
   const data = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
+    code?: string;
     error?: string;
   };
   if (!res.ok || data.ok === false) {
-    throw new Error(
-      `Workspace API: ${res.status} ${data.error ?? res.statusText}`,
-    );
+    throw new WorkspaceFilesApiError({
+      status: res.status,
+      code: data.code,
+      message: `Workspace API: ${res.status} ${data.error ?? res.statusText}`,
+    });
   }
   return data;
 }
@@ -113,6 +128,27 @@ export async function createSubAgentWorkspaceFiles(
     slug,
     contextContent,
   });
+}
+
+export interface InstallSkillResult {
+  ok: true;
+  installed_paths: string[];
+  context_md_changed_path: "CONTEXT.md";
+  source_sha256: string;
+  deriveWarnings?: string[];
+}
+
+export async function installWorkspaceSkill(
+  target: Target,
+  slug: string,
+  wiringChoice: string,
+): Promise<InstallSkillResult> {
+  return (await request({
+    action: "install-skill",
+    ...target,
+    slug,
+    wiring_choice: wiringChoice,
+  })) as InstallSkillResult;
 }
 
 export async function regenerateWorkspaceMap(
