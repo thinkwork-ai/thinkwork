@@ -40,7 +40,8 @@ import {
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 
 const s3 = new S3Client({
-  region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+  region:
+    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
 });
 
 function getBucket(): string {
@@ -51,7 +52,7 @@ function getBucket(): string {
 // Types
 // ---------------------------------------------------------------------------
 
-interface SkillInfo {
+export interface SkillInfo {
   skillId: string;
   name: string;
   description: string | null;
@@ -64,7 +65,7 @@ interface SkillInfo {
   usedIn: string[];
 }
 
-interface KBInfo {
+export interface KBInfo {
   id: string;
   name: string;
   description: string;
@@ -72,7 +73,7 @@ interface KBInfo {
   usedIn: string[];
 }
 
-interface WorkflowInfo {
+export interface WorkflowInfo {
   catalogSlug: string;
   name: string;
   description: string;
@@ -86,6 +87,28 @@ interface WorkspaceSummary {
   model: string;
   skills: string[];
 }
+
+export type DerivedSectionName =
+  | "Folder Structure"
+  | "Skills & Tools"
+  | "Knowledge Bases"
+  | "Workflows";
+
+const DERIVED_SECTION_ORDER: DerivedSectionName[] = [
+  "Folder Structure",
+  "Skills & Tools",
+  "Knowledge Bases",
+  "Workflows",
+];
+
+const ROOT_ANNOTATIONS = new Map<string, string>([
+  ["AGENTS.md", "You are here (always loaded)"],
+  ["CONTEXT.md", "Task router"],
+  ["memory/", "Long-lived agent memory"],
+  ["skills/", "Workspace skills"],
+  ["review/", "Human review artifacts"],
+  ["events/", "Event log"],
+]);
 
 export interface RoutingRowInsert {
   task: string;
@@ -166,14 +189,20 @@ function routingTableContainsGoTo(markdown: string, goTo: string): boolean {
 
 async function readS3Text(bucket: string, key: string): Promise<string | null> {
   try {
-    const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const resp = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
     return (await resp.Body?.transformToString("utf-8")) ?? null;
   } catch {
     return null;
   }
 }
 
-async function writeS3Text(bucket: string, key: string, content: string): Promise<void> {
+async function writeS3Text(
+  bucket: string,
+  key: string,
+  content: string,
+): Promise<void> {
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -184,14 +213,11 @@ async function writeS3Text(bucket: string, key: string, content: string): Promis
   );
 }
 
-/**
- * Discover workspace folders by listing S3 objects that match {prefix}{slug}/CONTEXT.md.
- */
-async function discoverWorkspaceFolders(
+async function listWorkspaceObjectPaths(
   bucket: string,
   prefix: string,
 ): Promise<string[]> {
-  const slugs: string[] = [];
+  const paths: string[] = [];
   let continuationToken: string | undefined;
 
   do {
@@ -205,23 +231,220 @@ async function discoverWorkspaceFolders(
     for (const obj of result.Contents ?? []) {
       if (!obj.Key) continue;
       const rel = obj.Key.slice(prefix.length);
-      // Match: {slug}/CONTEXT.md (exactly one level deep)
-      const match = rel.match(/^([^/]+)\/CONTEXT\.md$/);
-      if (match) {
-        slugs.push(match[1]);
-      }
+      if (rel) paths.push(rel);
     }
-    continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+    continuationToken = result.IsTruncated
+      ? result.NextContinuationToken
+      : undefined;
   } while (continuationToken);
 
-  return slugs;
+  return paths.sort((a, b) => a.localeCompare(b));
+}
+
+function isHiddenPathSegment(segment: string): boolean {
+  return segment.startsWith(".");
+}
+
+function visiblePathForTree(
+  path: string,
+): { segments: string[]; folderOnly: boolean } | null {
+  const rawSegments = path.split("/").filter(Boolean);
+  if (rawSegments.length === 0) return null;
+
+  if (path.endsWith("/")) {
+    return rawSegments.some(isHiddenPathSegment)
+      ? null
+      : { segments: rawSegments, folderOnly: true };
+  }
+
+  const lastSegment = rawSegments[rawSegments.length - 1];
+  const parentSegments = rawSegments.slice(0, -1);
+  if (parentSegments.some(isHiddenPathSegment)) return null;
+  if (lastSegment && isHiddenPathSegment(lastSegment)) {
+    return parentSegments.length > 0
+      ? { segments: parentSegments, folderOnly: true }
+      : null;
+  }
+  return { segments: rawSegments, folderOnly: false };
+}
+
+interface TreeNode {
+  name: string;
+  kind: "directory" | "file";
+  children: Map<string, TreeNode>;
+}
+
+function createTreeNode(name: string, kind: "directory" | "file"): TreeNode {
+  return { name, kind, children: new Map() };
+}
+
+function addTreePath(root: TreeNode, path: string): void {
+  const visiblePath = visiblePathForTree(path);
+  if (!visiblePath) return;
+  const { segments, folderOnly } = visiblePath;
+
+  let current = root;
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index];
+    const isLast = index === segments.length - 1;
+    const kind = isLast && !folderOnly ? "file" : "directory";
+    const existing = current.children.get(segment);
+    if (existing) {
+      if (!isLast) existing.kind = "directory";
+      current = existing;
+      continue;
+    }
+    const node = createTreeNode(segment, kind);
+    current.children.set(segment, node);
+    current = node;
+  }
+}
+
+function sortedTreeChildren(node: TreeNode): TreeNode[] {
+  return [...node.children.values()].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function contextAnnotation(content: string): string | null {
+  const lines = content.split(/\r?\n/);
+  const h1 = lines
+    .find((line) => /^#\s+/.test(line))
+    ?.replace(/^#\s+/, "")
+    .trim();
+  if (
+    h1 &&
+    !["context", "workspace context", "context.md"].includes(h1.toLowerCase())
+  ) {
+    return h1;
+  }
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed === "---") continue;
+    return trimmed;
+  }
+  return h1 ?? null;
+}
+
+function annotationForTreePath(
+  path: string,
+  contextByFolder: Map<string, string>,
+): string | null {
+  const fixed = ROOT_ANNOTATIONS.get(path);
+  if (fixed) return fixed;
+  const context = contextByFolder.get(path);
+  return context ? contextAnnotation(context) : null;
+}
+
+function renderTreeLabel(
+  node: TreeNode,
+  path: string,
+  contextByFolder: Map<string, string>,
+): string {
+  const displayName = node.kind === "directory" ? `${node.name}/` : node.name;
+  const annotation = annotationForTreePath(
+    node.kind === "directory" ? `${path}/` : path,
+    contextByFolder,
+  );
+  return annotation ? `${displayName} ← ${annotation}` : displayName;
+}
+
+function renderWorkspaceTree(
+  agentSlug: string,
+  objectPaths: string[],
+  contextByFolder: Map<string, string>,
+): string {
+  const root = createTreeNode(agentSlug, "directory");
+  for (const path of objectPaths) {
+    addTreePath(root, path);
+  }
+
+  const lines = [`${agentSlug}/`];
+  function walk(node: TreeNode, prefix: string, pathPrefix: string): void {
+    const children = sortedTreeChildren(node);
+    children.forEach((child, index) => {
+      const isLast = index === children.length - 1;
+      const branch = isLast ? "└──" : "├──";
+      const childPath = pathPrefix ? `${pathPrefix}/${child.name}` : child.name;
+      lines.push(
+        `${prefix}${branch} ${renderTreeLabel(child, childPath, contextByFolder)}`,
+      );
+      if (child.kind === "directory") {
+        walk(child, `${prefix}${isLast ? "    " : "│   "}`, childPath);
+      }
+    });
+  }
+  walk(root, "", "");
+  return lines.join("\n");
+}
+
+export function replaceDerivedAgentsMdSections(
+  markdown: string,
+  sections: Record<DerivedSectionName, string>,
+): string {
+  let rendered = markdown;
+
+  for (const sectionName of DERIVED_SECTION_ORDER) {
+    const sectionRange = findSectionBodyRange(rendered, sectionName);
+    if (!sectionRange) continue;
+    rendered =
+      rendered.slice(0, sectionRange.start) +
+      sections[sectionName] +
+      rendered.slice(sectionRange.end);
+  }
+
+  for (const sectionName of DERIVED_SECTION_ORDER) {
+    if (findSectionBodyRange(rendered, sectionName)) continue;
+    const suffix = rendered.endsWith("\n") ? "" : "\n";
+    rendered = `${rendered}${suffix}\n---\n\n## ${sectionName}${sections[sectionName]}`;
+  }
+
+  return rendered;
+}
+
+function findSectionBodyRange(
+  markdown: string,
+  sectionName: DerivedSectionName,
+): { start: number; end: number } | null {
+  const headingPattern = new RegExp(
+    `(^|\\n)## ${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(?:\\r?\\n|$)`,
+    "g",
+  );
+  const match = headingPattern.exec(markdown);
+  if (!match) return null;
+
+  const headingStart = match.index + (match[1] === "\n" ? 1 : 0);
+  const bodyStart = headingPattern.lastIndex;
+  const linePattern = /[^\n]*(?:\n|$)/g;
+  linePattern.lastIndex = bodyStart;
+
+  let lineMatch: RegExpExecArray | null;
+  while ((lineMatch = linePattern.exec(markdown))) {
+    const lineStart = lineMatch.index;
+    if (lineStart >= markdown.length) break;
+    const line = lineMatch[0];
+    const trimmed = line.trim();
+    if (
+      lineStart > headingStart &&
+      (trimmed === "---" || line.startsWith("## "))
+    ) {
+      return { start: bodyStart, end: lineStart };
+    }
+    if (linePattern.lastIndex >= markdown.length) break;
+  }
+
+  return { start: bodyStart, end: markdown.length };
 }
 
 /**
  * Parse a workspace CONTEXT.md to extract summary info.
  * Lightweight parse — just extracts name, role, model, and skill references.
  */
-function parseWorkspaceContext(content: string, slug: string): WorkspaceSummary {
+function parseWorkspaceContext(
+  content: string,
+  slug: string,
+): WorkspaceSummary {
   // Name from H1
   const nameMatch = content.match(/^#\s+(.+)$/m);
   const name = nameMatch ? nameMatch[1].trim() : slug;
@@ -237,7 +460,9 @@ function parseWorkspaceContext(content: string, slug: string): WorkspaceSummary 
 
   // Model from "Config" section
   let model = "";
-  const configMatch = content.match(/^##\s+Config\s*\n([\s\S]*?)(?=\n##\s|\n---|\n$)/m);
+  const configMatch = content.match(
+    /^##\s+Config\s*\n([\s\S]*?)(?=\n##\s|\n---|\n$)/m,
+  );
   if (configMatch) {
     const modelMatch = configMatch[1].match(/model:\s*(.+)/);
     if (modelMatch) model = modelMatch[1].trim();
@@ -249,7 +474,9 @@ function parseWorkspaceContext(content: string, slug: string): WorkspaceSummary 
     /^##\s+Skills & Tools\s*\n([\s\S]*?)(?=\n##\s|\n---|\n$)/m,
   );
   if (skillsMatch) {
-    const tableLines = skillsMatch[1].split("\n").filter((l) => l.trim().startsWith("|"));
+    const tableLines = skillsMatch[1]
+      .split("\n")
+      .filter((l) => l.trim().startsWith("|"));
     // Skip header + separator
     for (const line of tableLines.slice(2)) {
       const cells = line
@@ -332,7 +559,9 @@ export async function regenerateWorkspaceMap(
       enabled: agentSkills.enabled,
     })
     .from(agentSkills)
-    .where(and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)))
+    .where(
+      and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)),
+    )
     .orderBy(asc(agentSkills.skill_id));
   const skillRows = skillRowsRaw.filter((s) => !isBuiltinToolSlug(s.skill_id));
 
@@ -344,9 +573,15 @@ export async function regenerateWorkspaceMap(
       description: knowledgeBases.description,
     })
     .from(agentKnowledgeBases)
-    .innerJoin(knowledgeBases, eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id))
+    .innerJoin(
+      knowledgeBases,
+      eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
+    )
     .where(
-      and(eq(agentKnowledgeBases.agent_id, agentId), eq(agentKnowledgeBases.enabled, true)),
+      and(
+        eq(agentKnowledgeBases.agent_id, agentId),
+        eq(agentKnowledgeBases.enabled, true),
+      ),
     )
     .orderBy(asc(knowledgeBases.id));
 
@@ -388,31 +623,56 @@ export async function regenerateWorkspaceMap(
       schedule: r.default_schedule ?? r.routine_schedule ?? null,
     }));
 
-  // 4. Discover workspace folders from S3
-  const workspaceSlugs = await discoverWorkspaceFolders(bucket, prefix);
+  // 4. Discover workspace files/folders from S3
+  const workspaceObjectPaths = await listWorkspaceObjectPaths(bucket, prefix);
+  const workspaceSlugs = workspaceObjectPaths
+    .map((rel) => rel.match(/^([^/.][^/]*)\/CONTEXT\.md$/)?.[1])
+    .filter((slug): slug is string => Boolean(slug));
+  const contextByFolder = new Map<string, string>();
   const workspaces: WorkspaceSummary[] = [];
 
   for (const ws of workspaceSlugs) {
-    const contextContent = await readS3Text(bucket, `${prefix}${ws}/CONTEXT.md`);
+    const contextContent = await readS3Text(
+      bucket,
+      `${prefix}${ws}/CONTEXT.md`,
+    );
     if (contextContent) {
+      contextByFolder.set(`${ws}/`, contextContent);
       workspaces.push(parseWorkspaceContext(contextContent, ws));
     }
   }
 
+  for (const rel of workspaceObjectPaths) {
+    if (!rel.endsWith("/CONTEXT.md") || /^([^/]+)\/CONTEXT\.md$/.test(rel)) {
+      continue;
+    }
+    const folder = rel.slice(0, -"CONTEXT.md".length);
+    const contextContent = await readS3Text(bucket, `${prefix}${rel}`);
+    if (contextContent) contextByFolder.set(folder, contextContent);
+  }
+
   // 5. Build skill catalog with "Used In" mapping + PRD-31 metadata from DB
-  const catalogLookup = new Map<string, {
-    name: string; description: string | null; mcp_server: string | null;
-    triggers: string[] | null;
-  }>();
+  const catalogLookup = new Map<
+    string,
+    {
+      name: string;
+      description: string | null;
+      mcp_server: string | null;
+      triggers: string[] | null;
+    }
+  >();
   try {
     const { skillCatalog } = await import("@thinkwork/database-pg/schema");
-    const catalogRows = await db.select({
-      slug: skillCatalog.slug,
-      name: skillCatalog.display_name,
-      description: skillCatalog.description,
-      mcp_server: skillCatalog.mcp_server,
-      triggers: skillCatalog.triggers,
-    }).from(skillCatalog).execute();
+    const catalogRows = await db
+      .select({
+        slug: skillCatalog.slug,
+        name: skillCatalog.display_name,
+        description: skillCatalog.description,
+        mcp_server: skillCatalog.mcp_server,
+        triggers: skillCatalog.triggers,
+      })
+      .from(skillCatalog)
+      .execute();
     for (const row of catalogRows) {
       catalogLookup.set(row.slug, row);
     }
@@ -437,12 +697,15 @@ export async function regenerateWorkspaceMap(
     const catalog = catalogLookup.get(s.skill_id);
     return {
       skillId: s.skill_id,
-      name: catalog?.name || s.skill_id
-        .split("-")
-        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" "),
+      name:
+        catalog?.name ||
+        s.skill_id
+          .split("-")
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" "),
       description: catalog?.description || "",
-      mcpServer: catalog?.mcp_server || (config.mcpServer as string) || undefined,
+      mcpServer:
+        catalog?.mcp_server || (config.mcpServer as string) || undefined,
       triggers: catalog?.triggers || undefined,
       usedIn,
     };
@@ -471,7 +734,8 @@ export async function regenerateWorkspaceMap(
     skillInfos,
     kbInfos,
     workflowInfos,
-    workspaces,
+    workspaceObjectPaths,
+    contextByFolder,
   );
 
   // 8. Render CONTEXT.md
@@ -513,7 +777,9 @@ export async function regenerateWorkspaceMap(
   } catch {
     // Manifest regeneration is also available in workspace-files.ts Lambda
     // If import fails (different bundle), it will be regenerated on next workspace write
-    console.warn(`[workspace-map] Could not regenerate manifest inline, will sync on next write`);
+    console.warn(
+      `[workspace-map] Could not regenerate manifest inline, will sync on next write`,
+    );
   }
 }
 
@@ -527,37 +793,66 @@ function renderAgentsMap(
   skills: SkillInfo[],
   kbs: KBInfo[],
   workflowList: WorkflowInfo[],
-  workspaces: WorkspaceSummary[],
+  workspaceObjectPaths: string[],
+  contextByFolder: Map<string, string>,
 ): string {
   const lines: string[] = [];
 
   lines.push(`# ${agentName} — Workspace Map`);
-  lines.push("");
-  lines.push("## Folder Structure");
-  lines.push("");
-  lines.push("```");
-  lines.push(`${agentSlug}/`);
-  lines.push("├── AGENTS.md                    ← You are here (always loaded)");
-  lines.push("├── CONTEXT.md                   ← Task router");
-  lines.push("├── SOUL.md, IDENTITY.md, USER.md");
+  lines.push(
+    renderFolderStructureSection(
+      agentSlug,
+      workspaceObjectPaths,
+      contextByFolder,
+    ),
+  );
+  lines.push(renderSkillsSection(skills));
+  lines.push(renderKnowledgeBasesSection(kbs));
+  lines.push(renderWorkflowsSection(workflowList));
 
-  for (let i = 0; i < workspaces.length; i++) {
-    const ws = workspaces[i];
-    const isLast = i === workspaces.length - 1;
-    const branch = isLast ? "└──" : "├──";
-    lines.push(`${branch} ${ws.slug}/`);
-    lines.push(`${isLast ? "    " : "│   "}├── CONTEXT.md`);
-    lines.push(`${isLast ? "    " : "│   "}└── docs/`);
-  }
-  lines.push("```");
-  lines.push("");
+  return lines.join("\n");
+}
 
-  // Skills & Tools
-  lines.push("## Skills & Tools");
+function renderFolderStructureSection(
+  agentSlug: string,
+  workspaceObjectPaths: string[],
+  contextByFolder: Map<string, string>,
+): string {
+  return `\n## Folder Structure${renderFolderStructureBody(
+    agentSlug,
+    workspaceObjectPaths,
+    contextByFolder,
+  )}`;
+}
+
+function renderFolderStructureBody(
+  agentSlug: string,
+  workspaceObjectPaths: string[],
+  contextByFolder: Map<string, string>,
+): string {
+  return `\n\`\`\`\n${renderWorkspaceTree(
+    agentSlug,
+    workspaceObjectPaths,
+    contextByFolder,
+  )}\n\`\`\`\n`;
+}
+
+function renderSkillsSection(skills: SkillInfo[]): string {
+  return `\n## Skills & Tools${renderSkillsBody(skills)}`;
+}
+
+function renderSkillsBody(skills: SkillInfo[]): string {
+  const lines: string[] = [];
+
   lines.push("");
-  lines.push("**IMPORTANT**: Tools like `create_sub_thread`, `search_users`, `schedule_followup`, `list_sub_threads` etc. are registered directly on you. Always call these tools directly — do NOT delegate to another agent when you already have the required tool.");
   lines.push("");
-  lines.push("Use the `Skill` meta-tool with a skill name to invoke a skill; nested skills are supported up to the plan's depth budget.");
+  lines.push(
+    "**IMPORTANT**: Tools like `create_sub_thread`, `search_users`, `schedule_followup`, `list_sub_threads` etc. are registered directly on you. Always call these tools directly — do NOT delegate to another agent when you already have the required tool.",
+  );
+  lines.push("");
+  lines.push(
+    "Use the `Skill` meta-tool with a skill name to invoke a skill; nested skills are supported up to the plan's depth budget.",
+  );
   lines.push("");
   if (skills.length > 0) {
     lines.push("| Skill | Description | Triggers |");
@@ -573,11 +868,19 @@ function renderAgentsMap(
     lines.push("No skills assigned.");
   }
   lines.push("");
+  return lines.join("\n");
+}
 
-  // Knowledge Bases
+function renderKnowledgeBasesSection(kbs: KBInfo[]): string {
+  return `\n## Knowledge Bases${renderKnowledgeBasesBody(kbs)}`;
+}
+
+function renderKnowledgeBasesBody(kbs: KBInfo[]): string {
+  const lines: string[] = [];
+
+  lines.push("");
+  lines.push("");
   if (kbs.length > 0) {
-    lines.push("## Knowledge Bases");
-    lines.push("");
     lines.push("| KB | Description | Used In |");
     lines.push("|----|-------------|---------|");
     for (const kb of kbs) {
@@ -588,11 +891,21 @@ function renderAgentsMap(
         `| ${escTableCell(kb.name)} | ${escTableCell(kb.description)} | ${usedIn} |`,
       );
     }
-    lines.push("");
+  } else {
+    lines.push("No knowledge bases assigned.");
   }
+  lines.push("");
+  return lines.join("\n");
+}
 
-  // Workflows (Customize-page-driven; agent-keyed)
-  lines.push("## Workflows");
+function renderWorkflowsSection(workflowList: WorkflowInfo[]): string {
+  return `\n## Workflows${renderWorkflowsBody(workflowList)}`;
+}
+
+function renderWorkflowsBody(workflowList: WorkflowInfo[]): string {
+  const lines: string[] = [];
+
+  lines.push("");
   lines.push("");
   if (workflowList.length > 0) {
     lines.push("| Workflow | Description | Schedule |");
@@ -610,7 +923,31 @@ function renderAgentsMap(
   return lines.join("\n");
 }
 
-function renderContextRouter(agentName: string, workspaces: WorkspaceSummary[]): string {
+export function renderDerivedAgentsMdSections(args: {
+  agentSlug: string;
+  workspaceObjectPaths: string[];
+  contextByFolder?: Map<string, string>;
+  skills: SkillInfo[];
+  kbs: KBInfo[];
+  workflows: WorkflowInfo[];
+}): Record<DerivedSectionName, string> {
+  const contextByFolder = args.contextByFolder ?? new Map<string, string>();
+  return {
+    "Folder Structure": renderFolderStructureBody(
+      args.agentSlug,
+      args.workspaceObjectPaths,
+      contextByFolder,
+    ),
+    "Skills & Tools": renderSkillsBody(args.skills),
+    "Knowledge Bases": renderKnowledgeBasesBody(args.kbs),
+    Workflows: renderWorkflowsBody(args.workflows),
+  };
+}
+
+function renderContextRouter(
+  agentName: string,
+  workspaces: WorkspaceSummary[],
+): string {
   const lines: string[] = [];
 
   lines.push(`# ${agentName} — Context`);
