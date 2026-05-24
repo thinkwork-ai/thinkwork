@@ -115,6 +115,12 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/handleRegenerateMap/);
     expect(editorSource).toMatch(/agentBuilderApi\.regenerateMap/);
     expect(editorSource).toMatch(/onRegenerateMap=/);
+    expect(editorSource).toMatch(/handleGenerateFolderStructure/);
+    expect(editorSource).toMatch(/agentBuilderApi\.generateFolderStructure/);
+    expect(editorSource).toMatch(/onGenerateFolderStructure=/);
+    expect(editorSource).toMatch(
+      /if \(isOpenTarget\) setLoadingContent\(true\)/,
+    );
     expect(editorSource).toMatch(/renamePath/);
     expect(editorSource).toMatch(/replacePathPrefix/);
     expect(editorSource).toMatch(/mode: "new-folder"/);

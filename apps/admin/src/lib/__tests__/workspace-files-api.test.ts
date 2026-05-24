@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  generateFolderStructure,
   moveWorkspaceFile,
   normalizeWorkspaceMap,
   regenerateWorkspaceMap,
@@ -140,6 +141,21 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
     expect(JSON.parse(init.body as string)).toEqual({
       action: "regenerate-map",
       agentId: "agent-abc",
+    });
+  });
+
+  it("posts action=generate-folder-structure with the selected CONTEXT.md path", async () => {
+    mockOk({});
+
+    await generateFolderStructure("agent-abc", "community/CONTEXT.md");
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "generate-folder-structure",
+      agentId: "agent-abc",
+      path: "community/CONTEXT.md",
     });
   });
 });

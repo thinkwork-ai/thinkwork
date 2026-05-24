@@ -185,11 +185,16 @@ const { normalizeAgentsMdMock } = vi.hoisted(() => ({
   normalizeAgentsMdMock: vi.fn(),
 }));
 
+const { generateContextFolderStructureMock } = vi.hoisted(() => ({
+  generateContextFolderStructureMock: vi.fn(),
+}));
+
 vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../lib/workspace-map-generator.js")>();
   return {
     ...actual,
+    generateContextFolderStructure: generateContextFolderStructureMock,
     normalizeAgentsMd: normalizeAgentsMdMock,
     regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
   };
@@ -370,6 +375,8 @@ beforeEach(() => {
   refreshAgentsMdSectionsMock.mockResolvedValue(undefined);
   normalizeAgentsMdMock.mockReset();
   normalizeAgentsMdMock.mockResolvedValue(undefined);
+  generateContextFolderStructureMock.mockReset();
+  generateContextFolderStructureMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -535,6 +542,95 @@ describe("agent AGENTS.md derived section refresh", () => {
     expect(normalizeAgentsMdMock).toHaveBeenCalledTimes(1);
   });
 
+  it("generates folder structure only for agent CONTEXT.md targets", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const agentRes = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          agentId: AGENT_ID,
+          path: "community/CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(agentRes.statusCode).toBe(200);
+    expect(generateContextFolderStructureMock).toHaveBeenCalledTimes(1);
+    expect(generateContextFolderStructureMock).toHaveBeenCalledWith(
+      AGENT_ID,
+      "community/CONTEXT.md",
+    );
+
+    queueAdminAgentTargetRows();
+    const nonContextRes = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          agentId: AGENT_ID,
+          path: "community/README.md",
+        }),
+      ),
+    );
+    expect(nonContextRes.statusCode).toBe(400);
+    expect(nonContextRes.body.error).toMatch(/CONTEXT\.md/);
+    expect(generateContextFolderStructureMock).toHaveBeenCalledTimes(1);
+
+    queueAdminTemplateTargetRows();
+    const templateRes = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          templateId: TEMPLATE_ID,
+          path: "CONTEXT.md",
+        }),
+      ),
+    );
+    expect(templateRes.statusCode).toBe(400);
+    expect(templateRes.body.error).toMatch(/requires agentId/);
+    expect(generateContextFolderStructureMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects unsafe generate-folder-structure paths before invoking the generator", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          agentId: AGENT_ID,
+          path: "../CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(generateContextFolderStructureMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces generate-folder-structure failures", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    generateContextFolderStructureMock.mockRejectedValueOnce(
+      new Error("manifest down"),
+    );
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          agentId: AGENT_ID,
+          path: "CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body.error).toMatch(/manifest down/);
+  });
+
   it("rematerialize refreshes AGENTS.md sections after overwriting template/default files", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminAgentTargetRows();
@@ -695,6 +791,57 @@ describe("apikey auth (Strands container path, Unit 7)", () => {
       await handler(event({ action: "list", agentId: AGENT_ID })),
     );
     expect(res.statusCode).toBe(401);
+  });
+
+  it("requires apikey generate-folder-structure callers to match x-agent-id", async () => {
+    authMockImpl.mockResolvedValue({
+      principalId: null,
+      tenantId: TENANT_A,
+      email: null,
+      authType: "apikey",
+      agentId: "different-agent",
+    });
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+
+    const mismatch = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          agentId: AGENT_ID,
+          path: "CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(mismatch.statusCode).toBe(403);
+    expect(generateContextFolderStructureMock).not.toHaveBeenCalled();
+
+    authMockImpl.mockResolvedValue({
+      principalId: null,
+      tenantId: TENANT_A,
+      email: null,
+      authType: "apikey",
+      agentId: AGENT_ID,
+    });
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+
+    const match = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          agentId: AGENT_ID,
+          path: "CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(match.statusCode).toBe(200);
+    expect(generateContextFolderStructureMock).toHaveBeenCalledWith(
+      AGENT_ID,
+      "CONTEXT.md",
+    );
   });
 });
 
@@ -2911,6 +3058,26 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
 
     const res = await parse(
       await handler(event({ action: "regenerate-map", agentId: AGENT_ID })),
+    );
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("generate-folder-structure by a member-role caller → 403", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          agentId: AGENT_ID,
+          path: "CONTEXT.md",
+        }),
+      ),
     );
 
     expect(res.statusCode).toBe(403);
