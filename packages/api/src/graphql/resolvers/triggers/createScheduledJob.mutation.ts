@@ -81,7 +81,6 @@ export const createScheduledJob = async (
       space_id: i.spaceId || null,
       computer_id: computerId,
       routine_id: i.routineId || null,
-      team_id: i.teamId || null,
       name: i.name,
       description: i.description || null,
       prompt: i.prompt || null,

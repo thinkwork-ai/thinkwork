@@ -3,7 +3,6 @@ import {
   tenantAgentQueries,
 } from "./tenant-agent/index.js";
 import { coreQueries } from "./core/index.js";
-import { teamQueries } from "./teams/index.js";
 import { threadQueries } from "./threads/index.js";
 import { inboxQueries } from "./inbox/index.js";
 import { triggerQueries } from "./triggers/index.js";
@@ -22,7 +21,6 @@ import {
   messageMentionTypeResolvers,
   messageTypeResolvers,
 } from "./messages/types.js";
-import { teamMutations } from "./teams/index.js";
 import { triggerMutations } from "./triggers/index.js";
 import { threadMutations } from "./threads/index.js";
 import { inboxMutations } from "./inbox/index.js";
@@ -76,7 +74,6 @@ export const queryResolvers: Record<string, any> = {
   _empty: () => null,
   ...tenantAgentQueries,
   ...coreQueries,
-  ...teamQueries,
   ...threadQueries,
   ...inboxQueries,
   ...triggerQueries,
@@ -112,7 +109,6 @@ export const mutationResolvers: Record<string, any> = {
   ...tenantAgentMutations,
   ...coreMutations,
   ...messageMutations,
-  ...teamMutations,
   ...triggerMutations,
   ...threadMutations,
   ...inboxMutations,

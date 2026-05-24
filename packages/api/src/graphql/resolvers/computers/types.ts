@@ -4,7 +4,6 @@ import {
   users,
   agents,
   computers,
-  teams,
   agentToCamel,
   computerToCamel,
   snakeToCamel,
@@ -46,12 +45,6 @@ export const computerAssignmentTypeResolvers = {
     const userId = parent.userId ?? parent.user_id;
     if (!userId) return null;
     const [row] = await db.select().from(users).where(eq(users.id, userId));
-    return row ? snakeToCamel(row) : null;
-  },
-  team: async (parent: any) => {
-    const teamId = parent.teamId ?? parent.team_id;
-    if (!teamId) return null;
-    const [row] = await db.select().from(teams).where(eq(teams.id, teamId));
     return row ? snakeToCamel(row) : null;
   },
   assignedBy: async (parent: any) => {

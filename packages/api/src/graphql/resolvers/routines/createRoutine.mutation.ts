@@ -202,7 +202,6 @@ export async function createRoutine(
       .values({
         id: routineId,
         tenant_id: i.tenantId,
-        team_id: i.teamId,
         agent_id: i.agentId,
         owning_agent_id,
         visibility,

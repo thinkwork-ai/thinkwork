@@ -8,7 +8,6 @@
 export * from "./core";
 export * from "./agents";
 export * from "./messages";
-export * from "./teams";
 export * from "./routines";
 export * from "./routine-executions";
 export * from "./routine-step-events";

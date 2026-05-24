@@ -49,8 +49,6 @@ enum RoutineVisibility {
 type Routine {
   id: ID!
   tenantId: ID!
-  teamId: ID
-  team: Team
   agentId: ID
   agent: Agent
   name: String!
@@ -296,7 +294,6 @@ type TenantToolInventory {
 # routine's triggers, not stored on the routines row.
 input CreateRoutineInput {
   tenantId: ID!
-  teamId: ID
   agentId: ID
   # Visibility model (schema follow-up bundle). Defaults to agent_private
   # when owningAgentId is set, tenant_shared otherwise. The MCP
@@ -343,7 +340,6 @@ input UpdateRoutineInput {
   type: String
   status: String
   schedule: String
-  teamId: ID
   agentId: ID
 }
 
@@ -411,7 +407,6 @@ input DecideRoutineApprovalInput {
 extend type Query {
   routines(
     tenantId: ID!
-    teamId: ID
     agentId: ID
     status: RoutineStatus
   ): [Routine!]!

@@ -25,12 +25,11 @@ import { registerThreadCommand } from "./commands/thread.js";
 import { registerMessageCommand } from "./commands/message.js";
 import { registerLabelCommand } from "./commands/label.js";
 import { registerInboxCommand } from "./commands/inbox.js";
-// Phase-2 (agents / templates / tenancy / teams / kb).
+// Phase-2 (agents / templates / tenancy / kb).
 import { registerAgentCommand } from "./commands/agent.js";
 import { registerComputerCommand } from "./commands/computer.js";
 import { registerTenantCommand } from "./commands/tenant.js";
 import { registerMemberCommand } from "./commands/member.js";
-import { registerTeamCommand } from "./commands/team.js";
 import { registerKbCommand } from "./commands/kb.js";
 // Phase-3 (automation / integrations).
 import { registerRoutineCommand } from "./commands/routine.js";
@@ -123,7 +122,6 @@ registerAgentCommand(program);
 registerComputerCommand(program);
 registerTenantCommand(program);
 registerMemberCommand(program);
-registerTeamCommand(program);
 registerKbCommand(program);
 
 // Phase-3 stubs

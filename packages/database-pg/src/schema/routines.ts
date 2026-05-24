@@ -25,7 +25,6 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
-import { teams } from "./teams";
 
 // ---------------------------------------------------------------------------
 // routines — routine definitions (code/config stays, scheduling moved to triggers)
@@ -40,7 +39,6 @@ export const routines = pgTable(
 		tenant_id: uuid("tenant_id")
 			.references(() => tenants.id)
 			.notNull(),
-		team_id: uuid("team_id").references(() => teams.id),
 		agent_id: uuid("agent_id").references(() => agents.id),
 		name: text("name").notNull(),
 		description: text("description"),
@@ -107,10 +105,6 @@ export const routinesRelations = relations(routines, ({ one }) => ({
 	tenant: one(tenants, {
 		fields: [routines.tenant_id],
 		references: [tenants.id],
-	}),
-	team: one(teams, {
-		fields: [routines.team_id],
-		references: [teams.id],
 	}),
 	agent: one(agents, {
 		fields: [routines.agent_id],

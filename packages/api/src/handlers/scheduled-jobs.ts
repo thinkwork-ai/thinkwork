@@ -515,7 +515,6 @@ async function createScheduledJob(
       space_id: spaceId,
       computer_id: normalizedComputerId,
       routine_id: (body.routine_id as string) || null,
-      team_id: (body.team_id as string) || null,
       name: body.name as string,
       description: (body.description as string) || null,
       prompt: (body.prompt as string) || null,

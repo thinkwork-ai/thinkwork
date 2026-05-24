@@ -8,7 +8,6 @@ type ScheduledJob {
   spaceId: ID
   computerId: ID
   routineId: ID
-  teamId: ID
   name: String!
   description: String
   prompt: String
@@ -33,7 +32,6 @@ input CreateScheduledJobInput {
   spaceId: ID
   computerId: ID
   routineId: ID
-  teamId: ID
   name: String!
   description: String
   prompt: String

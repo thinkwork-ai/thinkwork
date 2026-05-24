@@ -32,7 +32,6 @@ export const costEvents = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		agent_id: uuid("agent_id").references(() => agents.id),
-		team_id: uuid("team_id"),
 		thread_id: uuid("thread_id"),
 		request_id: text("request_id").notNull(),
 		event_type: text("event_type").notNull(), // 'llm' | 'agentcore_compute'

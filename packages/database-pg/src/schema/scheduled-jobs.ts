@@ -27,7 +27,6 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
 import { computers } from "./computers";
-import { teams } from "./teams";
 import { routines } from "./routines";
 import { webhooks } from "./webhooks";
 import { spaces } from "./spaces";
@@ -50,7 +49,6 @@ export const scheduledJobs = pgTable(
     space_id: uuid("space_id").references(() => spaces.id),
     computer_id: uuid("computer_id").references(() => computers.id),
     routine_id: uuid("routine_id").references(() => routines.id),
-    team_id: uuid("team_id").references(() => teams.id),
     name: text("name").notNull(),
     description: text("description"),
     prompt: text("prompt"), // null for heartbeats; set for reminders/scheduled
@@ -223,10 +221,6 @@ export const scheduledJobsRelations = relations(
     routine: one(routines, {
       fields: [scheduledJobs.routine_id],
       references: [routines.id],
-    }),
-    team: one(teams, {
-      fields: [scheduledJobs.team_id],
-      references: [teams.id],
     }),
     runs: many(threadTurns),
   }),
