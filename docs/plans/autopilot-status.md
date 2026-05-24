@@ -20,7 +20,7 @@ Target branch: `main`
 - Active worktree: `.Codex/worktrees/folder-agent-defaults-substrate`
 - Started: 2026-05-24
 - Latest merged PR: [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664)
-- Active PR: pending
+- Active PR: [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667)
 - CI: PR 1 passed; PR 2 pending
 
 ### Active Unit Notes
@@ -33,10 +33,10 @@ Target branch: `main`
 
 ### Progress Log
 
-| Date       | Unit     | Branch                                  | PR                                                           | Status       | Verification                                                                                                                                                                                  | Notes                                                           |
-| ---------- | -------- | --------------------------------------- | ------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| 2026-05-24 | U1/U2    | `codex/folder-agent-preflight`          | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | Merged       | Required CI passed: CLA, lint, test, typecheck, and verify.                                                                                                                                   | Added supersession callouts and pre-retirement consumer survey. |
-| 2026-05-24 | U3/U4/U5 | `codex/folder-agent-defaults-substrate` | Pending                                                      | Ready for PR | `pnpm install`; workspace-defaults test/build; focused API pin/bootstrap/workspace-files tests; API typecheck; repo typecheck/lint; touched-file Prettier; `git diff --check` passed locally. | Consolidating root contracts into AGENTS.md substrate.          |
+| Date       | Unit     | Branch                                  | PR                                                           | Status     | Verification                                                                                                                                                                                  | Notes                                                           |
+| ---------- | -------- | --------------------------------------- | ------------------------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| 2026-05-24 | U1/U2    | `codex/folder-agent-preflight`          | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | Merged     | Required CI passed: CLA, lint, test, typecheck, and verify.                                                                                                                                   | Added supersession callouts and pre-retirement consumer survey. |
+| 2026-05-24 | U3/U4/U5 | `codex/folder-agent-defaults-substrate` | [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667) | CI pending | `pnpm install`; workspace-defaults test/build; focused API pin/bootstrap/workspace-files tests; API typecheck; repo typecheck/lint; touched-file Prettier; `git diff --check` passed locally. | Consolidating root contracts into AGENTS.md substrate.          |
 
 ### CI Failures
 
