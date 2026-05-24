@@ -12,8 +12,8 @@ The runtime container's `/app` flattens both `container-sources/*.py` and the
 shared `packages/agentcore/agent-container/*.py` modules side-by-side (see
 ``_boot_assert.EXPECTED_CONTAINER_SOURCES`` and ``EXPECTED_SHARED``). Tests have
 to mirror that layout so a Strands-side module that imports a shared module
-(e.g. ``delegate_to_workspace_tool`` importing ``agents_md_parser``) resolves
-the same way under pytest as it does in the container.
+(e.g. ``write_memory_tool`` importing ``agents_md_parser``) resolves the same
+way under pytest as it does in the container.
 """
 
 from __future__ import annotations

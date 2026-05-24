@@ -25,8 +25,10 @@ keeps the same ``{path, content, sha256}`` shape the resolver originally
 expected from the read-time composer. Catalog manifest is whatever the
 runtime already has in memory.
 
-``delegate_to_workspace`` is the only production caller and feeds it
-the parent's local-disk walk.
+Production callers of the path-addressed resolver are no longer wired
+(the prior path-addressed delegation tool was retired). The module
+remains imported by ``write_memory_tool`` for its ``MAX_FOLDER_DEPTH``
+and ``RESERVED_FOLDER_NAMES`` constants.
 
 Reserved-folder names (``memory``, ``skills``) at any depth in
 ``folder_path`` are rejected up front: they are never sub-agents, so a
@@ -58,9 +60,9 @@ logger = logging.getLogger(__name__)
 RESERVED_FOLDER_NAMES: frozenset[str] = frozenset({"memory", "skills"})
 
 # Maximum sub-agent recursion / folder depth — Plan §008 Key Decision (line 155):
-# "Recursion depth cap = 5 with soft warn at 4". Single source of truth shared by
-# `delegate_to_workspace_tool.py` (delegation depth) and `write_memory_tool.py`
-# (memory-path folder-prefix depth) so a future cap change is single-file.
+# "Recursion depth cap = 5 with soft warn at 4". Currently consumed by
+# `write_memory_tool.py` (memory-path folder-prefix depth). Kept as a shared
+# constant so any future tool needing the same cap reads from one place.
 MAX_FOLDER_DEPTH: int = 5
 
 
@@ -266,11 +268,11 @@ def resolve_skill(
 ) -> ResolvedSkill:
     """Resolve ``slug`` for an agent rooted at ``folder_path``.
 
-    ``composed_tree`` is the local /tmp/workspace walk produced by
-    ``delegate_to_workspace_tool._read_local_workspace`` — a list of
-    ``{path, content, sha256}`` records. ``platform_catalog_manifest``
-    is the in-memory map the dispatcher already maintains; pass ``None``
-    when the caller wants to test local-only resolution.
+    ``composed_tree`` is a sequence of ``{path, content, sha256}`` records
+    representing the local /tmp/workspace walk for the agent.
+    ``platform_catalog_manifest`` is the in-memory map the dispatcher
+    already maintains; pass ``None`` when the caller wants to test
+    local-only resolution.
 
     Raises ``SkillNotResolvable`` if the slug matches nowhere.
     Raises ``ValueError`` if ``slug`` or ``folder_path`` are
