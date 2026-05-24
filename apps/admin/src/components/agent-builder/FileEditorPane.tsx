@@ -1,7 +1,7 @@
 import CodeMirror from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { EditorView } from "@codemirror/view";
-import { File, Loader2, Trash2 } from "lucide-react";
+import { File, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { languageForFile } from "@/lib/codemirror-language";
 
@@ -11,14 +11,9 @@ export interface FileEditorPaneProps {
   value: string;
   loading: boolean;
   saving: boolean;
-  deleting: boolean;
-  confirmingDelete: boolean;
   onChange: (value: string) => void;
   onSave: () => void;
   onDiscard: () => void;
-  onDelete: () => void;
-  onConfirmDelete: () => void;
-  onCancelDeleteConfirm: () => void;
 }
 
 export function FileEditorPane({
@@ -27,14 +22,9 @@ export function FileEditorPane({
   value,
   loading,
   saving,
-  deleting,
-  confirmingDelete,
   onChange,
   onSave,
   onDiscard,
-  onDelete,
-  onConfirmDelete,
-  onCancelDeleteConfirm,
 }: FileEditorPaneProps) {
   if (!openFile) {
     return (
@@ -45,6 +35,7 @@ export function FileEditorPane({
   }
 
   const fileName = openFile.split("/").pop() ?? openFile;
+  const hasPendingChanges = value !== content;
 
   return (
     <>
@@ -59,14 +50,14 @@ export function FileEditorPane({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {!loading && (
+          {!loading && hasPendingChanges && (
             <>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-[11px] text-muted-foreground"
                 onClick={onDiscard}
-                disabled={saving || value === content}
+                disabled={saving}
               >
                 Discard
               </Button>
@@ -74,35 +65,12 @@ export function FileEditorPane({
                 size="sm"
                 className="h-6 px-2 text-[11px]"
                 onClick={onSave}
-                disabled={saving || value === content}
+                disabled={saving}
               >
                 {saving ? (
                   <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                 ) : null}
                 Save
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-6 p-0 ${
-                  confirmingDelete
-                    ? "w-auto rounded-full border border-destructive/45 bg-transparent px-1.5 text-[11px] font-semibold leading-none text-destructive shadow-none transition-none hover:border-destructive/65 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25"
-                    : "w-6 text-muted-foreground/65 transition-none hover:text-foreground"
-                }`}
-                aria-label={
-                  confirmingDelete ? "Confirm delete file" : "Delete file"
-                }
-                disabled={deleting}
-                onMouseLeave={onCancelDeleteConfirm}
-                onClick={confirmingDelete ? onDelete : onConfirmDelete}
-              >
-                {deleting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : confirmingDelete ? (
-                  "Confirm"
-                ) : (
-                  <Trash2 className="h-3 w-3" />
-                )}
               </Button>
             </>
           )}
