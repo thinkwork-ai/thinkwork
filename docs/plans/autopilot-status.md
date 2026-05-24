@@ -1414,7 +1414,7 @@ None.
 | U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | Merged | Squash merged as `3b51ec6e`; remote and local branch removed. Added the `skills/` folder context-menu entry and wired the dialog through agent/Space workspace targets.                                                                   |
 | U10 Uninstall-skill backend action              | `codex/pi-skill-catalog-u10-uninstall`    | [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) | Merged | Squash merged as `c81861cd`; remote and local branch removed. Added the symmetric workspace-files `uninstall-skill` action, catalog ref snippet stripping, installed-folder deletion, and agent/Space coverage.                           |
 | U11 FolderTree Remove Skill context menu        | `codex/pi-skill-catalog-u11-remove-menu`  | [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657) | Merged | Squash merged as `f5a8c657`; remote and local branch removed. Added the installed-skill folder context-menu affordance and routes folder-delete through `uninstall-skill` when `.catalog-ref.json` marks the folder as catalog-installed. |
-| U12 Catalog skill sha in list response          | `codex/pi-skill-catalog-u12-catalog-sha`  | Pending                                                      | Active | Adds deterministic per-skill catalog folder hashes to catalog `list` responses for the upcoming drift badge comparison.                                                                                                                   |
+| U12 Catalog skill sha in list response          | `codex/pi-skill-catalog-u12-catalog-sha`  | [#1660](https://github.com/thinkwork-ai/thinkwork/pull/1660) | In CI  | Adds deterministic per-skill catalog folder hashes to catalog `list` responses for the upcoming drift badge comparison.                                                                                                                   |
 
 ## Verification Log
 
@@ -1525,6 +1525,7 @@ None.
 - Opened [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657).
 - Squash merged [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657) as `f5a8c657cbbf5e231e18e990ba8fe10aae66afd1`.
 - Started U12 in `.Codex/worktrees/pi-skill-catalog-u12-catalog-sha` on branch `codex/pi-skill-catalog-u12-catalog-sha`.
+- Opened [#1660](https://github.com/thinkwork-ai/thinkwork/pull/1660).
 
 ## Blockers
 

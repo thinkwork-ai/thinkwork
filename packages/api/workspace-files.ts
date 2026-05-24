@@ -2574,7 +2574,8 @@ async function handleGenerateFolderStructure(
   if (target.kind === "space" && deps.auth.authType === "apikey") {
     return json(403, {
       ok: false,
-      error: "generate-folder-structure on a Space requires admin authentication",
+      error:
+        "generate-folder-structure on a Space requires admin authentication",
     });
   }
 
