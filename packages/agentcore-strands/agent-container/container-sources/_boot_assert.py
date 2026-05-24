@@ -44,7 +44,6 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "computer_thread_response",
     "computer_task_events",
     "context_engine_tool",
-    "delegate_to_workspace_tool",
     "eval_span_attrs",
     "external_task_context",
     "hindsight_recall_filter",
@@ -76,7 +75,6 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "workflow_skill_context",
     "bootstrap_workspace",
     "workspace_target",
-    "wake_workspace_tool",
     "write_memory_tool",
 )
 
