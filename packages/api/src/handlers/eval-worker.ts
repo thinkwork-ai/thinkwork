@@ -26,7 +26,7 @@ import {
   AgentCoreEvalInvocationTimeoutError,
   invokeAgentCoreForEval,
 } from "../lib/evals/agentcore-direct.js";
-import { ensureEvalAgentForTarget } from "../lib/evals/eval-agent-provisioning.js";
+import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
@@ -690,14 +690,14 @@ async function executeCase(
   let costUsd = 0;
 
   try {
-    let targetAgentId = tc.agent_id ?? run.agent_id;
+    // Belt-and-suspenders: in normal operation the dispatcher (eval-runner
+    // or job-trigger) sets run.agent_id before fan-out. During a deploy
+    // race or an SQS replay, a worker may receive a case for a run whose
+    // agent_id is still null — fall back to the tenant platform agent
+    // rather than failing the case outright.
+    let targetAgentId = run.agent_id;
     if (!targetAgentId) {
-      targetAgentId = (
-        await ensureEvalAgentForTarget({ tenantId: run.tenant_id })
-      ).agentId;
-    }
-    if (!targetAgentId) {
-      throw new Error("Eval run has no AgentCore agent target");
+      targetAgentId = (await resolveTenantPlatformAgent(run.tenant_id)).id;
     }
 
     const inv = await invokeAgentCoreForEval({

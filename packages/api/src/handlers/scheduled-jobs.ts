@@ -44,10 +44,7 @@ import {
 } from "../lib/tenant-membership.js";
 import { json, error, notFound } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
-import {
-  ensureEvalAgentForTarget,
-  resolveEvalAgentId,
-} from "../lib/evals/eval-agent-provisioning.js";
+import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 import {
   hasConnectorTriggerDefinition,
   prepareConnectorTriggerDefinition,
@@ -753,8 +750,14 @@ async function fireScheduledJob(
           `Scheduled eval model overrides are no longer supported; use ${DEFAULT_EVAL_MODEL_ID}`,
         );
       }
-      targetAgentId = await resolveEvalAgentId(tenantId, cfg.agentId);
-      await ensureEvalAgentForTarget({ tenantId, agentId: targetAgentId });
+      if (cfg.agentId) {
+        console.warn(
+          "[scheduled-jobs] eval cfg.agentId is deprecated and ignored; using tenant platform agent",
+          { tenantId, schedJobId: trig.id, ignoredAgentId: cfg.agentId },
+        );
+      }
+      const platformAgent = await resolveTenantPlatformAgent(tenantId);
+      targetAgentId = platformAgent.id;
     } catch (err) {
       return error(err instanceof Error ? err.message : String(err), 409);
     }

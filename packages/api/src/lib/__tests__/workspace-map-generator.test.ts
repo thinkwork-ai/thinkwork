@@ -179,6 +179,8 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import {
+  normalizeAgentsMd,
+  regenerateAgentsMdDerivedSections,
   regenerateWorkspaceMap,
   replaceDerivedAgentsMdSections,
 } from "../workspace-map-generator.js";
@@ -270,6 +272,95 @@ describe("regenerateWorkspaceMap — Workflows projection", () => {
     expect(lastWrittenAgentsMd()).toContain("No workflows configured.");
     expect(lastWrittenAgentsMd()).toContain("## Knowledge Bases");
     expect(lastWrittenAgentsMd()).toContain("No knowledge bases assigned.");
+  });
+});
+
+describe("regenerateAgentsMdDerivedSections", () => {
+  it("preserves custom AGENTS.md prose while replacing derived sections only", async () => {
+    state.skills = [
+      {
+        skill_id: "editor-review",
+        config: {},
+        enabled: true,
+      },
+    ];
+    state.skillCatalog = [
+      {
+        slug: "editor-review",
+        name: "Editor Review",
+        description: "Review edited workspace files",
+        mcp_server: null,
+        triggers: ["review edits"],
+      },
+    ];
+    state.listObjectsResponses = [
+      "AGENTS.md",
+      "CONTEXT.md",
+      "alpha/CONTEXT.md",
+      "alpha/notes.md",
+    ];
+    state.s3GetResponses.set(
+      `${PREFIX}AGENTS.md`,
+      [
+        "# Acme Daily Digest — Workspace Map",
+        "",
+        "## Routing",
+        "",
+        "| Task | Go to | Read | Skills |",
+        "| --- | --- | --- | --- |",
+        "| Alpha work | alpha/ | alpha/CONTEXT.md | editor-review |",
+        "",
+        "## Folder Structure",
+        "old folder section",
+        "",
+        "---",
+        "",
+        "## Custom Instructions",
+        "",
+        "Keep this operator-authored paragraph.",
+        "",
+        "## Skills & Tools",
+        "old skill section",
+      ].join("\n"),
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}alpha/CONTEXT.md`,
+      "# Alpha\n\n## Skills & Tools\n\n| Skill | When |\n| --- | --- |\n| Editor Review | When editing |\n",
+    );
+
+    await regenerateAgentsMdDerivedSections("agent-1");
+
+    const written = lastWrittenAgentsMd();
+    expect(written).toContain("## Routing");
+    expect(written).toContain("Keep this operator-authored paragraph.");
+    expect(written).toContain("## Custom Instructions");
+    expect(written).not.toContain("old folder section");
+    expect(written).not.toContain("old skill section");
+    expect(written).toContain("alpha/ ← Alpha");
+    expect(written).toContain(
+      "| Editor Review | Review edited workspace files | review edits |",
+    );
+    expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
+    expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("normalizeAgentsMd", () => {
+  it("replaces a malformed AGENTS.md with the canonical template plus derived sections", async () => {
+    state.listObjectsResponses = ["AGENTS.md", "memory/lessons.md"];
+    state.s3GetResponses.set(`${PREFIX}AGENTS.md`, "not markdown at all");
+
+    await normalizeAgentsMd("agent-1");
+
+    const written = lastWrittenAgentsMd();
+    expect(written).toContain("# AGENTS.md");
+    expect(written).toContain("## Routing");
+    expect(written).toContain("## Naming conventions");
+    expect(written).toContain("## Folder Structure");
+    expect(written).toContain("memory/");
+    expect(written).not.toContain("not markdown at all");
+    expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
+    expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
   });
 });
 

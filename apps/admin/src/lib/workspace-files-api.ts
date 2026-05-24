@@ -117,6 +117,10 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
   await request({ action: "regenerate-map", agentId });
 }
 
+export async function normalizeWorkspaceMap(agentId: string): Promise<void> {
+  await request({ action: "normalize-map", agentId });
+}
+
 export interface MoveResult {
   /** Final destination path after collision-aware auto-rename. */
   destPath: string;

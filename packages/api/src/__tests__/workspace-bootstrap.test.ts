@@ -37,6 +37,10 @@ const { dbQueue, pushDbRows, resetDbQueue } = vi.hoisted(() => {
   };
 });
 
+const { refreshAgentsMdSectionsMock } = vi.hoisted(() => ({
+  refreshAgentsMdSectionsMock: vi.fn(),
+}));
+
 vi.mock("../graphql/utils.js", () => {
   const tableCol = (label: string) => ({ __col: label });
   const chain = () => ({
@@ -60,6 +64,10 @@ vi.mock("../graphql/utils.js", () => {
     agentTemplates: { id: tableCol("agentTemplates.id") },
   };
 });
+
+vi.mock("../lib/workspace-map-generator.js", () => ({
+  regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
+}));
 
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
 
@@ -183,6 +191,8 @@ function stubAgentExists(relPath: string) {
 beforeEach(() => {
   s3Mock.reset();
   resetDbQueue();
+  refreshAgentsMdSectionsMock.mockReset();
+  refreshAgentsMdSectionsMock.mockResolvedValue(undefined);
 });
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -367,6 +377,23 @@ describe("bootstrapAgentWorkspace", () => {
     expect(manifestPut!.args[0].input.ContentType).toBe("application/json");
   });
 
+  it("can refresh derived AGENTS.md sections after operator-controlled bootstrap writes", async () => {
+    queueAgentResolution();
+    stubSources({
+      templateFiles: {
+        "AGENTS.md": "# Agent map\n\n## Routing\n",
+      },
+    });
+
+    await bootstrapAgentWorkspace(AGENT_ID, {
+      mode: "overwrite",
+      refreshAgentsMdSections: true,
+    });
+
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
   it("does not regenerate the manifest when nothing was written", async () => {
     queueAgentResolution();
     stubSources({
@@ -385,6 +412,7 @@ describe("bootstrapAgentWorkspace", () => {
       (c) => c.args[0].input.Key === AGENT_PREFIX + "manifest.json",
     );
     expect(manifestPut).toBeUndefined();
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
 
   it("throws BootstrapError when the agent / tenant / template chain is unresolvable", async () => {
