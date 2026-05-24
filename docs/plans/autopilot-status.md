@@ -1415,7 +1415,8 @@ None.
 | U10 Uninstall-skill backend action              | `codex/pi-skill-catalog-u10-uninstall`    | [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) | Merged | Squash merged as `c81861cd`; remote and local branch removed. Added the symmetric workspace-files `uninstall-skill` action, catalog ref snippet stripping, installed-folder deletion, and agent/Space coverage.                           |
 | U11 FolderTree Remove Skill context menu        | `codex/pi-skill-catalog-u11-remove-menu`  | [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657) | Merged | Squash merged as `f5a8c657`; remote and local branch removed. Added the installed-skill folder context-menu affordance and routes folder-delete through `uninstall-skill` when `.catalog-ref.json` marks the folder as catalog-installed. |
 | U12 Catalog skill sha in list response          | `codex/pi-skill-catalog-u12-catalog-sha`  | [#1660](https://github.com/thinkwork-ai/thinkwork/pull/1660) | Merged | Squash merged as `3a6232e5`; remote and local branch removed. Added deterministic per-skill catalog folder hashes to catalog `list` responses for drift comparison.                                                                       |
-| U13 Drift badge in workspace Skills tree        | `codex/pi-skill-catalog-u13-drift-badge`  | [#1661](https://github.com/thinkwork-ai/thinkwork/pull/1661) | In CI  | Shows stale/orphan badges for installed skill folders when `.catalog-ref.json` no longer matches the current tenant catalog hash.                                                                                                         |
+| U13 Drift badge in workspace Skills tree        | `codex/pi-skill-catalog-u13-drift-badge`  | [#1661](https://github.com/thinkwork-ai/thinkwork/pull/1661) | Merged | Squash merged as `b7da89ef`; remote and local branch removed. Shows stale/orphan badges for installed skill folders when `.catalog-ref.json` no longer matches the current tenant catalog hash.                                           |
+| U14 Reinstall-skill refresh action              | `codex/pi-skill-catalog-u14-reinstall`    | [#1662](https://github.com/thinkwork-ai/thinkwork/pull/1662) | In CI  | Adds files-only reinstall refresh for stale installed skills, preserving CONTEXT.md and updating `.catalog-ref.json.source_sha256`.                                                                                                       |
 
 ## Verification Log
 
@@ -1504,6 +1505,17 @@ None.
 - `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
 - `pnpm dlx prettier@3.8.2 --check apps/admin/src/lib/agent-builder-api.ts apps/admin/src/components/agent-builder/FolderTree.tsx apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/FolderTree.test.ts apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - passed.
 - `git diff --check` - passed.
+- U13 PR checks passed on [#1661](https://github.com/thinkwork-ai/thinkwork/pull/1661): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm install --frozen-lockfile` - passed in the U14 worktree.
+- `pnpm --filter @thinkwork/api test -- src/lib/catalog-reinstall.test.ts src/__tests__/workspace-files-handler.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/FolderTree.test.ts src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts src/lib/__tests__/workspace-files-api.test.ts` - passed.
+- `pnpm --filter @thinkwork/api test` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
+- `bash scripts/build-lambdas.sh workspace-files` - passed.
+- `pnpm dlx prettier@3.8.2 --check packages/api/src/lib/catalog-reinstall.ts packages/api/src/lib/catalog-reinstall.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts apps/admin/src/lib/workspace-files-api.ts apps/admin/src/lib/agent-builder-api.ts apps/admin/src/lib/__tests__/workspace-files-api.test.ts apps/admin/src/components/agent-builder/FolderTree.tsx apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/FolderTree.test.ts apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - passed.
+- `git diff --check` - passed.
 
 ## CI / PR
 
@@ -1537,6 +1549,9 @@ None.
 - Squash merged [#1660](https://github.com/thinkwork-ai/thinkwork/pull/1660) as `3a6232e5dd368c54619fb22e347ff622af33f01c`.
 - Started U13 in `.Codex/worktrees/pi-skill-catalog-u13-drift-badge` on branch `codex/pi-skill-catalog-u13-drift-badge`.
 - Opened [#1661](https://github.com/thinkwork-ai/thinkwork/pull/1661).
+- Squash merged [#1661](https://github.com/thinkwork-ai/thinkwork/pull/1661) as `b7da89ef6df4d8bf4de54ad1ed8d97ead05b47fb`; remote branch was already deleted and the local branch/worktree were removed.
+- Started U14 in `.Codex/worktrees/pi-skill-catalog-u14-reinstall` on branch `codex/pi-skill-catalog-u14-reinstall`.
+- Opened [#1662](https://github.com/thinkwork-ai/thinkwork/pull/1662).
 
 ## Blockers
 

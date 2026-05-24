@@ -151,6 +151,8 @@ describe("buildWorkspaceTree", () => {
     expect(source).toMatch(/Remove Skill/);
     expect(source).toMatch(/onAddSkill/);
     expect(source).toMatch(/onRemoveSkill/);
+    expect(source).toMatch(/onReinstallSkill/);
+    expect(source).toMatch(/Reinstall Skill/);
     expect(source).toMatch(/installedSkillSlugForNode/);
     expect(source).toMatch(/skillDriftByPath/);
     expect(source).toMatch(/SkillDriftStatus/);

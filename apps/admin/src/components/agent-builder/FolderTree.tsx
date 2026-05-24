@@ -226,6 +226,7 @@ export interface FolderTreeProps {
   ) => void;
   onAddSkill?: (skillsFolderPath: string) => void;
   onRemoveSkill?: (skillsFolderPath: string, slug: string) => void;
+  onReinstallSkill?: (skillsFolderPath: string, slug: string) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
   onRegenerateMap?: (path: string) => void;
   onGenerateFolderStructure?: (path: string) => void;
@@ -498,6 +499,7 @@ function FolderTreeItem(
     onDeleteSyntheticGroup,
     onAddSkill,
     onRemoveSkill,
+    onReinstallSkill,
     onRename,
     onRegenerateMap,
     onGenerateFolderStructure,
@@ -530,6 +532,11 @@ function FolderTreeItem(
       onDeleteSyntheticGroup;
     const canAddSkill = isSkillInstallFolder(node, Boolean(onAddSkill));
     const installedSkillSlug = installedSkillSlugForNode(node);
+    const canReinstallSkill = Boolean(
+      installedSkillSlug &&
+      skillDriftByPath?.[node.path] === "stale" &&
+      onReinstallSkill,
+    );
 
     const hasPendingNewItem =
       (inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder") &&
@@ -567,6 +574,7 @@ function FolderTreeItem(
                 onDeleteSyntheticGroup={onDeleteSyntheticGroup}
                 onAddSkill={onAddSkill}
                 onRemoveSkill={onRemoveSkill}
+                onReinstallSkill={onReinstallSkill}
                 onRename={onRename}
                 onRegenerateMap={onRegenerateMap}
                 onGenerateFolderStructure={onGenerateFolderStructure}
@@ -608,8 +616,20 @@ function FolderTreeItem(
               <ContextMenuSeparator />
             </>
           ) : null}
+          {canReinstallSkill ? (
+            <ContextMenuItem
+              onSelect={() => {
+                if (installedSkillSlug) {
+                  onReinstallSkill?.(node.path, installedSkillSlug);
+                }
+              }}
+            >
+              Reinstall Skill
+            </ContextMenuItem>
+          ) : null}
           {installedSkillSlug && onRemoveSkill ? (
             <>
+              {canReinstallSkill ? <ContextMenuSeparator /> : null}
               <ContextMenuItem
                 variant="destructive"
                 onSelect={() => onRemoveSkill(node.path, installedSkillSlug)}

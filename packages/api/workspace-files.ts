@@ -22,7 +22,7 @@
  *   list → { ok: true, files: Array<{ path, source, sha256, overridden }> }
  *   put  → { ok: true }
  *   delete → { ok: true }
- *   install-skill / uninstall-skill → { ok: true, ... }
+ *   install-skill / uninstall-skill / reinstall-skill → { ok: true, ... }
  *   generate-folder-structure → { ok: true }
  *   regenerate-map → { ok: true } (optional path scopes refresh to that AGENTS.md)
  *   normalize-map → { ok: true }
@@ -95,6 +95,10 @@ import {
   CatalogInstallError,
   installCatalogSkill,
 } from "./src/lib/catalog-install.js";
+import {
+  CatalogReinstallError,
+  reinstallCatalogSkill,
+} from "./src/lib/catalog-reinstall.js";
 import {
   CatalogUninstallError,
   uninstallCatalogSkill,
@@ -485,6 +489,7 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "install-skill",
+  "reinstall-skill",
   "uninstall-skill",
   "catalog-seed",
   "generate-folder-structure",
@@ -1671,6 +1676,72 @@ async function handleUninstallSkill(
   }
 }
 
+async function handleReinstallSkill(
+  deps: HandlerDeps,
+  slug: string,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "agent" && target.kind !== "space") {
+    return json(400, {
+      ok: false,
+      error: "reinstall-skill requires an agent or space target",
+      code: "unsupported_target",
+    });
+  }
+
+  let result;
+  try {
+    result = await reinstallCatalogSkill({
+      s3,
+      bucket: bucket(),
+      tenantSlug: target.tenantSlug,
+      targetPrefix: target.prefix,
+      slug,
+    });
+  } catch (err) {
+    if (err instanceof CatalogReinstallError) {
+      return json(err.status, {
+        ok: false,
+        error: err.message,
+        code: err.code,
+      });
+    }
+    throw err;
+  }
+
+  if (target.kind !== "agent") {
+    return json(200, result);
+  }
+
+  await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+  try {
+    const deriveResult = await deriveAgentSkills({ tenantId }, target.agentId);
+    const summary =
+      `agent=${target.agentId} skill_paths=${deriveResult.agentsMdPathsScanned.length} ` +
+      `changed=${deriveResult.changed} added=${deriveResult.addedSlugs.join(",") || "-"} ` +
+      `removed=${deriveResult.removedSlugs.join(",") || "-"}`;
+    console.log(`[derive-agent-skills] reinstall-skill ${summary}`);
+    const refreshError = await refreshAgentAgentsMdSections(
+      target,
+      "reinstall-skill",
+    );
+    if (refreshError) return refreshError;
+    return json(200, {
+      ...result,
+      ...(deriveResult.warnings.length > 0
+        ? { deriveWarnings: deriveResult.warnings }
+        : {}),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[derive-agent-skills] reinstall-skill failed: ${message}`);
+    return json(500, {
+      ok: false,
+      error: "Skill reinstalled but agent_skills derive failed: " + message,
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // `move` action — atomic copy + delete, single-file in this unit
 // ---------------------------------------------------------------------------
@@ -2848,6 +2919,15 @@ export async function handler(
           });
         }
         return await handleUninstallSkill(deps, body.slug);
+      }
+      case "reinstall-skill": {
+        if (!body.slug) {
+          return json(400, {
+            ok: false,
+            error: "slug is required for reinstall-skill",
+          });
+        }
+        return await handleReinstallSkill(deps, body.slug);
       }
       case "delete": {
         if (!body.path)

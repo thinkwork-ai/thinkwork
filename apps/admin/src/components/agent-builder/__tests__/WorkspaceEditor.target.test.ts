@@ -244,6 +244,32 @@ describe("workspace editor target capabilities", () => {
     expect(apiSource).toMatch(/uninstallSkill/);
   });
 
+  it("routes stale installed skill refresh through reinstall-skill", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+    const treeSource = readFileSync(
+      new URL("../FolderTree.tsx", import.meta.url),
+      "utf8",
+    );
+    const apiSource = readFileSync(
+      new URL("../../../lib/agent-builder-api.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(treeSource).toMatch(/onReinstallSkill/);
+    expect(treeSource).toMatch(/Reinstall Skill/);
+    expect(treeSource).toMatch(
+      /skillDriftByPath\?\.\[node\.path\] === "stale"/,
+    );
+    expect(editorSource).toMatch(/handleReinstallSkill/);
+    expect(editorSource).toMatch(/agentBuilderApi\.reinstallSkill/);
+    expect(editorSource).toMatch(/onReinstallSkill=/);
+    expect(apiSource).toMatch(/reinstallWorkspaceSkill/);
+    expect(apiSource).toMatch(/reinstallSkill/);
+  });
+
   it("closes the context-menu delete dialog before starting deletion", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),
