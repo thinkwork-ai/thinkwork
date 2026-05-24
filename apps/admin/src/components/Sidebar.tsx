@@ -3,7 +3,6 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   MessagesSquare,
-  Inbox,
   Users,
   Repeat,
   BarChart3,
@@ -24,11 +23,9 @@ import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import {
-  InboxItemsListQuery,
   ThreadsPagedQuery,
   RoutinesListQuery,
 } from "@/lib/graphql-queries";
-import { InboxItemStatus } from "@/gql/graphql";
 import { Badge } from "@/components/ui/badge";
 import { getAdminExtensions } from "@/extensions/registry";
 import {
@@ -102,12 +99,6 @@ export function AppSidebar() {
   const { tenantId } = useTenant();
   const { state, setOpen } = useSidebar();
   const isCollapsed = state === "collapsed";
-  const [inboxResult] = useQuery({
-    query: InboxItemsListQuery,
-    variables: { tenantId: tenantId!, status: InboxItemStatus.Pending },
-    pause: !tenantId,
-  });
-  const pendingInboxCount = inboxResult.data?.inboxItems?.length ?? 0;
 
   const [threadsResult] = useQuery({
     query: ThreadsPagedQuery,
@@ -218,7 +209,6 @@ export function AppSidebar() {
       label: "Threads",
       badge: threadCount ? formatCount(threadCount) : undefined,
     },
-    { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
     {
       to: "/automations/schedules",
       icon: CalendarClock,
