@@ -143,6 +143,13 @@ interface AgentsMdRenderScope {
   contextByFolder: Map<string, string>;
 }
 
+interface WorkspaceContextPath {
+  slug: string;
+  folder: string;
+  contextPath: string;
+  layout: "legacy-flat" | "workspaces-parent";
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -306,6 +313,45 @@ async function listWorkspaceObjectPaths(
   } while (continuationToken);
 
   return paths.sort((a, b) => a.localeCompare(b));
+}
+
+function getWorkspaceContextPath(path: string): WorkspaceContextPath | null {
+  const nested = path.match(/^workspaces\/([^/.][^/]*)\/CONTEXT\.md$/);
+  if (nested?.[1]) {
+    return {
+      slug: nested[1],
+      folder: `workspaces/${nested[1]}/`,
+      contextPath: path,
+      layout: "workspaces-parent",
+    };
+  }
+
+  const legacy = path.match(/^([^/.][^/]*)\/CONTEXT\.md$/);
+  if (legacy?.[1]) {
+    return {
+      slug: legacy[1],
+      folder: `${legacy[1]}/`,
+      contextPath: path,
+      layout: "legacy-flat",
+    };
+  }
+
+  return null;
+}
+
+function collectWorkspaceContextPaths(paths: string[]): WorkspaceContextPath[] {
+  const bySlug = new Map<string, WorkspaceContextPath>();
+  for (const path of paths) {
+    const parsed = getWorkspaceContextPath(path);
+    if (!parsed) continue;
+    const existing = bySlug.get(parsed.slug);
+    if (!existing || parsed.layout === "workspaces-parent") {
+      bySlug.set(parsed.slug, parsed);
+    }
+  }
+  return Array.from(bySlug.values()).sort((a, b) =>
+    a.slug.localeCompare(b.slug),
+  );
 }
 
 function isHiddenPathSegment(segment: string): boolean {
@@ -728,25 +774,24 @@ async function loadWorkspaceMapRenderContext(
     }));
 
   const workspaceObjectPaths = await listWorkspaceObjectPaths(bucket, prefix);
-  const workspaceSlugs = workspaceObjectPaths
-    .map((rel) => rel.match(/^([^/.][^/]*)\/CONTEXT\.md$/)?.[1])
-    .filter((slug): slug is string => Boolean(slug));
+  const workspaceContextPaths =
+    collectWorkspaceContextPaths(workspaceObjectPaths);
   const contextByFolder = new Map<string, string>();
   const workspaces: WorkspaceSummary[] = [];
 
-  for (const ws of workspaceSlugs) {
+  for (const ws of workspaceContextPaths) {
     const contextContent = await readS3Text(
       bucket,
-      `${prefix}${ws}/CONTEXT.md`,
+      `${prefix}${ws.contextPath}`,
     );
     if (contextContent) {
-      contextByFolder.set(`${ws}/`, contextContent);
-      workspaces.push(parseWorkspaceContext(contextContent, ws));
+      contextByFolder.set(ws.folder, contextContent);
+      workspaces.push(parseWorkspaceContext(contextContent, ws.slug));
     }
   }
 
   for (const rel of workspaceObjectPaths) {
-    if (!rel.endsWith("/CONTEXT.md") || /^([^/]+)\/CONTEXT\.md$/.test(rel)) {
+    if (!rel.endsWith("/CONTEXT.md") || getWorkspaceContextPath(rel)) {
       continue;
     }
     const folder = rel.slice(0, -"CONTEXT.md".length);
@@ -977,25 +1022,24 @@ export async function regenerateWorkspaceMap(
 
   // 4. Discover workspace files/folders from S3
   const workspaceObjectPaths = await listWorkspaceObjectPaths(bucket, prefix);
-  const workspaceSlugs = workspaceObjectPaths
-    .map((rel) => rel.match(/^([^/.][^/]*)\/CONTEXT\.md$/)?.[1])
-    .filter((slug): slug is string => Boolean(slug));
+  const workspaceContextPaths =
+    collectWorkspaceContextPaths(workspaceObjectPaths);
   const contextByFolder = new Map<string, string>();
   const workspaces: WorkspaceSummary[] = [];
 
-  for (const ws of workspaceSlugs) {
+  for (const ws of workspaceContextPaths) {
     const contextContent = await readS3Text(
       bucket,
-      `${prefix}${ws}/CONTEXT.md`,
+      `${prefix}${ws.contextPath}`,
     );
     if (contextContent) {
-      contextByFolder.set(`${ws}/`, contextContent);
-      workspaces.push(parseWorkspaceContext(contextContent, ws));
+      contextByFolder.set(ws.folder, contextContent);
+      workspaces.push(parseWorkspaceContext(contextContent, ws.slug));
     }
   }
 
   for (const rel of workspaceObjectPaths) {
-    if (!rel.endsWith("/CONTEXT.md") || /^([^/]+)\/CONTEXT\.md$/.test(rel)) {
+    if (!rel.endsWith("/CONTEXT.md") || getWorkspaceContextPath(rel)) {
       continue;
     }
     const folder = rel.slice(0, -"CONTEXT.md".length);

@@ -1,13 +1,13 @@
 /**
  * Vendor folder-bundle path normalization (Plan 2026-04-24-008 U14).
  *
- * ThinkWork stores Fat sub-agents at FOG-pure folder paths. Imports from
+ * ThinkWork stores Fat sub-agents under the `workspaces/` folder. Imports from
  * ecosystem-specific layouts are normalized at the boundary:
  *
- *   .claude/agents/expenses/CONTEXT.md -> expenses/CONTEXT.md
+ *   .claude/agents/expenses/CONTEXT.md -> workspaces/expenses/CONTEXT.md
  *   .claude/skills/foo/SKILL.md        -> skills/foo/SKILL.md
- *   .codex/agents/expenses/CONTEXT.md  -> expenses/CONTEXT.md
- *   .gemini/agents/expenses/CONTEXT.md -> expenses/CONTEXT.md
+ *   .codex/agents/expenses/CONTEXT.md  -> workspaces/expenses/CONTEXT.md
+ *   .gemini/agents/expenses/CONTEXT.md -> workspaces/expenses/CONTEXT.md
  *
  * Unknown vendor prefixes pass through unchanged.
  */
@@ -33,7 +33,7 @@ interface Rule {
 const RULES: Rule[] = [
   {
     from: /^\.claude\/agents\/(.+)$/,
-    to: (match) => match[1] ?? "",
+    to: (match) => `workspaces/${match[1] ?? ""}`,
   },
   {
     from: /^\.claude\/skills\/(.+)$/,
@@ -41,11 +41,11 @@ const RULES: Rule[] = [
   },
   {
     from: /^\.codex\/agents\/(.+)$/,
-    to: (match) => match[1] ?? "",
+    to: (match) => `workspaces/${match[1] ?? ""}`,
   },
   {
     from: /^\.gemini\/agents\/(.+)$/,
-    to: (match) => match[1] ?? "",
+    to: (match) => `workspaces/${match[1] ?? ""}`,
   },
 ];
 

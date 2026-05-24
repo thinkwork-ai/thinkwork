@@ -19,7 +19,7 @@ export function filesForFolderDelete(
     .sort((a, b) => a.localeCompare(b));
 }
 
-const RESERVED_SUB_AGENT_SLUGS = new Set(["memory", "skills"]);
+const RESERVED_SUB_AGENT_SLUGS = new Set(["memory", "skills", "workspaces"]);
 const SUB_AGENT_SLUG_RE = /^[a-z][a-z0-9-]{0,31}$/;
 
 export interface SubAgentSlugValidationResult {
@@ -60,7 +60,10 @@ export function validateSubAgentSlug(
       error: `\`${slug}\` is a reserved folder name.`,
     };
   }
-  if (topLevelFolders(files).has(slug)) {
+  if (
+    topLevelFolders(files).has(slug) ||
+    files.some((path) => path.startsWith(`workspaces/${slug}/`))
+  ) {
     return {
       valid: false,
       slug,

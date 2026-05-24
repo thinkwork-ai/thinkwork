@@ -63,6 +63,30 @@ describe("buildWorkspaceTree", () => {
     ]);
   });
 
+  it("groups routed workspaces-parent folders without rendering a missing duplicate", () => {
+    const tree = buildWorkspaceTree(
+      ["AGENTS.md", "workspaces/support/CONTEXT.md"],
+      [{ goTo: "workspaces/support/" }],
+    );
+
+    expect(tree[0]).toMatchObject({
+      name: "agents",
+      path: subAgentsNodePath(),
+      synthetic: true,
+    });
+    expect(tree[0]?.children).toHaveLength(1);
+    expect(tree[0]?.children[0]).toMatchObject({
+      name: "support",
+      path: "workspaces/support",
+    });
+    expect(tree[0]?.children[0]).not.toHaveProperty("missing");
+    expect(tree.map((node) => node.path)).toEqual([
+      subAgentsNodePath(),
+      "skills",
+      "AGENTS.md",
+    ]);
+  });
+
   it("renders routed folders with no files as missing sub-agent entries", () => {
     const tree = buildWorkspaceTree(["AGENTS.md"], [{ goTo: "expenses/" }]);
 

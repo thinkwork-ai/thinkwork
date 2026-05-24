@@ -3,8 +3,9 @@ write_memory Strands tool — Plan §008 U12 (path parameter).
 
 Lets the agent (parent or sub-agent) write to its agent-writable memory
 notes from inside a tool call. The parameter is a **path string** validated
-against a strict allowlist; sub-agents at ``{folder}/`` must compose
-``{folder}/memory/{basename}.md`` themselves so the call lands at sub scope.
+against a strict allowlist; workspaces at ``workspaces/{slug}/`` must compose
+``workspaces/{slug}/memory/{basename}.md`` themselves so the call lands at
+workspace scope.
 
 The path is **relative from the agent root** per Key Decisions §008
 (line 165). Sub-agents do not get folder-context magic — pass the full
@@ -18,8 +19,9 @@ Allowed paths match::
 Examples::
 
     memory/lessons.md                            (parent agent)
-    expenses/memory/preferences.md               (depth-1 sub-agent)
-    support/escalation/legal/case/memory/contacts.md   (depth-4 sub-agent)
+    workspaces/expenses/memory/preferences.md    (workspace)
+    workspaces/support/workspaces/escalation/memory/contacts.md   (nested workspace)
+    expenses/memory/preferences.md               (legacy flat transition path)
     a/b/c/d/e/memory/lessons.md                  (depth-5 hard cap)
 
 Validation runs **before** any network call, so adversarial inputs return
@@ -44,6 +46,7 @@ import urllib.request
 
 from skill_resolver import MAX_FOLDER_DEPTH, RESERVED_FOLDER_NAMES
 from strands import tool
+
 _WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
 
 
@@ -65,6 +68,7 @@ def _mirror_locally(rel_path: str, content: str) -> None:
             fh.write(content)
     except Exception as exc:  # pragma: no cover - best-effort
         logger.warning("write_memory local mirror failed on %s: %s", rel_path, exc)
+
 
 logger = logging.getLogger(__name__)
 
@@ -111,20 +115,14 @@ def _validate_memory_path(path: str | None) -> str:
     if path is None:
         raise ValueError("write_memory path is empty")
     if not isinstance(path, str):
-        raise ValueError(
-            f"write_memory path must be a string, got {type(path).__name__}"
-        )
+        raise ValueError(f"write_memory path must be a string, got {type(path).__name__}")
     stripped = path.strip()
     if not stripped:
         raise ValueError("write_memory path is empty")
     if stripped.startswith("/"):
-        raise ValueError(
-            f"write_memory path {path!r}: absolute paths not allowed"
-        )
+        raise ValueError(f"write_memory path {path!r}: absolute paths not allowed")
     if "\\" in stripped:
-        raise ValueError(
-            f"write_memory path {path!r}: invalid OS separator (backslash)"
-        )
+        raise ValueError(f"write_memory path {path!r}: invalid OS separator (backslash)")
 
     normalized = unicodedata.normalize("NFKC", stripped)
 
@@ -132,17 +130,11 @@ def _validate_memory_path(path: str | None) -> str:
     # normalized form so a fullwidth dot doesn't slip past.
     segments = normalized.split("/")
     if ".." in segments:
-        raise ValueError(
-            f"write_memory path {path!r}: path traversal not allowed"
-        )
+        raise ValueError(f"write_memory path {path!r}: path traversal not allowed")
     if "." in segments:
-        raise ValueError(
-            f"write_memory path {path!r}: path traversal segment '.'"
-        )
+        raise ValueError(f"write_memory path {path!r}: path traversal segment '.'")
     if "//" in normalized:
-        raise ValueError(
-            f"write_memory path {path!r}: invalid double slash (empty segment)"
-        )
+        raise ValueError(f"write_memory path {path!r}: invalid double slash (empty segment)")
 
     match = _CANONICAL_RE.match(normalized)
     if not match:
@@ -168,14 +160,17 @@ def _validate_memory_path(path: str | None) -> str:
     return normalized
 
 
-def _post_put(tenant_id: str, agent_id: str, rel_path: str,
-              content: str, api_url: str, api_secret: str) -> None:
-    body = json.dumps({
-        "action": "put",
-        "agentId": agent_id,
-        "path": rel_path,
-        "content": content,
-    }).encode("utf-8")
+def _post_put(
+    tenant_id: str, agent_id: str, rel_path: str, content: str, api_url: str, api_secret: str
+) -> None:
+    body = json.dumps(
+        {
+            "action": "put",
+            "agentId": agent_id,
+            "path": rel_path,
+            "content": content,
+        }
+    ).encode("utf-8")
     req = urllib.request.Request(
         f"{api_url.rstrip('/')}/api/workspaces/files",
         data=body,
@@ -197,13 +192,15 @@ def write_memory(path: str, content: str) -> str:
     """Append or replace an agent-writable memory note.
 
     The ``path`` is **relative from the agent root** — sub-agents must
-    compose ``{folder}/memory/{basename}.md`` themselves. Allowed shapes::
+    compose ``workspaces/{slug}/memory/{basename}.md`` themselves. Allowed
+    shapes::
 
         memory/lessons.md                  (parent / root)
         memory/preferences.md              (parent / root)
         memory/contacts.md                 (parent / root)
-        expenses/memory/lessons.md         (sub-agent)
-        support/escalation/memory/lessons.md   (nested sub-agent)
+        workspaces/expenses/memory/lessons.md   (workspace)
+        workspaces/support/workspaces/escalation/memory/lessons.md   (nested workspace)
+        expenses/memory/lessons.md         (legacy flat transition path)
 
     The basename must be one of ``lessons.md``, ``preferences.md``,
     ``contacts.md``. There is at most a 5-segment folder prefix before
@@ -214,8 +211,8 @@ def write_memory(path: str, content: str) -> str:
 
     Args:
         path: Path from the agent root, e.g. ``"memory/lessons.md"`` for
-            the parent agent or ``"expenses/memory/lessons.md"`` for a
-            sub-agent rooted at ``expenses/``.
+            the parent agent or ``"workspaces/expenses/memory/lessons.md"``
+            for a workspace rooted at ``workspaces/expenses/``.
         content: The full new content for the file. This is a write, not
             an append — read the file first if you want to preserve prior
             entries.
@@ -233,11 +230,7 @@ def write_memory(path: str, content: str) -> str:
     tenant_id = os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
     agent_id = os.environ.get("AGENT_ID") or os.environ.get("_MCP_AGENT_ID") or ""
     api_url = os.environ.get("THINKWORK_API_URL") or ""
-    api_secret = (
-        os.environ.get("API_AUTH_SECRET")
-        or os.environ.get("THINKWORK_API_SECRET")
-        or ""
-    )
+    api_secret = os.environ.get("API_AUTH_SECRET") or os.environ.get("THINKWORK_API_SECRET") or ""
     if not (tenant_id and agent_id and api_url and api_secret):
         return "write_memory: runtime is missing tenant / agent / API config."
 

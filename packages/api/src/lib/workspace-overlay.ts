@@ -27,7 +27,8 @@ import {
   normalizeWorkspacePath,
   parseWorkspacePinPath,
 } from "./pinned-versions.js";
-import { isReservedFolderSegment } from "./reserved-folder-names.js";
+
+const PIN_INHERITANCE_BOUNDARY_SEGMENTS = new Set(["memory", "skills"]);
 
 /**
  * Return the ancestor-walk paths for a workspace path, deepest first.
@@ -37,14 +38,17 @@ import { isReservedFolderSegment } from "./reserved-folder-names.js";
  *   "expenses/escalation/GUARDRAILS.md"      → 3 entries, deepest → root
  *   "memory/lessons.md"                      → ["memory/lessons.md"]   (reserved scope)
  *
- * Reserved folder segments terminate the walk: `memory/` and `skills/`
- * are bounded so they never collapse to a different file at an outer
- * scope.
+ * Pin-inheritance boundary segments terminate the walk: `memory/` and
+ * `skills/` are bounded so they never collapse to a different file at an
+ * outer scope. Layout containers such as `workspaces/` are intentionally not
+ * boundaries because workspace guardrails still inherit from the agent root.
  */
 export function buildWorkspaceAncestorPaths(path: string): string[] {
   const cleanPath = normalizeWorkspacePath(path);
   const segments = cleanPath.split("/");
-  if (segments.some(isReservedFolderSegment)) {
+  if (
+    segments.some((segment) => PIN_INHERITANCE_BOUNDARY_SEGMENTS.has(segment))
+  ) {
     return [cleanPath];
   }
   if (segments.length === 1) return [cleanPath];

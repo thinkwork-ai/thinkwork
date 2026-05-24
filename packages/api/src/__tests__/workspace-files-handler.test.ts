@@ -3597,11 +3597,11 @@ describe("agent create-sub-agent", () => {
     expect(res.statusCode).toBe(200);
     const puts = s3Mock.commandCalls(PutObjectCommand);
     expect(puts.map((call) => call.args[0].input.Key)).toEqual([
-      "tenants/acme/agents/marco/workspace/support/CONTEXT.md",
+      "tenants/acme/agents/marco/workspace/workspaces/support/CONTEXT.md",
       "tenants/acme/agents/marco/workspace/AGENTS.md",
     ]);
     expect(String(puts[1].args[0].input.Body)).toContain(
-      "| support specialist | support/ | support/CONTEXT.md |  |",
+      "| support specialist | workspaces/support/ | workspaces/support/CONTEXT.md |  |",
     );
     expect(deriveMockImpl).toHaveBeenCalledWith(
       { tenantId: TENANT_A },
@@ -3632,6 +3632,29 @@ describe("agent create-sub-agent", () => {
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
+  it("rejects workspaces as a reserved sub-agent slug before writing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "create-sub-agent",
+          agentId: AGENT_ID,
+          slug: "workspaces",
+          contextContent: "# Workspaces\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/reserved folder name/);
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
   it("returns 409 when the sub-agent slug collides with an existing top folder", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
@@ -3648,7 +3671,7 @@ describe("agent create-sub-agent", () => {
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/expenses/CONTEXT.md",
+            Key: "tenants/acme/agents/marco/workspace/workspaces/expenses/CONTEXT.md",
           },
         ],
       });
