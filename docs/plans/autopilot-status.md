@@ -1400,11 +1400,11 @@ None.
 
 ## Implementation Units
 
-| Unit                                                     | Branch                                    | PR  | State       | Notes                                                                                                           |
-| -------------------------------------------------------- | ----------------------------------------- | --- | ----------- | --------------------------------------------------------------------------------------------------------------- |
-| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | TBD | In progress | Implemented section-scoped derived renderer, recursive S3 tree, and focused tests; local verification underway. |
-| U2 Editor integration and background rewriter retirement | TBD                                       | TBD | Pending     | Wire agent editor writes and remove non-editor map rewrites.                                                    |
-| U3 Operator normalization and bootstrap polish           | TBD                                       | TBD | Pending     | Add explicit repair/normalization path and bootstrap/rematerialize coverage.                                    |
+| Unit                                                     | Branch                                    | PR                                                           | State   | Notes                                                                                             |
+| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------- |
+| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | PR open | Implemented section-scoped derived renderer, recursive S3 tree, and focused tests; monitoring CI. |
+| U2 Editor integration and background rewriter retirement | TBD                                       | TBD                                                          | Pending | Wire agent editor writes and remove non-editor map rewrites.                                      |
+| U3 Operator normalization and bootstrap polish           | TBD                                       | TBD                                                          | Pending | Add explicit repair/normalization path and bootstrap/rematerialize coverage.                      |
 
 ## Progress Log
 
@@ -1413,6 +1413,7 @@ None.
 - 2026-05-23: Created the implementation plan and began U1.
 - 2026-05-23: Began modifying `packages/api/src/lib/workspace-map-generator.ts` to expose the section-preserving helper and recursive workspace tree renderer.
 - 2026-05-23: Implemented U1 core renderer changes and tests in `packages/api/src/lib/__tests__/workspace-map-generator.test.ts`.
+- 2026-05-23: Opened U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617).
 
 ## Verification Log
 
@@ -1429,7 +1430,7 @@ None.
 
 ## CI / PR
 
-- Pending.
+- U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) opened; checks pending.
 
 ## Blockers
 
