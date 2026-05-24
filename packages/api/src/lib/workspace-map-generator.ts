@@ -1,14 +1,13 @@
 /**
  * Workspace Map Generator
  *
- * Generates AGENTS.md (the map) and top-level CONTEXT.md from DB state + S3
- * workspace structure. These two files are always loaded into the parent
- * agent's system prompt.
+ * Generates AGENTS.md (the map) and top-level CONTEXT.md from S3 workspace
+ * structure. These two files are always loaded into the parent agent's system
+ * prompt.
  *
  * AGENTS.md — The Map
  *   - Folder structure of entire workspace
- *   - Skill catalog with Mode column (tool vs agent per PRD-38)
- *   - KB catalog
+ *   - Skill catalog discovered from SKILL.md files in the workspace tree
  *   - Auto-generated; users don't edit directly
  *
  * CONTEXT.md — Knowledge Overview
@@ -17,7 +16,6 @@
  *
  * Called when:
  *   - Skill is assigned/removed from agent
- *   - KB is assigned/removed from agent
  *   - Workspace is created/deleted/modified via wizard
  */
 
@@ -27,21 +25,13 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { eq, and, asc, isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import {
-  agents,
-  agentSkills,
-  agentKnowledgeBases,
-  knowledgeBases,
-  routines,
-  spaces,
-  tenants,
-  tenantWorkflowCatalog,
-} from "@thinkwork/database-pg/schema";
+import { agents, spaces, tenants } from "@thinkwork/database-pg/schema";
 import { loadFile } from "@thinkwork/workspace-defaults";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 import { spaceSourcePrefix } from "./spaces/template-migration.js";
+import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
 import { regenerateManifestForPrefix } from "./workspace-manifest.js";
 
 const s3 = new S3Client({
@@ -61,28 +51,8 @@ export interface SkillInfo {
   skillId: string;
   name: string;
   description: string | null;
-  mcpServer?: string;
-  /** PRD-31: Trigger phrases for progressive disclosure tier-1 matching */
-  triggers?: string[];
-  /** PRD-31: Reference file names available in this skill */
-  references?: string[];
-  /** Workspace slugs that use this skill (parsed from workspace CONTEXT.md files) */
-  usedIn: string[];
-}
-
-export interface KBInfo {
-  id: string;
-  name: string;
-  description: string;
-  /** Workspace slugs that reference this KB */
-  usedIn: string[];
-}
-
-export interface WorkflowInfo {
-  catalogSlug: string;
-  name: string;
-  description: string;
-  schedule: string | null;
+  scope: string;
+  skillPath: string;
 }
 
 interface WorkspaceSummary {
@@ -100,24 +70,16 @@ interface WorkspaceMapRenderContext {
   bucket: string;
   prefix: string;
   skills: SkillInfo[];
-  kbs: KBInfo[];
-  workflows: WorkflowInfo[];
   workspaceObjectPaths: string[];
   contextByFolder: Map<string, string>;
   workspaces: WorkspaceSummary[];
 }
 
-export type DerivedSectionName =
-  | "Folder Structure"
-  | "Skills & Tools"
-  | "Knowledge Bases"
-  | "Workflows";
+export type DerivedSectionName = "Folder Structure" | "Skills & Tools";
 
 const DERIVED_SECTION_ORDER: DerivedSectionName[] = [
   "Folder Structure",
   "Skills & Tools",
-  "Knowledge Bases",
-  "Workflows",
 ];
 
 const ROOT_ANNOTATIONS = new Map<string, string>([
@@ -141,6 +103,7 @@ interface AgentsMdRenderScope {
   rootLabel: string;
   workspaceObjectPaths: string[];
   contextByFolder: Map<string, string>;
+  skills: SkillInfo[];
 }
 
 interface WorkspaceContextPath {
@@ -535,11 +498,28 @@ function scopedAgentsMdRenderContext(
     if (scopedFolder) contextByFolder.set(scopedFolder, content);
   }
 
+  const skills = folderPrefix
+    ? context.skills
+        .filter((skill) => skill.skillPath.startsWith(folderPrefix))
+        .map((skill) => {
+          const skillPath = skill.skillPath.slice(folderPrefix.length);
+          const scopePath =
+            skillPath.match(/^(?:(.+)\/)?skills\/[^/]+\/SKILL\.md$/)?.[1] ??
+            null;
+          return {
+            ...skill,
+            skillPath,
+            scope: scopePath ? `${scopePath}/` : "baseline",
+          };
+        })
+    : context.skills;
+
   return {
     agentsMdPath,
     rootLabel,
     workspaceObjectPaths,
     contextByFolder,
+    skills,
   };
 }
 
@@ -548,6 +528,9 @@ export function replaceDerivedAgentsMdSections(
   sections: Record<DerivedSectionName, string>,
 ): string {
   let rendered = markdown;
+  for (const sectionName of ["Knowledge Bases", "Workflows"]) {
+    rendered = removeMarkdownSection(rendered, sectionName);
+  }
 
   for (const sectionName of DERIVED_SECTION_ORDER) {
     const sectionRange = findSectionBodyRange(rendered, sectionName);
@@ -565,6 +548,23 @@ export function replaceDerivedAgentsMdSections(
   }
 
   return rendered;
+}
+
+function removeMarkdownSection(markdown: string, sectionName: string): string {
+  const sectionRange = findMarkdownSectionRange(markdown, sectionName);
+  if (!sectionRange) return markdown;
+
+  let start = sectionRange.headingStart;
+  const before = markdown.slice(0, start);
+  const leadingDivider = before.match(/(?:^|\n)---[ \t]*(?:\r?\n){1,2}$/);
+  if (leadingDivider) {
+    start =
+      before.length -
+      leadingDivider[0].length +
+      (leadingDivider[0].startsWith("\n") ? 1 : 0);
+  }
+
+  return markdown.slice(0, start) + markdown.slice(sectionRange.end);
 }
 
 export function replaceMarkdownSection(
@@ -589,6 +589,15 @@ function findSectionBodyRange(
   markdown: string,
   sectionName: string,
 ): { start: number; end: number } | null {
+  const sectionRange = findMarkdownSectionRange(markdown, sectionName);
+  if (!sectionRange) return null;
+  return { start: sectionRange.bodyStart, end: sectionRange.end };
+}
+
+function findMarkdownSectionRange(
+  markdown: string,
+  sectionName: string,
+): { headingStart: number; bodyStart: number; end: number } | null {
   const headingPattern = new RegExp(
     `(^|\\n)## ${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ \\t]*(?:\\r?\\n|$)`,
     "g",
@@ -611,12 +620,12 @@ function findSectionBodyRange(
       lineStart > headingStart &&
       (trimmed === "---" || line.startsWith("## "))
     ) {
-      return { start: bodyStart, end: lineStart };
+      return { headingStart, bodyStart, end: lineStart };
     }
     if (linePattern.lastIndex >= markdown.length) break;
   }
 
-  return { start: bodyStart, end: markdown.length };
+  return { headingStart, bodyStart, end: markdown.length };
 }
 
 /**
@@ -706,73 +715,6 @@ async function loadWorkspaceMapRenderContext(
   const agentSlug = agent.slug;
   const prefix = workspacePrefix(tenantSlug, agentSlug);
 
-  const skillRowsRaw = await db
-    .select({
-      skill_id: agentSkills.skill_id,
-      config: agentSkills.config,
-      enabled: agentSkills.enabled,
-    })
-    .from(agentSkills)
-    .where(
-      and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)),
-    )
-    .orderBy(asc(agentSkills.skill_id));
-  const skillRows = skillRowsRaw.filter((s) => !isBuiltinToolSlug(s.skill_id));
-
-  const kbRows = await db
-    .select({
-      id: knowledgeBases.id,
-      name: knowledgeBases.name,
-      description: knowledgeBases.description,
-    })
-    .from(agentKnowledgeBases)
-    .innerJoin(
-      knowledgeBases,
-      eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
-    )
-    .where(
-      and(
-        eq(agentKnowledgeBases.agent_id, agentId),
-        eq(agentKnowledgeBases.enabled, true),
-      ),
-    )
-    .orderBy(asc(knowledgeBases.id));
-
-  const workflowRowsRaw = await db
-    .select({
-      catalog_slug: routines.catalog_slug,
-      routine_schedule: routines.schedule,
-      display_name: tenantWorkflowCatalog.display_name,
-      description: tenantWorkflowCatalog.description,
-      default_schedule: tenantWorkflowCatalog.default_schedule,
-    })
-    .from(routines)
-    .innerJoin(
-      tenantWorkflowCatalog,
-      and(
-        eq(tenantWorkflowCatalog.tenant_id, routines.tenant_id),
-        eq(tenantWorkflowCatalog.slug, routines.catalog_slug),
-      ),
-    )
-    .where(
-      and(
-        eq(routines.agent_id, agentId),
-        eq(routines.status, "active"),
-        isNotNull(routines.catalog_slug),
-      ),
-    )
-    .orderBy(asc(routines.catalog_slug));
-  const workflowRows = workflowRowsRaw
-    .filter(
-      (r): r is typeof r & { catalog_slug: string } => r.catalog_slug !== null,
-    )
-    .map((r) => ({
-      catalog_slug: r.catalog_slug,
-      display_name: r.display_name,
-      description: r.description,
-      schedule: r.default_schedule ?? r.routine_schedule ?? null,
-    }));
-
   const workspaceObjectPaths = await listWorkspaceObjectPaths(bucket, prefix);
   const workspaceContextPaths =
     collectWorkspaceContextPaths(workspaceObjectPaths);
@@ -799,78 +741,19 @@ async function loadWorkspaceMapRenderContext(
     if (contextContent) contextByFolder.set(folder, contextContent);
   }
 
-  const catalogLookup = new Map<
-    string,
-    {
-      name: string;
-      description: string | null;
-      mcp_server: string | null;
-      triggers: string[] | null;
-    }
-  >();
-  try {
-    const { skillCatalog } = await import("@thinkwork/database-pg/schema");
-    const catalogRows = await db
-      .select({
-        slug: skillCatalog.slug,
-        name: skillCatalog.display_name,
-        description: skillCatalog.description,
-        mcp_server: skillCatalog.mcp_server,
-        triggers: skillCatalog.triggers,
-      })
-      .from(skillCatalog)
-      .execute();
-    for (const row of catalogRows) {
-      catalogLookup.set(row.slug, row);
-    }
-  } catch (e) {
-    console.warn("[workspace-map] Could not load skill_catalog from DB:", e);
-  }
-
-  const skillInfos: SkillInfo[] = skillRows.map((s) => {
-    const config = (s.config as Record<string, unknown>) || {};
-    const usedIn: string[] = [];
-    for (const ws of workspaces) {
-      if (
-        ws.skills.some(
-          (sk) =>
-            sk.toLowerCase() === s.skill_id.toLowerCase() ||
-            sk.toLowerCase().replace(/\s+/g, "-") === s.skill_id.toLowerCase(),
-        )
-      ) {
-        usedIn.push(ws.slug);
-      }
-    }
-    const catalog = catalogLookup.get(s.skill_id);
-    return {
-      skillId: s.skill_id,
-      name:
-        catalog?.name ||
-        s.skill_id
-          .split("-")
-          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" "),
-      description: catalog?.description || "",
-      mcpServer:
-        catalog?.mcp_server || (config.mcpServer as string) || undefined,
-      triggers: catalog?.triggers || undefined,
-      usedIn,
-    };
-  });
-
-  const kbInfos: KBInfo[] = kbRows.map((kb) => ({
-    id: kb.id,
-    name: kb.name || "Unnamed KB",
-    description: kb.description || "",
-    usedIn: [],
-  }));
-
-  const workflowInfos: WorkflowInfo[] = workflowRows.map((w) => ({
-    catalogSlug: w.catalog_slug,
-    name: w.display_name,
-    description: w.description ?? "",
-    schedule: w.schedule,
-  }));
+  const skillInfos: SkillInfo[] = (
+    await discoverWorkspaceSkillsFromPaths(workspaceObjectPaths, (path) =>
+      readS3Text(bucket, `${prefix}${path}`),
+    )
+  )
+    .filter((skill) => !isBuiltinToolSlug(skill.slug))
+    .map((skill) => ({
+      skillId: skill.slug,
+      name: skill.name,
+      description: skill.description,
+      scope: skill.scopeLabel,
+      skillPath: skill.skillPath,
+    }));
 
   return {
     agentName: agent.name,
@@ -879,8 +762,6 @@ async function loadWorkspaceMapRenderContext(
     bucket,
     prefix,
     skills: skillInfos,
-    kbs: kbInfos,
-    workflows: workflowInfos,
     workspaceObjectPaths,
     contextByFolder,
     workspaces,
@@ -895,10 +776,8 @@ async function loadWorkspaceMapRenderContext(
  * Regenerate AGENTS.md and CONTEXT.md for an agent.
  *
  * Reads:
- *   - agent_skills table → skill catalog (built-in tool slugs filtered out)
- *   - agent_knowledge_bases + knowledge_bases tables → KB catalog
- *   - routines + tenant_workflow_catalog → Workflows catalog (agent-keyed)
- *   - S3 workspace folders → workspace discovery + CONTEXT.md parsing
+ *   - S3 workspace folders → workspace discovery, CONTEXT.md parsing,
+ *     and SKILL.md tree-walk catalog
  *
  * Writes:
  *   - AGENTS.md to S3 workspace (skipped when content unchanged)
@@ -909,267 +788,62 @@ export async function regenerateWorkspaceMap(
   agentId: string,
   _computerId?: string,
 ): Promise<void> {
-  const db = getDb();
+  const context = await loadWorkspaceMapRenderContext(agentId);
+  if (!context) return;
 
-  // 1. Look up agent
-  const [agent] = await db
-    .select({
-      name: agents.name,
-      slug: agents.slug,
-      tenant_id: agents.tenant_id,
-    })
-    .from(agents)
-    .where(eq(agents.id, agentId));
-
-  if (!agent || !agent.slug) {
-    console.warn(`[workspace-map] Agent not found or no slug: ${agentId}`);
-    return;
-  }
-
-  // Look up tenant slug
-  const { tenants } = await import("@thinkwork/database-pg/schema");
-  const [tenant] = await db
-    .select({ slug: tenants.slug })
-    .from(tenants)
-    .where(eq(tenants.id, agent.tenant_id));
-  const tenantSlug = tenant?.slug || "";
-  const bucket = getBucket();
-  if (!tenantSlug || !bucket) {
-    console.warn(`[workspace-map] Missing tenant slug or bucket`);
-    return;
-  }
-
-  const agentSlug = agent.slug;
-  const prefix = workspacePrefix(tenantSlug, agentSlug);
-
-  // 2. Query skills (filter built-in tool slugs — they're template/runtime
-  //    config, not workspace skills, per
-  //    docs/solutions/best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md).
-  // Deterministic ORDER BY so the rendered Markdown is byte-stable across
-  // calls — required for the idempotent-write byte-equal compare to detect
-  // no-op renders. Postgres heap order is unspecified and shifts after
-  // UPDATEs.
-  const skillRowsRaw = await db
-    .select({
-      skill_id: agentSkills.skill_id,
-      config: agentSkills.config,
-      enabled: agentSkills.enabled,
-    })
-    .from(agentSkills)
-    .where(
-      and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)),
-    )
-    .orderBy(asc(agentSkills.skill_id));
-  const skillRows = skillRowsRaw.filter((s) => !isBuiltinToolSlug(s.skill_id));
-
-  // 3. Query knowledge bases
-  const kbRows = await db
-    .select({
-      id: knowledgeBases.id,
-      name: knowledgeBases.name,
-      description: knowledgeBases.description,
-    })
-    .from(agentKnowledgeBases)
-    .innerJoin(
-      knowledgeBases,
-      eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
-    )
-    .where(
-      and(
-        eq(agentKnowledgeBases.agent_id, agentId),
-        eq(agentKnowledgeBases.enabled, true),
-      ),
-    )
-    .orderBy(asc(knowledgeBases.id));
-
-  // 3c. Query active Customize workflows (agent-keyed). Joined to
-  //     tenant_workflow_catalog for display_name + description; schedule
-  //     prefers the catalog default_schedule, falls back to the routine row.
-  const workflowRowsRaw = await db
-    .select({
-      catalog_slug: routines.catalog_slug,
-      routine_schedule: routines.schedule,
-      display_name: tenantWorkflowCatalog.display_name,
-      description: tenantWorkflowCatalog.description,
-      default_schedule: tenantWorkflowCatalog.default_schedule,
-    })
-    .from(routines)
-    .innerJoin(
-      tenantWorkflowCatalog,
-      and(
-        eq(tenantWorkflowCatalog.tenant_id, routines.tenant_id),
-        eq(tenantWorkflowCatalog.slug, routines.catalog_slug),
-      ),
-    )
-    .where(
-      and(
-        eq(routines.agent_id, agentId),
-        eq(routines.status, "active"),
-        isNotNull(routines.catalog_slug),
-      ),
-    )
-    .orderBy(asc(routines.catalog_slug));
-  const workflowRows = workflowRowsRaw
-    .filter(
-      (r): r is typeof r & { catalog_slug: string } => r.catalog_slug !== null,
-    )
-    .map((r) => ({
-      catalog_slug: r.catalog_slug,
-      display_name: r.display_name,
-      description: r.description,
-      schedule: r.default_schedule ?? r.routine_schedule ?? null,
-    }));
-
-  // 4. Discover workspace files/folders from S3
-  const workspaceObjectPaths = await listWorkspaceObjectPaths(bucket, prefix);
-  const workspaceContextPaths =
-    collectWorkspaceContextPaths(workspaceObjectPaths);
-  const contextByFolder = new Map<string, string>();
-  const workspaces: WorkspaceSummary[] = [];
-
-  for (const ws of workspaceContextPaths) {
-    const contextContent = await readS3Text(
-      bucket,
-      `${prefix}${ws.contextPath}`,
-    );
-    if (contextContent) {
-      contextByFolder.set(ws.folder, contextContent);
-      workspaces.push(parseWorkspaceContext(contextContent, ws.slug));
-    }
-  }
-
-  for (const rel of workspaceObjectPaths) {
-    if (!rel.endsWith("/CONTEXT.md") || getWorkspaceContextPath(rel)) {
-      continue;
-    }
-    const folder = rel.slice(0, -"CONTEXT.md".length);
-    const contextContent = await readS3Text(bucket, `${prefix}${rel}`);
-    if (contextContent) contextByFolder.set(folder, contextContent);
-  }
-
-  // 5. Build skill catalog with "Used In" mapping + PRD-31 metadata from DB
-  const catalogLookup = new Map<
-    string,
-    {
-      name: string;
-      description: string | null;
-      mcp_server: string | null;
-      triggers: string[] | null;
-    }
-  >();
-  try {
-    const { skillCatalog } = await import("@thinkwork/database-pg/schema");
-    const catalogRows = await db
-      .select({
-        slug: skillCatalog.slug,
-        name: skillCatalog.display_name,
-        description: skillCatalog.description,
-        mcp_server: skillCatalog.mcp_server,
-        triggers: skillCatalog.triggers,
-      })
-      .from(skillCatalog)
-      .execute();
-    for (const row of catalogRows) {
-      catalogLookup.set(row.slug, row);
-    }
-  } catch (e) {
-    console.warn("[workspace-map] Could not load skill_catalog from DB:", e);
-  }
-
-  const skillInfos: SkillInfo[] = skillRows.map((s) => {
-    const config = (s.config as Record<string, unknown>) || {};
-    const usedIn: string[] = [];
-    for (const ws of workspaces) {
-      if (
-        ws.skills.some(
-          (sk) =>
-            sk.toLowerCase() === s.skill_id.toLowerCase() ||
-            sk.toLowerCase().replace(/\s+/g, "-") === s.skill_id.toLowerCase(),
-        )
-      ) {
-        usedIn.push(ws.slug);
-      }
-    }
-    const catalog = catalogLookup.get(s.skill_id);
-    return {
-      skillId: s.skill_id,
-      name:
-        catalog?.name ||
-        s.skill_id
-          .split("-")
-          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" "),
-      description: catalog?.description || "",
-      mcpServer:
-        catalog?.mcp_server || (config.mcpServer as string) || undefined,
-      triggers: catalog?.triggers || undefined,
-      usedIn,
-    };
-  });
-
-  // 6. Build KB catalog with "Used In" mapping
-  const kbInfos: KBInfo[] = kbRows.map((kb) => ({
-    id: kb.id,
-    name: kb.name || "Unnamed KB",
-    description: kb.description || "",
-    usedIn: [], // TODO: parse from workspace CONTEXT.md "Knowledge Bases" section
-  }));
-
-  // 6b. Build Workflows catalog
-  const workflowInfos: WorkflowInfo[] = workflowRows.map((w) => ({
-    catalogSlug: w.catalog_slug,
-    name: w.display_name,
-    description: w.description ?? "",
-    schedule: w.schedule,
-  }));
-
-  // 7. Render AGENTS.md
   const agentsMap = renderAgentsMap(
-    agent.name,
-    agentSlug,
-    skillInfos,
-    kbInfos,
-    workflowInfos,
-    workspaceObjectPaths,
-    contextByFolder,
+    context.agentName,
+    context.agentSlug,
+    context.skills,
+    context.workspaceObjectPaths,
+    context.contextByFolder,
+  );
+  const contextRouter = renderContextRouter(
+    context.agentName,
+    context.workspaces,
   );
 
-  // 8. Render CONTEXT.md
-  const contextRouter = renderContextRouter(agent.name, workspaces);
-
-  // 9. Idempotent write — skip the S3 PutObject when the rendered content
+  // Idempotent write — skip the S3 PutObject when the rendered content
   //    matches what's already on S3. Saves writes on no-op toggles
   //    (re-clicking Connect on already-active row) and avoids manifest
   //    regen churn.
   const [existingAgentsMap, existingContextRouter] = await Promise.all([
-    readS3Text(bucket, `${prefix}AGENTS.md`),
-    readS3Text(bucket, `${prefix}CONTEXT.md`),
+    readS3Text(context.bucket, `${context.prefix}AGENTS.md`),
+    readS3Text(context.bucket, `${context.prefix}CONTEXT.md`),
   ]);
   const agentsMapChanged = existingAgentsMap !== agentsMap;
   const contextRouterChanged = existingContextRouter !== contextRouter;
 
   if (agentsMapChanged) {
-    await writeS3Text(bucket, `${prefix}AGENTS.md`, agentsMap);
+    await writeS3Text(context.bucket, `${context.prefix}AGENTS.md`, agentsMap);
   }
   if (contextRouterChanged) {
-    await writeS3Text(bucket, `${prefix}CONTEXT.md`, contextRouter);
+    await writeS3Text(
+      context.bucket,
+      `${context.prefix}CONTEXT.md`,
+      contextRouter,
+    );
   }
 
   if (!agentsMapChanged && !contextRouterChanged) {
     console.log(
-      `[workspace-map] Skipped write for ${agentSlug}: content unchanged`,
+      `[workspace-map] Skipped write for ${context.agentSlug}: content unchanged`,
     );
     return;
   }
 
   console.log(
-    `[workspace-map] Regenerated for ${agentSlug}: ${workspaces.length} workspace(s), ${skillInfos.length} skill(s), ${kbInfos.length} KB(s), ${workflowInfos.length} workflow(s)`,
+    `[workspace-map] Regenerated for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s)`,
   );
 
-  // 10. Regenerate manifest so runtime picks up changes on next sync
+  // Regenerate manifest so runtime picks up changes on next sync
   try {
     const { regenerateManifest } = await import("./workspace-manifest.js");
-    await regenerateManifest(bucket, tenantSlug, agentSlug);
+    await regenerateManifest(
+      context.bucket,
+      context.tenantSlug,
+      context.agentSlug,
+    );
   } catch {
     // Manifest regeneration is also available in workspace-files.ts Lambda
     // If import fails (different bundle), it will be regenerated on next workspace write
@@ -1203,9 +877,7 @@ export async function regenerateAgentsMdDerivedSections(
       agentSlug: scope.rootLabel,
       workspaceObjectPaths: scope.workspaceObjectPaths,
       contextByFolder: scope.contextByFolder,
-      skills: context.skills,
-      kbs: context.kbs,
-      workflows: context.workflows,
+      skills: scope.skills,
     }),
   );
 
@@ -1218,7 +890,7 @@ export async function regenerateAgentsMdDerivedSections(
 
   await writeS3Text(context.bucket, targetKey, nextAgentsMd);
   console.log(
-    `[workspace-map] Refreshed ${scope.agentsMdPath} derived sections for ${context.agentSlug}: ${scope.workspaceObjectPaths.length} object(s), ${context.skills.length} skill(s), ${context.kbs.length} KB(s), ${context.workflows.length} workflow(s)`,
+    `[workspace-map] Refreshed ${scope.agentsMdPath} derived sections for ${context.agentSlug}: ${scope.workspaceObjectPaths.length} object(s), ${scope.skills.length} skill(s)`,
   );
 
   try {
@@ -1252,8 +924,6 @@ export async function normalizeAgentsMd(agentId: string): Promise<void> {
       workspaceObjectPaths: context.workspaceObjectPaths,
       contextByFolder: context.contextByFolder,
       skills: context.skills,
-      kbs: context.kbs,
-      workflows: context.workflows,
     }),
   );
   const existingAgentsMd = await readS3Text(
@@ -1281,7 +951,7 @@ export async function normalizeAgentsMd(agentId: string): Promise<void> {
     );
   }
   console.log(
-    `[workspace-map] Normalized AGENTS.md for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s), ${context.kbs.length} KB(s), ${context.workflows.length} workflow(s)`,
+    `[workspace-map] Normalized AGENTS.md for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s)`,
   );
 }
 
@@ -1563,8 +1233,6 @@ function renderAgentsMap(
   agentName: string,
   agentSlug: string,
   skills: SkillInfo[],
-  kbs: KBInfo[],
-  workflowList: WorkflowInfo[],
   workspaceObjectPaths: string[],
   contextByFolder: Map<string, string>,
 ): string {
@@ -1579,8 +1247,6 @@ function renderAgentsMap(
     ),
   );
   lines.push(renderSkillsSection(skills));
-  lines.push(renderKnowledgeBasesSection(kbs));
-  lines.push(renderWorkflowsSection(workflowList));
 
   return lines.join("\n");
 }
@@ -1644,14 +1310,13 @@ function renderSkillsBody(skills: SkillInfo[]): string {
   );
   lines.push("");
   if (skills.length > 0) {
-    lines.push("| Skill | Description | Triggers |");
-    lines.push("|-------|-------------|----------|");
+    lines.push("| Skill | Scope | Description |");
+    lines.push("|-------|-------|-------------|");
     for (const skill of skills) {
       const desc = escTableCell(skill.description?.slice(0, 80) ?? null);
-      const triggers = escTableCell(
-        skill.triggers?.slice(0, 3).join(", ") ?? null,
+      lines.push(
+        `| ${escTableCell(skill.name)} | ${escTableCell(skill.scope)} | ${desc} |`,
       );
-      lines.push(`| ${escTableCell(skill.name)} | ${desc} | ${triggers} |`);
     }
   } else {
     lines.push("No skills assigned.");
@@ -1660,59 +1325,11 @@ function renderSkillsBody(skills: SkillInfo[]): string {
   return lines.join("\n");
 }
 
-function renderKnowledgeBasesSection(kbs: KBInfo[]): string {
-  return `\n## Knowledge Bases${renderKnowledgeBasesBody(kbs)}`;
-}
-
-function renderKnowledgeBasesBody(kbs: KBInfo[]): string {
-  const lines: string[] = [""];
-  if (kbs.length > 0) {
-    lines.push("| KB | Description | Used In |");
-    lines.push("|----|-------------|---------|");
-    for (const kb of kbs) {
-      const usedIn = escTableCell(
-        kb.usedIn.length > 0 ? kb.usedIn.join(", ") : "(all workspaces)",
-      );
-      lines.push(
-        `| ${escTableCell(kb.name)} | ${escTableCell(kb.description)} | ${usedIn} |`,
-      );
-    }
-  } else {
-    lines.push("No knowledge bases assigned.");
-  }
-  lines.push("");
-  return lines.join("\n");
-}
-
-function renderWorkflowsSection(workflowList: WorkflowInfo[]): string {
-  return `\n## Workflows${renderWorkflowsBody(workflowList)}`;
-}
-
-function renderWorkflowsBody(workflowList: WorkflowInfo[]): string {
-  const lines: string[] = [""];
-  if (workflowList.length > 0) {
-    lines.push("| Workflow | Description | Schedule |");
-    lines.push("|----------|-------------|----------|");
-    for (const w of workflowList) {
-      const desc = escTableCell(w.description?.slice(0, 80) ?? null);
-      const schedule = escTableCell(w.schedule ?? "on-demand");
-      lines.push(`| ${escTableCell(w.name)} | ${desc} | ${schedule} |`);
-    }
-  } else {
-    lines.push("No workflows configured.");
-  }
-  lines.push("");
-
-  return lines.join("\n");
-}
-
 export function renderDerivedAgentsMdSections(args: {
   agentSlug: string;
   workspaceObjectPaths: string[];
   contextByFolder?: Map<string, string>;
   skills: SkillInfo[];
-  kbs: KBInfo[];
-  workflows: WorkflowInfo[];
 }): Record<DerivedSectionName, string> {
   const contextByFolder = args.contextByFolder ?? new Map<string, string>();
   return {
@@ -1722,8 +1339,6 @@ export function renderDerivedAgentsMdSections(args: {
       contextByFolder,
     ),
     "Skills & Tools": renderSkillsBody(args.skills),
-    "Knowledge Bases": renderKnowledgeBasesBody(args.kbs),
-    Workflows: renderWorkflowsBody(args.workflows),
   };
 }
 
