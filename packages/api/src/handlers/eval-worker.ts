@@ -689,7 +689,7 @@ async function executeCase(
   let costUsd = 0;
 
   try {
-    const targetAgentId = tc.agent_id ?? run.agent_id;
+    const targetAgentId = run.agent_id;
     if (!targetAgentId) {
       throw new Error("Eval run has no AgentCore agent target");
     }
