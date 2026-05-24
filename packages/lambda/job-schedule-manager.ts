@@ -213,7 +213,6 @@ async function createJob(
         agent_id: body.agentId || null,
         space_id: body.spaceId || null,
         routine_id: body.routineId || null,
-        team_id: body.teamId || null,
         name: body.name,
         description: body.description,
         prompt: body.prompt,

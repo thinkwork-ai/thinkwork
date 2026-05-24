@@ -19,8 +19,8 @@ import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../
 import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
 
 const RoutinesDoc = graphql(`
-  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {
-    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {
+  query CliRoutines($tenantId: ID!, $agentId: ID, $status: RoutineStatus) {
+    routines(tenantId: $tenantId, agentId: $agentId, status: $status) {
       id
       name
       type
@@ -28,7 +28,6 @@ const RoutinesDoc = graphql(`
       engine
       schedule
       agentId
-      teamId
       lastRunAt
       nextRunAt
     }
@@ -46,7 +45,6 @@ const RoutineDoc = graphql(`
       engine
       schedule
       agentId
-      teamId
       visibility
       owningAgentId
       currentVersion
@@ -193,7 +191,6 @@ function fmtIso(iso: string | null | undefined): string {
 
 interface ListOptions extends RoutineCliOptions {
   agent?: string;
-  team?: string;
   status?: string;
 }
 
@@ -229,7 +226,6 @@ async function runRoutineList(opts: ListOptions): Promise<void> {
   const ctx = await resolveRoutineContext(opts);
   const data = await gqlQuery(ctx.client, RoutinesDoc, {
     tenantId: ctx.tenantId,
-    teamId: opts.team ?? null,
     agentId: opts.agent ?? null,
     status: parseStatus(opts.status, ROUTINE_STATUS_BY_NAME, "--status"),
   });
@@ -282,7 +278,6 @@ async function runRoutineGet(id: string, opts: RoutineCliOptions): Promise<void>
     ["Visibility", r.visibility],
     ["Owning agent", r.owningAgentId ?? undefined],
     ["Agent", r.agentId ?? undefined],
-    ["Team", r.teamId ?? undefined],
     ["Schedule", r.schedule ?? undefined],
     ["Current version", r.currentVersion ?? undefined],
     ["Last run", fmtIso(r.lastRunAt)],
@@ -310,7 +305,6 @@ async function runRoutineGet(id: string, opts: RoutineCliOptions): Promise<void>
 
 interface CreateOptions extends RoutineCliOptions {
   agent?: string;
-  team?: string;
   description?: string;
   config?: string;
   configFile?: string;
@@ -354,7 +348,6 @@ async function runRoutineCreate(
       name: resolvedName!,
       description: opts.description ?? null,
       agentId: opts.agent ?? null,
-      teamId: opts.team ?? null,
       asl: aslJson,
     },
   });
@@ -371,7 +364,6 @@ interface UpdateOptions extends RoutineCliOptions {
   name?: string;
   status?: string;
   agent?: string;
-  team?: string;
   configFile?: string;
 }
 
@@ -381,7 +373,6 @@ async function runRoutineUpdate(id: string, opts: UpdateOptions): Promise<void> 
   if (opts.name !== undefined) input.name = opts.name;
   if (opts.status !== undefined) input.status = opts.status;
   if (opts.agent !== undefined) input.agentId = opts.agent;
-  if (opts.team !== undefined) input.teamId = opts.team;
   if (Object.keys(input).length === 0) {
     printError("Nothing to update.");
     process.exit(1);
@@ -603,7 +594,6 @@ export function registerRoutineCommand(program: Command): void {
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--agent <id>", "Filter by agent")
-    .option("--team <id>", "Filter by team")
     .option("--status <s>", "ACTIVE | PAUSED | ARCHIVED")
     .action(runRoutineList);
 
@@ -620,7 +610,6 @@ export function registerRoutineCommand(program: Command): void {
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--agent <id>", "Agent that runs the routine")
-    .option("--team <id>", "Team to route runs to (instead of a single agent)")
     .option("--description <text>")
     .option("--config <json>", "Inline ASL JSON")
     .option("--config-file <path>", "Load ASL JSON from a file")
@@ -641,7 +630,6 @@ Examples:
     .option("--name <n>")
     .option("--status <s>", "ACTIVE | PAUSED | ARCHIVED")
     .option("--agent <id>")
-    .option("--team <id>")
     .option("--config-file <path>", "(not supported — ASL is published separately)")
     .action(runRoutineUpdate);
 

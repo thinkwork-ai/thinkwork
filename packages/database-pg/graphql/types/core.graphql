@@ -40,7 +40,6 @@ type Tenant {
   settings: TenantSettings
   members: [TenantMember!]!
   agents: [Agent!]!
-  teams: [Team!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }

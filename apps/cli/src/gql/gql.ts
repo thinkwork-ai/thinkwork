@@ -86,8 +86,8 @@ type Documents = {
     "\n  mutation CliUpdateRecipe($id: ID!, $input: UpdateRecipeInput!) {\n    updateRecipe(id: $id, input: $input) {\n      id\n      title\n    }\n  }\n": typeof types.CliUpdateRecipeDocument,
     "\n  mutation CliDeleteRecipe($id: ID!) {\n    deleteRecipe(id: $id)\n  }\n": typeof types.CliDeleteRecipeDocument,
     "\n  query CliRecipeTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliRecipeTenantBySlugDocument,
-    "\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n": typeof types.CliRoutinesDocument,
-    "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n": typeof types.CliRoutineDocument,
+    "\n  query CliRoutines($tenantId: ID!, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      lastRunAt\n      nextRunAt\n    }\n  }\n": typeof types.CliRoutinesDocument,
+    "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n": typeof types.CliRoutineDocument,
     "\n  mutation CliCreateRoutine($input: CreateRoutineInput!) {\n    createRoutine(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": typeof types.CliCreateRoutineDocument,
     "\n  mutation CliUpdateRoutine($id: ID!, $input: UpdateRoutineInput!) {\n    updateRoutine(id: $id, input: $input) {\n      id\n      name\n      status\n    }\n  }\n": typeof types.CliUpdateRoutineDocument,
     "\n  mutation CliDeleteRoutine($id: ID!) {\n    deleteRoutine(id: $id)\n  }\n": typeof types.CliDeleteRoutineDocument,
@@ -108,16 +108,6 @@ type Documents = {
     "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliSkillTenantBySlugDocument,
     "\n  mutation CliInstallSkill($input: InstallSkillInput!) {\n    installSkill(input: $input) {\n      id\n      tenantId\n      skillId\n      source\n      version\n      catalogVersion\n      enabled\n      installedAt\n      updatedAt\n    }\n  }\n": typeof types.CliInstallSkillDocument,
     "\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n": typeof types.CliUninstallSkillDocument,
-    "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n": typeof types.CliTeamsDocument,
-    "\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n": typeof types.CliTeamDocument,
-    "\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": typeof types.CliCreateTeamDocument,
-    "\n  mutation CliUpdateTeam($id: ID!, $input: UpdateTeamInput!) {\n    updateTeam(id: $id, input: $input) {\n      id\n      name\n      type\n      status\n      budgetMonthlyCents\n    }\n  }\n": typeof types.CliUpdateTeamDocument,
-    "\n  mutation CliDeleteTeam($id: ID!) {\n    deleteTeam(id: $id)\n  }\n": typeof types.CliDeleteTeamDocument,
-    "\n  mutation CliAddTeamAgent($teamId: ID!, $input: AddTeamAgentInput!) {\n    addTeamAgent(teamId: $teamId, input: $input) {\n      id\n      agentId\n      role\n    }\n  }\n": typeof types.CliAddTeamAgentDocument,
-    "\n  mutation CliRemoveTeamAgent($teamId: ID!, $agentId: ID!) {\n    removeTeamAgent(teamId: $teamId, agentId: $agentId)\n  }\n": typeof types.CliRemoveTeamAgentDocument,
-    "\n  mutation CliAddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {\n    addTeamUser(teamId: $teamId, input: $input) {\n      id\n      userId\n      role\n    }\n  }\n": typeof types.CliAddTeamUserDocument,
-    "\n  mutation CliRemoveTeamUser($teamId: ID!, $userId: ID!) {\n    removeTeamUser(teamId: $teamId, userId: $userId)\n  }\n": typeof types.CliRemoveTeamUserDocument,
-    "\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n": typeof types.CliTeamTenantBySlugDocument,
     "\n  mutation CliCreateTenant($input: CreateTenantInput!) {\n    createTenant(input: $input) {\n      id\n      name\n      slug\n      plan\n      issuePrefix\n    }\n  }\n": typeof types.CliCreateTenantDocument,
     "\n  mutation CliUpdateTenant($id: ID!, $input: UpdateTenantInput!) {\n    updateTenant(id: $id, input: $input) {\n      id\n      name\n      slug\n      plan\n      issuePrefix\n    }\n  }\n": typeof types.CliUpdateTenantDocument,
     "\n  query CliTenantSettings($id: ID!) {\n    tenant(id: $id) {\n      id\n      name\n      slug\n      settings {\n        id\n        defaultModel\n        budgetMonthlyCents\n        autoCloseThreadMinutes\n        maxAgents\n        features\n      }\n    }\n  }\n": typeof types.CliTenantSettingsDocument,
@@ -238,8 +228,8 @@ const documents: Documents = {
     "\n  mutation CliUpdateRecipe($id: ID!, $input: UpdateRecipeInput!) {\n    updateRecipe(id: $id, input: $input) {\n      id\n      title\n    }\n  }\n": types.CliUpdateRecipeDocument,
     "\n  mutation CliDeleteRecipe($id: ID!) {\n    deleteRecipe(id: $id)\n  }\n": types.CliDeleteRecipeDocument,
     "\n  query CliRecipeTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliRecipeTenantBySlugDocument,
-    "\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n": types.CliRoutinesDocument,
-    "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n": types.CliRoutineDocument,
+    "\n  query CliRoutines($tenantId: ID!, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      lastRunAt\n      nextRunAt\n    }\n  }\n": types.CliRoutinesDocument,
+    "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n": types.CliRoutineDocument,
     "\n  mutation CliCreateRoutine($input: CreateRoutineInput!) {\n    createRoutine(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": types.CliCreateRoutineDocument,
     "\n  mutation CliUpdateRoutine($id: ID!, $input: UpdateRoutineInput!) {\n    updateRoutine(id: $id, input: $input) {\n      id\n      name\n      status\n    }\n  }\n": types.CliUpdateRoutineDocument,
     "\n  mutation CliDeleteRoutine($id: ID!) {\n    deleteRoutine(id: $id)\n  }\n": types.CliDeleteRoutineDocument,
@@ -260,16 +250,6 @@ const documents: Documents = {
     "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliSkillTenantBySlugDocument,
     "\n  mutation CliInstallSkill($input: InstallSkillInput!) {\n    installSkill(input: $input) {\n      id\n      tenantId\n      skillId\n      source\n      version\n      catalogVersion\n      enabled\n      installedAt\n      updatedAt\n    }\n  }\n": types.CliInstallSkillDocument,
     "\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n": types.CliUninstallSkillDocument,
-    "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n": types.CliTeamsDocument,
-    "\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n": types.CliTeamDocument,
-    "\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": types.CliCreateTeamDocument,
-    "\n  mutation CliUpdateTeam($id: ID!, $input: UpdateTeamInput!) {\n    updateTeam(id: $id, input: $input) {\n      id\n      name\n      type\n      status\n      budgetMonthlyCents\n    }\n  }\n": types.CliUpdateTeamDocument,
-    "\n  mutation CliDeleteTeam($id: ID!) {\n    deleteTeam(id: $id)\n  }\n": types.CliDeleteTeamDocument,
-    "\n  mutation CliAddTeamAgent($teamId: ID!, $input: AddTeamAgentInput!) {\n    addTeamAgent(teamId: $teamId, input: $input) {\n      id\n      agentId\n      role\n    }\n  }\n": types.CliAddTeamAgentDocument,
-    "\n  mutation CliRemoveTeamAgent($teamId: ID!, $agentId: ID!) {\n    removeTeamAgent(teamId: $teamId, agentId: $agentId)\n  }\n": types.CliRemoveTeamAgentDocument,
-    "\n  mutation CliAddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {\n    addTeamUser(teamId: $teamId, input: $input) {\n      id\n      userId\n      role\n    }\n  }\n": types.CliAddTeamUserDocument,
-    "\n  mutation CliRemoveTeamUser($teamId: ID!, $userId: ID!) {\n    removeTeamUser(teamId: $teamId, userId: $userId)\n  }\n": types.CliRemoveTeamUserDocument,
-    "\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n": types.CliTeamTenantBySlugDocument,
     "\n  mutation CliCreateTenant($input: CreateTenantInput!) {\n    createTenant(input: $input) {\n      id\n      name\n      slug\n      plan\n      issuePrefix\n    }\n  }\n": types.CliCreateTenantDocument,
     "\n  mutation CliUpdateTenant($id: ID!, $input: UpdateTenantInput!) {\n    updateTenant(id: $id, input: $input) {\n      id\n      name\n      slug\n      plan\n      issuePrefix\n    }\n  }\n": types.CliUpdateTenantDocument,
     "\n  query CliTenantSettings($id: ID!) {\n    tenant(id: $id) {\n      id\n      name\n      slug\n      settings {\n        id\n        defaultModel\n        budgetMonthlyCents\n        autoCloseThreadMinutes\n        maxAgents\n        features\n      }\n    }\n  }\n": types.CliTenantSettingsDocument,
@@ -623,11 +603,11 @@ export function graphql(source: "\n  query CliRecipeTenantBySlug($slug: String!)
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n"): (typeof documents)["\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n"];
+export function graphql(source: "\n  query CliRoutines($tenantId: ID!, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      lastRunAt\n      nextRunAt\n    }\n  }\n"): (typeof documents)["\n  query CliRoutines($tenantId: ID!, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      lastRunAt\n      nextRunAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n"): (typeof documents)["\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n"];
+export function graphql(source: "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n"): (typeof documents)["\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -708,46 +688,6 @@ export function graphql(source: "\n  mutation CliInstallSkill($input: InstallSki
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n"): (typeof documents)["\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n"): (typeof documents)["\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CliUpdateTeam($id: ID!, $input: UpdateTeamInput!) {\n    updateTeam(id: $id, input: $input) {\n      id\n      name\n      type\n      status\n      budgetMonthlyCents\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateTeam($id: ID!, $input: UpdateTeamInput!) {\n    updateTeam(id: $id, input: $input) {\n      id\n      name\n      type\n      status\n      budgetMonthlyCents\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CliDeleteTeam($id: ID!) {\n    deleteTeam(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteTeam($id: ID!) {\n    deleteTeam(id: $id)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CliAddTeamAgent($teamId: ID!, $input: AddTeamAgentInput!) {\n    addTeamAgent(teamId: $teamId, input: $input) {\n      id\n      agentId\n      role\n    }\n  }\n"): (typeof documents)["\n  mutation CliAddTeamAgent($teamId: ID!, $input: AddTeamAgentInput!) {\n    addTeamAgent(teamId: $teamId, input: $input) {\n      id\n      agentId\n      role\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CliRemoveTeamAgent($teamId: ID!, $agentId: ID!) {\n    removeTeamAgent(teamId: $teamId, agentId: $agentId)\n  }\n"): (typeof documents)["\n  mutation CliRemoveTeamAgent($teamId: ID!, $agentId: ID!) {\n    removeTeamAgent(teamId: $teamId, agentId: $agentId)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CliAddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {\n    addTeamUser(teamId: $teamId, input: $input) {\n      id\n      userId\n      role\n    }\n  }\n"): (typeof documents)["\n  mutation CliAddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {\n    addTeamUser(teamId: $teamId, input: $input) {\n      id\n      userId\n      role\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CliRemoveTeamUser($teamId: ID!, $userId: ID!) {\n    removeTeamUser(teamId: $teamId, userId: $userId)\n  }\n"): (typeof documents)["\n  mutation CliRemoveTeamUser($teamId: ID!, $userId: ID!) {\n    removeTeamUser(teamId: $teamId, userId: $userId)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n"): (typeof documents)["\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

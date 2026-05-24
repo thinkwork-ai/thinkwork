@@ -54,17 +54,13 @@ beforeEach(async () => {
 });
 
 describe("assignedComputers", () => {
-  it("returns direct and Team-assigned Computers once", async () => {
-    mockSelect
-      .mockReturnValueOnce(
-        queryRows([{ computers: { id: "c1", name: "Sales" } }]),
-      )
-      .mockReturnValueOnce(
-        queryRows([
-          { computers: { id: "c1", name: "Sales" } },
-          { computers: { id: "c2", name: "Finance" } },
-        ]),
-      );
+  it("returns directly assigned Computers", async () => {
+    mockSelect.mockReturnValueOnce(
+      queryRows([
+        { computers: { id: "c1", name: "Sales" } },
+        { computers: { id: "c2", name: "Finance" } },
+      ]),
+    );
 
     const result = await resolver.assignedComputers(null, {}, {} as any);
 

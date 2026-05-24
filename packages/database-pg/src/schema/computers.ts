@@ -20,7 +20,6 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core.js";
 import { agents } from "./agents.js";
-import { teams } from "./teams.js";
 
 export const computers = pgTable(
   "computers",
@@ -119,9 +118,7 @@ export const computerAssignments = pgTable(
     user_id: uuid("user_id").references(() => users.id, {
       onDelete: "cascade",
     }),
-    team_id: uuid("team_id").references(() => teams.id, {
-      onDelete: "cascade",
-    }),
+    team_id: uuid("team_id"),
     role: text("role").notNull().default("member"),
     assigned_by_user_id: uuid("assigned_by_user_id").references(
       () => users.id,
@@ -319,10 +316,6 @@ export const computerAssignmentsRelations = relations(
     user: one(users, {
       fields: [computerAssignments.user_id],
       references: [users.id],
-    }),
-    team: one(teams, {
-      fields: [computerAssignments.team_id],
-      references: [teams.id],
     }),
     assignedBy: one(users, {
       fields: [computerAssignments.assigned_by_user_id],

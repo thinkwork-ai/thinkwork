@@ -6,7 +6,6 @@ import {
   ne,
   computers,
   computerAssignments,
-  teamUsers,
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { toGraphqlComputer } from "./shared.js";
@@ -32,23 +31,8 @@ export async function assignedComputers(
       ),
     );
 
-  const teamRows = await db
-    .select()
-    .from(computerAssignments)
-    .innerJoin(teamUsers, eq(teamUsers.team_id, computerAssignments.team_id))
-    .innerJoin(computers, eq(computers.id, computerAssignments.computer_id))
-    .where(
-      and(
-        eq(computerAssignments.tenant_id, caller.tenantId),
-        eq(computerAssignments.subject_type, "team"),
-        eq(teamUsers.tenant_id, caller.tenantId),
-        eq(teamUsers.user_id, caller.userId),
-        ne(computers.status, "archived"),
-      ),
-    );
-
   const byId = new Map<string, typeof computers.$inferSelect>();
-  for (const row of [...directRows, ...teamRows]) {
+  for (const row of directRows) {
     byId.set(row.computers.id, row.computers);
   }
 

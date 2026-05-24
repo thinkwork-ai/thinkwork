@@ -291,155 +291,22 @@ export const ComputersQuery = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
-// Teams
-// ---------------------------------------------------------------------------
-
-export const TeamsQuery = graphql(`
-  query Teams($tenantId: ID!) {
-    teams(tenantId: $tenantId) {
-      id
-      tenantId
-      name
-      description
-      type
-      status
-      budgetMonthlyCents
-      metadata
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const TeamQuery = graphql(`
-  query Team($id: ID!) {
-    team(id: $id) {
-      id
-      tenantId
-      name
-      description
-      type
-      status
-      budgetMonthlyCents
-      metadata
-      agents {
-        id
-        agentId
-        role
-        joinedAt
-        agent {
-          id
-          name
-          type
-          status
-          avatarUrl
-        }
-      }
-      users {
-        id
-        userId
-        role
-        joinedAt
-        user {
-          id
-          name
-          email
-          image
-        }
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const CreateTeamMutation = graphql(`
-  mutation CreateTeam($input: CreateTeamInput!) {
-    createTeam(input: $input) {
-      id
-      tenantId
-      name
-      type
-      status
-      createdAt
-    }
-  }
-`);
-
-export const UpdateTeamMutation = graphql(`
-  mutation UpdateTeam($id: ID!, $input: UpdateTeamInput!) {
-    updateTeam(id: $id, input: $input) {
-      id
-      name
-      description
-      status
-      updatedAt
-    }
-  }
-`);
-
-export const DeleteTeamMutation = graphql(`
-  mutation DeleteTeam($id: ID!) {
-    deleteTeam(id: $id)
-  }
-`);
-
-export const AddTeamAgentMutation = graphql(`
-  mutation AddTeamAgent($teamId: ID!, $input: AddTeamAgentInput!) {
-    addTeamAgent(teamId: $teamId, input: $input) {
-      id
-      teamId
-      agentId
-      role
-      joinedAt
-    }
-  }
-`);
-
-export const RemoveTeamAgentMutation = graphql(`
-  mutation RemoveTeamAgent($teamId: ID!, $agentId: ID!) {
-    removeTeamAgent(teamId: $teamId, agentId: $agentId)
-  }
-`);
-
-export const AddTeamUserMutation = graphql(`
-  mutation AddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {
-    addTeamUser(teamId: $teamId, input: $input) {
-      id
-      teamId
-      userId
-      role
-      joinedAt
-    }
-  }
-`);
-
-export const RemoveTeamUserMutation = graphql(`
-  mutation RemoveTeamUser($teamId: ID!, $userId: ID!) {
-    removeTeamUser(teamId: $teamId, userId: $userId)
-  }
-`);
-
-// ---------------------------------------------------------------------------
 // Routines
 // ---------------------------------------------------------------------------
 
 export const RoutinesQuery = graphql(`
   query Routines(
     $tenantId: ID!
-    $teamId: ID
     $agentId: ID
     $status: RoutineStatus
   ) {
     routines(
       tenantId: $tenantId
-      teamId: $teamId
       agentId: $agentId
       status: $status
     ) {
       id
       tenantId
-      teamId
       agentId
       name
       description
@@ -460,7 +327,6 @@ export const RoutineQuery = graphql(`
     routine(id: $id) {
       id
       tenantId
-      teamId
       agentId
       name
       description
@@ -778,7 +644,6 @@ export const ScheduledJobsQuery = graphql(`
       triggerType
       agentId
       routineId
-      teamId
       name
       description
       scheduleType
