@@ -1411,7 +1411,7 @@ None.
 | U6a Catalog editor root correction              | `codex/pi-skill-catalog-catalog-root-fix` | [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647) | Merged | Squash merged as `b6f6cd8f`; remote and local branch removed.                                                                                                                                                                          |
 | U7 Install-skill backend action                 | `codex/pi-skill-catalog-u7-install`       | [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) | Merged | Squash merged as `400809ec`; remote and local branch removed. Added the workspace-files `install-skill` action, agent/Space install support, rollback, and self-seeding empty tenant catalogs from bundled repo skills before listing. |
 | U8 Add Skill dialog component                   | `codex/pi-skill-catalog-u8-dialog`        | [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) | Merged | Squash merged as `d49eccb4`; remote and local branch removed. Added the admin two-step Add Skill dialog, catalog/wiring parsing helpers, and install-skill client wrapper.                                                             |
-| U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | pending                                                      | Active | Adding the `skills/` folder context-menu entry and wiring the dialog through agent/Space workspace targets.                                                                                                                            |
+| U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | In CI  | Adds the `skills/` folder context-menu entry and wires the dialog through agent/Space workspace targets.                                                                                                                               |
 
 ## Verification Log
 
@@ -1494,6 +1494,7 @@ None.
 - Squash merged [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) as `400809ec37f2e4687d858395bfd992b3f4b6dae3`.
 - Opened [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653).
 - Squash merged [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) as `d49eccb473f86599ec584c1921219fda0bf2209b`.
+- Opened [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655).
 
 ## Blockers
 
