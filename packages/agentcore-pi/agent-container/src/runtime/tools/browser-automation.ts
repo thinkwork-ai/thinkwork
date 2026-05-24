@@ -86,8 +86,17 @@ export function buildBrowserAutomationTool(
     name: "browser_automation",
     label: "Browser",
     description:
-      "Open a managed AgentCore Browser session, navigate to a public HTTPS URL, and " +
-      "capture evidence that the page loaded.",
+      "Heavyweight browser-automation session — open a managed AgentCore " +
+      "Browser, navigate to a public HTTPS URL, interact with the page, and " +
+      "capture evidence. DO NOT use for ordinary information lookups such " +
+      "as locations, business hours, prices, schedules, news, or " +
+      "definitions — prefer the `web_search` tool for those (fast, cheap, " +
+      "indexed). Only reach for `browser_automation` when the task " +
+      "genuinely requires page interaction (filling forms, clicking " +
+      "through an auth flow, scraping JS-rendered content that search " +
+      "engines do not index, or following a multi-step user journey). " +
+      "This tool is expensive and slow; if `web_search` would answer the " +
+      "question, use it instead.",
     parameters: Type.Object({
       url: Type.String({ description: "Starting public HTTPS URL." }),
       task: Type.Optional(
