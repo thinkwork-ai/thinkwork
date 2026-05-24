@@ -100,6 +100,20 @@ describe("workspace editor target capabilities", () => {
     );
   });
 
+  it("registers Cmd/Ctrl+S only for dirty editor saves", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(/event\.key\.toLowerCase\(\) === "s"/);
+    expect(editorSource).toMatch(/event\.metaKey \|\| event\.ctrlKey/);
+    expect(editorSource).toMatch(/editValue === content/);
+    expect(editorSource).toMatch(
+      /event\.preventDefault\(\);\s+void handleSave\(\);/,
+    );
+  });
+
   it("uses inline tree editing for new files, new folders, and rename", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),

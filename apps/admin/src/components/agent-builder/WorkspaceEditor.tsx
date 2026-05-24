@@ -586,7 +586,7 @@ export function WorkspaceEditor({
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!openFile) return;
     const savedPath = openFile;
     const savedValue = editValue;
@@ -603,7 +603,26 @@ export function WorkspaceEditor({
     } finally {
       setSaving(false);
     }
-  };
+  }, [editValue, fetchFiles, openFile, stableTarget]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const isSaveShortcut =
+        event.key.toLowerCase() === "s" &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey;
+      if (!isSaveShortcut) return;
+      if (!openFileRef.current || saving || loadingContent) return;
+      if (editValue === content) return;
+
+      event.preventDefault();
+      void handleSave();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [content, editValue, handleSave, loadingContent, saving]);
 
   const handleDelete = async () => {
     if (!openFile) return;
