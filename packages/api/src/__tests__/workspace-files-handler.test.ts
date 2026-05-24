@@ -158,6 +158,14 @@ vi.mock("../lib/workspace-manifest.js", () => ({
   regenerateManifest: vi.fn().mockResolvedValue(undefined),
 }));
 
+const { bootstrapAgentWorkspaceMock } = vi.hoisted(() => ({
+  bootstrapAgentWorkspaceMock: vi.fn(),
+}));
+
+vi.mock("../lib/workspace-bootstrap.js", () => ({
+  bootstrapAgentWorkspace: bootstrapAgentWorkspaceMock,
+}));
+
 // ─── Mock deriveAgentSkills (U11) so handler tests don't need full composer
 // playback. Targeted derive-vs-no-derive tests below override the impl.
 
@@ -173,11 +181,16 @@ const { refreshAgentsMdSectionsMock } = vi.hoisted(() => ({
   refreshAgentsMdSectionsMock: vi.fn(),
 }));
 
+const { normalizeAgentsMdMock } = vi.hoisted(() => ({
+  normalizeAgentsMdMock: vi.fn(),
+}));
+
 vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../lib/workspace-map-generator.js")>();
   return {
     ...actual,
+    normalizeAgentsMd: normalizeAgentsMdMock,
     regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
   };
 });
@@ -338,6 +351,13 @@ beforeEach(() => {
   authMockImpl.mockReset();
   enqueueComputerTaskMock.mockReset();
   enqueueComputerTaskMock.mockResolvedValue({ id: "computer-task-1" });
+  bootstrapAgentWorkspaceMock.mockReset();
+  bootstrapAgentWorkspaceMock.mockResolvedValue({
+    agentId: AGENT_ID,
+    written: 1,
+    skipped: 0,
+    total: 1,
+  });
   deriveMockImpl.mockReset();
   deriveMockImpl.mockResolvedValue({
     changed: false,
@@ -348,6 +368,8 @@ beforeEach(() => {
   });
   refreshAgentsMdSectionsMock.mockReset();
   refreshAgentsMdSectionsMock.mockResolvedValue(undefined);
+  normalizeAgentsMdMock.mockReset();
+  normalizeAgentsMdMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -487,6 +509,52 @@ describe("agent AGENTS.md derived section refresh", () => {
     expect(regenRes.statusCode).toBe(200);
 
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("normalizes AGENTS.md only for agent targets", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const agentRes = await parse(
+      await handler(event({ action: "normalize-map", agentId: AGENT_ID })),
+    );
+
+    expect(agentRes.statusCode).toBe(200);
+    expect(normalizeAgentsMdMock).toHaveBeenCalledTimes(1);
+    expect(normalizeAgentsMdMock).toHaveBeenCalledWith(AGENT_ID);
+
+    queueAdminTemplateTargetRows();
+    const templateRes = await parse(
+      await handler(
+        event({ action: "normalize-map", templateId: TEMPLATE_ID }),
+      ),
+    );
+
+    expect(templateRes.statusCode).toBe(400);
+    expect(templateRes.body.error).toMatch(/requires agentId/);
+    expect(normalizeAgentsMdMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rematerialize refreshes AGENTS.md sections after overwriting template/default files", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(event({ action: "rematerialize", agentId: AGENT_ID })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      agentId: AGENT_ID,
+      written: 1,
+      skipped: 0,
+      total: 1,
+    });
+    expect(bootstrapAgentWorkspaceMock).toHaveBeenCalledWith(AGENT_ID, {
+      mode: "overwrite",
+      refreshAgentsMdSections: true,
+    });
   });
 });
 

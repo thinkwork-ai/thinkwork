@@ -179,6 +179,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import {
+  normalizeAgentsMd,
   regenerateAgentsMdDerivedSections,
   regenerateWorkspaceMap,
   replaceDerivedAgentsMdSections,
@@ -339,6 +340,25 @@ describe("regenerateAgentsMdDerivedSections", () => {
     expect(written).toContain(
       "| Editor Review | Review edited workspace files | review edits |",
     );
+    expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
+    expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("normalizeAgentsMd", () => {
+  it("replaces a malformed AGENTS.md with the canonical template plus derived sections", async () => {
+    state.listObjectsResponses = ["AGENTS.md", "memory/lessons.md"];
+    state.s3GetResponses.set(`${PREFIX}AGENTS.md`, "not markdown at all");
+
+    await normalizeAgentsMd("agent-1");
+
+    const written = lastWrittenAgentsMd();
+    expect(written).toContain("# AGENTS.md");
+    expect(written).toContain("## Routing");
+    expect(written).toContain("## Naming conventions");
+    expect(written).toContain("## Folder Structure");
+    expect(written).toContain("memory/");
+    expect(written).not.toContain("not markdown at all");
     expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
   });
