@@ -15,13 +15,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: PR 2 - U3 workspace-defaults substrate + U4 pin/governance collapse + U5 bootstrap exclusion
-- Active branch: `codex/folder-agent-defaults-substrate`
-- Active worktree: `.Codex/worktrees/folder-agent-defaults-substrate`
+- Active unit: PR 3 - U10 renderer Model A simplification + U11 SPACE.md mentionable-workspaces + U12 private-Space render authz
+- Active branch: `codex/folder-agent-renderer-model-a`
+- Active worktree: `.Codex/worktrees/folder-agent-renderer-model-a`
 - Started: 2026-05-24
-- Latest merged PR: [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664)
-- Active PR: [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667)
-- CI: PR 1 passed; PR 2 rerun pending after parser-compatibility fix
+- Latest merged PR: [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667)
+- Active PR: [#1668](https://github.com/thinkwork-ai/thinkwork/pull/1668)
+- CI: PR 1 and PR 2 passed; PR 3 pending
 
 ### Active Unit Notes
 
@@ -31,14 +31,18 @@ Target branch: `main`
 - Added `docs/runbooks/folder-canon-default-files-retirement-2026-05-24.md` to document the future per-tenant defaults-prefix cleanup; no S3 mutation was run.
 - PR 2 first CI `test` run failed because the admin routing-table parser test still expects a `## Routing` table in the canonical `AGENTS.md` fixture. Restored a minimal empty routing table as a transitional compatibility surface and verified the focused admin test locally.
 - PR 2 second CI `test` run failed on a stale workspace-map-generator assertion expecting the old `## Naming conventions` header. Updated the test to assert the new `## ID & Naming Conventions` canonical section.
+- PR 2 merged as `34b26ff02625d4bc362ace0ac2ef85ffd1bdac8a`; remote branch and local worktree/branch removed.
+- Created isolated PR 3 worktree from merged `origin/main`.
+- PR 3 follows the plan rollout sequence: U10, U11, and U12 ship together as the renderer Model A simplification plus SPACE.md parser and private-Space render authz.
 - Consumer survey found live references outside the plan's initial scope, especially mobile Personalize/Profile and `packages/computer-runtime`; U24 must not delete legacy defaults until those consumers are updated, retired, or explicitly proven harmless.
 
 ### Progress Log
 
-| Date       | Unit     | Branch                                  | PR                                                           | Status         | Verification                                                                                                                                                                                                                                                              | Notes                                                           |
-| ---------- | -------- | --------------------------------------- | ------------------------------------------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| 2026-05-24 | U1/U2    | `codex/folder-agent-preflight`          | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | Merged         | Required CI passed: CLA, lint, test, typecheck, and verify.                                                                                                                                                                                                               | Added supersession callouts and pre-retirement consumer survey. |
-| 2026-05-24 | U3/U4/U5 | `codex/folder-agent-defaults-substrate` | [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667) | CI fix pending | `pnpm install`; workspace-defaults test/build; focused API pin/bootstrap/workspace-files tests; focused admin routing-table test; focused API workspace-map-generator test; API typecheck; repo typecheck/lint; touched-file Prettier; `git diff --check` passed locally. | Consolidating root contracts into AGENTS.md substrate.          |
+| Date       | Unit        | Branch                                  | PR                                                           | Status     | Verification                                                                                                                                                                                                                                                                                                                                                                                     | Notes                                                                                                              |
+| ---------- | ----------- | --------------------------------------- | ------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| 2026-05-24 | U1/U2       | `codex/folder-agent-preflight`          | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | Merged     | Required CI passed: CLA, lint, test, typecheck, and verify.                                                                                                                                                                                                                                                                                                                                      | Added supersession callouts and pre-retirement consumer survey.                                                    |
+| 2026-05-24 | U3/U4/U5    | `codex/folder-agent-defaults-substrate` | [#1667](https://github.com/thinkwork-ai/thinkwork/pull/1667) | Merged     | Required CI passed after two fixes and a clean base-update rerun: CLA, lint, test, typecheck, and verify. Local verification included `pnpm install`; workspace-defaults test/build; focused API pin/bootstrap/workspace-files tests; focused admin routing-table test; focused API workspace-map-generator test; API typecheck; repo typecheck/lint; touched-file Prettier; `git diff --check`. | Squash merged as `34b26ff02625d4bc362ace0ac2ef85ffd1bdac8a`; consolidated root contracts into AGENTS.md substrate. |
+| 2026-05-24 | U10/U11/U12 | `codex/folder-agent-renderer-model-a`   | [#1668](https://github.com/thinkwork-ai/thinkwork/pull/1668) | CI pending | `pnpm install`; focused API renderer/parser/membership/handler tests; full API test suite; API typecheck; repo typecheck/lint; touched-file Prettier; `git diff --check` passed locally.                                                                                                                                                                                                         | Switching renderer to context-only Spaces, SPACE.md mentionability, and private-Space render authz.                |
 
 ### CI Failures
 

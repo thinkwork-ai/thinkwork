@@ -5,6 +5,7 @@ export interface WorkspaceRenderTupleInput {
   agentId: string;
   spaceId: string;
   userId?: string | null;
+  invokingServiceIdentity?: string | null;
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
 }
@@ -19,6 +20,7 @@ export interface ResolvedWorkspaceRenderTuple {
   spaceSlug: string;
   spaceName: string;
   spaceKind: string;
+  spaceAccessMode: string;
   spacePrompt: string | null;
   spaceToolPolicy: unknown;
   spaceMcpPolicy: unknown;
@@ -87,7 +89,8 @@ export class WorkspaceRenderError extends Error {
       | "WorkspaceBucketNotConfigured"
       | "WorkspaceTupleNotFound"
       | "AgentBaselineNotFound"
-      | "SpaceSourcesNotFound",
+      | "SpaceSourcesNotFound"
+      | "SpaceAccessDenied",
     message: string,
   ) {
     super(message);
