@@ -68,6 +68,7 @@ import { Route as AuthedTenantAnalyticsPerformanceRouteImport } from "./routes/_
 import { Route as AuthedTenantAnalyticsCostRouteImport } from "./routes/_authed/_tenant/analytics/cost";
 import { Route as AuthedTenantAnalyticsActivityRouteImport } from "./routes/_authed/_tenant/analytics/activity";
 import { Route as AuthedTenantAgentToolsRouteImport } from "./routes/_authed/_tenant/agent/tools";
+import { Route as AuthedTenantAgentSkillsRouteImport } from "./routes/_authed/_tenant/agent/skills";
 import { Route as AuthedTenantAgentMcpServersRouteImport } from "./routes/_authed/_tenant/agent/mcp-servers";
 import { Route as AuthedTenantAgentFilesRouteImport } from "./routes/_authed/_tenant/agent/files";
 import { Route as AuthedTenantAgentConfigRouteImport } from "./routes/_authed/_tenant/agent/config";
@@ -420,6 +421,11 @@ const AuthedTenantAgentToolsRoute = AuthedTenantAgentToolsRouteImport.update({
   path: "/tools",
   getParentRoute: () => AuthedTenantAgentRoute,
 } as any);
+const AuthedTenantAgentSkillsRoute = AuthedTenantAgentSkillsRouteImport.update({
+  id: "/skills",
+  path: "/skills",
+  getParentRoute: () => AuthedTenantAgentRoute,
+} as any);
 const AuthedTenantAgentMcpServersRoute =
   AuthedTenantAgentMcpServersRouteImport.update({
     id: "/mcp-servers",
@@ -584,6 +590,7 @@ export interface FileRoutesByFullPath {
   "/agent/config": typeof AuthedTenantAgentConfigRoute;
   "/agent/files": typeof AuthedTenantAgentFilesRoute;
   "/agent/mcp-servers": typeof AuthedTenantAgentMcpServersRoute;
+  "/agent/skills": typeof AuthedTenantAgentSkillsRoute;
   "/agent/tools": typeof AuthedTenantAgentToolsRoute;
   "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
@@ -663,6 +670,7 @@ export interface FileRoutesByTo {
   "/agent/config": typeof AuthedTenantAgentConfigRoute;
   "/agent/files": typeof AuthedTenantAgentFilesRoute;
   "/agent/mcp-servers": typeof AuthedTenantAgentMcpServersRoute;
+  "/agent/skills": typeof AuthedTenantAgentSkillsRoute;
   "/agent/tools": typeof AuthedTenantAgentToolsRoute;
   "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
@@ -749,6 +757,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/agent/config": typeof AuthedTenantAgentConfigRoute;
   "/_authed/_tenant/agent/files": typeof AuthedTenantAgentFilesRoute;
   "/_authed/_tenant/agent/mcp-servers": typeof AuthedTenantAgentMcpServersRoute;
+  "/_authed/_tenant/agent/skills": typeof AuthedTenantAgentSkillsRoute;
   "/_authed/_tenant/agent/tools": typeof AuthedTenantAgentToolsRoute;
   "/_authed/_tenant/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/_authed/_tenant/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
@@ -834,6 +843,7 @@ export interface FileRouteTypes {
     | "/agent/config"
     | "/agent/files"
     | "/agent/mcp-servers"
+    | "/agent/skills"
     | "/agent/tools"
     | "/analytics/activity"
     | "/analytics/cost"
@@ -913,6 +923,7 @@ export interface FileRouteTypes {
     | "/agent/config"
     | "/agent/files"
     | "/agent/mcp-servers"
+    | "/agent/skills"
     | "/agent/tools"
     | "/analytics/activity"
     | "/analytics/cost"
@@ -998,6 +1009,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/agent/config"
     | "/_authed/_tenant/agent/files"
     | "/_authed/_tenant/agent/mcp-servers"
+    | "/_authed/_tenant/agent/skills"
     | "/_authed/_tenant/agent/tools"
     | "/_authed/_tenant/analytics/activity"
     | "/_authed/_tenant/analytics/cost"
@@ -1488,6 +1500,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantAgentToolsRouteImport;
       parentRoute: typeof AuthedTenantAgentRoute;
     };
+    "/_authed/_tenant/agent/skills": {
+      id: "/_authed/_tenant/agent/skills";
+      path: "/skills";
+      fullPath: "/agent/skills";
+      preLoaderRoute: typeof AuthedTenantAgentSkillsRouteImport;
+      parentRoute: typeof AuthedTenantAgentRoute;
+    };
     "/_authed/_tenant/agent/mcp-servers": {
       id: "/_authed/_tenant/agent/mcp-servers";
       path: "/mcp-servers";
@@ -1683,6 +1702,7 @@ interface AuthedTenantAgentRouteChildren {
   AuthedTenantAgentConfigRoute: typeof AuthedTenantAgentConfigRoute;
   AuthedTenantAgentFilesRoute: typeof AuthedTenantAgentFilesRoute;
   AuthedTenantAgentMcpServersRoute: typeof AuthedTenantAgentMcpServersRoute;
+  AuthedTenantAgentSkillsRoute: typeof AuthedTenantAgentSkillsRoute;
   AuthedTenantAgentToolsRoute: typeof AuthedTenantAgentToolsRoute;
   AuthedTenantAgentIndexRoute: typeof AuthedTenantAgentIndexRoute;
 }
@@ -1691,6 +1711,7 @@ const AuthedTenantAgentRouteChildren: AuthedTenantAgentRouteChildren = {
   AuthedTenantAgentConfigRoute: AuthedTenantAgentConfigRoute,
   AuthedTenantAgentFilesRoute: AuthedTenantAgentFilesRoute,
   AuthedTenantAgentMcpServersRoute: AuthedTenantAgentMcpServersRoute,
+  AuthedTenantAgentSkillsRoute: AuthedTenantAgentSkillsRoute,
   AuthedTenantAgentToolsRoute: AuthedTenantAgentToolsRoute,
   AuthedTenantAgentIndexRoute: AuthedTenantAgentIndexRoute,
 };

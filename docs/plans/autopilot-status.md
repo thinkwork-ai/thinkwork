@@ -1404,7 +1404,8 @@ None.
 | --- | --- | --- | --- | --- |
 | U1 Catalog S3 prefix and storage contract | `codex/pi-skill-catalog-u1-types` | [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) | Merged | Squash merged as `60280cad`; remote and local branch removed. |
 | U2 Catalog target get/list/put/delete | `codex/pi-skill-catalog-u2-target` | [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) | Merged | Squash merged as `90e3617c`; remote and local branch removed. |
-| U3 Catalog seed action | `codex/pi-skill-catalog-u3-seed` | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | PR open | Added idempotent `catalog-seed` action and bundled skill-catalog assets for the workspace-files Lambda. |
+| U3 Catalog seed action | `codex/pi-skill-catalog-u3-seed` | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | Merged | Squash merged as `180dc7ae`; remote and local branch removed. |
+| U4 WorkspaceEditor catalog mode + Skills route | `codex/pi-skill-catalog-u4-admin-mode` | Pending | In progress | Added catalog target wiring, WorkspaceEditor catalog mode, Skills tab route, and focused admin tests. |
 
 ## Verification Log
 
@@ -1425,6 +1426,11 @@ None.
 - `bash scripts/build-lambdas.sh workspace-files` - passed; `workspace-files.zip` contains bundled `skill-catalog/*/SKILL.md` assets.
 - `git diff --check` - passed.
 - `pnpm exec prettier --check packages/api/src/lib/catalog-seed.ts packages/api/src/lib/catalog-seed.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts scripts/build-lambdas.sh docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+- U3 PR checks passed on [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts src/components/tenant-agent/TenantAgentSkillsTab.test.tsx` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed; regenerated `apps/admin/src/routeTree.gen.ts` with the `/agent/skills` route.
+- `git diff --check` - passed.
+- `pnpm exec prettier --check apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts apps/admin/src/lib/workspace-files-api.ts apps/admin/src/components/tenant-agent/TenantAgentSkillsTab.tsx apps/admin/src/components/tenant-agent/TenantAgentSkillsTab.test.tsx apps/admin/src/routes/_authed/_tenant/agent/skills.tsx docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
 
 ## CI / PR
 
@@ -1433,6 +1439,7 @@ None.
 - Opened [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641).
 - Squash merged [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) as `90e3617c91b9b36ac67b77f4e999b726b22d40aa`.
 - Opened [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643).
+- Squash merged [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) as `180dc7aef9675e423959b94ceb9e7e66a8fce553`.
 
 ## Blockers
 

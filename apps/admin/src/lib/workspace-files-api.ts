@@ -17,6 +17,7 @@ export type Target =
   | { spaceId: string }
   | { computerId: string }
   | { userId: string }
+  | { catalog: true }
   | { defaults: true };
 
 export type ComposeSource =
@@ -27,6 +28,7 @@ export type ComposeSource =
   | "space"
   | "computer"
   | "user"
+  | "catalog"
   | "defaults";
 
 export interface WorkspaceFileMeta {
