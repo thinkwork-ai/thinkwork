@@ -158,4 +158,19 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
       path: "community/CONTEXT.md",
     });
   });
+
+  it("posts nested AGENTS.md path for scoped map refresh", async () => {
+    mockOk({});
+
+    await regenerateWorkspaceMap("agent-abc", "earnest-falcon-947/AGENTS.md");
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "regenerate-map",
+      agentId: "agent-abc",
+      path: "earnest-falcon-947/AGENTS.md",
+    });
+  });
 });

@@ -115,8 +115,15 @@ export async function createSubAgentWorkspaceFiles(
   });
 }
 
-export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
-  await request({ action: "regenerate-map", agentId });
+export async function regenerateWorkspaceMap(
+  agentId: string,
+  path?: string,
+): Promise<void> {
+  await request({
+    action: "regenerate-map",
+    agentId,
+    ...(path ? { path } : {}),
+  });
 }
 
 export async function generateFolderStructure(
