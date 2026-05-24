@@ -197,7 +197,6 @@ describe("agentRepointTargets", () => {
         "thread_turns.agent_id",
         "thread_turn_events.agent_id",
         "retry_queue.agent_id",
-        "eval_test_cases.agent_id",
         "eval_runs.agent_id",
         "scheduled_jobs.agent_id",
         "agent_skills.agent_id",
@@ -211,5 +210,9 @@ describe("agentRepointTargets", () => {
         "user_quick_actions.workspace_agent_id",
       ]),
     );
+    // The eval_test_cases.agent_id column was dropped by
+    // drizzle/0128_drop_eval_test_cases_agent_id.sql; defend against any
+    // future "restore for safety" re-addition to the repoint surface.
+    expect(labels).not.toContain("eval_test_cases.agent_id");
   });
 });

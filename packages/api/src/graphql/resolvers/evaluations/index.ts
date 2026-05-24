@@ -649,22 +649,46 @@ const startEvalRun = async (
     );
   }
 
-  const target = await resolveRunTarget({ tenantId: args.tenantId });
   const model = await resolveEvalModelId(args.input.model);
 
+  // Insert a pending row up front so the failure path (e.g. tenant has no
+  // platform agent yet) still surfaces in the runs list with a recoverable
+  // error_message. Plan R6 mandates the failed-row trail.
   const [run] = await db
     .insert(evalRuns)
     .values({
       tenant_id: args.tenantId,
-      agent_id: target.agentId,
+      agent_id: null,
       computer_id: null,
       status: "pending",
       model,
       categories: args.input.categories ?? [],
     })
     .returning();
-
   const runId = (run as { id: string }).id;
+
+  let targetAgentId: string;
+  try {
+    const target = await resolveRunTarget({ tenantId: args.tenantId });
+    targetAgentId = target.agentId;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await db
+      .update(evalRuns)
+      .set({
+        status: "failed",
+        completed_at: new Date(),
+        error_message: message,
+      })
+      .where(eq(evalRuns.id, runId));
+    throw err;
+  }
+
+  const [withAgent] = await db
+    .update(evalRuns)
+    .set({ agent_id: targetAgentId })
+    .where(eq(evalRuns.id, runId))
+    .returning();
 
   try {
     await invokeEvalRunner(runId, args.input.testCaseIds ?? null);
@@ -681,7 +705,10 @@ const startEvalRun = async (
     throw err;
   }
 
-  return runToGraphql(run as unknown as Record<string, unknown>, null);
+  return runToGraphql(
+    (withAgent ?? run) as unknown as Record<string, unknown>,
+    null,
+  );
 };
 
 async function invokeEvalRunner(
