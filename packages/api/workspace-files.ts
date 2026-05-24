@@ -99,6 +99,7 @@ import {
   CatalogUninstallError,
   uninstallCatalogSkill,
 } from "./src/lib/catalog-uninstall.js";
+import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -598,6 +599,10 @@ async function handleList(
       !isBuiltinToolWorkspacePath(p),
   );
 
+  if (target.kind === "catalog") {
+    return await handleCatalogList(target, visiblePaths, includeContent);
+  }
+
   if (!includeContent) {
     return json(200, {
       ok: true,
@@ -645,6 +650,44 @@ async function handleList(
     }),
   );
   return json(200, { ok: true, files });
+}
+
+async function handleCatalogList(
+  target: CatalogTarget,
+  visiblePaths: string[],
+  includeContent: boolean,
+): Promise<APIGatewayProxyResult> {
+  // TODO: replace per-list content reads with a catalog sha index file if
+  // tenant catalogs grow large enough for this to become visible latency.
+  const filesWithContent = await Promise.all(
+    visiblePaths.map(async (path) => {
+      try {
+        const resp = await s3.send(
+          new GetObjectCommand({ Bucket: bucket(), Key: target.key(path) }),
+        );
+        const content = (await resp.Body?.transformToString("utf-8")) ?? "";
+        return { path, content };
+      } catch (err) {
+        if (isNoSuchKey(err)) return { path, content: "" };
+        throw err;
+      }
+    }),
+  );
+  const shaBySlug = computeCatalogSkillShaBySlug(filesWithContent);
+
+  return json(200, {
+    ok: true,
+    files: filesWithContent.map((file) => {
+      const slug = catalogPathSlug(file.path);
+      const base = {
+        path: file.path,
+        source: target.kind,
+        sha256: shaBySlug.get(slug) ?? "",
+        overridden: false,
+      };
+      return includeContent ? { ...base, content: file.content } : base;
+    }),
+  });
 }
 
 // Computer list/get bypass the computer_tasks queue and read EFS directly
@@ -2531,7 +2574,8 @@ async function handleGenerateFolderStructure(
   if (target.kind === "space" && deps.auth.authType === "apikey") {
     return json(403, {
       ok: false,
-      error: "generate-folder-structure on a Space requires admin authentication",
+      error:
+        "generate-folder-structure on a Space requires admin authentication",
     });
   }
 

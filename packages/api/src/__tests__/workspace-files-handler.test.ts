@@ -25,6 +25,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { computeCatalogSkillSha } from "../lib/catalog-skill-sha.js";
 
 // ─── Hoisted DB mock ─────────────────────────────────────────────────────────
 
@@ -1047,7 +1048,15 @@ describe("tenant skill catalog target", () => {
       .on(GetObjectCommand, {
         Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
       })
-      .resolves(body("# Finance Audit XLS\n"));
+      .resolves(body("# Finance Audit XLS\n"))
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
+      })
+      .resolves(body("## Wiring\n"));
+    const financeSha = computeCatalogSkillSha([
+      { relativePath: "SKILL.md", content: "# Finance Audit XLS\n" },
+      { relativePath: "WIRING.md", content: "## Wiring\n" },
+    ]);
 
     const listRes = await parse(
       await handler(event({ action: "list", catalog: true })),
@@ -1058,13 +1067,13 @@ describe("tenant skill catalog target", () => {
       {
         path: "finance-audit-xls/SKILL.md",
         source: "catalog",
-        sha256: "",
+        sha256: financeSha,
         overridden: false,
       },
       {
         path: "finance-audit-xls/WIRING.md",
         source: "catalog",
-        sha256: "",
+        sha256: financeSha,
         overridden: false,
       },
     ]);
@@ -1102,6 +1111,15 @@ describe("tenant skill catalog target", () => {
           { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
         ],
       });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+      })
+      .resolves(body("# Finance Audit XLS\n"))
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
+      })
+      .resolves(body("## Wiring\n"));
 
     const res = await parse(
       await handler(event({ action: "list", catalog: true })),
