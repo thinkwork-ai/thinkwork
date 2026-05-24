@@ -39,6 +39,7 @@ import {
 } from "../cost-recording.js";
 import { notifyThreadUpdate } from "../../graphql/notify.js";
 import { sendTurnCompletedPush } from "../push-notifications.js";
+import { sendThreadReplyEmail } from "../email/thread-reply.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -401,6 +402,22 @@ export async function processFinalize(
       });
     } catch (err) {
       console.error("[chat-finalize] Push notification failed:", err);
+    }
+  }
+
+  // 7f. Email the response back to the original sender for threads that
+  //     started from inbound email. No-op for chat-originated threads
+  //     and for turns where the latest user message came from chat.
+  if (assistantMsg && !computerThreadResponse?.responseMessageId) {
+    try {
+      await sendThreadReplyEmail({
+        tenantId,
+        threadId,
+        agentId,
+        body: responseText,
+      });
+    } catch (err) {
+      console.error("[chat-finalize] Email reply dispatch failed:", err);
     }
   }
 
