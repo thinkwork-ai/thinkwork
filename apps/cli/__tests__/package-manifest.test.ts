@@ -13,7 +13,9 @@ describe("published package manifest", () => {
   it("does not expose workspace-only dependencies to npm installs", () => {
     expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+$/);
 
-    for (const [name, range] of Object.entries(packageJson.dependencies ?? {})) {
+    for (const [name, range] of Object.entries(
+      packageJson.dependencies ?? {},
+    )) {
       expect(`${name}@${range}`).not.toContain("workspace:");
     }
   });

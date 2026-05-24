@@ -29,12 +29,18 @@ export default function DetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [copied, setCopied] = useState(false);
 
-  const [{ data: threadResult, fetching }] = useQuery({ query: ThreadQuery, variables: { id: id! }, pause: !id });
+  const [{ data: threadResult, fetching }] = useQuery({
+    query: ThreadQuery,
+    variables: { id: id! },
+    pause: !id,
+  });
   const thread = threadResult?.thread ?? undefined;
 
   const handleCopy = async () => {
     if (!(thread as any)?.metadata) return;
-    await Clipboard.setStringAsync(JSON.stringify((thread as any).metadata, null, 2));
+    await Clipboard.setStringAsync(
+      JSON.stringify((thread as any).metadata, null, 2),
+    );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -51,7 +57,8 @@ export default function DetailsScreen() {
   }
 
   const meta = (thread as any)?.metadata;
-  const hasMeta = meta != null && typeof meta === "object" && Object.keys(meta).length > 0;
+  const hasMeta =
+    meta != null && typeof meta === "object" && Object.keys(meta).length > 0;
 
   return (
     <DetailLayout showSidebar={false} title="Details">
@@ -65,28 +72,32 @@ export default function DetailsScreen() {
         ) : (
           <>
             <View className="mx-4 mt-4 bg-white dark:bg-neutral-900 rounded-xl overflow-hidden border border-neutral-100 dark:border-neutral-800">
-              {Object.entries(meta as Record<string, unknown>).map(([key, value], i, arr) => {
-                const isComplex = value !== null && typeof value === "object";
-                return (
-                  <View
-                    key={key}
-                    className={`px-4 py-3 ${
-                      i < arr.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""
-                    } ${isComplex ? "" : "flex-row items-start justify-between"}`}
-                  >
-                    <Text className="text-sm font-medium text-neutral-500 dark:text-neutral-400 capitalize">
-                      {key.replace(/_/g, " ")}
-                    </Text>
-                    {isComplex ? (
-                      <View className="mt-1 bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+              {Object.entries(meta as Record<string, unknown>).map(
+                ([key, value], i, arr) => {
+                  const isComplex = value !== null && typeof value === "object";
+                  return (
+                    <View
+                      key={key}
+                      className={`px-4 py-3 ${
+                        i < arr.length - 1
+                          ? "border-b border-neutral-100 dark:border-neutral-800"
+                          : ""
+                      } ${isComplex ? "" : "flex-row items-start justify-between"}`}
+                    >
+                      <Text className="text-sm font-medium text-neutral-500 dark:text-neutral-400 capitalize">
+                        {key.replace(/_/g, " ")}
+                      </Text>
+                      {isComplex ? (
+                        <View className="mt-1 bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                          <MetaValue value={value} />
+                        </View>
+                      ) : (
                         <MetaValue value={value} />
-                      </View>
-                    ) : (
-                      <MetaValue value={value} />
-                    )}
-                  </View>
-                );
-              })}
+                      )}
+                    </View>
+                  );
+                },
+              )}
             </View>
 
             <View className="mx-4 mt-4">

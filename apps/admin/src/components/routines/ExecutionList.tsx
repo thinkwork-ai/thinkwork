@@ -330,10 +330,7 @@ export function ExecutionList({
         header: "Status",
         cell: ({ row }) => (
           <div className="flex justify-end px-3 py-3">
-            <StatusBadge
-              status={row.original.status.toLowerCase()}
-              size="sm"
-            />
+            <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
           </div>
         ),
         size: 130,

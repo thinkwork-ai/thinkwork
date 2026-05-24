@@ -121,9 +121,11 @@ describe("tenant credential secret store", () => {
 
     expect(sm.commandCalls(UpdateSecretCommand)).toHaveLength(1);
     expect(sm.commandCalls(GetSecretValueCommand)).toHaveLength(1);
-    expect(sm.commandCalls(DeleteSecretCommand)[0].args[0].input).toMatchObject({
-      SecretId: "secret-ref",
-      RecoveryWindowInDays: 7,
-    });
+    expect(sm.commandCalls(DeleteSecretCommand)[0].args[0].input).toMatchObject(
+      {
+        SecretId: "secret-ref",
+        RecoveryWindowInDays: 7,
+      },
+    );
   });
 });

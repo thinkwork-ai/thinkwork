@@ -1,10 +1,30 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  type ReactNode,
+} from "react";
 
 interface DialogState {
-  newThread: { open: boolean; defaults?: Partial<{ title: string; agentId: string; teamId: string; status: string }> };
-  newAgent: { open: boolean; defaults?: Partial<{ name: string; type: string }> };
+  newThread: {
+    open: boolean;
+    defaults?: Partial<{
+      title: string;
+      agentId: string;
+      teamId: string;
+      status: string;
+    }>;
+  };
+  newAgent: {
+    open: boolean;
+    defaults?: Partial<{ name: string; type: string }>;
+  };
   newTeam: { open: boolean; defaults?: Partial<{ name: string }> };
-  newRoutine: { open: boolean; defaults?: Partial<{ name: string; teamId: string }> };
+  newRoutine: {
+    open: boolean;
+    defaults?: Partial<{ name: string; teamId: string }>;
+  };
 }
 
 interface DialogContextValue {
@@ -28,21 +48,33 @@ const DialogContext = createContext<DialogContextValue | null>(null);
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [dialogs, setDialogs] = useState<DialogState>(INITIAL_STATE);
 
-  const openNewThread = useCallback((defaults?: DialogState["newThread"]["defaults"]) => {
-    setDialogs((prev) => ({ ...prev, newThread: { open: true, defaults } }));
-  }, []);
+  const openNewThread = useCallback(
+    (defaults?: DialogState["newThread"]["defaults"]) => {
+      setDialogs((prev) => ({ ...prev, newThread: { open: true, defaults } }));
+    },
+    [],
+  );
 
-  const openNewAgent = useCallback((defaults?: DialogState["newAgent"]["defaults"]) => {
-    setDialogs((prev) => ({ ...prev, newAgent: { open: true, defaults } }));
-  }, []);
+  const openNewAgent = useCallback(
+    (defaults?: DialogState["newAgent"]["defaults"]) => {
+      setDialogs((prev) => ({ ...prev, newAgent: { open: true, defaults } }));
+    },
+    [],
+  );
 
-  const openNewTeam = useCallback((defaults?: DialogState["newTeam"]["defaults"]) => {
-    setDialogs((prev) => ({ ...prev, newTeam: { open: true, defaults } }));
-  }, []);
+  const openNewTeam = useCallback(
+    (defaults?: DialogState["newTeam"]["defaults"]) => {
+      setDialogs((prev) => ({ ...prev, newTeam: { open: true, defaults } }));
+    },
+    [],
+  );
 
-  const openNewRoutine = useCallback((defaults?: DialogState["newRoutine"]["defaults"]) => {
-    setDialogs((prev) => ({ ...prev, newRoutine: { open: true, defaults } }));
-  }, []);
+  const openNewRoutine = useCallback(
+    (defaults?: DialogState["newRoutine"]["defaults"]) => {
+      setDialogs((prev) => ({ ...prev, newRoutine: { open: true, defaults } }));
+    },
+    [],
+  );
 
   const closeDialog = useCallback((key: keyof DialogState) => {
     setDialogs((prev) => ({ ...prev, [key]: { open: false } }));

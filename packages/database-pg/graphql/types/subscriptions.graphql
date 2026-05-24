@@ -63,13 +63,6 @@ type ThreadTurnUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type ComputerThreadChunkEvent {
-  threadId: ID!
-  chunk: AWSJSON
-  seq: Int
-  publishedAt: AWSDateTime!
-}
-
 type OrgUpdateEvent {
   tenantId: ID!
   changeType: String!
@@ -160,12 +153,6 @@ extend type Mutation {
     triggerName: String
   ): ThreadTurnUpdateEvent
 
-  publishComputerThreadChunk(
-    threadId: ID!
-    chunk: AWSJSON!
-    seq: Int!
-  ): ComputerThreadChunkEvent!
-
   notifyOrgUpdate(
     tenantId: ID!
     changeType: String!
@@ -217,9 +204,6 @@ extend type Subscription {
 
   onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent
     @aws_subscribe(mutations: ["notifyThreadTurnUpdate"])
-
-  onComputerThreadChunk(threadId: ID!): ComputerThreadChunkEvent
-    @aws_subscribe(mutations: ["publishComputerThreadChunk"])
 
   onOrgUpdated(tenantId: ID!): OrgUpdateEvent
     @aws_subscribe(mutations: ["notifyOrgUpdate"])

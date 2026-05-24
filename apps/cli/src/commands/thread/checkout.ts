@@ -32,8 +32,12 @@ export async function runThreadCheckout(
   }
   printSuccess(`Checked out thread ${t.id} (status now ${t.status})`);
   console.log(`  Run ID: ${runId}`);
-  console.log(`  Release with: thinkwork thread release ${t.id} --run-id ${runId}`);
+  console.log(
+    `  Release with: thinkwork thread release ${t.id} --run-id ${runId}`,
+  );
   if (opts.agent) {
-    console.log(`  (note: --agent ${opts.agent} is informational; checkout is tracked by runId)`);
+    console.log(
+      `  (note: --agent ${opts.agent} is informational; checkout is tracked by runId)`,
+    );
   }
 }

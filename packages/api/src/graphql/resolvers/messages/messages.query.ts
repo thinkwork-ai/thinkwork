@@ -1,13 +1,13 @@
 import type { GraphQLContext } from "../../context.js";
 import {
-	db,
-	eq,
-	and,
-	desc,
-	lt,
-	messages,
-	threads,
-	messageToCamel,
+  db,
+  eq,
+  and,
+  desc,
+  lt,
+  messages,
+  threads,
+  messageToCamel,
 } from "../../utils.js";
 import {
   resolveCallerTenantId,
@@ -42,74 +42,74 @@ import { callerVisibleThreadPredicate } from "../threads/access.js";
  *      transitively.
  */
 export const messages_ = async (
-	_parent: unknown,
-	args: { threadId: string; limit?: number; cursor?: string },
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: { threadId: string; limit?: number; cursor?: string },
+  ctx: GraphQLContext,
 ) => {
-	const callerTenantId =
-		ctx.auth?.tenantId ?? (await resolveCallerTenantId(ctx));
-	if (!callerTenantId) {
-		return {
-			edges: [],
-			pageInfo: { hasNextPage: false, endCursor: null },
-		};
-	}
-	const callerUserId =
-		ctx.auth?.authType === "cognito" ? await resolveCallerUserId(ctx) : null;
-	if (ctx.auth?.authType === "cognito" && !callerUserId) {
-		return {
-			edges: [],
-			pageInfo: { hasNextPage: false, endCursor: null },
-		};
-	}
+  const callerTenantId =
+    ctx.auth?.tenantId ?? (await resolveCallerTenantId(ctx));
+  if (!callerTenantId) {
+    return {
+      edges: [],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    };
+  }
+  const callerUserId =
+    ctx.auth?.authType === "cognito" ? await resolveCallerUserId(ctx) : null;
+  if (ctx.auth?.authType === "cognito" && !callerUserId) {
+    return {
+      edges: [],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    };
+  }
 
-	const threadConditions: any[] = [
-		eq(threads.id, args.threadId),
-		eq(threads.tenant_id, callerTenantId),
-	];
-	if (ctx.auth?.authType === "cognito") {
-		threadConditions.push(
-			callerVisibleThreadPredicate(callerTenantId, callerUserId!),
-		);
-	}
-	const [thread] = await db
-		.select({ id: threads.id, tenant_id: threads.tenant_id })
-		.from(threads)
-		.where(and(...threadConditions));
-	if (!thread) {
-		return {
-			edges: [],
-			pageInfo: { hasNextPage: false, endCursor: null },
-		};
-	}
+  const threadConditions: any[] = [
+    eq(threads.id, args.threadId),
+    eq(threads.tenant_id, callerTenantId),
+  ];
+  if (ctx.auth?.authType === "cognito") {
+    threadConditions.push(
+      callerVisibleThreadPredicate(callerTenantId, callerUserId!),
+    );
+  }
+  const [thread] = await db
+    .select({ id: threads.id, tenant_id: threads.tenant_id })
+    .from(threads)
+    .where(and(...threadConditions));
+  if (!thread) {
+    return {
+      edges: [],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    };
+  }
 
-	const limit = Math.min(args.limit || 50, 200);
-	const conditions = [
-		eq(messages.thread_id, args.threadId),
-		eq(messages.tenant_id, callerTenantId),
-	];
-	if (args.cursor) {
-		conditions.push(lt(messages.created_at, new Date(args.cursor)));
-	}
-	const rows = await db
-		.select()
-		.from(messages)
-		.where(and(...conditions))
-		.orderBy(desc(messages.created_at))
-		.limit(limit + 1);
+  const limit = Math.min(args.limit || 50, 200);
+  const conditions = [
+    eq(messages.thread_id, args.threadId),
+    eq(messages.tenant_id, callerTenantId),
+  ];
+  if (args.cursor) {
+    conditions.push(lt(messages.created_at, new Date(args.cursor)));
+  }
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(and(...conditions))
+    .orderBy(desc(messages.created_at))
+    .limit(limit + 1);
 
-	const hasMore = rows.length > limit;
-	const items = hasMore ? rows.slice(0, limit) : rows;
-	const endCursor =
-		hasMore && items.length > 0
-			? items[items.length - 1].created_at.toISOString()
-			: null;
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const endCursor =
+    hasMore && items.length > 0
+      ? items[items.length - 1].created_at.toISOString()
+      : null;
 
-	return {
-		edges: items.map((m) => ({
-			node: messageToCamel(m),
-			cursor: m.created_at.toISOString(),
-		})),
-		pageInfo: { hasNextPage: hasMore, endCursor },
-	};
+  return {
+    edges: items.map((m) => ({
+      node: messageToCamel(m),
+      cursor: m.created_at.toISOString(),
+    })),
+    pageInfo: { hasNextPage: hasMore, endCursor },
+  };
 };

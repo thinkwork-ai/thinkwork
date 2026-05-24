@@ -70,11 +70,25 @@ export function useCostData(tenantId: string | null | undefined) {
 
     // Surface any query errors during development
     if (import.meta.env.DEV) {
-      if (summaryResult.error) console.error("[costs] costSummary error:", summaryResult.error.message);
-      if (agentResult.error) console.error("[costs] costByAgent error:", agentResult.error.message);
-      if (modelResult.error) console.error("[costs] costByModel error:", modelResult.error.message);
-      if (timeSeriesResult.error) console.error("[costs] costTimeSeries error:", timeSeriesResult.error.message);
-      if (budgetResult.error) console.error("[costs] budgetStatus error:", budgetResult.error.message);
+      if (summaryResult.error)
+        console.error(
+          "[costs] costSummary error:",
+          summaryResult.error.message,
+        );
+      if (agentResult.error)
+        console.error("[costs] costByAgent error:", agentResult.error.message);
+      if (modelResult.error)
+        console.error("[costs] costByModel error:", modelResult.error.message);
+      if (timeSeriesResult.error)
+        console.error(
+          "[costs] costTimeSeries error:",
+          timeSeriesResult.error.message,
+        );
+      if (budgetResult.error)
+        console.error(
+          "[costs] budgetStatus error:",
+          budgetResult.error.message,
+        );
     }
 
     const s = (summaryResult.data as any)?.costSummary;
@@ -100,7 +114,13 @@ export function useCostData(tenantId: string | null | undefined) {
     refetchModel({ requestPolicy: "network-only" });
     refetchTimeSeries({ requestPolicy: "network-only" });
     refetchBudget({ requestPolicy: "network-only" });
-  }, [refetchSummary, refetchAgent, refetchModel, refetchTimeSeries, refetchBudget]);
+  }, [
+    refetchSummary,
+    refetchAgent,
+    refetchModel,
+    refetchTimeSeries,
+    refetchBudget,
+  ]);
 
   return {
     loading: !loaded && anyFetching,

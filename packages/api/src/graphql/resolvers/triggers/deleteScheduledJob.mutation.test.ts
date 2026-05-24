@@ -66,7 +66,11 @@ describe("deleteScheduledJob", () => {
   it("returns {ok:false} when no row matches (idempotent no-op)", async () => {
     mocks.selectFrom.mockResolvedValue([]);
 
-    const result = await deleteScheduledJob(null, { id: "sj-missing" }, cognitoCtx());
+    const result = await deleteScheduledJob(
+      null,
+      { id: "sj-missing" },
+      cognitoCtx(),
+    );
 
     expect(result).toEqual({ id: "sj-missing", ok: false });
     // No auth check, no Lambda, no DB delete should have fired.

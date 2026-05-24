@@ -10,7 +10,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, asc, desc, inArray, sql } from "../../utils.js";
 import {
-  computers,
   evalRuns,
   evalResults,
   evalTestCases,

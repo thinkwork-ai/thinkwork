@@ -12,7 +12,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { BarChart, Bar, XAxis, Cell } from "recharts";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { useTenant } from "@/context/TenantContext";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -20,7 +25,11 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FilterBarSearch } from "@/components/ui/data-table-filter-bar";
-import { ThreadsListQuery, OnThreadTurnUpdatedSubscription, OnThreadUpdatedSubscription } from "@/lib/graphql-queries";
+import {
+  ThreadsListQuery,
+  OnThreadTurnUpdatedSubscription,
+  OnThreadUpdatedSubscription,
+} from "@/lib/graphql-queries";
 import { cn, relativeTime } from "@/lib/utils";
 import {
   type ActivityItem,
@@ -66,7 +75,10 @@ function ActivityChart({
   const data = useMemo(() => buildLast30DaysCounts(items), [items]);
 
   return (
-    <ChartContainer config={activityChartConfig} className="aspect-auto h-32 w-full -mt-2 mb-1">
+    <ChartContainer
+      config={activityChartConfig}
+      className="aspect-auto h-32 w-full -mt-2 mb-1"
+    >
       <BarChart
         data={data}
         onClick={(state) => {
@@ -96,7 +108,11 @@ function ActivityChart({
                 const day = payload[0]?.payload?.day;
                 if (!day) return "";
                 const date = new Date(day + "T00:00:00");
-                return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                return date.toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                });
               }}
             />
           }
@@ -106,7 +122,9 @@ function ActivityChart({
             <Cell
               key={entry.day}
               fill="var(--color-count)"
-              fillOpacity={selectedDay && selectedDay !== entry.day ? 0.25 : 0.85}
+              fillOpacity={
+                selectedDay && selectedDay !== entry.day ? 0.25 : 0.85
+              }
             />
           ))}
         </Bar>
@@ -171,7 +189,9 @@ export function ActivityView() {
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter(
-        (i) => i.title.toLowerCase().includes(q) || (i.agentName?.toLowerCase().includes(q) ?? false),
+        (i) =>
+          i.title.toLowerCase().includes(q) ||
+          (i.agentName?.toLowerCase().includes(q) ?? false),
       );
     }
     if (selectedDay) {
@@ -184,67 +204,86 @@ export function ActivityView() {
     return items;
   }, [allItems, search, selectedDay]);
 
-  const handleRowClick = useCallback((item: ActivityItem) => {
-    const threadId = item.sourceType === "thread" ? item.sourceId : item.threadId;
-    if (threadId) {
-      navigate({ to: "/threads/$threadId", params: { threadId } });
-    }
-  }, [navigate]);
-
-  const columns = useMemo((): ColumnDef<ActivityItem>[] => [
-    {
-      id: "type",
-      size: 120,
-      cell: ({ row }) => {
-        const item = row.original;
-        return (
-          <div className="flex items-center pl-2">
-            <Badge
-              variant="secondary"
-              className={cn("text-xs gap-1", TYPE_COLORS[item.type])}
-            >
-              {item.type === "chat" && <MessageSquare className="h-3 w-3" />}
-              {item.type === "thread" && <MessagesSquare className="h-3 w-3" />}
-              {item.type === "email" && <Mail className="h-3 w-3" />}
-              {item.type === "scheduled" && <CalendarClock className="h-3 w-3" />}
-              {item.type === "webhook" && <Webhook className="h-3 w-3" />}
-              {(item.type === "routine" || item.type === "task") && <Bot className="h-3 w-3" />}
-              {TYPE_LABELS[item.type]}
-            </Badge>
-          </div>
-        );
-      },
+  const handleRowClick = useCallback(
+    (item: ActivityItem) => {
+      const threadId =
+        item.sourceType === "thread" ? item.sourceId : item.threadId;
+      if (threadId) {
+        navigate({ to: "/threads/$threadId", params: { threadId } });
+      }
     },
-    {
-      id: "content",
-      cell: ({ row }) => {
-        const item = row.original;
-        return (
-          <div className="flex h-10 items-center gap-2.5 pr-3 text-sm">
-            <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+    [navigate],
+  );
 
-            <span className="ml-auto hidden shrink-0 items-center gap-3 sm:flex">
+  const columns = useMemo(
+    (): ColumnDef<ActivityItem>[] => [
+      {
+        id: "type",
+        size: 120,
+        cell: ({ row }) => {
+          const item = row.original;
+          return (
+            <div className="flex items-center pl-2">
               <Badge
                 variant="secondary"
-                className={cn("text-xs capitalize", STATUS_COLORS[item.status] ?? "bg-muted text-muted-foreground")}
+                className={cn("text-xs gap-1", TYPE_COLORS[item.type])}
               >
-                {item.status.replace(/_/g, " ")}
+                {item.type === "chat" && <MessageSquare className="h-3 w-3" />}
+                {item.type === "thread" && (
+                  <MessagesSquare className="h-3 w-3" />
+                )}
+                {item.type === "email" && <Mail className="h-3 w-3" />}
+                {item.type === "scheduled" && (
+                  <CalendarClock className="h-3 w-3" />
+                )}
+                {item.type === "webhook" && <Webhook className="h-3 w-3" />}
+                {(item.type === "routine" || item.type === "task") && (
+                  <Bot className="h-3 w-3" />
+                )}
+                {TYPE_LABELS[item.type]}
               </Badge>
-              <span className="text-xs text-muted-foreground w-14 text-right tabular-nums">
-                {formatDuration(item.duration)}
-              </span>
-              <span className="text-xs text-muted-foreground w-16 text-right tabular-nums">
-                {formatCost(item.cost)}
-              </span>
-              <span className="text-xs text-muted-foreground w-16 text-right">
-                {relativeTime(new Date(item.timestamp).toISOString())}
-              </span>
-            </span>
-          </div>
-        );
+            </div>
+          );
+        },
       },
-    },
-  ], []);
+      {
+        id: "content",
+        cell: ({ row }) => {
+          const item = row.original;
+          return (
+            <div className="flex h-10 items-center gap-2.5 pr-3 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {item.title}
+              </span>
+
+              <span className="ml-auto hidden shrink-0 items-center gap-3 sm:flex">
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-xs capitalize",
+                    STATUS_COLORS[item.status] ??
+                      "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {item.status.replace(/_/g, " ")}
+                </Badge>
+                <span className="text-xs text-muted-foreground w-14 text-right tabular-nums">
+                  {formatDuration(item.duration)}
+                </span>
+                <span className="text-xs text-muted-foreground w-16 text-right tabular-nums">
+                  {formatCost(item.cost)}
+                </span>
+                <span className="text-xs text-muted-foreground w-16 text-right">
+                  {relativeTime(new Date(item.timestamp).toISOString())}
+                </span>
+              </span>
+            </div>
+          );
+        },
+      },
+    ],
+    [],
+  );
 
   const isLoading = threadsResult.fetching && !threadsResult.data;
   if (!tenantId || isLoading) return <PageSkeleton />;
@@ -255,7 +294,11 @@ export function ActivityView() {
         {allItems.length} item{allItems.length !== 1 ? "s" : ""}
       </div>
 
-      <ActivityChart items={allItems} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+      <ActivityChart
+        items={allItems}
+        selectedDay={selectedDay}
+        onSelectDay={setSelectedDay}
+      />
 
       <div className="flex items-center gap-2">
         <FilterBarSearch
@@ -264,13 +307,18 @@ export function ActivityView() {
           placeholder="Search activity..."
           className="flex-1 max-w-sm"
         />
-        <Button type="button" variant="outline" size="sm" onClick={refreshAll}>Refresh</Button>
+        <Button type="button" variant="outline" size="sm" onClick={refreshAll}>
+          Refresh
+        </Button>
       </div>
 
       {selectedDay && (
         <div className="flex items-center gap-2 py-1">
           <Badge variant="secondary" className="text-xs gap-1">
-            {new Date(selectedDay + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            {new Date(selectedDay + "T00:00:00").toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })}
           </Badge>
           <button
             type="button"

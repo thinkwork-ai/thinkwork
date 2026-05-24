@@ -11,7 +11,14 @@ import { TabHeader } from "@/components/layout/tab-header";
 import { WebContent } from "@/components/layout/web-content";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { RoutineRow, type Routine } from "@/components/routines/routine-row";
-import { Hammer, RefreshCw, Plus, ChevronUp, ChevronDown, ChevronRight } from "lucide-react-native";
+import {
+  Hammer,
+  RefreshCw,
+  Plus,
+  ChevronUp,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react-native";
 // Plus is used in the empty-state CTA below
 
 export default function SkillsScreen() {
@@ -47,7 +54,10 @@ export default function SkillsScreen() {
   return (
     <View className="flex-1 bg-white dark:bg-neutral-950">
       <TabHeader title="Skills" right={headerMenu} />
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
         <WebContent bordered>
           {/* -- Skills Section -- */}
           <Pressable
@@ -67,8 +77,8 @@ export default function SkillsScreen() {
             )}
           </Pressable>
 
-          {skillsExpanded && (
-            catalog === undefined ? null : skillsEmpty ? (
+          {skillsExpanded &&
+            (catalog === undefined ? null : skillsEmpty ? (
               <View className="items-center py-10 px-6">
                 <View className="bg-neutral-100 dark:bg-neutral-800 rounded-full p-4 mb-3">
                   <Hammer size={28} color={colors.mutedForeground} />
@@ -88,7 +98,10 @@ export default function SkillsScreen() {
                       })
                     }
                     line1Left={
-                      <Text weight="medium" className="text-neutral-900 dark:text-neutral-100">
+                      <Text
+                        weight="medium"
+                        className="text-neutral-900 dark:text-neutral-100"
+                      >
                         {skill.name}
                       </Text>
                     }
@@ -103,8 +116,7 @@ export default function SkillsScreen() {
                   />
                 ))}
               </View>
-            )
-          )}
+            ))}
 
           {/* -- Routines Section -- */}
           <Pressable
@@ -124,8 +136,8 @@ export default function SkillsScreen() {
             )}
           </Pressable>
 
-          {routinesExpanded && (
-            routines === undefined ? null : routinesEmpty ? (
+          {routinesExpanded &&
+            (routines === undefined ? null : routinesEmpty ? (
               <View className="items-center py-10 px-6">
                 <View className="bg-neutral-100 dark:bg-neutral-800 rounded-full p-4 mb-3">
                   <RefreshCw size={28} color={colors.mutedForeground} />
@@ -151,7 +163,8 @@ export default function SkillsScreen() {
                       isLast={idx === arr.length - 1}
                       onPress={() => {
                         if (
-                          (rt.status === "draft" || rt.buildStatus === "draft") &&
+                          (rt.status === "draft" ||
+                            rt.buildStatus === "draft") &&
                           rt.builderThreadId
                         ) {
                           router.push({
@@ -167,11 +180,10 @@ export default function SkillsScreen() {
                         }
                       }}
                     />
-                  )
+                  ),
                 )}
               </View>
-            )
-          )}
+            ))}
         </WebContent>
       </ScrollView>
     </View>

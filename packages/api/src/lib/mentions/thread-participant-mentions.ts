@@ -103,9 +103,7 @@ export function toThreadParticipantInsert(row: MentionParticipantInsert) {
   } satisfies typeof threadParticipants.$inferInsert;
 }
 
-class DrizzleMentionParticipantRepository
-  implements MentionParticipantRepository
-{
+class DrizzleMentionParticipantRepository implements MentionParticipantRepository {
   private readonly db = getDb();
 
   async insertParticipants(rows: MentionParticipantInsert[]) {

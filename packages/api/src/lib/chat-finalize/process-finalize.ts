@@ -122,7 +122,10 @@ export async function processFinalize(
   const responseRuntimeType =
     typeof invokeResult.runtime === "string" ? invokeResult.runtime : null;
   const runtimeType =
-    payloadRuntimeType || responseRuntimeType || claimed[0]?.runtimeType || null;
+    payloadRuntimeType ||
+    responseRuntimeType ||
+    claimed[0]?.runtimeType ||
+    null;
 
   // 1. Response text + guardrail-block detection
   const responseData = invokeResult as Record<string, unknown>;

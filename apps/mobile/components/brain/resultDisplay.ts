@@ -43,7 +43,7 @@ function decodeJsonStringContent(value: string): string {
   return value
     .replace(/\\n/g, "\n")
     .replace(/\\t/g, "\t")
-    .replace(/\\"/g, "\"")
+    .replace(/\\"/g, '"')
     .replace(/\\\\/g, "\\");
 }
 

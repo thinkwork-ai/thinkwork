@@ -1,9 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { View, TextInput, Pressable, Platform, NativeSyntheticEvent, TextInputKeyPressEventData, useWindowDimensions } from "react-native";
+import {
+  View,
+  TextInput,
+  Pressable,
+  Platform,
+  NativeSyntheticEvent,
+  TextInputKeyPressEventData,
+  useWindowDimensions,
+} from "react-native";
 import { Send } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
-import { MentionAutocomplete, type MentionCandidate } from "./MentionAutocomplete";
+import {
+  MentionAutocomplete,
+  type MentionCandidate,
+} from "./MentionAutocomplete";
 
 export interface SelectedMention {
   id: string;
@@ -28,10 +39,18 @@ function getMentionQuery(text: string, cursorPos: number): string | null {
   return match[1]; // partial name after @
 }
 
-export function ChatInput({ onSend, disabled, initialValue, mentions = [], onMentionsChange }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled,
+  initialValue,
+  mentions = [],
+  onMentionsChange,
+}: ChatInputProps) {
   const [text, setText] = useState(initialValue ? initialValue + "\n" : "");
   const [cursorPos, setCursorPos] = useState(0);
-  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>(
+    [],
+  );
   const inputRef = useRef<TextInput>(null);
   const [inputHeight, setInputHeight] = useState(40);
   const { height: windowHeight } = useWindowDimensions();
@@ -50,9 +69,18 @@ export function ChatInput({ onSend, disabled, initialValue, mentions = [], onMen
   const canSend = text.trim().length > 0 && !disabled;
 
   // Determine if autocomplete should be visible and what query to use
-  const mentionQuery = mentions.length > 0 ? getMentionQuery(text, cursorPos) : null;
+  const mentionQuery =
+    mentions.length > 0 ? getMentionQuery(text, cursorPos) : null;
   // Debug: remove after confirming it works
-  if (mentionQuery !== null) console.log("[ChatInput] mentionQuery:", mentionQuery, "candidates:", mentions.length, "cursorPos:", cursorPos);
+  if (mentionQuery !== null)
+    console.log(
+      "[ChatInput] mentionQuery:",
+      mentionQuery,
+      "candidates:",
+      mentions.length,
+      "cursorPos:",
+      cursorPos,
+    );
   const autocompleteVisible = mentionQuery !== null;
 
   const handleSend = useCallback(() => {
@@ -71,7 +99,8 @@ export function ChatInput({ onSend, disabled, initialValue, mentions = [], onMen
     const atIndex = before.lastIndexOf("@");
     if (atIndex === -1) return;
 
-    const newText = before.slice(0, atIndex) + "@" + candidate.name + " " + after;
+    const newText =
+      before.slice(0, atIndex) + "@" + candidate.name + " " + after;
     setText(newText);
     // Update cursor position immediately (onChangeText won't fire for programmatic setText)
     const newCursorPos = atIndex + candidate.name.length + 2; // @Name<space>
@@ -80,13 +109,18 @@ export function ChatInput({ onSend, disabled, initialValue, mentions = [], onMen
     // Track in selectedMentions (avoid dupes)
     const updated = selectedMentions.some((m) => m.id === candidate.id)
       ? selectedMentions
-      : [...selectedMentions, { id: candidate.id, name: candidate.name, type: candidate.type }];
+      : [
+          ...selectedMentions,
+          { id: candidate.id, name: candidate.name, type: candidate.type },
+        ];
     setSelectedMentions(updated);
     if (onMentionsChange) onMentionsChange(updated);
 
     // Move native cursor after inserted mention
     setTimeout(() => {
-      inputRef.current?.setNativeProps({ selection: { start: newCursorPos, end: newCursorPos } });
+      inputRef.current?.setNativeProps({
+        selection: { start: newCursorPos, end: newCursorPos },
+      });
     }, 10);
   };
 
@@ -94,7 +128,12 @@ export function ChatInput({ onSend, disabled, initialValue, mentions = [], onMen
     (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
       if (Platform.OS !== "web") return;
       const nativeEvent = e.nativeEvent as any;
-      if (nativeEvent.key === "Enter" && !nativeEvent.shiftKey && !nativeEvent.metaKey && !nativeEvent.ctrlKey) {
+      if (
+        nativeEvent.key === "Enter" &&
+        !nativeEvent.shiftKey &&
+        !nativeEvent.metaKey &&
+        !nativeEvent.ctrlKey
+      ) {
         e.preventDefault();
         handleSend();
       }
@@ -150,7 +189,10 @@ export function ChatInput({ onSend, disabled, initialValue, mentions = [], onMen
             backgroundColor: colorScheme === "dark" ? "#1f1f1f" : "#f1f1f1",
           }}
         >
-          <Send size={18} color={canSend ? colors.primary : colors.mutedForeground} />
+          <Send
+            size={18}
+            color={canSend ? colors.primary : colors.mutedForeground}
+          />
         </Pressable>
       </View>
     </View>

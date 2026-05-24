@@ -26,7 +26,9 @@ export default function AcceptInvitationScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
   // TODO: Migrate invitation queries to GraphQL
   const invitation = undefined as any; // Stub
-  const acceptInvite = async (args: any) => { console.log("TODO: acceptInvite", args); };
+  const acceptInvite = async (args: any) => {
+    console.log("TODO: acceptInvite", args);
+  };
 
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -66,7 +68,9 @@ export default function AcceptInvitationScreen() {
       setAccepted(true);
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Something went wrong. Please try again.";
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.";
       setError(message);
       setLoading(false);
     }
@@ -87,7 +91,9 @@ export default function AcceptInvitationScreen() {
                 />
               </View>
               <CardTitle>
-                <H2 className="tracking-wider uppercase text-center">Welcome!</H2>
+                <H2 className="tracking-wider uppercase text-center">
+                  Welcome!
+                </H2>
               </CardTitle>
               <CardDescription>
                 <Muted className="text-center">
@@ -181,12 +187,15 @@ export default function AcceptInvitationScreen() {
                 />
               </View>
               <CardTitle>
-                <H2 className="tracking-wider uppercase text-center">You're Invited!</H2>
+                <H2 className="tracking-wider uppercase text-center">
+                  You're Invited!
+                </H2>
               </CardTitle>
               <CardDescription>
                 <Muted className="text-center">
-                  Join <Text className="font-semibold">{invitation.tenantName}</Text> on
-                  ThinkWork
+                  Join{" "}
+                  <Text className="font-semibold">{invitation.tenantName}</Text>{" "}
+                  on ThinkWork
                 </Muted>
               </CardDescription>
             </CardHeader>
@@ -250,7 +259,12 @@ export default function AcceptInvitationScreen() {
                 </View>
               )}
 
-              <Button onPress={handleSubmit} loading={loading} size="lg" className="mt-2">
+              <Button
+                onPress={handleSubmit}
+                loading={loading}
+                size="lg"
+                className="mt-2"
+              >
                 Accept & Create Account
               </Button>
 

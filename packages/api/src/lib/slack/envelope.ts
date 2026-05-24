@@ -228,7 +228,9 @@ export function buildSlackThreadTurnInput(input: {
   };
 }
 
-export function mergeSlackFileRefs(...groups: SlackFileRef[][]): SlackFileRef[] {
+export function mergeSlackFileRefs(
+  ...groups: SlackFileRef[][]
+): SlackFileRef[] {
   const byId = new Map<string, SlackFileRef>();
   for (const group of groups) {
     for (const file of group) {

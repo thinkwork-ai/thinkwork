@@ -10,12 +10,7 @@ import {
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 import { Scan } from "lucide-react-native";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Text, H2 } from "@/components/ui/typography";
@@ -92,7 +87,11 @@ export default function SignInScreen() {
 
       // Store credentials so _layout can show the biometric enable prompt
       // after navigation (Alert gets dismissed if shown here due to route change)
-      if (biometricSupported && !hasStoredCredentials && Platform.OS !== "web") {
+      if (
+        biometricSupported &&
+        !hasStoredCredentials &&
+        Platform.OS !== "web"
+      ) {
         await storeCredentials(trimmedEmail, currentPassword);
       }
       // Redirect will happen automatically via _layout
@@ -100,9 +99,17 @@ export default function SignInScreen() {
       console.error("[sign-in] error:", err);
       const message = err instanceof Error ? err.message : String(err);
       const lower = message.toLowerCase();
-      if (lower.includes("invalid") || lower.includes("password") || lower.includes("credentials") || lower.includes("user")) {
+      if (
+        lower.includes("invalid") ||
+        lower.includes("password") ||
+        lower.includes("credentials") ||
+        lower.includes("user")
+      ) {
         setError("Invalid email or password");
-      } else if (lower.includes("not configured") || lower.includes("network")) {
+      } else if (
+        lower.includes("not configured") ||
+        lower.includes("network")
+      ) {
         setError("Unable to connect. Please check your connection.");
       } else {
         setError(message || "Unable to sign in. Please try again.");
@@ -169,26 +176,35 @@ export default function SignInScreen() {
               />
             </View>
             <CardTitle className="pb-2">
-              <H2 className="tracking-wider" numberOfLines={1} adjustsFontSizeToFit>ThinkWork</H2>
+              <H2
+                className="tracking-wider"
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                ThinkWork
+              </H2>
             </CardTitle>
           </CardHeader>
 
           <CardContent className="gap-4">
-            {biometricSupported && hasStoredCredentials && !biometricLoading && Platform.OS !== "web" && (
-              <Button
-                variant="outline"
-                onPress={handleBiometricLogin}
-                loading={biometricLoading2}
-                className="mb-2"
-              >
-                <View className="flex-row items-center">
-                  <Scan size={20} color={colors.foreground} />
-                  <Text className="ml-2 text-neutral-900 dark:text-neutral-100 font-semibold">
-                    Sign in with {biometricName}
-                  </Text>
-                </View>
-              </Button>
-            )}
+            {biometricSupported &&
+              hasStoredCredentials &&
+              !biometricLoading &&
+              Platform.OS !== "web" && (
+                <Button
+                  variant="outline"
+                  onPress={handleBiometricLogin}
+                  loading={biometricLoading2}
+                  className="mb-2"
+                >
+                  <View className="flex-row items-center">
+                    <Scan size={20} color={colors.foreground} />
+                    <Text className="ml-2 text-neutral-900 dark:text-neutral-100 font-semibold">
+                      Sign in with {biometricName}
+                    </Text>
+                  </View>
+                </Button>
+              )}
 
             <Button
               variant="outline"
@@ -205,7 +221,9 @@ export default function SignInScreen() {
 
             <View className="flex-row items-center my-2">
               <View className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
-              <Text className="mx-4 text-neutral-400 dark:text-neutral-500 text-sm">or</Text>
+              <Text className="mx-4 text-neutral-400 dark:text-neutral-500 text-sm">
+                or
+              </Text>
               <View className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
             </View>
 
@@ -260,9 +278,7 @@ export default function SignInScreen() {
               </Text>
             </Pressable>
 
-            <Pressable
-              onPress={() => router.push("/onboarding/payment")}
-            >
+            <Pressable onPress={() => router.push("/onboarding/payment")}>
               <Text size="sm" variant="muted" className="text-center">
                 Don't have an account? Sign up
               </Text>

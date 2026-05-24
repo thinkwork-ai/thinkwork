@@ -1,9 +1,22 @@
-import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { BookOpen } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Badge, DataTable, Input, Spinner, Tabs, TabsList, TabsTrigger } from "@thinkwork/ui";
+import {
+  Badge,
+  DataTable,
+  Input,
+  Spinner,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@thinkwork/ui";
 import { ComputerKnowledgeBasesQuery } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
 import { MEMORY_TABS } from "./memory";
@@ -48,7 +61,9 @@ function StatusBadge({ status }: { status: string }) {
     failed: "bg-red-500/20 text-red-400",
   };
   return (
-    <Badge className={`${colors[status] ?? "bg-muted text-muted-foreground"} font-normal text-xs`}>
+    <Badge
+      className={`${colors[status] ?? "bg-muted text-muted-foreground"} font-normal text-xs`}
+    >
       {status}
     </Badge>
   );
@@ -61,7 +76,8 @@ function KbsIndexPage() {
   const activeTab =
     [...MEMORY_TABS]
       .reverse()
-      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ?? "";
+      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
+    "";
   const [search, setSearch] = useState("");
 
   const [result] = useQuery<KnowledgeBasesResult>({
@@ -83,7 +99,9 @@ function KbsIndexPage() {
         documentCount: kb.documentCount ?? 0,
         lastSyncAt: kb.lastSyncAt,
       }))
-      .filter((kb) => !search || kb.name.toLowerCase().includes(search.toLowerCase()));
+      .filter(
+        (kb) => !search || kb.name.toLowerCase().includes(search.toLowerCase()),
+      );
   }, [result.data, search]);
 
   const columns: ColumnDef<KbRow>[] = useMemo(
@@ -113,7 +131,9 @@ function KbsIndexPage() {
         header: "Docs",
         size: 70,
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}>
+          <span
+            className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}
+          >
             {row.original.documentCount}
           </span>
         ),
@@ -123,7 +143,9 @@ function KbsIndexPage() {
         header: "Last Sync",
         size: 120,
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}>
+          <span
+            className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}
+          >
             {relativeTime(row.original.lastSyncAt)}
           </span>
         ),
@@ -132,7 +154,9 @@ function KbsIndexPage() {
         accessorKey: "description",
         header: "Description",
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}>
+          <span
+            className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}
+          >
             <span className="truncate">{row.original.description || "—"}</span>
           </span>
         ),

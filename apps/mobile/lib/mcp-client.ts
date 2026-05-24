@@ -40,7 +40,9 @@ export async function callMcpTool<T = unknown>(
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    throw new Error(`MCP request failed (${resp.status}): ${text.slice(0, 200)}`);
+    throw new Error(
+      `MCP request failed (${resp.status}): ${text.slice(0, 200)}`,
+    );
   }
 
   const data = await resp.json();

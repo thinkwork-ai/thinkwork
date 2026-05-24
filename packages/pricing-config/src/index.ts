@@ -21,7 +21,7 @@ import { plans } from "./plans";
 
 /** Return a plan by id, or undefined when no match exists. */
 export function getPlanById(id: PlanId | string): Plan | undefined {
-	return plans.find((p) => p.id === id);
+  return plans.find((p) => p.id === id);
 }
 
 /**
@@ -31,10 +31,10 @@ export function getPlanById(id: PlanId | string): Plan | undefined {
  * tests); if multiple are, returns the first in catalog order.
  */
 export function getHighlightedPlan(): Plan | undefined {
-	return plans.find((p) => p.highlighted);
+  return plans.find((p) => p.highlighted);
 }
 
 /** Ordered list of plan ids, useful for iterating tabs / cards. */
 export function getPlanIds(): readonly PlanId[] {
-	return plans.map((p) => p.id);
+  return plans.map((p) => p.id);
 }

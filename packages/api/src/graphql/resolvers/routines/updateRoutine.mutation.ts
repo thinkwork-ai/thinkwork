@@ -35,11 +35,7 @@ export async function updateRoutine(
   if (!existing) {
     throw new Error(`Routine ${args.id} not found`);
   }
-  await requireAdminOrApiKeyCaller(
-    ctx,
-    existing.tenant_id,
-    "update_routine",
-  );
+  await requireAdminOrApiKeyCaller(ctx, existing.tenant_id, "update_routine");
 
   const i = args.input;
   const updates: Record<string, unknown> = { updated_at: new Date() };

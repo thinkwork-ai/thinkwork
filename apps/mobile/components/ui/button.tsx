@@ -71,7 +71,8 @@ const buttonTextVariants = cva("font-semibold", {
 });
 
 export interface ButtonProps
-  extends Omit<PressableProps, "children">,
+  extends
+    Omit<PressableProps, "children">,
     VariantProps<typeof buttonVariants> {
   className?: string;
   textClassName?: string;

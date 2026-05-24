@@ -53,7 +53,8 @@ export default function AgentModelScreen() {
       <WebContent>
         <View className="px-4 pt-4 pb-2">
           <Text className="text-sm text-neutral-500 dark:text-neutral-400 leading-5">
-            Pick the default runtime model for this agent. New conversations use this model immediately.
+            Pick the default runtime model for this agent. New conversations use
+            this model immediately.
           </Text>
         </View>
 
@@ -63,11 +64,16 @@ export default function AgentModelScreen() {
           </View>
         ) : agent === null ? (
           <View className="px-4 py-8">
-            <Text className="text-sm text-neutral-500 dark:text-neutral-400">No access to this agent.</Text>
+            <Text className="text-sm text-neutral-500 dark:text-neutral-400">
+              No access to this agent.
+            </Text>
           </View>
         ) : catalogModels.length === 0 ? (
           <View className="px-4 py-8">
-            <Text className="text-sm text-neutral-500 dark:text-neutral-400">No enabled models available yet. Ask an admin to seed or enable models.</Text>
+            <Text className="text-sm text-neutral-500 dark:text-neutral-400">
+              No enabled models available yet. Ask an admin to seed or enable
+              models.
+            </Text>
           </View>
         ) : (
           <>

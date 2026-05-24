@@ -14,7 +14,9 @@ interface MessageConnection {
 }
 
 export function useMessages(threadId: string | null | undefined) {
-  const [{ data, fetching, error }, refetch] = useQuery<{ messages: MessageConnection }>({
+  const [{ data, fetching, error }, refetch] = useQuery<{
+    messages: MessageConnection;
+  }>({
     query: MessagesQuery,
     variables: { threadId },
     pause: !threadId,
@@ -52,7 +54,9 @@ export interface SendMessageOptions {
 // freshly-minted threadId wasn't available until after the component re-rendered.
 // Callers now pass the threadId at call time.
 export function useSendMessage() {
-  const [, sendMessage] = useMutation<{ sendMessage: Message }>(SendMessageMutation);
+  const [, sendMessage] = useMutation<{ sendMessage: Message }>(
+    SendMessageMutation,
+  );
   return useCallback(
     async (
       threadId: string,

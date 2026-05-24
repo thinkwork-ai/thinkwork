@@ -2,7 +2,11 @@ import { readFile } from "node:fs/promises";
 import { input } from "@inquirer/prompts";
 import { gqlMutate } from "../../lib/gql-client.js";
 import { MessageRole } from "../../gql/graphql.js";
-import { isInteractive, promptOrExit, requireTty } from "../../lib/interactive.js";
+import {
+  isInteractive,
+  promptOrExit,
+  requireTty,
+} from "../../lib/interactive.js";
 import { isJsonMode, printJson } from "../../lib/output.js";
 import { printError, printSuccess } from "../../ui.js";
 import { SendMessageDoc } from "./gql.js";

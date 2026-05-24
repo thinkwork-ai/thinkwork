@@ -298,13 +298,13 @@ export function registerSkillCommand(program: Command): void {
   const skill = program
     .command("skill")
     .alias("skills")
-    .description(
-      "Browse the skill catalog and push custom skill plugins.",
-    );
+    .description("Browse the skill catalog and push custom skill plugins.");
 
   skill
     .command("catalog")
-    .description("Browse the skill catalog. Client-side filters --search and --tag are applied locally.")
+    .description(
+      "Browse the skill catalog. Client-side filters --search and --tag are applied locally.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--search <q>", "Filter by keyword")
@@ -317,7 +317,10 @@ export function registerSkillCommand(program: Command): void {
     .description("List skills available to the tenant.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--custom-only", "Only show tenant-owned custom skills (source=tenant)")
+    .option(
+      "--custom-only",
+      "Only show tenant-owned custom skills (source=tenant)",
+    )
     .action(runSkillList);
 
   skill
@@ -327,7 +330,10 @@ export function registerSkillCommand(program: Command): void {
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--version <v>", "Pin to a specific version (defaults to catalog's current)")
+    .option(
+      "--version <v>",
+      "Pin to a specific version (defaults to catalog's current)",
+    )
     .action(runSkillInstall);
 
   skill
@@ -344,7 +350,9 @@ export function registerSkillCommand(program: Command): void {
   // authoring is `skill push <folder>`, not a metadata-only CRUD.
   skill
     .command("create [slug]")
-    .description("Retired — use `thinkwork skill push <folder>` to publish a custom skill.")
+    .description(
+      "Retired — use `thinkwork skill push <folder>` to publish a custom skill.",
+    )
     .action(() =>
       retiredVerb(
         "create",
@@ -354,7 +362,9 @@ export function registerSkillCommand(program: Command): void {
 
   skill
     .command("update <slug>")
-    .description("Retired — re-push the skill folder with `thinkwork skill push <folder>` to update.")
+    .description(
+      "Retired — re-push the skill folder with `thinkwork skill push <folder>` to update.",
+    )
     .action(() =>
       retiredVerb(
         "update",

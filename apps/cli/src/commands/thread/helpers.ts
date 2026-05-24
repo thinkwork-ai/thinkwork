@@ -28,7 +28,10 @@ export async function resolveThreadContext(
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
-  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({ stage, region });
+  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({
+    stage,
+    region,
+  });
 
   const flagOrEnv = opts.tenant ?? process.env.THINKWORK_TENANT;
   const principalId =
@@ -45,7 +48,9 @@ export async function resolveThreadContext(
         principalId,
       };
     }
-    const data = await gqlQuery(client, ThreadTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, ThreadTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
@@ -72,7 +77,9 @@ export async function resolveThreadContext(
   }
 
   if (ctxTenantSlug) {
-    const data = await gqlQuery(client, ThreadTenantBySlugDoc, { slug: ctxTenantSlug });
+    const data = await gqlQuery(client, ThreadTenantBySlugDoc, {
+      slug: ctxTenantSlug,
+    });
     if (data.tenantBySlug) {
       return {
         stage,
@@ -134,7 +141,9 @@ export function parseIdOrNumber(
   if (/^\d+$/.test(raw)) {
     const n = Number.parseInt(raw, 10);
     if (!Number.isFinite(n) || n <= 0) {
-      printError(`Invalid thread number "${raw}". Expected a positive integer.`);
+      printError(
+        `Invalid thread number "${raw}". Expected a positive integer.`,
+      );
       process.exit(1);
     }
     return { kind: "number", number: n };

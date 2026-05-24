@@ -148,11 +148,9 @@ describe("addSpaceMember", () => {
     const { addSpaceMember } = await import("./addSpaceMember.mutation.js");
 
     await expect(
-      addSpaceMember(
-        null,
-        { spaceId: "space-1", userId: "user-2" },
-        { auth: { authType: "cognito" } } as any,
-      ),
+      addSpaceMember(null, { spaceId: "space-1", userId: "user-2" }, {
+        auth: { authType: "cognito" },
+      } as any),
     ).rejects.toMatchObject({
       message: expect.stringContaining("private Spaces"),
       extensions: { code: "SPACE_NOT_PRIVATE" },
@@ -167,11 +165,9 @@ describe("addSpaceMember", () => {
     const { addSpaceMember } = await import("./addSpaceMember.mutation.js");
 
     await expect(
-      addSpaceMember(
-        null,
-        { spaceId: "space-1", userId: "user-2" },
-        { auth: { authType: "cognito" } } as any,
-      ),
+      addSpaceMember(null, { spaceId: "space-1", userId: "user-2" }, {
+        auth: { authType: "cognito" },
+      } as any),
     ).rejects.toMatchObject({
       extensions: { code: "USER_NOT_IN_TENANT" },
     });
@@ -184,11 +180,9 @@ describe("addSpaceMember", () => {
     const { addSpaceMember } = await import("./addSpaceMember.mutation.js");
 
     await expect(
-      addSpaceMember(
-        null,
-        { spaceId: "missing", userId: "user-2" },
-        { auth: { authType: "cognito" } } as any,
-      ),
+      addSpaceMember(null, { spaceId: "missing", userId: "user-2" }, {
+        auth: { authType: "cognito" },
+      } as any),
     ).rejects.toThrow("Space not found");
     expect(authCalls).toEqual([]);
     expect(inserts).toEqual([]);

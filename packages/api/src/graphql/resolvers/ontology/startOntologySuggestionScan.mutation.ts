@@ -13,7 +13,11 @@ export const startOntologySuggestionScanMutation = async (
   },
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "start_ontology_suggestion_scan");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.input.tenantId,
+    "start_ontology_suggestion_scan",
+  );
   return startOntologySuggestionScanJob({
     tenantId: args.input.tenantId,
     trigger: args.input.trigger,

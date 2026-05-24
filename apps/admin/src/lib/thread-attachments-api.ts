@@ -18,37 +18,37 @@ import { getIdToken } from "@/lib/auth";
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 export interface AdminUploadResult {
-	attachmentId: string;
-	name: string;
-	mimeType: string;
-	sizeBytes: number;
+  attachmentId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 export interface AdminUploadFailure {
-	file: File;
-	stage: "presign" | "put" | "finalize";
-	message: string;
+  file: File;
+  stage: "presign" | "put" | "finalize";
+  message: string;
 }
 
 export interface AdminUploadBatch {
-	uploaded: AdminUploadResult[];
-	failures: AdminUploadFailure[];
+  uploaded: AdminUploadResult[];
+  failures: AdminUploadFailure[];
 }
 
 interface PresignResponse {
-	signedPutUrl: string;
-	stagingKey: string;
-	attachmentId: string;
-	name: string;
-	expiresAt: string;
+  signedPutUrl: string;
+  stagingKey: string;
+  attachmentId: string;
+  name: string;
+  expiresAt: string;
 }
 
 interface FinalizeResponse {
-	attachmentId: string;
-	name: string;
-	mimeType: string;
-	sizeBytes: number;
-	alreadyFinalized?: boolean;
+  attachmentId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  alreadyFinalized?: boolean;
 }
 
 /**
@@ -57,58 +57,58 @@ interface FinalizeResponse {
  * per failed file).
  */
 export async function uploadThreadAttachmentsFromAdmin(input: {
-	threadId: string;
-	files: File[];
+  threadId: string;
+  files: File[];
 }): Promise<AdminUploadBatch> {
-	if (input.files.length === 0) {
-		return { uploaded: [], failures: [] };
-	}
-	const token = await getIdToken();
-	if (!token) {
-		throw new Error("Not signed in");
-	}
+  if (input.files.length === 0) {
+    return { uploaded: [], failures: [] };
+  }
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error("Not signed in");
+  }
 
-	const uploaded: AdminUploadResult[] = [];
-	const failures: AdminUploadFailure[] = [];
+  const uploaded: AdminUploadResult[] = [];
+  const failures: AdminUploadFailure[] = [];
 
-	for (const file of input.files) {
-		try {
-			const presign = await presign(input.threadId, file, token);
-			try {
-				await putToS3(presign.signedPutUrl, file);
-			} catch (err) {
-				failures.push({
-					file,
-					stage: "put",
-					message: errorMessage(err),
-				});
-				continue;
-			}
-			try {
-				const fin = await finalize(input.threadId, presign, file, token);
-				uploaded.push({
-					attachmentId: fin.attachmentId,
-					name: fin.name,
-					mimeType: fin.mimeType,
-					sizeBytes: fin.sizeBytes,
-				});
-			} catch (err) {
-				failures.push({
-					file,
-					stage: "finalize",
-					message: errorMessage(err),
-				});
-			}
-		} catch (err) {
-			failures.push({
-				file,
-				stage: "presign",
-				message: errorMessage(err),
-			});
-		}
-	}
+  for (const file of input.files) {
+    try {
+      const presign = await presign(input.threadId, file, token);
+      try {
+        await putToS3(presign.signedPutUrl, file);
+      } catch (err) {
+        failures.push({
+          file,
+          stage: "put",
+          message: errorMessage(err),
+        });
+        continue;
+      }
+      try {
+        const fin = await finalize(input.threadId, presign, file, token);
+        uploaded.push({
+          attachmentId: fin.attachmentId,
+          name: fin.name,
+          mimeType: fin.mimeType,
+          sizeBytes: fin.sizeBytes,
+        });
+      } catch (err) {
+        failures.push({
+          file,
+          stage: "finalize",
+          message: errorMessage(err),
+        });
+      }
+    } catch (err) {
+      failures.push({
+        file,
+        stage: "presign",
+        message: errorMessage(err),
+      });
+    }
+  }
 
-	return { uploaded, failures };
+  return { uploaded, failures };
 }
 
 /**
@@ -118,10 +118,10 @@ export async function uploadThreadAttachmentsFromAdmin(input: {
  * browser will download rather than render inline.
  */
 export function buildAttachmentDownloadUrl(input: {
-	threadId: string;
-	attachmentId: string;
+  threadId: string;
+  attachmentId: string;
 }): string {
-	return `${API_URL}/api/threads/${input.threadId}/attachments/${input.attachmentId}/download`;
+  return `${API_URL}/api/threads/${input.threadId}/attachments/${input.attachmentId}/download`;
 }
 
 /**
@@ -140,99 +140,99 @@ export function buildAttachmentDownloadUrl(input: {
  * `window.open` behaves as a download (no inline render).
  */
 export async function downloadThreadAttachment(input: {
-	threadId: string;
-	attachmentId: string;
+  threadId: string;
+  attachmentId: string;
 }): Promise<void> {
-	const token = await getIdToken();
-	if (!token) {
-		throw new Error("Not signed in");
-	}
-	const res = await fetch(buildAttachmentDownloadUrl(input), {
-		method: "GET",
-		headers: {
-			authorization: `Bearer ${token}`,
-			accept: "application/json",
-		},
-	});
-	if (!res.ok) {
-		throw new Error(`download endpoint returned ${res.status}`);
-	}
-	const body = (await res.json()) as { url?: string };
-	if (!body.url) {
-		throw new Error("download endpoint returned no url");
-	}
-	window.open(body.url, "_blank", "noopener,noreferrer");
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error("Not signed in");
+  }
+  const res = await fetch(buildAttachmentDownloadUrl(input), {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/json",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`download endpoint returned ${res.status}`);
+  }
+  const body = (await res.json()) as { url?: string };
+  if (!body.url) {
+    throw new Error("download endpoint returned no url");
+  }
+  window.open(body.url, "_blank", "noopener,noreferrer");
 }
 
 async function presign(
-	threadId: string,
-	file: File,
-	token: string,
+  threadId: string,
+  file: File,
+  token: string,
 ): Promise<PresignResponse> {
-	const res = await fetch(
-		`${API_URL}/api/threads/${threadId}/attachments/presign`,
-		{
-			method: "POST",
-			headers: {
-				"content-type": "application/json",
-				authorization: `Bearer ${token}`,
-			},
-			body: JSON.stringify({
-				name: file.name,
-				mimeType:
-					file.type ||
-					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-				sizeBytes: file.size,
-			}),
-		},
-	);
-	if (!res.ok) {
-		throw new Error(`presign ${res.status}: ${await res.text()}`);
-	}
-	return (await res.json()) as PresignResponse;
+  const res = await fetch(
+    `${API_URL}/api/threads/${threadId}/attachments/presign`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: file.name,
+        mimeType:
+          file.type ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        sizeBytes: file.size,
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`presign ${res.status}: ${await res.text()}`);
+  }
+  return (await res.json()) as PresignResponse;
 }
 
 async function putToS3(signedUrl: string, file: File): Promise<void> {
-	const res = await fetch(signedUrl, {
-		method: "PUT",
-		body: file,
-	});
-	if (!res.ok) {
-		throw new Error(`S3 PUT ${res.status}: ${await res.text()}`);
-	}
+  const res = await fetch(signedUrl, {
+    method: "PUT",
+    body: file,
+  });
+  if (!res.ok) {
+    throw new Error(`S3 PUT ${res.status}: ${await res.text()}`);
+  }
 }
 
 async function finalize(
-	threadId: string,
-	presign: PresignResponse,
-	file: File,
-	token: string,
+  threadId: string,
+  presign: PresignResponse,
+  file: File,
+  token: string,
 ): Promise<FinalizeResponse> {
-	const res = await fetch(
-		`${API_URL}/api/threads/${threadId}/attachments/finalize`,
-		{
-			method: "POST",
-			headers: {
-				"content-type": "application/json",
-				authorization: `Bearer ${token}`,
-			},
-			body: JSON.stringify({
-				attachmentId: presign.attachmentId,
-				stagingKey: presign.stagingKey,
-				name: presign.name,
-				declaredMimeType:
-					file.type ||
-					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-				declaredSizeBytes: file.size,
-			}),
-		},
-	);
-	if (!res.ok) {
-		throw new Error(`finalize ${res.status}: ${await res.text()}`);
-	}
-	return (await res.json()) as FinalizeResponse;
+  const res = await fetch(
+    `${API_URL}/api/threads/${threadId}/attachments/finalize`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        attachmentId: presign.attachmentId,
+        stagingKey: presign.stagingKey,
+        name: presign.name,
+        declaredMimeType:
+          file.type ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        declaredSizeBytes: file.size,
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`finalize ${res.status}: ${await res.text()}`);
+  }
+  return (await res.json()) as FinalizeResponse;
 }
 
 function errorMessage(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
+  return err instanceof Error ? err.message : String(err);
 }

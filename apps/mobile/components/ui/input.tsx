@@ -23,8 +23,17 @@ export interface InputProps extends TextInputProps {
 
 const Input = React.forwardRef<TextInput, InputProps>(
   (
-    { className, label, error, containerClassName, compact, onFocus, onBlur, ...props },
-    ref
+    {
+      className,
+      label,
+      error,
+      containerClassName,
+      compact,
+      onFocus,
+      onBlur,
+      ...props
+    },
+    ref,
   ) => {
     const [isFocused, setIsFocused] = React.useState(false);
     const colorScheme = useColorScheme();
@@ -34,7 +43,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
         setIsFocused(true);
         onFocus?.(e);
       },
-      [onFocus]
+      [onFocus],
     );
 
     const handleBlur = React.useCallback(
@@ -42,7 +51,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
         setIsFocused(false);
         onBlur?.(e);
       },
-      [onBlur]
+      [onBlur],
     );
 
     // Use actual colors for placeholder (CSS vars don't work on native)
@@ -51,7 +60,9 @@ const Input = React.forwardRef<TextInput, InputProps>(
     return (
       <View className={cn("w-full", containerClassName)}>
         {label && (
-          <Text className={`${compact ? "mb-1.5 text-sm" : "mb-2 text-base"} font-medium leading-none text-neutral-900 dark:text-neutral-100`}>
+          <Text
+            className={`${compact ? "mb-1.5 text-sm" : "mb-2 text-base"} font-medium leading-none text-neutral-900 dark:text-neutral-100`}
+          >
             {label}
           </Text>
         )}
@@ -59,9 +70,13 @@ const Input = React.forwardRef<TextInput, InputProps>(
           ref={ref}
           className={cn(
             "w-full rounded-xl border bg-transparent px-4 text-neutral-900 dark:text-neutral-100",
-            isFocused ? "border-ring" : error ? "border-destructive" : "border-neutral-300 dark:border-neutral-700",
+            isFocused
+              ? "border-ring"
+              : error
+                ? "border-destructive"
+                : "border-neutral-300 dark:border-neutral-700",
             Platform.OS === "web" && "outline-none",
-            className
+            className,
           )}
           style={[
             {
@@ -69,11 +84,12 @@ const Input = React.forwardRef<TextInput, InputProps>(
               fontSize: compact ? 14 : 18,
               lineHeight: compact ? 18 : 22,
             },
-            Platform.OS === "android" && { textAlignVertical: "center" as const },
+            Platform.OS === "android" && {
+              textAlignVertical: "center" as const,
+            },
             Platform.OS === "web" && isFocused
               ? ({
-                  boxShadow:
-                    "0 0 0 3px oklch(0.708 0 0 / 0.5)",
+                  boxShadow: "0 0 0 3px oklch(0.708 0 0 / 0.5)",
                 } as any)
               : undefined,
           ].filter(Boolean)}
@@ -87,7 +103,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
         )}
       </View>
     );
-  }
+  },
 );
 
 Input.displayName = "Input";

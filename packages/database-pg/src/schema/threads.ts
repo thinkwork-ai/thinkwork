@@ -16,7 +16,6 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
 import { agents } from "./agents";
-import { computers } from "./computers";
 import { spaces } from "./spaces";
 import { messages } from "./messages";
 import { threadDependencies } from "./thread-dependencies";
@@ -36,7 +35,7 @@ export const threads = pgTable(
       .references(() => tenants.id)
       .notNull(),
     agent_id: uuid("agent_id").references(() => agents.id),
-    computer_id: uuid("computer_id").references(() => computers.id),
+    computer_id: uuid("computer_id"),
     space_id: uuid("space_id")
       .references(() => spaces.id)
       .notNull(),
@@ -217,10 +216,6 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
   agent: one(agents, {
     fields: [threads.agent_id],
     references: [agents.id],
-  }),
-  computer: one(computers, {
-    fields: [threads.computer_id],
-    references: [computers.id],
   }),
   space: one(spaces, {
     fields: [threads.space_id],

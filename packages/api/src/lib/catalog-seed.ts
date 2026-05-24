@@ -43,7 +43,12 @@ export async function seedTenantSkillCatalog(
     }
 
     for (const file of skill.files) {
-      await putCatalogFile(options, skill.slug, file.relativePath, file.content);
+      await putCatalogFile(
+        options,
+        skill.slug,
+        file.relativePath,
+        file.content,
+      );
     }
     if (!skill.hasWiringMd) {
       await putCatalogFile(

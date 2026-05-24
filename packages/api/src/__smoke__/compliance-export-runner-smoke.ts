@@ -25,9 +25,9 @@
  */
 
 import {
-	InvokeCommand,
-	LambdaClient,
-	type InvokeCommandOutput,
+  InvokeCommand,
+  LambdaClient,
+  type InvokeCommandOutput,
 } from "@aws-sdk/client-lambda";
 
 const STAGE = process.env.STAGE ?? "dev";
@@ -41,101 +41,101 @@ const FUNCTION_NAME = `thinkwork-${STAGE}-api-compliance-export-runner`;
 const SMOKE_JOB_ID = "00500000-0000-7000-8000-000000000000";
 
 interface BatchResponse {
-	batchItemFailures: { itemIdentifier: string }[];
+  batchItemFailures: { itemIdentifier: string }[];
 }
 
 function fail(reason: string, context?: Record<string, unknown>): never {
-	console.error(
-		JSON.stringify({
-			level: "error",
-			component: "compliance-export-runner-smoke",
-			reason,
-			...(context ?? {}),
-		}),
-	);
-	process.exit(1);
+  console.error(
+    JSON.stringify({
+      level: "error",
+      component: "compliance-export-runner-smoke",
+      reason,
+      ...(context ?? {}),
+    }),
+  );
+  process.exit(1);
 }
 
 function log(msg: string, fields?: Record<string, unknown>): void {
-	console.log(
-		JSON.stringify({
-			level: "info",
-			component: "compliance-export-runner-smoke",
-			message: msg,
-			...(fields ?? {}),
-		}),
-	);
+  console.log(
+    JSON.stringify({
+      level: "info",
+      component: "compliance-export-runner-smoke",
+      message: msg,
+      ...(fields ?? {}),
+    }),
+  );
 }
 
 async function main(): Promise<void> {
-	log("smoke start", { functionName: FUNCTION_NAME, region: AWS_REGION });
+  log("smoke start", { functionName: FUNCTION_NAME, region: AWS_REGION });
 
-	const client = new LambdaClient({ region: AWS_REGION });
-	const event = {
-		Records: [
-			{
-				messageId: `smoke-${Date.now()}`,
-				receiptHandle: "smoke-receipt",
-				body: JSON.stringify({ jobId: SMOKE_JOB_ID }),
-			},
-		],
-	};
+  const client = new LambdaClient({ region: AWS_REGION });
+  const event = {
+    Records: [
+      {
+        messageId: `smoke-${Date.now()}`,
+        receiptHandle: "smoke-receipt",
+        body: JSON.stringify({ jobId: SMOKE_JOB_ID }),
+      },
+    ],
+  };
 
-	let result: InvokeCommandOutput;
-	try {
-		result = await client.send(
-			new InvokeCommand({
-				FunctionName: FUNCTION_NAME,
-				InvocationType: "RequestResponse",
-				LogType: "Tail",
-				Payload: Buffer.from(JSON.stringify(event), "utf8"),
-			}),
-		);
-	} catch (err) {
-		fail("invoke failed", {
-			error: err instanceof Error ? err.message : String(err),
-		});
-	}
+  let result: InvokeCommandOutput;
+  try {
+    result = await client.send(
+      new InvokeCommand({
+        FunctionName: FUNCTION_NAME,
+        InvocationType: "RequestResponse",
+        LogType: "Tail",
+        Payload: Buffer.from(JSON.stringify(event), "utf8"),
+      }),
+    );
+  } catch (err) {
+    fail("invoke failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
-	if (result.FunctionError) {
-		fail("function returned error", {
-			functionError: result.FunctionError,
-			payload: Buffer.from(result.Payload ?? new Uint8Array()).toString("utf8"),
-		});
-	}
+  if (result.FunctionError) {
+    fail("function returned error", {
+      functionError: result.FunctionError,
+      payload: Buffer.from(result.Payload ?? new Uint8Array()).toString("utf8"),
+    });
+  }
 
-	const payloadBytes = result.Payload;
-	if (!payloadBytes || payloadBytes.length === 0) {
-		fail("function returned empty payload");
-	}
-	let parsed: BatchResponse;
-	try {
-		parsed = JSON.parse(Buffer.from(payloadBytes).toString("utf8"));
-	} catch (err) {
-		fail("function payload not JSON", {
-			error: err instanceof Error ? err.message : String(err),
-		});
-	}
+  const payloadBytes = result.Payload;
+  if (!payloadBytes || payloadBytes.length === 0) {
+    fail("function returned empty payload");
+  }
+  let parsed: BatchResponse;
+  try {
+    parsed = JSON.parse(Buffer.from(payloadBytes).toString("utf8"));
+  } catch (err) {
+    fail("function payload not JSON", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
-	if (!parsed || typeof parsed !== "object") {
-		fail("function payload not an object", { parsed });
-	}
-	if (!Array.isArray(parsed.batchItemFailures)) {
-		fail("function payload missing batchItemFailures array", { parsed });
-	}
-	if (parsed.batchItemFailures.length !== 0) {
-		fail("function reported batch failures on smoke invocation", {
-			failures: parsed.batchItemFailures,
-		});
-	}
+  if (!parsed || typeof parsed !== "object") {
+    fail("function payload not an object", { parsed });
+  }
+  if (!Array.isArray(parsed.batchItemFailures)) {
+    fail("function payload missing batchItemFailures array", { parsed });
+  }
+  if (parsed.batchItemFailures.length !== 0) {
+    fail("function reported batch failures on smoke invocation", {
+      failures: parsed.batchItemFailures,
+    });
+  }
 
-	log("smoke ok — runner returned empty batchItemFailures", {
-		jobId: SMOKE_JOB_ID,
-	});
+  log("smoke ok — runner returned empty batchItemFailures", {
+    jobId: SMOKE_JOB_ID,
+  });
 }
 
 main().catch((err) => {
-	fail("uncaught error in smoke", {
-		error: err instanceof Error ? err.message : String(err),
-	});
+  fail("uncaught error in smoke", {
+    error: err instanceof Error ? err.message : String(err),
+  });
 });

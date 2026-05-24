@@ -9,7 +9,10 @@ import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
 import { gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isJsonMode, logStderr, printJson, printTable } from "../lib/output.js";
 import { printError, printSuccess } from "../ui.js";
-import { resolveTenantContext, type TenantCliOptions } from "../lib/resolve-tenant-id.js";
+import {
+  resolveTenantContext,
+  type TenantCliOptions,
+} from "../lib/resolve-tenant-id.js";
 
 const BudgetPoliciesDoc = graphql(`
   query CliBudgetPolicies($tenantId: ID!) {
@@ -44,7 +47,10 @@ const BudgetStatusDoc = graphql(`
 `);
 
 const UpsertBudgetPolicyDoc = graphql(`
-  mutation CliUpsertBudgetPolicy($tenantId: ID!, $input: UpsertBudgetPolicyInput!) {
+  mutation CliUpsertBudgetPolicy(
+    $tenantId: ID!
+    $input: UpsertBudgetPolicyInput!
+  ) {
     upsertBudgetPolicy(tenantId: $tenantId, input: $input) {
       id
       scope
@@ -64,7 +70,9 @@ const DeleteBudgetPolicyDoc = graphql(`
 
 async function runBudgetList(opts: TenantCliOptions): Promise<void> {
   const ctx = await resolveTenantContext(opts);
-  const data = await gqlQuery(ctx.client, BudgetPoliciesDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, BudgetPoliciesDoc, {
+    tenantId: ctx.tenantId,
+  });
   const items = data.budgetPolicies ?? [];
   if (isJsonMode()) {
     printJson({ items });
@@ -94,7 +102,9 @@ async function runBudgetList(opts: TenantCliOptions): Promise<void> {
 
 async function runBudgetStatus(opts: TenantCliOptions): Promise<void> {
   const ctx = await resolveTenantContext(opts);
-  const data = await gqlQuery(ctx.client, BudgetStatusDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, BudgetStatusDoc, {
+    tenantId: ctx.tenantId,
+  });
   const items = data.budgetStatus ?? [];
   if (isJsonMode()) {
     printJson({ items });
@@ -178,7 +188,9 @@ async function runBudgetDelete(id: string, opts: DeleteOptions): Promise<void> {
       process.exit(1);
     }
     requireTty("Confirmation");
-    const go = await promptOrExit(() => confirm({ message: `Delete budget policy ${id}?`, default: false }));
+    const go = await promptOrExit(() =>
+      confirm({ message: `Delete budget policy ${id}?`, default: false }),
+    );
     if (!go) {
       logStderr("Cancelled.");
       process.exit(0);

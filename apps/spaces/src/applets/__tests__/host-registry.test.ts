@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  loadAppletHostExternals,
-  registerAppletHost,
-} from "../host-registry";
+import { loadAppletHostExternals, registerAppletHost } from "../host-registry";
 
 type LeafletWithDefault = typeof import("leaflet") & {
   default: typeof import("leaflet");

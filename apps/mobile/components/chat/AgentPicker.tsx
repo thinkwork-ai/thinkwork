@@ -21,9 +21,20 @@ interface AgentPickerProps {
   anchor?: "start" | "end";
 }
 
-export function AgentPicker({ agents, selectedId, onSelect, children, anchor: anchorSide = "start" }: AgentPickerProps) {
+export function AgentPicker({
+  agents,
+  selectedId,
+  onSelect,
+  children,
+  anchor: anchorSide = "start",
+}: AgentPickerProps) {
   const [visible, setVisible] = useState(false);
-  const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [anchor, setAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const triggerRef = useRef<View>(null);
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
@@ -43,14 +54,23 @@ export function AgentPicker({ agents, selectedId, onSelect, children, anchor: an
       <Pressable ref={triggerRef} onPress={open}>
         {children}
       </Pressable>
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
         <Pressable className="flex-1" onPress={() => setVisible(false)}>
           <View
             style={{
               position: "absolute",
               top: dropdownTop,
               ...(anchorSide === "end"
-                ? { right: anchor ? screenWidth - (anchor.x + anchor.width) : 16 }
+                ? {
+                    right: anchor
+                      ? screenWidth - (anchor.x + anchor.width)
+                      : 16,
+                  }
                 : { left: anchor ? anchor.x : 16 }),
               minWidth: 200,
               maxWidth: 280,
@@ -62,7 +82,10 @@ export function AgentPicker({ agents, selectedId, onSelect, children, anchor: an
               shadowRadius: 12,
               elevation: 8,
               borderWidth: 1,
-              borderColor: colorScheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
+              borderColor:
+                colorScheme === "dark"
+                  ? "rgba(255,255,255,0.1)"
+                  : "rgba(0,0,0,0.08)",
             }}
           >
             <FlatList
@@ -80,13 +103,24 @@ export function AgentPicker({ agents, selectedId, onSelect, children, anchor: an
                       setVisible(false);
                     }}
                     className="flex-row items-center justify-between px-3.5 py-3"
-                    style={!isLast ? {
-                      borderBottomWidth: 0.5,
-                      borderBottomColor: colorScheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                    } : undefined}
+                    style={
+                      !isLast
+                        ? {
+                            borderBottomWidth: 0.5,
+                            borderBottomColor:
+                              colorScheme === "dark"
+                                ? "rgba(255,255,255,0.08)"
+                                : "rgba(0,0,0,0.06)",
+                          }
+                        : undefined
+                    }
                   >
                     <View className="flex-row items-center flex-1">
-                      <Text size="sm" weight={isSelected ? "semibold" : "regular"} numberOfLines={1}>
+                      <Text
+                        size="sm"
+                        weight={isSelected ? "semibold" : "regular"}
+                        numberOfLines={1}
+                      >
                         {item.name}
                       </Text>
                     </View>

@@ -1,6 +1,6 @@
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
@@ -15,34 +15,44 @@ const { activityLog } = schema;
 // ---------------------------------------------------------------------------
 
 export async function handler(
-	event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
+  if (event.requestContext.http.method === "OPTIONS")
+    return {
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+      },
+      body: "",
+    };
 
-	const tenantHeader = event.headers["x-tenant-id"];
-	if (!tenantHeader) return error("Missing x-tenant-id header");
+  const tenantHeader = event.headers["x-tenant-id"];
+  if (!tenantHeader) return error("Missing x-tenant-id header");
 
-	const method = event.requestContext.http.method;
-	const path = event.rawPath;
+  const method = event.requestContext.http.method;
+  const path = event.rawPath;
 
-	const verdict = await requireTenantMembership(event, tenantHeader, {
-		requiredRoles: method === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
-	});
-	if (!verdict.ok) return error(verdict.reason, verdict.status);
-	const tenantId = verdict.tenantId;
+  const verdict = await requireTenantMembership(event, tenantHeader, {
+    requiredRoles:
+      method === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+  });
+  if (!verdict.ok) return error(verdict.reason, verdict.status);
+  const tenantId = verdict.tenantId;
 
-	try {
-		if (path === "/api/activity") {
-			if (method === "GET") return listActivity(tenantId, event);
-			if (method === "POST") return createActivity(tenantId, event);
-			return error("Method not allowed", 405);
-		}
+  try {
+    if (path === "/api/activity") {
+      if (method === "GET") return listActivity(tenantId, event);
+      if (method === "POST") return createActivity(tenantId, event);
+      return error("Method not allowed", 405);
+    }
 
-		return error("Route not found", 404);
-	} catch (err) {
-		console.error("Activity handler error:", err);
-		return error("Internal server error", 500);
-	}
+    return error("Route not found", 404);
+  } catch (err) {
+    console.error("Activity handler error:", err);
+    return error("Internal server error", 500);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -50,35 +60,35 @@ export async function handler(
 // ---------------------------------------------------------------------------
 
 async function listActivity(
-	tenantId: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const params = event.queryStringParameters || {};
-	const conditions = [eq(activityLog.tenant_id, tenantId)];
+  const params = event.queryStringParameters || {};
+  const conditions = [eq(activityLog.tenant_id, tenantId)];
 
-	if (params.actor_type) {
-		conditions.push(eq(activityLog.actor_type, params.actor_type));
-	}
-	if (params.action) {
-		conditions.push(eq(activityLog.action, params.action));
-	}
-	if (params.entity_type) {
-		conditions.push(eq(activityLog.entity_type, params.entity_type));
-	}
-	if (params.from) {
-		conditions.push(gte(activityLog.created_at, new Date(params.from)));
-	}
-	if (params.to) {
-		conditions.push(lte(activityLog.created_at, new Date(params.to)));
-	}
+  if (params.actor_type) {
+    conditions.push(eq(activityLog.actor_type, params.actor_type));
+  }
+  if (params.action) {
+    conditions.push(eq(activityLog.action, params.action));
+  }
+  if (params.entity_type) {
+    conditions.push(eq(activityLog.entity_type, params.entity_type));
+  }
+  if (params.from) {
+    conditions.push(gte(activityLog.created_at, new Date(params.from)));
+  }
+  if (params.to) {
+    conditions.push(lte(activityLog.created_at, new Date(params.to)));
+  }
 
-	const rows = await db
-		.select()
-		.from(activityLog)
-		.where(and(...conditions))
-		.orderBy(desc(activityLog.created_at));
+  const rows = await db
+    .select()
+    .from(activityLog)
+    .where(and(...conditions))
+    .orderBy(desc(activityLog.created_at));
 
-	return json(rows);
+  return json(rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,30 +96,29 @@ async function listActivity(
 // ---------------------------------------------------------------------------
 
 async function createActivity(
-	tenantId: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = JSON.parse(event.body || "{}");
+  const body = JSON.parse(event.body || "{}");
 
-	if (!body.action) return error("action is required");
-	if (!body.actor_type) return error("actor_type is required");
-	if (!body.actor_id) return error("actor_id is required");
+  if (!body.action) return error("action is required");
+  if (!body.actor_type) return error("actor_type is required");
+  if (!body.actor_id) return error("actor_id is required");
 
-	const [entry] = await db
-		.insert(activityLog)
-		.values({
-			tenant_id: tenantId,
-			actor_type: body.actor_type,
-			actor_id: body.actor_id,
-			action: body.action,
-			entity_type: body.entity_type,
-			entity_id: body.entity_id,
-			changes: body.changes,
-			metadata: body.metadata,
-			ip_address:
-				event.requestContext.http.sourceIp || body.ip_address,
-		})
-		.returning();
+  const [entry] = await db
+    .insert(activityLog)
+    .values({
+      tenant_id: tenantId,
+      actor_type: body.actor_type,
+      actor_id: body.actor_id,
+      action: body.action,
+      entity_type: body.entity_type,
+      entity_id: body.entity_id,
+      changes: body.changes,
+      metadata: body.metadata,
+      ip_address: event.requestContext.http.sourceIp || body.ip_address,
+    })
+    .returning();
 
-	return json(entry, 201);
+  return json(entry, 201);
 }

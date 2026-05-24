@@ -11,7 +11,10 @@ interface UseMobileMemoryCapturesArgs {
   limit?: number;
 }
 
-export function useMobileMemoryCaptures({ agentId, limit }: UseMobileMemoryCapturesArgs) {
+export function useMobileMemoryCaptures({
+  agentId,
+  limit,
+}: UseMobileMemoryCapturesArgs) {
   const [{ data, fetching, error }, refetch] = useQuery<{
     mobileMemoryCaptures: MobileMemoryCapture[];
   }>({
@@ -35,8 +38,10 @@ export function useDeleteMobileMemoryCapture() {
   );
   return useCallback(
     async (input: { agentId: string; captureId: string }): Promise<void> => {
-      if (!input.agentId) throw new Error("useDeleteMobileMemoryCapture: agentId is required");
-      if (!input.captureId) throw new Error("useDeleteMobileMemoryCapture: captureId is required");
+      if (!input.agentId)
+        throw new Error("useDeleteMobileMemoryCapture: agentId is required");
+      if (!input.captureId)
+        throw new Error("useDeleteMobileMemoryCapture: captureId is required");
       const result = await deleteCapture({
         agentId: input.agentId,
         captureId: input.captureId,

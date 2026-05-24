@@ -14,23 +14,23 @@ import { markdownToHtml, wrapEmailHtml } from "./markdown-render.js";
 // ---------------------------------------------------------------------------
 
 export interface ArtifactPayload {
-	id: string;
-	title: string;
-	type: string;
-	status: string;
-	content: string;
-	summary?: string | null;
-	metadata?: Record<string, unknown> | null;
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  content: string;
+  summary?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface EmailDeliveryResult {
-	subject: string;
-	htmlBody: string;
-	textBody: string;
+  subject: string;
+  htmlBody: string;
+  textBody: string;
 }
 
 export interface SmsDeliveryResult {
-	body: string;
+  body: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,16 +38,16 @@ export interface SmsDeliveryResult {
 // ---------------------------------------------------------------------------
 
 const TYPE_LABELS: Record<string, string> = {
-	data_view: "Data View",
-	note: "Note",
-	report: "Report",
-	plan: "Plan",
-	draft: "Draft",
-	digest: "Digest",
+  data_view: "Data View",
+  note: "Note",
+  report: "Report",
+  plan: "Plan",
+  draft: "Draft",
+  digest: "Digest",
 };
 
 function typeLabel(type: string): string {
-	return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -60,12 +60,14 @@ function typeLabel(type: string): string {
  * Returns subject, HTML body (wrapped in email template), and plain text
  * fallback for multipart/alternative.
  */
-export function renderEmailDelivery(artifact: ArtifactPayload): EmailDeliveryResult {
-	const label = typeLabel(artifact.type);
-	const subject = `${label}: ${artifact.title}`;
+export function renderEmailDelivery(
+  artifact: ArtifactPayload,
+): EmailDeliveryResult {
+  const label = typeLabel(artifact.type);
+  const subject = `${label}: ${artifact.title}`;
 
-	// Header badge
-	const headerHtml = `
+  // Header badge
+  const headerHtml = `
 <div style="margin-bottom:16px">
   <span style="display:inline-block;background:#e5e7eb;color:#374151;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px">${label}</span>
   ${artifact.status === "draft" ? '<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:6px">DRAFT</span>' : ""}
@@ -73,25 +75,25 @@ export function renderEmailDelivery(artifact: ArtifactPayload): EmailDeliveryRes
 <h1 style="font-size:20px;font-weight:600;margin:0 0 16px;color:#1a1a1a">${escapeHtml(artifact.title)}</h1>
 `;
 
-	const contentHtml = markdownToHtml(artifact.content);
+  const contentHtml = markdownToHtml(artifact.content);
 
-	const htmlBody = wrapEmailHtml(headerHtml + contentHtml, {
-		title: artifact.title,
-		preheader: artifact.summary ?? artifact.title,
-	});
+  const htmlBody = wrapEmailHtml(headerHtml + contentHtml, {
+    title: artifact.title,
+    preheader: artifact.summary ?? artifact.title,
+  });
 
-	// Plain text fallback: summary or first 500 chars of content
-	const textBody = [
-		`${label}: ${artifact.title}`,
-		artifact.status === "draft" ? "[DRAFT]" : "",
-		"",
-		artifact.content.slice(0, 2000),
-		artifact.content.length > 2000 ? "\n[Content truncated]" : "",
-	]
-		.filter(Boolean)
-		.join("\n");
+  // Plain text fallback: summary or first 500 chars of content
+  const textBody = [
+    `${label}: ${artifact.title}`,
+    artifact.status === "draft" ? "[DRAFT]" : "",
+    "",
+    artifact.content.slice(0, 2000),
+    artifact.content.length > 2000 ? "\n[Content truncated]" : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-	return { subject, htmlBody, textBody };
+  return { subject, htmlBody, textBody };
 }
 
 // ---------------------------------------------------------------------------
@@ -108,28 +110,28 @@ const SMS_MAX_LENGTH = 160;
  * the content to fit within SMS limits.
  */
 export function renderSmsDelivery(
-	artifact: ArtifactPayload,
-	maxLength = SMS_MAX_LENGTH,
+  artifact: ArtifactPayload,
+  maxLength = SMS_MAX_LENGTH,
 ): SmsDeliveryResult {
-	const prefix = `${typeLabel(artifact.type)}: `;
-	const available = maxLength - prefix.length;
+  const prefix = `${typeLabel(artifact.type)}: `;
+  const available = maxLength - prefix.length;
 
-	if (artifact.summary && artifact.summary.length <= available) {
-		return { body: prefix + artifact.summary };
-	}
+  if (artifact.summary && artifact.summary.length <= available) {
+    return { body: prefix + artifact.summary };
+  }
 
-	const source = artifact.summary ?? artifact.content;
-	// Strip markdown formatting for SMS
-	const plain = source
-		.replace(/[#*_`~\[\]()>]/g, "")
-		.replace(/\n+/g, " ")
-		.trim();
+  const source = artifact.summary ?? artifact.content;
+  // Strip markdown formatting for SMS
+  const plain = source
+    .replace(/[#*_`~\[\]()>]/g, "")
+    .replace(/\n+/g, " ")
+    .trim();
 
-	if (plain.length <= available) {
-		return { body: prefix + plain };
-	}
+  if (plain.length <= available) {
+    return { body: prefix + plain };
+  }
 
-	return { body: prefix + plain.slice(0, available - 1) + "\u2026" };
+  return { body: prefix + plain.slice(0, available - 1) + "\u2026" };
 }
 
 // ---------------------------------------------------------------------------
@@ -141,10 +143,10 @@ export function renderSmsDelivery(
  * (via Puppeteer, wkhtmltopdf, or similar).
  */
 export function renderPdfHtml(artifact: ArtifactPayload): string {
-	const label = typeLabel(artifact.type);
-	const contentHtml = markdownToHtml(artifact.content);
+  const label = typeLabel(artifact.type);
+  const contentHtml = markdownToHtml(artifact.content);
 
-	return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -218,9 +220,9 @@ ${contentHtml}
 // ---------------------------------------------------------------------------
 
 function escapeHtml(str: string): string {
-	return str
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

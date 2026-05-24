@@ -1,5 +1,11 @@
 import React, { useRef, useState, useCallback, useEffect } from "react";
-import { View, FlatList, KeyboardAvoidingView, Platform, Pressable } from "react-native";
+import {
+  View,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { IconHistory } from "@tabler/icons-react-native";
@@ -68,12 +74,13 @@ function EmptyState() {
 }
 
 function GraphQLChatScreen(props: Omit<ChatScreenProps, "baseUrl" | "token">) {
-  const { messages, sendMessage, isConnected, isStreaming, historyLoaded } = useGraphQLChat(
-    props.selectedAgentId ?? "",
-    props.threadId,
-    props.tenantId,
-    props.caller,
-  );
+  const { messages, sendMessage, isConnected, isStreaming, historyLoaded } =
+    useGraphQLChat(
+      props.selectedAgentId ?? "",
+      props.threadId,
+      props.tenantId,
+      props.caller,
+    );
   return (
     <ChatView
       messages={messages}
@@ -95,16 +102,13 @@ function GraphQLChatScreen(props: Omit<ChatScreenProps, "baseUrl" | "token">) {
 
 function GatewayChatScreen(props: ChatScreenProps) {
   const useDeviceAuth = props.agentType === "local";
-  const { messages, send, connectionStatus, isStreaming, historyLoaded } = useGatewayChat(
-    props.baseUrl,
-    props.token,
-    {
+  const { messages, send, connectionStatus, isStreaming, historyLoaded } =
+    useGatewayChat(props.baseUrl, props.token, {
       useDeviceAuth,
       caller: props.caller,
       sessionKey: props.sessionKey,
       onFirstExchange: props.onFirstExchange,
-    }
-  );
+    });
   return (
     <ChatView
       messages={messages}
@@ -180,7 +184,6 @@ function ChatView({
     }
   }, [historyLoaded, messages]);
 
-
   // Handle UI envelope actions — sends a system-instruction message to invoke the tool
   const handleEnvelopeAction = useCallback(
     (action: UiAction, context?: Record<string, unknown>) => {
@@ -188,7 +191,8 @@ function ChatView({
         // Extract display metadata (UI-only, not sent to tool)
         const displayLabel = context?._displayLabel as string | undefined;
         const fieldLabel = context?._fieldLabel as string | undefined;
-        const { _displayLabel, _fieldLabel, ...cleanContext } = (context ?? {}) as Record<string, unknown>;
+        const { _displayLabel, _fieldLabel, ...cleanContext } = (context ??
+          {}) as Record<string, unknown>;
         const mergedArgs = {
           ...action.action.presetArgs,
           ...action.action.args,
@@ -199,7 +203,9 @@ function ChatView({
         // Prefer the entity arg (e.g. "lead", "opportunity", "task") for a clean label
         const entityArg = mergedArgs.entity as string | undefined;
         const typeName = entityArg
-          ? entityArg.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+          ? entityArg
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (c: string) => c.toUpperCase())
           : action.action.tool
               .replace(/_graphql$/, "")
               .replace(/_schema$/, "")
@@ -223,7 +229,9 @@ function ChatView({
         const argsStr = Object.entries(mergedArgs)
           .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
           .join(", ");
-        const interactionTag = interactionText ? `[INTERACTION]${interactionText}[/INTERACTION]\n` : "";
+        const interactionTag = interactionText
+          ? `[INTERACTION]${interactionText}[/INTERACTION]\n`
+          : "";
         const instruction = `${interactionTag}[SYSTEM INSTRUCTION]\nACTION REQUIRED: Call the ${action.action.tool} tool with these arguments: ${argsStr}\n[/SYSTEM INSTRUCTION]`;
         send(instruction);
       }
@@ -255,20 +263,27 @@ function ChatView({
                   onSelect={(a) => onSelectAgent?.(a)}
                 >
                   <View className="flex-row items-center gap-2" hitSlop={8}>
-                    <Text size={isWide ? "lg" : "xl"} weight="bold">{agentName || "Agent"}</Text>
+                    <Text size={isWide ? "lg" : "xl"} weight="bold">
+                      {agentName || "Agent"}
+                    </Text>
                   </View>
                 </AgentPicker>
               ) : (
-                <Text size={isWide ? "lg" : "xl"} weight="bold">{agentName || "Agent"}</Text>
+                <Text size={isWide ? "lg" : "xl"} weight="bold">
+                  {agentName || "Agent"}
+                </Text>
               )}
               {title ? (
-                <Text size="sm" variant="muted">{title}</Text>
+                <Text size="sm" variant="muted">
+                  {title}
+                </Text>
               ) : null}
-              <Pressable
-                onPress={() => router.push("/threads")}
-                hitSlop={8}
-              >
-                <IconHistory size={22} strokeWidth={1.5} color={colors.primary} />
+              <Pressable onPress={() => router.push("/threads")} hitSlop={8}>
+                <IconHistory
+                  size={22}
+                  strokeWidth={1.5}
+                  color={colors.primary}
+                />
               </Pressable>
             </View>
             {/* New chat button */}
@@ -279,7 +294,12 @@ function ChatView({
                 hitSlop={8}
               >
                 <Plus size={18} color={colors.primary} />
-                <Text style={{ color: colors.primary }} className="font-semibold text-base">New</Text>
+                <Text
+                  style={{ color: colors.primary }}
+                  className="font-semibold text-base"
+                >
+                  New
+                </Text>
               </Pressable>
             )}
           </View>
@@ -301,7 +321,10 @@ function ChatView({
               <ChatBubble
                 message={item}
                 onEnvelopeAction={handleEnvelopeAction}
-                animate={initialIds.current !== null && !initialIds.current.has(item.id)}
+                animate={
+                  initialIds.current !== null &&
+                  !initialIds.current.has(item.id)
+                }
               />
             </WebContent>
           )}
@@ -316,15 +339,23 @@ function ChatView({
           onSend={(text) => {
             let enrichedText = text;
             if (pendingMentions.length > 0) {
-              const assistantMentions = pendingMentions.filter((m) => m.type === "assistant");
+              const assistantMentions = pendingMentions.filter(
+                (m) => m.type === "assistant",
+              );
               if (assistantMentions.length > 0) {
-                const instructions = assistantMentions.map((m) =>
-                  `ACTION REQUIRED: The user mentioned @${m.name}. You MUST call the request_assistant tool to delegate to them. Use targetAssistantId="${m.id}", parentTicketId from your current thread context. Compose a clear request message based on what the user asked. Do NOT just describe what you would do — actually call the tool.`
-                ).join("\n");
+                const instructions = assistantMentions
+                  .map(
+                    (m) =>
+                      `ACTION REQUIRED: The user mentioned @${m.name}. You MUST call the request_assistant tool to delegate to them. Use targetAssistantId="${m.id}", parentTicketId from your current thread context. Compose a clear request message based on what the user asked. Do NOT just describe what you would do — actually call the tool.`,
+                  )
+                  .join("\n");
                 enrichedText = `${text}\n\n[SYSTEM INSTRUCTION]\n${instructions}\n[/SYSTEM INSTRUCTION]`;
               }
             }
-            send(enrichedText, pendingMentions.length > 0 ? pendingMentions : undefined);
+            send(
+              enrichedText,
+              pendingMentions.length > 0 ? pendingMentions : undefined,
+            );
             setPendingMentions([]);
           }}
           disabled={connectionStatus !== "connected"}
@@ -332,7 +363,6 @@ function ChatView({
           onMentionsChange={setPendingMentions}
         />
       </WebContent>
-
     </KeyboardAvoidingView>
   );
 }

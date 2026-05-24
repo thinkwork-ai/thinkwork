@@ -61,18 +61,14 @@ export function SpaceMembersPanel({
       (space?.members ?? []).map((member) => ({
         id: member.id,
         userId: member.userId,
-        name:
-          member.user?.name ?? member.user?.email ?? member.userId,
+        name: member.user?.name ?? member.user?.email ?? member.userId,
         email: member.user?.email ?? "",
         role: member.role,
         joinedAt: member.createdAt ?? null,
       })),
     [space?.members],
   );
-  const existingUserIds = useMemo(
-    () => rows.map((row) => row.userId),
-    [rows],
-  );
+  const existingUserIds = useMemo(() => rows.map((row) => row.userId), [rows]);
 
   const handleRemove = useCallback(
     async (userId: string) => {
@@ -139,9 +135,7 @@ export function SpaceMembersPanel({
         header: "Joined",
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground">
-            {row.original.joinedAt
-              ? relativeTime(row.original.joinedAt)
-              : "—"}
+            {row.original.joinedAt ? relativeTime(row.original.joinedAt) : "—"}
           </span>
         ),
         size: 120,

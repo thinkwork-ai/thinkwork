@@ -51,13 +51,13 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 
 export interface CliArgs {
-	stage: string;
-	dryRun: boolean;
-	userId?: string;
-	tenantId?: string;
-	surveyedOn?: string;
-	maxDeletes: number;
-	batchSize: number;
+  stage: string;
+  dryRun: boolean;
+  userId?: string;
+  tenantId?: string;
+  surveyedOn?: string;
+  maxDeletes: number;
+  batchSize: number;
 }
 
 export const DEFAULT_MAX_DELETES = 1_000_000;
@@ -65,55 +65,55 @@ export const DEFAULT_BATCH_SIZE = 1_000;
 export const SURVEY_FRESHNESS_DAYS = 7;
 
 export function parseArgs(argv: string[]): CliArgs {
-	const args: CliArgs = {
-		stage: "",
-		dryRun: true,
-		maxDeletes: DEFAULT_MAX_DELETES,
-		batchSize: DEFAULT_BATCH_SIZE,
-	};
-	for (let i = 0; i < argv.length; i += 1) {
-		const arg = argv[i];
-		switch (arg) {
-			case "--stage":
-				args.stage = argv[++i] ?? "";
-				break;
-			case "--dry-run":
-				args.dryRun = true;
-				break;
-			case "--dry-run=false":
-				args.dryRun = false;
-				break;
-			case "--dry-run=true":
-				args.dryRun = true;
-				break;
-			case "--user":
-				args.userId = argv[++i];
-				break;
-			case "--tenant":
-				args.tenantId = argv[++i];
-				break;
-			case "--surveyed-on":
-				args.surveyedOn = argv[++i];
-				break;
-			case "--max-deletes":
-				args.maxDeletes = parseInt(argv[++i] ?? "0", 10);
-				break;
-			case "--batch-size":
-				args.batchSize = parseInt(argv[++i] ?? "0", 10);
-				break;
-			case "--help":
-			case "-h":
-				printHelp();
-				process.exit(0);
-			default:
-				throw new Error(`Unknown argument: ${arg}`);
-		}
-	}
-	return args;
+  const args: CliArgs = {
+    stage: "",
+    dryRun: true,
+    maxDeletes: DEFAULT_MAX_DELETES,
+    batchSize: DEFAULT_BATCH_SIZE,
+  };
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--stage":
+        args.stage = argv[++i] ?? "";
+        break;
+      case "--dry-run":
+        args.dryRun = true;
+        break;
+      case "--dry-run=false":
+        args.dryRun = false;
+        break;
+      case "--dry-run=true":
+        args.dryRun = true;
+        break;
+      case "--user":
+        args.userId = argv[++i];
+        break;
+      case "--tenant":
+        args.tenantId = argv[++i];
+        break;
+      case "--surveyed-on":
+        args.surveyedOn = argv[++i];
+        break;
+      case "--max-deletes":
+        args.maxDeletes = parseInt(argv[++i] ?? "0", 10);
+        break;
+      case "--batch-size":
+        args.batchSize = parseInt(argv[++i] ?? "0", 10);
+        break;
+      case "--help":
+      case "-h":
+        printHelp();
+        process.exit(0);
+      default:
+        throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+  return args;
 }
 
 function printHelp(): void {
-	console.log(`Usage: wipe-external-memory-stores --stage <dev|prod> [options]
+  console.log(`Usage: wipe-external-memory-stores --stage <dev|prod> [options]
 
   --stage <name>           Required. Used in summary log only.
   --dry-run[=true|=false]  Default true. Live run requires --dry-run=false.
@@ -128,50 +128,61 @@ function printHelp(): void {
 }
 
 export interface SurveyValidation {
-	ok: boolean;
-	error?: string;
+  ok: boolean;
+  error?: string;
 }
 
-export function validateSurvey(args: CliArgs, today: Date = new Date()): SurveyValidation {
-	if (args.dryRun) return { ok: true };
-	if (!args.surveyedOn) {
-		return {
-			ok: false,
-			error:
-				"--dry-run=false requires --surveyed-on YYYY-MM-DD. The pre-flight " +
-				"consumer survey (recall callsites, eval harness, renderers, " +
-				"wiki-compile) must be re-run for each stage before a live wipe.",
-		};
-	}
-	const surveyDate = new Date(args.surveyedOn + "T00:00:00.000Z");
-	if (Number.isNaN(surveyDate.getTime())) {
-		return { ok: false, error: `--surveyed-on must be YYYY-MM-DD; got ${args.surveyedOn}` };
-	}
-	const todayUTC = new Date(today.toISOString().slice(0, 10) + "T00:00:00.000Z");
-	const daysOld = Math.floor(
-		(todayUTC.getTime() - surveyDate.getTime()) / (1000 * 60 * 60 * 24),
-	);
-	if (daysOld > SURVEY_FRESHNESS_DAYS) {
-		return {
-			ok: false,
-			error:
-				`--surveyed-on ${args.surveyedOn} is ${daysOld} days old; max ${SURVEY_FRESHNESS_DAYS}. ` +
-				`Re-run the consumer survey and supply a fresh date.`,
-		};
-	}
-	if (daysOld < 0) {
-		return { ok: false, error: `--surveyed-on ${args.surveyedOn} is in the future` };
-	}
-	return { ok: true };
+export function validateSurvey(
+  args: CliArgs,
+  today: Date = new Date(),
+): SurveyValidation {
+  if (args.dryRun) return { ok: true };
+  if (!args.surveyedOn) {
+    return {
+      ok: false,
+      error:
+        "--dry-run=false requires --surveyed-on YYYY-MM-DD. The pre-flight " +
+        "consumer survey (recall callsites, eval harness, renderers, " +
+        "wiki-compile) must be re-run for each stage before a live wipe.",
+    };
+  }
+  const surveyDate = new Date(args.surveyedOn + "T00:00:00.000Z");
+  if (Number.isNaN(surveyDate.getTime())) {
+    return {
+      ok: false,
+      error: `--surveyed-on must be YYYY-MM-DD; got ${args.surveyedOn}`,
+    };
+  }
+  const todayUTC = new Date(
+    today.toISOString().slice(0, 10) + "T00:00:00.000Z",
+  );
+  const daysOld = Math.floor(
+    (todayUTC.getTime() - surveyDate.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (daysOld > SURVEY_FRESHNESS_DAYS) {
+    return {
+      ok: false,
+      error:
+        `--surveyed-on ${args.surveyedOn} is ${daysOld} days old; max ${SURVEY_FRESHNESS_DAYS}. ` +
+        `Re-run the consumer survey and supply a fresh date.`,
+    };
+  }
+  if (daysOld < 0) {
+    return {
+      ok: false,
+      error: `--surveyed-on ${args.surveyedOn} is in the future`,
+    };
+  }
+  return { ok: true };
 }
 
 interface CountRow {
-	count: string | number | bigint;
+  count: string | number | bigint;
 }
 
 interface BankRow {
-	bank_id: string;
-	row_count: string | number | bigint;
+  bank_id: string;
+  row_count: string | number | bigint;
 }
 
 /**
@@ -181,91 +192,95 @@ interface BankRow {
  * across count and per-bank delete, so it lives in this helper.
  */
 function legacyPredicate(args: CliArgs) {
-	if (args.userId) {
-		return sql`bank_id = ${"user_" + args.userId} AND (metadata->>'document_id' IS NULL OR context = 'thread_turn')`;
-	}
-	if (args.tenantId) {
-		// Tenant scope joins agents → memory_units via human_pair_id (the
-		// user_id used in bank construction). The agents table is in the
-		// public schema; hindsight.memory_units is in hindsight.
-		return sql`bank_id LIKE 'user_%' AND bank_id IN (
+  if (args.userId) {
+    return sql`bank_id = ${"user_" + args.userId} AND (metadata->>'document_id' IS NULL OR context = 'thread_turn')`;
+  }
+  if (args.tenantId) {
+    // Tenant scope joins agents → memory_units via human_pair_id (the
+    // user_id used in bank construction). The agents table is in the
+    // public schema; hindsight.memory_units is in hindsight.
+    return sql`bank_id LIKE 'user_%' AND bank_id IN (
 			SELECT 'user_' || a.human_pair_id::text
 			FROM public.agents a
 			WHERE a.tenant_id = ${args.tenantId}::uuid
 			  AND a.human_pair_id IS NOT NULL
 		) AND (metadata->>'document_id' IS NULL OR context = 'thread_turn')`;
-	}
-	return sql`bank_id LIKE 'user_%' AND (metadata->>'document_id' IS NULL OR context = 'thread_turn')`;
+  }
+  return sql`bank_id LIKE 'user_%' AND (metadata->>'document_id' IS NULL OR context = 'thread_turn')`;
 }
 
 export interface WipeReport {
-	totalLegacy: number;
-	bankCount: number;
-	dryRun: boolean;
-	deletedByBank: Array<{ bankId: string; deleted: number }>;
+  totalLegacy: number;
+  bankCount: number;
+  dryRun: boolean;
+  deletedByBank: Array<{ bankId: string; deleted: number }>;
 }
 
-export async function runWipe(args: CliArgs, db = getDb()): Promise<WipeReport> {
-	if (!args.stage) {
-		throw new Error("--stage is required");
-	}
-	const survey = validateSurvey(args);
-	if (!survey.ok) {
-		throw new Error(survey.error);
-	}
+export async function runWipe(
+  args: CliArgs,
+  db = getDb(),
+): Promise<WipeReport> {
+  if (!args.stage) {
+    throw new Error("--stage is required");
+  }
+  const survey = validateSurvey(args);
+  if (!survey.ok) {
+    throw new Error(survey.error);
+  }
 
-	// Count phase — always runs first, even on live run.
-	const countResult: any = await db.execute(
-		sql`SELECT COUNT(*)::text AS count FROM hindsight.memory_units WHERE ${legacyPredicate(args)}`,
-	);
-	const rows: CountRow[] = countResult?.rows ?? countResult ?? [];
-	const totalLegacy = Number((rows[0]?.count ?? 0));
+  // Count phase — always runs first, even on live run.
+  const countResult: any = await db.execute(
+    sql`SELECT COUNT(*)::text AS count FROM hindsight.memory_units WHERE ${legacyPredicate(args)}`,
+  );
+  const rows: CountRow[] = countResult?.rows ?? countResult ?? [];
+  const totalLegacy = Number(rows[0]?.count ?? 0);
 
-	// Implausibly-large safeguard.
-	if (totalLegacy > args.maxDeletes) {
-		throw new Error(
-			`Refusing to proceed: legacy count ${totalLegacy} exceeds --max-deletes ${args.maxDeletes}. ` +
-				`Either narrow scope with --user/--tenant or override with --max-deletes.`,
-		);
-	}
+  // Implausibly-large safeguard.
+  if (totalLegacy > args.maxDeletes) {
+    throw new Error(
+      `Refusing to proceed: legacy count ${totalLegacy} exceeds --max-deletes ${args.maxDeletes}. ` +
+        `Either narrow scope with --user/--tenant or override with --max-deletes.`,
+    );
+  }
 
-	// Per-bank breakdown so the operator can see distribution.
-	const banksResult: any = await db.execute(
-		sql`SELECT bank_id, COUNT(*)::text AS row_count FROM hindsight.memory_units WHERE ${legacyPredicate(args)} GROUP BY bank_id ORDER BY COUNT(*) DESC`,
-	);
-	const bankRows: BankRow[] = banksResult?.rows ?? banksResult ?? [];
+  // Per-bank breakdown so the operator can see distribution.
+  const banksResult: any = await db.execute(
+    sql`SELECT bank_id, COUNT(*)::text AS row_count FROM hindsight.memory_units WHERE ${legacyPredicate(args)} GROUP BY bank_id ORDER BY COUNT(*) DESC`,
+  );
+  const bankRows: BankRow[] = banksResult?.rows ?? banksResult ?? [];
 
-	const summaryHeader = `[wipe-external-memory-stores] stage=${args.stage} dry_run=${args.dryRun} ` +
-		`scope=${args.userId ? `user:${args.userId.slice(0, 8)}` : args.tenantId ? `tenant:${args.tenantId.slice(0, 8)}` : "all-users"} ` +
-		`legacy_total=${totalLegacy} bank_count=${bankRows.length}`;
-	console.log(summaryHeader);
+  const summaryHeader =
+    `[wipe-external-memory-stores] stage=${args.stage} dry_run=${args.dryRun} ` +
+    `scope=${args.userId ? `user:${args.userId.slice(0, 8)}` : args.tenantId ? `tenant:${args.tenantId.slice(0, 8)}` : "all-users"} ` +
+    `legacy_total=${totalLegacy} bank_count=${bankRows.length}`;
+  console.log(summaryHeader);
 
-	if (args.dryRun || totalLegacy === 0) {
-		for (const row of bankRows.slice(0, 20)) {
-			console.log(`  bank=${row.bank_id} would_delete=${row.row_count}`);
-		}
-		if (bankRows.length > 20) {
-			console.log(`  ... ${bankRows.length - 20} more banks`);
-		}
-		return {
-			totalLegacy,
-			bankCount: bankRows.length,
-			dryRun: true,
-			deletedByBank: [],
-		};
-	}
+  if (args.dryRun || totalLegacy === 0) {
+    for (const row of bankRows.slice(0, 20)) {
+      console.log(`  bank=${row.bank_id} would_delete=${row.row_count}`);
+    }
+    if (bankRows.length > 20) {
+      console.log(`  ... ${bankRows.length - 20} more banks`);
+    }
+    return {
+      totalLegacy,
+      bankCount: bankRows.length,
+      dryRun: true,
+      deletedByBank: [],
+    };
+  }
 
-	// Live run: per-bank batched DELETE in transactions.
-	const deletedByBank: Array<{ bankId: string; deleted: number }> = [];
-	for (const row of bankRows) {
-		const bankId = row.bank_id;
-		let deletedForBank = 0;
-		// Loop until no more rows match the predicate for this bank.
-		// Each iteration is its own transaction (db.execute runs each
-		// statement atomically); a partial run leaves a clean state.
-		for (;;) {
-			const deleteResult: any = await db.execute(
-				sql`DELETE FROM hindsight.memory_units
+  // Live run: per-bank batched DELETE in transactions.
+  const deletedByBank: Array<{ bankId: string; deleted: number }> = [];
+  for (const row of bankRows) {
+    const bankId = row.bank_id;
+    let deletedForBank = 0;
+    // Loop until no more rows match the predicate for this bank.
+    // Each iteration is its own transaction (db.execute runs each
+    // statement atomically); a partial run leaves a clean state.
+    for (;;) {
+      const deleteResult: any = await db.execute(
+        sql`DELETE FROM hindsight.memory_units
 					WHERE id IN (
 						SELECT id FROM hindsight.memory_units
 						WHERE bank_id = ${bankId}
@@ -273,36 +288,36 @@ export async function runWipe(args: CliArgs, db = getDb()): Promise<WipeReport> 
 						LIMIT ${args.batchSize}
 					)
 					RETURNING id`,
-			);
-			const deletedRows: any[] = deleteResult?.rows ?? deleteResult ?? [];
-			if (deletedRows.length === 0) break;
-			deletedForBank += deletedRows.length;
-		}
-		deletedByBank.push({ bankId, deleted: deletedForBank });
-		console.log(`  bank=${bankId} deleted=${deletedForBank}`);
-	}
+      );
+      const deletedRows: any[] = deleteResult?.rows ?? deleteResult ?? [];
+      if (deletedRows.length === 0) break;
+      deletedForBank += deletedRows.length;
+    }
+    deletedByBank.push({ bankId, deleted: deletedForBank });
+    console.log(`  bank=${bankId} deleted=${deletedForBank}`);
+  }
 
-	const total = deletedByBank.reduce((acc, x) => acc + x.deleted, 0);
-	console.log(`[wipe-external-memory-stores] complete deleted_total=${total}`);
-	return {
-		totalLegacy,
-		bankCount: bankRows.length,
-		dryRun: false,
-		deletedByBank,
-	};
+  const total = deletedByBank.reduce((acc, x) => acc + x.deleted, 0);
+  console.log(`[wipe-external-memory-stores] complete deleted_total=${total}`);
+  return {
+    totalLegacy,
+    bankCount: bankRows.length,
+    dryRun: false,
+    deletedByBank,
+  };
 }
 
 // Entry point — only runs when invoked as a script, not when imported in tests.
 if (import.meta.url === `file://${process.argv[1]}`) {
-	(async () => {
-		try {
-			const args = parseArgs(process.argv.slice(2));
-			await runWipe(args);
-			process.exit(0);
-		} catch (err) {
-			const msg = (err as Error)?.message || String(err);
-			console.error(`[wipe-external-memory-stores] ${msg}`);
-			process.exit(1);
-		}
-	})();
+  (async () => {
+    try {
+      const args = parseArgs(process.argv.slice(2));
+      await runWipe(args);
+      process.exit(0);
+    } catch (err) {
+      const msg = (err as Error)?.message || String(err);
+      console.error(`[wipe-external-memory-stores] ${msg}`);
+      process.exit(1);
+    }
+  })();
 }

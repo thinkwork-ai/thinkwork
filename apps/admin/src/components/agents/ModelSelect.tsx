@@ -37,7 +37,9 @@ export function ModelSelect({
   const models = result.data?.modelCatalog ?? [];
 
   const compatible = models.filter((m) => isCompatible(m.modelId, adapterType));
-  const incompatible = models.filter((m) => !isCompatible(m.modelId, adapterType));
+  const incompatible = models.filter(
+    (m) => !isCompatible(m.modelId, adapterType),
+  );
 
   // If current value is incompatible with newly-selected adapter, flag it
   const currentModel = models.find((m) => m.modelId === value);

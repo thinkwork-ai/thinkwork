@@ -43,20 +43,32 @@ export default function ArtifactViewScreen() {
           <Muted>Artifact not found.</Muted>
         </View>
       ) : (
-        <ScrollView className="flex-1" contentContainerClassName="px-4 pt-3 pb-8">
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="px-4 pt-3 pb-8"
+        >
           <View className="flex-row items-center gap-2 mb-3">
             {typeLabel ? (
               <View className="bg-neutral-200 dark:bg-neutral-700 rounded px-2 py-0.5">
-                <Text className="text-xs text-neutral-600 dark:text-neutral-300">{typeLabel}</Text>
+                <Text className="text-xs text-neutral-600 dark:text-neutral-300">
+                  {typeLabel}
+                </Text>
               </View>
             ) : null}
             {artifact.status?.toLowerCase() === "draft" && (
               <View className="bg-amber-100 dark:bg-amber-900/30 rounded px-2 py-0.5">
-                <Text className="text-xs text-amber-700 dark:text-amber-400">Draft</Text>
+                <Text className="text-xs text-amber-700 dark:text-amber-400">
+                  Draft
+                </Text>
               </View>
             )}
           </View>
-          <MarkdownMessage content={artifact.content || artifact.summary || "No content available."} isUser={false} />
+          <MarkdownMessage
+            content={
+              artifact.content || artifact.summary || "No content available."
+            }
+            isUser={false}
+          />
         </ScrollView>
       )}
     </DetailLayout>

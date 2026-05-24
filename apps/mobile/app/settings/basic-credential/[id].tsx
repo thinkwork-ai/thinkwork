@@ -1,5 +1,12 @@
 import { useMemo, useState, useEffect } from "react";
-import { View, ScrollView, Pressable, ActivityIndicator, Alert, Platform } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Platform,
+} from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Trash2 } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
@@ -28,7 +35,12 @@ export default function BasicCredentialDetailScreen() {
 
   // TODO: Replace with GraphQL query
   const credentials: CredentialMeta[] | undefined = undefined; // TODO: implement connectorCredentials.list via GraphQL
-  const updateCredential = async (_args: { credentialId: string; name: string; username?: string; password?: string }) => {
+  const updateCredential = async (_args: {
+    credentialId: string;
+    name: string;
+    username?: string;
+    password?: string;
+  }) => {
     throw new Error("TODO: implement updateCredential via GraphQL");
   };
   const removeCredential = async (_args: { credentialId: string }) => {
@@ -36,8 +48,11 @@ export default function BasicCredentialDetailScreen() {
   };
 
   const credential = useMemo(
-    () => ((credentials || []) as CredentialMeta[]).find((c) => c.id === id && c.type === "basic"),
-    [credentials, id]
+    () =>
+      ((credentials || []) as CredentialMeta[]).find(
+        (c) => c.id === id && c.type === "basic",
+      ),
+    [credentials, id],
   );
 
   const [name, setName] = useState("");
@@ -72,7 +87,9 @@ export default function BasicCredentialDetailScreen() {
       });
       router.back();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save credential");
+      setError(
+        err instanceof Error ? err.message : "Failed to save credential",
+      );
     } finally {
       setSaving(false);
     }
@@ -80,28 +97,28 @@ export default function BasicCredentialDetailScreen() {
 
   const confirmDelete = () => {
     if (!credential) return;
-    Alert.alert(
-      "Delete credential?",
-      "This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await removeCredential({ credentialId: credential.id });
-              router.back();
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Failed to delete credential");
-            } finally {
-              setDeleting(false);
-            }
-          },
+    Alert.alert("Delete credential?", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          setDeleting(true);
+          try {
+            await removeCredential({ credentialId: credential.id });
+            router.back();
+          } catch (err) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Failed to delete credential",
+            );
+          } finally {
+            setDeleting(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   if (credentials === undefined) {
@@ -118,7 +135,9 @@ export default function BasicCredentialDetailScreen() {
     return (
       <DetailLayout title="Basic Credential" onBack={() => router.back()}>
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-neutral-900 dark:text-neutral-100">Credential not found.</Text>
+          <Text className="text-neutral-900 dark:text-neutral-100">
+            Credential not found.
+          </Text>
         </View>
       </DetailLayout>
     );
@@ -129,18 +148,33 @@ export default function BasicCredentialDetailScreen() {
       title="Basic Credential"
       onBack={() => router.back()}
       headerRight={
-        <Pressable onPress={confirmDelete} disabled={deleting} className="p-1" style={{ opacity: deleting ? 0.5 : 1 }}>
+        <Pressable
+          onPress={confirmDelete}
+          disabled={deleting}
+          className="p-1"
+          style={{ opacity: deleting ? 0.5 : 1 }}
+        >
           <Trash2 size={18} color="#ef4444" />
         </Pressable>
       }
     >
       <ScrollView
         className="flex-1 bg-white dark:bg-neutral-950"
-        contentContainerStyle={{ paddingTop: 0, paddingBottom: 24, alignItems: Platform.OS === "web" ? "flex-start" : "center" }}
+        contentContainerStyle={{
+          paddingTop: 0,
+          paddingBottom: 24,
+          alignItems: Platform.OS === "web" ? "flex-start" : "center",
+        }}
         keyboardShouldPersistTaps="handled"
       >
         <View className="mt-4 px-4 gap-4 w-full" style={{ maxWidth: 768 }}>
-          <Input label="Name" value={name} onChangeText={setName} placeholder="Production" autoCapitalize="words" />
+          <Input
+            label="Name"
+            value={name}
+            onChangeText={setName}
+            placeholder="Production"
+            autoCapitalize="words"
+          />
           <Input
             label="New Username (optional)"
             value={username}
@@ -148,17 +182,28 @@ export default function BasicCredentialDetailScreen() {
             placeholder={credential.usernameHint || "username"}
             autoCapitalize="none"
           />
-          <Input label="New Password (optional)" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry autoCapitalize="none" />
+          <Input
+            label="New Password (optional)"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="••••••••"
+            secureTextEntry
+            autoCapitalize="none"
+          />
 
           {!isSecretUpdateValid && (
             <View className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
-              <Text className="text-sm text-amber-700 dark:text-amber-400">Enter both username and password when rotating secrets.</Text>
+              <Text className="text-sm text-amber-700 dark:text-amber-400">
+                Enter both username and password when rotating secrets.
+              </Text>
             </View>
           )}
 
           {error && (
             <View className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3">
-              <Text className="text-sm text-red-600 dark:text-red-400">{error}</Text>
+              <Text className="text-sm text-red-600 dark:text-red-400">
+                {error}
+              </Text>
             </View>
           )}
 
@@ -167,15 +212,22 @@ export default function BasicCredentialDetailScreen() {
               onPress={handleSave}
               disabled={!canSave || saving || deleting}
               className="flex-row items-center justify-center px-5 rounded-lg bg-sky-500 border border-sky-500"
-              style={{ opacity: !canSave || saving || deleting ? 0.5 : 1, height: 44 }}
+              style={{
+                opacity: !canSave || saving || deleting ? 0.5 : 1,
+                height: 44,
+              }}
             >
               {saving ? (
                 <>
                   <ActivityIndicator size="small" color="#fff" />
-                  <Text className="ml-2 text-white font-semibold text-sm">Saving...</Text>
+                  <Text className="ml-2 text-white font-semibold text-sm">
+                    Saving...
+                  </Text>
                 </>
               ) : (
-                <Text className="text-white font-semibold text-sm">Save Changes</Text>
+                <Text className="text-white font-semibold text-sm">
+                  Save Changes
+                </Text>
               )}
             </Pressable>
           </View>

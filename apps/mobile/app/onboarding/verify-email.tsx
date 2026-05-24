@@ -57,7 +57,9 @@ export default function VerifyEmailScreen() {
               />
             </View>
             <CardTitle>
-              <H2 className="tracking-wider uppercase text-center">Check Your Email</H2>
+              <H2 className="tracking-wider uppercase text-center">
+                Check Your Email
+              </H2>
             </CardTitle>
             <CardDescription>
               <Muted className="text-center">
@@ -84,7 +86,10 @@ export default function VerifyEmailScreen() {
 
             {resent && (
               <View className="rounded-lg border border-green-500/40 bg-green-500/10 px-4 py-3 w-full">
-                <Text size="sm" className="text-green-600 dark:text-green-400 text-center">
+                <Text
+                  size="sm"
+                  className="text-green-600 dark:text-green-400 text-center"
+                >
                   Verification email resent!
                 </Text>
               </View>

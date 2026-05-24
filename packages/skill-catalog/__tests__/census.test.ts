@@ -389,7 +389,11 @@ describe("renderUsageSql", () => {
 
 describe("collectSkillMetadata", () => {
   it("produces the same ordered output across repeated runs", () => {
-    writeSkill(fixtureRoot, "b-slug", "name: b-slug\nexecution: context\ndescription: B");
+    writeSkill(
+      fixtureRoot,
+      "b-slug",
+      "name: b-slug\nexecution: context\ndescription: B",
+    );
     writeSkill(
       fixtureRoot,
       "a-slug",

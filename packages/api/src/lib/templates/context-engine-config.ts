@@ -84,7 +84,9 @@ export function validateTemplateContextEngine(
           error: "contextEngine.providers.ids must be a string array",
         };
       }
-      next.providers = { ids: [...new Set(providers.ids.map((id) => id.trim()))] };
+      next.providers = {
+        ids: [...new Set(providers.ids.map((id) => id.trim()))],
+      };
     }
   }
 

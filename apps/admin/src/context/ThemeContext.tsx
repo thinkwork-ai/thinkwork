@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 type Theme = "light" | "dark";
 
@@ -25,7 +32,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle("dark", t === "dark");
     document.documentElement.style.colorScheme = t;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", t === "dark" ? "#1a1a1a" : "#ffffff");
+    if (meta)
+      meta.setAttribute("content", t === "dark" ? "#1a1a1a" : "#ffffff");
     localStorage.setItem(STORAGE_KEY, t);
   }, []);
 

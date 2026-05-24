@@ -20,7 +20,9 @@ export async function runThreadEscalate(
     process.exit(1);
   }
   if (!opts.reason) {
-    printError("--reason <text> is required for escalation (recorded in activity log).");
+    printError(
+      "--reason <text> is required for escalation (recorded in activity log).",
+    );
     process.exit(1);
   }
 

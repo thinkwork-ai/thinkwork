@@ -39,7 +39,9 @@ export class McpJsonRpcClient {
       params,
     });
     if (response.error) {
-      throw new Error(`${method} failed: ${response.error.code} ${response.error.message}`);
+      throw new Error(
+        `${method} failed: ${response.error.code} ${response.error.message}`,
+      );
     }
     return response.result as T;
   }
@@ -68,7 +70,8 @@ export class McpJsonRpcClient {
     if (!res.ok) {
       throw new Error(`MCP HTTP ${res.status}: ${text.slice(0, 500)}`);
     }
-    if (!text.trim()) return { jsonrpc: "2.0", result: null } satisfies JsonRpcResponse;
+    if (!text.trim())
+      return { jsonrpc: "2.0", result: null } satisfies JsonRpcResponse;
 
     return parseMcpBody(text, res.headers.get("content-type") ?? "");
   }
@@ -85,7 +88,9 @@ function parseMcpBody(text: string, contentType: string): JsonRpcResponse {
     .map((line) => line.slice("data:".length).trim())
     .filter(Boolean);
   if (dataLines.length === 0) {
-    throw new Error(`MCP event-stream response had no data lines: ${text.slice(0, 500)}`);
+    throw new Error(
+      `MCP event-stream response had no data lines: ${text.slice(0, 500)}`,
+    );
   }
   return JSON.parse(dataLines.at(-1)!) as JsonRpcResponse;
 }

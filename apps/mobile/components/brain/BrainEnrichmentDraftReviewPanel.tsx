@@ -198,9 +198,7 @@ function InPlaceView({
 }) {
   if (sections.length === 0) {
     return (
-      <Muted style={{ paddingHorizontal: 4 }}>
-        Proposed page is empty.
-      </Muted>
+      <Muted style={{ paddingHorizontal: 4 }}>Proposed page is empty.</Muted>
     );
   }
   return (
@@ -214,9 +212,7 @@ function InPlaceView({
             section={section}
             region={region ?? null}
             accepted={accepted}
-            onToggle={
-              region ? () => onToggleRegion(region.id) : undefined
-            }
+            onToggle={region ? () => onToggleRegion(region.id) : undefined}
             colors={colors}
           />
         );
@@ -246,13 +242,11 @@ function SectionBlock({
   const borderColor = region
     ? accepted
       ? familyTint(region.sourceFamily, colors)
-      : colors.destructive ?? "#ef4444"
+      : (colors.destructive ?? "#ef4444")
     : colors.border;
 
   const heading =
-    section.slug === "_preamble" || !section.heading
-      ? null
-      : section.heading;
+    section.slug === "_preamble" || !section.heading ? null : section.heading;
 
   // Limit the tap target to the badge row only — the body must NOT capture
   // taps because (a) it's tall and overlaps with the footer Approve/Reject
@@ -272,9 +266,7 @@ function SectionBlock({
       {region ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={
-            `${accepted ? "Reject" : "Accept"} ${section.heading || "(preamble)"} change`
-          }
+          accessibilityLabel={`${accepted ? "Reject" : "Accept"} ${section.heading || "(preamble)"} change`}
           onPress={onToggle}
           // Hit-slop expands the touchable area without growing the visual
           // bounds; gives the small badge row a comfortable tap target
@@ -342,7 +334,10 @@ function RegionBadgeRow({
 }) {
   const tint = familyTint(region.sourceFamily, colors);
   return (
-    <View className="flex-row items-center" style={{ gap: 8, flexWrap: "wrap" }}>
+    <View
+      className="flex-row items-center"
+      style={{ gap: 8, flexWrap: "wrap" }}
+    >
       <View
         className="flex-row items-center rounded-full px-2 py-0.5"
         style={{ backgroundColor: hexWithAlpha(tint, 0.18), gap: 4 }}
@@ -366,7 +361,7 @@ function RegionBadgeRow({
       ) : null}
       <Text
         style={{
-          color: accepted ? tint : colors.destructive ?? "#ef4444",
+          color: accepted ? tint : (colors.destructive ?? "#ef4444"),
           fontSize: 11,
           fontWeight: "700",
         }}
@@ -400,12 +395,15 @@ function DiffView({
               borderWidth: 1,
               borderColor: accepted
                 ? familyTint(region.sourceFamily, colors)
-                : colors.destructive ?? "#ef4444",
+                : (colors.destructive ?? "#ef4444"),
               gap: 0,
               overflow: "hidden",
             }}
           >
-            <View className="px-3 py-2" style={{ backgroundColor: colors.secondary }}>
+            <View
+              className="px-3 py-2"
+              style={{ backgroundColor: colors.secondary }}
+            >
               <RegionBadgeRow
                 region={region}
                 accepted={accepted}
@@ -443,12 +441,15 @@ function DiffView({
               }
               onPress={() => onToggleRegion(region.id)}
               className="px-3 py-2"
-              style={{ backgroundColor: colors.background, alignItems: "center" }}
+              style={{
+                backgroundColor: colors.background,
+                alignItems: "center",
+              }}
             >
               <Text
                 style={{
                   color: accepted
-                    ? colors.destructive ?? "#ef4444"
+                    ? (colors.destructive ?? "#ef4444")
                     : colors.primary,
                   fontWeight: "600",
                   fontSize: 13,
@@ -485,14 +486,17 @@ function DiffPane({
           tone === "muted" ? "transparent" : hexWithAlpha(colors.primary, 0.06),
       }}
     >
-      <Muted style={{ fontSize: 11, textTransform: "uppercase", marginBottom: 4 }}>
+      <Muted
+        style={{ fontSize: 11, textTransform: "uppercase", marginBottom: 4 }}
+      >
         {label}
       </Muted>
       {bodyMd.trim() ? (
         <Markdown
           style={{
             body: {
-              color: tone === "muted" ? colors.mutedForeground : colors.foreground,
+              color:
+                tone === "muted" ? colors.mutedForeground : colors.foreground,
               fontSize: 13,
               lineHeight: 20,
             },
@@ -524,9 +528,7 @@ function DiffPane({
           {bodyMd}
         </Markdown>
       ) : (
-        <Muted style={{ fontStyle: "italic", fontSize: 12 }}>
-          (empty)
-        </Muted>
+        <Muted style={{ fontStyle: "italic", fontSize: 12 }}>(empty)</Muted>
       )}
     </View>
   );

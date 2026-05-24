@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { FileText, BarChart3, Notebook, ClipboardList, PenLine, Mail } from "lucide-react";
+import {
+  FileText,
+  BarChart3,
+  Notebook,
+  ClipboardList,
+  PenLine,
+  Mail,
+} from "lucide-react";
 import { useState, useMemo } from "react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";

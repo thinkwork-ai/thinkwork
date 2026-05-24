@@ -22,14 +22,22 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   AWAITING_USER: "Awaiting user",
 };
 
-function lifecycleColor(status: string | null | undefined, isDark: boolean): string {
+function lifecycleColor(
+  status: string | null | undefined,
+  isDark: boolean,
+): string {
   if (!status) return isDark ? "#a3a3a3" : "#737373";
   switch (status) {
-    case "RUNNING": return isDark ? "#60a5fa" : "#2563eb";
-    case "COMPLETED": return isDark ? "#4ade80" : "#16a34a";
-    case "CANCELLED": return isDark ? "#facc15" : "#ca8a04";
-    case "FAILED": return isDark ? "#f87171" : "#dc2626";
-    default: return isDark ? "#a3a3a3" : "#737373"; // IDLE / AWAITING_USER / unknown
+    case "RUNNING":
+      return isDark ? "#60a5fa" : "#2563eb";
+    case "COMPLETED":
+      return isDark ? "#4ade80" : "#16a34a";
+    case "CANCELLED":
+      return isDark ? "#facc15" : "#ca8a04";
+    case "FAILED":
+      return isDark ? "#f87171" : "#dc2626";
+    default:
+      return isDark ? "#a3a3a3" : "#737373"; // IDLE / AWAITING_USER / unknown
   }
 }
 
@@ -70,7 +78,17 @@ function formatDateTime(dateStr: string): string {
   });
 }
 
-function SectionHeader({ title, expanded, onToggle, colors }: { title: string; expanded: boolean; onToggle: () => void; colors: { mutedForeground: string } }) {
+function SectionHeader({
+  title,
+  expanded,
+  onToggle,
+  colors,
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  colors: { mutedForeground: string };
+}) {
   return (
     <Pressable
       onPress={onToggle}
@@ -88,22 +106,38 @@ function SectionHeader({ title, expanded, onToggle, colors }: { title: string; e
   );
 }
 
-function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
+function PropertyRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <View className="flex-row items-center justify-between px-4 py-3 border-t border-neutral-200 dark:border-neutral-800">
-      <Text className="text-sm text-neutral-500 dark:text-neutral-400">{label}</Text>
+      <Text className="text-sm text-neutral-500 dark:text-neutral-400">
+        {label}
+      </Text>
       <View className="flex-row items-center">{children}</View>
     </View>
   );
 }
 
-function LifecycleBadge({ status, isDark }: { status: string | null | undefined; isDark: boolean }) {
+function LifecycleBadge({
+  status,
+  isDark,
+}: {
+  status: string | null | undefined;
+  isDark: boolean;
+}) {
   if (!status) return <Text className="text-sm text-neutral-400">—</Text>;
   const label = LIFECYCLE_LABELS[status] ?? "Idle";
   const color = lifecycleColor(status, isDark);
   return (
     <View className="flex-row items-center gap-1.5">
-      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+      <View
+        style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }}
+      />
       <Text className="text-sm font-medium">{label}</Text>
     </View>
   );
@@ -131,7 +165,9 @@ export default function ThreadInfoRoute() {
   });
   const agentName = useMemo(() => {
     if (!thread?.agentId) return "Agent";
-    const agent = ((agentsData?.agents ?? []) as any[]).find((a: any) => a.id === thread.agentId);
+    const agent = ((agentsData?.agents ?? []) as any[]).find(
+      (a: any) => a.id === thread.agentId,
+    );
     return agent?.name || "Agent";
   }, [agentsData?.agents, thread?.agentId]);
 
@@ -143,16 +179,26 @@ export default function ThreadInfoRoute() {
     <DetailLayout title="Thread Info">
       <ScrollView className="flex-1">
         {/* Properties */}
-        <SectionHeader title="Properties" expanded={propertiesExpanded} onToggle={() => setPropertiesExpanded(!propertiesExpanded)} colors={colors} />
+        <SectionHeader
+          title="Properties"
+          expanded={propertiesExpanded}
+          onToggle={() => setPropertiesExpanded(!propertiesExpanded)}
+          colors={colors}
+        />
 
         {propertiesExpanded && (
           <>
             <PropertyRow label="Status">
-              <LifecycleBadge status={thread?.lifecycleStatus} isDark={isDark} />
+              <LifecycleBadge
+                status={thread?.lifecycleStatus}
+                isDark={isDark}
+              />
             </PropertyRow>
 
             <PropertyRow label="Trigger">
-              <Text className="text-sm font-medium">{triggerLabel(thread?.channel)}</Text>
+              <Text className="text-sm font-medium">
+                {triggerLabel(thread?.channel)}
+              </Text>
             </PropertyRow>
 
             <PropertyRow label="Agent">
@@ -161,18 +207,21 @@ export default function ThreadInfoRoute() {
 
             {thread?.createdAt && (
               <PropertyRow label="Created">
-                <Text className="text-sm font-medium">{formatDateTime(thread.createdAt)}</Text>
+                <Text className="text-sm font-medium">
+                  {formatDateTime(thread.createdAt)}
+                </Text>
               </PropertyRow>
             )}
 
             {thread?.updatedAt && (
               <PropertyRow label="Updated">
-                <Text className="text-sm font-medium">{relativeTime(thread.updatedAt)}</Text>
+                <Text className="text-sm font-medium">
+                  {relativeTime(thread.updatedAt)}
+                </Text>
               </PropertyRow>
             )}
           </>
         )}
-
       </ScrollView>
     </DetailLayout>
   );

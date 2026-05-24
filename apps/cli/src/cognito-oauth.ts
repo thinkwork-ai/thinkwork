@@ -19,7 +19,11 @@
  * confidential client.)
  */
 
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { AddressInfo } from "node:net";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -139,10 +143,7 @@ function waitForCallbackCode(opts: WaitOptions): Promise<string> {
       );
     }, opts.timeoutMs);
 
-    function handleRequest(
-      req: IncomingMessage,
-      res: ServerResponse,
-    ): void {
+    function handleRequest(req: IncomingMessage, res: ServerResponse): void {
       if (!req.url) return;
       const parsed = new URL(req.url, `http://127.0.0.1:${opts.port}`);
       if (parsed.pathname !== CALLBACK_PATH) {
@@ -180,7 +181,10 @@ function waitForCallbackCode(opts: WaitOptions): Promise<string> {
         return;
       }
 
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", connection: "close" });
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        connection: "close",
+      });
       res.end(renderSuccessPage());
       finish(null, code);
     }
@@ -312,13 +316,8 @@ export function decodeIdToken(idToken: string): IdTokenClaims {
 function openInBrowser(url: string): void {
   const platform = process.platform;
   const cmd =
-    platform === "darwin"
-      ? "open"
-      : platform === "win32"
-        ? "cmd"
-        : "xdg-open";
-  const args =
-    platform === "win32" ? ["/c", "start", "", url] : [url];
+    platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
+  const args = platform === "win32" ? ["/c", "start", "", url] : [url];
   try {
     spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
   } catch {
@@ -371,12 +370,18 @@ function renderErrorPage(message: string): string {
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => {
     switch (c) {
-      case "&": return "&amp;";
-      case "<": return "&lt;";
-      case ">": return "&gt;";
-      case '"': return "&quot;";
-      case "'": return "&#39;";
-      default: return c;
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return c;
     }
   });
 }

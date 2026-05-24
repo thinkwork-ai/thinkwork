@@ -226,9 +226,7 @@ export async function decideWorkspaceReview(
   const threadId = run.current_thread_turn_id
     ? await store.findThreadIdForTurn(run.tenant_id, run.current_thread_turn_id)
     : null;
-  const draftPayload = parseDraftReviewEventPayload(
-    latestReviewEvent?.payload,
-  );
+  const draftPayload = parseDraftReviewEventPayload(latestReviewEvent?.payload);
   const isBrainEnrichmentDraft = draftPayload !== null;
   const isBrainEnrichment =
     !isBrainEnrichmentDraft &&
@@ -605,8 +603,7 @@ function parseDraftReviewEventPayload(
     targetPage: {
       pageTable: targetPageTable,
       id: targetPageId,
-      title:
-        typeof obj.pageTitle === "string" ? obj.pageTitle : undefined,
+      title: typeof obj.pageTitle === "string" ? obj.pageTitle : undefined,
     },
   };
 }

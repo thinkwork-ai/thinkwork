@@ -222,9 +222,7 @@ export async function tenantToolInventory(
       name: r.name,
       description: r.description ?? null,
       visibility:
-        r.agent_id === null
-          ? ("tenant" as const)
-          : ("agent_private" as const),
+        r.agent_id === null ? ("tenant" as const) : ("agent_private" as const),
       agent_id: r.agent_id,
     }))
     // R21: agent-stamped routines are private until promoted. Without a
@@ -242,4 +240,3 @@ export async function tenantToolInventory(
     routines: routineInventory,
   };
 }
-

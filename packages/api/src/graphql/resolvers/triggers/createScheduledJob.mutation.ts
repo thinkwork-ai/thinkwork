@@ -2,16 +2,11 @@ import type { GraphQLContext } from "../../context.js";
 import {
   db,
   scheduledJobs,
-  computers,
   spaces,
   snakeToCamel,
   invokeJobScheduleManager,
   eq,
 } from "../../utils.js";
-import {
-  hasConnectorTriggerDefinition,
-  prepareConnectorTriggerDefinition,
-} from "../../../lib/computers/connector-trigger-routing.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 
 export const createScheduledJob = async (
@@ -29,22 +24,6 @@ export const createScheduledJob = async (
       ? (caller?.userId ?? i.createdById ?? null)
       : i.createdById || null;
 
-  // Validate that any computer_id in the input belongs to the named tenant
-  // before inserting the FK. Mirrors the REST handler — see U3 / U4 of
-  // the scheduled-jobs-and-automations plan.
-  if (i.computerId) {
-    const [computerRow] = await db
-      .select({ tenant_id: computers.tenant_id })
-      .from(computers)
-      .where(eq(computers.id, i.computerId));
-    if (!computerRow) {
-      throw new Error(`Computer ${i.computerId} not found`);
-    }
-    if (computerRow.tenant_id !== i.tenantId) {
-      throw new Error("Computer does not belong to this tenant");
-    }
-  }
-
   if (i.spaceId) {
     const [spaceRow] = await db
       .select({ tenant_id: spaces.tenant_id })
@@ -58,28 +37,16 @@ export const createScheduledJob = async (
     }
   }
 
-  const parsedConfig = parseConfig(i.config);
-  const connectorTrigger =
-    triggerType === "event" && hasConnectorTriggerDefinition(parsedConfig)
-      ? await prepareConnectorTriggerDefinition({
-          tenantId: i.tenantId,
-          requesterUserId: createdByType === "user" ? createdById : null,
-          computerId: i.computerId || null,
-          config: parsedConfig,
-        })
-      : null;
-  const scheduleType = connectorTrigger?.scheduleType ?? i.scheduleType ?? null;
-  const computerId = connectorTrigger?.computerId ?? i.computerId ?? null;
-  const config = connectorTrigger?.config ?? parsedConfig;
+  const config = parseConfig(i.config);
+  const scheduleType = i.scheduleType ?? null;
 
   const [row] = await db
     .insert(scheduledJobs)
     .values({
       tenant_id: i.tenantId,
-      trigger_type: connectorTrigger?.triggerType ?? triggerType,
+      trigger_type: triggerType,
       agent_id: i.agentId || null,
       space_id: i.spaceId || null,
-      computer_id: computerId,
       routine_id: i.routineId || null,
       name: i.name,
       description: i.description || null,
@@ -115,7 +82,6 @@ export const createScheduledJob = async (
       );
     }
   }
-  // Re-read to pick up eb_schedule_name populated by the manager Lambda
   const [refreshed] = await db
     .select()
     .from(scheduledJobs)

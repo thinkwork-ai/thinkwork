@@ -56,7 +56,10 @@ interface SaveAppletStateResult<T> {
   } | null;
 }
 
-export function createHostAppletAPI(appId: string, instanceId: string): AppletAPI {
+export function createHostAppletAPI(
+  appId: string,
+  instanceId: string,
+): AppletAPI {
   return {
     useAppletState<T>(key: string, initialValue: T) {
       return useHostAppletState(appId, instanceId, key, initialValue);
@@ -88,7 +91,9 @@ export function registerAppletRefreshHandler(
 export async function refreshApplet(appId: string, instanceId: string) {
   const handler = refreshHandlers.get(refreshHandlerKey(appId, instanceId));
   if (!handler) {
-    throw new Error("This app does not expose a deterministic refresh function.");
+    throw new Error(
+      "This app does not expose a deterministic refresh function.",
+    );
   }
   return handler();
 }
@@ -104,8 +109,9 @@ function useHostAppletState<T>(
     variables: { appId, instanceId, key },
     requestPolicy: "cache-and-network",
   });
-  const [, saveAppletState] =
-    useMutation<SaveAppletStateResult<T>>(SaveAppletStateMutation);
+  const [, saveAppletState] = useMutation<SaveAppletStateResult<T>>(
+    SaveAppletStateMutation,
+  );
   const [value, setValue] = useState<T>(initialValue);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<Error | undefined>();

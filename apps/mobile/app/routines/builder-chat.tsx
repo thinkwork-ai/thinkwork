@@ -24,7 +24,7 @@ const WELCOME_ROUTINE: ChatMessage = {
   id: "welcome",
   role: "assistant",
   content:
-    "Tell me what you'd like this routine to do, and I'll help you plan it out.\n\nFor example:\n- \"Check weather in Honolulu every morning\"\n- \"Send a Slack message when a webhook fires\"\n- \"Fetch data from an API and summarize it\"",
+    'Tell me what you\'d like this routine to do, and I\'ll help you plan it out.\n\nFor example:\n- "Check weather in Honolulu every morning"\n- "Send a Slack message when a webhook fires"\n- "Fetch data from an API and summarize it"',
   timestamp: Date.now(),
   isStreaming: false,
 };
@@ -63,7 +63,9 @@ export default function BuilderChatScreen() {
   const pendingQuestions: string[] = useMemo(() => {
     try {
       return params.pendingQuestions ? JSON.parse(params.pendingQuestions) : [];
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   }, [params.pendingQuestions]);
 
   // -- Tenant context --
@@ -89,7 +91,10 @@ export default function BuilderChatScreen() {
     sessionCreated.current = true;
     // TODO: Migrate createSession to GraphQL
     // For now, just set a placeholder
-    Alert.alert("Not Ready", "Builder Chat session creation not yet migrated to GraphQL.");
+    Alert.alert(
+      "Not Ready",
+      "Builder Chat session creation not yet migrated to GraphQL.",
+    );
   }, [existingThreadId]);
 
   // Subscribe to messages
@@ -101,13 +106,17 @@ export default function BuilderChatScreen() {
     role: (m.role ?? "user") as ChatMessage["role"],
     content: m.content,
     timestamp: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
-    isStreaming: (m.status === "pending" || m.status === "processing") && m.role === "user",
+    isStreaming:
+      (m.status === "pending" || m.status === "processing") &&
+      m.role === "user",
   }));
 
   const welcomeMsg = useMemo(() => {
     if (editSlug) return WELCOME_EDIT_ROUTINE;
     if (pendingQuestions.length > 0) {
-      const questionText = pendingQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n");
+      const questionText = pendingQuestions
+        .map((q, i) => `${i + 1}. ${q}`)
+        .join("\n");
       return {
         ...WELCOME_ROUTINE,
         content: `I need a bit more information before I can build this routine:\n\n${questionText}`,
@@ -120,14 +129,19 @@ export default function BuilderChatScreen() {
 
   const lastServerMsg = serverMessages[serverMessages.length - 1];
   const isPending =
-    !!lastServerMsg && lastServerMsg.role === "user" && (lastServerMsg.isStreaming ?? false);
+    !!lastServerMsg &&
+    lastServerMsg.role === "user" &&
+    (lastServerMsg.isStreaming ?? false);
 
   const hasConversation = serverMessages.length > 0;
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   const handleSend = async (content: string) => {
     if (!sessionThreadId) {
-      Alert.alert("Not Ready", "Builder Chat is still starting up. Please wait a moment.");
+      Alert.alert(
+        "Not Ready",
+        "Builder Chat is still starting up. Please wait a moment.",
+      );
       return;
     }
     // TODO: Migrate sendMessage to GraphQL
@@ -138,8 +152,12 @@ export default function BuilderChatScreen() {
     if (!sessionThreadId || !tenantRepo || building) return;
     setBuilding(true);
     try {
-      const routineSlug = editSlug || (routineName || "routine")
-        .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const routineSlug =
+        editSlug ||
+        (routineName || "routine")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "");
 
       // TODO: Migrate sendMessage (build) to GraphQL
 
@@ -153,13 +171,22 @@ export default function BuilderChatScreen() {
       Alert.alert("Error", err?.message || "Failed to send build request");
       setBuilding(false);
     }
-  }, [sessionThreadId, tenantRepo, building, editSlug, routineName, params.routineId]);
+  }, [
+    sessionThreadId,
+    tenantRepo,
+    building,
+    editSlug,
+    routineName,
+    params.routineId,
+  ]);
 
   const notReady = !sessionThreadId || !tenantRepo;
 
   return (
     <DetailLayout
-      title={editSlug && routineName ? `Edit: ${routineName}` : "Routine Builder"}
+      title={
+        editSlug && routineName ? `Edit: ${routineName}` : "Routine Builder"
+      }
       headerRight={
         hasConversation && tenantRepo ? (
           <Pressable onPress={handleBuild} disabled={building || notReady}>

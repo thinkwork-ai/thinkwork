@@ -23,14 +23,14 @@ import { scrubBearerStrings } from "./bearer-scrub.js";
 import { McpHandleAuthScheme, type HandleStore } from "./mcp.js";
 
 export interface ScrubbingFetchOptions {
-	/** Trusted-handler HandleStore. Per-invocation; never module-level. */
-	handleStore: HandleStore;
-	/**
-	 * The fetch to delegate to. Defaults to `globalThis.fetch`. Tests
-	 * inject a mock to capture the swapped Authorization and to control
-	 * the response body.
-	 */
-	baseFetch?: typeof fetch;
+  /** Trusted-handler HandleStore. Per-invocation; never module-level. */
+  handleStore: HandleStore;
+  /**
+   * The fetch to delegate to. Defaults to `globalThis.fetch`. Tests
+   * inject a mock to capture the swapped Authorization and to control
+   * the response body.
+   */
+  baseFetch?: typeof fetch;
 }
 
 /**
@@ -52,67 +52,71 @@ export interface ScrubbingFetchOptions {
  * `HandleStore` and therefore a fresh interceptor closure.
  */
 export function createScrubbingFetch(
-	options: ScrubbingFetchOptions,
+  options: ScrubbingFetchOptions,
 ): typeof fetch {
-	const { handleStore, baseFetch } = options;
-	const delegate = baseFetch ?? globalThis.fetch.bind(globalThis);
-	const handlePrefix = `${McpHandleAuthScheme} `;
+  const { handleStore, baseFetch } = options;
+  const delegate = baseFetch ?? globalThis.fetch.bind(globalThis);
+  const handlePrefix = `${McpHandleAuthScheme} `;
 
-	return async function scrubbingFetch(
-		input: Parameters<typeof fetch>[0],
-		init?: Parameters<typeof fetch>[1],
-	): Promise<Response> {
-		const swap = swapAuthorizationHeader(init?.headers, handleStore, handlePrefix);
+  return async function scrubbingFetch(
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> {
+    const swap = swapAuthorizationHeader(
+      init?.headers,
+      handleStore,
+      handlePrefix,
+    );
 
-		const effectiveInit: RequestInit | undefined = swap
-			? { ...(init ?? {}), headers: swap.headers }
-			: init;
+    const effectiveInit: RequestInit | undefined = swap
+      ? { ...(init ?? {}), headers: swap.headers }
+      : init;
 
-		const response = await delegate(input, effectiveInit);
+    const response = await delegate(input, effectiveInit);
 
-		// Content-type-aware scrubbing. Buffering `response.text()` consumes
-		// the underlying ReadableStream — that's correct for JSON RPC bodies
-		// (the SDK reads them to completion via `await response.json()`)
-		// but BREAKS server-sent-events (text/event-stream) and any other
-		// streaming content type by collapsing the live stream into a
-		// finite snapshot. The MCP wire protocol uses JSON for the RPC
-		// channel where bearer reflection is the realistic threat (e.g.,
-		// 401 with `Bearer <token>` echoed in the error body); SSE is for
-		// server-initiated push notifications and is unlikely to carry a
-		// reflected bearer in practice.
-		//
-		// Decision: buffer-and-scrub JSON; pass non-JSON through unchanged.
-		// SSE-event bearer scrub is tracked as residual review work; an
-		// in-stream TransformStream-based scrub is the next iteration.
-		const contentType = response.headers.get("content-type") ?? "";
-		// MCP `streamable-http` SDK paths (per
-		// @modelcontextprotocol/sdk/dist/cjs/client/streamableHttp.js):
-		//   - `application/json` → SDK calls `await response.json()` (buffered)
-		//   - `text/event-stream` → SDK pipes `response.body` through
-		//     TextDecoderStream + EventSourceParserStream (streaming)
-		// Buffering the SSE body would block the SDK from receiving
-		// server-initiated events until the connection closes. Restrict
-		// scrub to JSON only.
-		const shouldBuffer = contentType.includes("application/json");
+    // Content-type-aware scrubbing. Buffering `response.text()` consumes
+    // the underlying ReadableStream — that's correct for JSON RPC bodies
+    // (the SDK reads them to completion via `await response.json()`)
+    // but BREAKS server-sent-events (text/event-stream) and any other
+    // streaming content type by collapsing the live stream into a
+    // finite snapshot. The MCP wire protocol uses JSON for the RPC
+    // channel where bearer reflection is the realistic threat (e.g.,
+    // 401 with `Bearer <token>` echoed in the error body); SSE is for
+    // server-initiated push notifications and is unlikely to carry a
+    // reflected bearer in practice.
+    //
+    // Decision: buffer-and-scrub JSON; pass non-JSON through unchanged.
+    // SSE-event bearer scrub is tracked as residual review work; an
+    // in-stream TransformStream-based scrub is the next iteration.
+    const contentType = response.headers.get("content-type") ?? "";
+    // MCP `streamable-http` SDK paths (per
+    // @modelcontextprotocol/sdk/dist/cjs/client/streamableHttp.js):
+    //   - `application/json` → SDK calls `await response.json()` (buffered)
+    //   - `text/event-stream` → SDK pipes `response.body` through
+    //     TextDecoderStream + EventSourceParserStream (streaming)
+    // Buffering the SSE body would block the SDK from receiving
+    // server-initiated events until the connection closes. Restrict
+    // scrub to JSON only.
+    const shouldBuffer = contentType.includes("application/json");
 
-		if (!shouldBuffer) {
-			return response;
-		}
+    if (!shouldBuffer) {
+      return response;
+    }
 
-		const rawBody = await response.text();
-		const scrubbed = scrubBearerStrings(rawBody, swap?.activeBearer);
+    const rawBody = await response.text();
+    const scrubbed = scrubBearerStrings(rawBody, swap?.activeBearer);
 
-		return new Response(scrubbed, {
-			status: response.status,
-			statusText: response.statusText,
-			headers: response.headers,
-		});
-	};
+    return new Response(scrubbed, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  };
 }
 
 interface SwapResult {
-	headers: Record<string, string>;
-	activeBearer: string;
+  headers: Record<string, string>;
+  activeBearer: string;
 }
 
 /**
@@ -126,70 +130,70 @@ interface SwapResult {
  * the canonical capitalization the SDK transport expects.
  */
 function swapAuthorizationHeader(
-	headers: HeadersInit | undefined,
-	handleStore: HandleStore,
-	handlePrefix: string,
+  headers: HeadersInit | undefined,
+  handleStore: HandleStore,
+  handlePrefix: string,
 ): SwapResult | null {
-	if (!headers) return null;
+  if (!headers) return null;
 
-	const flat = flattenHeaders(headers);
-	const authKey = findHeaderKey(flat, "authorization");
-	if (!authKey) return null;
+  const flat = flattenHeaders(headers);
+  const authKey = findHeaderKey(flat, "authorization");
+  if (!authKey) return null;
 
-	const value = flat[authKey];
-	if (typeof value !== "string" || !value.startsWith(handlePrefix)) {
-		return null;
-	}
+  const value = flat[authKey];
+  if (typeof value !== "string" || !value.startsWith(handlePrefix)) {
+    return null;
+  }
 
-	const handle = value.slice(handlePrefix.length).trim();
-	if (!handle) return null;
+  const handle = value.slice(handlePrefix.length).trim();
+  if (!handle) return null;
 
-	const bearer = handleStore.resolve(handle);
+  const bearer = handleStore.resolve(handle);
 
-	// Strip ALL case variants of `authorization` before installing the
-	// canonical `Authorization`. A caller that supplied both
-	// `Authorization` and `authorization` would otherwise leave the
-	// non-canonical key alongside the swapped one — at the wire level
-	// the SDK transport iterates `Object.entries(headers)` and the
-	// remaining lowercase key would override depending on iteration
-	// order. Defensive: HTTP header names are case-insensitive per
-	// RFC 7230, so multiple casings represent the same header and only
-	// one (the canonical) should reach the transport.
-	const out: Record<string, string> = {};
-	for (const [key, val] of Object.entries(flat)) {
-		if (key.toLowerCase() === "authorization") continue;
-		out[key] = val;
-	}
-	out["Authorization"] = `Bearer ${bearer}`;
+  // Strip ALL case variants of `authorization` before installing the
+  // canonical `Authorization`. A caller that supplied both
+  // `Authorization` and `authorization` would otherwise leave the
+  // non-canonical key alongside the swapped one — at the wire level
+  // the SDK transport iterates `Object.entries(headers)` and the
+  // remaining lowercase key would override depending on iteration
+  // order. Defensive: HTTP header names are case-insensitive per
+  // RFC 7230, so multiple casings represent the same header and only
+  // one (the canonical) should reach the transport.
+  const out: Record<string, string> = {};
+  for (const [key, val] of Object.entries(flat)) {
+    if (key.toLowerCase() === "authorization") continue;
+    out[key] = val;
+  }
+  out["Authorization"] = `Bearer ${bearer}`;
 
-	return { headers: out, activeBearer: bearer };
+  return { headers: out, activeBearer: bearer };
 }
 
 function flattenHeaders(headers: HeadersInit): Record<string, string> {
-	if (headers instanceof Headers) {
-		const out: Record<string, string> = {};
-		headers.forEach((value, key) => {
-			out[key] = value;
-		});
-		return out;
-	}
-	if (Array.isArray(headers)) {
-		const out: Record<string, string> = {};
-		for (const [key, value] of headers) {
-			out[key] = value;
-		}
-		return out;
-	}
-	return { ...(headers as Record<string, string>) };
+  if (headers instanceof Headers) {
+    const out: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      out[key] = value;
+    });
+    return out;
+  }
+  if (Array.isArray(headers)) {
+    const out: Record<string, string> = {};
+    for (const [key, value] of headers) {
+      out[key] = value;
+    }
+    return out;
+  }
+  return { ...(headers as Record<string, string>) };
 }
 
 function findHeaderKey(
-	headers: Record<string, string>,
-	target: string,
+  headers: Record<string, string>,
+  target: string,
 ): string | undefined {
-	const lower = target.toLowerCase();
-	for (const key of Object.keys(headers)) {
-		if (key.toLowerCase() === lower) return key;
-	}
-	return undefined;
+  const lower = target.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === lower) return key;
+  }
+  return undefined;
 }

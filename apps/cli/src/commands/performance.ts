@@ -5,12 +5,24 @@
 import { Command } from "commander";
 import { graphql } from "../gql/index.js";
 import { gqlQuery } from "../lib/gql-client.js";
-import { isJsonMode, printJson, printKeyValue, printTable } from "../lib/output.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
 import { printError } from "../ui.js";
-import { resolveTenantContext, type TenantCliOptions } from "../lib/resolve-tenant-id.js";
+import {
+  resolveTenantContext,
+  type TenantCliOptions,
+} from "../lib/resolve-tenant-id.js";
 
 const AgentPerformanceDoc = graphql(`
-  query CliAgentPerformance($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
+  query CliAgentPerformance(
+    $tenantId: ID!
+    $from: AWSDateTime
+    $to: AWSDateTime
+  ) {
     agentPerformance(tenantId: $tenantId, from: $from, to: $to) {
       agentId
       agentName
@@ -78,7 +90,10 @@ async function runPerfAgents(opts: RangeOptions): Promise<void> {
   );
 }
 
-async function runPerfAgent(agentId: string, opts: TenantCliOptions): Promise<void> {
+async function runPerfAgent(
+  agentId: string,
+  opts: TenantCliOptions,
+): Promise<void> {
   const ctx = await resolveTenantContext(opts);
   const data = await gqlQuery(ctx.client, SingleAgentPerformanceDoc, {
     agentId,

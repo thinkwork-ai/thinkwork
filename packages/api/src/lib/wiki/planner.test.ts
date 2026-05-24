@@ -114,7 +114,9 @@ describe("validatePlannerResult", () => {
     });
 
     expect(() => validatePlannerResult(plan)).not.toThrow();
-    expect((plan.promotions as Array<Record<string, unknown>>)[0]).toMatchObject({
+    expect(
+      (plan.promotions as Array<Record<string, unknown>>)[0],
+    ).toMatchObject({
       type: "entity",
       entityTypeSlug: "place",
     });
@@ -150,7 +152,9 @@ describe("validatePlannerResult", () => {
 
     expect(() => validatePlannerResult(plan)).not.toThrow();
     expect(plan.promotions).toHaveLength(1);
-    expect((plan.promotions as Array<Record<string, unknown>>)[0]).toMatchObject({
+    expect(
+      (plan.promotions as Array<Record<string, unknown>>)[0],
+    ).toMatchObject({
       mentionId: "mention-1",
       type: "entity",
       entityTypeSlug: "place",

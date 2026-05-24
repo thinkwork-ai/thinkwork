@@ -18,7 +18,12 @@ import { ArrowLeft } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import { useAgents, useAgent } from "@/lib/hooks/use-agents";
 
-type EnvField = { key: string; label: string; secret: boolean; defaultValue?: string };
+type EnvField = {
+  key: string;
+  label: string;
+  secret: boolean;
+  defaultValue?: string;
+};
 
 export default function SkillConfigureScreen() {
   const { skillId, assistantId } = useLocalSearchParams<{
@@ -39,7 +44,10 @@ export default function SkillConfigureScreen() {
   const [{ data: agentData }] = useAgent(assistantId);
   const agent = agentData?.agent;
 
-  const [envFormValues, setEnvFormValues] = useState<Record<string, string> | null>(null);
+  const [envFormValues, setEnvFormValues] = useState<Record<
+    string,
+    string
+  > | null>(null);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
 
@@ -56,8 +64,10 @@ export default function SkillConfigureScreen() {
   }, [envFormValues, binding, skill]);
 
   const isFormComplete = useMemo(
-    () => skill?.requiresEnv.every((f: EnvField) => formValues[f.key]?.trim()) ?? true,
-    [skill, formValues]
+    () =>
+      skill?.requiresEnv.every((f: EnvField) => formValues[f.key]?.trim()) ??
+      true,
+    [skill, formValues],
   );
 
   const handleSave = async () => {
@@ -106,14 +116,14 @@ export default function SkillConfigureScreen() {
         [
           { text: "Cancel", style: "cancel" },
           { text: "Remove", style: "destructive", onPress: doRemove },
-        ]
+        ],
       );
     }
   };
 
   const title = agent?.name
     ? `${skill?.name ?? skillId} \u2014 ${agent.name}`
-    : skill?.name ?? skillId ?? "Configure";
+    : (skill?.name ?? skillId ?? "Configure");
 
   return (
     <View className="flex-1 bg-white dark:bg-neutral-950">
@@ -127,15 +137,29 @@ export default function SkillConfigureScreen() {
             className="flex-row items-center gap-3 flex-1 active:opacity-70"
           >
             <ArrowLeft size={20} color={colors.foreground} />
-            <Text size="lg" weight="semibold" className="flex-1" numberOfLines={1}>
+            <Text
+              size="lg"
+              weight="semibold"
+              className="flex-1"
+              numberOfLines={1}
+            >
               {title}
             </Text>
           </Pressable>
-          <Pressable onPress={handleRemove} disabled={removing} className="ml-3">
+          <Pressable
+            onPress={handleRemove}
+            disabled={removing}
+            className="ml-3"
+          >
             {removing ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Text style={{ color: colors.primary }} className="font-semibold text-base">Remove</Text>
+              <Text
+                style={{ color: colors.primary }}
+                className="font-semibold text-base"
+              >
+                Remove
+              </Text>
             )}
           </Pressable>
         </View>
@@ -193,7 +217,9 @@ export default function SkillConfigureScreen() {
               onPress={handleSave}
               disabled={!isFormComplete || saving}
               className={`rounded-lg py-3 items-center mt-2 ${
-                isFormComplete ? "bg-sky-500" : "bg-neutral-300 dark:bg-neutral-700"
+                isFormComplete
+                  ? "bg-sky-500"
+                  : "bg-neutral-300 dark:bg-neutral-700"
               }`}
             >
               {saving ? (

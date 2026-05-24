@@ -360,10 +360,14 @@ export function parseBrainEnrichmentDraftDecision(
     };
     if (parsed.kind !== DRAFT_DECISION_KIND) return null;
     const accepted = Array.isArray(parsed.acceptedRegionIds)
-      ? parsed.acceptedRegionIds.filter((v): v is string => typeof v === "string")
+      ? parsed.acceptedRegionIds.filter(
+          (v): v is string => typeof v === "string",
+        )
       : [];
     const rejected = Array.isArray(parsed.rejectedRegionIds)
-      ? parsed.rejectedRegionIds.filter((v): v is string => typeof v === "string")
+      ? parsed.rejectedRegionIds.filter(
+          (v): v is string => typeof v === "string",
+        )
       : [];
     const note = typeof parsed.note === "string" ? parsed.note : undefined;
     return {
@@ -707,17 +711,15 @@ async function replaceWikiPageSections(args: {
     return;
   }
 
-  await args.db
-    .delete(wikiPageSections)
-    .where(
-      and(
-        eq(wikiPageSections.page_id, args.pageId),
-        notInArray(
-          wikiPageSections.section_slug,
-          sections.map((section) => section.section_slug),
-        ),
+  await args.db.delete(wikiPageSections).where(
+    and(
+      eq(wikiPageSections.page_id, args.pageId),
+      notInArray(
+        wikiPageSections.section_slug,
+        sections.map((section) => section.section_slug),
       ),
-    );
+    ),
+  );
 
   for (const section of sections) {
     const [existing] = await args.db

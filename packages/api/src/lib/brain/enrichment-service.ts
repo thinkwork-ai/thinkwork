@@ -1,9 +1,5 @@
 import { GraphQLError } from "graphql";
-import {
-  and,
-  db as defaultDb,
-  eq,
-} from "../../graphql/utils.js";
+import { and, db as defaultDb, eq } from "../../graphql/utils.js";
 import { tenantEntityPages, wikiPages } from "@thinkwork/database-pg/schema";
 import { getContextEngineService } from "../context-engine/service.js";
 import { sourceFamilyForProvider } from "../context-engine/source-families.js";
@@ -213,7 +209,6 @@ export async function listBrainEnrichmentSources(args: {
     reason: null,
   }));
 }
-
 
 export function selectProviderIdsForSourceFamilies(
   providers: ContextProviderDescriptor[],

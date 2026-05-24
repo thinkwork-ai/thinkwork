@@ -10,11 +10,11 @@
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import {
-	GetObjectCommand,
-	PutObjectCommand,
-	ListObjectsV2Command,
-	DeleteObjectCommand,
-	S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectCommand,
+  S3Client,
 } from "@aws-sdk/client-s3";
 
 // ---------------------------------------------------------------------------
@@ -22,31 +22,31 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface GitHubWorkspaceConfig {
-	appId: string;
-	privateKey: string;
-	installationId: number;
-	owner: string; // GitHub org name
+  appId: string;
+  privateKey: string;
+  installationId: number;
+  owner: string; // GitHub org name
 }
 
 export interface CommitFileEntry {
-	path: string; // relative to repo root, e.g. "agents/my-agent/workspace/SOUL.md"
-	content: string;
+  path: string; // relative to repo root, e.g. "agents/my-agent/workspace/SOUL.md"
+  content: string;
 }
 
 export interface WorkspaceFile {
-	path: string; // relative path within workspace/
-	content: string;
+  path: string; // relative path within workspace/
+  content: string;
 }
 
 export interface BranchInfo {
-	name: string;
-	sha: string;
+  name: string;
+  sha: string;
 }
 
 export interface PRInfo {
-	number: number;
-	url: string;
-	htmlUrl: string;
+  number: number;
+  url: string;
+  htmlUrl: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,21 +61,24 @@ let _cachedConfig: GitHubWorkspaceConfig | null = null;
  * Caches the client for reuse within the same Lambda invocation.
  */
 export function getOctokit(config: GitHubWorkspaceConfig): Octokit {
-	if (_cachedOctokit && _cachedConfig?.installationId === config.installationId) {
-		return _cachedOctokit;
-	}
+  if (
+    _cachedOctokit &&
+    _cachedConfig?.installationId === config.installationId
+  ) {
+    return _cachedOctokit;
+  }
 
-	_cachedOctokit = new Octokit({
-		authStrategy: createAppAuth,
-		auth: {
-			appId: config.appId,
-			privateKey: config.privateKey,
-			installationId: config.installationId,
-		},
-	});
-	_cachedConfig = config;
+  _cachedOctokit = new Octokit({
+    authStrategy: createAppAuth,
+    auth: {
+      appId: config.appId,
+      privateKey: config.privateKey,
+      installationId: config.installationId,
+    },
+  });
+  _cachedConfig = config;
 
-	return _cachedOctokit;
+  return _cachedOctokit;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,9 +87,9 @@ export function getOctokit(config: GitHubWorkspaceConfig): Octokit {
 
 /** Construct the workspace prefix path within a GitHub repo */
 export function workspacePath(agentSlug: string, filePath?: string): string {
-	const base = `agents/${agentSlug}/workspace`;
-	if (!filePath) return base;
-	return `${base}/${filePath.replace(/^\/+/, "")}`;
+  const base = `agents/${agentSlug}/workspace`;
+  if (!filePath) return base;
+  return `${base}/${filePath.replace(/^\/+/, "")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,43 +101,43 @@ export function workspacePath(agentSlug: string, filePath?: string): string {
  * Returns the repo full name (e.g., "org/acme-corp").
  */
 export async function createTenantRepo(
-	octokit: Octokit,
-	owner: string,
-	tenantSlug: string,
-	options?: { description?: string; isPrivate?: boolean },
+  octokit: Octokit,
+  owner: string,
+  tenantSlug: string,
+  options?: { description?: string; isPrivate?: boolean },
 ): Promise<{ fullName: string; defaultBranch: string }> {
-	const { data } = await octokit.repos.createInOrg({
-		org: owner,
-		name: tenantSlug,
-		description: options?.description ?? `Maniflow workspace for ${tenantSlug}`,
-		private: options?.isPrivate ?? true,
-		auto_init: true, // Creates initial commit with README
-		has_issues: false,
-		has_projects: false,
-		has_wiki: false,
-	});
+  const { data } = await octokit.repos.createInOrg({
+    org: owner,
+    name: tenantSlug,
+    description: options?.description ?? `Maniflow workspace for ${tenantSlug}`,
+    private: options?.isPrivate ?? true,
+    auto_init: true, // Creates initial commit with README
+    has_issues: false,
+    has_projects: false,
+    has_wiki: false,
+  });
 
-	return {
-		fullName: data.full_name,
-		defaultBranch: data.default_branch,
-	};
+  return {
+    fullName: data.full_name,
+    defaultBranch: data.default_branch,
+  };
 }
 
 /**
  * Check if a repository exists.
  */
 export async function repoExists(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
 ): Promise<boolean> {
-	try {
-		await octokit.repos.get({ owner, repo });
-		return true;
-	} catch (err: any) {
-		if (err.status === 404) return false;
-		throw err;
-	}
+  try {
+    await octokit.repos.get({ owner, repo });
+    return true;
+  } catch (err: any) {
+    if (err.status === 404) return false;
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -145,28 +148,28 @@ export async function repoExists(
  * Read a single file from a repo. Returns null if not found.
  */
 export async function readFile(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	path: string,
-	ref?: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  path: string,
+  ref?: string,
 ): Promise<string | null> {
-	try {
-		const { data } = await octokit.repos.getContent({
-			owner,
-			repo,
-			path,
-			ref,
-		});
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref,
+    });
 
-		if ("content" in data && data.encoding === "base64") {
-			return Buffer.from(data.content, "base64").toString("utf-8");
-		}
-		return null;
-	} catch (err: any) {
-		if (err.status === 404) return null;
-		throw err;
-	}
+    if ("content" in data && data.encoding === "base64") {
+      return Buffer.from(data.content, "base64").toString("utf-8");
+    }
+    return null;
+  } catch (err: any) {
+    if (err.status === 404) return null;
+    throw err;
+  }
 }
 
 /**
@@ -174,43 +177,43 @@ export async function readFile(
  * Returns relative paths within that directory.
  */
 export async function listFiles(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	dirPath: string,
-	ref?: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  dirPath: string,
+  ref?: string,
 ): Promise<string[]> {
-	try {
-		// Use the Git Trees API with recursive=true for efficiency
-		const refToUse = ref || "main";
-		const { data: refData } = await octokit.git.getRef({
-			owner,
-			repo,
-			ref: `heads/${refToUse}`,
-		});
-		const commitSha = refData.object.sha;
+  try {
+    // Use the Git Trees API with recursive=true for efficiency
+    const refToUse = ref || "main";
+    const { data: refData } = await octokit.git.getRef({
+      owner,
+      repo,
+      ref: `heads/${refToUse}`,
+    });
+    const commitSha = refData.object.sha;
 
-		const { data: commit } = await octokit.git.getCommit({
-			owner,
-			repo,
-			commit_sha: commitSha,
-		});
+    const { data: commit } = await octokit.git.getCommit({
+      owner,
+      repo,
+      commit_sha: commitSha,
+    });
 
-		const { data: tree } = await octokit.git.getTree({
-			owner,
-			repo,
-			tree_sha: commit.tree.sha,
-			recursive: "true",
-		});
+    const { data: tree } = await octokit.git.getTree({
+      owner,
+      repo,
+      tree_sha: commit.tree.sha,
+      recursive: "true",
+    });
 
-		const prefix = dirPath.endsWith("/") ? dirPath : `${dirPath}/`;
-		return tree.tree
-			.filter((item) => item.type === "blob" && item.path?.startsWith(prefix))
-			.map((item) => item.path!.slice(prefix.length));
-	} catch (err: any) {
-		if (err.status === 404) return [];
-		throw err;
-	}
+    const prefix = dirPath.endsWith("/") ? dirPath : `${dirPath}/`;
+    return tree.tree
+      .filter((item) => item.type === "blob" && item.path?.startsWith(prefix))
+      .map((item) => item.path!.slice(prefix.length));
+  } catch (err: any) {
+    if (err.status === 404) return [];
+    throw err;
+  }
 }
 
 /**
@@ -218,25 +221,25 @@ export async function listFiles(
  * Returns a map of relative path → content.
  */
 export async function readWorkspaceFiles(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	agentSlug: string,
-	ref?: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  agentSlug: string,
+  ref?: string,
 ): Promise<Record<string, string>> {
-	const wsPath = workspacePath(agentSlug);
-	const filePaths = await listFiles(octokit, owner, repo, wsPath, ref);
+  const wsPath = workspacePath(agentSlug);
+  const filePaths = await listFiles(octokit, owner, repo, wsPath, ref);
 
-	const files: Record<string, string> = {};
-	for (const relativePath of filePaths) {
-		const fullPath = `${wsPath}/${relativePath}`;
-		const content = await readFile(octokit, owner, repo, fullPath, ref);
-		if (content !== null) {
-			files[relativePath] = content;
-		}
-	}
+  const files: Record<string, string> = {};
+  for (const relativePath of filePaths) {
+    const fullPath = `${wsPath}/${relativePath}`;
+    const content = await readFile(octokit, owner, repo, fullPath, ref);
+    if (content !== null) {
+      files[relativePath] = content;
+    }
+  }
 
-	return files;
+  return files;
 }
 
 /**
@@ -244,72 +247,72 @@ export async function readWorkspaceFiles(
  * This creates a single commit with all file changes.
  */
 export async function commitFiles(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branch: string,
-	files: CommitFileEntry[],
-	message: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
+  files: CommitFileEntry[],
+  message: string,
 ): Promise<{ sha: string }> {
-	// 1. Get the current commit SHA for the branch
-	const { data: ref } = await octokit.git.getRef({
-		owner,
-		repo,
-		ref: `heads/${branch}`,
-	});
-	const parentSha = ref.object.sha;
+  // 1. Get the current commit SHA for the branch
+  const { data: ref } = await octokit.git.getRef({
+    owner,
+    repo,
+    ref: `heads/${branch}`,
+  });
+  const parentSha = ref.object.sha;
 
-	// 2. Get the current tree
-	const { data: parentCommit } = await octokit.git.getCommit({
-		owner,
-		repo,
-		commit_sha: parentSha,
-	});
+  // 2. Get the current tree
+  const { data: parentCommit } = await octokit.git.getCommit({
+    owner,
+    repo,
+    commit_sha: parentSha,
+  });
 
-	// 3. Create blobs for each file
-	const treeItems = await Promise.all(
-		files.map(async (file) => {
-			const { data: blob } = await octokit.git.createBlob({
-				owner,
-				repo,
-				content: Buffer.from(file.content, "utf-8").toString("base64"),
-				encoding: "base64",
-			});
-			return {
-				path: file.path,
-				mode: "100644" as const,
-				type: "blob" as const,
-				sha: blob.sha,
-			};
-		}),
-	);
+  // 3. Create blobs for each file
+  const treeItems = await Promise.all(
+    files.map(async (file) => {
+      const { data: blob } = await octokit.git.createBlob({
+        owner,
+        repo,
+        content: Buffer.from(file.content, "utf-8").toString("base64"),
+        encoding: "base64",
+      });
+      return {
+        path: file.path,
+        mode: "100644" as const,
+        type: "blob" as const,
+        sha: blob.sha,
+      };
+    }),
+  );
 
-	// 4. Create a new tree
-	const { data: newTree } = await octokit.git.createTree({
-		owner,
-		repo,
-		base_tree: parentCommit.tree.sha,
-		tree: treeItems,
-	});
+  // 4. Create a new tree
+  const { data: newTree } = await octokit.git.createTree({
+    owner,
+    repo,
+    base_tree: parentCommit.tree.sha,
+    tree: treeItems,
+  });
 
-	// 5. Create the commit
-	const { data: newCommit } = await octokit.git.createCommit({
-		owner,
-		repo,
-		message,
-		tree: newTree.sha,
-		parents: [parentSha],
-	});
+  // 5. Create the commit
+  const { data: newCommit } = await octokit.git.createCommit({
+    owner,
+    repo,
+    message,
+    tree: newTree.sha,
+    parents: [parentSha],
+  });
 
-	// 6. Update the branch reference
-	await octokit.git.updateRef({
-		owner,
-		repo,
-		ref: `heads/${branch}`,
-		sha: newCommit.sha,
-	});
+  // 6. Update the branch reference
+  await octokit.git.updateRef({
+    owner,
+    repo,
+    ref: `heads/${branch}`,
+    sha: newCommit.sha,
+  });
 
-	return { sha: newCommit.sha };
+  return { sha: newCommit.sha };
 }
 
 // ---------------------------------------------------------------------------
@@ -320,33 +323,33 @@ export async function commitFiles(
  * Create a new branch from a base ref (defaults to main).
  */
 export async function createBranch(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branchName: string,
-	baseBranch?: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branchName: string,
+  baseBranch?: string,
 ): Promise<BranchInfo> {
-	const base = baseBranch || "main";
+  const base = baseBranch || "main";
 
-	// Get the SHA of the base branch
-	const { data: baseRef } = await octokit.git.getRef({
-		owner,
-		repo,
-		ref: `heads/${base}`,
-	});
+  // Get the SHA of the base branch
+  const { data: baseRef } = await octokit.git.getRef({
+    owner,
+    repo,
+    ref: `heads/${base}`,
+  });
 
-	// Create new branch pointing to the same commit
-	const { data: newRef } = await octokit.git.createRef({
-		owner,
-		repo,
-		ref: `refs/heads/${branchName}`,
-		sha: baseRef.object.sha,
-	});
+  // Create new branch pointing to the same commit
+  const { data: newRef } = await octokit.git.createRef({
+    owner,
+    repo,
+    ref: `refs/heads/${branchName}`,
+    sha: baseRef.object.sha,
+  });
 
-	return {
-		name: branchName,
-		sha: newRef.object.sha,
-	};
+  return {
+    name: branchName,
+    sha: newRef.object.sha,
+  };
 }
 
 /**
@@ -354,58 +357,58 @@ export async function createBranch(
  * Used by AutoResearch to discard a failed experiment.
  */
 export async function resetBranch(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branch: string,
-	targetSha: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
+  targetSha: string,
 ): Promise<void> {
-	await octokit.git.updateRef({
-		owner,
-		repo,
-		ref: `heads/${branch}`,
-		sha: targetSha,
-		force: true,
-	});
+  await octokit.git.updateRef({
+    owner,
+    repo,
+    ref: `heads/${branch}`,
+    sha: targetSha,
+    force: true,
+  });
 }
 
 /**
  * Get the current HEAD SHA of a branch.
  */
 export async function getBranchHead(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branch: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
 ): Promise<string> {
-	const { data: ref } = await octokit.git.getRef({
-		owner,
-		repo,
-		ref: `heads/${branch}`,
-	});
-	return ref.object.sha;
+  const { data: ref } = await octokit.git.getRef({
+    owner,
+    repo,
+    ref: `heads/${branch}`,
+  });
+  return ref.object.sha;
 }
 
 /**
  * Check if a branch exists.
  */
 export async function branchExists(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branch: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
 ): Promise<boolean> {
-	try {
-		await octokit.git.getRef({
-			owner,
-			repo,
-			ref: `heads/${branch}`,
-		});
-		return true;
-	} catch (err: any) {
-		if (err.status === 404) return false;
-		throw err;
-	}
+  try {
+    await octokit.git.getRef({
+      owner,
+      repo,
+      ref: `heads/${branch}`,
+    });
+    return true;
+  } catch (err: any) {
+    if (err.status === 404) return false;
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -416,47 +419,47 @@ export async function branchExists(
  * Create a pull request from an experiment branch to main.
  */
 export async function createPR(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	head: string,
-	base: string,
-	title: string,
-	body: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  head: string,
+  base: string,
+  title: string,
+  body: string,
 ): Promise<PRInfo> {
-	const { data } = await octokit.pulls.create({
-		owner,
-		repo,
-		title,
-		body,
-		head,
-		base,
-	});
+  const { data } = await octokit.pulls.create({
+    owner,
+    repo,
+    title,
+    body,
+    head,
+    base,
+  });
 
-	return {
-		number: data.number,
-		url: data.url,
-		htmlUrl: data.html_url,
-	};
+  return {
+    number: data.number,
+    url: data.url,
+    htmlUrl: data.html_url,
+  };
 }
 
 /**
  * Merge a pull request using the specified merge method.
  */
 export async function mergePR(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	pullNumber: number,
-	mergeMethod: "merge" | "squash" | "rebase" = "squash",
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  mergeMethod: "merge" | "squash" | "rebase" = "squash",
 ): Promise<{ sha: string; merged: boolean }> {
-	const { data } = await octokit.pulls.merge({
-		owner,
-		repo,
-		pull_number: pullNumber,
-		merge_method: mergeMethod,
-	});
-	return { sha: data.sha, merged: data.merged };
+  const { data } = await octokit.pulls.merge({
+    owner,
+    repo,
+    pull_number: pullNumber,
+    merge_method: mergeMethod,
+  });
+  return { sha: data.sha, merged: data.merged };
 }
 
 // ---------------------------------------------------------------------------
@@ -464,7 +467,7 @@ export async function mergePR(
 // ---------------------------------------------------------------------------
 
 const s3Client = new S3Client({
-	region: process.env.AWS_REGION || "us-east-1",
+  region: process.env.AWS_REGION || "us-east-1",
 });
 
 /**
@@ -473,37 +476,43 @@ const s3Client = new S3Client({
  * so the eval runner reads the updated workspace from S3.
  */
 export async function syncBranchToS3(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branch: string,
-	agentSlug: string,
-	tenantSlug: string,
-	bucket: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
+  agentSlug: string,
+  tenantSlug: string,
+  bucket: string,
 ): Promise<{ filesSynced: number }> {
-	const wsPath = workspacePath(agentSlug);
-	const files = await readWorkspaceFiles(octokit, owner, repo, agentSlug, branch);
+  const wsPath = workspacePath(agentSlug);
+  const files = await readWorkspaceFiles(
+    octokit,
+    owner,
+    repo,
+    agentSlug,
+    branch,
+  );
 
-	let count = 0;
-	for (const [relativePath, content] of Object.entries(files)) {
-		const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${relativePath}`;
-		await s3Client.send(
-			new PutObjectCommand({
-				Bucket: bucket,
-				Key: s3Key,
-				Body: content,
-				ContentType: relativePath.endsWith(".json")
-					? "application/json"
-					: "text/plain; charset=utf-8",
-			}),
-		);
-		count++;
-	}
+  let count = 0;
+  for (const [relativePath, content] of Object.entries(files)) {
+    const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${relativePath}`;
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: s3Key,
+        Body: content,
+        ContentType: relativePath.endsWith(".json")
+          ? "application/json"
+          : "text/plain; charset=utf-8",
+      }),
+    );
+    count++;
+  }
 
-	// Regenerate manifest
-	await regenerateS3Manifest(bucket, tenantSlug, agentSlug);
+  // Regenerate manifest
+  await regenerateS3Manifest(bucket, tenantSlug, agentSlug);
 
-	return { filesSynced: count };
+  return { filesSynced: count };
 }
 
 /**
@@ -511,60 +520,60 @@ export async function syncBranchToS3(
  * Called by the webhook handler when files are pushed to main.
  */
 export async function syncPushToS3(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	ref: string,
-	changedFiles: string[],
-	tenantSlug: string,
-	bucket: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  ref: string,
+  changedFiles: string[],
+  tenantSlug: string,
+  bucket: string,
 ): Promise<{ filesSynced: number }> {
-	// Filter to workspace files only: agents/{slug}/workspace/{path}
-	const wsPattern = /^agents\/([^/]+)\/workspace\/(.+)$/;
-	let count = 0;
-	const affectedAgents = new Set<string>();
+  // Filter to workspace files only: agents/{slug}/workspace/{path}
+  const wsPattern = /^agents\/([^/]+)\/workspace\/(.+)$/;
+  let count = 0;
+  const affectedAgents = new Set<string>();
 
-	for (const filePath of changedFiles) {
-		const match = filePath.match(wsPattern);
-		if (!match) continue;
+  for (const filePath of changedFiles) {
+    const match = filePath.match(wsPattern);
+    if (!match) continue;
 
-		const [, agentSlug, relativePath] = match;
-		affectedAgents.add(agentSlug);
+    const [, agentSlug, relativePath] = match;
+    affectedAgents.add(agentSlug);
 
-		// Read file content from GitHub (it may have been deleted)
-		const content = await readFile(octokit, owner, repo, filePath, ref);
-		const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${relativePath}`;
+    // Read file content from GitHub (it may have been deleted)
+    const content = await readFile(octokit, owner, repo, filePath, ref);
+    const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${relativePath}`;
 
-		if (content !== null) {
-			await s3Client.send(
-				new PutObjectCommand({
-					Bucket: bucket,
-					Key: s3Key,
-					Body: content,
-					ContentType: relativePath.endsWith(".json")
-						? "application/json"
-						: "text/plain; charset=utf-8",
-				}),
-			);
-		} else {
-			// File was deleted
-			try {
-				await s3Client.send(
-					new DeleteObjectCommand({ Bucket: bucket, Key: s3Key }),
-				);
-			} catch {
-				// Ignore delete errors for non-existent keys
-			}
-		}
-		count++;
-	}
+    if (content !== null) {
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: s3Key,
+          Body: content,
+          ContentType: relativePath.endsWith(".json")
+            ? "application/json"
+            : "text/plain; charset=utf-8",
+        }),
+      );
+    } else {
+      // File was deleted
+      try {
+        await s3Client.send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: s3Key }),
+        );
+      } catch {
+        // Ignore delete errors for non-existent keys
+      }
+    }
+    count++;
+  }
 
-	// Regenerate manifests for affected agents
-	for (const agentSlug of affectedAgents) {
-		await regenerateS3Manifest(bucket, tenantSlug, agentSlug);
-	}
+  // Regenerate manifests for affected agents
+  for (const agentSlug of affectedAgents) {
+    await regenerateS3Manifest(bucket, tenantSlug, agentSlug);
+  }
 
-	return { filesSynced: count };
+  return { filesSynced: count };
 }
 
 /**
@@ -572,50 +581,57 @@ export async function syncPushToS3(
  * Mirrors the logic from workspace-files.ts.
  */
 async function regenerateS3Manifest(
-	bucket: string,
-	tenantSlug: string,
-	agentSlug: string,
+  bucket: string,
+  tenantSlug: string,
+  agentSlug: string,
 ): Promise<void> {
-	const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
-	const files: { path: string; etag: string; size: number; last_modified: string }[] = [];
-	let continuationToken: string | undefined;
+  const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  const files: {
+    path: string;
+    etag: string;
+    size: number;
+    last_modified: string;
+  }[] = [];
+  let continuationToken: string | undefined;
 
-	do {
-		const result = await s3Client.send(
-			new ListObjectsV2Command({
-				Bucket: bucket,
-				Prefix: prefix,
-				ContinuationToken: continuationToken,
-			}),
-		);
-		for (const obj of result.Contents ?? []) {
-			if (!obj.Key) continue;
-			const relPath = obj.Key.slice(prefix.length);
-			if (!relPath || relPath === "manifest.json") continue;
-			files.push({
-				path: relPath,
-				etag: obj.ETag ?? "",
-				size: obj.Size ?? 0,
-				last_modified: obj.LastModified?.toISOString() ?? "",
-			});
-		}
-		continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
-	} while (continuationToken);
+  do {
+    const result = await s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const obj of result.Contents ?? []) {
+      if (!obj.Key) continue;
+      const relPath = obj.Key.slice(prefix.length);
+      if (!relPath || relPath === "manifest.json") continue;
+      files.push({
+        path: relPath,
+        etag: obj.ETag ?? "",
+        size: obj.Size ?? 0,
+        last_modified: obj.LastModified?.toISOString() ?? "",
+      });
+    }
+    continuationToken = result.IsTruncated
+      ? result.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
 
-	const manifest = {
-		version: 1,
-		generated_at: new Date().toISOString(),
-		files,
-	};
+  const manifest = {
+    version: 1,
+    generated_at: new Date().toISOString(),
+    files,
+  };
 
-	await s3Client.send(
-		new PutObjectCommand({
-			Bucket: bucket,
-			Key: `${prefix}manifest.json`,
-			Body: JSON.stringify(manifest),
-			ContentType: "application/json",
-		}),
-	);
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: `${prefix}manifest.json`,
+      Body: JSON.stringify(manifest),
+      ContentType: "application/json",
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -627,36 +643,43 @@ async function regenerateS3Manifest(
  * Writes changes to the experiment branch and syncs to S3.
  */
 export async function commitExperiment(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branch: string,
-	agentSlug: string,
-	tenantSlug: string,
-	bucket: string,
-	changes: { file: string; content: string }[],
-	message: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
+  agentSlug: string,
+  tenantSlug: string,
+  bucket: string,
+  changes: { file: string; content: string }[],
+  message: string,
 ): Promise<{ sha: string; filesSynced: number }> {
-	// Convert workspace-relative paths to repo-absolute paths
-	const commitEntries: CommitFileEntry[] = changes.map((change) => ({
-		path: workspacePath(agentSlug, change.file),
-		content: change.content,
-	}));
+  // Convert workspace-relative paths to repo-absolute paths
+  const commitEntries: CommitFileEntry[] = changes.map((change) => ({
+    path: workspacePath(agentSlug, change.file),
+    content: change.content,
+  }));
 
-	const { sha } = await commitFiles(octokit, owner, repo, branch, commitEntries, message);
+  const { sha } = await commitFiles(
+    octokit,
+    owner,
+    repo,
+    branch,
+    commitEntries,
+    message,
+  );
 
-	// Sync the branch to S3 so eval-runner reads the updated workspace
-	const { filesSynced } = await syncBranchToS3(
-		octokit,
-		owner,
-		repo,
-		branch,
-		agentSlug,
-		tenantSlug,
-		bucket,
-	);
+  // Sync the branch to S3 so eval-runner reads the updated workspace
+  const { filesSynced } = await syncBranchToS3(
+    octokit,
+    owner,
+    repo,
+    branch,
+    agentSlug,
+    tenantSlug,
+    bucket,
+  );
 
-	return { sha, filesSynced };
+  return { sha, filesSynced };
 }
 
 /**
@@ -664,28 +687,27 @@ export async function commitExperiment(
  * and re-syncing S3 to match.
  */
 export async function revertExperiment(
-	octokit: Octokit,
-	owner: string,
-	repo: string,
-	branch: string,
-	targetSha: string,
-	agentSlug: string,
-	tenantSlug: string,
-	bucket: string,
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
+  targetSha: string,
+  agentSlug: string,
+  tenantSlug: string,
+  bucket: string,
 ): Promise<{ filesSynced: number }> {
-	await resetBranch(octokit, owner, repo, branch, targetSha);
+  await resetBranch(octokit, owner, repo, branch, targetSha);
 
-	// Re-sync S3 from the reverted branch state
-	const { filesSynced } = await syncBranchToS3(
-		octokit,
-		owner,
-		repo,
-		branch,
-		agentSlug,
-		tenantSlug,
-		bucket,
-	);
+  // Re-sync S3 from the reverted branch state
+  const { filesSynced } = await syncBranchToS3(
+    octokit,
+    owner,
+    repo,
+    branch,
+    agentSlug,
+    tenantSlug,
+    bucket,
+  );
 
-	return { filesSynced };
+  return { filesSynced };
 }
-

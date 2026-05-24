@@ -24,7 +24,14 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * format hint and inline validation; v2 will swap in @react-native-community
  * /datetimepicker on native and a real date input on web.
  */
-export function DateField({ id, label, required, value, disabled, onChange }: DateFieldProps) {
+export function DateField({
+  id,
+  label,
+  required,
+  value,
+  disabled,
+  onChange,
+}: DateFieldProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -37,8 +44,14 @@ export function DateField({ id, label, required, value, disabled, onChange }: Da
   if (Platform.OS === "web") {
     return (
       <View className="mb-4">
-        <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
-          {label}{required ? " *" : ""}
+        <Text
+          size="xs"
+          weight="medium"
+          variant="muted"
+          className="uppercase tracking-wide mb-1.5"
+        >
+          {label}
+          {required ? " *" : ""}
         </Text>
         {/* Raw HTML input on web — gives us the OS date picker for free. */}
         <input
@@ -66,8 +79,14 @@ export function DateField({ id, label, required, value, disabled, onChange }: Da
 
   return (
     <View className="mb-4">
-      <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
-        {label}{required ? " *" : ""}
+      <Text
+        size="xs"
+        weight="medium"
+        variant="muted"
+        className="uppercase tracking-wide mb-1.5"
+      >
+        {label}
+        {required ? " *" : ""}
       </Text>
       <View
         className="flex-row items-center rounded-xl border px-3"
@@ -75,7 +94,9 @@ export function DateField({ id, label, required, value, disabled, onChange }: Da
           backgroundColor: isDark ? "#262626" : "#fff",
           borderColor: isInvalid
             ? "#ef4444"
-            : (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"),
+            : isDark
+              ? "rgba(255,255,255,0.12)"
+              : "rgba(0,0,0,0.12)",
           opacity: disabled ? 0.6 : 1,
         }}
       >
@@ -95,7 +116,9 @@ export function DateField({ id, label, required, value, disabled, onChange }: Da
         />
       </View>
       {isInvalid && (
-        <Text size="xs" className="mt-1 text-red-500">Use format YYYY-MM-DD</Text>
+        <Text size="xs" className="mt-1 text-red-500">
+          Use format YYYY-MM-DD
+        </Text>
       )}
     </View>
   );

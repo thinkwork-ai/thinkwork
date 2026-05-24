@@ -35,10 +35,7 @@ vi.mock("@aws-sdk/client-sfn", () => ({
   },
 }));
 
-import {
-  resumeRoutineExecution,
-  type ResumeInput,
-} from "../routine-resume.js";
+import { resumeRoutineExecution, type ResumeInput } from "../routine-resume.js";
 
 const baseSuccessInput: ResumeInput = {
   taskToken: "token-abc",
@@ -69,7 +66,10 @@ describe("resumeRoutineExecution — happy path", () => {
     };
     expect(call.constructor.name).toBe("SendTaskSuccessCommand");
     expect(call.input.taskToken).toBe("token-abc");
-    expect(JSON.parse(call.input.output)).toEqual({ approved: true, by: "user-1" });
+    expect(JSON.parse(call.input.output)).toEqual({
+      approved: true,
+      by: "user-1",
+    });
   });
 
   it("calls SendTaskFailureCommand with errorCode + errorMessage for decision='failure'", async () => {

@@ -15,8 +15,18 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
-import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  isJsonMode,
+  logStderr,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const RoutinesDoc = graphql(`
   query CliRoutines($tenantId: ID!, $agentId: ID, $status: RoutineStatus) {
@@ -100,8 +110,18 @@ const TriggerRoutineRunDoc = graphql(`
 `);
 
 const RoutineExecutionsDoc = graphql(`
-  query CliRoutineExecutions($routineId: ID!, $status: RoutineExecutionStatus, $limit: Int, $cursor: String) {
-    routineExecutions(routineId: $routineId, status: $status, limit: $limit, cursor: $cursor) {
+  query CliRoutineExecutions(
+    $routineId: ID!
+    $status: RoutineExecutionStatus
+    $limit: Int
+    $cursor: String
+  ) {
+    routineExecutions(
+      routineId: $routineId
+      status: $status
+      limit: $limit
+      cursor: $cursor
+    ) {
       id
       status
       startedAt
@@ -166,17 +186,23 @@ async function resolveRoutineContext(opts: RoutineCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, RoutineTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, RoutineTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, RoutineTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    const data = await gqlQuery(client, RoutineTenantBySlugDoc, {
+      slug: ctxSlug,
+    });
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -216,7 +242,9 @@ function parseStatus<E extends string>(
   if (!raw) return null;
   const v = table[raw.toUpperCase()];
   if (!v) {
-    printError(`Invalid ${label} "${raw}". Expected one of: ${Object.keys(table).join(", ")}.`);
+    printError(
+      `Invalid ${label} "${raw}". Expected one of: ${Object.keys(table).join(", ")}.`,
+    );
     process.exit(1);
   }
   return v;
@@ -256,7 +284,10 @@ async function runRoutineList(opts: ListOptions): Promise<void> {
   );
 }
 
-async function runRoutineGet(id: string, opts: RoutineCliOptions): Promise<void> {
+async function runRoutineGet(
+  id: string,
+  opts: RoutineCliOptions,
+): Promise<void> {
   const ctx = await resolveRoutineContext(opts);
   const data = await gqlQuery(ctx.client, RoutineDoc, { id });
   const r = data.routine;
@@ -322,7 +353,9 @@ async function runRoutineCreate(
       process.exit(1);
     }
     requireTty("Routine name");
-    resolvedName = await promptOrExit(() => input({ message: "Routine name:" }));
+    resolvedName = await promptOrExit(() =>
+      input({ message: "Routine name:" }),
+    );
   }
   let aslJson: unknown = null;
   if (opts.config) {
@@ -337,7 +370,9 @@ async function runRoutineCreate(
     try {
       aslJson = JSON.parse(txt);
     } catch (err) {
-      printError(`--config-file does not parse as JSON: ${(err as Error).message}`);
+      printError(
+        `--config-file does not parse as JSON: ${(err as Error).message}`,
+      );
       process.exit(1);
     }
   }
@@ -367,7 +402,10 @@ interface UpdateOptions extends RoutineCliOptions {
   configFile?: string;
 }
 
-async function runRoutineUpdate(id: string, opts: UpdateOptions): Promise<void> {
+async function runRoutineUpdate(
+  id: string,
+  opts: UpdateOptions,
+): Promise<void> {
   const ctx = await resolveRoutineContext(opts);
   const input: Record<string, unknown> = {};
   if (opts.name !== undefined) input.name = opts.name;
@@ -395,16 +433,24 @@ interface DeleteOptions extends RoutineCliOptions {
   yes?: boolean;
 }
 
-async function runRoutineDelete(id: string, opts: DeleteOptions): Promise<void> {
+async function runRoutineDelete(
+  id: string,
+  opts: DeleteOptions,
+): Promise<void> {
   const ctx = await resolveRoutineContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to delete without --yes in a non-interactive session.");
+      printError(
+        "Refusing to delete without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
     const go = await promptOrExit(() =>
-      confirm({ message: `Delete routine ${id}? Past runs + triggers are removed.`, default: false }),
+      confirm({
+        message: `Delete routine ${id}? Past runs + triggers are removed.`,
+        default: false,
+      }),
     );
     if (!go) {
       logStderr("Cancelled.");
@@ -425,7 +471,10 @@ interface TriggerOptions extends RoutineCliOptions {
   wait?: boolean;
 }
 
-async function runRoutineTrigger(id: string, opts: TriggerOptions): Promise<void> {
+async function runRoutineTrigger(
+  id: string,
+  opts: TriggerOptions,
+): Promise<void> {
   const ctx = await resolveRoutineContext(opts);
   let payload: unknown = null;
   if (opts.input) {
@@ -448,7 +497,9 @@ async function runRoutineTrigger(id: string, opts: TriggerOptions): Promise<void
     `Triggered routine ${id} — execution ${data.triggerRoutineRun.id} (status: ${data.triggerRoutineRun.status}).`,
   );
   if (opts.wait) {
-    console.log("  (--wait is not yet implemented; poll `routine run get` until status is terminal.)");
+    console.log(
+      "  (--wait is not yet implemented; poll `routine run get` until status is terminal.)",
+    );
   }
 }
 
@@ -492,7 +543,10 @@ async function runRoutineRunList(
   );
 }
 
-async function runRoutineRunGet(runId: string, opts: RoutineCliOptions): Promise<void> {
+async function runRoutineRunGet(
+  runId: string,
+  opts: RoutineCliOptions,
+): Promise<void> {
   const ctx = await resolveRoutineContext(opts);
   const data = await gqlQuery(ctx.client, RoutineExecutionDoc, { id: runId });
   const e = data.routineExecution;
@@ -560,7 +614,9 @@ async function runRoutineTriggerConfigDelete(
   const ctx = await resolveRoutineContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to delete without --yes in a non-interactive session.");
+      printError(
+        "Refusing to delete without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
@@ -572,7 +628,9 @@ async function runRoutineTriggerConfigDelete(
       process.exit(0);
     }
   }
-  const data = await gqlMutate(ctx.client, DeleteRoutineTriggerDoc, { id: triggerId });
+  const data = await gqlMutate(ctx.client, DeleteRoutineTriggerDoc, {
+    id: triggerId,
+  });
   if (isJsonMode()) {
     printJson({ id: triggerId, deleted: data.deleteRoutineTrigger });
     return;
@@ -585,7 +643,9 @@ export function registerRoutineCommand(program: Command): void {
   const routine = program
     .command("routine")
     .alias("routines")
-    .description("Manage routines — saved workflows, their triggers, and past runs.");
+    .description(
+      "Manage routines — saved workflows, their triggers, and past runs.",
+    );
 
   routine
     .command("list")
@@ -624,13 +684,18 @@ Examples:
 
   routine
     .command("update <id>")
-    .description("Update routine metadata (name/status/assignment). ASL changes go through publish.")
+    .description(
+      "Update routine metadata (name/status/assignment). ASL changes go through publish.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--name <n>")
     .option("--status <s>", "ACTIVE | PAUSED | ARCHIVED")
     .option("--agent <id>")
-    .option("--config-file <path>", "(not supported — ASL is published separately)")
+    .option(
+      "--config-file <path>",
+      "(not supported — ASL is published separately)",
+    )
     .action(runRoutineUpdate);
 
   routine

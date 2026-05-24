@@ -80,8 +80,8 @@ export function PayloadSection({ payload, eventId }: PayloadSectionProps) {
         {isLarge ? (
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">
-              Payload exceeds {formatBytes(INLINE_BYTE_LIMIT)} — showing first
-              1 KB preview. Use Download for the full record.
+              Payload exceeds {formatBytes(INLINE_BYTE_LIMIT)} — showing first 1
+              KB preview. Use Download for the full record.
             </p>
             <pre className="font-mono text-xs whitespace-pre-wrap break-words bg-muted p-3 rounded-md">
               {json.slice(0, PREVIEW_CHAR_LIMIT)}

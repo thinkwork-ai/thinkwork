@@ -19,7 +19,9 @@ export default function FleetScreen() {
   const tenantId = user?.tenantId;
 
   // TODO: api.agentcoreAdmin.getAgentCoreAssistants — using useAgents with type filter as approximation
-  const [{ data: agentsData, fetching: agentsFetching }] = useAgents(tenantId, { type: "fleet" });
+  const [{ data: agentsData, fetching: agentsFetching }] = useAgents(tenantId, {
+    type: "fleet",
+  });
   const assistants = agentsData?.agents ?? [];
 
   // TODO: inboxItems query — no GraphQL hook yet
@@ -60,7 +62,8 @@ export default function FleetScreen() {
             onPress={() => router.push("/fleet/inbox")}
           >
             <Text className="text-sm font-medium text-amber-800 dark:text-amber-200">
-              {pendingCount} pending item{pendingCount > 1 ? "s" : ""} — tap to review
+              {pendingCount} pending item{pendingCount > 1 ? "s" : ""} — tap to
+              review
             </Text>
           </Pressable>
         )}
@@ -70,8 +73,8 @@ export default function FleetScreen() {
             <Server size={48} color={colors.mutedForeground} />
             <Text className="mt-4 text-lg font-semibold">No Fleet Agents</Text>
             <Muted className="mt-2 text-center">
-              Register an OpenClaw fleet agent to get started with
-              multi-tenant enterprise deployment.
+              Register an OpenClaw fleet agent to get started with multi-tenant
+              enterprise deployment.
             </Muted>
             <Button
               className="mt-6"

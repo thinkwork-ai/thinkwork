@@ -23,95 +23,95 @@
  */
 
 export type EnvelopeKind =
-	| "init"
-	| "ready"
-	| "ready-with-component"
-	| "theme"
-	| "resize"
-	| "wheel"
-	| "callback"
-	| "state-read"
-	| "state-read-ack"
-	| "state-write"
-	| "state-write-ack"
-	| "error";
+  | "init"
+  | "ready"
+  | "ready-with-component"
+  | "theme"
+  | "resize"
+  | "wheel"
+  | "callback"
+  | "state-read"
+  | "state-read-ack"
+  | "state-write"
+  | "state-write-ack"
+  | "error";
 
 export interface Envelope<P = unknown> {
-	v: 1;
-	kind: EnvelopeKind;
-	payload: P;
-	msgId: string;
-	replyTo?: string;
-	channelId: string;
+  v: 1;
+  kind: EnvelopeKind;
+  payload: P;
+  msgId: string;
+  replyTo?: string;
+  channelId: string;
 }
 
 // --- payload shapes per envelope kind --------------------------------------
 
 export interface InitPayload {
-	tsx: string;
-	version: string;
-	theme?: "light" | "dark";
-	themeOverrides?: Record<string, string>;
-	fitContentHeight?: boolean;
+  tsx: string;
+  version: string;
+  theme?: "light" | "dark";
+  themeOverrides?: Record<string, string>;
+  fitContentHeight?: boolean;
 }
 
 export interface ReadyPayload {
-	ready: true;
+  ready: true;
 }
 
 export interface ReadyWithComponentPayload {
-	rendered: true;
-	renderedAt: string;
+  rendered: true;
+  renderedAt: string;
 }
 
 export interface ThemePayload {
-	theme?: "light" | "dark";
-	overrides: Record<string, string>;
+  theme?: "light" | "dark";
+  overrides: Record<string, string>;
 }
 
 export interface ResizePayload {
-	height: number;
+  height: number;
 }
 
 export interface WheelPayload {
-	deltaX: number;
-	deltaY: number;
-	deltaMode: number;
+  deltaX: number;
+  deltaY: number;
+  deltaMode: number;
 }
 
 export interface CallbackPayload {
-	name: string;
-	payload: unknown;
+  name: string;
+  payload: unknown;
 }
 
 export interface StateReadPayload {
-	key: string;
+  key: string;
 }
 
 export interface StateReadAckPayload {
-	value: unknown;
+  value: unknown;
 }
 
 export interface StateWritePayload {
-	key: string;
-	value: unknown;
+  key: string;
+  value: unknown;
 }
 
 export interface StateWriteAckPayload {
-	ok: boolean;
+  ok: boolean;
 }
 
 export type ErrorCode =
-	| "IMPORT_REJECTED"
-	| "COMPILE_FAILED"
-	| "RUNTIME_ERROR"
-	| "CSP_VIOLATION";
+  | "IMPORT_REJECTED"
+  | "COMPILE_FAILED"
+  | "RUNTIME_ERROR"
+  | "CSP_VIOLATION";
 
 export interface ErrorPayload {
-	code: ErrorCode;
-	message: string;
-	detail?: string;
-	stack?: string;
+  code: ErrorCode;
+  message: string;
+  detail?: string;
+  stack?: string;
 }
 
 // --- envelope guard / mint helpers ----------------------------------------
@@ -122,38 +122,39 @@ export interface ErrorPayload {
  * the parent sends.
  */
 export function newChannelId(): string {
-	if (
-		typeof crypto !== "undefined" &&
-		typeof crypto.randomUUID === "function"
-	) {
-		return crypto.randomUUID();
-	}
-	// Fallback for older test environments — produces a 32-char hex
-	// string that's unique enough for tests; production runs in modern
-	// browsers where crypto.randomUUID is always present.
-	let out = "";
-	for (let i = 0; i < 32; i++) out += Math.floor(Math.random() * 16).toString(16);
-	return `${out.slice(0, 8)}-${out.slice(8, 12)}-${out.slice(12, 16)}-${out.slice(16, 20)}-${out.slice(20)}`;
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older test environments — produces a 32-char hex
+  // string that's unique enough for tests; production runs in modern
+  // browsers where crypto.randomUUID is always present.
+  let out = "";
+  for (let i = 0; i < 32; i++)
+    out += Math.floor(Math.random() * 16).toString(16);
+  return `${out.slice(0, 8)}-${out.slice(8, 12)}-${out.slice(12, 16)}-${out.slice(16, 20)}-${out.slice(20)}`;
 }
 
 export function newMsgId(): string {
-	return newChannelId();
+  return newChannelId();
 }
 
 export function buildEnvelope<P>(
-	kind: EnvelopeKind,
-	payload: P,
-	channelId: string,
-	replyTo?: string,
+  kind: EnvelopeKind,
+  payload: P,
+  channelId: string,
+  replyTo?: string,
 ): Envelope<P> {
-	return {
-		v: 1,
-		kind,
-		payload,
-		msgId: newMsgId(),
-		replyTo,
-		channelId,
-	};
+  return {
+    v: 1,
+    kind,
+    payload,
+    msgId: newMsgId(),
+    replyTo,
+    channelId,
+  };
 }
 
 /**
@@ -163,37 +164,34 @@ export function buildEnvelope<P>(
  * warning — never throws on hostile input.
  */
 export function validateInboundEnvelope(
-	raw: unknown,
-	expectedChannelId: string,
+  raw: unknown,
+  expectedChannelId: string,
 ): Envelope | null {
-	if (!raw || typeof raw !== "object") return null;
-	const candidate = raw as Record<string, unknown>;
-	if (candidate.v !== 1) return null;
-	if (typeof candidate.kind !== "string") return null;
-	if (typeof candidate.msgId !== "string") return null;
-	if (typeof candidate.channelId !== "string") return null;
-	if (candidate.channelId !== expectedChannelId) return null;
-	if (
-		candidate.replyTo !== undefined &&
-		typeof candidate.replyTo !== "string"
-	)
-		return null;
-	const KNOWN_KINDS: EnvelopeKind[] = [
-		"init",
-		"ready",
-		"ready-with-component",
-		"theme",
-		"resize",
-		"wheel",
-		"callback",
-		"state-read",
-		"state-read-ack",
-		"state-write",
-		"state-write-ack",
-		"error",
-	];
-	if (!KNOWN_KINDS.includes(candidate.kind as EnvelopeKind)) return null;
-	return candidate as unknown as Envelope;
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as Record<string, unknown>;
+  if (candidate.v !== 1) return null;
+  if (typeof candidate.kind !== "string") return null;
+  if (typeof candidate.msgId !== "string") return null;
+  if (typeof candidate.channelId !== "string") return null;
+  if (candidate.channelId !== expectedChannelId) return null;
+  if (candidate.replyTo !== undefined && typeof candidate.replyTo !== "string")
+    return null;
+  const KNOWN_KINDS: EnvelopeKind[] = [
+    "init",
+    "ready",
+    "ready-with-component",
+    "theme",
+    "resize",
+    "wheel",
+    "callback",
+    "state-read",
+    "state-read-ack",
+    "state-write",
+    "state-write-ack",
+    "error",
+  ];
+  if (!KNOWN_KINDS.includes(candidate.kind as EnvelopeKind)) return null;
+  return candidate as unknown as Envelope;
 }
 
 /**
@@ -204,53 +202,53 @@ export function validateInboundEnvelope(
  * accidentally adds a credential field.
  */
 const FORBIDDEN_PAYLOAD_FIELDS = [
-	"apiKey",
-	"token",
-	"accessToken",
-	"idToken",
-	"refreshToken",
-	"cognitoJwt",
-	"sessionCookie",
-	"authorization",
-	"bearerToken",
-	"tenantId",
-	"userId",
-	"principalId",
+  "apiKey",
+  "token",
+  "accessToken",
+  "idToken",
+  "refreshToken",
+  "cognitoJwt",
+  "sessionCookie",
+  "authorization",
+  "bearerToken",
+  "tenantId",
+  "userId",
+  "principalId",
 ] as const;
 
 export function assertNoSecretsInPayload(payload: unknown): void {
-	const visited = new WeakSet<object>();
-	const walk = (value: unknown): void => {
-		if (!value || typeof value !== "object") return;
-		// Cycle guard — defensive; LLM-authored payloads should not be
-		// circular but we don't trust them by definition.
-		const objRef = value as object;
-		if (visited.has(objRef)) return;
-		visited.add(objRef);
+  const visited = new WeakSet<object>();
+  const walk = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    // Cycle guard — defensive; LLM-authored payloads should not be
+    // circular but we don't trust them by definition.
+    const objRef = value as object;
+    if (visited.has(objRef)) return;
+    visited.add(objRef);
 
-		if (Array.isArray(value)) {
-			for (const item of value) walk(item);
-			return;
-		}
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item);
+      return;
+    }
 
-		const obj = value as Record<string, unknown>;
-		for (const field of FORBIDDEN_PAYLOAD_FIELDS) {
-			if (Object.prototype.hasOwnProperty.call(obj, field)) {
-				throw new IframePayloadSecretLeakError(
-					`Forbidden field '${field}' in iframe postMessage payload — the iframe runs untrusted LLM-authored code, payloads must never carry credentials. State proxy operations round-trip through the parent.`,
-				);
-			}
-		}
-		for (const v of Object.values(obj)) walk(v);
-	};
-	walk(payload);
+    const obj = value as Record<string, unknown>;
+    for (const field of FORBIDDEN_PAYLOAD_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(obj, field)) {
+        throw new IframePayloadSecretLeakError(
+          `Forbidden field '${field}' in iframe postMessage payload — the iframe runs untrusted LLM-authored code, payloads must never carry credentials. State proxy operations round-trip through the parent.`,
+        );
+      }
+    }
+    for (const v of Object.values(obj)) walk(v);
+  };
+  walk(payload);
 }
 
 export class IframePayloadSecretLeakError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "IframePayloadSecretLeakError";
-	}
+  constructor(message: string) {
+    super(message);
+    this.name = "IframePayloadSecretLeakError";
+  }
 }
 
 /**
@@ -282,32 +280,34 @@ declare const __SANDBOX_IFRAME_SRC__: string;
 declare const __ALLOWED_PARENT_ORIGINS__: readonly string[];
 
 const SANDBOX_IFRAME_SRC_DEFAULT =
-	"https://sandbox.thinkwork.ai/iframe-shell.html";
+  "https://sandbox.thinkwork.ai/iframe-shell.html";
 
 const ALLOWED_PARENT_ORIGINS_DEFAULT: readonly string[] = Object.freeze([
-	"https://thinkwork.ai",
+  "https://thinkwork.ai",
 ]);
 
 interface ViteRuntimeEnv {
-	DEV?: boolean;
-	MODE?: string;
-	VITE_ALLOWED_PARENT_ORIGINS?: string;
-	VITE_SANDBOX_IFRAME_SRC?: string;
+  DEV?: boolean;
+  MODE?: string;
+  VITE_ALLOWED_PARENT_ORIGINS?: string;
+  VITE_SANDBOX_IFRAME_SRC?: string;
 }
 
 function viteEnv(): ViteRuntimeEnv {
-	return (
-		import.meta as unknown as {
-			env?: ViteRuntimeEnv;
-		}
-	).env ?? {};
+  return (
+    (
+      import.meta as unknown as {
+        env?: ViteRuntimeEnv;
+      }
+    ).env ?? {}
+  );
 }
 
 function splitOriginList(value: string): string[] {
-	return value
-		.split(",")
-		.map((origin) => origin.trim())
-		.filter(Boolean);
+  return value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -317,27 +317,26 @@ function splitOriginList(value: string): string[] {
  * `define` has not run).
  */
 export function resolveSandboxIframeSrc(): string {
-	if (typeof __SANDBOX_IFRAME_SRC__ !== "undefined") {
-		// Defensive: a zero-length build-time substitution would still
-		// satisfy `typeof !== "undefined"` (and Vitest sees globalThis
-		// assignments as bare-identifier hits). Treat empty as unset.
-		if (
-			typeof __SANDBOX_IFRAME_SRC__ === "string" &&
-			__SANDBOX_IFRAME_SRC__.length > 0
-		) {
-			return __SANDBOX_IFRAME_SRC__;
-		}
-	}
-	const fromViteEnv = viteEnv().VITE_SANDBOX_IFRAME_SRC;
-	if (typeof fromViteEnv === "string" && fromViteEnv.length > 0) {
-		return fromViteEnv;
-	}
-	const fromGlobal = (
-		globalThis as { __SANDBOX_IFRAME_SRC__?: string }
-	).__SANDBOX_IFRAME_SRC__;
-	return typeof fromGlobal === "string" && fromGlobal.length > 0
-		? fromGlobal
-		: SANDBOX_IFRAME_SRC_DEFAULT;
+  if (typeof __SANDBOX_IFRAME_SRC__ !== "undefined") {
+    // Defensive: a zero-length build-time substitution would still
+    // satisfy `typeof !== "undefined"` (and Vitest sees globalThis
+    // assignments as bare-identifier hits). Treat empty as unset.
+    if (
+      typeof __SANDBOX_IFRAME_SRC__ === "string" &&
+      __SANDBOX_IFRAME_SRC__.length > 0
+    ) {
+      return __SANDBOX_IFRAME_SRC__;
+    }
+  }
+  const fromViteEnv = viteEnv().VITE_SANDBOX_IFRAME_SRC;
+  if (typeof fromViteEnv === "string" && fromViteEnv.length > 0) {
+    return fromViteEnv;
+  }
+  const fromGlobal = (globalThis as { __SANDBOX_IFRAME_SRC__?: string })
+    .__SANDBOX_IFRAME_SRC__;
+  return typeof fromGlobal === "string" && fromGlobal.length > 0
+    ? fromGlobal
+    : SANDBOX_IFRAME_SRC_DEFAULT;
 }
 
 /**
@@ -345,29 +344,25 @@ export function resolveSandboxIframeSrc(): string {
  * override via `globalThis.__ALLOWED_PARENT_ORIGINS__`.
  */
 export function resolveAllowedParentOrigins(): readonly string[] {
-	if (typeof __ALLOWED_PARENT_ORIGINS__ !== "undefined") {
-		const list = __ALLOWED_PARENT_ORIGINS__;
-		if (Array.isArray(list) && list.length > 0) {
-			return Object.freeze([...list]);
-		}
-	}
-	const env = viteEnv();
-	if (typeof env.VITE_ALLOWED_PARENT_ORIGINS === "string") {
-		return Object.freeze(splitOriginList(env.VITE_ALLOWED_PARENT_ORIGINS));
-	}
-	if (env.MODE === "development") {
-		return Object.freeze([
-			"http://localhost:5174",
-			"http://127.0.0.1:5174",
-		]);
-	}
-	const fromGlobal = (
-		globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
-	).__ALLOWED_PARENT_ORIGINS__;
-	if (Array.isArray(fromGlobal) && fromGlobal.length > 0) {
-		return Object.freeze([...fromGlobal]);
-	}
-	return ALLOWED_PARENT_ORIGINS_DEFAULT;
+  if (typeof __ALLOWED_PARENT_ORIGINS__ !== "undefined") {
+    const list = __ALLOWED_PARENT_ORIGINS__;
+    if (Array.isArray(list) && list.length > 0) {
+      return Object.freeze([...list]);
+    }
+  }
+  const env = viteEnv();
+  if (typeof env.VITE_ALLOWED_PARENT_ORIGINS === "string") {
+    return Object.freeze(splitOriginList(env.VITE_ALLOWED_PARENT_ORIGINS));
+  }
+  if (env.MODE === "development") {
+    return Object.freeze(["http://localhost:5174", "http://127.0.0.1:5174"]);
+  }
+  const fromGlobal = (globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] })
+    .__ALLOWED_PARENT_ORIGINS__;
+  if (Array.isArray(fromGlobal) && fromGlobal.length > 0) {
+    return Object.freeze([...fromGlobal]);
+  }
+  return ALLOWED_PARENT_ORIGINS_DEFAULT;
 }
 
 /**
@@ -378,20 +373,20 @@ export function resolveAllowedParentOrigins(): readonly string[] {
  */
 export const SANDBOX_IFRAME_SRC: string = resolveSandboxIframeSrc();
 export const ALLOWED_PARENT_ORIGINS: readonly string[] =
-	resolveAllowedParentOrigins();
+  resolveAllowedParentOrigins();
 
 /**
  * Defense: assert the allowlist never contains the dangerous values
  * "null" or "*". The iframe-shell test asserts this at build time.
  */
 export function assertSafeAllowlist(
-	allowlist: readonly string[] = ALLOWED_PARENT_ORIGINS,
+  allowlist: readonly string[] = ALLOWED_PARENT_ORIGINS,
 ): void {
-	for (const origin of allowlist) {
-		if (origin === "null" || origin === "*") {
-			throw new Error(
-				`Unsafe parent-origin allowlist entry: ${origin}. The iframe runs untrusted LLM code; ${origin} would accept messages from any origin (including hostile siblings under sandbox=allow-scripts). Use concrete https:// origins only.`,
-			);
-		}
-	}
+  for (const origin of allowlist) {
+    if (origin === "null" || origin === "*") {
+      throw new Error(
+        `Unsafe parent-origin allowlist entry: ${origin}. The iframe runs untrusted LLM code; ${origin} would accept messages from any origin (including hostile siblings under sandbox=allow-scripts). Use concrete https:// origins only.`,
+      );
+    }
+  }
 }

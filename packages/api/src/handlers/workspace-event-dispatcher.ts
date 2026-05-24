@@ -9,8 +9,6 @@ import {
   persistWorkspaceEvent,
   type WorkspaceEventProcessResult,
 } from "../lib/workspace-events/processor.js";
-import { syncComputerTemplateSkillObjectToLiveComputers } from "../lib/computers/workspace-seed.js";
-
 interface SqsEvent {
   Records?: Array<{ messageId: string; body: string }>;
 }
@@ -90,39 +88,6 @@ export async function processRecord(
   if (isWorkspaceAuditObjectKey(decodedKey)) {
     console.log("[workspace-event-dispatcher] ignored_audit_key", {
       key: decodedKey,
-    });
-    return null;
-  }
-
-  if (isComputerTemplateSkillObjectKey(decodedKey)) {
-    if (parsedBody["detail-type"] !== "Object Deleted") {
-      const head = await s3.send(
-        new HeadObjectCommand({
-          Bucket: bucket,
-          Key: decodedKey,
-        }),
-      );
-      objectEtag = head.ETag ?? objectEtag;
-      objectVersionId = head.VersionId ?? objectVersionId;
-      const suppress = head.Metadata?.["thinkwork-suppress-event"];
-      if (suppress === "true") {
-        console.log("[workspace-event-dispatcher] suppressed_template_sync", {
-          key: decodedKey,
-        });
-        return null;
-      }
-    }
-
-    const result = await syncComputerTemplateSkillObjectToLiveComputers({
-      key: decodedKey,
-      detailType: parsedBody["detail-type"] ?? "Object Created",
-      objectEtag,
-      objectVersionId,
-      sequencer,
-    });
-    console.log("[workspace-event-dispatcher] template_skill_sync", {
-      key: decodedKey,
-      result,
     });
     return null;
   }
@@ -209,10 +174,4 @@ export async function processRecord(
 
 function isWorkspaceAuditObjectKey(key: string): boolean {
   return /\/workspace(?:\/[^/]+)*\/events\/audit(?:\/|$)/.test(key);
-}
-
-function isComputerTemplateSkillObjectKey(key: string): boolean {
-  return /^tenants\/[^/]+\/agents\/_catalog\/[^/]+\/workspace\/skills\/.+/.test(
-    key,
-  );
 }

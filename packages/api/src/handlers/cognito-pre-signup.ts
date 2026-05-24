@@ -53,9 +53,7 @@ export async function handler(event: PreSignUpEvent): Promise<PreSignUpEvent> {
   const nativeUser = existing.Users?.find(
     (u) =>
       u.UserStatus !== "EXTERNAL_PROVIDER" &&
-      u.Attributes?.some(
-        (a) => a.Name === "email" && a.Value === email,
-      ),
+      u.Attributes?.some((a) => a.Name === "email" && a.Value === email),
   );
 
   // Extract provider info from the federated userName (e.g., "google_12345")
@@ -68,7 +66,9 @@ export async function handler(event: PreSignUpEvent): Promise<PreSignUpEvent> {
   const rawPrefix = event.userName.includes("_")
     ? event.userName.split("_")[0]
     : null;
-  const providerName = rawPrefix ? (PROVIDER_NAME_MAP[rawPrefix] ?? rawPrefix) : null;
+  const providerName = rawPrefix
+    ? (PROVIDER_NAME_MAP[rawPrefix] ?? rawPrefix)
+    : null;
   const providerUserId = event.userName.includes("_")
     ? event.userName.split("_").slice(1).join("_")
     : null;

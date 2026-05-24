@@ -4,7 +4,8 @@ import { Route as MemoryLayoutRoute } from "../src/routes/_authed/_shell/memory"
 import { Route as MemoryIndexRoute } from "../src/routes/_authed/_shell/memory.index";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+  const actual =
+    await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
     Outlet: () => <div data-testid="outlet" />,
@@ -35,7 +36,10 @@ describe("Memory layout (U4)", () => {
     const Component = MemoryLayoutRoute.options.component!;
     render(<Component />);
     expect(usePageHeaderActions).toHaveBeenCalledTimes(1);
-    const arg = usePageHeaderActions.mock.calls[0]![0] as Record<string, unknown>;
+    const arg = usePageHeaderActions.mock.calls[0]![0] as Record<
+      string,
+      unknown
+    >;
     expect(arg).toEqual({ title: "Memory" });
     // Hard guard against re-introducing a global-header tab push.
     expect(Object.prototype.hasOwnProperty.call(arg, "tabs")).toBe(false);

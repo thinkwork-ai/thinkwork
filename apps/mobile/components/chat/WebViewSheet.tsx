@@ -40,16 +40,38 @@ export const WebViewSheet = forwardRef<WebViewSheetRef>((_, ref) => {
     setCurrentTitle("");
   };
 
-  const displayHost = url ? (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } })() : "";
+  const displayHost = url
+    ? (() => {
+        try {
+          return new URL(url).hostname.replace(/^www\./, "");
+        } catch {
+          return url;
+        }
+      })()
+    : "";
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
-      <View style={{ flex: 1, backgroundColor: isDark ? "#1c1c1e" : "#ffffff", paddingTop: insets.top }}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={handleClose}
+    >
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
+          paddingTop: insets.top,
+        }}
+      >
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
           <View className="flex-row items-center gap-2 flex-1 mr-2">
             <Globe size={16} color={colors.mutedForeground} />
-            <Text className="text-sm text-neutral-500 dark:text-neutral-400 flex-1" numberOfLines={1}>
+            <Text
+              className="text-sm text-neutral-500 dark:text-neutral-400 flex-1"
+              numberOfLines={1}
+            >
               {currentTitle || displayHost}
             </Text>
           </View>

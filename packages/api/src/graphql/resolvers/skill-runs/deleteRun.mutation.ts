@@ -11,44 +11,43 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import {
-	db, eq, and,
-	skillRuns,
-} from "../../utils.js";
+import { db, eq, and, skillRuns } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 
 export class DeleteRunError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "DeleteRunError";
-	}
+  constructor(message: string) {
+    super(message);
+    this.name = "DeleteRunError";
+  }
 }
 
 export async function deleteRun(
-	_parent: unknown,
-	args: { runId: string },
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: { runId: string },
+  ctx: GraphQLContext,
 ): Promise<boolean> {
-	const { userId, tenantId } = await resolveCaller(ctx);
-	if (!userId || !tenantId) {
-		throw new DeleteRunError("unauthorized");
-	}
+  const { userId, tenantId } = await resolveCaller(ctx);
+  if (!userId || !tenantId) {
+    throw new DeleteRunError("unauthorized");
+  }
 
-	const [row] = await db
-		.select()
-		.from(skillRuns)
-		.where(and(eq(skillRuns.id, args.runId), eq(skillRuns.tenant_id, tenantId)));
-	if (!row) {
-		// Opaque 404 — no cross-tenant existence leak.
-		throw new DeleteRunError("run not found");
-	}
+  const [row] = await db
+    .select()
+    .from(skillRuns)
+    .where(
+      and(eq(skillRuns.id, args.runId), eq(skillRuns.tenant_id, tenantId)),
+    );
+  if (!row) {
+    // Opaque 404 — no cross-tenant existence leak.
+    throw new DeleteRunError("run not found");
+  }
 
-	// v1: invoker can delete their own run. Tenant-admin deletion for
-	// another user's run lands when the admin group claim is wired (Unit 7).
-	if (row.invoker_user_id !== userId) {
-		throw new DeleteRunError("run not found");
-	}
+  // v1: invoker can delete their own run. Tenant-admin deletion for
+  // another user's run lands when the admin group claim is wired (Unit 7).
+  if (row.invoker_user_id !== userId) {
+    throw new DeleteRunError("run not found");
+  }
 
-	await db.delete(skillRuns).where(eq(skillRuns.id, args.runId));
-	return true;
+  await db.delete(skillRuns).where(eq(skillRuns.id, args.runId));
+  return true;
 }

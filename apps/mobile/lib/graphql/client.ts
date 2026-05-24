@@ -1,4 +1,9 @@
-import { Client, cacheExchange, fetchExchange, subscriptionExchange } from "urql";
+import {
+  Client,
+  cacheExchange,
+  fetchExchange,
+  subscriptionExchange,
+} from "urql";
 import { randomUUID } from "expo-crypto";
 import { setAuthToken as setSdkAuthToken } from "@thinkwork/react-native-sdk";
 
@@ -7,7 +12,12 @@ const GRAPHQL_URL = process.env.EXPO_PUBLIC_GRAPHQL_URL || "";
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 const GRAPHQL_WS_URL = process.env.EXPO_PUBLIC_GRAPHQL_WS_URL || "";
 
-console.log("[AppSync WS] Config:", { GRAPHQL_WS_URL: GRAPHQL_WS_URL ? `${GRAPHQL_WS_URL.slice(0, 40)}...` : "(empty)", hasApiKey: !!GRAPHQL_API_KEY });
+console.log("[AppSync WS] Config:", {
+  GRAPHQL_WS_URL: GRAPHQL_WS_URL
+    ? `${GRAPHQL_WS_URL.slice(0, 40)}...`
+    : "(empty)",
+  hasApiKey: !!GRAPHQL_API_KEY,
+});
 
 // ---------------------------------------------------------------------------
 // Token management — updated by AuthProvider after sign-in
@@ -27,8 +37,12 @@ function getAuthHeader() {
   // AppSync WS auth requires the *regular* API host (not realtime host)
   // e.g. "xyz.appsync-api.us-east-1.amazonaws.com" not "xyz.appsync-realtime-api..."
   const appsyncHost = GRAPHQL_WS_URL
-    ? new URL(GRAPHQL_WS_URL.replace("wss://", "https://").replace("ws://", "http://")).host
-        .replace(".appsync-realtime-api.", ".appsync-api.")
+    ? new URL(
+        GRAPHQL_WS_URL.replace("wss://", "https://").replace(
+          "ws://",
+          "http://",
+        ),
+      ).host.replace(".appsync-realtime-api.", ".appsync-api.")
     : new URL(GRAPHQL_URL).host;
   return cachedToken
     ? { Authorization: cachedToken, host: appsyncHost }
@@ -64,7 +78,7 @@ function ensureConnection(): Promise<void> {
     return Promise.resolve();
   }
 
-  if (sharedWs && (sharedWs.readyState === WebSocket.CONNECTING)) {
+  if (sharedWs && sharedWs.readyState === WebSocket.CONNECTING) {
     return new Promise((resolve) => pendingStarts.push(resolve));
   }
 
@@ -100,7 +114,10 @@ function ensureConnection(): Promise<void> {
 
       switch (msg.type) {
         case "connection_ack":
-          console.log("[AppSync WS] Connection acknowledged, timeout:", msg.payload?.connectionTimeoutMs);
+          console.log(
+            "[AppSync WS] Connection acknowledged, timeout:",
+            msg.payload?.connectionTimeoutMs,
+          );
           connectionTimeoutMs = msg.payload?.connectionTimeoutMs || 300000;
           wsReady = true;
           resetKaTimer();
@@ -114,7 +131,14 @@ function ensureConnection(): Promise<void> {
           break;
 
         case "data":
-          console.log("[AppSync WS] Data received for sub:", msg.id, "active:", activeSubs.has(msg.id), "payload:", JSON.stringify(msg.payload).slice(0, 200));
+          console.log(
+            "[AppSync WS] Data received for sub:",
+            msg.id,
+            "active:",
+            activeSubs.has(msg.id),
+            "payload:",
+            JSON.stringify(msg.payload).slice(0, 200),
+          );
           if (msg.id && activeSubs.has(msg.id)) {
             activeSubs.get(msg.id)!.next(msg.payload);
           }
@@ -126,11 +150,20 @@ function ensureConnection(): Promise<void> {
             // NewMessageEvent when a notify mutation fires with empty payload). Log and ignore
             // instead of killing the subscription.
             const errors = msg.payload?.errors ?? msg.payload;
-            const isNullFieldError = Array.isArray(errors) && errors.every(
-              (e: any) => typeof e?.message === "string" && e.message.includes("Cannot return null for non-nullable type")
-            );
+            const isNullFieldError =
+              Array.isArray(errors) &&
+              errors.every(
+                (e: any) =>
+                  typeof e?.message === "string" &&
+                  e.message.includes(
+                    "Cannot return null for non-nullable type",
+                  ),
+              );
             if (isNullFieldError) {
-              console.warn("[AppSync WS] Ignoring null-field subscription error for sub:", msg.id);
+              console.warn(
+                "[AppSync WS] Ignoring null-field subscription error for sub:",
+                msg.id,
+              );
             } else {
               console.error("[AppSync WS] Subscription error:", msg.payload);
               activeSubs.get(msg.id)!.error(msg.payload);
@@ -147,7 +180,10 @@ function ensureConnection(): Promise<void> {
           break;
 
         case "connection_error":
-          console.error("[AppSync WS] Connection error:", JSON.stringify(msg.payload));
+          console.error(
+            "[AppSync WS] Connection error:",
+            JSON.stringify(msg.payload),
+          );
           wsReady = false;
           // Reject all pending
           const rejects = pendingStarts.splice(0);
@@ -172,9 +208,10 @@ function ensureConnection(): Promise<void> {
   });
 }
 
-function createAppSyncSubscription(
-  request: { query: string; variables?: Record<string, unknown> },
-) {
+function createAppSyncSubscription(request: {
+  query: string;
+  variables?: Record<string, unknown>;
+}) {
   return {
     subscribe(sink: Sink) {
       const subId = randomUUID();
@@ -202,7 +239,12 @@ function createAppSyncSubscription(
               },
             },
           };
-          console.log("[AppSync WS] Registering subscription:", subId, "vars:", request.variables);
+          console.log(
+            "[AppSync WS] Registering subscription:",
+            subId,
+            "vars:",
+            request.variables,
+          );
           sharedWs?.send(JSON.stringify(startMsg));
         })
         .catch((err) => {

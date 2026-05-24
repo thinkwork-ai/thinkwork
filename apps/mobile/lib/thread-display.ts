@@ -13,7 +13,9 @@ interface ThreadLike {
   metadata?: unknown;
 }
 
-export function getExternalProviderLabel(_thread: ThreadLike | null | undefined): string | null {
+export function getExternalProviderLabel(
+  _thread: ThreadLike | null | undefined,
+): string | null {
   return null;
 }
 
@@ -21,6 +23,8 @@ export function getExternalProviderLabel(_thread: ThreadLike | null | undefined)
  * The label to show in the nav header for a thread — the external provider
  * label when applicable, falling back to the thread's own title.
  */
-export function getThreadHeaderLabel(thread: ThreadLike | null | undefined): string {
+export function getThreadHeaderLabel(
+  thread: ThreadLike | null | undefined,
+): string {
   return getExternalProviderLabel(thread) ?? thread?.title ?? "";
 }

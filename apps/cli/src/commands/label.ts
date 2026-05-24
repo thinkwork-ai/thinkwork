@@ -12,7 +12,11 @@ import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
 import { isJsonMode, logStderr, printJson, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const ThreadLabelsDoc = graphql(`
   query CliLabelList($tenantId: ID!) {
@@ -101,15 +105,26 @@ async function resolveLabelContext(opts: LabelCliOptions) {
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
-  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({ stage, region });
+  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({
+    stage,
+    region,
+  });
 
   const flagOrEnv = opts.tenant ?? process.env.THINKWORK_TENANT;
 
   if (flagOrEnv) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
-      return { stage, region, client, tenantId: session.tenantId, tenantSlug: flagOrEnv };
+      return {
+        stage,
+        region,
+        client,
+        tenantId: session.tenantId,
+        tenantSlug: flagOrEnv,
+      };
     }
-    const data = await gqlQuery(client, LabelTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, LabelTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
@@ -134,7 +149,9 @@ async function resolveLabelContext(opts: LabelCliOptions) {
   }
 
   if (ctxTenantSlug) {
-    const data = await gqlQuery(client, LabelTenantBySlugDoc, { slug: ctxTenantSlug });
+    const data = await gqlQuery(client, LabelTenantBySlugDoc, {
+      slug: ctxTenantSlug,
+    });
     if (data.tenantBySlug) {
       return {
         stage,
@@ -152,7 +169,9 @@ async function resolveLabelContext(opts: LabelCliOptions) {
 
 async function runLabelList(opts: LabelCliOptions): Promise<void> {
   const ctx = await resolveLabelContext(opts);
-  const data = await gqlQuery(ctx.client, ThreadLabelsDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, ThreadLabelsDoc, {
+    tenantId: ctx.tenantId,
+  });
   const items = data.threadLabels ?? [];
 
   if (isJsonMode()) {
@@ -228,7 +247,9 @@ async function runLabelUpdate(id: string, opts: UpdateOptions): Promise<void> {
   if (opts.description !== undefined) input.description = opts.description;
 
   if (Object.keys(input).length === 0) {
-    printError("Nothing to update. Pass at least one of --name, --color, --description.");
+    printError(
+      "Nothing to update. Pass at least one of --name, --color, --description.",
+    );
     process.exit(1);
   }
 
@@ -247,7 +268,9 @@ async function runLabelDelete(id: string, opts: DeleteOptions): Promise<void> {
 
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to delete without --yes in a non-interactive session.");
+      printError(
+        "Refusing to delete without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");

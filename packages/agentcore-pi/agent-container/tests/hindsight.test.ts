@@ -26,9 +26,10 @@ interface ScriptedResponse {
   throw?: Error;
 }
 
-function scriptedFetch(
-  responses: ScriptedResponse[],
-): { fetchImpl: typeof fetch; calls: FetchCall[] } {
+function scriptedFetch(responses: ScriptedResponse[]): {
+  fetchImpl: typeof fetch;
+  calls: FetchCall[];
+} {
   const calls: FetchCall[] = [];
   let i = 0;
   const fetchImpl = (async (
@@ -109,10 +110,9 @@ describe("hindsight_recall — happy path", () => {
       },
     ]);
     const tool = buildRecallTool(makeContext(fetchImpl));
-    const result = await tool.execute(
-      "call-1",
-      { query: "preferences" } as any,
-    );
+    const result = await tool.execute("call-1", {
+      query: "preferences",
+    } as any);
     const text = (result.content[0]! as { text: string }).text;
     expect(text).toContain("1. First memory");
     expect(text).toContain("2. Second memory");
@@ -204,11 +204,15 @@ describe("retry semantics", () => {
       { throw: new Error("ECONNRESET") },
     ]);
     const tool = buildRecallTool(makeContext(fetchImpl));
-    const promise = tool.execute("call-7", { query: "x" } as any).catch((e) => e);
+    const promise = tool
+      .execute("call-7", { query: "x" } as any)
+      .catch((e) => e);
     await vi.advanceTimersByTimeAsync(20_000);
     const err = await promise;
     expect(err).toBeInstanceOf(HindsightToolError);
-    expect((err as Error).message).toContain("transport error after 4 attempts");
+    expect((err as Error).message).toContain(
+      "transport error after 4 attempts",
+    );
     expect(calls).toHaveLength(4);
   });
 
@@ -218,9 +222,9 @@ describe("retry semantics", () => {
       { status: 200, body: { memory_units: [] } },
     ]);
     const tool = buildRecallTool(makeContext(fetchImpl));
-    await expect(
-      tool.execute("call-8", { query: "x" } as any),
-    ).rejects.toThrow(/Hindsight 400/);
+    await expect(tool.execute("call-8", { query: "x" } as any)).rejects.toThrow(
+      /Hindsight 400/,
+    );
     expect(calls).toHaveLength(1);
   });
 
@@ -232,7 +236,9 @@ describe("retry semantics", () => {
       { status: 503 },
     ]);
     const tool = buildRecallTool(makeContext(fetchImpl));
-    const promise = tool.execute("call-9", { query: "x" } as any).catch((e) => e);
+    const promise = tool
+      .execute("call-9", { query: "x" } as any)
+      .catch((e) => e);
     await vi.advanceTimersByTimeAsync(20_000);
     const err = await promise;
     expect(err).toBeInstanceOf(HindsightToolError);
@@ -245,9 +251,9 @@ describe("fail-closed validation", () => {
   it("recall throws when query is empty", async () => {
     const { fetchImpl } = scriptedFetch([{ status: 200, body: {} }]);
     const tool = buildRecallTool(makeContext(fetchImpl));
-    await expect(
-      tool.execute("call-10", { query: "" } as any),
-    ).rejects.toThrow(HindsightToolError);
+    await expect(tool.execute("call-10", { query: "" } as any)).rejects.toThrow(
+      HindsightToolError,
+    );
   });
 
   it("reflect throws when query is empty", async () => {
@@ -330,13 +336,13 @@ describe("AbortSignal composition", () => {
       init?: RequestInit,
     ): Promise<Response> => {
       observedSignal = init?.signal ?? undefined;
-      return new Response(JSON.stringify({ memory_units: [] }), { status: 200 });
+      return new Response(JSON.stringify({ memory_units: [] }), {
+        status: 200,
+      });
     }) as typeof fetch;
 
     const callerController = new AbortController();
-    const tool = buildRecallTool(
-      makeContext(fetchImpl, { timeoutMs: 100 }),
-    );
+    const tool = buildRecallTool(makeContext(fetchImpl, { timeoutMs: 100 }));
     await tool.execute(
       "call-17",
       { query: "x" } as any,

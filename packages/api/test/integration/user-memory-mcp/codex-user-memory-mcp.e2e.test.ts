@@ -3,7 +3,8 @@ import { McpJsonRpcClient } from "./_harness/mcp-json-rpc.js";
 
 const url = process.env.USER_MEMORY_MCP_URL;
 const token = process.env.USER_MEMORY_MCP_TOKEN;
-const requireRecallMatch = process.env.USER_MEMORY_MCP_REQUIRE_RECALL_MATCH === "true";
+const requireRecallMatch =
+  process.env.USER_MEMORY_MCP_REQUIRE_RECALL_MATCH === "true";
 
 const missing = [
   ["USER_MEMORY_MCP_URL", url],
@@ -31,7 +32,9 @@ describe("Codex direct User Memory MCP E2E", () => {
 
     const listed = await client.listTools();
     const toolNames = listed.tools.map((tool) => tool.name);
-    expect(toolNames).toEqual(expect.arrayContaining(["retain", "memory_recall", "wiki_search"]));
+    expect(toolNames).toEqual(
+      expect.arrayContaining(["retain", "memory_recall", "wiki_search"]),
+    );
 
     const runId = `codex-user-memory-mcp-e2e-${Date.now()}`;
     const sentinel = `${runId} user scoped retention probe`;
@@ -66,7 +69,8 @@ async function pollForRecall(client: McpJsonRpcClient, sentinel: string) {
       limit: 5,
     });
     if (JSON.stringify(lastResult).includes(sentinel)) return lastResult;
-    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 10_000));
+    if (i < attempts - 1)
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
   }
   return lastResult;
 }

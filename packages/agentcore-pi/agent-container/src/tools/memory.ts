@@ -164,9 +164,7 @@ function formatRecall(records: NormalisedRecord[]): string {
  * immediate searchability, and fires a `CreateEvent` so the
  * conversational extraction strategies can process it later.
  */
-export function buildRememberTool(
-  context: MemoryToolsContext,
-): AgentTool<any> {
+export function buildRememberTool(context: MemoryToolsContext): AgentTool<any> {
   return {
     name: "remember",
     label: "Remember",
@@ -176,7 +174,8 @@ export function buildRememberTool(
       "The memory persists across all future conversations for this user.",
     parameters: Type.Object({
       fact: Type.String({
-        description: "The fact or preference to remember. Be specific and concise.",
+        description:
+          "The fact or preference to remember. Be specific and concise.",
       }),
       category: Type.Optional(
         Type.String({
@@ -228,7 +227,9 @@ export function buildRememberTool(
           payload: [
             {
               conversational: {
-                content: { text: `The user asked me to remember: ${trimmedFact}` },
+                content: {
+                  text: `The user asked me to remember: ${trimmedFact}`,
+                },
                 role: "USER",
               },
             },
@@ -285,7 +286,10 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
           "recall called with an empty query parameter.",
         );
       }
-      const topK = Math.max(1, Math.min(top_k ?? MAX_RECALL_RECORDS, MAX_RECALL_RECORDS));
+      const topK = Math.max(
+        1,
+        Math.min(top_k ?? MAX_RECALL_RECORDS, MAX_RECALL_RECORDS),
+      );
       const namespace = namespaceFor(context.userId);
 
       let records: NormalisedRecord[] = [];

@@ -69,9 +69,9 @@ export async function transformApplet(
   return { ok: true, compiledModuleUrl, cacheKey, cached: false };
 }
 
-export function compileAppletSource(source: string):
-  | { ok: true; code: string }
-  | TransformAppletFailure {
+export function compileAppletSource(
+  source: string,
+): { ok: true; code: string } | TransformAppletFailure {
   try {
     const transformed = sucraseTransform(source, {
       transforms: ["typescript", "jsx"],
@@ -91,32 +91,35 @@ function compileAppletSourceInWorker(
   version: string | number,
   appId?: string,
 ) {
-  return new Promise<
-    { ok: true; code: string } | TransformAppletFailure
-  >((resolve) => {
-    const worker = new Worker(new URL("./sucrase-worker.ts", import.meta.url), {
-      type: "module",
-    });
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      worker.terminate();
-      if (event.data.ok && event.data.compiledCode) {
-        resolve({ ok: true, code: event.data.compiledCode });
-      } else {
+  return new Promise<{ ok: true; code: string } | TransformAppletFailure>(
+    (resolve) => {
+      const worker = new Worker(
+        new URL("./sucrase-worker.ts", import.meta.url),
+        {
+          type: "module",
+        },
+      );
+      worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+        worker.terminate();
+        if (event.data.ok && event.data.compiledCode) {
+          resolve({ ok: true, code: event.data.compiledCode });
+        } else {
+          resolve({
+            ok: false,
+            error: event.data.error ?? { message: "Applet transform failed" },
+          });
+        }
+      };
+      worker.onerror = (event) => {
+        worker.terminate();
         resolve({
           ok: false,
-          error: event.data.error ?? { message: "Applet transform failed" },
+          error: { message: event.message || "Applet transform worker failed" },
         });
-      }
-    };
-    worker.onerror = (event) => {
-      worker.terminate();
-      resolve({
-        ok: false,
-        error: { message: event.message || "Applet transform worker failed" },
-      });
-    };
-    worker.postMessage({ source, appId, version });
-  });
+      };
+      worker.postMessage({ source, appId, version });
+    },
+  );
 }
 
 function createCompiledModuleUrl(code: string) {

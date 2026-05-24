@@ -24,16 +24,16 @@ import type { GraphQLContext } from "../../context.js";
  * upstream by memoryRecords/memorySearch/etc.
  */
 async function resolveWikiPagesForMemory(
-	parent: any,
-	_args: unknown,
-	ctx: GraphQLContext,
+  parent: any,
+  _args: unknown,
+  ctx: GraphQLContext,
 ): Promise<unknown[]> {
-	const memoryRecordId =
-		parent?.memoryRecordId ?? parent?.id ?? parent?.memory_unit_id;
-	if (!memoryRecordId || typeof memoryRecordId !== "string") return [];
-	return ctx.loaders.wikiPagesByMemoryRecord.load(memoryRecordId);
+  const memoryRecordId =
+    parent?.memoryRecordId ?? parent?.id ?? parent?.memory_unit_id;
+  if (!memoryRecordId || typeof memoryRecordId !== "string") return [];
+  return ctx.loaders.wikiPagesByMemoryRecord.load(memoryRecordId);
 }
 
 export const memoryRecordTypeResolvers = {
-	wikiPages: resolveWikiPagesForMemory,
+  wikiPages: resolveWikiPagesForMemory,
 };

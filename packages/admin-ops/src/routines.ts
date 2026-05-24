@@ -150,7 +150,9 @@ export async function triggerRoutineRun(
   client: AdminOpsClient,
   input: TriggerRoutineRunInput,
 ): Promise<RoutineExecutionLite> {
-  const data = await client.graphql<{ triggerRoutineRun: RoutineExecutionLite }>(
+  const data = await client.graphql<{
+    triggerRoutineRun: RoutineExecutionLite;
+  }>(
     `mutation($routineId: ID!, $input: AWSJSON) {
        triggerRoutineRun(routineId: $routineId, input: $input) {
          id
@@ -174,10 +176,7 @@ export async function triggerRoutineRun(
 export interface VisibilityCheckResult {
   ok: boolean;
   /** Populated when ok=false. */
-  reason?:
-    | "not_found"
-    | "private_to_other_agent"
-    | "different_tenant";
+  reason?: "not_found" | "private_to_other_agent" | "different_tenant";
 }
 
 export function checkRoutineVisibility(
@@ -197,7 +196,10 @@ export function checkRoutineVisibility(
   if (routine.visibility === "tenant_shared") {
     return { ok: true };
   }
-  if (routine.owningAgentId !== null && routine.owningAgentId !== caller.agentId) {
+  if (
+    routine.owningAgentId !== null &&
+    routine.owningAgentId !== caller.agentId
+  ) {
     return { ok: false, reason: "private_to_other_agent" };
   }
   return { ok: true };

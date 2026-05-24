@@ -58,11 +58,13 @@ describe("mergeComputerThreadChunk", () => {
       { seq: 5, text: " stream" },
     ];
 
-    expect(mergeComputerThreadChunk(chunks, { seq: 1, text: "stale" })).toEqual([
-      { seq: 1, text: "stale" },
-      { seq: 4, text: "current" },
-      { seq: 5, text: " stream" },
-    ]);
+    expect(mergeComputerThreadChunk(chunks, { seq: 1, text: "stale" })).toEqual(
+      [
+        { seq: 1, text: "stale" },
+        { seq: 4, text: "current" },
+        { seq: 5, text: " stream" },
+      ],
+    );
   });
 
   it("keeps live chunks across same-thread rerenders until an explicit reset or thread change", () => {

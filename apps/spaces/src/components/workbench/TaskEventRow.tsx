@@ -24,7 +24,9 @@ export function TaskEventRow({ title, detail, status }: TaskEventRowProps) {
           </Badge>
         </div>
         {detail ? (
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{detail}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {detail}
+          </p>
         ) : null}
       </div>
       <Button type="button" variant="ghost" size="icon" disabled>

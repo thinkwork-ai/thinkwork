@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { View, ScrollView, Pressable, Alert, ActivityIndicator } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRoutine } from "@/lib/hooks/use-routines";
 import { Link, Clock, ChevronRight, Plus } from "lucide-react-native";
@@ -51,19 +57,19 @@ function TriggerCard({
 
   const timezoneAbbr =
     !isWebhook && trigger.timezone
-      ? new Intl.DateTimeFormat("en-US", {
+      ? (new Intl.DateTimeFormat("en-US", {
           timeZoneName: "short",
           timeZone: trigger.timezone,
         })
           .formatToParts(new Date())
-          .find((p) => p.type === "timeZoneName")?.value ?? ""
+          .find((p) => p.type === "timeZoneName")?.value ?? "")
       : "";
 
   const title = isWebhook
     ? "Webhook"
     : trigger.scheduleLabel
       ? `${trigger.scheduleLabel}${timezoneAbbr ? ` ${timezoneAbbr}` : ""}`
-      : trigger.schedule ?? "Schedule";
+      : (trigger.schedule ?? "Schedule");
 
   const subtitle = trigger.lastTriggeredAt
     ? `Last triggered ${formatRelativeTime(trigger.lastTriggeredAt)}`
@@ -110,25 +116,24 @@ export default function TriggersScreen() {
   const handleAddWebhook = async () => {
     if (!id) return;
     // TODO: Migrate createWebhookTrigger to GraphQL
-    Alert.alert("Not Implemented", "Webhook trigger creation not yet migrated to GraphQL.");
+    Alert.alert(
+      "Not Implemented",
+      "Webhook trigger creation not yet migrated to GraphQL.",
+    );
   };
 
   const handleAddTrigger = () => {
-    Alert.alert(
-      "Add Trigger",
-      "What type of trigger would you like to add?",
-      [
-        {
-          text: "Webhook",
-          onPress: handleAddWebhook,
-        },
-        {
-          text: "Schedule",
-          onPress: () => router.push(`/routines/${id}/triggers/add-schedule`),
-        },
-        { text: "Cancel", style: "cancel" },
-      ],
-    );
+    Alert.alert("Add Trigger", "What type of trigger would you like to add?", [
+      {
+        text: "Webhook",
+        onPress: handleAddWebhook,
+      },
+      {
+        text: "Schedule",
+        onPress: () => router.push(`/routines/${id}/triggers/add-schedule`),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   return (
@@ -145,7 +150,10 @@ export default function TriggersScreen() {
           ) : (
             <>
               <Plus size={18} color={colors.primary} />
-              <Text style={{ color: colors.primary }} className="font-semibold text-base">
+              <Text
+                style={{ color: colors.primary }}
+                className="font-semibold text-base"
+              >
                 Add
               </Text>
             </>
@@ -162,7 +170,8 @@ export default function TriggersScreen() {
           ) : triggers.length === 0 ? (
             <View className="items-center py-12 px-6">
               <Muted className="text-center">
-                No triggers yet. Add a webhook or schedule to automatically run this routine.
+                No triggers yet. Add a webhook or schedule to automatically run
+                this routine.
               </Muted>
               <Pressable
                 onPress={handleAddTrigger}
@@ -170,7 +179,10 @@ export default function TriggersScreen() {
                 style={{ borderColor: colors.primary }}
               >
                 <Plus size={16} color={colors.primary} />
-                <Text style={{ color: colors.primary }} className="font-semibold">
+                <Text
+                  style={{ color: colors.primary }}
+                  className="font-semibold"
+                >
                   Add Trigger
                 </Text>
               </Pressable>
@@ -182,7 +194,9 @@ export default function TriggersScreen() {
                   key={trigger.id}
                   trigger={trigger}
                   isLast={idx === triggers.length - 1}
-                  onPress={() => router.push(`/routines/${id}/triggers/${trigger.id}`)}
+                  onPress={() =>
+                    router.push(`/routines/${id}/triggers/${trigger.id}`)
+                  }
                 />
               ))}
             </View>

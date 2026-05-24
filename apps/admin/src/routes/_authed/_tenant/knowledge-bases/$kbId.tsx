@@ -6,25 +6,13 @@ import {
 } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  RefreshCw,
-  Trash2,
-  Upload,
-  FileText,
-  Loader2,
-  X,
-} from "lucide-react";
+import { RefreshCw, Trash2, Upload, FileText, Loader2, X } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { PageLayout } from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   KnowledgeBaseDetailQuery,
   UpdateKnowledgeBaseMutation,
@@ -39,9 +27,7 @@ import {
 } from "@/lib/knowledge-base-api";
 import { relativeTime } from "@/lib/utils";
 
-export const Route = createFileRoute(
-  "/_authed/_tenant/knowledge-bases/$kbId",
-)({
+export const Route = createFileRoute("/_authed/_tenant/knowledge-bases/$kbId")({
   beforeLoad: ({ params }) => {
     throw redirect({
       to: "/knowledge/knowledge-bases/$kbId",
@@ -172,185 +158,197 @@ export function KnowledgeBaseDetailPage({
 
   const header = (
     <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
-              {kb.name}
-            </h1>
-            <p className="ml-auto text-sm text-muted-foreground">{kb.slug}</p>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
+          {kb.name}
+        </h1>
+        <p className="ml-auto text-sm text-muted-foreground">{kb.slug}</p>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <StatusBadge status={kb.status} />
+        {kb.lastSyncStatus && (
+          <StatusBadge status={kb.lastSyncStatus.toLowerCase()} />
+        )}
+        {confirmDelete ? (
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-sm text-muted-foreground">
+              Delete this KB?
+            </span>
+            <Button variant="destructive" size="sm" onClick={handleDelete}>
+              Confirm
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancel
+            </Button>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <StatusBadge status={kb.status} />
-            {kb.lastSyncStatus && (
-              <StatusBadge status={kb.lastSyncStatus.toLowerCase()} />
-            )}
-            {confirmDelete ? (
-              <div className="flex items-center gap-2 ml-2">
-                <span className="text-sm text-muted-foreground">Delete this KB?</span>
-                <Button variant="destructive" size="sm" onClick={handleDelete}>
-                  Confirm
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setConfirmDelete(true)}
-              >
-                <Trash2 className="h-3.5 w-3.5 mr-1" />
-                Delete
-              </Button>
-            )}
-          </div>
-        </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            Delete
+          </Button>
+        )}
+      </div>
+    </div>
   );
 
   const content = (
-      <div className="space-y-6">
-        {/* Description */}
-        {kb.description && (
-          <p className="text-sm text-muted-foreground">{kb.description}</p>
-        )}
+    <div className="space-y-6">
+      {/* Description */}
+      {kb.description && (
+        <p className="text-sm text-muted-foreground">{kb.description}</p>
+      )}
 
-        {/* Error message */}
-        {kb.errorMessage && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {kb.errorMessage}
-          </div>
-        )}
+      {/* Error message */}
+      {kb.errorMessage && (
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          {kb.errorMessage}
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Documents Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle>Documents</CardTitle>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".txt,.md,.html,.doc,.docx,.csv,.xls,.xlsx,.pdf"
-                  className="hidden"
-                  onChange={(e) => handleUpload(e.target.files)}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                  ) : (
-                    <Upload className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Upload
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-1 p-0 pb-2">
-              {uploadError && (
-                <div className="mx-4 mt-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
-                  {uploadError}
-                </div>
-              )}
-              {loadingDocs ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading...
-                </div>
-              ) : docs.length === 0 ? (
-                <p className="text-sm text-muted-foreground px-4 py-3">
-                  No documents uploaded. Upload files to populate this knowledge base.
-                </p>
-              ) : (
-                docs.map((doc) => (
-                  <div
-                    key={doc.name}
-                    className="flex items-center justify-between px-4 py-2.5 hover:bg-accent transition-colors"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{doc.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatBytes(doc.size)}
-                          {doc.lastModified && ` \u00b7 ${relativeTime(doc.lastModified)}`}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDeleteDoc(doc.name)}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Sync Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle>Sync</CardTitle>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Documents Card */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Documents</CardTitle>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".txt,.md,.html,.doc,.docx,.csv,.xls,.xlsx,.pdf"
+                className="hidden"
+                onChange={(e) => handleUpload(e.target.files)}
+              />
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleSync}
-                disabled={syncing || kb.status === "syncing" || kb.status === "creating"}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
               >
-                {syncing || kb.status === "syncing" ? (
+                {uploading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                 ) : (
-                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
                 )}
-                Sync Now
+                Upload
               </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Status</p>
-                  <p className="font-medium capitalize">{kb.status}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Last Sync</p>
-                  <p className="font-medium">
-                    {kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : "Never"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Documents</p>
-                  <p className="font-medium">{kb.documentCount ?? 0}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Sync Status</p>
-                  <p className="font-medium capitalize">
-                    {kb.lastSyncStatus?.toLowerCase() ?? "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Chunking</p>
-                  <p className="font-medium">
-                    {kb.chunkingStrategy} ({kb.chunkSizeTokens} tokens,{" "}
-                    {kb.chunkOverlapPercent}% overlap)
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Embedding Model</p>
-                  <p className="font-medium text-xs truncate">{kb.embeddingModel}</p>
-                </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-1 p-0 pb-2">
+            {uploadError && (
+              <div className="mx-4 mt-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+                {uploadError}
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            )}
+            {loadingDocs ? (
+              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+              </div>
+            ) : docs.length === 0 ? (
+              <p className="text-sm text-muted-foreground px-4 py-3">
+                No documents uploaded. Upload files to populate this knowledge
+                base.
+              </p>
+            ) : (
+              docs.map((doc) => (
+                <div
+                  key={doc.name}
+                  className="flex items-center justify-between px-4 py-2.5 hover:bg-accent transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatBytes(doc.size)}
+                        {doc.lastModified &&
+                          ` \u00b7 ${relativeTime(doc.lastModified)}`}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleDeleteDoc(doc.name)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sync Card */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Sync</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSync}
+              disabled={
+                syncing || kb.status === "syncing" || kb.status === "creating"
+              }
+            >
+              {syncing || kb.status === "syncing" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Sync Now
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground">Status</p>
+                <p className="font-medium capitalize">{kb.status}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Last Sync</p>
+                <p className="font-medium">
+                  {kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : "Never"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Documents</p>
+                <p className="font-medium">{kb.documentCount ?? 0}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Sync Status</p>
+                <p className="font-medium capitalize">
+                  {kb.lastSyncStatus?.toLowerCase() ?? "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Chunking</p>
+                <p className="font-medium">
+                  {kb.chunkingStrategy} ({kb.chunkSizeTokens} tokens,{" "}
+                  {kb.chunkOverlapPercent}% overlap)
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Embedding Model</p>
+                <p className="font-medium text-xs truncate">
+                  {kb.embeddingModel}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    </div>
   );
 
   if (embedded) {
@@ -362,9 +360,5 @@ export function KnowledgeBaseDetailPage({
     );
   }
 
-  return (
-    <PageLayout header={header}>
-      {content}
-    </PageLayout>
-  );
+  return <PageLayout header={header}>{content}</PageLayout>;
 }

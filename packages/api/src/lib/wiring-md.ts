@@ -1,10 +1,7 @@
 import type { WiringSuggestion } from "../types/catalog-skill.js";
 
 export type WiringMdWarning = {
-  code:
-    | "missing_context_md"
-    | "multiple_context_md"
-    | "duplicate_id";
+  code: "missing_context_md" | "multiple_context_md" | "duplicate_id";
   message: string;
   title: string;
 };

@@ -16,7 +16,7 @@ import {
 } from "../src/mcp-proxy.js";
 
 describe("buildMcpProxyTool — inert mode", () => {
-  it("returns an AgentTool named \"mcp\" with executionMode=sequential", () => {
+  it('returns an AgentTool named "mcp" with executionMode=sequential', () => {
     const tool = buildMcpProxyTool({ mode: "inert" });
     expect(tool.name).toBe(MCP_PROXY_TOOL_NAME);
     expect(tool.name).toBe("mcp");
@@ -66,9 +66,9 @@ describe("buildMcpProxyTool — inert mode", () => {
 
   it("execute() throws even when called with each discriminator", async () => {
     const tool = buildMcpProxyTool({ mode: "inert" });
-    await expect(tool.execute("call-1", { list: true } as never)).rejects.toThrow(
-      McpProxyInertError,
-    );
+    await expect(
+      tool.execute("call-1", { list: true } as never),
+    ).rejects.toThrow(McpProxyInertError);
     await expect(
       tool.execute("call-2", { search: "foo" } as never),
     ).rejects.toThrow(McpProxyInertError);

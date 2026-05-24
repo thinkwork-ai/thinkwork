@@ -1,5 +1,12 @@
 import * as React from "react";
-import { View, Text, Pressable, ScrollView, Image, Linking } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  Image,
+  Linking,
+} from "react-native";
 import { useRouter, usePathname } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,7 +24,15 @@ interface NavItem {
   badge?: number;
 }
 
-function SidebarMenuButton({ item, isActive, colors }: { item: NavItem; isActive: boolean; colors: typeof COLORS.light }) {
+function SidebarMenuButton({
+  item,
+  isActive,
+  colors,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  colors: typeof COLORS.light;
+}) {
   const router = useRouter();
   const Icon = item.icon;
 
@@ -28,7 +43,7 @@ function SidebarMenuButton({ item, isActive, colors }: { item: NavItem; isActive
         "flex-row items-center gap-3 rounded-md px-3 py-2",
         isActive
           ? "bg-neutral-100 dark:bg-neutral-800"
-          : "active:bg-neutral-100 dark:active:bg-neutral-800"
+          : "active:bg-neutral-100 dark:active:bg-neutral-800",
       )}
     >
       <Icon
@@ -41,7 +56,7 @@ function SidebarMenuButton({ item, isActive, colors }: { item: NavItem; isActive
           "text-sm flex-1",
           isActive
             ? "font-medium text-neutral-900 dark:text-neutral-100"
-            : "text-neutral-500 dark:text-neutral-400"
+            : "text-neutral-500 dark:text-neutral-400",
         )}
       >
         {item.title}
@@ -72,7 +87,11 @@ export function Sidebar() {
 
   const isActive = (href: string) => {
     if (href === "/(tabs)" || href === "/(tabs)/index") {
-      return pathname === "/" || pathname === "/(tabs)" || pathname === "/(tabs)/index";
+      return (
+        pathname === "/" ||
+        pathname === "/(tabs)" ||
+        pathname === "/(tabs)/index"
+      );
     }
     return pathname.startsWith(href.replace("/(tabs)", ""));
   };
@@ -83,7 +102,10 @@ export function Sidebar() {
       style={{ paddingTop: insets.top }}
     >
       {/* Header */}
-      <View className="px-4 border-b border-neutral-200 dark:border-neutral-800 justify-center" style={{ height: 56 }}>
+      <View
+        className="px-4 border-b border-neutral-200 dark:border-neutral-800 justify-center"
+        style={{ height: 56 }}
+      >
         <View className="flex-row items-center gap-3">
           <Image
             source={require("@/assets/logo.png")}
@@ -94,7 +116,10 @@ export function Sidebar() {
             <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-100 leading-tight">
               ThinkWork
             </Text>
-            <Text className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight" numberOfLines={1}>
+            <Text
+              className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight"
+              numberOfLines={1}
+            >
               {user?.email ?? ""}
             </Text>
           </View>

@@ -79,8 +79,11 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const manualPagination = totalCount != null;
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    [],
+  );
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
 
   // Sync external filter → internal column filter
@@ -112,16 +115,21 @@ export function DataTable<TData, TValue>({
     onRowSelectionChange: enableRowSelection ? setRowSelection : undefined,
     enableRowSelection,
     globalFilterFn: "includesString",
-    ...(manualPagination ? {
-      manualPagination: true,
-      pageCount: Math.ceil(totalCount! / pageSize),
-      onPaginationChange: (updater: any) => {
-        const current = { pageIndex: controlledPageIndex ?? 0, pageSize };
-        const next = typeof updater === "function" ? updater(current) : updater;
-        if (next.pageIndex !== current.pageIndex) onPageChange?.(next.pageIndex);
-        if (next.pageSize !== current.pageSize) onPageSizeChange?.(next.pageSize);
-      },
-    } : {}),
+    ...(manualPagination
+      ? {
+          manualPagination: true,
+          pageCount: Math.ceil(totalCount! / pageSize),
+          onPaginationChange: (updater: any) => {
+            const current = { pageIndex: controlledPageIndex ?? 0, pageSize };
+            const next =
+              typeof updater === "function" ? updater(current) : updater;
+            if (next.pageIndex !== current.pageIndex)
+              onPageChange?.(next.pageIndex);
+            if (next.pageSize !== current.pageSize)
+              onPageSizeChange?.(next.pageSize);
+          },
+        }
+      : {}),
     state: {
       sorting,
       columnFilters,
@@ -130,12 +138,16 @@ export function DataTable<TData, TValue>({
       ...(filterValue !== undefined && !filterColumn
         ? { globalFilter: filterValue }
         : {}),
-      ...(manualPagination ? { pagination: { pageIndex: controlledPageIndex ?? 0, pageSize } } : {}),
+      ...(manualPagination
+        ? { pagination: { pageIndex: controlledPageIndex ?? 0, pageSize } }
+        : {}),
     },
     ...(filterValue !== undefined && !filterColumn
       ? { onGlobalFilterChange: () => {} }
       : {}),
-    ...(!manualPagination && pageSize > 0 ? { initialState: { pagination: { pageSize } } } : {}),
+    ...(!manualPagination && pageSize > 0
+      ? { initialState: { pagination: { pageSize } } }
+      : {}),
   });
 
   const colgroup = tableClassName?.includes("table-fixed") ? (
@@ -154,7 +166,9 @@ export function DataTable<TData, TValue>({
   ) : null;
 
   const headerRow = !hideHeader ? (
-    <TableHeader className={scrollable ? "sticky top-0 z-10 bg-background" : undefined}>
+    <TableHeader
+      className={scrollable ? "sticky top-0 z-10 bg-background" : undefined}
+    >
       {table.getHeaderGroups().map((headerGroup) => (
         <TableRow key={headerGroup.id}>
           {headerGroup.headers.map((header) => (
@@ -186,11 +200,15 @@ export function DataTable<TData, TValue>({
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
-              <TableCell key={cell.id} className={tableClassName?.includes("table-fixed") ? "overflow-hidden" : undefined}>
-                {flexRender(
-                  cell.column.columnDef.cell,
-                  cell.getContext(),
-                )}
+              <TableCell
+                key={cell.id}
+                className={
+                  tableClassName?.includes("table-fixed")
+                    ? "overflow-hidden"
+                    : undefined
+                }
+              >
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </TableCell>
             ))}
           </TableRow>
@@ -208,20 +226,38 @@ export function DataTable<TData, TValue>({
     </TableBody>
   );
 
-  const pagination = pageSize > 0 ? (
-    <DataTablePagination table={table} />
-  ) : null;
+  const pagination =
+    pageSize > 0 ? <DataTablePagination table={table} /> : null;
 
   return (
     <div className={scrollable ? "flex flex-col h-full" : undefined}>
       {toolbar && (
-        <div className={scrollable ? "shrink-0 flex items-center py-3" : "flex items-center py-3"}>
+        <div
+          className={
+            scrollable
+              ? "shrink-0 flex items-center py-3"
+              : "flex items-center py-3"
+          }
+        >
           {toolbar(table)}
         </div>
       )}
 
-      <div className={scrollable ? "flex-1 min-h-0 overflow-y-auto rounded-md border" : allowHorizontalScroll ? "overflow-x-auto rounded-md border" : "overflow-hidden rounded-md border"}>
-        <Table className={tableClassName} containerClassName={allowHorizontalScroll ? undefined : "overflow-hidden"}>
+      <div
+        className={
+          scrollable
+            ? "flex-1 min-h-0 overflow-y-auto rounded-md border"
+            : allowHorizontalScroll
+              ? "overflow-x-auto rounded-md border"
+              : "overflow-hidden rounded-md border"
+        }
+      >
+        <Table
+          className={tableClassName}
+          containerClassName={
+            allowHorizontalScroll ? undefined : "overflow-hidden"
+          }
+        >
           {colgroup}
           {headerRow}
           {bodyRows}
@@ -230,9 +266,7 @@ export function DataTable<TData, TValue>({
 
       {/* Pagination */}
       {pagination && (
-        <div className={scrollable ? "shrink-0" : undefined}>
-          {pagination}
-        </div>
+        <div className={scrollable ? "shrink-0" : undefined}>{pagination}</div>
       )}
     </div>
   );

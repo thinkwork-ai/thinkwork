@@ -23,7 +23,7 @@ function Skeleton({ className, style, ...props }: ViewProps) {
           duration: 1000,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     animation.start();
     return () => animation.stop();
@@ -33,7 +33,10 @@ function Skeleton({ className, style, ...props }: ViewProps) {
   if (Platform.OS === "web") {
     return (
       <View
-        className={cn("bg-neutral-200 dark:bg-neutral-800 rounded-md animate-pulse", className)}
+        className={cn(
+          "bg-neutral-200 dark:bg-neutral-800 rounded-md animate-pulse",
+          className,
+        )}
         style={style}
         {...props}
       />

@@ -18,9 +18,11 @@ interface BrainProviderStatusSheetProps {
   onClose: () => void;
 }
 
-function statusMeta(
-  state: ContextProviderStatus["state"],
-): { label: string; color: string; icon: LucideIcon } {
+function statusMeta(state: ContextProviderStatus["state"]): {
+  label: string;
+  color: string;
+  icon: LucideIcon;
+} {
   switch (state) {
     case "ok":
       return { label: "Available", color: "#22c55e", icon: CheckCircle2 };
@@ -79,7 +81,11 @@ export function BrainProviderStatusSheet({
             </Text>
             <Muted>{providers.length} sources checked</Muted>
           </View>
-          <Pressable onPress={onClose} className="p-2" accessibilityLabel="Close">
+          <Pressable
+            onPress={onClose}
+            className="p-2"
+            accessibilityLabel="Close"
+          >
             <X size={22} color={colors.foreground} />
           </Pressable>
         </View>
@@ -98,7 +104,10 @@ export function BrainProviderStatusSheet({
               <View
                 key={provider.providerId}
                 className="flex-row items-start py-3"
-                style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
+                style={{
+                  borderBottomWidth: 1,
+                  borderBottomColor: colors.border,
+                }}
               >
                 <View
                   style={{

@@ -1,10 +1,22 @@
 import { gqlQuery } from "../../lib/gql-client.js";
-import { isJsonMode, printJson, printKeyValue, printTable } from "../../lib/output.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../../lib/output.js";
 import { printError } from "../../ui.js";
 import { InboxItemDoc } from "./gql.js";
-import { resolveInboxContext, fmtIso, type InboxCliOptions } from "./helpers.js";
+import {
+  resolveInboxContext,
+  fmtIso,
+  type InboxCliOptions,
+} from "./helpers.js";
 
-export async function runInboxGet(id: string, opts: InboxCliOptions): Promise<void> {
+export async function runInboxGet(
+  id: string,
+  opts: InboxCliOptions,
+): Promise<void> {
   const ctx = await resolveInboxContext(opts);
   const data = await gqlQuery(ctx.client, InboxItemDoc, { id });
 
@@ -27,7 +39,12 @@ export async function runInboxGet(id: string, opts: InboxCliOptions): Promise<vo
     ["Description", item.description ?? undefined],
     ["Requester", item.requesterId ?? undefined],
     ["Recipient", item.recipientId ?? undefined],
-    ["Entity", item.entityType && item.entityId ? `${item.entityType}:${item.entityId}` : undefined],
+    [
+      "Entity",
+      item.entityType && item.entityId
+        ? `${item.entityType}:${item.entityId}`
+        : undefined,
+    ],
     ["Revision", String(item.revision)],
     ["Review notes", item.reviewNotes ?? undefined],
     ["Decided by", item.decidedBy ?? undefined],
@@ -42,9 +59,10 @@ export async function runInboxGet(id: string, opts: InboxCliOptions): Promise<vo
     console.log("  Comments:");
     const rows = item.comments.map((c) => ({
       when: fmtIso(c.createdAt),
-      author: c.authorType && c.authorId
-        ? `${c.authorType}:${c.authorId.slice(0, 8)}`
-        : c.authorType ?? "—",
+      author:
+        c.authorType && c.authorId
+          ? `${c.authorType}:${c.authorId.slice(0, 8)}`
+          : (c.authorType ?? "—"),
       content: c.content.length > 80 ? `${c.content.slice(0, 77)}…` : c.content,
     }));
     printTable(rows, [

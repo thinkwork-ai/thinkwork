@@ -25,8 +25,8 @@
  */
 
 import {
-	GetSecretValueCommand,
-	SecretsManagerClient,
+  GetSecretValueCommand,
+  SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 import type { Client as PgClientType } from "pg";
 
@@ -34,44 +34,44 @@ let _client: PgClientType | undefined;
 let _secretsManager: SecretsManagerClient | undefined;
 
 interface SecretShape {
-	username: string;
-	password: string;
-	host: string;
-	port: number | string;
-	dbname: string;
+  username: string;
+  password: string;
+  host: string;
+  port: number | string;
+  dbname: string;
 }
 
 function getSecretsManagerClient(): SecretsManagerClient {
-	if (_secretsManager) return _secretsManager;
-	_secretsManager = new SecretsManagerClient({
-		region: process.env.AWS_REGION || "us-east-1",
-		requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
-	});
-	return _secretsManager;
+  if (_secretsManager) return _secretsManager;
+  _secretsManager = new SecretsManagerClient({
+    region: process.env.AWS_REGION || "us-east-1",
+    requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
+  });
+  return _secretsManager;
 }
 
 async function resolveDatabaseUrl(): Promise<string> {
-	const secretArn = process.env.COMPLIANCE_READER_SECRET_ARN;
-	if (!secretArn) {
-		throw new Error(
-			"compliance/reader-db: COMPLIANCE_READER_SECRET_ARN is unset. " +
-				"Compliance event browsing is not available in this environment. " +
-				"Wire the env var on the graphql-http Lambda via Terraform.",
-		);
-	}
-	const sm = getSecretsManagerClient();
-	const result = await sm.send(
-		new GetSecretValueCommand({ SecretId: secretArn }),
-	);
-	const secret = JSON.parse(result.SecretString || "{}") as SecretShape;
-	const user = encodeURIComponent(secret.username);
-	const pass = encodeURIComponent(secret.password);
-	// sslmode=require — TLS encryption + server-cert validation. Mirrors
-	// what AWS RDS recommends for cross-VPC hops; the writer Lambda's
-	// no-verify default is acceptable for short-lived per-cadence anchor
-	// writes inside the VPC, but the read surface is the load-bearing
-	// audit-tool path and warrants the stricter mode.
-	return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=require`;
+  const secretArn = process.env.COMPLIANCE_READER_SECRET_ARN;
+  if (!secretArn) {
+    throw new Error(
+      "compliance/reader-db: COMPLIANCE_READER_SECRET_ARN is unset. " +
+        "Compliance event browsing is not available in this environment. " +
+        "Wire the env var on the graphql-http Lambda via Terraform.",
+    );
+  }
+  const sm = getSecretsManagerClient();
+  const result = await sm.send(
+    new GetSecretValueCommand({ SecretId: secretArn }),
+  );
+  const secret = JSON.parse(result.SecretString || "{}") as SecretShape;
+  const user = encodeURIComponent(secret.username);
+  const pass = encodeURIComponent(secret.password);
+  // sslmode=require — TLS encryption + server-cert validation. Mirrors
+  // what AWS RDS recommends for cross-VPC hops; the writer Lambda's
+  // no-verify default is acceptable for short-lived per-cadence anchor
+  // writes inside the VPC, but the read surface is the load-bearing
+  // audit-tool path and warrants the stricter mode.
+  return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=require`;
 }
 
 /**
@@ -81,33 +81,33 @@ async function resolveDatabaseUrl(): Promise<string> {
  * `_readerDb` pattern in `packages/lambda/compliance-anchor.ts`.
  */
 export async function getComplianceReaderClient(): Promise<PgClientType> {
-	if (_client) return _client;
+  if (_client) return _client;
 
-	if (
-		process.env.NODE_ENV === "test" &&
-		process.env.COMPLIANCE_READER_DATABASE_URL
-	) {
-		const { Client } = await import("pg");
-		const client = new Client({
-			connectionString: process.env.COMPLIANCE_READER_DATABASE_URL,
-		});
-		await client.connect();
-		client.on("error", () => {
-			_client = undefined;
-		});
-		_client = client;
-		return client;
-	}
+  if (
+    process.env.NODE_ENV === "test" &&
+    process.env.COMPLIANCE_READER_DATABASE_URL
+  ) {
+    const { Client } = await import("pg");
+    const client = new Client({
+      connectionString: process.env.COMPLIANCE_READER_DATABASE_URL,
+    });
+    await client.connect();
+    client.on("error", () => {
+      _client = undefined;
+    });
+    _client = client;
+    return client;
+  }
 
-	const url = await resolveDatabaseUrl();
-	const { Client } = await import("pg");
-	const client = new Client({ connectionString: url });
-	await client.connect();
-	client.on("error", () => {
-		_client = undefined;
-	});
-	_client = client;
-	return client;
+  const url = await resolveDatabaseUrl();
+  const { Client } = await import("pg");
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  client.on("error", () => {
+    _client = undefined;
+  });
+  _client = client;
+  return client;
 }
 
 /**
@@ -120,14 +120,14 @@ export async function getComplianceReaderClient(): Promise<PgClientType> {
  * empty for the next call.
  */
 export async function _resetComplianceReaderClient(): Promise<void> {
-	const existing = _client;
-	_client = undefined;
-	_secretsManager = undefined;
-	if (existing) {
-		try {
-			await existing.end();
-		} catch {
-			// best-effort close — fixture already discarded the reference
-		}
-	}
+  const existing = _client;
+  _client = undefined;
+  _secretsManager = undefined;
+  if (existing) {
+    try {
+      await existing.end();
+    } catch {
+      // best-effort close — fixture already discarded the reference
+    }
+  }
 }

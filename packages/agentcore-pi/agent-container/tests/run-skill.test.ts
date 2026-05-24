@@ -113,9 +113,7 @@ describe("buildRunSkillTool — manifest handling", () => {
           skillId: "beta",
           description: "Second skill.",
           skillDir: workDir,
-          scripts: [
-            { name: "go", path: "scripts/main.py", description: "go" },
-          ],
+          scripts: [{ name: "go", path: "scripts/main.py", description: "go" }],
         },
       ],
       bridgeScriptPath: BRIDGE_SCRIPT_PATH,
@@ -130,10 +128,7 @@ describe("buildRunSkillTool — manifest handling", () => {
 
 describe("buildRunSkillTool — happy path execution", () => {
   it("invokes the named script function and returns its result", async () => {
-    const skillDir = writeSkill(
-      "calc",
-      "def add(a, b):\n    return a + b\n",
-    );
+    const skillDir = writeSkill("calc", "def add(a, b):\n    return a + b\n");
     const tool = buildRunSkillTool({
       skills: [
         {
@@ -141,16 +136,20 @@ describe("buildRunSkillTool — happy path execution", () => {
           description: "Calculator.",
           skillDir,
           scripts: [
-            { name: "add", path: "scripts/main.py", description: "Add two numbers." },
+            {
+              name: "add",
+              path: "scripts/main.py",
+              description: "Add two numbers.",
+            },
           ],
         },
       ],
       bridgeScriptPath: BRIDGE_SCRIPT_PATH,
     });
-    const result = await tool!.execute(
-      "call-1",
-      { skill_id: "calc", kwargs: { a: 2, b: 3 } } as any,
-    );
+    const result = await tool!.execute("call-1", {
+      skill_id: "calc",
+      kwargs: { a: 2, b: 3 },
+    } as any);
     expect(result.content).toEqual([{ type: "text", text: "5" }]);
     expect(result.details).toMatchObject({
       skillId: "calc",
@@ -178,19 +177,16 @@ describe("buildRunSkillTool — happy path execution", () => {
       ],
       bridgeScriptPath: BRIDGE_SCRIPT_PATH,
     });
-    const result = await tool!.execute(
-      "call-2",
-      { skill_id: "lookup", kwargs: { key: "alpha" } } as any,
-    );
+    const result = await tool!.execute("call-2", {
+      skill_id: "lookup",
+      kwargs: { key: "alpha" },
+    } as any);
     const block = result.content[0]! as { type: "text"; text: string };
     expect(JSON.parse(block.text)).toEqual({ key: "alpha", value: 42 });
   });
 
   it("treats missing kwargs as an empty object", async () => {
-    const skillDir = writeSkill(
-      "hello",
-      'def greet(): return "hi"\n',
-    );
+    const skillDir = writeSkill("hello", 'def greet(): return "hi"\n');
     const tool = buildRunSkillTool({
       skills: [
         {
@@ -204,10 +200,7 @@ describe("buildRunSkillTool — happy path execution", () => {
       ],
       bridgeScriptPath: BRIDGE_SCRIPT_PATH,
     });
-    const result = await tool!.execute(
-      "call-3",
-      { skill_id: "hello" } as any,
-    );
+    const result = await tool!.execute("call-3", { skill_id: "hello" } as any);
     expect(result.content).toEqual([{ type: "text", text: "hi" }]);
   });
 });
@@ -232,10 +225,7 @@ describe("buildRunSkillTool — multi-script skills", () => {
       ],
       bridgeScriptPath: BRIDGE_SCRIPT_PATH,
     });
-    const result = await tool!.execute(
-      "call-4",
-      { skill_id: "multi" } as any,
-    );
+    const result = await tool!.execute("call-4", { skill_id: "multi" } as any);
     expect(result.content).toEqual([{ type: "text", text: "A" }]);
   });
 
@@ -258,10 +248,10 @@ describe("buildRunSkillTool — multi-script skills", () => {
       ],
       bridgeScriptPath: BRIDGE_SCRIPT_PATH,
     });
-    const result = await tool!.execute(
-      "call-5",
-      { skill_id: "multi", script_name: "second" } as any,
-    );
+    const result = await tool!.execute("call-5", {
+      skill_id: "multi",
+      script_name: "second",
+    } as any);
     expect(result.content).toEqual([{ type: "text", text: "B" }]);
   });
 });
@@ -298,10 +288,7 @@ describe("buildRunSkillTool — fail-closed", () => {
   });
 
   it("throws when script_name does not match any script in the skill", async () => {
-    const skillDir = writeSkill(
-      "alpha",
-      "def first(): return 1\n",
-    );
+    const skillDir = writeSkill("alpha", "def first(): return 1\n");
     const tool = buildRunSkillTool({
       skills: [
         {
@@ -362,10 +349,7 @@ describe("buildRunSkillTool — error propagation from bridge", () => {
     });
     let captured: RunSkillError | null = null;
     try {
-      await tool!.execute(
-        "call-11",
-        { skill_id: "bad", kwargs: {} } as any,
-      );
+      await tool!.execute("call-11", { skill_id: "bad", kwargs: {} } as any);
     } catch (err) {
       captured = err as RunSkillError;
     }
@@ -479,10 +463,7 @@ describe("buildRunSkillTool — timeout + abort", () => {
   });
 
   it("rejects synchronously when the abort signal is already aborted", async () => {
-    const skillDir = writeSkill(
-      "preaborted",
-      "def wait(): return 'never'\n",
-    );
+    const skillDir = writeSkill("preaborted", "def wait(): return 'never'\n");
     const tool = buildRunSkillTool({
       skills: [
         {
@@ -521,24 +502,24 @@ describe("buildRunSkillTool — channel hygiene", () => {
           description: "Prints debug to stdout.",
           skillDir,
           scripts: [
-            { name: "chatter", path: "scripts/main.py", description: "Chatter." },
+            {
+              name: "chatter",
+              path: "scripts/main.py",
+              description: "Chatter.",
+            },
           ],
         },
       ],
       bridgeScriptPath: BRIDGE_SCRIPT_PATH,
     });
-    const result = await tool!.execute(
-      "call-stdout-clean",
-      { skill_id: "noisy" } as any,
-    );
+    const result = await tool!.execute("call-stdout-clean", {
+      skill_id: "noisy",
+    } as any);
     expect(result.content).toEqual([{ type: "text", text: "final" }]);
   });
 
   it("rejects a script_path that escapes skill_dir", async () => {
-    const skillDir = writeSkill(
-      "escaping",
-      "def safe(): return 'inside'\n",
-    );
+    const skillDir = writeSkill("escaping", "def safe(): return 'inside'\n");
     const tool = buildRunSkillTool({
       skills: [
         {
@@ -581,10 +562,7 @@ describe("buildRunSkillTool — channel hygiene", () => {
     });
     let captured: Error | null = null;
     try {
-      await tool!.execute(
-        "call-stderr",
-        { skill_id: "stderr-leaker" } as any,
-      );
+      await tool!.execute("call-stderr", { skill_id: "stderr-leaker" } as any);
     } catch (err) {
       captured = err as Error;
     }
@@ -620,10 +598,9 @@ describe("buildRunSkillTool — env overrides", () => {
         envcheck: { SKILL_USER: "alice" },
       },
     });
-    const result = await tool!.execute(
-      "call-16",
-      { skill_id: "envcheck" } as any,
-    );
+    const result = await tool!.execute("call-16", {
+      skill_id: "envcheck",
+    } as any);
     expect(result.content).toEqual([{ type: "text", text: "alice" }]);
   });
 });

@@ -66,8 +66,8 @@ function ComplianceAllowlistMissing() {
             <code className="bg-muted px-1 rounded text-xs">
               THINKWORK_PLATFORM_OPERATOR_EMAILS
             </code>{" "}
-            on the platform deployment to enable cross-tenant browse and
-            unlock the Compliance section.
+            on the platform deployment to enable cross-tenant browse and unlock
+            the Compliance section.
           </p>
           <p className="text-xs text-muted-foreground flex items-center gap-1.5">
             <ScrollText className="size-3.5" />

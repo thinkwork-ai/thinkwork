@@ -47,12 +47,6 @@ import {
   quickActionQueries,
   quickActionMutations,
 } from "./quick-actions/index.js";
-import {
-  computerAssignmentTypeResolvers,
-  computerQueries,
-  computerMutations,
-  computerTypeResolvers,
-} from "./computers/index.js";
 import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
@@ -95,7 +89,6 @@ export const queryResolvers: Record<string, any> = {
   ...routineQueries,
   ...tenantCredentialQueries,
   ...quickActionQueries,
-  ...computerQueries,
   ...customizeQueries,
   ...complianceQueries,
   ...slackQueries,
@@ -128,7 +121,6 @@ export const mutationResolvers: Record<string, any> = {
   ...routineMutations,
   ...tenantCredentialMutations,
   ...quickActionMutations,
-  ...computerMutations,
   ...customizeMutations,
   ...complianceMutations,
   ...slackMutations,
@@ -156,8 +148,6 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   MemoryRecord: memoryRecordTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
-  Computer: computerTypeResolvers,
-  ComputerAssignment: computerAssignmentTypeResolvers,
   Space: spaceTypeResolvers,
   SpaceMember: spaceMemberTypeResolvers,
   SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,

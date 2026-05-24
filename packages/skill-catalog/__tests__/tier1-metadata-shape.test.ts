@@ -76,7 +76,9 @@ describe("tier1_metadata JSONB shape (U3 producer flip)", () => {
     // Sanity: the keys parseTier1Metadata's downstream readers expect
     // (permissions_model, scripts) are at the top level of the blob,
     // not nested under metadata.* or anywhere else.
-    expect(Object.keys(meta)).toEqual(expect.arrayContaining(["execution", "scripts"]));
+    expect(Object.keys(meta)).toEqual(
+      expect.arrayContaining(["execution", "scripts"]),
+    );
   });
 
   it("a script-shape skill with default_enabled scripts surfaces real booleans (not 'true' strings)", () => {

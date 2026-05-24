@@ -42,7 +42,13 @@ export function BrainEnrichmentCandidateList({
             </Text>
             <Muted style={{ fontSize: 11 }}>{candidate.providerId}</Muted>
           </View>
-          <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "600" }}>
+          <Text
+            style={{
+              color: colors.foreground,
+              fontSize: 15,
+              fontWeight: "600",
+            }}
+          >
             {candidate.title}
           </Text>
           <Muted style={{ fontSize: 14, lineHeight: 20 }}>

@@ -79,9 +79,7 @@ describe("CustomizeTabBody", () => {
         onAction={vi.fn()}
       />,
     );
-    const search = screen.getByTestId(
-      "customize-search",
-    ) as HTMLInputElement;
+    const search = screen.getByTestId("customize-search") as HTMLInputElement;
     fireEvent.change(search, { target: { value: "drive" } });
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
@@ -97,8 +95,12 @@ describe("CustomizeTabBody", () => {
       />,
     );
     const toolbar = screen.getByTestId("customize-toolbar");
-    expect(toolbar.querySelector('[data-testid="customize-search"]')).not.toBeNull();
-    expect(toolbar.querySelector('[data-testid="customize-tabs"]')).not.toBeNull();
+    expect(
+      toolbar.querySelector('[data-testid="customize-search"]'),
+    ).not.toBeNull();
+    expect(
+      toolbar.querySelector('[data-testid="customize-tabs"]'),
+    ).not.toBeNull();
     expect(
       toolbar.querySelector('[data-testid="customize-category"]'),
     ).not.toBeNull();

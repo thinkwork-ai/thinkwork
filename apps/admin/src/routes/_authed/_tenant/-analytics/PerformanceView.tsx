@@ -4,8 +4,20 @@ import { useTenant } from "@/context/TenantContext";
 import { MetricCard } from "@/components/MetricCard";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatUsd } from "@/lib/utils";
 
@@ -27,7 +39,11 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-export function PerformanceView({ selectedAgentId: _selectedAgentId }: { selectedAgentId: string | null }) {
+export function PerformanceView({
+  selectedAgentId: _selectedAgentId,
+}: {
+  selectedAgentId: string | null;
+}) {
   const { tenantId } = useTenant();
 
   if (!tenantId) return <PageSkeleton />;
@@ -36,7 +52,15 @@ export function PerformanceView({ selectedAgentId: _selectedAgentId }: { selecte
   const timeSeries: any[] = [];
 
   const totals = agents.reduce(
-    (acc: { invocations: number; errors: number; cost: number; avgLatency: number }, a: any) => ({
+    (
+      acc: {
+        invocations: number;
+        errors: number;
+        cost: number;
+        avgLatency: number;
+      },
+      a: any,
+    ) => ({
       invocations: acc.invocations + a.invocationCount,
       errors: acc.errors + a.errorCount,
       cost: acc.cost + a.totalCostUsd,
@@ -44,7 +68,8 @@ export function PerformanceView({ selectedAgentId: _selectedAgentId }: { selecte
     }),
     { invocations: 0, errors: 0, cost: 0, avgLatency: 0 },
   );
-  const avgLatency = totals.invocations > 0 ? totals.avgLatency / totals.invocations : 0;
+  const avgLatency =
+    totals.invocations > 0 ? totals.avgLatency / totals.invocations : 0;
 
   return (
     <div className="space-y-6">
@@ -61,9 +86,10 @@ export function PerformanceView({ selectedAgentId: _selectedAgentId }: { selecte
         />
         <MetricCard
           label="Error Rate"
-          value={totals.invocations > 0
-            ? `${((totals.errors / totals.invocations) * 100).toFixed(1)}%`
-            : "0%"
+          value={
+            totals.invocations > 0
+              ? `${((totals.errors / totals.invocations) * 100).toFixed(1)}%`
+              : "0%"
           }
           icon={<AlertTriangle className="h-4 w-4" />}
         />
@@ -80,12 +106,19 @@ export function PerformanceView({ selectedAgentId: _selectedAgentId }: { selecte
             <CardTitle>Invocations (30 days)</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={timeSeriesConfig} className="h-[250px] w-full">
+            <ChartContainer
+              config={timeSeriesConfig}
+              className="h-[250px] w-full"
+            >
               <BarChart data={timeSeries}>
                 <XAxis dataKey="day" tickFormatter={(d) => d.slice(5)} />
                 <YAxis />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="invocationCount" fill="var(--color-invocationCount)" radius={[2, 2, 0, 0]} />
+                <Bar
+                  dataKey="invocationCount"
+                  fill="var(--color-invocationCount)"
+                  radius={[2, 2, 0, 0]}
+                />
               </BarChart>
             </ChartContainer>
           </CardContent>
@@ -98,12 +131,27 @@ export function PerformanceView({ selectedAgentId: _selectedAgentId }: { selecte
             <CardTitle>Average Latency (30 days)</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={timeSeriesConfig} className="h-[200px] w-full">
+            <ChartContainer
+              config={timeSeriesConfig}
+              className="h-[200px] w-full"
+            >
               <LineChart data={timeSeries}>
                 <XAxis dataKey="day" tickFormatter={(d) => d.slice(5)} />
                 <YAxis tickFormatter={(v) => formatDuration(v)} />
-                <ChartTooltip content={<ChartTooltipContent formatter={(v) => formatDuration(Number(v))} />} />
-                <Line type="monotone" dataKey="avgDurationMs" stroke="var(--color-avgDurationMs)" strokeWidth={2} dot={false} />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(v) => formatDuration(Number(v))}
+                    />
+                  }
+                />
+                <Line
+                  type="monotone"
+                  dataKey="avgDurationMs"
+                  stroke="var(--color-avgDurationMs)"
+                  strokeWidth={2}
+                  dot={false}
+                />
               </LineChart>
             </ChartContainer>
           </CardContent>
@@ -138,17 +186,32 @@ export function PerformanceView({ selectedAgentId: _selectedAgentId }: { selecte
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">{agent.invocationCount}</TableCell>
-                  <TableCell className="text-right">{formatDuration(agent.avgDurationMs)}</TableCell>
-                  <TableCell className="text-right">{formatDuration(agent.p95DurationMs)}</TableCell>
-                  <TableCell className="text-right">{formatTokens(agent.totalInputTokens)}</TableCell>
-                  <TableCell className="text-right">{formatTokens(agent.totalOutputTokens)}</TableCell>
-                  <TableCell className="text-right">{formatUsd(agent.totalCostUsd)}</TableCell>
+                  <TableCell className="text-right">
+                    {agent.invocationCount}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatDuration(agent.avgDurationMs)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatDuration(agent.p95DurationMs)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatTokens(agent.totalInputTokens)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatTokens(agent.totalOutputTokens)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatUsd(agent.totalCostUsd)}
+                  </TableCell>
                 </TableRow>
               ))}
               {agents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell
+                    colSpan={7}
+                    className="text-center text-muted-foreground py-8"
+                  >
                     No performance data yet. Agent invocations will appear here.
                   </TableCell>
                 </TableRow>

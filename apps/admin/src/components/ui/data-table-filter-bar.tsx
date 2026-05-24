@@ -3,7 +3,11 @@ import { Check, Filter, X, ArrowUpDown, Layers, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -88,7 +92,9 @@ export function FilterBarFacet({
           >
             <Checkbox
               checked={selected.includes(opt.value)}
-              onCheckedChange={() => onChange(toggleInArray(selected, opt.value))}
+              onCheckedChange={() =>
+                onChange(toggleInArray(selected, opt.value))
+              }
             />
             {opt.icon}
             <span className="text-sm">{opt.label}</span>

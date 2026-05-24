@@ -17,19 +17,19 @@ const db = getDb();
  * If so, returns true — the caller should defer the wakeup instead of queueing it.
  */
 export async function shouldDeferWakeup(threadId: string): Promise<boolean> {
-	if (!threadId) return false;
+  if (!threadId) return false;
 
-	try {
-		const { threads } = await import("@thinkwork/database-pg/schema");
-		const [thread] = await db
-			.select({ checkout_run_id: threads.checkout_run_id })
-			.from(threads)
-			.where(eq(threads.id, threadId));
+  try {
+    const { threads } = await import("@thinkwork/database-pg/schema");
+    const [thread] = await db
+      .select({ checkout_run_id: threads.checkout_run_id })
+      .from(threads)
+      .where(eq(threads.id, threadId));
 
-		return !!thread?.checkout_run_id;
-	} catch {
-		return false;
-	}
+    return !!thread?.checkout_run_id;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -39,15 +39,15 @@ export async function shouldDeferWakeup(threadId: string): Promise<boolean> {
  * Returns the promoted wakeup ID, or null if none found.
  */
 export async function promoteNextDeferredWakeup(
-	tenantId: string,
-	threadId: string,
+  tenantId: string,
+  threadId: string,
 ): Promise<string | null> {
-	if (!threadId) return null;
+  if (!threadId) return null;
 
-	try {
-		// Find the oldest deferred wakeup for this thread
-		// Note: payload->>'ticketId' is the JSON key stored in the DB — stays unchanged
-		const result = await db.execute(sql`
+  try {
+    // Find the oldest deferred wakeup for this thread
+    // Note: payload->>'ticketId' is the JSON key stored in the DB — stays unchanged
+    const result = await db.execute(sql`
 			UPDATE agent_wakeup_requests
 			SET status = 'queued', claimed_at = NULL
 			WHERE id = (
@@ -62,16 +62,18 @@ export async function promoteNextDeferredWakeup(
 			RETURNING id
 		`);
 
-		const rows = (result.rows || []) as Array<Record<string, unknown>>;
-		if (rows.length > 0) {
-			const promotedId = rows[0].id as string;
-			console.log(`[wakeup-defer] Promoted deferred wakeup ${promotedId} for thread ${threadId}`);
-			return promotedId;
-		}
+    const rows = (result.rows || []) as Array<Record<string, unknown>>;
+    if (rows.length > 0) {
+      const promotedId = rows[0].id as string;
+      console.log(
+        `[wakeup-defer] Promoted deferred wakeup ${promotedId} for thread ${threadId}`,
+      );
+      return promotedId;
+    }
 
-		return null;
-	} catch (err) {
-		console.error(`[wakeup-defer] Failed to promote deferred wakeup:`, err);
-		return null;
-	}
+    return null;
+  } catch (err) {
+    console.error(`[wakeup-defer] Failed to promote deferred wakeup:`, err);
+    return null;
+  }
 }

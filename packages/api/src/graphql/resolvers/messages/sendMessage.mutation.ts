@@ -13,10 +13,6 @@ import {
 } from "../../utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
-import {
-  enqueueComputerThreadTurn,
-  resolveThreadComputer,
-} from "../../../lib/computers/thread-cutover.js";
 import { recordThreadActivityForIdleLearning } from "../../../lib/thread-idle-learning/activity.js";
 import { dispatchAgentMentions } from "../../../lib/mentions/dispatch-agent-mentions.js";
 import { parseMessageMentions } from "../../../lib/mentions/parse-message-mentions.js";
@@ -92,22 +88,11 @@ export const sendMessage = async (
         extensions: { code: "FORBIDDEN" },
       });
     }
-    await resolveThreadComputer({
-      tenantId: thread.tenant_id,
-      requesterUserId: senderId,
-      requestedComputerId: thread.computer_id,
-    });
   }
-  const isClaimingLegacyComputerThread =
-    isUserMessage &&
-    senderType === "user" &&
-    Boolean(thread.computer_id) &&
-    !thread.user_id;
   if (
     isUserMessage &&
     senderType === "user" &&
-    ctx.auth.authType === "cognito" &&
-    !isClaimingLegacyComputerThread
+    ctx.auth.authType === "cognito"
   ) {
     const [visibleThread] = await db
       .select({ id: threads.id })
@@ -337,21 +322,6 @@ export const sendMessage = async (
       status: thread.status ?? "in_progress",
       title: thread.title,
     }).catch(() => {});
-  }
-
-  // Computer-owned Threads are picked up exclusively through the durable
-  // Computer work queue. Agent fallback is intentionally disabled.
-  if (role === "user" && thread.computer_id && parsedMentions.length === 0) {
-    await enqueueComputerThreadTurn({
-      tenantId: thread.tenant_id,
-      computerId: thread.computer_id,
-      threadId: i.threadId,
-      messageId: row.id,
-      source: "chat_message",
-      actorType: senderType,
-      actorId: senderId,
-    });
-    return messageToCamel(row);
   }
 
   return messageToCamel(row);

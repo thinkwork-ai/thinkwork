@@ -11,8 +11,18 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
-import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  isJsonMode,
+  logStderr,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const ThreadTurnsDoc = graphql(`
   query CliThreadTurns(
@@ -124,17 +134,21 @@ async function resolveTurnContext(opts: TurnCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, TurnTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, TurnTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
     const data = await gqlQuery(client, TurnTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -202,7 +216,10 @@ async function runTurnGet(id: string, opts: TurnCliOptions): Promise<void> {
     printError(`Thread turn ${id} not found.`);
     process.exit(1);
   }
-  const ev = await gqlQuery(ctx.client, ThreadTurnEventsDoc, { runId: id, limit: 50 });
+  const ev = await gqlQuery(ctx.client, ThreadTurnEventsDoc, {
+    runId: id,
+    limit: 50,
+  });
 
   if (isJsonMode()) {
     printJson({ turn: t, events: ev.threadTurnEvents ?? [] });
@@ -220,7 +237,10 @@ async function runTurnGet(id: string, opts: TurnCliOptions): Promise<void> {
     ["Trigger", t.triggerName ?? undefined],
     ["Started", fmtIso(t.startedAt)],
     ["Finished", fmtIso(t.finishedAt)],
-    ["Total cost", t.totalCost != null ? `$${t.totalCost.toFixed(4)}` : undefined],
+    [
+      "Total cost",
+      t.totalCost != null ? `$${t.totalCost.toFixed(4)}` : undefined,
+    ],
     ["Retries", t.retryAttempt ?? undefined],
     ["Error", t.error ?? undefined],
     ["Error code", t.errorCode ?? undefined],
@@ -254,7 +274,9 @@ async function runTurnCancel(id: string, opts: CancelOptions): Promise<void> {
   const ctx = await resolveTurnContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to cancel without --yes in a non-interactive session.");
+      printError(
+        "Refusing to cancel without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
@@ -271,7 +293,9 @@ async function runTurnCancel(id: string, opts: CancelOptions): Promise<void> {
     printJson(data.cancelThreadTurn);
     return;
   }
-  printSuccess(`Cancelled turn ${data.cancelThreadTurn.id} (status: ${data.cancelThreadTurn.status}).`);
+  printSuccess(
+    `Cancelled turn ${data.cancelThreadTurn.id} (status: ${data.cancelThreadTurn.status}).`,
+  );
 }
 
 export function registerTurnCommand(program: Command): void {
@@ -311,7 +335,9 @@ Examples:
 
   turn
     .command("cancel <id>")
-    .description("Cancel an in-progress thread turn. No-op if already finished.")
+    .description(
+      "Cancel an in-progress thread turn. No-op if already finished.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")

@@ -274,9 +274,9 @@ function toTaskSnapshot(
     dueAt: stringValue(record.dueAt) ?? stringValue(record.dueDate),
     idempotent: Boolean(
       record.idempotent ??
-        record.duplicate ??
-        record.existing ??
-        record.alreadyExists,
+      record.duplicate ??
+      record.existing ??
+      record.alreadyExists,
     ),
     needsTriage: Boolean(
       fallback.needsTriage || record.needsTriage || !assignee,

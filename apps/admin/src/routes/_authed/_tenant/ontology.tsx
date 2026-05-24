@@ -1552,9 +1552,7 @@ function ReprocessPanel({
 
 export function OntologyStudioPage() {
   const { tenantId } = useTenant();
-  useBreadcrumbs([
-    { label: "Ontology" },
-  ]);
+  useBreadcrumbs([{ label: "Ontology" }]);
 
   const [tab, setTab] = useState("change-sets");
   const [selectedChangeSetId, setSelectedChangeSetId] = useState<string | null>(

@@ -95,7 +95,9 @@ export function BadgeSelectorText({
       </PopoverTrigger>
       <PopoverContent className="w-52 p-0" align="start">
         <div className="p-2 space-y-2">
-          <p className="text-[11px] font-medium text-muted-foreground px-0.5">{label}</p>
+          <p className="text-[11px] font-medium text-muted-foreground px-0.5">
+            {label}
+          </p>
           <input
             type={type}
             className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
@@ -183,11 +185,17 @@ export function BadgeSelectorSelect({
   }, [options, search]);
 
   const displayLabel = value
-    ? options.find((o) => o.value === value)?.label ?? value
+    ? (options.find((o) => o.value === value)?.label ?? value)
     : emptyLabel;
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(""); }}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setSearch("");
+      }}
+    >
       <PopoverTrigger asChild>
         <button type="button">
           <BadgeTrigger icon={icon} className={className}>
@@ -236,11 +244,15 @@ export function BadgeSelectorSelect({
                 {opt.icon}
                 {opt.label}
               </span>
-              {value === opt.value && <Check className="h-3.5 w-3.5 shrink-0" />}
+              {value === opt.value && (
+                <Check className="h-3.5 w-3.5 shrink-0" />
+              )}
             </button>
           ))}
           {filtered.length === 0 && (
-            <p className="px-2.5 py-2 text-xs text-muted-foreground">No results</p>
+            <p className="px-2.5 py-2 text-xs text-muted-foreground">
+              No results
+            </p>
           )}
         </div>
       </PopoverContent>
@@ -298,14 +310,21 @@ export function BadgeSelectorMulti({
   }, [options, search]);
 
   const displayCount = values.length;
-  const displayText = displayCount === 0
-    ? emptyLabel
-    : displayCount === 1
-      ? options.find((o) => o.value === values[0])?.label ?? values[0]
-      : `${displayCount} selected`;
+  const displayText =
+    displayCount === 0
+      ? emptyLabel
+      : displayCount === 1
+        ? (options.find((o) => o.value === values[0])?.label ?? values[0])
+        : `${displayCount} selected`;
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(""); }}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setSearch("");
+      }}
+    >
       <PopoverTrigger asChild>
         <button type="button">
           <BadgeTrigger icon={icon} className={className}>
@@ -353,7 +372,9 @@ export function BadgeSelectorMulti({
             );
           })}
           {filtered.length === 0 && (
-            <p className="px-2.5 py-2 text-xs text-muted-foreground">No results</p>
+            <p className="px-2.5 py-2 text-xs text-muted-foreground">
+              No results
+            </p>
           )}
         </div>
       </PopoverContent>
@@ -374,7 +395,11 @@ interface BadgeSelectorDateProps {
 }
 
 function formatShortDate(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function BadgeSelectorDate({
@@ -417,7 +442,10 @@ export function BadgeSelectorDate({
               variant="ghost"
               size="sm"
               className="h-7 text-xs gap-1"
-              onClick={() => { void onSelect(null); setOpen(false); }}
+              onClick={() => {
+                void onSelect(null);
+                setOpen(false);
+              }}
             >
               <X className="h-3 w-3" />
               Clear

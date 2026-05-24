@@ -3,7 +3,11 @@ import { useQuery } from "urql";
 import { AgentsQuery } from "../graphql/queries";
 import type { Agent } from "../types";
 
-export function useAgents({ tenantId }: { tenantId: string | null | undefined }) {
+export function useAgents({
+  tenantId,
+}: {
+  tenantId: string | null | undefined;
+}) {
   const [{ data, fetching, error }, refetch] = useQuery<{ agents: Agent[] }>({
     query: AgentsQuery,
     variables: { tenantId },

@@ -81,7 +81,9 @@ describe("TaskDashboard", () => {
       />,
     );
 
-    expect(screen.getByText("No threads match the current search")).toBeTruthy();
+    expect(
+      screen.getByText("No threads match the current search"),
+    ).toBeTruthy();
   });
 
   it("shows a row loading indicator while a thread delete is pending", () => {

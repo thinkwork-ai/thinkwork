@@ -51,12 +51,12 @@ describe("apiFetchRaw", () => {
       }),
     }) as any;
 
-    const result = await apiFetchRaw<{ alreadyMember?: boolean; role?: string }>(
-      "https://api.example.com",
-      "secret",
-      "/api/tenants/acme/members",
-      { method: "POST" },
-    );
+    const result = await apiFetchRaw<{
+      alreadyMember?: boolean;
+      role?: string;
+    }>("https://api.example.com", "secret", "/api/tenants/acme/members", {
+      method: "POST",
+    });
 
     expect(result.ok).toBe(true);
     expect(result.body.alreadyMember).toBe(true);

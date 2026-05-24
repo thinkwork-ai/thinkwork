@@ -15,17 +15,17 @@
 import { getMemoryServices } from "../../../lib/memory/index.js";
 
 export const memorySystemConfig = async () => {
-	try {
-		const { config, inspect } = getMemoryServices();
-		const capabilities = await inspect.capabilities();
-		return {
-			managedMemoryEnabled: config.enabled,
-			hindsightEnabled: capabilities.inspectGraph,
-		};
-	} catch {
-		return {
-			managedMemoryEnabled: false,
-			hindsightEnabled: false,
-		};
-	}
+  try {
+    const { config, inspect } = getMemoryServices();
+    const capabilities = await inspect.capabilities();
+    return {
+      managedMemoryEnabled: config.enabled,
+      hindsightEnabled: capabilities.inspectGraph,
+    };
+  } catch {
+    return {
+      managedMemoryEnabled: false,
+      hindsightEnabled: false,
+    };
+  }
 };

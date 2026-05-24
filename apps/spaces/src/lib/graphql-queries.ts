@@ -7,47 +7,6 @@ import { gql } from "@urql/core";
  * in a future slice when query count grows.
  */
 
-export const AssignedComputersQuery = gql`
-  query AssignedComputers {
-    assignedComputers {
-      id
-      name
-      tenantId
-      slug
-      status
-      runtimeStatus
-      sourceAgent {
-        id
-        name
-      }
-    }
-  }
-`;
-
-export const ComputerThreadsQuery = gql`
-  query ComputerThreads($tenantId: ID!, $computerId: ID!, $limit: Int) {
-    threads(tenantId: $tenantId, computerId: $computerId, limit: $limit) {
-      id
-      userId
-      user {
-        id
-        name
-        email
-      }
-      number
-      identifier
-      spaceId
-      title
-      status
-      channel
-      lifecycleStatus
-      lastResponsePreview
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
 export const ThreadsPagedQuery = gql`
   query ThreadsPaged(
     $tenantId: ID!
@@ -80,7 +39,6 @@ export const ThreadsPagedQuery = gql`
         assigneeType
         assigneeId
         agentId
-        computerId
         space {
           id
           slug
@@ -364,12 +322,6 @@ export const ComputerThreadQuery = gql`
       status
       spaceId
       channel
-      computerId
-      computer {
-        id
-        name
-        slug
-      }
       lifecycleStatus
       lastResponsePreview
       costSummary
@@ -501,47 +453,6 @@ export const ThreadMentionTargetsQuery = gql`
   }
 `;
 
-export const ComputerThreadTasksQuery = gql`
-  query ComputerThreadTasks($computerId: ID!, $threadId: ID!, $limit: Int) {
-    computerTasks(computerId: $computerId, threadId: $threadId, limit: $limit) {
-      id
-      taskType
-      status
-      input
-      output
-      error
-      claimedAt
-      completedAt
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-export const ComputerEventsQuery = gql`
-  query ComputerEvents($computerId: ID!, $limit: Int) {
-    computerEvents(computerId: $computerId, limit: $limit) {
-      id
-      taskId
-      eventType
-      level
-      payload
-      createdAt
-    }
-  }
-`;
-
-export const ComputerThreadChunkSubscription = gql`
-  subscription ComputerThreadChunk($threadId: ID!) {
-    onComputerThreadChunk(threadId: $threadId) {
-      threadId
-      chunk
-      seq
-      publishedAt
-    }
-  }
-`;
-
 export const ThreadTurnUpdatedSubscription = gql`
   subscription ThreadTurnUpdated($tenantId: ID!) {
     onThreadTurnUpdated(tenantId: $tenantId) {
@@ -664,90 +575,6 @@ export const SendMessageMutation = gql`
       createdAt
     }
   }
-`;
-
-const RunbookRunFields = gql`
-  fragment RunbookRunFields on RunbookRun {
-    id
-    tenantId
-    computerId
-    threadId
-    runbookSlug
-    runbookVersion
-    status
-    invocationMode
-    approvedAt
-    rejectedAt
-    cancelledAt
-    startedAt
-    completedAt
-    createdAt
-    updatedAt
-    tasks {
-      id
-      phaseId
-      phaseTitle
-      taskKey
-      title
-      summary
-      status
-      dependsOn
-      capabilityRoles
-      sortOrder
-      details
-      output
-      error
-      startedAt
-      completedAt
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-export const RunbookRunQuery = gql`
-  query RunbookRun($id: ID!) {
-    runbookRun(id: $id) {
-      ...RunbookRunFields
-    }
-  }
-  ${RunbookRunFields}
-`;
-
-export const RunbookRunsQuery = gql`
-  query RunbookRuns($computerId: ID!, $threadId: ID, $limit: Int) {
-    runbookRuns(computerId: $computerId, threadId: $threadId, limit: $limit) {
-      ...RunbookRunFields
-    }
-  }
-  ${RunbookRunFields}
-`;
-
-export const ConfirmRunbookRunMutation = gql`
-  mutation ConfirmRunbookRun($id: ID!) {
-    confirmRunbookRun(id: $id) {
-      ...RunbookRunFields
-    }
-  }
-  ${RunbookRunFields}
-`;
-
-export const RejectRunbookRunMutation = gql`
-  mutation RejectRunbookRun($id: ID!) {
-    rejectRunbookRun(id: $id) {
-      ...RunbookRunFields
-    }
-  }
-  ${RunbookRunFields}
-`;
-
-export const CancelRunbookRunMutation = gql`
-  mutation CancelRunbookRun($id: ID!) {
-    cancelRunbookRun(id: $id) {
-      ...RunbookRunFields
-    }
-  }
-  ${RunbookRunFields}
 `;
 
 const ComputerApprovalFields = gql`
@@ -1053,7 +880,7 @@ export const WorkflowCatalogQuery = gql`
 export const CustomizeBindingsQuery = gql`
   query CustomizeBindings {
     customizeBindings {
-      computerId
+      agentId
       connectedSkillIds
       connectedWorkflowSlugs
     }
@@ -1084,7 +911,6 @@ export const EnableWorkflowMutation = gql`
       id
       tenantId
       agentId
-      computerId
       catalogSlug
       status
       enabled
@@ -1152,5 +978,47 @@ export const FavoriteArtifactsQuery = gql`
       type
       favoritedAt
     }
+  }
+`;
+
+// ----- inert stubs after Computer/Runbook kill -----
+// These exports exist so consumers that haven't been refactored yet can
+// still type-check. Each operation is a harmless tenant query that returns
+// minimal data — the runtime payload no longer carries Computer/Runbook
+// fields, and the consuming UI hides cleanly when the arrays are empty.
+
+export const ComputerEventsQuery = gql`
+  query ComputerEvents($computerId: ID!, $limit: Int) {
+    __typename
+  }
+`;
+
+export const ComputerThreadTasksQuery = gql`
+  query ComputerThreadTasks($computerId: ID!, $threadId: ID!, $limit: Int) {
+    __typename
+  }
+`;
+
+export const RunbookRunsQuery = gql`
+  query RunbookRuns($computerId: ID!, $threadId: ID, $limit: Int) {
+    __typename
+  }
+`;
+
+export const ComputerThreadChunkSubscription = gql`
+  subscription ComputerThreadChunk($threadId: ID!) {
+    __typename
+  }
+`;
+
+export const ConfirmRunbookRunMutation = gql`
+  mutation ConfirmRunbookRun($id: ID!) {
+    __typename
+  }
+`;
+
+export const RejectRunbookRunMutation = gql`
+  mutation RejectRunbookRun($id: ID!) {
+    __typename
   }
 `;

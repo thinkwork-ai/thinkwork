@@ -55,8 +55,7 @@ export interface EnterpriseWorkflowDependencies {
   now?: () => Date;
 }
 
-export interface RunEnterpriseWorkflowOptions
-  extends EnterpriseWorkflowDispatchOptions {
+export interface RunEnterpriseWorkflowOptions extends EnterpriseWorkflowDispatchOptions {
   wait: boolean;
   region?: string;
   runLookupAttempts?: number;

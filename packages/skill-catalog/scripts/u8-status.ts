@@ -89,7 +89,10 @@ function inspect(slug: string, catalog: string): SlugStatus {
     };
   }
 
-  const result = parseSkillMdInternal(readFileSync(skillMdPath, "utf8"), skillMdPath);
+  const result = parseSkillMdInternal(
+    readFileSync(skillMdPath, "utf8"),
+    skillMdPath,
+  );
   if (!result.valid) {
     return {
       slug,

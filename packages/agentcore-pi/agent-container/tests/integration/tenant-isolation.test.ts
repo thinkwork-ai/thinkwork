@@ -66,9 +66,7 @@ import {
   ExecuteStatementCommand,
 } from "@aws-sdk/client-rds-data";
 import { mockClient } from "aws-sdk-client-mock";
-import {
-  BedrockAgentCoreClient,
-} from "@aws-sdk/client-bedrock-agentcore";
+import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 
 import { AuroraSessionStore } from "../../src/sessionstore-aurora.js";
 import {
@@ -106,19 +104,25 @@ describe("AuroraSessionStore — concurrent tenant isolation (audit item #1)", (
     const tenants = ["tenant-A", "tenant-B"] as const;
     const agents = ["agent-A", "agent-B"] as const;
 
-    const stores = tenants.map((tenantId, i) =>
-      new AuroraSessionStore({
-        tenantId,
-        agentId: agents[i]!,
-        clusterArn: "arn:aws:rds:us-east-1:000000000000:cluster:test",
-        secretArn: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test",
-        client: new RDSDataClient({}),
-      }),
+    const stores = tenants.map(
+      (tenantId, i) =>
+        new AuroraSessionStore({
+          tenantId,
+          agentId: agents[i]!,
+          clusterArn: "arn:aws:rds:us-east-1:000000000000:cluster:test",
+          secretArn:
+            "arn:aws:secretsmanager:us-east-1:000000000000:secret:test",
+          client: new RDSDataClient({}),
+        }),
     );
 
     const N = 10;
     const ops: Array<Promise<unknown>> = [];
-    const expectations: Array<{ tenantId: string; agentId: string; threadId: string }> = [];
+    const expectations: Array<{
+      tenantId: string;
+      agentId: string;
+      threadId: string;
+    }> = [];
     for (let i = 0; i < N; i += 1) {
       const tenantIdx = i % 2;
       const tenantId = tenants[tenantIdx]!;
@@ -170,7 +174,9 @@ describe("AuroraSessionStore — concurrent tenant isolation (audit item #1)", (
       const recordedThreadId = byName.get("thread_id");
       const recordedTenantId = byName.get("tenant_id");
       const recordedAgentId = byName.get("agent_id");
-      const expected = expectations.find((e) => e.threadId === recordedThreadId);
+      const expected = expectations.find(
+        (e) => e.threadId === recordedThreadId,
+      );
       if (!expected) {
         throw new Error(`unrecognised thread_id ${recordedThreadId}`);
       }
@@ -285,10 +291,12 @@ describe("HandleStore — per-invocation isolation (audit item #2)", () => {
   it("buildMcpTools constructs Authorization with the local handle store, no module-level cache", async () => {
     const headersByStore: Array<Record<string, string>[]> = [[], []];
     const stores = [new HandleStore(), new HandleStore()];
-    const factories: ConnectMcpServerFn[] = stores.map((_, idx) => async (args) => {
-      headersByStore[idx]!.push(args.headers);
-      return [];
-    });
+    const factories: ConnectMcpServerFn[] = stores.map(
+      (_, idx) => async (args) => {
+        headersByStore[idx]!.push(args.headers);
+        return [];
+      },
+    );
 
     await Promise.all(
       stores.map((store, idx) =>
@@ -375,9 +383,9 @@ describe("Memory tool tenant scope (audit item #4)", () => {
       userId: "user-A",
     });
     expect(tools).toHaveLength(2);
-    await expect(
-      tools[0]!.execute("call-1", { fact: "x" }),
-    ).rejects.toThrow(MemoryToolError);
+    await expect(tools[0]!.execute("call-1", { fact: "x" })).rejects.toThrow(
+      MemoryToolError,
+    );
   });
 
   it("each invocation gets a fresh tool array with its own bound tenantId", () => {
@@ -407,9 +415,9 @@ describe("Hindsight tool tenant scope (audit item #4)", () => {
       userId: "user-A",
     });
     expect(tools).toHaveLength(2);
-    await expect(
-      tools[0]!.execute("call-1", { query: "x" }),
-    ).rejects.toThrow(HindsightToolError);
+    await expect(tools[0]!.execute("call-1", { query: "x" })).rejects.toThrow(
+      HindsightToolError,
+    );
   });
 
   it("buildHindsightTools throws at execute() when endpoint is empty", async () => {
@@ -418,9 +426,9 @@ describe("Hindsight tool tenant scope (audit item #4)", () => {
       tenantId: "tenant-A",
       userId: "user-A",
     });
-    await expect(
-      tools[0]!.execute("call-1", { query: "x" }),
-    ).rejects.toThrow(HindsightToolError);
+    await expect(tools[0]!.execute("call-1", { query: "x" })).rejects.toThrow(
+      HindsightToolError,
+    );
   });
 });
 
@@ -554,11 +562,15 @@ function grepLines(rootDir: string, needle: string): GrepMatch[] {
   const localRelativeRoot = path.relative(searchCwd, rootDir) || ".";
   try {
     // Prefer ripgrep so local rename worktrees include untracked renamed files.
-    output = execFileSync("rg", ["-n", "--fixed-strings", needle, localRelativeRoot], {
-      cwd: searchCwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    output = execFileSync(
+      "rg",
+      ["-n", "--fixed-strings", needle, localRelativeRoot],
+      {
+        cwd: searchCwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
   } catch (err) {
     const e = err as {
       status?: number;
@@ -574,11 +586,15 @@ function grepLines(rootDir: string, needle: string): GrepMatch[] {
     try {
       // GitHub's default runner image may not have rg installed. In CI the
       // checkout is tracked, so git grep preserves the audit signal there.
-      output = execFileSync("git", ["grep", "-n", "-F", needle, "--", repoRelativeRoot], {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      output = execFileSync(
+        "git",
+        ["grep", "-n", "-F", needle, "--", repoRelativeRoot],
+        {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
     } catch (gitErr) {
       const ge = gitErr as {
         status?: number;
@@ -613,7 +629,10 @@ function grepLines(rootDir: string, needle: string): GrepMatch[] {
 // reorganisation doesn't make this test silently match nothing.
 describe("test infrastructure self-check", () => {
   it("REPO_ROOT contains a recognisable thinkwork landmark", () => {
-    const cliPkg = readFileSync(path.join(REPO_ROOT, "apps/cli/package.json"), "utf8");
+    const cliPkg = readFileSync(
+      path.join(REPO_ROOT, "apps/cli/package.json"),
+      "utf8",
+    );
     expect(cliPkg).toContain("thinkwork-cli");
   });
 

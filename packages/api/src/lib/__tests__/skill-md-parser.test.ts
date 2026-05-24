@@ -16,10 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  parseSkillMd,
-  parseSkillMdInternal,
-} from "../skill-md-parser.js";
+import { parseSkillMd, parseSkillMdInternal } from "../skill-md-parser.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -137,17 +134,19 @@ describe("parseSkillMd — happy paths", () => {
     expect(internal.tags).toEqual(["example", "full", "productivity"]);
     expect(internal.oauth_scopes).toEqual(["gmail", "calendar", "identity"]);
     expect(Array.isArray(internal.scripts)).toBe(true);
-    expect((internal.scripts as Array<Record<string, unknown>>)[0]).toMatchObject(
+    expect(
+      (internal.scripts as Array<Record<string, unknown>>)[0],
+    ).toMatchObject({
+      name: "do_thing",
+      path: "scripts/do_thing.py",
+      default_enabled: true,
+    });
+    expect((internal.inputs as Record<string, unknown>).customer).toMatchObject(
       {
-        name: "do_thing",
-        path: "scripts/do_thing.py",
-        default_enabled: true,
+        type: "string",
+        required: true,
       },
     );
-    expect((internal.inputs as Record<string, unknown>).customer).toMatchObject({
-      type: "string",
-      required: true,
-    });
     expect(
       (internal.triggers as Record<string, Record<string, unknown>>).schedule
         .expression,
@@ -247,9 +246,9 @@ describe("parseSkillMd — execution validation", () => {
       "skills/weird/SKILL.md",
     );
     if (r.valid) throw new Error("expected invalid");
-    expect(
-      r.errors.some((e) => e.kind === "SkillMdUnsupportedExecution"),
-    ).toBe(true);
+    expect(r.errors.some((e) => e.kind === "SkillMdUnsupportedExecution")).toBe(
+      true,
+    );
   });
 
   it("rejects non-string execution (type drift)", () => {
@@ -320,7 +319,10 @@ describe("parseSkillMdInternal — happy paths", () => {
   });
 
   it("parses full frontmatter and preserves every field including name/description/allowed-tools", () => {
-    const r = parseSkillMdInternal(md(FULL_FRONTMATTER), "skills/full/SKILL.md");
+    const r = parseSkillMdInternal(
+      md(FULL_FRONTMATTER),
+      "skills/full/SKILL.md",
+    );
     if (!r.valid) throw new Error("expected valid");
     // Lenient parser keeps the full mapping — callers index by key.
     expect(r.parsed.data.name).toBe("full-skill");
@@ -396,18 +398,18 @@ describe("parseSkillMdInternal — rejections", () => {
       "skills/legacy/SKILL.md",
     );
     if (r.valid) throw new Error("expected invalid");
-    expect(
-      r.errors.some((e) => e.kind === "SkillMdUnsupportedExecution"),
-    ).toBe(true);
+    expect(r.errors.some((e) => e.kind === "SkillMdUnsupportedExecution")).toBe(
+      true,
+    );
   });
 
   it("rejects frontmatter that parses to a non-mapping (e.g. a list)", () => {
     const source = ["---", "- a", "- b", "---", "body"].join("\n");
     const r = parseSkillMdInternal(source, "skills/list-fm/SKILL.md");
     if (r.valid) throw new Error("expected invalid");
-    expect(
-      r.errors.some((e) => e.kind === "SkillMdMalformedFrontmatter"),
-    ).toBe(true);
+    expect(r.errors.some((e) => e.kind === "SkillMdMalformedFrontmatter")).toBe(
+      true,
+    );
   });
 });
 

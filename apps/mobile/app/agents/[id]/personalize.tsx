@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { View, ScrollView, TextInput, ActivityIndicator, Pressable } from "react-native";
+import {
+  View,
+  ScrollView,
+  TextInput,
+  ActivityIndicator,
+  Pressable,
+} from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { Save, Code, FormInput } from "lucide-react-native";
@@ -53,7 +59,9 @@ function parseFormFromMarkdown(
   const traitsMatch = soul.match(/## Personality\n([\s\S]*?)(?=\n##|\n$|$)/);
   if (traitsMatch) form.personalityTraits = traitsMatch[1].trim();
 
-  const styleMatch = soul.match(/## Communication Style\n([\s\S]*?)(?=\n##|\n$|$)/);
+  const styleMatch = soul.match(
+    /## Communication Style\n([\s\S]*?)(?=\n##|\n$|$)/,
+  );
   if (styleMatch) {
     const style = styleMatch[1].trim().toLowerCase();
     if (style.includes("formal")) form.communicationStyle = "formal";
@@ -71,10 +79,14 @@ function parseFormFromMarkdown(
   const aboutMatch = user.match(/## About\n([\s\S]*?)(?=\n##|\n$|$)/);
   if (aboutMatch) form.aboutMe = aboutMatch[1].trim();
 
-  const topicsMatch = user.match(/## Topics of Interest\n([\s\S]*?)(?=\n##|\n$|$)/);
+  const topicsMatch = user.match(
+    /## Topics of Interest\n([\s\S]*?)(?=\n##|\n$|$)/,
+  );
   if (topicsMatch) form.topicsOfInterest = topicsMatch[1].trim();
 
-  const rememberMatch = user.match(/## Things to Remember\n([\s\S]*?)(?=\n##|\n$|$)/);
+  const rememberMatch = user.match(
+    /## Things to Remember\n([\s\S]*?)(?=\n##|\n$|$)/,
+  );
   if (rememberMatch) form.thingsToRemember = rememberMatch[1].trim();
 
   const tzMatch = user.match(/## Timezone\n(.+)/);
@@ -104,8 +116,10 @@ function renderUserMd(form: PersonalizationForm): string {
   if (form.preferredName) sections.push(`## Name\n${form.preferredName}\n`);
   if (form.roleDescription) sections.push(`## Role\n${form.roleDescription}\n`);
   if (form.aboutMe) sections.push(`## About\n${form.aboutMe}\n`);
-  if (form.topicsOfInterest) sections.push(`## Topics of Interest\n${form.topicsOfInterest}\n`);
-  if (form.thingsToRemember) sections.push(`## Things to Remember\n${form.thingsToRemember}\n`);
+  if (form.topicsOfInterest)
+    sections.push(`## Topics of Interest\n${form.topicsOfInterest}\n`);
+  if (form.thingsToRemember)
+    sections.push(`## Things to Remember\n${form.thingsToRemember}\n`);
   if (form.timezone) sections.push(`## Timezone\n${form.timezone}\n`);
   return sections.join("\n");
 }
@@ -114,7 +128,10 @@ function renderUserMd(form: PersonalizationForm): string {
 // Style options
 // ---------------------------------------------------------------------------
 
-const STYLE_OPTIONS: { value: PersonalizationForm["communicationStyle"]; label: string }[] = [
+const STYLE_OPTIONS: {
+  value: PersonalizationForm["communicationStyle"];
+  label: string;
+}[] = [
   { value: "formal", label: "Formal" },
   { value: "balanced", label: "Balanced" },
   { value: "casual", label: "Casual" },
@@ -219,7 +236,8 @@ export default function PersonalizeAgentScreen() {
       <DetailLayout title="Personalize">
         <View className="flex-1 items-center justify-center px-6">
           <Muted className="text-center">
-            This is a team agent. Personality is managed by your admin in the Team dashboard.
+            This is a team agent. Personality is managed by your admin in the
+            Team dashboard.
           </Muted>
         </View>
       </DetailLayout>
@@ -230,7 +248,11 @@ export default function PersonalizeAgentScreen() {
     <DetailLayout
       title="Personalize"
       rightAction={
-        <Pressable onPress={handleSave} disabled={saving} className="active:opacity-70">
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          className="active:opacity-70"
+        >
           {saving ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : (
@@ -239,7 +261,10 @@ export default function PersonalizeAgentScreen() {
         </Pressable>
       }
     >
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
         {/* Mode toggle */}
         <View className="flex-row items-center justify-end px-4 py-2">
           <Pressable
@@ -330,13 +355,23 @@ export default function PersonalizeAgentScreen() {
             {/* Agent Identity */}
             <View>
               <Text className="text-lg font-semibold mb-3">Agent Identity</Text>
-              <FormField label="Agent Name" value={form.agentName}
-                onChangeText={(v) => updateField("agentName", v)} placeholder="e.g. Nova" />
-              <FormField label="Personality" value={form.personalityTraits}
+              <FormField
+                label="Agent Name"
+                value={form.agentName}
+                onChangeText={(v) => updateField("agentName", v)}
+                placeholder="e.g. Nova"
+              />
+              <FormField
+                label="Personality"
+                value={form.personalityTraits}
                 onChangeText={(v) => updateField("personalityTraits", v)}
-                placeholder="e.g. friendly, concise, technical" multiline />
+                placeholder="e.g. friendly, concise, technical"
+                multiline
+              />
 
-              <Text className="text-sm font-medium mb-1.5 mt-3">Communication Style</Text>
+              <Text className="text-sm font-medium mb-1.5 mt-3">
+                Communication Style
+              </Text>
               <View className="flex-row gap-2">
                 {STYLE_OPTIONS.map((opt) => (
                   <Pressable
@@ -348,9 +383,13 @@ export default function PersonalizeAgentScreen() {
                         : "border-neutral-300 dark:border-neutral-700"
                     }`}
                   >
-                    <Text className={`text-sm ${
-                      form.communicationStyle === opt.value ? "font-semibold" : ""
-                    }`}>
+                    <Text
+                      className={`text-sm ${
+                        form.communicationStyle === opt.value
+                          ? "font-semibold"
+                          : ""
+                      }`}
+                    >
                       {opt.label}
                     </Text>
                   </Pressable>
@@ -361,23 +400,44 @@ export default function PersonalizeAgentScreen() {
             {/* About You */}
             <View>
               <Text className="text-lg font-semibold mb-3">About You</Text>
-              <FormField label="Your Name" value={form.preferredName}
-                onChangeText={(v) => updateField("preferredName", v)} placeholder="What should the agent call you?" />
-              <FormField label="Your Role" value={form.roleDescription}
+              <FormField
+                label="Your Name"
+                value={form.preferredName}
+                onChangeText={(v) => updateField("preferredName", v)}
+                placeholder="What should the agent call you?"
+              />
+              <FormField
+                label="Your Role"
+                value={form.roleDescription}
                 onChangeText={(v) => updateField("roleDescription", v)}
-                placeholder="e.g. Senior Engineer, Product Manager" />
-              <FormField label="About You" value={form.aboutMe}
+                placeholder="e.g. Senior Engineer, Product Manager"
+              />
+              <FormField
+                label="About You"
+                value={form.aboutMe}
                 onChangeText={(v) => updateField("aboutMe", v)}
-                placeholder="Anything the agent should know about you" multiline />
-              <FormField label="Topics of Interest" value={form.topicsOfInterest}
+                placeholder="Anything the agent should know about you"
+                multiline
+              />
+              <FormField
+                label="Topics of Interest"
+                value={form.topicsOfInterest}
                 onChangeText={(v) => updateField("topicsOfInterest", v)}
-                placeholder="e.g. AI, distributed systems, product strategy" />
-              <FormField label="Things to Remember" value={form.thingsToRemember}
+                placeholder="e.g. AI, distributed systems, product strategy"
+              />
+              <FormField
+                label="Things to Remember"
+                value={form.thingsToRemember}
                 onChangeText={(v) => updateField("thingsToRemember", v)}
-                placeholder="Persistent notes for the agent" multiline />
-              <FormField label="Timezone" value={form.timezone}
+                placeholder="Persistent notes for the agent"
+                multiline
+              />
+              <FormField
+                label="Timezone"
+                value={form.timezone}
                 onChangeText={(v) => updateField("timezone", v)}
-                placeholder="e.g. America/Chicago" />
+                placeholder="e.g. America/Chicago"
+              />
             </View>
           </View>
         )}

@@ -423,9 +423,7 @@ export function buildRunSkillTool(
       };
 
       const skillEnv = envOverrides[skillId];
-      const env = skillEnv
-        ? { ...process.env, ...skillEnv }
-        : process.env;
+      const env = skillEnv ? { ...process.env, ...skillEnv } : process.env;
 
       const result = await runBridge(envelope, {
         pythonBin,
@@ -435,8 +433,7 @@ export function buildRunSkillTool(
         signal,
       });
 
-      const text =
-        typeof result === "string" ? result : JSON.stringify(result);
+      const text = typeof result === "string" ? result : JSON.stringify(result);
 
       return {
         content: [{ type: "text", text }],

@@ -95,7 +95,6 @@ describe("enterprise Terraform release artifacts", () => {
       "compliance-anchor",
       "compliance-anchor-watchdog",
       "compliance-export-runner",
-      "workspace-files-efs",
     ]) {
       expect(source).toMatch(
         new RegExp(

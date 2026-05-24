@@ -7,7 +7,11 @@ export const ontologyReprocessJob = async (
   args: { tenantId: string; jobId: string },
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.tenantId, "ontology_reprocess_job");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.tenantId,
+    "ontology_reprocess_job",
+  );
   return loadOntologyReprocessJob({
     tenantId: args.tenantId,
     jobId: args.jobId,

@@ -160,9 +160,7 @@ export interface RuntimeEnvSnapshot {
 export function snapshotRuntimeEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeEnvSnapshot {
-  const memoryEngineRaw = (env.MEMORY_ENGINE || "managed")
-    .toLowerCase()
-    .trim();
+  const memoryEngineRaw = (env.MEMORY_ENGINE || "managed").toLowerCase().trim();
   const memoryEngine: RuntimeEnvSnapshot["memoryEngine"] =
     memoryEngineRaw === "hindsight" ? "hindsight" : "managed";
 
@@ -282,11 +280,11 @@ function classifyIpv4(host: string): McpUrlRejection | null {
 function classifyIpv6(host: string): McpUrlRejection | null {
   // Node's URL keeps brackets in `hostname` for IPv6; strip them before
   // matching so the predicates don't have to know about the wire form.
-  const stripped = host.startsWith("[") && host.endsWith("]")
-    ? host.slice(1, -1)
-    : host;
+  const stripped =
+    host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
   const lowered = stripped.toLowerCase();
-  if (lowered === "::1" || lowered === "0:0:0:0:0:0:0:1") return "loopback-host";
+  if (lowered === "::1" || lowered === "0:0:0:0:0:0:0:1")
+    return "loopback-host";
   // Unspecified address — never legally routable.
   if (lowered === "::" || lowered === "0:0:0:0:0:0:0:0") return "loopback-host";
   // Link-local — fe80::/10. Per RFC 4291 the prefix is fe8x..febx (the
@@ -295,11 +293,14 @@ function classifyIpv6(host: string): McpUrlRejection | null {
   if (/^fe[89ab][0-9a-f]?:/i.test(lowered)) return "link-local-host";
   // ULAs — fc00::/7 (fc... or fd...). Match any leading hex pair so
   // `fc00::1`, `fd12:abcd::1`, etc. all resolve.
-  if (/^fc[0-9a-f]{0,2}:|^fd[0-9a-f]{0,2}:/i.test(lowered)) return "private-host";
+  if (/^fc[0-9a-f]{0,2}:|^fd[0-9a-f]{0,2}:/i.test(lowered))
+    return "private-host";
   // IPv4-mapped IPv6 — `::ffff:a.b.c.d` (literal) OR `::ffff:N1:N2`
   // (the canonical form Node's URL parser emits). Re-derive the IPv4
   // octets and run classifyIpv4.
-  const dottedMatch = lowered.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  const dottedMatch = lowered.match(
+    /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/,
+  );
   if (dottedMatch?.[1]) {
     const inner = classifyIpv4(dottedMatch[1]);
     if (inner) return inner;
@@ -322,7 +323,8 @@ function classifyIpv6(host: string): McpUrlRejection | null {
 
 function classifyHostname(host: string): McpUrlRejection | null {
   const lower = host.toLowerCase();
-  if (lower === "localhost" || lower.endsWith(".localhost")) return "loopback-host";
+  if (lower === "localhost" || lower.endsWith(".localhost"))
+    return "loopback-host";
   // `metadata.google.internal` and similar cloud-metadata hostnames are not
   // covered here — the IPv4 169.254.x.x predicate catches the IMDS endpoint
   // they typically resolve to. Adding hostname denylists is FR-future work.

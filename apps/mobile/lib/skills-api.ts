@@ -1,10 +1,14 @@
-const API_BASE = (
-  process.env.EXPO_PUBLIC_GRAPHQL_URL ?? ""
-).replace(/\/graphql$/, "");
+const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
+  /\/graphql$/,
+  "",
+);
 
 const AUTH_TOKEN = process.env.EXPO_PUBLIC_MCP_AUTH_TOKEN ?? "";
 
-async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T = any>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {

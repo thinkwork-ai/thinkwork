@@ -28,7 +28,11 @@ interface Props {
   onSaved: () => void;
 }
 
-export function KnowledgeBaseFormDialog({ open, onOpenChange, onSaved }: Props) {
+export function KnowledgeBaseFormDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: Props) {
   const { tenantId } = useTenant();
   const [, createKb] = useMutation(CreateKnowledgeBaseMutation);
 
@@ -101,7 +105,10 @@ export function KnowledgeBaseFormDialog({ open, onOpenChange, onSaved }: Props) 
 
           <div className="space-y-1.5">
             <Label>Chunking Strategy</Label>
-            <Select value={chunkingStrategy} onValueChange={setChunkingStrategy}>
+            <Select
+              value={chunkingStrategy}
+              onValueChange={setChunkingStrategy}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -133,7 +140,9 @@ export function KnowledgeBaseFormDialog({ open, onOpenChange, onSaved }: Props) 
                   id="kb-overlap"
                   type="number"
                   value={overlapPercent}
-                  onChange={(e) => setOverlapPercent(Number(e.target.value) || 20)}
+                  onChange={(e) =>
+                    setOverlapPercent(Number(e.target.value) || 20)
+                  }
                   min={0}
                   max={50}
                   step={5}
@@ -143,11 +152,22 @@ export function KnowledgeBaseFormDialog({ open, onOpenChange, onSaved }: Props) 
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
-              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+            <Button
+              size="sm"
+              onClick={handleCreate}
+              disabled={saving || !name.trim()}
+            >
+              {saving && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              )}
               Create
             </Button>
           </div>

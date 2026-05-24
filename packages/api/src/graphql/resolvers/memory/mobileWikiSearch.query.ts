@@ -31,38 +31,38 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
 export const mobileWikiSearch = async (
-	_parent: unknown,
-	args: {
-		tenantId?: string;
-		userId?: string;
-		agentId?: string;
-		query: string;
-		limit?: number;
-	},
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: {
+    tenantId?: string;
+    userId?: string;
+    agentId?: string;
+    query: string;
+    limit?: number;
+  },
+  ctx: GraphQLContext,
 ) => {
-	const { query, limit = DEFAULT_LIMIT } = args;
-	const trimmed = (query || "").trim();
-	if (!trimmed) return [];
-	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
+  const { query, limit = DEFAULT_LIMIT } = args;
+  const trimmed = (query || "").trim();
+  if (!trimmed) return [];
+  const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
 
-	const ownerId = userId as string;
-	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
+  const ownerId = userId as string;
+  const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 
-	const rows = await searchWikiForUser({
-		tenantId,
-		userId: ownerId,
-		query: trimmed,
-		limit: cappedLimit,
-	});
+  const rows = await searchWikiForUser({
+    tenantId,
+    userId: ownerId,
+    query: trimmed,
+    limit: cappedLimit,
+  });
 
-	console.log(
-		`[mobileWikiSearch] user=${userId} query=${JSON.stringify(trimmed)} pages=${rows.length}`,
-	);
+  console.log(
+    `[mobileWikiSearch] user=${userId} query=${JSON.stringify(trimmed)} pages=${rows.length}`,
+  );
 
-	return rows.map((r) => ({
-		page: r.page,
-		score: r.score,
-		matchingMemoryIds: [] as string[],
-	}));
+  return rows.map((r) => ({
+    page: r.page,
+    score: r.score,
+    matchingMemoryIds: [] as string[],
+  }));
 };

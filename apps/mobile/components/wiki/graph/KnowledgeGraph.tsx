@@ -85,7 +85,9 @@ export function KnowledgeGraph({
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
     setSize((prev) =>
-      prev && prev.width === w && prev.height === h ? prev : { width: w, height: h },
+      prev && prev.width === w && prev.height === h
+        ? prev
+        : { width: w, height: h },
     );
   }, []);
 

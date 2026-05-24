@@ -1,4 +1,10 @@
-import { UserPlus, Lightbulb, ShieldCheck, GitPullRequestDraft, AlertTriangle } from "lucide-react";
+import {
+  UserPlus,
+  Lightbulb,
+  ShieldCheck,
+  GitPullRequestDraft,
+  AlertTriangle,
+} from "lucide-react";
 
 export const typeLabel: Record<string, string> = {
   hire_agent: "Hire Agent",
@@ -18,30 +24,44 @@ function PayloadField({ label, value }: { label: string; value: unknown }) {
   if (!value) return null;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">{label}</span>
+      <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">
+        {label}
+      </span>
       <span>{String(value)}</span>
     </div>
   );
 }
 
-export function HireAgentPayload({ payload }: { payload: Record<string, unknown> }) {
+export function HireAgentPayload({
+  payload,
+}: {
+  payload: Record<string, unknown>;
+}) {
   return (
     <div className="mt-3 space-y-1.5 text-sm">
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Name</span>
+        <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">
+          Name
+        </span>
         <span className="font-medium">{String(payload.name ?? "—")}</span>
       </div>
       <PayloadField label="Role" value={payload.role} />
       <PayloadField label="Title" value={payload.title} />
       {!!payload.capabilities && (
         <div className="flex items-start gap-2">
-          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">Capabilities</span>
-          <span className="text-muted-foreground">{String(payload.capabilities)}</span>
+          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">
+            Capabilities
+          </span>
+          <span className="text-muted-foreground">
+            {String(payload.capabilities)}
+          </span>
         </div>
       )}
       {!!payload.adapterType && (
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Adapter</span>
+          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">
+            Adapter
+          </span>
           <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
             {String(payload.adapterType)}
           </span>
@@ -51,8 +71,13 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
   );
 }
 
-export function GenericPayload({ payload }: { payload: Record<string, unknown> }) {
-  const plan = payload.plan ?? payload.description ?? payload.strategy ?? payload.text;
+export function GenericPayload({
+  payload,
+}: {
+  payload: Record<string, unknown>;
+}) {
+  const plan =
+    payload.plan ?? payload.description ?? payload.strategy ?? payload.text;
   return (
     <div className="mt-3 space-y-1.5 text-sm">
       <PayloadField label="Title" value={payload.title} />
@@ -70,7 +95,11 @@ export function GenericPayload({ payload }: { payload: Record<string, unknown> }
   );
 }
 
-export function WorkspaceReviewPayload({ payload }: { payload: Record<string, unknown> }) {
+export function WorkspaceReviewPayload({
+  payload,
+}: {
+  payload: Record<string, unknown>;
+}) {
   const classification = (payload.classification ?? {}) as {
     kind?: string;
     responsibleUserId?: string | null;
@@ -105,17 +134,23 @@ export function WorkspaceReviewPayload({ payload }: { payload: Record<string, un
       <div className="flex flex-wrap gap-x-4 gap-y-1.5">
         {agentName && (
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground w-20 shrink-0 text-xs">Agent</span>
+            <span className="text-muted-foreground w-20 shrink-0 text-xs">
+              Agent
+            </span>
             <span className="font-medium">{agentName}</span>
           </div>
         )}
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground w-20 shrink-0 text-xs">Target</span>
+          <span className="text-muted-foreground w-20 shrink-0 text-xs">
+            Target
+          </span>
           <span className="font-mono text-xs">{targetPath}</span>
         </div>
         {reason && (
           <div className="flex items-start gap-2">
-            <span className="text-muted-foreground w-20 shrink-0 text-xs pt-0.5">Reason</span>
+            <span className="text-muted-foreground w-20 shrink-0 text-xs pt-0.5">
+              Reason
+            </span>
             <span className="text-muted-foreground">{reason}</span>
           </div>
         )}
@@ -161,8 +196,15 @@ export function WorkspaceReviewPayload({ payload }: { payload: Record<string, un
   );
 }
 
-export function InboxItemPayloadRenderer({ type, payload }: { type: string; payload: Record<string, unknown> }) {
+export function InboxItemPayloadRenderer({
+  type,
+  payload,
+}: {
+  type: string;
+  payload: Record<string, unknown>;
+}) {
   if (type === "hire_agent") return <HireAgentPayload payload={payload} />;
-  if (type === "workspace_review") return <WorkspaceReviewPayload payload={payload} />;
+  if (type === "workspace_review")
+    return <WorkspaceReviewPayload payload={payload} />;
   return <GenericPayload payload={payload} />;
 }

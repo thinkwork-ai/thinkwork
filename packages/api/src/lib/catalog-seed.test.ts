@@ -52,12 +52,14 @@ describe("seedTenantSkillCatalog", () => {
       "SKILL.md": "# Web Search\n",
     });
     await mkdir(join(catalogRoot, "scripts"), { recursive: true });
-    await writeFile(join(catalogRoot, "scripts/helper.ts"), "ignored\n", "utf8");
+    await writeFile(
+      join(catalogRoot, "scripts/helper.ts"),
+      "ignored\n",
+      "utf8",
+    );
 
     s3Mock.on(ListObjectsV2Command).resolves({
-      Contents: [
-        { Key: "tenants/acme/skill-catalog/sales-prep/SKILL.md" },
-      ],
+      Contents: [{ Key: "tenants/acme/skill-catalog/sales-prep/SKILL.md" }],
     });
     s3Mock.on(PutObjectCommand).resolves({});
 
@@ -88,9 +90,7 @@ describe("seedTenantSkillCatalog", () => {
     const wiringPut = s3Mock
       .commandCalls(PutObjectCommand)
       .find((call) =>
-        call.args[0].input.Key?.endsWith(
-          "finance-audit-xls/WIRING.md",
-        ),
+        call.args[0].input.Key?.endsWith("finance-audit-xls/WIRING.md"),
       );
     expect(wiringPut?.args[0].input.Body?.toString()).toBe(
       renderPlaceholderWiring("finance-audit-xls"),

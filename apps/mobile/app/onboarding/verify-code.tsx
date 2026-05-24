@@ -61,7 +61,7 @@ export default function VerifyCodeScreen() {
       setCode(newCode);
       const nextIndex = Math.min(index + digits.length, 5);
       inputRefs.current[nextIndex]?.focus();
-      
+
       // Auto-submit if all 6 digits filled
       if (newCode.every((d) => d !== "")) {
         handleVerify(newCode.join(""));
@@ -136,7 +136,10 @@ export default function VerifyCodeScreen() {
   };
 
   const maskedEmail = email
-    ? email.replace(/^(.{2})(.*)(@.*)$/, (_, a, b, c) => a + "•".repeat(b.length) + c)
+    ? email.replace(
+        /^(.{2})(.*)(@.*)$/,
+        (_, a, b, c) => a + "•".repeat(b.length) + c,
+      )
     : "";
 
   return (
@@ -205,8 +208,8 @@ export default function VerifyCodeScreen() {
                       borderColor: digit
                         ? colors.primary
                         : colorScheme === "dark"
-                        ? "#404040"
-                        : "#d4d4d4",
+                          ? "#404040"
+                          : "#d4d4d4",
                       backgroundColor:
                         colorScheme === "dark" ? "#171717" : "#fafafa",
                       color: colorScheme === "dark" ? "#fff" : "#111",

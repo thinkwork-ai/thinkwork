@@ -65,7 +65,8 @@ export async function handler(
   return {
     statusCode: response.status,
     headers: {
-      "Content-Type": response.headers.get("content-type") || "text/plain; charset=utf-8",
+      "Content-Type":
+        response.headers.get("content-type") || "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
     },
     body: bodyText || (response.ok ? "OK" : "Request failed"),

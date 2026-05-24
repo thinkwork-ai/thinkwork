@@ -1,11 +1,5 @@
 import { GraphQLError } from "graphql";
-import {
-  and,
-  db,
-  eq,
-  snakeToCamel,
-  tenantCredentials,
-} from "../../utils.js";
+import { and, db, eq, snakeToCamel, tenantCredentials } from "../../utils.js";
 import type {
   TenantCredentialKind,
   TenantCredentialStatus,
@@ -73,7 +67,9 @@ export function normalizeSlug(value: string): string {
   return slug;
 }
 
-export function assertKnownKind(kind: string): asserts kind is TenantCredentialKind {
+export function assertKnownKind(
+  kind: string,
+): asserts kind is TenantCredentialKind {
   if (
     kind !== "api_key" &&
     kind !== "bearer_token" &&

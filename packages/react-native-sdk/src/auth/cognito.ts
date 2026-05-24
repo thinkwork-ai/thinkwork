@@ -34,13 +34,20 @@ export async function signIn(
     Storage: cognitoStorage as unknown as Storage,
   });
   user.setAuthenticationFlowType("USER_PASSWORD_AUTH");
-  const details = new AuthenticationDetails({ Username: email, Password: password });
+  const details = new AuthenticationDetails({
+    Username: email,
+    Password: password,
+  });
   return new Promise((resolve, reject) => {
     user.authenticateUser(details, {
       onSuccess: resolve,
       onFailure: reject,
       newPasswordRequired: () =>
-        reject(new Error("Password change required. Reset via the ThinkWork web app first.")),
+        reject(
+          new Error(
+            "Password change required. Reset via the ThinkWork web app first.",
+          ),
+        ),
     });
   });
 }
@@ -63,13 +70,20 @@ export async function getCurrentSession(
   });
 }
 
-export async function getIdToken(config: ThinkworkConfig): Promise<string | null> {
+export async function getIdToken(
+  config: ThinkworkConfig,
+): Promise<string | null> {
   const session = await getCurrentSession(config);
   return session?.getIdToken().getJwtToken() ?? null;
 }
 
-export function parseUserFromSession(session: CognitoUserSession): ThinkworkUser {
-  const payload = session.getIdToken().decodePayload() as Record<string, unknown>;
+export function parseUserFromSession(
+  session: CognitoUserSession,
+): ThinkworkUser {
+  const payload = session.getIdToken().decodePayload() as Record<
+    string,
+    unknown
+  >;
   return {
     sub: String(payload.sub ?? ""),
     email: String(payload.email ?? ""),
@@ -141,20 +155,32 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 /** Store OAuth tokens in CognitoSecureStorage using Cognito's key format so `getCurrentSession` picks them up. */
-export function storeOAuthTokens(config: ThinkworkConfig, tokens: OAuthTokens): ThinkworkUser {
+export function storeOAuthTokens(
+  config: ThinkworkConfig,
+  tokens: OAuthTokens,
+): ThinkworkUser {
   const payload = decodeJwtPayload(tokens.id_token);
   const clientId = config.cognito.userPoolClientId;
   const username = String(payload["sub"] ?? payload["cognito:username"] ?? "");
   const prefix = `CognitoIdentityServiceProvider.${clientId}`;
   cognitoStorage.setItem(`${prefix}.LastAuthUser`, username);
   cognitoStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
-  cognitoStorage.setItem(`${prefix}.${username}.accessToken`, tokens.access_token);
-  cognitoStorage.setItem(`${prefix}.${username}.refreshToken`, tokens.refresh_token);
+  cognitoStorage.setItem(
+    `${prefix}.${username}.accessToken`,
+    tokens.access_token,
+  );
+  cognitoStorage.setItem(
+    `${prefix}.${username}.refreshToken`,
+    tokens.refresh_token,
+  );
   cognitoStorage.setItem(`${prefix}.${username}.clockDrift`, "0");
   return {
     sub: String(payload["sub"] ?? ""),
     email: String(payload["email"] ?? ""),
-    name: typeof payload["name"] === "string" ? (payload["name"] as string) : undefined,
+    name:
+      typeof payload["name"] === "string"
+        ? (payload["name"] as string)
+        : undefined,
     tenantId:
       typeof payload["custom:tenant_id"] === "string"
         ? (payload["custom:tenant_id"] as string)

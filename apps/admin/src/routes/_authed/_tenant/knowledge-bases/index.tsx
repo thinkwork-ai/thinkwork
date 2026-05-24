@@ -16,9 +16,7 @@ import { KnowledgeBasesListQuery } from "@/lib/graphql-queries";
 import { KnowledgeBaseFormDialog } from "@/components/knowledge-bases/KnowledgeBaseFormDialog";
 import { relativeTime } from "@/lib/utils";
 
-export const Route = createFileRoute(
-  "/_authed/_tenant/knowledge-bases/",
-)({
+export const Route = createFileRoute("/_authed/_tenant/knowledge-bases/")({
   beforeLoad: () => {
     throw redirect({
       to: "/knowledge/knowledge-bases",
@@ -76,7 +74,9 @@ const columns: ColumnDef<KbRow>[] = [
     header: "Last Sync",
     cell: ({ row }) => (
       <span className="text-sm text-muted-foreground whitespace-nowrap">
-        {row.original.lastSyncAt ? relativeTime(row.original.lastSyncAt) : "Never"}
+        {row.original.lastSyncAt
+          ? relativeTime(row.original.lastSyncAt)
+          : "Never"}
       </span>
     ),
     size: 120,
@@ -131,8 +131,9 @@ export function KnowledgeBasesPage({
         lastSyncStatus: kb.lastSyncStatus,
         createdAt: kb.createdAt,
       }))
-      .filter((kb: KbRow) =>
-        !search || kb.name.toLowerCase().includes(search.toLowerCase()),
+      .filter(
+        (kb: KbRow) =>
+          !search || kb.name.toLowerCase().includes(search.toLowerCase()),
       );
   }, [result.data, search]);
 
@@ -199,9 +200,5 @@ export function KnowledgeBasesPage({
     );
   }
 
-  return (
-    <PageLayout header={header}>
-      {content}
-    </PageLayout>
-  );
+  return <PageLayout header={header}>{content}</PageLayout>;
 }

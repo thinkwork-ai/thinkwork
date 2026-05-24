@@ -21,11 +21,7 @@ export type AgentTab = "files" | "skills" | "tools" | "mcp-servers";
 
 export const AGENT_TABS: {
   value: AgentTab;
-  to:
-    | "/agent/files"
-    | "/agent/skills"
-    | "/agent/tools"
-    | "/agent/mcp-servers";
+  to: "/agent/files" | "/agent/skills" | "/agent/tools" | "/agent/mcp-servers";
   label: string;
 }[] = [
   { value: "files", to: "/agent/files", label: "Workspace" },

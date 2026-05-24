@@ -7,7 +7,11 @@ export const ontologySuggestionScanJob = async (
   args: { tenantId: string; jobId: string },
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.tenantId, "ontology_suggestion_scan_job");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.tenantId,
+    "ontology_suggestion_scan_job",
+  );
   return loadOntologySuggestionScanJob({
     tenantId: args.tenantId,
     jobId: args.jobId,

@@ -10,10 +10,10 @@ import { defineConfig } from "drizzle-kit";
  *   DATABASE_URL="postgresql://user:pass@host:5432/thinkwork" pnpm db:push
  */
 export default defineConfig({
-	dialect: "postgresql",
-	schema: "./src/schema/index.ts",
-	out: "./drizzle",
-	dbCredentials: {
-		url: process.env.DATABASE_URL!,
-	},
+  dialect: "postgresql",
+  schema: "./src/schema/index.ts",
+  out: "./drizzle",
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
 });

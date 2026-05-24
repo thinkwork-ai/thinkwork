@@ -14,7 +14,10 @@ export const PROD_LIKE_STAGES = ["main", "prod", "production", "staging"];
  * Validates a stage name. Stages must be lowercase alphanumeric + hyphens,
  * 2-30 characters. This catches typos while allowing custom stage names.
  */
-export function validateStage(stage: string): { valid: boolean; error?: string } {
+export function validateStage(stage: string): {
+  valid: boolean;
+  error?: string;
+} {
   if (!stage) {
     return { valid: false, error: "Stage name is required." };
   }
@@ -30,7 +33,10 @@ export function validateStage(stage: string): { valid: boolean; error?: string }
 /**
  * Validates a component name.
  */
-export function validateComponent(component: string): { valid: boolean; error?: string } {
+export function validateComponent(component: string): {
+  valid: boolean;
+  error?: string;
+} {
   if (!VALID_COMPONENTS.includes(component as Component)) {
     return {
       valid: false,

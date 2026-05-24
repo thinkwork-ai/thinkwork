@@ -125,7 +125,9 @@ export function GraphCanvas({
             return null;
           }
           const edgeDimmed =
-            !!filter && !filter.matchedIds.has(a.id) && !filter.matchedIds.has(b.id);
+            !!filter &&
+            !filter.matchedIds.has(a.id) &&
+            !filter.matchedIds.has(b.id);
           const dx = b.x - a.x;
           const dy = b.y - a.y;
           const dist = Math.hypot(dx, dy);

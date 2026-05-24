@@ -32,7 +32,8 @@ type VaultRequest = {
 };
 
 const client = new SecretsManagerClient({
-  region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+  region:
+    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
 });
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResult {
@@ -46,19 +47,27 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResult {
 function authToken(headers?: Record<string, string | undefined>) {
   const auth = headers?.authorization || headers?.Authorization;
   if (!auth) return null;
-  return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
+  return auth.startsWith("Bearer ")
+    ? auth.slice("Bearer ".length).trim()
+    : null;
 }
 
-function isStoredConnectorSecret(value: unknown): value is StoredConnectorSecret {
+function isStoredConnectorSecret(
+  value: unknown,
+): value is StoredConnectorSecret {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
   if (v.type === "apiKey") return typeof v.apiKey === "string";
-  if (v.type === "basic") return typeof v.username === "string" && typeof v.password === "string";
+  if (v.type === "basic")
+    return typeof v.username === "string" && typeof v.password === "string";
   if (v.type === "skillEnv") return typeof v.env === "object" && v.env !== null;
   return false;
 }
 
-async function putSecret(secretRef: string, payload: StoredConnectorSecret): Promise<void> {
+async function putSecret(
+  secretRef: string,
+  payload: StoredConnectorSecret,
+): Promise<void> {
   const secretString = JSON.stringify(payload);
   try {
     await client.send(
@@ -81,9 +90,13 @@ async function putSecret(secretRef: string, payload: StoredConnectorSecret): Pro
   }
 }
 
-async function getSecret(secretRef: string): Promise<StoredConnectorSecret | null> {
+async function getSecret(
+  secretRef: string,
+): Promise<StoredConnectorSecret | null> {
   try {
-    const result = await client.send(new GetSecretValueCommand({ SecretId: secretRef }));
+    const result = await client.send(
+      new GetSecretValueCommand({ SecretId: secretRef }),
+    );
     if (!result.SecretString) return null;
 
     const parsed = JSON.parse(result.SecretString);
@@ -115,7 +128,9 @@ function errorMessage(error: unknown): string {
   return message ? `${name}: ${message}` : name;
 }
 
-export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+export async function handler(
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> {
   const expectedSecret = process.env.API_AUTH_SECRET;
   const token = authToken(event.headers);
   if (!expectedSecret || !token || token !== expectedSecret) {
@@ -156,6 +171,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(400, { ok: false, error: "Unsupported action" });
   } catch (error: unknown) {
-    return json(500, { ok: false, error: `Vault operation failed: ${errorMessage(error)}` });
+    return json(500, {
+      ok: false,
+      error: `Vault operation failed: ${errorMessage(error)}`,
+    });
   }
 }

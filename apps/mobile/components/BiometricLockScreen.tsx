@@ -37,16 +37,19 @@ export function BiometricLockScreen({
 
   // Auto-trigger authentication when app comes to foreground
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === "active" &&
-        !authenticating
-      ) {
-        handleAuthenticate();
-      }
-      appState.current = nextAppState;
-    });
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (
+          appState.current.match(/inactive|background/) &&
+          nextAppState === "active" &&
+          !authenticating
+        ) {
+          handleAuthenticate();
+        }
+        appState.current = nextAppState;
+      },
+    );
 
     return () => {
       subscription.remove();
@@ -76,7 +79,14 @@ export function BiometricLockScreen({
   return (
     <View
       className="bg-white dark:bg-neutral-950 items-center justify-center p-6"
-      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 1000,
+      }}
     >
       <View className="items-center max-w-sm">
         {/* Logo */}
@@ -119,7 +129,9 @@ export function BiometricLockScreen({
         {!showHint && <View style={{ height: 20, marginBottom: 12 }} />}
 
         <Button variant="link" onPress={onLoginScreen}>
-          <Text className="text-neutral-400 dark:text-neutral-400">Login Screen</Text>
+          <Text className="text-neutral-400 dark:text-neutral-400">
+            Login Screen
+          </Text>
         </Button>
       </View>
     </View>

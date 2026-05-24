@@ -5,7 +5,10 @@ import {
   UpdateMemoryRecordMutation,
 } from "@/lib/graphql-queries";
 
-export function useMemoryRecords(userId: string | undefined, namespace: string | undefined) {
+export function useMemoryRecords(
+  userId: string | undefined,
+  namespace: string | undefined,
+) {
   return useQuery({
     query: MemoryRecordsQuery,
     variables: { userId: userId!, namespace: namespace! },

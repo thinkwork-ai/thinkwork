@@ -58,10 +58,7 @@ export function computeFit(
   const availW = Math.max(1, viewportWidth - 2 * padX);
   const availH = Math.max(1, viewportHeight - 2 * padY);
   const clamp = (s: number) =>
-    Math.min(
-      Math.min(SCALE_MAX, maxScale),
-      Math.max(SCALE_MIN, s),
-    );
+    Math.min(Math.min(SCALE_MAX, maxScale), Math.max(SCALE_MIN, s));
 
   if (centerOnOrigin) {
     // Lock to the viewport center; size by the largest distance from

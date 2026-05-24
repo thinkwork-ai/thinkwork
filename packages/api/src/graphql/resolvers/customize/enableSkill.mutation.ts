@@ -1,45 +1,31 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import {
-  agentSkills,
-  and,
-  computers,
-  db,
-  eq,
-  ne,
-  sql,
-  tenantSkills,
-} from "../../utils.js";
+import { agentSkills, and, db, eq, tenantSkills } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
 import { isBuiltinToolSlug } from "../../../lib/builtin-tool-slugs.js";
 import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
+import {
+  PlatformAgentNotFoundError,
+  resolveTenantPlatformAgent,
+} from "../../../lib/agents/tenant-platform-agent.js";
 
 export interface EnableSkillArgs {
-  input: { computerId: string; skillId: string };
+  input: { agentId: string; skillId: string };
 }
 
 /**
- * Enable a skill for the caller's Computer. Looks up the catalog row in
- * `tenant_skills`, rejects built-in tool slugs (template/runtime config,
- * not workspace skills), resolves the Computer's primary agent, and
- * upserts an `agent_skills` row keyed by the existing
- * `uq_agent_skills_agent_skill (agent_id, skill_id)` index.
- *
- * `derive-agent-skills.ts` runs on workspace AGENTS.md writes and uses
- * `onConflictDoNothing` to preserve metadata, so this resolver setting
- * `enabled=true` doesn't fight the workspace-driven path. Workspace
- * deletion of `skills/<slug>/SKILL.md` still drops the row, but our
- * `enabled=true` wouldn't survive that anyway.
- *
- * Plan: docs/plans/2026-05-09-009-feat-customize-skills-live-plan.md U5-1.
+ * Enable a skill on the caller's tenant platform agent. Upserts an
+ * `agent_skills` row keyed by the `uq_agent_skills_agent_skill
+ * (agent_id, skill_id)` index. `derive-agent-skills.ts` keeps these in
+ * sync with workspace AGENTS.md writes.
  */
 export async function enableSkill(
   _parent: unknown,
   args: EnableSkillArgs,
   ctx: GraphQLContext,
 ) {
-  const { computerId, skillId } = args.input;
+  const { agentId, skillId } = args.input;
   const caller = await resolveCaller(ctx);
   if (!caller.userId || !caller.tenantId) {
     throw new GraphQLError("Authentication required", {
@@ -47,29 +33,29 @@ export async function enableSkill(
     });
   }
 
-  const [computer] = await db
-    .select({
-      id: computers.id,
-      tenant_id: computers.tenant_id,
-      owner_user_id: computers.owner_user_id,
-      primary_agent_id: computers.primary_agent_id,
-      migrated_from_agent_id: computers.migrated_from_agent_id,
-    })
-    .from(computers)
-    .where(
-      and(
-        eq(computers.id, computerId),
-        eq(computers.owner_user_id, caller.userId),
-        ne(computers.status, "archived"),
-      ),
-    );
-  if (!computer) {
-    throw new GraphQLError("Computer not found or not accessible", {
-      extensions: { code: "COMPUTER_NOT_FOUND" },
-    });
-  }
+  await requireTenantMember(ctx, caller.tenantId);
 
-  await requireTenantMember(ctx, computer.tenant_id);
+  let resolvedAgentId: string;
+  try {
+    const agent = await resolveTenantPlatformAgent(caller.tenantId);
+    if (agentId && agentId !== agent.id) {
+      throw new GraphQLError(
+        "agentId does not match the tenant platform agent",
+        {
+          extensions: { code: "CUSTOMIZE_AGENT_MISMATCH" },
+        },
+      );
+    }
+    resolvedAgentId = agent.id;
+  } catch (err) {
+    if (err instanceof PlatformAgentNotFoundError) {
+      throw new GraphQLError(
+        "Tenant has no platform agent — bootstrap your workspace first.",
+        { extensions: { code: "CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND" } },
+      );
+    }
+    throw err;
+  }
 
   if (isBuiltinToolSlug(skillId)) {
     throw new GraphQLError(
@@ -78,21 +64,12 @@ export async function enableSkill(
     );
   }
 
-  const agentId =
-    computer.primary_agent_id ?? computer.migrated_from_agent_id ?? null;
-  if (!agentId) {
-    throw new GraphQLError(
-      "This Computer has no primary agent — open the workbench once to provision one.",
-      { extensions: { code: "CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND" } },
-    );
-  }
-
   const [catalog] = await db
     .select()
     .from(tenantSkills)
     .where(
       and(
-        eq(tenantSkills.tenant_id, computer.tenant_id),
+        eq(tenantSkills.tenant_id, caller.tenantId),
         eq(tenantSkills.skill_id, skillId),
       ),
     );
@@ -106,16 +83,14 @@ export async function enableSkill(
   const [row] = await db
     .insert(agentSkills)
     .values({
-      tenant_id: computer.tenant_id,
-      agent_id: agentId,
+      tenant_id: caller.tenantId,
+      agent_id: resolvedAgentId,
       skill_id: skillId,
       enabled: true,
     })
     .onConflictDoUpdate({
       target: [agentSkills.agent_id, agentSkills.skill_id],
-      set: {
-        enabled: true,
-      },
+      set: { enabled: true },
     })
     .returning();
 
@@ -125,10 +100,8 @@ export async function enableSkill(
     });
   }
 
-  await renderWorkspaceAfterCustomize("enableSkill", agentId, computer.id);
+  await renderWorkspaceAfterCustomize("enableSkill", resolvedAgentId);
 
-  // Return the AgentSkill projection (matches the existing GraphQL type
-  // exposed by setAgentSkills + agents.graphql — no duplicate projection).
   return {
     id: row.id,
     tenantId: row.tenant_id,

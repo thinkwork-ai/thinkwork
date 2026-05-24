@@ -11,12 +11,12 @@
  * @param maxSeconds - maximum delay cap in seconds (default 300)
  */
 export function getRetryDelay(
-	attempt: number,
-	baseSeconds = 10,
-	maxSeconds = 300,
+  attempt: number,
+  baseSeconds = 10,
+  maxSeconds = 300,
 ): number {
-	const exponential = baseSeconds * Math.pow(2, attempt - 1);
-	const capped = Math.min(exponential, maxSeconds);
-	// Full jitter: random between 0 and capped
-	return Math.floor(Math.random() * capped) + 1;
+  const exponential = baseSeconds * Math.pow(2, attempt - 1);
+  const capped = Math.min(exponential, maxSeconds);
+  // Full jitter: random between 0 and capped
+  return Math.floor(Math.random() * capped) + 1;
 }

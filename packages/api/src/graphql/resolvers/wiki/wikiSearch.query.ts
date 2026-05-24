@@ -19,26 +19,26 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
 export const wikiSearch = async (
-	_parent: unknown,
-	args: {
-		tenantId: string;
-		userId?: string | null;
-		ownerId?: string | null;
-		query: string;
-		limit?: number;
-	},
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: {
+    tenantId: string;
+    userId?: string | null;
+    ownerId?: string | null;
+    query: string;
+    limit?: number;
+  },
+  ctx: GraphQLContext,
 ) => {
-	const { tenantId, userId } = await assertCanReadWikiScope(ctx, args);
+  const { tenantId, userId } = await assertCanReadWikiScope(ctx, args);
 
-	const query = args.query.trim();
-	if (query.length === 0) return [];
-	const limit = Math.max(1, Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT));
+  const query = args.query.trim();
+  if (query.length === 0) return [];
+  const limit = Math.max(1, Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT));
 
-	return searchWikiForUser({
-		tenantId: args.tenantId,
-		userId,
-		query,
-		limit,
-	});
+  return searchWikiForUser({
+    tenantId: args.tenantId,
+    userId,
+    query,
+    limit,
+  });
 };

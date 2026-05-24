@@ -49,9 +49,7 @@ import {
   type BuiltinTool,
 } from "@/lib/builtin-tools-api";
 
-export const Route = createFileRoute(
-  "/_authed/_tenant/agent/tools",
-)({
+export const Route = createFileRoute("/_authed/_tenant/agent/tools")({
   component: BuiltinToolsPage,
 });
 
@@ -181,10 +179,7 @@ function toolNameFor(slug: string): string | null {
   }
 }
 
-function agentConfigFor(
-  slug: string,
-  agent: AgentToolConfig | null,
-): unknown {
+function agentConfigFor(slug: string, agent: AgentToolConfig | null): unknown {
   if (!agent) return null;
   switch (slug) {
     case "code-sandbox":
@@ -236,11 +231,7 @@ function accessForTool(
     const enabled = tenantReady && agentEnabled;
     return {
       enabled,
-      label: enabled
-        ? "Enabled"
-        : tenantReady
-          ? "Agent off"
-          : "Platform off",
+      label: enabled ? "Enabled" : tenantReady ? "Agent off" : "Platform off",
       detail: enabled
         ? `${agentName} receives execute_code.`
         : tenantReady
@@ -428,10 +419,7 @@ function BuiltinToolsPage() {
   const { tenant } = useTenant();
   const tenantSlug = tenant?.slug;
   const tenantId = tenant?.id;
-  useBreadcrumbs([
-    { label: "Agent", href: "/agent" },
-    { label: "Tools" },
-  ]);
+  useBreadcrumbs([{ label: "Agent", href: "/agent" }, { label: "Tools" }]);
 
   const [tools, setTools] = useState<BuiltinTool[]>([]);
   const [loading, setLoading] = useState(true);

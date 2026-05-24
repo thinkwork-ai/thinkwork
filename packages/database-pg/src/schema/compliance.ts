@@ -24,16 +24,16 @@
  */
 
 import {
-	pgSchema,
-	uuid,
-	text,
-	timestamp,
-	integer,
-	jsonb,
-	char,
-	index,
-	uniqueIndex,
-	check,
+  pgSchema,
+  uuid,
+  text,
+  timestamp,
+  integer,
+  jsonb,
+  char,
+  index,
+  uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -49,62 +49,62 @@ export const compliance = pgSchema("compliance");
  * replay).
  */
 export const auditOutbox = compliance.table(
-	"audit_outbox",
-	{
-		outbox_id: uuid("outbox_id")
-			.primaryKey()
-			.default(sql`gen_random_uuid()`),
-		event_id: uuid("event_id").notNull(),
-		tenant_id: uuid("tenant_id").notNull(),
-		occurred_at: timestamp("occurred_at", { withTimezone: true }).notNull(),
-		enqueued_at: timestamp("enqueued_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-		drained_at: timestamp("drained_at", { withTimezone: true }),
-		drainer_error: text("drainer_error"),
-		actor: text("actor").notNull(),
-		actor_type: text("actor_type").notNull(),
-		source: text("source").notNull(),
-		event_type: text("event_type").notNull(),
-		resource_type: text("resource_type"),
-		resource_id: text("resource_id"),
-		action: text("action"),
-		outcome: text("outcome"),
-		request_id: text("request_id"),
-		thread_id: uuid("thread_id"),
-		agent_id: uuid("agent_id"),
-		payload: jsonb("payload")
-			.notNull()
-			.default(sql`'{}'::jsonb`),
-		payload_schema_version: integer("payload_schema_version")
-			.notNull()
-			.default(1),
-		control_ids: text("control_ids")
-			.array()
-			.notNull()
-			.default(sql`ARRAY[]::text[]`),
-		payload_redacted_fields: text("payload_redacted_fields")
-			.array()
-			.notNull()
-			.default(sql`ARRAY[]::text[]`),
-		payload_oversize_s3_key: text("payload_oversize_s3_key"),
-	},
-	(table) => [
-		uniqueIndex("uq_audit_outbox_event_id").on(table.event_id),
-		index("idx_audit_outbox_pending")
-			.on(table.enqueued_at)
-			.where(sql`${table.drained_at} IS NULL`),
-		index("idx_audit_outbox_tenant_enqueued").on(
-			table.tenant_id,
-			table.enqueued_at,
-		),
-		check(
-			// _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
-			// to include attachment|skill|output prefixes for the finance pilot.
-			"audit_outbox_event_type_prefix_v2",
-			sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
-		),
-	],
+  "audit_outbox",
+  {
+    outbox_id: uuid("outbox_id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    event_id: uuid("event_id").notNull(),
+    tenant_id: uuid("tenant_id").notNull(),
+    occurred_at: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    enqueued_at: timestamp("enqueued_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    drained_at: timestamp("drained_at", { withTimezone: true }),
+    drainer_error: text("drainer_error"),
+    actor: text("actor").notNull(),
+    actor_type: text("actor_type").notNull(),
+    source: text("source").notNull(),
+    event_type: text("event_type").notNull(),
+    resource_type: text("resource_type"),
+    resource_id: text("resource_id"),
+    action: text("action"),
+    outcome: text("outcome"),
+    request_id: text("request_id"),
+    thread_id: uuid("thread_id"),
+    agent_id: uuid("agent_id"),
+    payload: jsonb("payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    payload_schema_version: integer("payload_schema_version")
+      .notNull()
+      .default(1),
+    control_ids: text("control_ids")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    payload_redacted_fields: text("payload_redacted_fields")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    payload_oversize_s3_key: text("payload_oversize_s3_key"),
+  },
+  (table) => [
+    uniqueIndex("uq_audit_outbox_event_id").on(table.event_id),
+    index("idx_audit_outbox_pending")
+      .on(table.enqueued_at)
+      .where(sql`${table.drained_at} IS NULL`),
+    index("idx_audit_outbox_tenant_enqueued").on(
+      table.tenant_id,
+      table.enqueued_at,
+    ),
+    check(
+      // _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
+      // to include attachment|skill|output prefixes for the finance pilot.
+      "audit_outbox_event_type_prefix_v2",
+      sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
+    ),
+  ],
 );
 
 /**
@@ -118,71 +118,71 @@ export const auditOutbox = compliance.table(
  * outbox row, drainer-replay idempotency key).
  */
 export const auditEvents = compliance.table(
-	"audit_events",
-	{
-		event_id: uuid("event_id").primaryKey().notNull(),
-		outbox_id: uuid("outbox_id").notNull(),
-		tenant_id: uuid("tenant_id").notNull(),
-		occurred_at: timestamp("occurred_at", { withTimezone: true }).notNull(),
-		recorded_at: timestamp("recorded_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-		actor: text("actor").notNull(),
-		actor_type: text("actor_type").notNull(),
-		source: text("source").notNull(),
-		event_type: text("event_type").notNull(),
-		resource_type: text("resource_type"),
-		resource_id: text("resource_id"),
-		action: text("action"),
-		outcome: text("outcome"),
-		request_id: text("request_id"),
-		thread_id: uuid("thread_id"),
-		agent_id: uuid("agent_id"),
-		payload: jsonb("payload")
-			.notNull()
-			.default(sql`'{}'::jsonb`),
-		payload_schema_version: integer("payload_schema_version")
-			.notNull()
-			.default(1),
-		control_ids: text("control_ids")
-			.array()
-			.notNull()
-			.default(sql`ARRAY[]::text[]`),
-		payload_redacted_fields: text("payload_redacted_fields")
-			.array()
-			.notNull()
-			.default(sql`ARRAY[]::text[]`),
-		payload_oversize_s3_key: text("payload_oversize_s3_key"),
-		prev_hash: char("prev_hash", { length: 64 }),
-		event_hash: char("event_hash", { length: 64 }).notNull(),
-	},
-	(table) => [
-		uniqueIndex("uq_audit_events_event_id").on(table.event_id),
-		uniqueIndex("uq_audit_events_outbox_id").on(table.outbox_id),
-		index("idx_audit_events_tenant_occurred").on(
-			table.tenant_id,
-			table.occurred_at,
-		),
-		index("idx_audit_events_tenant_event_type").on(
-			table.tenant_id,
-			table.event_type,
-			table.occurred_at,
-		),
-		index("idx_audit_events_actor").on(table.actor),
-		// GIN index in DDL — Drizzle index() defaults to BTREE; the SQL
-		// migration is the source of truth for the access method.
-		index("idx_audit_events_control_ids").using("gin", table.control_ids),
-		check(
-			"audit_events_actor_type_allowed",
-			sql`${table.actor_type} IN ('user','system','agent')`,
-		),
-		check(
-			// _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
-			// to include attachment|skill|output prefixes for the finance pilot.
-			"audit_events_event_type_prefix_v2",
-			sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
-		),
-	],
+  "audit_events",
+  {
+    event_id: uuid("event_id").primaryKey().notNull(),
+    outbox_id: uuid("outbox_id").notNull(),
+    tenant_id: uuid("tenant_id").notNull(),
+    occurred_at: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    recorded_at: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    actor: text("actor").notNull(),
+    actor_type: text("actor_type").notNull(),
+    source: text("source").notNull(),
+    event_type: text("event_type").notNull(),
+    resource_type: text("resource_type"),
+    resource_id: text("resource_id"),
+    action: text("action"),
+    outcome: text("outcome"),
+    request_id: text("request_id"),
+    thread_id: uuid("thread_id"),
+    agent_id: uuid("agent_id"),
+    payload: jsonb("payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    payload_schema_version: integer("payload_schema_version")
+      .notNull()
+      .default(1),
+    control_ids: text("control_ids")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    payload_redacted_fields: text("payload_redacted_fields")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    payload_oversize_s3_key: text("payload_oversize_s3_key"),
+    prev_hash: char("prev_hash", { length: 64 }),
+    event_hash: char("event_hash", { length: 64 }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_audit_events_event_id").on(table.event_id),
+    uniqueIndex("uq_audit_events_outbox_id").on(table.outbox_id),
+    index("idx_audit_events_tenant_occurred").on(
+      table.tenant_id,
+      table.occurred_at,
+    ),
+    index("idx_audit_events_tenant_event_type").on(
+      table.tenant_id,
+      table.event_type,
+      table.occurred_at,
+    ),
+    index("idx_audit_events_actor").on(table.actor),
+    // GIN index in DDL — Drizzle index() defaults to BTREE; the SQL
+    // migration is the source of truth for the access method.
+    index("idx_audit_events_control_ids").using("gin", table.control_ids),
+    check(
+      "audit_events_actor_type_allowed",
+      sql`${table.actor_type} IN ('user','system','agent')`,
+    ),
+    check(
+      // _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
+      // to include attachment|skill|output prefixes for the finance pilot.
+      "audit_events_event_type_prefix_v2",
+      sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
+    ),
+  ],
 );
 
 /**
@@ -193,31 +193,31 @@ export const auditEvents = compliance.table(
  * actor→person resolution is lost.
  */
 export const actorPseudonym = compliance.table(
-	"actor_pseudonym",
-	{
-		actor_id: uuid("actor_id")
-			.primaryKey()
-			.default(sql`gen_random_uuid()`),
-		user_id: uuid("user_id"),
-		email_hash: char("email_hash", { length: 64 }),
-		actor_type: text("actor_type").notNull(),
-		display_name: text("display_name"),
-		created_at: timestamp("created_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-	},
-	(table) => [
-		index("idx_actor_pseudonym_user")
-			.on(table.user_id)
-			.where(sql`${table.user_id} IS NOT NULL`),
-		index("idx_actor_pseudonym_email_hash")
-			.on(table.email_hash)
-			.where(sql`${table.email_hash} IS NOT NULL`),
-		check(
-			"actor_pseudonym_actor_type_allowed",
-			sql`${table.actor_type} IN ('user','system','agent')`,
-		),
-	],
+  "actor_pseudonym",
+  {
+    actor_id: uuid("actor_id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    user_id: uuid("user_id"),
+    email_hash: char("email_hash", { length: 64 }),
+    actor_type: text("actor_type").notNull(),
+    display_name: text("display_name"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("idx_actor_pseudonym_user")
+      .on(table.user_id)
+      .where(sql`${table.user_id} IS NOT NULL`),
+    index("idx_actor_pseudonym_email_hash")
+      .on(table.email_hash)
+      .where(sql`${table.email_hash} IS NOT NULL`),
+    check(
+      "actor_pseudonym_actor_type_allowed",
+      sql`${table.actor_type} IN ('user','system','agent')`,
+    ),
+  ],
 );
 
 /**
@@ -228,47 +228,44 @@ export const actorPseudonym = compliance.table(
  * URL.
  */
 export const exportJobs = compliance.table(
-	"export_jobs",
-	{
-		job_id: uuid("job_id")
-			.primaryKey()
-			.default(sql`gen_random_uuid()`),
-		tenant_id: uuid("tenant_id").notNull(),
-		requested_by_actor_id: uuid("requested_by_actor_id").notNull(),
-		filter: jsonb("filter").notNull(),
-		format: text("format").notNull(),
-		status: text("status").notNull().default("queued"),
-		s3_key: text("s3_key"),
-		presigned_url: text("presigned_url"),
-		presigned_url_expires_at: timestamp("presigned_url_expires_at", {
-			withTimezone: true,
-		}),
-		job_error: text("job_error"),
-		requested_at: timestamp("requested_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-		started_at: timestamp("started_at", { withTimezone: true }),
-		completed_at: timestamp("completed_at", { withTimezone: true }),
-	},
-	(table) => [
-		index("idx_export_jobs_tenant_requested").on(
-			table.tenant_id,
-			table.requested_at,
-		),
-		index("idx_export_jobs_actor_requested").on(
-			table.tenant_id,
-			table.requested_by_actor_id,
-			table.requested_at,
-		),
-		check(
-			"export_jobs_format_allowed",
-			sql`${table.format} IN ('csv','json')`,
-		),
-		check(
-			"export_jobs_status_allowed",
-			sql`${table.status} IN ('queued','running','complete','failed')`,
-		),
-	],
+  "export_jobs",
+  {
+    job_id: uuid("job_id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id").notNull(),
+    requested_by_actor_id: uuid("requested_by_actor_id").notNull(),
+    filter: jsonb("filter").notNull(),
+    format: text("format").notNull(),
+    status: text("status").notNull().default("queued"),
+    s3_key: text("s3_key"),
+    presigned_url: text("presigned_url"),
+    presigned_url_expires_at: timestamp("presigned_url_expires_at", {
+      withTimezone: true,
+    }),
+    job_error: text("job_error"),
+    requested_at: timestamp("requested_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    started_at: timestamp("started_at", { withTimezone: true }),
+    completed_at: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_export_jobs_tenant_requested").on(
+      table.tenant_id,
+      table.requested_at,
+    ),
+    index("idx_export_jobs_actor_requested").on(
+      table.tenant_id,
+      table.requested_by_actor_id,
+      table.requested_at,
+    ),
+    check("export_jobs_format_allowed", sql`${table.format} IN ('csv','json')`),
+    check(
+      "export_jobs_status_allowed",
+      sql`${table.status} IN ('queued','running','complete','failed')`,
+    ),
+  ],
 );
 
 /**
@@ -288,21 +285,19 @@ export const exportJobs = compliance.table(
  *   - compliance_reader: SELECT (for U10 admin Compliance UI showing anchor lag)
  */
 export const tenantAnchorState = compliance.table(
-	"tenant_anchor_state",
-	{
-		tenant_id: uuid("tenant_id").primaryKey(),
-		last_anchored_recorded_at: timestamp("last_anchored_recorded_at", {
-			withTimezone: true,
-		}),
-		last_anchored_event_id: uuid("last_anchored_event_id"),
-		last_cadence_id: uuid("last_cadence_id"),
-		updated_at: timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-	},
-	(table) => [
-		index("idx_tenant_anchor_state_updated_at").on(table.updated_at),
-	],
+  "tenant_anchor_state",
+  {
+    tenant_id: uuid("tenant_id").primaryKey(),
+    last_anchored_recorded_at: timestamp("last_anchored_recorded_at", {
+      withTimezone: true,
+    }),
+    last_anchored_event_id: uuid("last_anchored_event_id"),
+    last_cadence_id: uuid("last_cadence_id"),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [index("idx_tenant_anchor_state_updated_at").on(table.updated_at)],
 );
 
 /**
@@ -314,32 +309,32 @@ export const tenantAnchorState = compliance.table(
  * the audit_outbox / audit_events event_type check constraints).
  */
 export const COMPLIANCE_EVENT_TYPES = [
-	// Phase 3 starter slate (R10)
-	"auth.signin.success",
-	"auth.signin.failure",
-	"auth.signout",
-	"user.invited",
-	"user.created",
-	"user.disabled",
-	"user.deleted",
-	"agent.created",
-	"agent.deleted",
-	"agent.migrated",
-	"agent.skills_changed",
-	"mcp.added",
-	"mcp.removed",
-	"workspace.governance_file_edited",
-	"data.export_initiated",
-	// Phase 6 reservations (R14)
-	"policy.evaluated",
-	"policy.allowed",
-	"policy.blocked",
-	"policy.bypassed",
-	"approval.recorded",
-	// Finance pilot (U6 of 2026-05-14-002-feat-finance-analysis-pilot-plan)
-	"attachment.received",
-	"skill.activated",
-	"output.artifact_produced",
+  // Phase 3 starter slate (R10)
+  "auth.signin.success",
+  "auth.signin.failure",
+  "auth.signout",
+  "user.invited",
+  "user.created",
+  "user.disabled",
+  "user.deleted",
+  "agent.created",
+  "agent.deleted",
+  "agent.migrated",
+  "agent.skills_changed",
+  "mcp.added",
+  "mcp.removed",
+  "workspace.governance_file_edited",
+  "data.export_initiated",
+  // Phase 6 reservations (R14)
+  "policy.evaluated",
+  "policy.allowed",
+  "policy.blocked",
+  "policy.bypassed",
+  "approval.recorded",
+  // Finance pilot (U6 of 2026-05-14-002-feat-finance-analysis-pilot-plan)
+  "attachment.received",
+  "skill.activated",
+  "output.artifact_produced",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

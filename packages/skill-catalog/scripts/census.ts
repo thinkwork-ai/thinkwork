@@ -46,11 +46,7 @@ import { parseSkillMdInternal } from "../../api/src/lib/skill-md-parser.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export type YamlExecution =
-  | "script"
-  | "context"
-  | "mcp"
-  | "unknown";
+export type YamlExecution = "script" | "context" | "mcp" | "unknown";
 
 export interface SkillScriptEntry {
   name: string;
@@ -121,11 +117,7 @@ export interface SkillRow extends SkillMetadata, SkillSignals, SkillVerdict {}
 // SKILL.md frontmatter parsing
 // ---------------------------------------------------------------------------
 
-const EXECUTION_TYPES: readonly YamlExecution[] = [
-  "script",
-  "context",
-  "mcp",
-];
+const EXECUTION_TYPES: readonly YamlExecution[] = ["script", "context", "mcp"];
 
 function coerceExecution(v: unknown): YamlExecution {
   if (
@@ -183,10 +175,7 @@ export function parseSkillFrontmatter(
   const result = parseSkillMdInternal(source, skillMdPath);
   const fm: Record<string, unknown> = result.valid ? result.parsed.data : {};
   const slug =
-    coerceString(fm.name) ??
-    coerceString(fm.slug) ??
-    coerceString(fm.id) ??
-    "";
+    coerceString(fm.name) ?? coerceString(fm.slug) ?? coerceString(fm.id) ?? "";
   const dir = dirname(skillMdPath);
   const hasScriptsDir =
     existsSync(join(dir, "scripts")) &&

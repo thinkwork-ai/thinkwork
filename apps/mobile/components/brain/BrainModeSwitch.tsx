@@ -1,10 +1,7 @@
 import React from "react";
 import { Pressable, View } from "react-native";
 import { Search } from "lucide-react-native";
-import {
-  IconList,
-  IconTopologyStar3,
-} from "@tabler/icons-react-native";
+import { IconList, IconTopologyStar3 } from "@tabler/icons-react-native";
 import { Text } from "@/components/ui/typography";
 import type { COLORS } from "@/lib/theme";
 import type { BrainMode } from "./types";

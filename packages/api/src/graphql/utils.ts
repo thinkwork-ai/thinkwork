@@ -88,11 +88,6 @@ import {
   // Agent Templates
   agentTemplates,
   agentVersions,
-  computers,
-  computerAssignments,
-  computerTasks,
-  computerEvents,
-  computerSnapshots,
   // Skill Runs (composable-skills Unit 4)
   skillRuns,
   // Mutation idempotency (thinkwork-admin plan Unit 4)
@@ -191,11 +186,6 @@ export {
   recipes,
   agentTemplates,
   agentVersions,
-  computers,
-  computerAssignments,
-  computerTasks,
-  computerEvents,
-  computerSnapshots,
   skillRuns,
   mutationIdempotency,
   tenantPolicyEvents,
@@ -497,8 +487,7 @@ async function getSkillRunInvokeFnName(
     return _skillRunInvokeFnName[runtimeType] ?? null;
   }
   if (runtimeType === "pi") {
-    _skillRunInvokeFnName.pi =
-      process.env.AGENTCORE_PI_FUNCTION_NAME || null;
+    _skillRunInvokeFnName.pi = process.env.AGENTCORE_PI_FUNCTION_NAME || null;
     return _skillRunInvokeFnName.pi;
   }
   // Reuse the same Lambda as chat invocation — there's exactly one

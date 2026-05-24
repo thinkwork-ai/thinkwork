@@ -27,7 +27,6 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
 import { scheduledJobs } from "./scheduled-jobs";
-import { computers } from "./computers";
 
 // ---------------------------------------------------------------------------
 // eval_test_cases — Studio-managed test definitions
@@ -97,7 +96,7 @@ export const evalRuns = pgTable(
       .references(() => tenants.id)
       .notNull(),
     agent_id: uuid("agent_id").references(() => agents.id),
-    computer_id: uuid("computer_id").references(() => computers.id),
+    computer_id: uuid("computer_id"),
     scheduled_job_id: uuid("scheduled_job_id").references(
       () => scheduledJobs.id,
       {
@@ -220,10 +219,6 @@ export const evalRunsRelations = relations(evalRuns, ({ one, many }) => ({
   agent: one(agents, {
     fields: [evalRuns.agent_id],
     references: [agents.id],
-  }),
-  computer: one(computers, {
-    fields: [evalRuns.computer_id],
-    references: [computers.id],
   }),
   scheduledJob: one(scheduledJobs, {
     fields: [evalRuns.scheduled_job_id],

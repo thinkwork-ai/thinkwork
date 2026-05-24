@@ -116,7 +116,7 @@ describe("composeSystemPrompt", () => {
     expect(prompt).toContain("## Runtime Tool Policy");
     expect(prompt).toContain("The `execute_code` tool is not available");
     expect(prompt).toContain("Do not run code, simulate code execution");
-    expect(prompt).toContain("Do not treat vague phrases like \"send me\"");
+    expect(prompt).toContain('Do not treat vague phrases like "send me"');
   });
 
   it("instructs the agent to use execute_code when it is available", async () => {

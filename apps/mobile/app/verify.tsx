@@ -23,7 +23,9 @@ export default function VerifyScreen() {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "error">(
+    "loading",
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Spinning animation for loader
@@ -35,7 +37,7 @@ export default function VerifyScreen() {
         toValue: 1,
         duration: 1000,
         useNativeDriver: true,
-      })
+      }),
     ).start();
   }, []);
 
@@ -56,7 +58,7 @@ export default function VerifyScreen() {
         // Verify the email using Cognito confirmSignUp
         // TODO: Need email from URL params or stored state
         await confirmSignUp("", token);
-        
+
         setStatus("success");
       } catch (err) {
         console.error("Verification error:", err);
@@ -101,8 +103,8 @@ export default function VerifyScreen() {
                 {status === "loading"
                   ? "Verifying..."
                   : status === "success"
-                  ? "Email Verified!"
-                  : "Verification Failed"}
+                    ? "Email Verified!"
+                    : "Verification Failed"}
               </H2>
             </CardTitle>
             <CardDescription>
@@ -110,8 +112,8 @@ export default function VerifyScreen() {
                 {status === "loading"
                   ? "Please wait while we verify your email"
                   : status === "success"
-                  ? "Your email has been verified"
-                  : "We couldn't verify your email"}
+                    ? "Your email has been verified"
+                    : "We couldn't verify your email"}
               </Muted>
             </CardDescription>
           </CardHeader>
@@ -145,7 +147,12 @@ export default function VerifyScreen() {
             )}
 
             {status === "error" && (
-              <Button onPress={handleResend} variant="outline" size="lg" className="w-full">
+              <Button
+                onPress={handleResend}
+                variant="outline"
+                size="lg"
+                className="w-full"
+              >
                 Try Again
               </Button>
             )}

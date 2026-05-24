@@ -262,49 +262,12 @@ export const MessagesQuery = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
-// Computers
-// ---------------------------------------------------------------------------
-
-export const AssignedComputersQuery = graphql(`
-  query AssignedComputers {
-    assignedComputers {
-      id
-      name
-      slug
-      status
-      runtimeStatus
-      tenantId
-    }
-  }
-`);
-
-export const ComputersQuery = graphql(`
-  query Computers($tenantId: ID!) {
-    computers(tenantId: $tenantId) {
-      id
-      name
-      slug
-      status
-      runtimeStatus
-    }
-  }
-`);
-
-// ---------------------------------------------------------------------------
 // Routines
 // ---------------------------------------------------------------------------
 
 export const RoutinesQuery = graphql(`
-  query Routines(
-    $tenantId: ID!
-    $agentId: ID
-    $status: RoutineStatus
-  ) {
-    routines(
-      tenantId: $tenantId
-      agentId: $agentId
-      status: $status
-    ) {
+  query Routines($tenantId: ID!, $agentId: ID, $status: RoutineStatus) {
+    routines(tenantId: $tenantId, agentId: $agentId, status: $status) {
       id
       tenantId
       agentId
@@ -821,7 +784,6 @@ export const ThreadsQuery = graphql(`
     $tenantId: ID!
     $channel: ThreadChannel
     $agentId: ID
-    $computerId: ID
     $assigneeId: ID
     $limit: Int
     $cursor: String
@@ -830,7 +792,6 @@ export const ThreadsQuery = graphql(`
       tenantId: $tenantId
       channel: $channel
       agentId: $agentId
-      computerId: $computerId
       assigneeId: $assigneeId
       limit: $limit
       cursor: $cursor
@@ -838,7 +799,6 @@ export const ThreadsQuery = graphql(`
       id
       tenantId
       agentId
-      computerId
       number
       identifier
       title
@@ -873,7 +833,6 @@ export const ThreadQuery = graphql(`
       id
       tenantId
       agentId
-      computerId
       number
       identifier
       title
@@ -925,7 +884,6 @@ export const CreateThreadMutation = graphql(`
       number
       title
       status
-      computerId
       agentId
       createdAt
     }

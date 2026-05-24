@@ -36,20 +36,25 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const follow = (url: string) => {
-      mod.get(url, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          follow(res.headers.location!);
-          return;
-        }
-        if (res.statusCode !== 200) {
-          reject(new Error(`Download failed: ${res.statusCode}`));
-          return;
-        }
-        const file = createWriteStream(dest);
-        res.pipe(file);
-        file.on("finish", () => { file.close(); resolve(); });
-        file.on("error", reject);
-      }).on("error", reject);
+      mod
+        .get(url, (res) => {
+          if (res.statusCode === 301 || res.statusCode === 302) {
+            follow(res.headers.location!);
+            return;
+          }
+          if (res.statusCode !== 200) {
+            reject(new Error(`Download failed: ${res.statusCode}`));
+            return;
+          }
+          const file = createWriteStream(dest);
+          res.pipe(file);
+          file.on("finish", () => {
+            file.close();
+            resolve();
+          });
+          file.on("error", reject);
+        })
+        .on("error", reject);
     };
     follow(url);
   });
@@ -76,16 +81,24 @@ export async function ensureAwsCli(): Promise<boolean> {
       mkdirSync(tmpDir, { recursive: true });
       const zipPath = join(tmpDir, "awscliv2.zip");
       console.log("    Downloading AWS CLI...");
-      run(`curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "${zipPath}"`);
+      run(
+        `curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "${zipPath}"`,
+      );
       run(`cd "${tmpDir}" && unzip -qo "${zipPath}"`);
-      run(`"${tmpDir}/aws/install" --install-dir "${homedir()}/.thinkwork/aws-cli" --bin-dir "${homedir()}/.local/bin" --update`);
+      run(
+        `"${tmpDir}/aws/install" --install-dir "${homedir()}/.thinkwork/aws-cli" --bin-dir "${homedir()}/.local/bin" --update`,
+      );
       // Add to PATH for this session
       process.env.PATH = `${homedir()}/.local/bin:${process.env.PATH}`;
       if (isInstalled("aws")) {
-        console.log(`  ${chalk.green("✓")} AWS CLI installed to ~/.local/bin/aws`);
+        console.log(
+          `  ${chalk.green("✓")} AWS CLI installed to ~/.local/bin/aws`,
+        );
         return true;
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   if (os === "darwin") {
@@ -94,17 +107,25 @@ export async function ensureAwsCli(): Promise<boolean> {
       mkdirSync(tmpDir, { recursive: true });
       const pkgPath = join(tmpDir, "AWSCLIV2.pkg");
       console.log("    Downloading AWS CLI...");
-      run(`curl -sL "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "${pkgPath}"`);
-      run(`installer -pkg "${pkgPath}" -target CurrentUserHomeDirectory 2>/dev/null || sudo installer -pkg "${pkgPath}" -target /`);
+      run(
+        `curl -sL "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "${pkgPath}"`,
+      );
+      run(
+        `installer -pkg "${pkgPath}" -target CurrentUserHomeDirectory 2>/dev/null || sudo installer -pkg "${pkgPath}" -target /`,
+      );
       if (isInstalled("aws")) {
         console.log(`  ${chalk.green("✓")} AWS CLI installed`);
         return true;
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   console.log(`  ${chalk.red("✗")} Could not auto-install AWS CLI.`);
-  console.log(`    Install manually: ${chalk.cyan("https://aws.amazon.com/cli/")}`);
+  console.log(
+    `    Install manually: ${chalk.cyan("https://aws.amazon.com/cli/")}`,
+  );
   return false;
 }
 
@@ -147,13 +168,19 @@ export async function ensureTerraform(): Promise<boolean> {
     }
 
     if (isInstalled("terraform")) {
-      console.log(`  ${chalk.green("✓")} Terraform ${tfVersion} installed to ~/.local/bin/terraform`);
+      console.log(
+        `  ${chalk.green("✓")} Terraform ${tfVersion} installed to ~/.local/bin/terraform`,
+      );
       return true;
     }
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
 
   console.log(`  ${chalk.red("✗")} Could not auto-install Terraform.`);
-  console.log(`    Install manually: ${chalk.cyan("https://developer.hashicorp.com/terraform/install")}`);
+  console.log(
+    `    Install manually: ${chalk.cyan("https://developer.hashicorp.com/terraform/install")}`,
+  );
   return false;
 }
 
@@ -172,6 +199,8 @@ export async function ensurePrerequisites(): Promise<boolean> {
   }
 
   console.log("");
-  console.log(`  ${chalk.red("Missing prerequisites.")} Install them and try again.`);
+  console.log(
+    `  ${chalk.red("Missing prerequisites.")} Install them and try again.`,
+  );
   return false;
 }

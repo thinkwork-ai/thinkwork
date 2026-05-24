@@ -115,9 +115,7 @@ export class McpToolRegistry {
           entry.description.toLowerCase().includes(q)
         ) {
           matches.push(
-            includeSchemas
-              ? entry
-              : { ...entry, inputSchema: undefined },
+            includeSchemas ? entry : { ...entry, inputSchema: undefined },
           );
         }
       }

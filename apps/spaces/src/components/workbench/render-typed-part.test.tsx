@@ -12,17 +12,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
 
 vi.mock("@/applets/mount", () => ({
-	AppletFailure: ({ children }: { children: ReactNode }) => (
-		<div data-testid="applet-failure">{children}</div>
-	),
-	AppletMount: ({ appId }: { appId: string }) => (
-		<div data-app-id={appId} data-testid="draft-applet-mount" />
-	),
-	useAppletInstanceId: (appId: string) => `instance-${appId}`,
+  AppletFailure: ({ children }: { children: ReactNode }) => (
+    <div data-testid="applet-failure">{children}</div>
+  ),
+  AppletMount: ({ appId }: { appId: string }) => (
+    <div data-app-id={appId} data-testid="draft-applet-mount" />
+  ),
+  useAppletInstanceId: (appId: string) => `instance-${appId}`,
 }));
 
 vi.mock("urql", () => ({
-	useMutation: () => [{ fetching: false }, vi.fn()],
+  useMutation: () => [{ fetching: false }, vi.fn()],
 }));
 
 import { renderTypedPart, renderTypedParts } from "./render-typed-part";
@@ -30,181 +30,185 @@ import { renderTypedPart, renderTypedParts } from "./render-typed-part";
 afterEach(cleanup);
 
 function rk() {
-	return { keyPrefix: "msg-1", index: 0 };
+  return { keyPrefix: "msg-1", index: 0 };
 }
 
 describe("renderTypedPart", () => {
-	it("renders a text part via <Response>", () => {
-		const part: AccumulatedPart = {
-			type: "text",
-			id: "p1",
-			text: "Hello",
-			state: "done",
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		// <Response> renders to a <div class="ai-response prose ...">
-		const proseHost = container.querySelector("div.ai-response");
-		expect(proseHost).not.toBeNull();
-	});
+  it("renders a text part via <Response>", () => {
+    const part: AccumulatedPart = {
+      type: "text",
+      id: "p1",
+      text: "Hello",
+      state: "done",
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    // <Response> renders to a <div class="ai-response prose ...">
+    const proseHost = container.querySelector("div.ai-response");
+    expect(proseHost).not.toBeNull();
+  });
 
-	it("renders a reasoning part via <Reasoning> + <ReasoningContent>", () => {
-		const part: AccumulatedPart = {
-			type: "reasoning",
-			id: "r1",
-			text: "Hmm",
-			state: "streaming",
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		// Reasoning wraps a Collapsible; structural smoke check.
-		expect(container.querySelector('[data-slot="collapsible"], [class*=collapsible], [class*=not-prose]')).not.toBeNull();
-	});
+  it("renders a reasoning part via <Reasoning> + <ReasoningContent>", () => {
+    const part: AccumulatedPart = {
+      type: "reasoning",
+      id: "r1",
+      text: "Hmm",
+      state: "streaming",
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    // Reasoning wraps a Collapsible; structural smoke check.
+    expect(
+      container.querySelector(
+        '[data-slot="collapsible"], [class*=collapsible], [class*=not-prose]',
+      ),
+    ).not.toBeNull();
+  });
 
-	it("renders a tool-${name} part via <Tool>", () => {
-		const part: AccumulatedPart = {
-			type: "tool-renderFragment",
-			toolCallId: "t1",
-			toolName: "renderFragment",
-			input: { tsx: "<App />" },
-			output: { rendered: true },
-			state: "output-available",
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		// Tool renders some structural elements; we just assert the
-		// container has children and didn't throw.
-		expect(container.firstChild).not.toBeNull();
-	});
+  it("renders a tool-${name} part via <Tool>", () => {
+    const part: AccumulatedPart = {
+      type: "tool-renderFragment",
+      toolCallId: "t1",
+      toolName: "renderFragment",
+      input: { tsx: "<App />" },
+      output: { rendered: true },
+      state: "output-available",
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    // Tool renders some structural elements; we just assert the
+    // container has children and didn't throw.
+    expect(container.firstChild).not.toBeNull();
+  });
 
-	it("renders draft app preview tool output through the sandbox preview component", () => {
-		const part: AccumulatedPart = {
-			type: "tool-preview_app",
-			toolCallId: "draft-1",
-			toolName: "preview_app",
-			output: {
-				type: "draft_app_preview",
-				draft: {
-					draftId: "draft_123",
-					unsaved: true,
-					name: "CRM Draft",
-					files: {
-						"App.tsx": "export default function App() { return null; }",
-					},
-					validation: { ok: true, status: "passed", errors: [] },
-				},
-			},
-			state: "output-available",
-		};
+  it("renders draft app preview tool output through the sandbox preview component", () => {
+    const part: AccumulatedPart = {
+      type: "tool-preview_app",
+      toolCallId: "draft-1",
+      toolName: "preview_app",
+      output: {
+        type: "draft_app_preview",
+        draft: {
+          draftId: "draft_123",
+          unsaved: true,
+          name: "CRM Draft",
+          files: {
+            "App.tsx": "export default function App() { return null; }",
+          },
+          validation: { ok: true, status: "passed", errors: [] },
+        },
+      },
+      state: "output-available",
+    };
 
-		render(<>{renderTypedPart(part, rk())}</>);
+    render(<>{renderTypedPart(part, rk())}</>);
 
-		expect(screen.getByTestId("draft-applet-preview")).toBeTruthy();
-		expect(screen.getByTestId("draft-applet-mount")).toBeTruthy();
-		expect(screen.queryByLabelText("Tool activity")).toBeNull();
-	});
+    expect(screen.getByTestId("draft-applet-preview")).toBeTruthy();
+    expect(screen.getByTestId("draft-applet-mount")).toBeTruthy();
+    expect(screen.queryByLabelText("Tool activity")).toBeNull();
+  });
 
-	it("groups tool parts into one collapsed tool activity section", () => {
-		const parts: AccumulatedPart[] = [
-			{
-				type: "text",
-				id: "p1",
-				text: "Working",
-				state: "done",
-			},
-			{
-				type: "tool-web_search",
-				toolCallId: "t1",
-				toolName: "web_search",
-				input: { preview: "{}" },
-				state: "input-available",
-			},
-			{
-				type: "tool-browser_automation",
-				toolCallId: "t2",
-				toolName: "browser_automation",
-				state: "input-available",
-			},
-		];
+  it("groups tool parts into one collapsed tool activity section", () => {
+    const parts: AccumulatedPart[] = [
+      {
+        type: "text",
+        id: "p1",
+        text: "Working",
+        state: "done",
+      },
+      {
+        type: "tool-web_search",
+        toolCallId: "t1",
+        toolName: "web_search",
+        input: { preview: "{}" },
+        state: "input-available",
+      },
+      {
+        type: "tool-browser_automation",
+        toolCallId: "t2",
+        toolName: "browser_automation",
+        state: "input-available",
+      },
+    ];
 
-		const { container } = render(
-			<>{renderTypedParts(parts, { keyPrefix: "msg-1" })}</>,
-		);
+    const { container } = render(
+      <>{renderTypedParts(parts, { keyPrefix: "msg-1" })}</>,
+    );
 
-		expect(screen.getByLabelText("Tool activity")).toBeTruthy();
-		expect(screen.getByText(/2 tool calls/)).toBeTruthy();
-		expect(container.textContent).not.toContain("PARAMETERS");
-	});
+    expect(screen.getByLabelText("Tool activity")).toBeTruthy();
+    expect(screen.getByText(/2 tool calls/)).toBeTruthy();
+    expect(container.textContent).not.toContain("PARAMETERS");
+  });
 
-	it("does not render runbook queue parts in the transcript renderer", () => {
-		const part: AccumulatedPart = {
-			type: "data-runbook-queue",
-			id: "runbook-queue:run-1",
-			data: {
-				runbookRunId: "run-1",
-				displayName: "CRM Dashboard",
-				status: "RUNNING",
-				phases: [
-					{
-						id: "discover",
-						title: "Discover",
-						tasks: [
-							{
-								id: "task-1",
-								title: "Discover CRM context",
-								status: "PENDING",
-							},
-						],
-					},
-				],
-			},
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		expect(container.textContent).toBe("");
-	});
+  it("does not render runbook queue parts in the transcript renderer", () => {
+    const part: AccumulatedPart = {
+      type: "data-runbook-queue",
+      id: "runbook-queue:run-1",
+      data: {
+        runbookRunId: "run-1",
+        displayName: "CRM Dashboard",
+        status: "RUNNING",
+        phases: [
+          {
+            id: "discover",
+            title: "Discover",
+            tasks: [
+              {
+                id: "task-1",
+                title: "Discover CRM context",
+                status: "PENDING",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    expect(container.textContent).toBe("");
+  });
 
-	it("renders a source-url part as an anchor", () => {
-		const part: AccumulatedPart = {
-			type: "source-url",
-			sourceId: "s1",
-			url: "https://example.com",
-			title: "Example",
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		const anchor = container.querySelector("a");
-		expect(anchor).not.toBeNull();
-		expect(anchor!.getAttribute("href")).toBe("https://example.com");
-		expect(anchor!.textContent).toBe("Example");
-	});
+  it("renders a source-url part as an anchor", () => {
+    const part: AccumulatedPart = {
+      type: "source-url",
+      sourceId: "s1",
+      url: "https://example.com",
+      title: "Example",
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    const anchor = container.querySelector("a");
+    expect(anchor).not.toBeNull();
+    expect(anchor!.getAttribute("href")).toBe("https://example.com");
+    expect(anchor!.textContent).toBe("Example");
+  });
 
-	it("renders a file part as an anchor with media-type label", () => {
-		const part: AccumulatedPart = {
-			type: "file",
-			url: "https://example.com/x.png",
-			mediaType: "image/png",
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		const anchor = container.querySelector("a");
-		expect(anchor).not.toBeNull();
-		expect(anchor!.getAttribute("href")).toBe("https://example.com/x.png");
-	});
+  it("renders a file part as an anchor with media-type label", () => {
+    const part: AccumulatedPart = {
+      type: "file",
+      url: "https://example.com/x.png",
+      mediaType: "image/png",
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    const anchor = container.querySelector("a");
+    expect(anchor).not.toBeNull();
+    expect(anchor!.getAttribute("href")).toBe("https://example.com/x.png");
+  });
 
-	it("renders an unknown data-${name} part as a forward-compat debug strip", () => {
-		const part: AccumulatedPart = {
-			type: "data-future-shape",
-			data: { foo: "bar" },
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		expect(container.textContent).toContain("data-future-shape");
-	});
+  it("renders an unknown data-${name} part as a forward-compat debug strip", () => {
+    const part: AccumulatedPart = {
+      type: "data-future-shape",
+      data: { foo: "bar" },
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    expect(container.textContent).toContain("data-future-shape");
+  });
 
-	it("renders nothing surprising for an unsupported part type (defensive return null)", () => {
-		// A theoretical unknown part shape should not crash — the helper
-		// returns null and React renders nothing.
-		const part = {
-			type: "source-document" as const,
-			sourceId: "s1",
-			mediaType: "text/markdown",
-			title: "doc",
-		};
-		const { container } = render(<>{renderTypedPart(part, rk())}</>);
-		expect(container.textContent).toContain("doc");
-	});
+  it("renders nothing surprising for an unsupported part type (defensive return null)", () => {
+    // A theoretical unknown part shape should not crash — the helper
+    // returns null and React renders nothing.
+    const part = {
+      type: "source-document" as const,
+      sourceId: "s1",
+      mediaType: "text/markdown",
+      title: "doc",
+    };
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    expect(container.textContent).toContain("doc");
+  });
 });

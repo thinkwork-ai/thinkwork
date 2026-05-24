@@ -86,19 +86,17 @@ describe("loopback port constant", () => {
 
 describe("refreshCognitoTokens", () => {
   it("exchanges a refresh_token for fresh id/access tokens and computes expiresAt", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            id_token: "new-id",
-            access_token: "new-access",
-            expires_in: 3600,
-            token_type: "Bearer",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        ),
-      );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id_token: "new-id",
+          access_token: "new-access",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
 
     const beforeSeconds = Math.floor(Date.now() / 1000);
     const refreshed = await refreshCognitoTokens(cognito, "refresh-xyz");
@@ -113,7 +111,9 @@ describe("refreshCognitoTokens", () => {
     const call = fetchSpy.mock.calls[0];
     const url = String(call[0]);
     const body = String((call[1] as RequestInit).body);
-    expect(url).toBe("https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/token");
+    expect(url).toBe(
+      "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/token",
+    );
     expect(body).toContain("grant_type=refresh_token");
     expect(body).toContain("client_id=client-abc");
     expect(body).toContain("refresh_token=refresh-xyz");
@@ -123,9 +123,9 @@ describe("refreshCognitoTokens", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("bad refresh token", { status: 401 }),
     );
-    await expect(
-      refreshCognitoTokens(cognito, "expired"),
-    ).rejects.toThrow(/Token refresh failed \(HTTP 401\)/);
+    await expect(refreshCognitoTokens(cognito, "expired")).rejects.toThrow(
+      /Token refresh failed \(HTTP 401\)/,
+    );
   });
 });
 
@@ -153,27 +153,29 @@ describe("loginWithCognito (loopback)", () => {
     // to 127.0.0.1 fall through to the real implementation so the loopback
     // server can receive the callback.
     const originalFetch = globalThis.fetch;
-    const tokenSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.includes("/oauth2/token")) {
-          const body = String(init?.body ?? "");
-          expect(body).toContain("grant_type=authorization_code");
-          expect(body).toContain("code=authcode-xyz");
-          return new Response(
-            JSON.stringify({
-              id_token: "id-tok",
-              access_token: "acc-tok",
-              refresh_token: "ref-tok",
-              expires_in: 3600,
-              token_type: "Bearer",
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          );
-        }
-        return originalFetch(input as any, init);
-      },
-    );
+    const tokenSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url.includes("/oauth2/token")) {
+            const body = String(init?.body ?? "");
+            expect(body).toContain("grant_type=authorization_code");
+            expect(body).toContain("code=authcode-xyz");
+            return new Response(
+              JSON.stringify({
+                id_token: "id-tok",
+                access_token: "acc-tok",
+                refresh_token: "ref-tok",
+                expires_in: 3600,
+                token_type: "Bearer",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+          return originalFetch(input as any, init);
+        },
+      );
 
     const tokens = await loginWithCognito({
       cognito,

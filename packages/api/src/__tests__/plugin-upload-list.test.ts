@@ -142,7 +142,9 @@ beforeEach(() => {
   // Default: mirror what resolveCallerFromAuth returns for native Cognito
   // users (users.id == Cognito sub).
   mockResolveCaller.mockImplementation(
-    async (auth: { principalId: string | null; tenantId: string | null } | null) => ({
+    async (
+      auth: { principalId: string | null; tenantId: string | null } | null,
+    ) => ({
       userId: auth?.principalId ?? null,
       tenantId: auth?.tenantId ?? null,
     }),

@@ -70,7 +70,13 @@ interface UseWikiPageArgs {
  * Fetches a compiled wiki page by (tenant, user, type, slug) with all
  * its sections. Paused until all four args are present.
  */
-export function useWikiPage({ tenantId, userId, ownerId, type, slug }: UseWikiPageArgs) {
+export function useWikiPage({
+  tenantId,
+  userId,
+  ownerId,
+  type,
+  slug,
+}: UseWikiPageArgs) {
   const scopeUserId = userId ?? ownerId;
   const [{ data, fetching, error }, refetch] = useQuery<{
     wikiPage: WikiPageDetail | null;

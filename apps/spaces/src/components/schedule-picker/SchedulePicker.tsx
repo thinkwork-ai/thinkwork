@@ -11,7 +11,7 @@ import { cn, Input } from "@thinkwork/ui";
 // ---------------------------------------------------------------------------
 
 export interface SchedulePickerValue {
-  scheduleType: string;       // "rate" | "cron" | "at"
+  scheduleType: string; // "rate" | "cron" | "at"
   scheduleExpression: string; // "rate(5 minutes)" | "cron(...)" | "at(...)"
   timezone: string;
 }
@@ -89,18 +89,29 @@ export function buildExpression(opts: {
 }): { type: string; expr: string } {
   if (opts.scheduleType === "one_time") {
     const dt = new Date(opts.oneTimeDate || "");
-    return { type: "at", expr: `at(${dt.toISOString().replace(/\.\d{3}Z$/, "")})` };
+    return {
+      type: "at",
+      expr: `at(${dt.toISOString().replace(/\.\d{3}Z$/, "")})`,
+    };
   }
 
   if (opts.useCustom) {
     const e = (opts.customExpr || "").trim();
-    if (e.startsWith("rate(") || e.startsWith("cron(")) return { type: e.startsWith("rate") ? "rate" : "cron", expr: e };
+    if (e.startsWith("rate(") || e.startsWith("cron("))
+      return { type: e.startsWith("rate") ? "rate" : "cron", expr: e };
     return { type: "cron", expr: `cron(${e} *)` };
   }
 
   let expr = opts.selectedFreq;
   if (expr.startsWith("cron(")) {
-    const h24 = opts.amPm === "PM" ? (opts.hour === 12 ? 12 : opts.hour + 12) : (opts.hour === 12 ? 0 : opts.hour);
+    const h24 =
+      opts.amPm === "PM"
+        ? opts.hour === 12
+          ? 12
+          : opts.hour + 12
+        : opts.hour === 12
+          ? 0
+          : opts.hour;
     expr = expr.replace(/cron\(\d+\s+\d+/, `cron(0 ${h24}`);
   }
 
@@ -146,17 +157,31 @@ export function parseScheduleExpression(expr: string): {
     }
   }
 
-  return { selectedFreq, useCustom, customExpr, scheduleType, oneTimeDate, hour, amPm };
+  return {
+    selectedFreq,
+    useCustom,
+    customExpr,
+    scheduleType,
+    oneTimeDate,
+    hour,
+    amPm,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // SchedulePicker component
 // ---------------------------------------------------------------------------
 
-export function SchedulePicker({ value, onChange, allowOneTime = true }: SchedulePickerProps) {
+export function SchedulePicker({
+  value,
+  onChange,
+  allowOneTime = true,
+}: SchedulePickerProps) {
   const parsed = parseScheduleExpression(value.scheduleExpression);
 
-  const [scheduleType, setScheduleType] = useState<"recurring" | "one_time">(parsed.scheduleType);
+  const [scheduleType, setScheduleType] = useState<"recurring" | "one_time">(
+    parsed.scheduleType,
+  );
   const [selectedFreq, setSelectedFreq] = useState(parsed.selectedFreq);
   const [useCustom, setUseCustom] = useState(parsed.useCustom);
   const [customExpr, setCustomExpr] = useState(parsed.customExpr);
@@ -167,13 +192,31 @@ export function SchedulePicker({ value, onChange, allowOneTime = true }: Schedul
 
   useEffect(() => {
     const { type, expr } = buildExpression({
-      scheduleType, useCustom, customExpr, selectedFreq, hour, amPm, oneTimeDate,
+      scheduleType,
+      useCustom,
+      customExpr,
+      selectedFreq,
+      hour,
+      amPm,
+      oneTimeDate,
     });
     onChange({ scheduleType: type, scheduleExpression: expr, timezone });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleType, selectedFreq, useCustom, customExpr, hour, amPm, oneTimeDate, timezone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    scheduleType,
+    selectedFreq,
+    useCustom,
+    customExpr,
+    hour,
+    amPm,
+    oneTimeDate,
+    timezone,
+  ]);
 
-  const showHourPicker = !useCustom && scheduleType === "recurring" && selectedFreq.startsWith("cron(");
+  const showHourPicker =
+    !useCustom &&
+    scheduleType === "recurring" &&
+    selectedFreq.startsWith("cron(");
 
   return (
     <div className="space-y-4">
@@ -209,7 +252,10 @@ export function SchedulePicker({ value, onChange, allowOneTime = true }: Schedul
                 <button
                   key={f.expr}
                   type="button"
-                  onClick={() => { setSelectedFreq(f.expr); setUseCustom(false); }}
+                  onClick={() => {
+                    setSelectedFreq(f.expr);
+                    setUseCustom(false);
+                  }}
                   className={cn(
                     "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                     !useCustom && selectedFreq === f.expr

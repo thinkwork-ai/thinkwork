@@ -26,16 +26,21 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   AWAITING_USER: "Awaiting user",
 };
 
-function lifecycleVariant(status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" {
+function lifecycleVariant(
+  status: string | null | undefined,
+): "default" | "secondary" | "destructive" | "outline" {
   if (!status) return "outline";
   switch (status) {
-    case "RUNNING": return "secondary";
-    case "FAILED": return "destructive";
+    case "RUNNING":
+      return "secondary";
+    case "FAILED":
+      return "destructive";
     case "COMPLETED":
     case "CANCELLED":
     case "IDLE":
     case "AWAITING_USER":
-    default: return "outline";
+    default:
+      return "outline";
   }
 }
 
@@ -57,7 +62,12 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export function ActiveWorkSection({ threads, onThreadPress, onViewAll, agentNames }: ActiveWorkSectionProps) {
+export function ActiveWorkSection({
+  threads,
+  onThreadPress,
+  onViewAll,
+  agentNames,
+}: ActiveWorkSectionProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -115,13 +125,17 @@ export function ActiveWorkSection({ threads, onThreadPress, onViewAll, agentName
                   {thread.title || "Untitled"}
                 </Text>
                 {thread.agentId && agentNames?.[thread.agentId] && (
-                  <Muted className="text-xs">{agentNames[thread.agentId]}</Muted>
+                  <Muted className="text-xs">
+                    {agentNames[thread.agentId]}
+                  </Muted>
                 )}
               </View>
 
               {/* Time + chevron */}
               <View className="flex-row items-center gap-1">
-                <Muted className="text-xs">{formatRelativeTime(thread.updatedAt)}</Muted>
+                <Muted className="text-xs">
+                  {formatRelativeTime(thread.updatedAt)}
+                </Muted>
                 <ChevronRight size={14} color={colors.mutedForeground} />
               </View>
             </Pressable>

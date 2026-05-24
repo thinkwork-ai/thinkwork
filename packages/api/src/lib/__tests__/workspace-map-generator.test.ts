@@ -909,10 +909,7 @@ describe("generateContextFolderStructureForSpace", () => {
       `${SPACE_PREFIX}CONTEXT.md`,
       "# Sales — Context\n",
     );
-    state.s3GetResponses.set(
-      `${SPACE_PREFIX}memory/CONTEXT.md`,
-      "# Memory\n",
-    );
+    state.s3GetResponses.set(`${SPACE_PREFIX}memory/CONTEXT.md`, "# Memory\n");
 
     await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
 
@@ -990,9 +987,7 @@ describe("generateContextFolderStructureForSpace", () => {
 
     await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
 
-    expect(
-      s3Calls.puts.some((p) => p.key.endsWith("AGENTS.md")),
-    ).toBe(false);
+    expect(s3Calls.puts.some((p) => p.key.endsWith("AGENTS.md"))).toBe(false);
   });
 
   it("rejects non-CONTEXT.md paths", async () => {

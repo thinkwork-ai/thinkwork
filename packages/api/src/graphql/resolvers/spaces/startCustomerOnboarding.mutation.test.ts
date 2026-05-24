@@ -58,9 +58,8 @@ vi.mock("../../../lib/spaces/customer-onboarding-workflow.js", async () => {
   };
 });
 
-const { startCustomerOnboarding } = await import(
-  "./startCustomerOnboarding.mutation.js"
-);
+const { startCustomerOnboarding } =
+  await import("./startCustomerOnboarding.mutation.js");
 
 const ctx = { auth: { authType: "cognito" } } as any;
 

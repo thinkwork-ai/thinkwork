@@ -16,7 +16,9 @@ import {
 const ARN =
   "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-routine:abc-123";
 
-function base(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function base(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     executionArn: ARN,
     status: "succeeded",
@@ -109,9 +111,7 @@ describe("shapeExecutionCallback — happy paths", () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.value.error_code).toBe("States.TaskFailed");
-      expect(r.value.error_message).toBe(
-        "python sandbox returned exit_code=1",
-      );
+      expect(r.value.error_message).toBe("python sandbox returned exit_code=1");
     }
   });
 });

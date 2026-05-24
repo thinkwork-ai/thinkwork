@@ -229,9 +229,7 @@ export function setMcpApiKey(
 // Template MCP assignments
 // ---------------------------------------------------------------------------
 
-export function getTemplateMcpServers(
-  templateId: string,
-): Promise<{
+export function getTemplateMcpServers(templateId: string): Promise<{
   mcpServers: Array<{
     mcp_server_id: string;
     enabled: boolean;

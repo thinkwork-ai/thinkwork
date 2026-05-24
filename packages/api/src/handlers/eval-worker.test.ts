@@ -3,7 +3,6 @@ import {
   agentCoreBudgetExceededAssertion,
   agentCoreEvaluatorsEnabled,
   estimateAgentCoreEvaluatorCostUsd,
-  extractComputerTaskResponse,
   includesUnsafeOperationalGuidance,
   isRetryableEvalInfrastructureError,
   llmJudgeEnabled,
@@ -89,10 +88,10 @@ describe("eval-worker evaluator cost controls", () => {
 });
 
 describe("eval-worker infrastructure retry classification", () => {
-  it("retries Computer queue stalls but records model throttles as case errors", () => {
+  it("treats AgentCore throttling as retryable and model throttles as case errors", () => {
     expect(
       isRetryableEvalInfrastructureError(
-        new Error("Timed out waiting for Computer eval task after 210000ms"),
+        new Error("Lambda.TooManyRequestsException: backoff"),
       ),
     ).toBe(true);
     expect(
@@ -265,20 +264,5 @@ describe("eval-worker assertion scoring", () => {
       passed: false,
       reason: 'Incorrectly contains "Full year performance"',
     });
-  });
-});
-
-describe("eval-worker Computer task output", () => {
-  it("extracts the response text from Computer task output shapes", () => {
-    expect(extractComputerTaskResponse({ response: "from task" })).toBe(
-      "from task",
-    );
-    expect(extractComputerTaskResponse({ responseText: "from runbook" })).toBe(
-      "from runbook",
-    );
-    expect(extractComputerTaskResponse({ content: "from fallback" })).toBe(
-      "from fallback",
-    );
-    expect(extractComputerTaskResponse({ ok: true })).toBe("");
   });
 });

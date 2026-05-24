@@ -117,9 +117,9 @@ function normalizeWorkflowResponse(raw: unknown): N8nWorkflow | null {
 function isWorkflow(value: unknown): value is N8nWorkflow {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      Array.isArray((value as { nodes?: unknown }).nodes) &&
-      typeof (value as { connections?: unknown }).connections === "object",
+    typeof value === "object" &&
+    Array.isArray((value as { nodes?: unknown }).nodes) &&
+    typeof (value as { connections?: unknown }).connections === "object",
   );
 }
 

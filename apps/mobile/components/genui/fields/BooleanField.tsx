@@ -18,12 +18,27 @@ export interface BooleanFieldProps {
  * Renders as two pressable pills (Yes / No) — clearer than a toggle on a
  * touchscreen and works without a Switch primitive.
  */
-export function BooleanField({ id, label, required, value, disabled, onChange }: BooleanFieldProps) {
+export function BooleanField({
+  id,
+  label,
+  required,
+  value,
+  disabled,
+  onChange,
+}: BooleanFieldProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
 
-  const Pill = ({ active, label: pillLabel, onPress }: { active: boolean; label: string; onPress: () => void }) => (
+  const Pill = ({
+    active,
+    label: pillLabel,
+    onPress,
+  }: {
+    active: boolean;
+    label: string;
+    onPress: () => void;
+  }) => (
     <Pressable
       testID={`questioncard-field-${id}-${pillLabel.toLowerCase()}`}
       onPress={disabled ? undefined : onPress}
@@ -31,12 +46,22 @@ export function BooleanField({ id, label, required, value, disabled, onChange }:
       style={{
         backgroundColor: active ? colors.primary : "transparent",
         borderWidth: 1,
-        borderColor: active ? colors.primary : (isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
+        borderColor: active
+          ? colors.primary
+          : isDark
+            ? "rgba(255,255,255,0.18)"
+            : "rgba(0,0,0,0.15)",
         opacity: disabled ? 0.6 : 1,
       }}
     >
-      {active && <Check size={14} color={colors.primaryForeground} strokeWidth={2.5} />}
-      <Text size="sm" weight="medium" style={{ color: active ? colors.primaryForeground : colors.foreground }}>
+      {active && (
+        <Check size={14} color={colors.primaryForeground} strokeWidth={2.5} />
+      )}
+      <Text
+        size="sm"
+        weight="medium"
+        style={{ color: active ? colors.primaryForeground : colors.foreground }}
+      >
         {pillLabel}
       </Text>
     </Pressable>
@@ -44,12 +69,26 @@ export function BooleanField({ id, label, required, value, disabled, onChange }:
 
   return (
     <View className="mb-4">
-      <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
-        {label}{required ? " *" : ""}
+      <Text
+        size="xs"
+        weight="medium"
+        variant="muted"
+        className="uppercase tracking-wide mb-1.5"
+      >
+        {label}
+        {required ? " *" : ""}
       </Text>
       <View className="flex-row gap-2">
-        <Pill active={value === true} label="Yes" onPress={() => onChange(true)} />
-        <Pill active={value === false} label="No" onPress={() => onChange(false)} />
+        <Pill
+          active={value === true}
+          label="Yes"
+          onPress={() => onChange(true)}
+        />
+        <Pill
+          active={value === false}
+          label="No"
+          onPress={() => onChange(false)}
+        />
       </View>
     </View>
   );

@@ -41,7 +41,8 @@ const TenantContext = createContext<TenantContextValue | null>(null);
 // ---------------------------------------------------------------------------
 
 const API_URL = import.meta.env.VITE_API_URL || "";
-const GRAPHQL_URL = import.meta.env.VITE_GRAPHQL_HTTP_URL || `${API_URL}/graphql`;
+const GRAPHQL_URL =
+  import.meta.env.VITE_GRAPHQL_HTTP_URL || `${API_URL}/graphql`;
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, getToken } = useAuth();
@@ -128,7 +129,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const bootstrap = result?.data?.bootstrapUser;
 
       if (bootstrap?.tenant) {
-        console.log("[TenantContext] Bootstrap complete:", bootstrap.tenant.name);
+        console.log(
+          "[TenantContext] Bootstrap complete:",
+          bootstrap.tenant.name,
+        );
         setTenant({
           id: bootstrap.tenant.id,
           name: bootstrap.tenant.name,
@@ -184,7 +188,6 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
 export function useTenant() {
   const ctx = useContext(TenantContext);
-  if (!ctx)
-    throw new Error("useTenant must be used within a TenantProvider");
+  if (!ctx) throw new Error("useTenant must be used within a TenantProvider");
   return ctx;
 }

@@ -16,7 +16,7 @@ export function useMediaQuery() {
 
   return useMemo(() => {
     const isWeb = Platform.OS === "web";
-    
+
     return {
       width,
       isMobile: width < BREAKPOINTS.md,

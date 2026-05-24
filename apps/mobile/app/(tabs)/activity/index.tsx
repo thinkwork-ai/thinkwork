@@ -24,7 +24,13 @@ type ActivityRow = {
   gatewayName: string;
 };
 
-const TYPE_CONFIG: Record<string, { label: string; variant: "outline" | "secondary" | "success" | "warning" | "destructive" }> = {
+const TYPE_CONFIG: Record<
+  string,
+  {
+    label: string;
+    variant: "outline" | "secondary" | "success" | "warning" | "destructive";
+  }
+> = {
   status_update: { label: "Status", variant: "secondary" },
   assignees_update: { label: "Assignees", variant: "outline" },
   thread_update: { label: "Thread", variant: "outline" },
@@ -35,7 +41,11 @@ const TYPE_CONFIG: Record<string, { label: string; variant: "outline" | "seconda
 
 const FILTERS = [
   { id: "all", label: "All", types: [] },
-  { id: "threads", label: "Threads", types: ["status_update", "assignees_update", "thread_update"] },
+  {
+    id: "threads",
+    label: "Threads",
+    types: ["status_update", "assignees_update", "thread_update"],
+  },
   { id: "comments", label: "Comments", types: ["message", "commented"] },
 ] as const;
 
@@ -46,7 +56,10 @@ function formatRelativeTime(dateStr: string): string {
   if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
   if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
   if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
-  return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(ms).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function toTitleCase(str: string): string {
@@ -54,25 +67,38 @@ function toTitleCase(str: string): string {
 }
 
 function TypeBadge({ type }: { type: string }) {
-  const config = TYPE_CONFIG[type] || { label: toTitleCase(type), variant: "outline" as const };
-  return <Badge variant="outline" className="whitespace-nowrap">{config.label}</Badge>;
+  const config = TYPE_CONFIG[type] || {
+    label: toTitleCase(type),
+    variant: "outline" as const,
+  };
+  return (
+    <Badge variant="outline" className="whitespace-nowrap">
+      {config.label}
+    </Badge>
+  );
 }
 
-function FilterPill({ label, isActive, onPress }: { label: string; isActive: boolean; onPress: () => void }) {
+function FilterPill({
+  label,
+  isActive,
+  onPress,
+}: {
+  label: string;
+  isActive: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
       className={`px-4 h-9 rounded-full items-center justify-center ${
-        isActive
-          ? "bg-sky-500"
-          : "bg-neutral-100 dark:bg-neutral-800"
+        isActive ? "bg-sky-500" : "bg-neutral-100 dark:bg-neutral-800"
       }`}
     >
-      <Text className={`text-base font-medium ${
-        isActive
-          ? "text-white"
-          : "text-neutral-700 dark:text-neutral-300"
-      }`}>
+      <Text
+        className={`text-base font-medium ${
+          isActive ? "text-white" : "text-neutral-700 dark:text-neutral-300"
+        }`}
+      >
         {label}
       </Text>
     </Pressable>
@@ -83,7 +109,7 @@ function FilterPill({ label, isActive, onPress }: { label: string; isActive: boo
 function ActivityRowItem({
   activity,
   onPress,
-  isLast
+  isLast,
 }: {
   activity: ActivityRow;
   onPress?: () => void;
@@ -102,9 +128,16 @@ function ActivityRowItem({
           <TypeBadge type={activity.type} />
         </>
       }
-      line1Right={<Muted className="text-sm">{formatRelativeTime(activity.createdAt)}</Muted>}
+      line1Right={
+        <Muted className="text-sm">
+          {formatRelativeTime(activity.createdAt)}
+        </Muted>
+      }
       line2Left={
-        <Text className="text-sm text-neutral-500 dark:text-neutral-400" numberOfLines={1}>
+        <Text
+          className="text-sm text-neutral-500 dark:text-neutral-400"
+          numberOfLines={1}
+        >
           {activity.message}
         </Text>
       }
@@ -134,54 +167,73 @@ export default function ActivityScreen() {
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const handleActivityPress = useCallback((activity: ActivityRow) => {
-    if (activity.targetId) {
-      router.push(`/threads/${activity.targetId}`);
-    }
-  }, [router]);
+  const handleActivityPress = useCallback(
+    (activity: ActivityRow) => {
+      if (activity.targetId) {
+        router.push(`/threads/${activity.targetId}`);
+      }
+    },
+    [router],
+  );
 
   // Table columns for wide screens
-  const columns: Column<ActivityRow>[] = useMemo(() => [
-    {
-      key: "agent",
-      header: "Agent",
-      flex: 1,
-      minWidth: 100,
-      render: (item) => <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{item.agentName}</Text>,
-    },
-    {
-      key: "type",
-      header: "Type",
-      flex: 0,
-      width: 140,
-      minWidth: 140,
-      render: (item) => <TypeBadge type={item.type} />,
-    },
-    {
-      key: "message",
-      header: "Message",
-      flex: 3,
-      minWidth: 200,
-      render: (item) => (
-        <Text className="text-sm text-neutral-500 dark:text-neutral-400" numberOfLines={1}>{item.message}</Text>
-      ),
-    },
-    {
-      key: "agent",
-      header: "Agent",
-      flex: 1,
-      minWidth: 100,
-      render: (item) => <Muted className="text-sm">{item.gatewayName}</Muted>,
-    },
-    {
-      key: "time",
-      header: "Time",
-      flex: 0.8,
-      minWidth: 80,
-      align: "right",
-      render: (item) => <Muted className="text-sm">{formatRelativeTime(item.createdAt)}</Muted>,
-    },
-  ], []);
+  const columns: Column<ActivityRow>[] = useMemo(
+    () => [
+      {
+        key: "agent",
+        header: "Agent",
+        flex: 1,
+        minWidth: 100,
+        render: (item) => (
+          <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+            {item.agentName}
+          </Text>
+        ),
+      },
+      {
+        key: "type",
+        header: "Type",
+        flex: 0,
+        width: 140,
+        minWidth: 140,
+        render: (item) => <TypeBadge type={item.type} />,
+      },
+      {
+        key: "message",
+        header: "Message",
+        flex: 3,
+        minWidth: 200,
+        render: (item) => (
+          <Text
+            className="text-sm text-neutral-500 dark:text-neutral-400"
+            numberOfLines={1}
+          >
+            {item.message}
+          </Text>
+        ),
+      },
+      {
+        key: "agent",
+        header: "Agent",
+        flex: 1,
+        minWidth: 100,
+        render: (item) => <Muted className="text-sm">{item.gatewayName}</Muted>,
+      },
+      {
+        key: "time",
+        header: "Time",
+        flex: 0.8,
+        minWidth: 80,
+        align: "right",
+        render: (item) => (
+          <Muted className="text-sm">
+            {formatRelativeTime(item.createdAt)}
+          </Muted>
+        ),
+      },
+    ],
+    [],
+  );
 
   // Loading state
   if (paginated === undefined) {
@@ -198,7 +250,13 @@ export default function ActivityScreen() {
     );
   }
 
-  const renderMobileItem = ({ item, index }: { item: ActivityRow; index: number }) => (
+  const renderMobileItem = ({
+    item,
+    index,
+  }: {
+    item: ActivityRow;
+    index: number;
+  }) => (
     <ActivityRowItem
       activity={item}
       onPress={item.targetId ? () => handleActivityPress(item) : undefined}
@@ -214,7 +272,12 @@ export default function ActivityScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: "row" }}
+          contentContainerStyle={{
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            gap: 8,
+            flexDirection: "row",
+          }}
         >
           {FILTERS.map((f) => (
             <FilterPill
@@ -231,14 +294,22 @@ export default function ActivityScreen() {
       {isLargeScreen ? (
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 16,
+          }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
           <DataTable
             data={activities}
             columns={columns}
             keyExtractor={(item) => item.id}
-            onRowPress={(item) => item.targetId ? handleActivityPress(item) : undefined}
+            onRowPress={(item) =>
+              item.targetId ? handleActivityPress(item) : undefined
+            }
             emptyMessage="No activity yet."
           />
         </ScrollView>
@@ -253,7 +324,9 @@ export default function ActivityScreen() {
               data={activities}
               renderItem={renderMobileItem}
               keyExtractor={(item) => item.id}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
             />
           )}
         </View>

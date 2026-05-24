@@ -25,8 +25,8 @@
  * parity test stays meaningful.
  */
 export const RESERVED_FOLDER_NAMES: ReadonlySet<string> = new Set([
-	"memory",
-	"skills",
+  "memory",
+  "skills",
 ]);
 
 /** Type-level enumeration mirroring the runtime set, useful for narrowing. */
@@ -38,5 +38,5 @@ export type ReservedFolderName = "memory" | "skills";
  * canonicalisation rule at every site.
  */
 export function isReservedFolderSegment(segment: string): boolean {
-	return RESERVED_FOLDER_NAMES.has(segment);
+  return RESERVED_FOLDER_NAMES.has(segment);
 }

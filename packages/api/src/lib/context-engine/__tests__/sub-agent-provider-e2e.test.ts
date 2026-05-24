@@ -107,12 +107,12 @@ describe("Context Engine sub-agent provider E2E seam", () => {
     ]);
   });
 
-	it("runs the Company Brain page agent through the wiki retrieval seam", async () => {
-		const seen: Array<{ tenantId: string; userId: string; query: string }> = [];
-		const provider = createWikiSourceAgentContextProvider({
-			runtimeMode: "deterministic",
-			search: async (args) => {
-				seen.push({
+  it("runs the Company Brain page agent through the wiki retrieval seam", async () => {
+    const seen: Array<{ tenantId: string; userId: string; query: string }> = [];
+    const provider = createWikiSourceAgentContextProvider({
+      runtimeMode: "deterministic",
+      search: async (args) => {
+        seen.push({
           tenantId: args.tenantId,
           userId: args.userId,
           query: args.query,
@@ -215,10 +215,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
       seamState: "live",
       processModel: "deterministic-retrieval",
       promptRef: "brain/provider/wiki-source-agent",
-      toolAllowlist: [
-        "company-brain.pages.search",
-        "company-brain.pages.read",
-      ],
+      toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
     });
   });
 
@@ -358,10 +355,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
       seamState: "live",
       processModel: "lambda-bedrock-converse",
       promptRef: "brain/provider/wiki-source-agent",
-      toolAllowlist: [
-        "company-brain.pages.search",
-        "company-brain.pages.read",
-      ],
+      toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
     });
   });
 });

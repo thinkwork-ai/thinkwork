@@ -19,7 +19,13 @@ import UserPickerField from "./fields/UserPickerField";
 // Schema types — match references/intake-form.json shape
 // ---------------------------------------------------------------------------
 
-type FieldType = "text" | "textarea" | "boolean" | "select" | "user_picker" | "date";
+type FieldType =
+  | "text"
+  | "textarea"
+  | "boolean"
+  | "select"
+  | "user_picker"
+  | "date";
 
 interface FormField {
   id: string;
@@ -50,7 +56,10 @@ function isFieldFilled(field: FormField, value: FieldValue): boolean {
   return value !== undefined && value !== null;
 }
 
-function buildFormResponseContent(formId: string, values: Record<string, FieldValue>): string {
+function buildFormResponseContent(
+  formId: string,
+  values: Record<string, FieldValue>,
+): string {
   // Use a triple-backtick fenced block with `form_response` language tag.
   // The agent's next turn sees this as part of the user message and parses
   // the JSON to drive task creation. Matches PRD-46 spec.
@@ -71,9 +80,12 @@ export function QuestionCard({ data, context }: GenUIProps) {
   const colors = isDark ? COLORS.dark : COLORS.light;
 
   const schema = data.schema as FormSchema | undefined;
-  const initialValues = (data.values as Record<string, FieldValue> | undefined) ?? {};
+  const initialValues =
+    (data.values as Record<string, FieldValue> | undefined) ?? {};
 
-  const [values, setValues] = useState<Record<string, FieldValue>>(() => ({ ...initialValues }));
+  const [values, setValues] = useState<Record<string, FieldValue>>(() => ({
+    ...initialValues,
+  }));
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,10 +170,14 @@ export function QuestionCard({ data, context }: GenUIProps) {
       {/* Header */}
       <View className="px-4 pt-4 pb-2">
         {schema.title && (
-          <Text size="lg" weight="bold">{schema.title}</Text>
+          <Text size="lg" weight="bold">
+            {schema.title}
+          </Text>
         )}
         {schema.description && (
-          <Text size="sm" variant="muted" className="mt-1">{schema.description}</Text>
+          <Text size="sm" variant="muted" className="mt-1">
+            {schema.description}
+          </Text>
         )}
       </View>
 
@@ -244,7 +260,12 @@ export function QuestionCard({ data, context }: GenUIProps) {
           // Unknown field type — render a small inline error so authors notice.
           return (
             <View key={field.id} className="mb-4">
-              <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
+              <Text
+                size="xs"
+                weight="medium"
+                variant="muted"
+                className="uppercase tracking-wide mb-1.5"
+              >
                 {field.label}
               </Text>
               <Text size="xs" className="text-red-500">
@@ -255,28 +276,39 @@ export function QuestionCard({ data, context }: GenUIProps) {
         })}
 
         {error && (
-          <Text size="sm" className="mb-2 text-red-500">{error}</Text>
+          <Text size="sm" className="mb-2 text-red-500">
+            {error}
+          </Text>
         )}
 
         {/* Submit / submitted state */}
         {submitted ? (
           <View
             className="flex-row items-center justify-center gap-2 py-3 rounded-xl"
-            style={{ backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "rgba(34,197,94,0.10)" }}
+            style={{
+              backgroundColor: isDark
+                ? "rgba(34,197,94,0.12)"
+                : "rgba(34,197,94,0.10)",
+            }}
           >
             <CheckCircle2 size={18} color="#22c55e" />
-            <Text size="sm" weight="medium" style={{ color: "#22c55e" }}>Submitted</Text>
+            <Text size="sm" weight="medium" style={{ color: "#22c55e" }}>
+              Submitted
+            </Text>
           </View>
         ) : (
-          <Button
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            className="mt-2"
-          >
+          <Button onPress={handleSubmit} disabled={!canSubmit} className="mt-2">
             {submitting ? (
-              <ActivityIndicator size="small" color={colors.primaryForeground} />
+              <ActivityIndicator
+                size="small"
+                color={colors.primaryForeground}
+              />
             ) : (
-              <Text size="base" weight="semibold" style={{ color: colors.primaryForeground }}>
+              <Text
+                size="base"
+                weight="semibold"
+                style={{ color: colors.primaryForeground }}
+              >
                 {schema.submit_label || "Submit"}
               </Text>
             )}

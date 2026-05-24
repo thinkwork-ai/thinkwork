@@ -9,7 +9,11 @@
  */
 
 import { Command } from "commander";
-import { createClient, tenants as tenantOps, AdminOpsError } from "@thinkwork/admin-ops";
+import {
+  createClient,
+  tenants as tenantOps,
+  AdminOpsError,
+} from "@thinkwork/admin-ops";
 import { graphql } from "../gql/index.js";
 import { resolveApiConfig } from "../api-client.js";
 import { loadStageSession } from "../cli-config.js";
@@ -17,8 +21,17 @@ import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
 import { input } from "@inquirer/prompts";
-import { isJsonMode, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const CreateTenantDoc = graphql(`
   mutation CliCreateTenant($input: CreateTenantInput!) {
@@ -97,7 +110,9 @@ function nameToSlug(name: string): string {
   );
 }
 
-function parseFeatureFlags(raw: string[] | undefined): Record<string, unknown> | undefined {
+function parseFeatureFlags(
+  raw: string[] | undefined,
+): Record<string, unknown> | undefined {
   if (!raw || raw.length === 0) return undefined;
   const out: Record<string, unknown> = {};
   for (const item of raw) {
@@ -117,8 +132,15 @@ function parseFeatureFlags(raw: string[] | undefined): Record<string, unknown> |
   return out;
 }
 
-async function resolveTenantIdForCmd(opts: { stage?: string; tenant?: string }): Promise<{
-  client: ReturnType<typeof getGqlClient> extends Promise<infer R> ? R extends { client: infer C } ? C : never : never;
+async function resolveTenantIdForCmd(opts: {
+  stage?: string;
+  tenant?: string;
+}): Promise<{
+  client: ReturnType<typeof getGqlClient> extends Promise<infer R>
+    ? R extends { client: infer C }
+      ? C
+      : never
+    : never;
   tenantId: string;
 }> {
   const stage = await resolveStage({ flag: opts.stage });
@@ -130,7 +152,9 @@ async function resolveTenantIdForCmd(opts: { stage?: string; tenant?: string }):
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, TenantBySlugForCmdDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, TenantBySlugForCmdDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
@@ -139,7 +163,9 @@ async function resolveTenantIdForCmd(opts: { stage?: string; tenant?: string }):
   }
   if (session?.tenantId) return { client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, TenantBySlugForCmdDoc, { slug: ctxSlug });
+    const data = await gqlQuery(client, TenantBySlugForCmdDoc, {
+      slug: ctxSlug,
+    });
     if (data.tenantBySlug) return { client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
@@ -153,7 +179,10 @@ interface CreateOptions {
   issuePrefix?: string;
 }
 
-async function runTenantCreate(name: string | undefined, opts: CreateOptions): Promise<void> {
+async function runTenantCreate(
+  name: string | undefined,
+  opts: CreateOptions,
+): Promise<void> {
   const stage = await resolveStage({ flag: opts.stage });
   const session = loadStageSession(stage);
   const { client } = await getGqlClient({ stage });
@@ -196,7 +225,9 @@ async function runTenantCreate(name: string | undefined, opts: CreateOptions): P
     printJson(tenant);
     return;
   }
-  printSuccess(`Created tenant ${tenant.id} — ${tenant.name} (slug: ${tenant.slug}, plan: ${tenant.plan}).`);
+  printSuccess(
+    `Created tenant ${tenant.id} — ${tenant.name} (slug: ${tenant.slug}, plan: ${tenant.plan}).`,
+  );
 }
 
 interface UpdateOptions {
@@ -221,7 +252,9 @@ async function runTenantUpdate(id: string, opts: UpdateOptions): Promise<void> {
   if (opts.issuePrefix !== undefined) input.issuePrefix = opts.issuePrefix;
 
   if (Object.keys(input).length === 0) {
-    printError("Nothing to update. Pass at least one of --name, --plan, --issue-prefix.");
+    printError(
+      "Nothing to update. Pass at least one of --name, --plan, --issue-prefix.",
+    );
     process.exit(1);
   }
 
@@ -230,7 +263,9 @@ async function runTenantUpdate(id: string, opts: UpdateOptions): Promise<void> {
     printJson(data.updateTenant);
     return;
   }
-  printSuccess(`Updated tenant ${data.updateTenant.id} (slug: ${data.updateTenant.slug}).`);
+  printSuccess(
+    `Updated tenant ${data.updateTenant.id} (slug: ${data.updateTenant.slug}).`,
+  );
 }
 
 interface SettingsGetOptions {
@@ -246,7 +281,9 @@ async function runTenantSettingsGet(
     tenant: tenantArg,
   });
 
-  const data = await gqlQuery(ctx.client, TenantSettingsDoc, { id: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, TenantSettingsDoc, {
+    id: ctx.tenantId,
+  });
   const tenant = data.tenant;
   if (!tenant) {
     printError(`Tenant ${ctx.tenantId} not found.`);
@@ -263,7 +300,12 @@ async function runTenantSettingsGet(
     ["Tenant", `${tenant.name} (${tenant.slug})`],
     ["Default model", s?.defaultModel ?? undefined],
     ["Monthly budget (cents)", s?.budgetMonthlyCents ?? undefined],
-    ["Monthly budget (USD)", s?.budgetMonthlyCents != null ? `$${(s.budgetMonthlyCents / 100).toFixed(2)}` : undefined],
+    [
+      "Monthly budget (USD)",
+      s?.budgetMonthlyCents != null
+        ? `$${(s.budgetMonthlyCents / 100).toFixed(2)}`
+        : undefined,
+    ],
     ["Max agents", s?.maxAgents ?? undefined],
     ["Auto-close after (min)", s?.autoCloseThreadMinutes ?? undefined],
     ["Features", s?.features ? JSON.stringify(s.features) : undefined],
@@ -291,12 +333,17 @@ async function runTenantSettingsSet(
   const input: Record<string, unknown> = {};
   if (opts.defaultModel !== undefined) input.defaultModel = opts.defaultModel;
   if (opts.monthlyBudgetUsd !== undefined) {
-    input.budgetMonthlyCents = Math.round(Number.parseFloat(opts.monthlyBudgetUsd) * 100);
+    input.budgetMonthlyCents = Math.round(
+      Number.parseFloat(opts.monthlyBudgetUsd) * 100,
+    );
   }
-  if (opts.maxAgents !== undefined) input.maxAgents = Number.parseInt(opts.maxAgents, 10);
+  if (opts.maxAgents !== undefined)
+    input.maxAgents = Number.parseInt(opts.maxAgents, 10);
   if (opts.autoCloseAfterDays !== undefined) {
     // schema field is autoCloseThreadMinutes; convert days → minutes.
-    input.autoCloseThreadMinutes = Math.round(Number.parseFloat(opts.autoCloseAfterDays) * 60 * 24);
+    input.autoCloseThreadMinutes = Math.round(
+      Number.parseFloat(opts.autoCloseAfterDays) * 60 * 24,
+    );
   }
   const features = parseFeatureFlags(opts.feature);
   // `features` is GraphQL type AWSJSON — a string-encoded JSON value. The
@@ -327,7 +374,9 @@ export function registerTenantCommand(program: Command): void {
   const tenant = program
     .command("tenant")
     .alias("tenants")
-    .description("Manage tenants (workspaces) — create, rename, and configure plans / defaults.");
+    .description(
+      "Manage tenants (workspaces) — create, rename, and configure plans / defaults.",
+    );
 
   tenant
     .command("list")
@@ -349,7 +398,10 @@ Examples:
         const api = resolveApiConfig(stage);
         if (!api) process.exit(1);
 
-        const client = createClient({ apiUrl: api!.apiUrl, authSecret: api!.authSecret });
+        const client = createClient({
+          apiUrl: api!.apiUrl,
+          authSecret: api!.authSecret,
+        });
         const rows = await tenantOps.listTenants(client);
 
         if (isJsonMode()) {
@@ -386,10 +438,14 @@ Examples:
         const api = resolveApiConfig(stage);
         if (!api) process.exit(1);
 
-        const client = createClient({ apiUrl: api!.apiUrl, authSecret: api!.authSecret });
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          idOrSlug,
-        );
+        const client = createClient({
+          apiUrl: api!.apiUrl,
+          authSecret: api!.authSecret,
+        });
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            idOrSlug,
+          );
         const t = isUuid
           ? await tenantOps.getTenant(client, idOrSlug)
           : await tenantOps.getTenantBySlug(client, idOrSlug);
@@ -398,13 +454,16 @@ Examples:
           printJson(t);
           return;
         }
-        printTable([t as unknown as Record<string, unknown>], [
-          { key: "slug", header: "SLUG" },
-          { key: "name", header: "NAME" },
-          { key: "plan", header: "PLAN" },
-          { key: "issue_prefix", header: "PREFIX" },
-          { key: "id", header: "ID" },
-        ]);
+        printTable(
+          [t as unknown as Record<string, unknown>],
+          [
+            { key: "slug", header: "SLUG" },
+            { key: "name", header: "NAME" },
+            { key: "plan", header: "PLAN" },
+            { key: "issue_prefix", header: "PREFIX" },
+            { key: "id", header: "ID" },
+          ],
+        );
       } catch (err) {
         if (err instanceof AdminOpsError && err.status === 404) {
           printError(`Tenant "${idOrSlug}" not found`);
@@ -419,9 +478,15 @@ Examples:
     .command("create [name]")
     .description("Create a new tenant. The caller becomes its first owner.")
     .option("-s, --stage <name>", "Deployment stage")
-    .option("--slug <slug>", "URL-safe slug (lowercase, hyphens). Generated from name if omitted.")
+    .option(
+      "--slug <slug>",
+      "URL-safe slug (lowercase, hyphens). Generated from name if omitted.",
+    )
     .option("--plan <plan>", "Plan tier (free, team, enterprise, …)", "team")
-    .option("--issue-prefix <prefix>", "Issue-number prefix for thread numbers (e.g. ACME)")
+    .option(
+      "--issue-prefix <prefix>",
+      "Issue-number prefix for thread numbers (e.g. ACME)",
+    )
     .addHelpText(
       "after",
       `
@@ -444,17 +509,23 @@ Examples:
 
   const settings = tenant
     .command("settings")
-    .description("Tenant-wide defaults — model, budget, auto-close, feature flags.");
+    .description(
+      "Tenant-wide defaults — model, budget, auto-close, feature flags.",
+    );
 
   settings
     .command("get [tenant]")
-    .description("Print the current TenantSettings (human) or the full object (--json).")
+    .description(
+      "Print the current TenantSettings (human) or the full object (--json).",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .action(runTenantSettingsGet);
 
   settings
     .command("set [tenant]")
-    .description("Set one or more TenantSettings fields. Each --<field> flag is independent.")
+    .description(
+      "Set one or more TenantSettings fields. Each --<field> flag is independent.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("--default-model <id>")
     .option("--monthly-budget-usd <n>")

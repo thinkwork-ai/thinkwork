@@ -17,29 +17,29 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 
 export const tenantSystemUsers = pgTable(
-	"tenant_system_users",
-	{
-		id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-		tenant_id: uuid("tenant_id")
-			.references(() => tenants.id)
-			.notNull(),
-		created_at: timestamp("created_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-	},
-	(table) => [
-		uniqueIndex("uq_tenant_system_users_tenant").on(table.tenant_id),
-	],
+  "tenant_system_users",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [uniqueIndex("uq_tenant_system_users_tenant").on(table.tenant_id)],
 );
 
 export const tenantSystemUsersRelations = relations(
-	tenantSystemUsers,
-	({ one }) => ({
-		tenant: one(tenants, {
-			fields: [tenantSystemUsers.tenant_id],
-			references: [tenants.id],
-		}),
-	}),
+  tenantSystemUsers,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [tenantSystemUsers.tenant_id],
+      references: [tenants.id],
+    }),
+  }),
 );
 
 export type TenantSystemUser = typeof tenantSystemUsers.$inferSelect;

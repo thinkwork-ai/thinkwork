@@ -268,187 +268,6 @@ export const RemoveSpaceMemberMutation = graphql(`
   }
 `);
 
-// ---------------------------------------------------------------------------
-// Computers
-// ---------------------------------------------------------------------------
-
-export const ComputersListQuery = graphql(`
-  query ComputersList($tenantId: ID!) {
-    computers(tenantId: $tenantId) {
-      id
-      tenantId
-      ownerUserId
-      owner {
-        id
-        name
-        email
-      }
-      sourceAgent {
-        id
-        name
-        slug
-      }
-      name
-      slug
-      scope
-      status
-      desiredRuntimeStatus
-      runtimeStatus
-      liveWorkspaceRoot
-      efsAccessPointId
-      ecsServiceName
-      lastHeartbeatAt
-      lastActiveAt
-      budgetMonthlyCents
-      spentMonthlyCents
-      budgetPausedAt
-      budgetPausedReason
-      migratedFromAgentId
-      migrationMetadata
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const ComputerDetailQuery = graphql(`
-  query ComputerDetail($id: ID!) {
-    computer(id: $id) {
-      id
-      tenantId
-      ownerUserId
-      owner {
-        id
-        name
-        email
-      }
-      sourceAgent {
-        id
-        name
-        slug
-      }
-      name
-      slug
-      scope
-      status
-      desiredRuntimeStatus
-      runtimeStatus
-      runtimeConfig
-      liveWorkspaceRoot
-      efsAccessPointId
-      ecsServiceName
-      lastHeartbeatAt
-      lastActiveAt
-      budgetMonthlyCents
-      spentMonthlyCents
-      budgetPausedAt
-      budgetPausedReason
-      migratedFromAgentId
-      migrationMetadata
-      createdBy
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const CreateComputerMutation = graphql(`
-  mutation CreateComputer($input: CreateComputerInput!) {
-    createComputer(input: $input) {
-      id
-      name
-      slug
-      scope
-      status
-      desiredRuntimeStatus
-      runtimeStatus
-      tenantId
-      ownerUserId
-      budgetMonthlyCents
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const UpdateComputerMutation = graphql(`
-  mutation UpdateComputer($id: ID!, $input: UpdateComputerInput!) {
-    updateComputer(id: $id, input: $input) {
-      id
-      name
-      status
-      desiredRuntimeStatus
-      runtimeStatus
-      liveWorkspaceRoot
-      efsAccessPointId
-      ecsServiceName
-      lastHeartbeatAt
-      lastActiveAt
-      budgetMonthlyCents
-      spentMonthlyCents
-      budgetPausedReason
-      updatedAt
-    }
-  }
-`);
-
-export const ComputerAssignmentsQuery = graphql(`
-  query ComputerAssignments($computerId: ID!) {
-    computerAssignments(computerId: $computerId) {
-      id
-      subjectType
-      userId
-      user {
-        id
-        name
-        email
-      }
-      role
-      createdAt
-    }
-  }
-`);
-
-export const SetUserComputerAssignmentsMutation = graphql(`
-  mutation SetUserComputerAssignments(
-    $input: SetUserComputerAssignmentsInput!
-  ) {
-    setUserComputerAssignments(input: $input) {
-      id
-      computerId
-      subjectType
-      userId
-      role
-      updatedAt
-    }
-  }
-`);
-
-// ComputerTasksQuery, ComputerThreadsQuery, and ComputerEventsQuery
-// retired by plan 2026-05-13-005 U2 alongside the
-// ComputerLiveTasksPanel, ComputerDashboardActivity, and
-// ComputerEventsPanel components. The Computer Dashboard now reads
-// threads via the shared ThreadsTable + threadsPaged(computerId:...)
-// path; tasks + events were judged operator noise and removed.
-
-export const EnqueueComputerTaskMutation = graphql(`
-  mutation EnqueueComputerTask($input: EnqueueComputerTaskInput!) {
-    enqueueComputerTask(input: $input) {
-      id
-      taskType
-      status
-      input
-      output
-      error
-      idempotencyKey
-      claimedAt
-      completedAt
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
 export const ModelCatalogQuery = graphql(`
   query ModelCatalog {
     modelCatalog {
@@ -583,17 +402,11 @@ export const ThreadsListQuery = graphql(`
       assigneeType
       assigneeId
       agentId
-      computerId
       userId
       agent {
         id
         name
         avatarUrl
-      }
-      computer {
-        id
-        name
-        slug
       }
       user {
         id
@@ -625,7 +438,6 @@ export const ThreadsPagedQuery = gql`
     $sortDir: String
     $limit: Int
     $offset: Int
-    $computerId: ID
     $spaceId: ID
   ) {
     threadsPaged(
@@ -636,7 +448,6 @@ export const ThreadsPagedQuery = gql`
       sortDir: $sortDir
       limit: $limit
       offset: $offset
-      computerId: $computerId
       spaceId: $spaceId
     ) {
       items {
@@ -648,18 +459,12 @@ export const ThreadsPagedQuery = gql`
         assigneeType
         assigneeId
         agentId
-        computerId
         spaceId
         userId
         agent {
           id
           name
           avatarUrl
-        }
-        computer {
-          id
-          name
-          slug
         }
         user {
           id
@@ -697,17 +502,11 @@ export const ThreadDetailQuery = graphql(`
       assigneeType
       assigneeId
       agentId
-      computerId
       userId
       agent {
         id
         name
         avatarUrl
-      }
-      computer {
-        id
-        name
-        slug
       }
       user {
         id

@@ -22,5 +22,24 @@ import { queuedWakeups } from "./queuedWakeups.query.js";
 // routineRun + routineRuns query surfaces alongside their RoutineRun /
 // RoutineStep types — admin (D U14) + mobile (this PR) both query
 // routineExecutions now.
-export const triggerQueries = { routines, routine, threadTurns, threadTurn, threadTurnEvents, scheduledJobs, scheduledJob, queuedWakeups };
-export const triggerMutations = { deleteRoutine, setRoutineTrigger, deleteRoutineTrigger, cancelThreadTurn, createWakeupRequest, createScheduledJob, updateScheduledJob, deleteScheduledJob, runScheduledJob };
+export const triggerQueries = {
+  routines,
+  routine,
+  threadTurns,
+  threadTurn,
+  threadTurnEvents,
+  scheduledJobs,
+  scheduledJob,
+  queuedWakeups,
+};
+export const triggerMutations = {
+  deleteRoutine,
+  setRoutineTrigger,
+  deleteRoutineTrigger,
+  cancelThreadTurn,
+  createWakeupRequest,
+  createScheduledJob,
+  updateScheduledJob,
+  deleteScheduledJob,
+  runScheduledJob,
+};

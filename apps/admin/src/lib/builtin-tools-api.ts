@@ -4,7 +4,11 @@ import { apiFetch, ApiError } from "@/lib/api-fetch";
 // so consumers that string-match on the message keep working.
 async function request<T>(
   path: string,
-  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+  options: {
+    method?: string;
+    body?: string;
+    extraHeaders?: Record<string, string>;
+  } = {},
 ): Promise<T> {
   try {
     return await apiFetch<T>(path, options);
@@ -55,7 +59,12 @@ export function upsertBuiltinTool(
   tenantSlug: string,
   slug: string,
   input: BuiltinToolInput,
-): Promise<{ id: string; toolSlug: string; created?: boolean; updated?: boolean }> {
+): Promise<{
+  id: string;
+  toolSlug: string;
+  created?: boolean;
+  updated?: boolean;
+}> {
   return request(`/api/skills/builtin-tools/${slug}`, {
     method: "PUT",
     extraHeaders: { "x-tenant-slug": tenantSlug },

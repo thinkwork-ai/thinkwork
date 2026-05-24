@@ -37,7 +37,10 @@ async function hydrate() {
     // killed the debounced manifest write before it could flush.
     const lastUserKey = `${PREFIX}.${CLIENT_ID}.LastAuthUser`;
     const username = await SecureStore.getItemAsync(lastUserKey);
-    console.log("[auth-boot] hydrate LastAuthUser:", username ? `len=${username.length}` : "null");
+    console.log(
+      "[auth-boot] hydrate LastAuthUser:",
+      username ? `len=${username.length}` : "null",
+    );
     const keysToLoad = new Set<string>();
 
     if (username) {
@@ -52,7 +55,9 @@ async function hydrate() {
 
     // Legacy manifest support (pre-fix sessions). Harmless once all users
     // have re-signed in under the new hydration path; delete later.
-    const manifestRaw = await SecureStore.getItemAsync(`${PREFIX}.__manifest__`);
+    const manifestRaw = await SecureStore.getItemAsync(
+      `${PREFIX}.__manifest__`,
+    );
     if (manifestRaw) {
       try {
         const keys: string[] = JSON.parse(manifestRaw);
@@ -99,9 +104,10 @@ function updateManifest() {
   manifestTimer = setTimeout(() => {
     manifestTimer = null;
     const keys = [...memoryCache.keys()];
-    SecureStore.setItemAsync(`${PREFIX}.__manifest__`, JSON.stringify(keys)).catch((e) =>
-      console.warn("[CognitoStorage] manifest write error:", e),
-    );
+    SecureStore.setItemAsync(
+      `${PREFIX}.__manifest__`,
+      JSON.stringify(keys),
+    ).catch((e) => console.warn("[CognitoStorage] manifest write error:", e));
   }, 100);
 }
 

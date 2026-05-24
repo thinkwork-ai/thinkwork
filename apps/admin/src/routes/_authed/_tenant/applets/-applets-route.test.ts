@@ -40,10 +40,16 @@ describe("Apps admin routes", () => {
     expect(detailRouteSource).toContain("CodeMirror");
     expect(detailRouteSource).toContain("AdminAppletPreview");
     expect(detailRouteSource).toContain("!overflow-hidden !pb-4");
-    expect(detailRouteSource).toContain('activeTab === "app" || activeTab === "source"');
-    expect(detailRouteSource).toContain("activeTab === \"source\"");
-    expect(detailRouteSource).toContain('TabsContent value="source" className="min-h-0 overflow-hidden"');
-    expect(detailRouteSource).toContain("h-full min-h-0 overflow-hidden rounded-md border bg-black");
+    expect(detailRouteSource).toContain(
+      'activeTab === "app" || activeTab === "source"',
+    );
+    expect(detailRouteSource).toContain('activeTab === "source"');
+    expect(detailRouteSource).toContain(
+      'TabsContent value="source" className="min-h-0 overflow-hidden"',
+    );
+    expect(detailRouteSource).toContain(
+      "h-full min-h-0 overflow-hidden rounded-md border bg-black",
+    );
     expect(detailRouteSource).toContain('variant="link"');
     expect(detailRouteSource).toContain("text-muted-foreground");
     expect(detailRouteSource).not.toContain("Save Source");

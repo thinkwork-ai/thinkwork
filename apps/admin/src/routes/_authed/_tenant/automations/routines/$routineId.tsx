@@ -130,9 +130,7 @@ function RoutineDetailPage() {
   return (
     <PageLayout
       contentClassName="overflow-hidden pb-4"
-      header={
-        <PageHeader title={routine.name} actions={actions} />
-      }
+      header={<PageHeader title={routine.name} actions={actions} />}
     >
       {triggerError && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400">

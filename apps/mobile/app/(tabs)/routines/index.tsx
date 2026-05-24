@@ -35,9 +35,15 @@ export default function RoutinesScreen() {
       <TabHeader
         title="Routines"
         right={
-          <Pressable onPress={handleNewRoutine} className="flex-row items-center gap-1">
+          <Pressable
+            onPress={handleNewRoutine}
+            className="flex-row items-center gap-1"
+          >
             <Plus size={18} color={colors.primary} />
-            <Text style={{ color: colors.primary }} className="font-semibold text-base">
+            <Text
+              style={{ color: colors.primary }}
+              className="font-semibold text-base"
+            >
               New
             </Text>
           </Pressable>
@@ -115,7 +121,7 @@ export default function RoutinesScreen() {
                       }
                     }}
                   />
-                )
+                ),
               )}
             </View>
           )}

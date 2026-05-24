@@ -67,28 +67,12 @@ export function useKeyboardShortcuts(
       for (const s of shortcuts) {
         const keyMatch = e.key.toLowerCase() === s.key.toLowerCase();
         // `mod`: Cmd on Mac, Ctrl elsewhere — satisfied by either modifier.
-        const modSatisfied = s.mod
-          ? e.metaKey || e.ctrlKey
-          : true;
-        const metaMatch = s.mod
-          ? true
-          : s.meta
-          ? e.metaKey
-          : !e.metaKey;
-        const ctrlMatch = s.mod
-          ? true
-          : s.ctrl
-          ? e.ctrlKey
-          : !e.ctrlKey;
+        const modSatisfied = s.mod ? e.metaKey || e.ctrlKey : true;
+        const metaMatch = s.mod ? true : s.meta ? e.metaKey : !e.metaKey;
+        const ctrlMatch = s.mod ? true : s.ctrl ? e.ctrlKey : !e.ctrlKey;
         const shiftMatch = s.shift ? e.shiftKey : !e.shiftKey;
 
-        if (
-          keyMatch &&
-          modSatisfied &&
-          metaMatch &&
-          ctrlMatch &&
-          shiftMatch
-        ) {
+        if (keyMatch && modSatisfied && metaMatch && ctrlMatch && shiftMatch) {
           e.preventDefault();
           s.handler();
           return;

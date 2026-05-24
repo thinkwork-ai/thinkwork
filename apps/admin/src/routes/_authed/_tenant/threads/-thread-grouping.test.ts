@@ -18,9 +18,9 @@ describe("threadAssigneeGroupKey", () => {
   });
 
   it("groups unowned threads under __unassigned", () => {
-    expect(
-      threadAssigneeGroupKey({ computerId: null, agentId: null }),
-    ).toBe("__unassigned");
+    expect(threadAssigneeGroupKey({ computerId: null, agentId: null })).toBe(
+      "__unassigned",
+    );
   });
 
   it("prefers Computer ownership when both fields are set", () => {
@@ -30,15 +30,15 @@ describe("threadAssigneeGroupKey", () => {
   });
 
   it("treats an empty-string agentId as unassigned (defensive normalization)", () => {
-    expect(
-      threadAssigneeGroupKey({ computerId: null, agentId: "" }),
-    ).toBe("__unassigned");
+    expect(threadAssigneeGroupKey({ computerId: null, agentId: "" })).toBe(
+      "__unassigned",
+    );
   });
 
   it("treats an empty-string computerId as unassigned (defensive normalization)", () => {
-    expect(
-      threadAssigneeGroupKey({ computerId: "", agentId: null }),
-    ).toBe("__unassigned");
+    expect(threadAssigneeGroupKey({ computerId: "", agentId: null })).toBe(
+      "__unassigned",
+    );
   });
 
   it("falls through empty-string computerId to a real agentId", () => {
@@ -49,22 +49,29 @@ describe("threadAssigneeGroupKey", () => {
 });
 
 describe("threadAssigneeGroupLabel", () => {
-  const resolveAgentName = (id: string) =>
-    id === "agent-42" ? "Marco" : null;
+  const resolveAgentName = (id: string) => (id === "agent-42" ? "Marco" : null);
 
   it("renders 'Computer' for the Computer bucket", () => {
-    expect(threadAssigneeGroupLabel("__computer", resolveAgentName)).toBe("Computer");
+    expect(threadAssigneeGroupLabel("__computer", resolveAgentName)).toBe(
+      "Computer",
+    );
   });
 
   it("renders 'Unassigned' for the unassigned bucket", () => {
-    expect(threadAssigneeGroupLabel("__unassigned", resolveAgentName)).toBe("Unassigned");
+    expect(threadAssigneeGroupLabel("__unassigned", resolveAgentName)).toBe(
+      "Unassigned",
+    );
   });
 
   it("resolves an agent name when one is known", () => {
-    expect(threadAssigneeGroupLabel("agent-42", resolveAgentName)).toBe("Marco");
+    expect(threadAssigneeGroupLabel("agent-42", resolveAgentName)).toBe(
+      "Marco",
+    );
   });
 
   it("falls back to a short id when the agent name is unknown", () => {
-    expect(threadAssigneeGroupLabel("agentXYZ12345", resolveAgentName)).toBe("agentXYZ");
+    expect(threadAssigneeGroupLabel("agentXYZ12345", resolveAgentName)).toBe(
+      "agentXYZ",
+    );
   });
 });

@@ -128,7 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }),
         });
         const payload = await res.json();
-        const tenantId = payload?.data?.bootstrapUser?.tenant?.id as string | undefined;
+        const tenantId = payload?.data?.bootstrapUser?.tenant?.id as
+          | string
+          | undefined;
         if (tenantId) {
           console.log("[auth-boot] tenantId resolved via bootstrapUser");
           SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch((e) =>
@@ -190,7 +192,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const restoredUser = auth.getCurrentUser();
       console.log(
         "[auth-boot] getCurrentUser:",
-        restoredUser ? `sub=${restoredUser.sub.slice(0, 8)} tenantId=${restoredUser.tenantId ?? "none"}` : "null",
+        restoredUser
+          ? `sub=${restoredUser.sub.slice(0, 8)} tenantId=${restoredUser.tenantId ?? "none"}`
+          : "null",
       );
       if (!restoredUser) {
         console.log("[auth-boot] no user from either path");
@@ -198,9 +202,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const oauthToken = await auth.getIdToken();
-      console.log("[auth-boot] getIdToken:", oauthToken ? `len=${oauthToken.length}` : "null");
+      console.log(
+        "[auth-boot] getIdToken:",
+        oauthToken ? `len=${oauthToken.length}` : "null",
+      );
       if (!oauthToken) {
-        console.log("[auth-boot] OAuth path: no id token, leaving soft-auth state");
+        console.log(
+          "[auth-boot] OAuth path: no id token, leaving soft-auth state",
+        );
         return false;
       }
 
@@ -224,32 +233,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     runBootstrap().finally(() => {
       if (!cancelled) setIsLoading(false);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [runBootstrap]);
 
   // ------ Refresh token when app comes to foreground ------
   useEffect(() => {
     if (Platform.OS === "web") return;
 
-    const subscription = AppState.addEventListener("change", async (nextState) => {
-      if (nextState === "active" && user && !refreshingRef.current) {
-        refreshingRef.current = true;
-        try {
-          const token = await auth.getIdToken();
-          if (token) {
-            setAuthToken(token);
-            // Force WS reconnect so subscriptions use the fresh token
-            reconnectSubscriptions();
-            // Signal screens to re-fetch data
-            setRefreshCounter((c) => c + 1);
+    const subscription = AppState.addEventListener(
+      "change",
+      async (nextState) => {
+        if (nextState === "active" && user && !refreshingRef.current) {
+          refreshingRef.current = true;
+          try {
+            const token = await auth.getIdToken();
+            if (token) {
+              setAuthToken(token);
+              // Force WS reconnect so subscriptions use the fresh token
+              reconnectSubscriptions();
+              // Signal screens to re-fetch data
+              setRefreshCounter((c) => c + 1);
+            }
+          } catch (e) {
+            console.warn("[AuthProvider] foreground refresh failed:", e);
+          } finally {
+            refreshingRef.current = false;
           }
-        } catch (e) {
-          console.warn("[AuthProvider] foreground refresh failed:", e);
-        } finally {
-          refreshingRef.current = false;
         }
-      }
-    });
+      },
+    );
 
     return () => subscription.remove();
   }, [user]);
@@ -288,7 +302,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       Promise.all([
         SecureStore.setItemAsync(CRED_EMAIL_KEY, email),
         SecureStore.setItemAsync(CRED_PASSWORD_KEY, password),
-      ]).catch((e) => console.warn("[AuthProvider] credential store error:", e));
+      ]).catch((e) =>
+        console.warn("[AuthProvider] credential store error:", e),
+      );
     }
   }, []);
 
@@ -319,7 +335,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const oauthInFlightRef = useRef(false);
   const handleSignInWithGoogle = useCallback(async () => {
     if (oauthInFlightRef.current) {
-      console.warn("[AuthProvider] Google OAuth: already in flight, ignoring re-entry");
+      console.warn(
+        "[AuthProvider] Google OAuth: already in flight, ignoring re-entry",
+      );
       return;
     }
     oauthInFlightRef.current = true;
@@ -349,8 +367,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // literal redirect URI fix below (stopping at `&` AND `#`) is the
       // durable fix for that parser bug — ephemeral sessions are no
       // longer needed.
-      const result = await WebBrowser.openAuthSessionAsync(authorizeUrl, redirectUri);
-      console.log("[AuthProvider] Google OAuth result type:", result.type, "url" in result ? result.url : "no url");
+      const result = await WebBrowser.openAuthSessionAsync(
+        authorizeUrl,
+        redirectUri,
+      );
+      console.log(
+        "[AuthProvider] Google OAuth result type:",
+        result.type,
+        "url" in result ? result.url : "no url",
+      );
 
       if (result.type !== "success") return;
 
@@ -388,7 +413,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const bootstrapResult = await res.json();
         const bootstrap = bootstrapResult?.data?.bootstrapUser;
         if (!bootstrap?.tenant?.id) {
-          throw new Error(bootstrapResult?.errors?.[0]?.message ?? "Failed to provision workspace");
+          throw new Error(
+            bootstrapResult?.errors?.[0]?.message ??
+              "Failed to provision workspace",
+          );
         }
         oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
       }
@@ -399,7 +427,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // This code runs after the `Platform.OS === "web"` early return above,
       // so we're guaranteed to be on native here.
       if (oauthUser.tenantId) {
-        SecureStore.setItemAsync(STORED_TENANT_ID_KEY, oauthUser.tenantId).catch((e) => {
+        SecureStore.setItemAsync(
+          STORED_TENANT_ID_KEY,
+          oauthUser.tenantId,
+        ).catch((e) => {
           console.warn("[AuthProvider] tenantId persist failed:", e);
         });
       }

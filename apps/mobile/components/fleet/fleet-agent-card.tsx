@@ -17,10 +17,7 @@ interface FleetAgentCardProps {
   onPress: () => void;
 }
 
-export function FleetAgentCard({
-  agent,
-  onPress,
-}: FleetAgentCardProps) {
+export function FleetAgentCard({ agent, onPress }: FleetAgentCardProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
@@ -49,9 +46,7 @@ export function FleetAgentCard({
             <View className={`h-2 w-2 rounded-full ${statusDotColor}`} />
             <Muted className="text-xs capitalize">{status}</Muted>
             {agent.stackName && (
-              <Muted className="text-xs">
-                | {agent.stackName}
-              </Muted>
+              <Muted className="text-xs">| {agent.stackName}</Muted>
             )}
           </View>
         </View>

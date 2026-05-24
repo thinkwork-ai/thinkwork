@@ -46,9 +46,7 @@ const PROMPT_FILES = [
   "TOOLS.md",
 ] as const;
 
-export type WorkspaceFileReader = (
-  filePath: string,
-) => Promise<string | null>;
+export type WorkspaceFileReader = (filePath: string) => Promise<string | null>;
 
 export interface ComposeSystemPromptArgs {
   payload: PiInvocationPayload;
@@ -136,7 +134,7 @@ function buildRuntimeToolPolicy(toolNames: string[] | undefined): string {
     sendEmailAvailable
       ? "- The `send_email` tool is available. Use it only when the user explicitly asks to email something or the active task is already an email reply."
       : "- The `send_email` tool is not available for this turn.",
-    "- Do not treat vague phrases like \"send me\", \"share with me\", or \"give me\" as email permission by themselves; answer in chat unless the user specifically requests email.",
+    '- Do not treat vague phrases like "send me", "share with me", or "give me" as email permission by themselves; answer in chat unless the user specifically requests email.',
   ].join("\n");
 }
 

@@ -53,10 +53,7 @@ describe("skill-catalog SKILL.md frontmatter (post-U2)", () => {
     "%s — SKILL.md parses with parseSkillMdInternal + name matches slug",
     (slug) => {
       const skillMdPath = join(catalogRoot, slug, "SKILL.md");
-      expect(
-        existsSync(skillMdPath),
-        `${skillMdPath} must exist`,
-      ).toBe(true);
+      expect(existsSync(skillMdPath), `${skillMdPath} must exist`).toBe(true);
 
       const src = readFileSync(skillMdPath, "utf8");
       const result = parseSkillMdInternal(src, skillMdPath);
@@ -159,10 +156,9 @@ describe("catalog directory shape (post-U2)", () => {
   it("every directory in slugDirs has a SKILL.md", () => {
     for (const slug of slugDirs) {
       const p = join(catalogRoot, slug, "SKILL.md");
-      expect(
-        existsSync(p) && statSync(p).isFile(),
-        `${p} must exist`,
-      ).toBe(true);
+      expect(existsSync(p) && statSync(p).isFile(), `${p} must exist`).toBe(
+        true,
+      );
     }
   });
 });

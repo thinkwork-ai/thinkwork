@@ -1,9 +1,6 @@
 import { useQuery } from "urql";
 import { Building2, X } from "lucide-react";
-import {
-  ComplianceActorType,
-  ComplianceEventType,
-} from "@/gql/graphql";
+import { ComplianceActorType, ComplianceEventType } from "@/gql/graphql";
 import { ComplianceTenantsQuery } from "@/lib/compliance/queries";
 import {
   COMPLIANCE_RANGE_VALUES,
@@ -33,8 +30,14 @@ const ACTOR_OPTIONS: { value: ComplianceActorType; label: string }[] = [
 ];
 
 const EVENT_OPTIONS: { value: ComplianceEventType; label: string }[] = [
-  { value: ComplianceEventType.AuthSigninSuccess, label: "Auth · Sign-in success" },
-  { value: ComplianceEventType.AuthSigninFailure, label: "Auth · Sign-in failure" },
+  {
+    value: ComplianceEventType.AuthSigninSuccess,
+    label: "Auth · Sign-in success",
+  },
+  {
+    value: ComplianceEventType.AuthSigninFailure,
+    label: "Auth · Sign-in failure",
+  },
   { value: ComplianceEventType.AuthSignout, label: "Auth · Sign-out" },
   { value: ComplianceEventType.UserInvited, label: "User · Invited" },
   { value: ComplianceEventType.UserCreated, label: "User · Created" },
@@ -42,11 +45,20 @@ const EVENT_OPTIONS: { value: ComplianceEventType; label: string }[] = [
   { value: ComplianceEventType.UserDeleted, label: "User · Deleted" },
   { value: ComplianceEventType.AgentCreated, label: "Agent · Created" },
   { value: ComplianceEventType.AgentDeleted, label: "Agent · Deleted" },
-  { value: ComplianceEventType.AgentSkillsChanged, label: "Agent · Skills changed" },
+  {
+    value: ComplianceEventType.AgentSkillsChanged,
+    label: "Agent · Skills changed",
+  },
   { value: ComplianceEventType.McpAdded, label: "MCP · Added" },
   { value: ComplianceEventType.McpRemoved, label: "MCP · Removed" },
-  { value: ComplianceEventType.WorkspaceGovernanceFileEdited, label: "Workspace · Governance file edited" },
-  { value: ComplianceEventType.DataExportInitiated, label: "Data · Export initiated" },
+  {
+    value: ComplianceEventType.WorkspaceGovernanceFileEdited,
+    label: "Workspace · Governance file edited",
+  },
+  {
+    value: ComplianceEventType.DataExportInitiated,
+    label: "Data · Export initiated",
+  },
   { value: ComplianceEventType.PolicyEvaluated, label: "Policy · Evaluated" },
   { value: ComplianceEventType.PolicyAllowed, label: "Policy · Allowed" },
   { value: ComplianceEventType.PolicyBlocked, label: "Policy · Blocked" },
@@ -88,7 +100,10 @@ function inputValueToIso(value: string): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarProps) {
+export function ComplianceFilterBar({
+  search,
+  onChange,
+}: ComplianceFilterBarProps) {
   const operator = useComplianceOperator();
   const showCrossTenantToggle = operator.isOperator;
   const showTenantFilter = operator.isOperator && search.xt === 1;
@@ -113,7 +128,12 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
   const toggleCrossTenant = (next: boolean) => {
     if (!next) {
       // Turning OFF — clear the tenant override.
-      onChange({ ...search, xt: undefined, tenantId: undefined, cursor: undefined });
+      onChange({
+        ...search,
+        xt: undefined,
+        tenantId: undefined,
+        cursor: undefined,
+      });
     } else {
       onChange({ ...search, xt: 1, cursor: undefined });
     }
@@ -136,7 +156,11 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
               key={r}
               type="button"
               size="sm"
-              variant={search.range === r && !search.since && !search.until ? "default" : "outline"}
+              variant={
+                search.range === r && !search.since && !search.until
+                  ? "default"
+                  : "outline"
+              }
               onClick={() => setRange(search.range === r ? undefined : r)}
             >
               {RANGE_LABELS[r]}
@@ -146,7 +170,10 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
 
         {/* Since */}
         <div className="space-y-1">
-          <Label htmlFor="compliance-since" className="text-xs text-muted-foreground">
+          <Label
+            htmlFor="compliance-since"
+            className="text-xs text-muted-foreground"
+          >
             Since
           </Label>
           <Input
@@ -163,7 +190,10 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
 
         {/* Until */}
         <div className="space-y-1">
-          <Label htmlFor="compliance-until" className="text-xs text-muted-foreground">
+          <Label
+            htmlFor="compliance-until"
+            className="text-xs text-muted-foreground"
+          >
             Until
           </Label>
           <Input
@@ -184,7 +214,9 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
           <Select
             value={search.actorType ?? "__all__"}
             onValueChange={(v) =>
-              patch({ actorType: v === "__all__" ? undefined : pickActorType(v) })
+              patch({
+                actorType: v === "__all__" ? undefined : pickActorType(v),
+              })
             }
           >
             <SelectTrigger className="w-[10rem]">
@@ -207,7 +239,9 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
           <Select
             value={search.eventType ?? "__all__"}
             onValueChange={(v) =>
-              patch({ eventType: v === "__all__" ? undefined : pickEventType(v) })
+              patch({
+                eventType: v === "__all__" ? undefined : pickEventType(v),
+              })
             }
           >
             <SelectTrigger className="w-[16rem]">
@@ -265,9 +299,7 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
             type="button"
             size="sm"
             variant="ghost"
-            onClick={() =>
-              onChange({ xt: search.xt })
-            }
+            onClick={() => onChange({ xt: search.xt })}
             className="text-muted-foreground"
           >
             <X className="size-3.5" />

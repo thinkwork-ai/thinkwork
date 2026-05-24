@@ -9,19 +9,14 @@
 
 import type { SQSEvent, SQSRecord } from "aws-lambda";
 import { and, eq, sql } from "drizzle-orm";
-import { ensureThreadForWork, getDb } from "@thinkwork/database-pg";
+import { getDb } from "@thinkwork/database-pg";
 import {
-  agents,
-  computerTasks,
-  computers,
   costEvents,
   evalResults,
   evalRuns,
   evalTestCases,
-  messages,
 } from "@thinkwork/database-pg/schema";
 import { createHash } from "crypto";
-import { enqueueComputerThreadTurn } from "../lib/computers/thread-cutover.js";
 import {
   AgentCoreEvalInvocationTimeoutError,
   invokeAgentCoreForEval,
@@ -33,16 +28,6 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 const PASS_THRESHOLD = 0.7;
 const BUILT_IN_EVALUATOR_INPUT_USD_PER_1K = 0.0024;
 const BUILT_IN_EVALUATOR_OUTPUT_USD_PER_1K = 0.012;
-// Keep this below the eval-worker Lambda timeout so slow Computer turns
-// are recorded as per-case eval errors instead of timing out the worker
-// process and leaving the run permanently "running".
-const COMPUTER_TASK_TIMEOUT_MS = Number(
-  process.env.EVAL_COMPUTER_TASK_TIMEOUT_MS ?? 210_000,
-);
-const COMPUTER_TASK_POLL_INTERVAL_MS = Number(
-  process.env.EVAL_COMPUTER_TASK_POLL_INTERVAL_MS ?? 2_000,
-);
-
 export interface EvalWorkerMessage {
   runId: string;
   testCaseId: string;
@@ -87,15 +72,6 @@ interface CaseOutcome {
   errorMessage: string | null;
   costUsd: number;
   sessionId: string;
-}
-
-interface EvalComputerTarget {
-  id: string;
-  ownerUserId: string | null;
-  runtimeStatus: string;
-  primaryAgentId: string | null;
-  migratedFromAgentId: string | null;
-  agentHumanPairId: string | null;
 }
 
 export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
@@ -163,9 +139,7 @@ export function agentCoreEvaluatorsEnabled(
 
 export function isRetryableEvalInfrastructureError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /Timed out waiting for Computer eval task|Lambda\.TooManyRequestsException|Lambda throttled/i.test(
-    message,
-  );
+  return /Lambda\.TooManyRequestsException|Lambda throttled/i.test(message);
 }
 
 export function agentCoreBudgetExceededAssertion(
@@ -498,165 +472,6 @@ export function softenEchoedForbiddenPhraseAssertions(
       score: 1,
     };
   });
-}
-
-async function resolveEvalComputerTarget(
-  run: typeof evalRuns.$inferSelect,
-): Promise<EvalComputerTarget> {
-  const db = getDb();
-  const conditions = [
-    eq(computers.tenant_id, run.tenant_id),
-    eq(computers.status, "active"),
-  ];
-  if (run.computer_id) {
-    conditions.push(eq(computers.id, run.computer_id));
-  } else if (run.agent_id) {
-    conditions.push(sql`
-			(${computers.primary_agent_id} = ${run.agent_id}
-			 OR ${computers.migrated_from_agent_id} = ${run.agent_id})
-		`);
-  } else {
-    throw new Error("Eval run has no Computer target");
-  }
-
-  const [computer] = await db
-    .select({
-      id: computers.id,
-      ownerUserId: computers.owner_user_id,
-      runtimeStatus: computers.runtime_status,
-      primaryAgentId: computers.primary_agent_id,
-      migratedFromAgentId: computers.migrated_from_agent_id,
-      agentHumanPairId: agents.human_pair_id,
-    })
-    .from(computers)
-    .leftJoin(
-      agents,
-      sql`${agents.id} = coalesce(${computers.primary_agent_id}, ${computers.migrated_from_agent_id})`,
-    )
-    .where(and(...conditions))
-    .limit(1);
-
-  if (!computer) {
-    throw new Error("Eval run Computer target was not found");
-  }
-  if (computer.runtimeStatus !== "running") {
-    throw new Error("Eval run Computer target is not running");
-  }
-
-  return computer;
-}
-
-export function extractComputerTaskResponse(output: unknown): string {
-  if (!output || typeof output !== "object") return "";
-  const record = output as Record<string, unknown>;
-  for (const key of ["response", "responseText", "content"]) {
-    const value = record[key];
-    if (typeof value === "string") return value;
-  }
-  return "";
-}
-
-async function waitForComputerTask(input: {
-  tenantId: string;
-  computerId: string;
-  taskId: string;
-  timeoutMs?: number;
-}): Promise<{ output: unknown; durationMs: number }> {
-  const start = Date.now();
-  const timeoutMs = input.timeoutMs ?? COMPUTER_TASK_TIMEOUT_MS;
-  while (Date.now() - start < timeoutMs) {
-    const [task] = await getDb()
-      .select({
-        status: computerTasks.status,
-        output: computerTasks.output,
-        error: computerTasks.error,
-      })
-      .from(computerTasks)
-      .where(
-        and(
-          eq(computerTasks.tenant_id, input.tenantId),
-          eq(computerTasks.computer_id, input.computerId),
-          eq(computerTasks.id, input.taskId),
-        ),
-      )
-      .limit(1);
-
-    if (!task) throw new Error("Computer eval task disappeared");
-    if (task.status === "completed") {
-      return { output: task.output, durationMs: Date.now() - start };
-    }
-    if (task.status === "failed" || task.status === "cancelled") {
-      const error = task.error
-        ? JSON.stringify(task.error)
-        : `Computer task ${task.status}`;
-      throw new Error(error);
-    }
-    await new Promise((r) => setTimeout(r, COMPUTER_TASK_POLL_INTERVAL_MS));
-  }
-  throw new Error(
-    `Timed out waiting for Computer eval task after ${timeoutMs}ms`,
-  );
-}
-
-async function invokeComputer(
-  run: typeof evalRuns.$inferSelect,
-  tc: typeof evalTestCases.$inferSelect,
-  sessionId: string,
-): Promise<{ output: string; durationMs: number }> {
-  const target = await resolveEvalComputerTarget(run);
-  const userId = target.ownerUserId ?? target.agentHumanPairId;
-  if (!userId) {
-    throw new Error("Eval Computer target has no user identity for delegation");
-  }
-
-  const { threadId } = await ensureThreadForWork({
-    tenantId: run.tenant_id,
-    computerId: target.id,
-    userId,
-    title: `Eval: ${tc.name}`,
-    channel: "task",
-  });
-  const [message] = await getDb()
-    .insert(messages)
-    .values({
-      thread_id: threadId,
-      tenant_id: run.tenant_id,
-      role: "user",
-      content: tc.query,
-      sender_type: "user",
-      sender_id: userId,
-      metadata: {
-        source: "eval_worker",
-        evalRunId: run.id,
-        testCaseId: tc.id,
-        category: tc.category,
-        sessionId,
-      },
-    })
-    .returning({ id: messages.id });
-  if (!message) throw new Error("Failed to create eval thread message");
-
-  const task = await enqueueComputerThreadTurn({
-    tenantId: run.tenant_id,
-    computerId: target.id,
-    threadId,
-    messageId: message.id,
-    source: "eval_run",
-    actorType: "user",
-    actorId: userId,
-  });
-  const taskId = (task as { id?: string }).id;
-  if (!taskId) throw new Error("Failed to enqueue Computer eval task");
-
-  const completed = await waitForComputerTask({
-    tenantId: run.tenant_id,
-    computerId: target.id,
-    taskId,
-  });
-  return {
-    output: extractComputerTaskResponse(completed.output),
-    durationMs: completed.durationMs,
-  };
 }
 
 function skippedBuiltInEvaluator(evaluatorId: string): EvaluatorResult {

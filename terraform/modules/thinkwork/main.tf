@@ -287,19 +287,6 @@ module "appsync" {
   subscription_schema = local.subscription_schema
 }
 
-module "computer_runtime" {
-  source = "../app/computer-runtime"
-
-  stage            = var.stage
-  account_id       = var.account_id
-  region           = var.region
-  vpc_id           = module.vpc.vpc_id
-  subnet_ids       = module.vpc.private_subnet_ids
-  task_subnet_ids  = local.computer_task_subnet_ids
-  assign_public_ip = length(module.vpc.public_subnet_ids) > 0
-  appsync_api_arn  = module.appsync.graphql_api_arn
-}
-
 module "api" {
   source = "../app/lambda-api"
 
@@ -402,27 +389,6 @@ module "api" {
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
-  computer_runtime_cluster_name                 = module.computer_runtime.cluster_name
-  computer_runtime_cluster_arn                  = module.computer_runtime.cluster_arn
-  computer_runtime_efs_file_system_id           = module.computer_runtime.efs_file_system_id
-  computer_runtime_subnet_ids                   = module.computer_runtime.task_subnet_ids
-  computer_runtime_assign_public_ip             = module.computer_runtime.assign_public_ip
-  computer_runtime_task_sg_id                   = module.computer_runtime.task_security_group_id
-  computer_runtime_execution_role_arn           = module.computer_runtime.execution_role_arn
-  computer_runtime_task_role_arn                = module.computer_runtime.task_role_arn
-  computer_runtime_log_group_name               = module.computer_runtime.log_group_name
-  computer_runtime_repository_url               = module.computer_runtime.repository_url
-  computer_runtime_default_cpu                  = module.computer_runtime.default_cpu
-  computer_runtime_default_memory               = module.computer_runtime.default_memory
-  computer_runtime_manager_policy_arn           = module.computer_runtime.manager_policy_arn
-
-  # workspace-files-efs sidecar: VPC-attached Lambda that reads any Computer's
-  # workspace files directly off the shared EFS (bypasses the
-  # computer_tasks queue for list/get). See plan
-  # docs/plans/2026-05-13-XXX-feat-admin-computer-efs-listing-plan.md.
-  workspace_admin_efs_access_point_arn = module.computer_runtime.workspace_admin_access_point_arn
-  workspace_admin_lambda_sg_id         = module.computer_runtime.workspace_admin_lambda_sg_id
-
   # Per-user OAuth client credentials — fed to Secrets Manager in
   # app/lambda-api/oauth-secrets.tf. Reuses the same google_oauth_client_*
   # tfvars that already flow to the Cognito federated-signin module.

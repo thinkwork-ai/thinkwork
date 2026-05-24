@@ -7,4 +7,10 @@ import { syncKnowledgeBase } from "./syncKnowledgeBase.mutation.js";
 import { setAgentKnowledgeBases } from "./setAgentKnowledgeBases.mutation.js";
 
 export const knowledgeQueries = { knowledgeBases, knowledgeBase };
-export const knowledgeMutations = { createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase, syncKnowledgeBase, setAgentKnowledgeBases };
+export const knowledgeMutations = {
+  createKnowledgeBase,
+  updateKnowledgeBase,
+  deleteKnowledgeBase,
+  syncKnowledgeBase,
+  setAgentKnowledgeBases,
+};

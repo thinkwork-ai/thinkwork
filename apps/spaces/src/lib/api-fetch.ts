@@ -26,27 +26,27 @@ import { getIdToken } from "@/lib/auth";
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 export class NotReadyError extends Error {
-	readonly kind = "NotReadyError" as const;
-	constructor(message = "Auth not ready") {
-		super(message);
-		this.name = "NotReadyError";
-	}
+  readonly kind = "NotReadyError" as const;
+  constructor(message = "Auth not ready") {
+    super(message);
+    this.name = "NotReadyError";
+  }
 }
 
 export class ApiError extends Error {
-	readonly kind = "ApiError" as const;
-	readonly status: number;
-	readonly body: unknown;
-	constructor(status: number, body: unknown, message?: string) {
-		super(message ?? `API ${status}`);
-		this.name = "ApiError";
-		this.status = status;
-		this.body = body;
-	}
+  readonly kind = "ApiError" as const;
+  readonly status: number;
+  readonly body: unknown;
+  constructor(status: number, body: unknown, message?: string) {
+    super(message ?? `API ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
 }
 
 export interface ApiFetchOptions extends RequestInit {
-	extraHeaders?: Record<string, string>;
+  extraHeaders?: Record<string, string>;
 }
 
 /**
@@ -58,45 +58,45 @@ export interface ApiFetchOptions extends RequestInit {
  * Throws `ApiError` on non-2xx responses.
  */
 export async function apiFetch<T = unknown>(
-	path: string,
-	options: ApiFetchOptions = {},
+  path: string,
+  options: ApiFetchOptions = {},
 ): Promise<T> {
-	const { extraHeaders, headers: callerHeaders, ...rest } = options;
-	const token = await getIdToken();
-	if (!token) throw new NotReadyError();
+  const { extraHeaders, headers: callerHeaders, ...rest } = options;
+  const token = await getIdToken();
+  if (!token) throw new NotReadyError();
 
-	const res = await fetch(`${API_URL}${path}`, {
-		...rest,
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
-			// TODO(PR B): drop x-tenant-id passthrough once handlers
-			// derive tenantId from membership instead of the header.
-			...(extraHeaders ?? {}),
-			...(callerHeaders ?? {}),
-		},
-	});
+  const res = await fetch(`${API_URL}${path}`, {
+    ...rest,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      // TODO(PR B): drop x-tenant-id passthrough once handlers
+      // derive tenantId from membership instead of the header.
+      ...(extraHeaders ?? {}),
+      ...(callerHeaders ?? {}),
+    },
+  });
 
-	// Best-effort body parse: try JSON, fall back to text. Attach raw
-	// text to `ApiError.body` so a non-JSON 5xx still surfaces something
-	// useful to the caller instead of a parse failure.
-	let body: unknown = null;
-	const text = await res.text();
-	if (text) {
-		try {
-			body = JSON.parse(text);
-		} catch {
-			body = text;
-		}
-	}
+  // Best-effort body parse: try JSON, fall back to text. Attach raw
+  // text to `ApiError.body` so a non-JSON 5xx still surfaces something
+  // useful to the caller instead of a parse failure.
+  let body: unknown = null;
+  const text = await res.text();
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+  }
 
-	if (!res.ok) {
-		const message =
-			typeof body === "object" && body !== null && "error" in body
-				? String((body as { error: unknown }).error)
-				: `API ${res.status} ${res.statusText}`;
-		throw new ApiError(res.status, body, message);
-	}
+  if (!res.ok) {
+    const message =
+      typeof body === "object" && body !== null && "error" in body
+        ? String((body as { error: unknown }).error)
+        : `API ${res.status} ${res.statusText}`;
+    throw new ApiError(res.status, body, message);
+  }
 
-	return body as T;
+  return body as T;
 }

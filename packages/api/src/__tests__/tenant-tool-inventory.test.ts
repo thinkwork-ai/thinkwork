@@ -82,7 +82,9 @@ vi.mock("drizzle-orm", () => ({
 
 import { tenantToolInventory } from "../graphql/resolvers/routines/tenantToolInventory.query.js";
 
-const ctx = { auth: {} } as unknown as Parameters<typeof tenantToolInventory>[2];
+const ctx = { auth: {} } as unknown as Parameters<
+  typeof tenantToolInventory
+>[2];
 
 beforeEach(() => {
   mockSelectRows.mockReset();
@@ -99,11 +101,7 @@ describe("tenantToolInventory", () => {
       userId: "u1",
       tenantId: "other-tenant",
     });
-    const out = await tenantToolInventory(
-      null,
-      { tenantId: "tenant-a" },
-      ctx,
-    );
+    const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
     expect(out).toEqual({
       agents: [],
       tools: [],
@@ -120,11 +118,7 @@ describe("tenantToolInventory", () => {
       tenantId: "tenant-a",
     });
     queueResultsInOrder([], [], [], [], []);
-    const out = await tenantToolInventory(
-      null,
-      { tenantId: "tenant-a" },
-      ctx,
-    );
+    const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
     expect(out.agents).toEqual([]);
     expect(out.tools).toEqual([]);
     expect(out.skills).toEqual([]);
@@ -157,11 +151,7 @@ describe("tenantToolInventory", () => {
       [{ id: "skill-1", skill_id: "deep-research" }],
       [],
     );
-    const out = await tenantToolInventory(
-      null,
-      { tenantId: "tenant-a" },
-      ctx,
-    );
+    const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
 
     expect(out.agents).toEqual([
       { id: "agent-1", name: "Researcher", description: null },
@@ -218,11 +208,7 @@ describe("tenantToolInventory", () => {
         },
       ],
     );
-    const out = await tenantToolInventory(
-      null,
-      { tenantId: "tenant-a" },
-      ctx,
-    );
+    const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
     expect(out.routines).toEqual([
       {
         id: "routine-tenant",

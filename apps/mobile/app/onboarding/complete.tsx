@@ -1,5 +1,12 @@
 import { useEffect, useState, useRef } from "react";
-import { View, Image, Animated, Pressable, Modal, ActivityIndicator } from "react-native";
+import {
+  View,
+  Image,
+  Animated,
+  Pressable,
+  Modal,
+  ActivityIndicator,
+} from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Loader2, XCircle, AlertTriangle } from "lucide-react-native";
@@ -60,7 +67,10 @@ export default function CompleteScreen() {
       try {
         signInWithGoogle();
       } catch (err) {
-        console.error("[CompleteScreen] post-checkout Google sign-in failed:", err);
+        console.error(
+          "[CompleteScreen] post-checkout Google sign-in failed:",
+          err,
+        );
         claimStartedRef.current = false;
       }
     }, 2200);
@@ -68,7 +78,8 @@ export default function CompleteScreen() {
     return () => clearTimeout(timer);
   }, [isPostCheckoutClaim, signInWithGoogle]);
 
-  const selectedPlan = plan === "enterprise" ? "enterprise" : plan === "pro" ? "pro" : "basic";
+  const selectedPlan =
+    plan === "enterprise" ? "enterprise" : plan === "pro" ? "pro" : "basic";
 
   const [provisioning, setProvisioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +93,9 @@ export default function CompleteScreen() {
   const [{ data: agentsData }] = useAgents(hasTenant ? tenantId : undefined);
   const agents = agentsData?.agents;
   const beacon = agents?.find((a: any) => a.role === "team");
-  const isOnline = (beacon as any)?.connectionStatus === "online" || beacon?.status === "active";
+  const isOnline =
+    (beacon as any)?.connectionStatus === "online" ||
+    beacon?.status === "active";
 
   // Spinning animation
   const spinValue = useRef(new Animated.Value(0)).current;
@@ -92,7 +105,7 @@ export default function CompleteScreen() {
         toValue: 1,
         duration: 1500,
         useNativeDriver: true,
-      })
+      }),
     ).start();
   }, []);
   const spin = spinValue.interpolate({
@@ -171,17 +184,14 @@ export default function CompleteScreen() {
 
           <H2 className="text-center mb-3">Finalizing your account…</H2>
           <Muted className="text-center mb-2 px-4 leading-5">
-            Payment received. Signing you in with Google in a moment so we
-            can claim your workspace.
+            Payment received. Signing you in with Google in a moment so we can
+            claim your workspace.
           </Muted>
           <Muted className="text-center px-4 leading-5 mt-1">
             If the redirect doesn't fire on its own, tap below.
           </Muted>
           <View className="mt-8 w-full max-w-xs">
-            <Button
-              size="lg"
-              onPress={() => signInWithGoogle()}
-            >
+            <Button size="lg" onPress={() => signInWithGoogle()}>
               Continue with Google
             </Button>
           </View>
@@ -209,14 +219,24 @@ export default function CompleteScreen() {
             <Button onPress={handleRetry} size="lg" className="w-full max-w-xs">
               Try Again
             </Button>
-            <Pressable onPress={() => { signOut(); router.replace("/sign-in"); }} className="mt-4 py-2">
-              <Text size="sm" variant="muted">Back to Sign In</Text>
+            <Pressable
+              onPress={() => {
+                signOut();
+                router.replace("/sign-in");
+              }}
+              className="mt-4 py-2"
+            >
+              <Text size="sm" variant="muted">
+                Back to Sign In
+              </Text>
             </Pressable>
           </>
         ) : (
           <>
             {/* Spinner */}
-            <Animated.View style={{ transform: [{ rotate: spin }], marginBottom: 24 }}>
+            <Animated.View
+              style={{ transform: [{ rotate: spin }], marginBottom: 24 }}
+            >
               <Loader2 size={32} color={colors.primary} />
             </Animated.View>
 
@@ -231,13 +251,20 @@ export default function CompleteScreen() {
 
             {/* Cancel Setup Link */}
             <Pressable
-              onPress={() => { setShowCancelConfirm(true); setCancelText(""); }}
+              onPress={() => {
+                setShowCancelConfirm(true);
+                setCancelText("");
+              }}
               className="mt-10 py-2 opacity-50"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <View className="flex-row items-center gap-1.5">
                 <XCircle size={14} color={colors.muted} />
-                <Text size="xs" variant="muted" className="tracking-wider uppercase">
+                <Text
+                  size="xs"
+                  variant="muted"
+                  className="tracking-wider uppercase"
+                >
                   Cancel Setup
                 </Text>
               </View>
@@ -268,10 +295,15 @@ export default function CompleteScreen() {
               Cancel Setup?
             </Text>
             <Text className="text-sm text-center text-neutral-600 dark:text-neutral-400 mb-4">
-              This will permanently cancel your account setup and delete all data. This action cannot be undone.
+              This will permanently cancel your account setup and delete all
+              data. This action cannot be undone.
             </Text>
             <Text className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-              Type <Text className="font-bold text-red-600 dark:text-red-400">CANCEL SETUP</Text> to confirm:
+              Type{" "}
+              <Text className="font-bold text-red-600 dark:text-red-400">
+                CANCEL SETUP
+              </Text>{" "}
+              to confirm:
             </Text>
             <Input
               value={cancelText}
@@ -284,7 +316,10 @@ export default function CompleteScreen() {
               onPress={handleCancelSetup}
               disabled={cancelText !== "CANCEL SETUP" || cancelling}
               style={{
-                backgroundColor: cancelText === "CANCEL SETUP" && !cancelling ? "#dc2626" : "#d4d4d4",
+                backgroundColor:
+                  cancelText === "CANCEL SETUP" && !cancelling
+                    ? "#dc2626"
+                    : "#d4d4d4",
                 paddingVertical: 14,
                 borderRadius: 10,
                 alignItems: "center",
@@ -296,7 +331,9 @@ export default function CompleteScreen() {
               {cancelling ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+                <Text
+                  style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}
+                >
                   Cancel Setup
                 </Text>
               )}
@@ -304,7 +341,12 @@ export default function CompleteScreen() {
             <Pressable
               onPress={() => setShowCancelConfirm(false)}
               disabled={cancelling}
-              style={{ paddingVertical: 12, alignItems: "center", marginTop: 8, width: "100%" }}
+              style={{
+                paddingVertical: 12,
+                alignItems: "center",
+                marginTop: 8,
+                width: "100%",
+              }}
             >
               <Text className="font-medium text-neutral-500 dark:text-neutral-400">
                 Go Back

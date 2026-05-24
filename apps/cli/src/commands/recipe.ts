@@ -9,12 +9,34 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
-import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  isJsonMode,
+  logStderr,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const RecipesDoc = graphql(`
-  query CliRecipes($tenantId: ID!, $threadId: ID, $agentId: ID, $limit: Int, $cursor: String) {
-    recipes(tenantId: $tenantId, threadId: $threadId, agentId: $agentId, limit: $limit, cursor: $cursor) {
+  query CliRecipes(
+    $tenantId: ID!
+    $threadId: ID
+    $agentId: ID
+    $limit: Int
+    $cursor: String
+  ) {
+    recipes(
+      tenantId: $tenantId
+      threadId: $threadId
+      agentId: $agentId
+      limit: $limit
+      cursor: $cursor
+    ) {
       id
       title
       server
@@ -101,17 +123,23 @@ async function resolveRecipeContext(opts: RecipeCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, RecipeTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, RecipeTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, RecipeTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    const data = await gqlQuery(client, RecipeTenantBySlugDoc, {
+      slug: ctxSlug,
+    });
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -187,7 +215,10 @@ interface CreateOptions extends RecipeCliOptions {
   agent?: string;
 }
 
-async function runRecipeCreate(name: string | undefined, opts: CreateOptions): Promise<void> {
+async function runRecipeCreate(
+  name: string | undefined,
+  opts: CreateOptions,
+): Promise<void> {
   const ctx = await resolveRecipeContext(opts);
   let title = name;
   if (!title) {
@@ -204,7 +235,7 @@ async function runRecipeCreate(name: string | undefined, opts: CreateOptions): P
   }
   const parts = opts.tool.split("/");
   if (parts.length !== 2) {
-    printError("--tool must be \"server/tool\" (e.g. github/list_pulls).");
+    printError('--tool must be "server/tool" (e.g. github/list_pulls).');
     process.exit(1);
   }
   const [server, tool] = parts;
@@ -233,7 +264,9 @@ async function runRecipeCreate(name: string | undefined, opts: CreateOptions): P
     printJson(data.createRecipe);
     return;
   }
-  printSuccess(`Created recipe ${data.createRecipe.id} — ${data.createRecipe.title}.`);
+  printSuccess(
+    `Created recipe ${data.createRecipe.id} — ${data.createRecipe.title}.`,
+  );
 }
 
 interface UpdateOptions extends RecipeCliOptions {
@@ -279,7 +312,9 @@ async function runRecipeDelete(id: string, opts: DeleteOptions): Promise<void> {
       process.exit(1);
     }
     requireTty("Confirmation");
-    const go = await promptOrExit(() => confirm({ message: `Delete recipe ${id}?`, default: false }));
+    const go = await promptOrExit(() =>
+      confirm({ message: `Delete recipe ${id}?`, default: false }),
+    );
     if (!go) {
       logStderr("Cancelled.");
       process.exit(0);
@@ -298,7 +333,9 @@ export function registerRecipeCommand(program: Command): void {
   const recipe = program
     .command("recipe")
     .alias("recipes")
-    .description("Manage saved MCP tool invocations (parameterized one-click actions).");
+    .description(
+      "Manage saved MCP tool invocations (parameterized one-click actions).",
+    );
 
   recipe
     .command("list")
@@ -323,7 +360,10 @@ export function registerRecipeCommand(program: Command): void {
     .description("Create a new recipe.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--tool <server/tool>", "MCP server + tool (e.g. github/list_pulls)")
+    .option(
+      "--tool <server/tool>",
+      "MCP server + tool (e.g. github/list_pulls)",
+    )
     .option("--params <json>", "Recipe params as JSON")
     .option("--scope <s>", "tenant | agent | thread (informational)")
     .option("--thread <id>", "Scope to a thread")

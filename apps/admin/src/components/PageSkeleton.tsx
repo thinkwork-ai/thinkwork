@@ -5,9 +5,7 @@ interface PageSkeletonProps {
   className?: string;
 }
 
-export function PageSkeleton({
-  className,
-}: PageSkeletonProps) {
+export function PageSkeleton({ className }: PageSkeletonProps) {
   return (
     <div className={cn("flex items-center justify-center py-24", className)}>
       <Spinner className="h-6 w-6 text-muted-foreground" />

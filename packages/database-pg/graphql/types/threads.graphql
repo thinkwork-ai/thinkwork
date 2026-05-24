@@ -40,11 +40,9 @@ type Thread {
   id: ID!
   tenantId: ID!
   agentId: ID
-  computerId: ID
   spaceId: ID!
   userId: ID
   agent: Agent
-  computer: Computer
   space: Space
   user: User
   participants: [ThreadParticipant!]!
@@ -126,7 +124,6 @@ type ThreadLabelAssignment {
 input CreateThreadInput {
   tenantId: ID!
   agentId: ID
-  computerId: ID
   spaceId: ID
   title: String!
   channel: ThreadChannel
@@ -188,7 +185,6 @@ extend type Query {
     status: ThreadStatus
     channel: ThreadChannel
     agentId: ID
-    computerId: ID
     assigneeId: ID
     search: String
     limit: Int
@@ -204,14 +200,6 @@ extend type Query {
     limit: Int
     offset: Int
     unreadOnly: Boolean
-    """
-    Optional scope to a single Computer. When set, results are filtered to
-    threads where `computer_id = $computerId`. Tenant scoping still applies
-    on top, so a cross-tenant computerId returns empty rather than leaking.
-    Consumed by the admin Computer Detail Dashboard's shared ThreadsTable
-    (plan 2026-05-13-005 U7).
-    """
-    computerId: ID
     spaceId: ID
   ): ThreadsPage!
   thread(id: ID!): Thread

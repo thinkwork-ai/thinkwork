@@ -1,5 +1,8 @@
 import { CheckCircle, Clock } from "lucide-react";
-import { ComplianceAnchorState, type ComplianceAnchorStatus } from "@/gql/graphql";
+import {
+  ComplianceAnchorState,
+  type ComplianceAnchorStatus,
+} from "@/gql/graphql";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CopyableRow } from "@/components/ui/copyable-row";
@@ -28,10 +31,7 @@ export function AnchorStatusPanel({ anchorStatus }: AnchorStatusPanelProps) {
             Anchored
           </Badge>
           {anchorStatus.cadenceId ? (
-            <CopyableRow
-              label="Cadence"
-              value={anchorStatus.cadenceId}
-            />
+            <CopyableRow label="Cadence" value={anchorStatus.cadenceId} />
           ) : null}
           {anchorStatus.anchoredRecordedAt ? (
             <div className="flex items-center justify-between text-sm gap-4">

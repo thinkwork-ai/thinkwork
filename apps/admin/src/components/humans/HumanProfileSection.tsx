@@ -154,13 +154,17 @@ export function HumanProfileSection({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormItem>
-              <FormLabel className="text-xs text-muted-foreground">Email</FormLabel>
+              <FormLabel className="text-xs text-muted-foreground">
+                Email
+              </FormLabel>
               <FormControl>
                 <Input value={email} readOnly disabled className="text-sm" />
               </FormControl>
             </FormItem>
             <FormItem>
-              <FormLabel className="text-xs text-muted-foreground">Role</FormLabel>
+              <FormLabel className="text-xs text-muted-foreground">
+                Role
+              </FormLabel>
               <Select
                 value={currentRole}
                 onValueChange={handleRoleChange}
@@ -188,7 +192,9 @@ export function HumanProfileSection({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">Name</FormLabel>
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Name
+                  </FormLabel>
                   <FormControl>
                     <Input className="text-sm" {...field} />
                   </FormControl>
@@ -201,9 +207,16 @@ export function HumanProfileSection({
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">Phone</FormLabel>
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Phone
+                  </FormLabel>
                   <FormControl>
-                    <Input type="tel" placeholder="+15551234567" className="text-sm" {...field} />
+                    <Input
+                      type="tel"
+                      placeholder="+15551234567"
+                      className="text-sm"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -214,9 +227,15 @@ export function HumanProfileSection({
               name="image"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">Image URL</FormLabel>
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Image URL
+                  </FormLabel>
                   <FormControl>
-                    <Input placeholder="https://…" className="text-sm" {...field} />
+                    <Input
+                      placeholder="https://…"
+                      className="text-sm"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

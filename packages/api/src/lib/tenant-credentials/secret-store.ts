@@ -132,7 +132,9 @@ export async function readTenantCredentialSecret(
     new GetSecretValueCommand({ SecretId: secretRef }),
   );
   if (!result.SecretString) {
-    throw new Error(`Secrets Manager returned empty SecretString for ${secretRef}`);
+    throw new Error(
+      `Secrets Manager returned empty SecretString for ${secretRef}`,
+    );
   }
   return parseAwsJsonObject(result.SecretString, "SecretString");
 }

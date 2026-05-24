@@ -68,238 +68,232 @@
 import { RESERVED_FOLDER_NAMES } from "./reserved-folder-names.js";
 
 export interface RoutingRow {
-	task: string;
-	goTo: string;
-	reads: string[];
-	skills: string[];
+  task: string;
+  goTo: string;
+  reads: string[];
+  skills: string[];
 }
 
 export interface SkippedRow {
-	rowIndex: number;
-	goTo: string;
-	reason: "reserved" | "invalid_path";
+  rowIndex: number;
+  goTo: string;
+  reason: "reserved" | "invalid_path";
 }
 
 export interface ParsedAgentsMd {
-	routing: RoutingRow[];
-	rawMarkdown: string;
-	warnings: string[];
-	skippedRows: SkippedRow[];
+  routing: RoutingRow[];
+  rawMarkdown: string;
+  warnings: string[];
+  skippedRows: SkippedRow[];
 }
 
 interface TableBlock {
-	headerLine: string;
-	dataLines: string[];
+  headerLine: string;
+  dataLines: string[];
 }
 
 export function parseAgentsMd(markdown: string): ParsedAgentsMd {
-	const block = locateRoutingTable(markdown);
-	if (!block) {
-		return {
-			routing: [],
-			rawMarkdown: markdown,
-			warnings: [],
-			skippedRows: [],
-		};
-	}
-	const { routing, warnings, skippedRows } = parseRoutingBlock(block);
-	return { routing, rawMarkdown: markdown, warnings, skippedRows };
+  const block = locateRoutingTable(markdown);
+  if (!block) {
+    return {
+      routing: [],
+      rawMarkdown: markdown,
+      warnings: [],
+      skippedRows: [],
+    };
+  }
+  const { routing, warnings, skippedRows } = parseRoutingBlock(block);
+  return { routing, rawMarkdown: markdown, warnings, skippedRows };
 }
 
 function locateRoutingTable(markdown: string): TableBlock | null {
-	const lines = markdown.split("\n");
+  const lines = markdown.split("\n");
 
-	// Preferred: '## Routing' (or 'Routes' / 'Routing Table') heading.
-	const headingIdx = lines.findIndex((l) =>
-		/^##\s+Routing(\s+Table)?\s*$/i.test(l.trim()),
-	);
-	if (headingIdx !== -1) {
-		const sectionLines = sliceUntilNextH2(lines, headingIdx + 1);
-		const block = extractFirstTable(sectionLines);
-		return block;
-	}
+  // Preferred: '## Routing' (or 'Routes' / 'Routing Table') heading.
+  const headingIdx = lines.findIndex((l) =>
+    /^##\s+Routing(\s+Table)?\s*$/i.test(l.trim()),
+  );
+  if (headingIdx !== -1) {
+    const sectionLines = sliceUntilNextH2(lines, headingIdx + 1);
+    const block = extractFirstTable(sectionLines);
+    return block;
+  }
 
-	// Fallback: a single top-level table when the document has no routing
-	// heading. If multiple tables exist we refuse — too ambiguous to risk
-	// guessing wrong on import.
-	const tables = extractAllTables(lines);
-	if (tables.length === 0) return null;
-	if (tables.length === 1) return tables[0];
-	throw new Error(
-		"AGENTS.md has multiple tables but no '## Routing' heading — add a heading to disambiguate.",
-	);
+  // Fallback: a single top-level table when the document has no routing
+  // heading. If multiple tables exist we refuse — too ambiguous to risk
+  // guessing wrong on import.
+  const tables = extractAllTables(lines);
+  if (tables.length === 0) return null;
+  if (tables.length === 1) return tables[0];
+  throw new Error(
+    "AGENTS.md has multiple tables but no '## Routing' heading — add a heading to disambiguate.",
+  );
 }
 
 function sliceUntilNextH2(lines: string[], from: number): string[] {
-	const end = lines.slice(from).findIndex((l) => /^##\s+/.test(l.trim()));
-	return end === -1 ? lines.slice(from) : lines.slice(from, from + end);
+  const end = lines.slice(from).findIndex((l) => /^##\s+/.test(l.trim()));
+  return end === -1 ? lines.slice(from) : lines.slice(from, from + end);
 }
 
 function extractFirstTable(lines: string[]): TableBlock | null {
-	const all = extractAllTables(lines);
-	return all.length > 0 ? all[0] : null;
+  const all = extractAllTables(lines);
+  return all.length > 0 ? all[0] : null;
 }
 
 function extractAllTables(lines: string[]): TableBlock[] {
-	const tables: TableBlock[] = [];
-	let i = 0;
-	while (i < lines.length) {
-		if (!isTableLine(lines[i])) {
-			i++;
-			continue;
-		}
-		const headerLine = lines[i];
-		// A valid markdown table has a separator row directly after the header.
-		if (i + 1 >= lines.length || !isSeparatorRow(lines[i + 1])) {
-			i++;
-			continue;
-		}
-		const dataLines: string[] = [];
-		let j = i + 2;
-		while (j < lines.length && isTableLine(lines[j])) {
-			dataLines.push(lines[j]);
-			j++;
-		}
-		tables.push({ headerLine, dataLines });
-		i = j;
-	}
-	return tables;
+  const tables: TableBlock[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (!isTableLine(lines[i])) {
+      i++;
+      continue;
+    }
+    const headerLine = lines[i];
+    // A valid markdown table has a separator row directly after the header.
+    if (i + 1 >= lines.length || !isSeparatorRow(lines[i + 1])) {
+      i++;
+      continue;
+    }
+    const dataLines: string[] = [];
+    let j = i + 2;
+    while (j < lines.length && isTableLine(lines[j])) {
+      dataLines.push(lines[j]);
+      j++;
+    }
+    tables.push({ headerLine, dataLines });
+    i = j;
+  }
+  return tables;
 }
 
 function isTableLine(line: string): boolean {
-	return line.trim().startsWith("|");
+  return line.trim().startsWith("|");
 }
 
 function isSeparatorRow(line: string): boolean {
-	const cells = parseRowCells(line);
-	return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c));
+  const cells = parseRowCells(line);
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c));
 }
 
 function parseRowCells(line: string): string[] {
-	const trimmed = line.trim();
-	if (!trimmed.startsWith("|")) return [];
-	let body = trimmed.slice(1);
-	if (body.endsWith("|")) body = body.slice(0, -1);
-	return body.split("|").map((c) => c.trim());
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|")) return [];
+  let body = trimmed.slice(1);
+  if (body.endsWith("|")) body = body.slice(0, -1);
+  return body.split("|").map((c) => c.trim());
 }
 
 interface ColumnIndex {
-	task: number;
-	goTo: number;
-	reads: number;
-	skills: number;
+  task: number;
+  goTo: number;
+  reads: number;
+  skills: number;
 }
 
 function indexColumns(headerCells: string[]): ColumnIndex {
-	const idx: ColumnIndex = { task: -1, goTo: -1, reads: -1, skills: -1 };
-	for (let i = 0; i < headerCells.length; i++) {
-		const normalized = headerCells[i]
-			.toLowerCase()
-			.replace(/[\s_\-]/g, "");
-		if (normalized === "task") idx.task = i;
-		else if (normalized === "goto") idx.goTo = i;
-		else if (normalized === "read" || normalized === "reads") idx.reads = i;
-		else if (normalized === "skill" || normalized === "skills")
-			idx.skills = i;
-	}
-	return idx;
+  const idx: ColumnIndex = { task: -1, goTo: -1, reads: -1, skills: -1 };
+  for (let i = 0; i < headerCells.length; i++) {
+    const normalized = headerCells[i].toLowerCase().replace(/[\s_\-]/g, "");
+    if (normalized === "task") idx.task = i;
+    else if (normalized === "goto") idx.goTo = i;
+    else if (normalized === "read" || normalized === "reads") idx.reads = i;
+    else if (normalized === "skill" || normalized === "skills") idx.skills = i;
+  }
+  return idx;
 }
 
 interface ParsedRoutingBlock {
-	routing: RoutingRow[];
-	warnings: string[];
-	skippedRows: SkippedRow[];
+  routing: RoutingRow[];
+  warnings: string[];
+  skippedRows: SkippedRow[];
 }
 
 function parseRoutingBlock(block: TableBlock): ParsedRoutingBlock {
-	const headerCells = parseRowCells(block.headerLine);
-	const cols = indexColumns(headerCells);
-	if (cols.goTo === -1) {
-		throw new Error(
-			"AGENTS.md routing table is missing the 'Go to' column. " +
-				"Add a 'Go to' header to the routing table.",
-		);
-	}
+  const headerCells = parseRowCells(block.headerLine);
+  const cols = indexColumns(headerCells);
+  if (cols.goTo === -1) {
+    throw new Error(
+      "AGENTS.md routing table is missing the 'Go to' column. " +
+        "Add a 'Go to' header to the routing table.",
+    );
+  }
 
-	const out: RoutingRow[] = [];
-	const warnings: string[] = [];
-	const skippedRows: SkippedRow[] = [];
-	// `rowIndex` counts data rows the parser actually considered (i.e.
-	// non-blank). It mirrors the index a routing-row editor would surface.
-	let rowIndex = 0;
-	for (const line of block.dataLines) {
-		const cells = parseRowCells(line);
-		if (cells.length === 0) continue;
-		if (cells.every((c) => c === "")) continue;
+  const out: RoutingRow[] = [];
+  const warnings: string[] = [];
+  const skippedRows: SkippedRow[] = [];
+  // `rowIndex` counts data rows the parser actually considered (i.e.
+  // non-blank). It mirrors the index a routing-row editor would surface.
+  let rowIndex = 0;
+  for (const line of block.dataLines) {
+    const cells = parseRowCells(line);
+    if (cells.length === 0) continue;
+    if (cells.every((c) => c === "")) continue;
 
-		const rawGoTo = cells[cols.goTo] ?? "";
-		const goTo = stripDecorations(rawGoTo);
-		if (!goTo) {
-			rowIndex++;
-			continue;
-		}
+    const rawGoTo = cells[cols.goTo] ?? "";
+    const goTo = stripDecorations(rawGoTo);
+    if (!goTo) {
+      rowIndex++;
+      continue;
+    }
 
-		const goToFolder = goTo.replace(/\/$/, "");
-		if (RESERVED_FOLDER_NAMES.has(goToFolder)) {
-			console.warn(
-				`[agents-md-parser] Skipping row — goTo "${goTo}" is a reserved folder name (memory/skills).`,
-			);
-			warnings.push(
-				`row ${rowIndex} skipped — go_to '${goTo}' is reserved`,
-			);
-			skippedRows.push({ rowIndex, goTo, reason: "reserved" });
-			rowIndex++;
-			continue;
-		}
-		if (!isValidFolderPath(goTo)) {
-			console.warn(
-				`[agents-md-parser] Skipping row — goTo "${rawGoTo}" is not a valid folder path.`,
-			);
-			warnings.push(
-				`row ${rowIndex} skipped — go_to '${goTo}' is not a valid folder path`,
-			);
-			skippedRows.push({ rowIndex, goTo, reason: "invalid_path" });
-			rowIndex++;
-			continue;
-		}
+    const goToFolder = goTo.replace(/\/$/, "");
+    if (RESERVED_FOLDER_NAMES.has(goToFolder)) {
+      console.warn(
+        `[agents-md-parser] Skipping row — goTo "${goTo}" is a reserved folder name (memory/skills).`,
+      );
+      warnings.push(`row ${rowIndex} skipped — go_to '${goTo}' is reserved`);
+      skippedRows.push({ rowIndex, goTo, reason: "reserved" });
+      rowIndex++;
+      continue;
+    }
+    if (!isValidFolderPath(goTo)) {
+      console.warn(
+        `[agents-md-parser] Skipping row — goTo "${rawGoTo}" is not a valid folder path.`,
+      );
+      warnings.push(
+        `row ${rowIndex} skipped — go_to '${goTo}' is not a valid folder path`,
+      );
+      skippedRows.push({ rowIndex, goTo, reason: "invalid_path" });
+      rowIndex++;
+      continue;
+    }
 
-		const task =
-			cols.task >= 0 ? stripDecorations(cells[cols.task] ?? "") : "";
-		const reads =
-			cols.reads >= 0
-				? splitList(cells[cols.reads] ?? "")
-						.map(stripDecorations)
-						.filter((s) => s.length > 0)
-				: [];
-		const skills =
-			cols.skills >= 0
-				? splitList(cells[cols.skills] ?? "")
-						.map(stripDecorations)
-						.filter((s) => s.length > 0)
-				: [];
+    const task = cols.task >= 0 ? stripDecorations(cells[cols.task] ?? "") : "";
+    const reads =
+      cols.reads >= 0
+        ? splitList(cells[cols.reads] ?? "")
+            .map(stripDecorations)
+            .filter((s) => s.length > 0)
+        : [];
+    const skills =
+      cols.skills >= 0
+        ? splitList(cells[cols.skills] ?? "")
+            .map(stripDecorations)
+            .filter((s) => s.length > 0)
+        : [];
 
-		out.push({ task, goTo, reads, skills });
-		rowIndex++;
-	}
-	return { routing: out, warnings, skippedRows };
+    out.push({ task, goTo, reads, skills });
+    rowIndex++;
+  }
+  return { routing: out, warnings, skippedRows };
 }
 
 function stripDecorations(s: string): string {
-	let out = s.trim();
-	// Strip wrapping italics (_..._ or *...*) and bold (**...** or __...__).
-	out = out.replace(/^(\*\*|__)(.*?)(\*\*|__)$/, "$2");
-	out = out.replace(/^(\*|_)(.*?)(\*|_)$/, "$2");
-	// Strip backticks anywhere; routing-row cells don't contain code spans.
-	out = out.replace(/`/g, "");
-	return out.trim();
+  let out = s.trim();
+  // Strip wrapping italics (_..._ or *...*) and bold (**...** or __...__).
+  out = out.replace(/^(\*\*|__)(.*?)(\*\*|__)$/, "$2");
+  out = out.replace(/^(\*|_)(.*?)(\*|_)$/, "$2");
+  // Strip backticks anywhere; routing-row cells don't contain code spans.
+  out = out.replace(/`/g, "");
+  return out.trim();
 }
 
 function splitList(cell: string): string[] {
-	return cell.split(",").map((p) => p.trim());
+  return cell.split(",").map((p) => p.trim());
 }
 
 const FOLDER_PATH_RE = /^[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*\/?$/;
 
 function isValidFolderPath(p: string): boolean {
-	return FOLDER_PATH_RE.test(p);
+  return FOLDER_PATH_RE.test(p);
 }

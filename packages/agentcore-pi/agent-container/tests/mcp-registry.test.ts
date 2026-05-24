@@ -3,10 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  McpToolRegistry,
-  validateDirectTools,
-} from "../src/mcp-registry.js";
+import { McpToolRegistry, validateDirectTools } from "../src/mcp-registry.js";
 
 function exampleSchema(): unknown {
   return {
@@ -218,11 +215,7 @@ describe("McpToolRegistry", () => {
       description: "",
       inputSchema: {},
     });
-    expect(r.toolsForServer("slack")).toEqual([
-      "alpha",
-      "chat_post",
-      "search",
-    ]);
+    expect(r.toolsForServer("slack")).toEqual(["alpha", "chat_post", "search"]);
   });
 });
 

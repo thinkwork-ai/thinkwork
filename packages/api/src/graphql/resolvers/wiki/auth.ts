@@ -1,40 +1,48 @@
 import type { GraphQLContext } from "../../context.js";
 import { hasServiceSecret } from "../core/authz.js";
 import {
-	requireMemoryUserScope,
-	UserScopeAuthError,
+  requireMemoryUserScope,
+  UserScopeAuthError,
 } from "../core/require-user-scope.js";
 
 export class WikiAuthError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "WikiAuthError";
-	}
+  constructor(message: string) {
+    super(message);
+    this.name = "WikiAuthError";
+  }
 }
 
 export async function assertCanReadWikiScope(
-	ctx: GraphQLContext,
-	args: { tenantId?: string | null; userId?: string | null; ownerId?: string | null },
+  ctx: GraphQLContext,
+  args: {
+    tenantId?: string | null;
+    userId?: string | null;
+    ownerId?: string | null;
+  },
 ): Promise<{ tenantId: string; userId: string }> {
-	try {
-		return await requireMemoryUserScope(ctx, {
-			...args,
-			allowTenantAdmin: true,
-		});
-	} catch (err) {
-		if (err instanceof UserScopeAuthError) {
-			throw new WikiAuthError(err.message);
-		}
-		throw err;
-	}
+  try {
+    return await requireMemoryUserScope(ctx, {
+      ...args,
+      allowTenantAdmin: true,
+    });
+  } catch (err) {
+    if (err instanceof UserScopeAuthError) {
+      throw new WikiAuthError(err.message);
+    }
+    throw err;
+  }
 }
 
 export async function assertCanAdminWikiScope(
-	ctx: GraphQLContext,
-	args: { tenantId?: string | null; userId?: string | null; ownerId?: string | null },
+  ctx: GraphQLContext,
+  args: {
+    tenantId?: string | null;
+    userId?: string | null;
+    ownerId?: string | null;
+  },
 ): Promise<{ tenantId: string; userId: string }> {
-	if (!hasServiceSecret(ctx)) {
-		throw new WikiAuthError("Admin-only: requires internal API key credential");
-	}
-	return assertCanReadWikiScope(ctx, args);
+  if (!hasServiceSecret(ctx)) {
+    throw new WikiAuthError("Admin-only: requires internal API key credential");
+  }
+  return assertCanReadWikiScope(ctx, args);
 }

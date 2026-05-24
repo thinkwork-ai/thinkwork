@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { View, FlatList, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, Alert } from "react-native";
+import {
+  View,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useRoutine } from "@/lib/hooks/use-routines";
@@ -17,7 +25,7 @@ const NEW_WELCOME: ChatMessage = {
   id: "welcome",
   role: "assistant",
   content:
-    "Describe what you want your routine to do and I'll build it for you.\n\nFor example:\n- \"Fetch data from an API every hour and send a Slack summary\"\n- \"When a webhook fires, validate the payload and store it\"\n- \"Check our status page and notify me if anything is down\"",
+    'Describe what you want your routine to do and I\'ll build it for you.\n\nFor example:\n- "Fetch data from an API every hour and send a Slack summary"\n- "When a webhook fires, validate the payload and store it"\n- "Check our status page and notify me if anything is down"',
   timestamp: Date.now(),
   isStreaming: false,
 };
@@ -61,15 +69,19 @@ export default function RoutineBuilderScreen() {
 
   // Fetch existing routine for edit mode
   const [{ data: existingRoutineData }] = useRoutine(
-    isEditMode && params.routineId ? params.routineId : ''
+    isEditMode && params.routineId ? params.routineId : "",
   );
-  const existingRoutine = isEditMode ? (existingRoutineData?.routine ?? undefined) : undefined;
+  const existingRoutine = isEditMode
+    ? (existingRoutineData?.routine ?? undefined)
+    : undefined;
 
   // Watch routine record while building -- when code appears, save is complete
   const [{ data: routineRecordData }] = useRoutine(
-    building && params.routineId ? params.routineId : ''
+    building && params.routineId ? params.routineId : "",
   );
-  const routineRecord = building ? (routineRecordData?.routine ?? undefined) : undefined;
+  const routineRecord = building
+    ? (routineRecordData?.routine ?? undefined)
+    : undefined;
 
   useEffect(() => {
     if (!building || !routineRecord) return;
@@ -98,7 +110,10 @@ export default function RoutineBuilderScreen() {
     if (!building) return;
     const timer = setTimeout(() => {
       setBuilding(false);
-      Alert.alert("Timeout", "Routine save is taking too long. The agent may still be working -- check back shortly.");
+      Alert.alert(
+        "Timeout",
+        "Routine save is taking too long. The agent may still be working -- check back shortly.",
+      );
     }, 60000);
     return () => clearTimeout(timer);
   }, [building]);
@@ -149,10 +164,16 @@ export default function RoutineBuilderScreen() {
   });
 
   // Prepend the welcome message, then server messages
-  const welcomeMsg = hasErrorContext ? ERROR_WELCOME : isEditMode ? EDIT_WELCOME : NEW_WELCOME;
+  const welcomeMsg = hasErrorContext
+    ? ERROR_WELCOME
+    : isEditMode
+      ? EDIT_WELCOME
+      : NEW_WELCOME;
   const messages = [welcomeMsg, ...serverMessages];
 
-  const isPending = serverMessages.some((m) => m.role === "user" && m.isStreaming);
+  const isPending = serverMessages.some(
+    (m) => m.role === "user" && m.isStreaming,
+  );
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   const handleSend = async (content: string) => {
@@ -215,7 +236,9 @@ export default function RoutineBuilderScreen() {
                 assistantId,
                 content: `[SYSTEM CONTEXT -- not visible to user] The user clicked BUILD. Generate the final ASL + markdown summary + step manifest NOW based on our entire conversation. IMPORTANT: You MUST use ONLY the publishRoutineVersion tool. Call publishRoutineVersion with: routineId="${params.routineId}", asl, markdownSummary, stepManifest. ONE tool call only. Do NOT ask the user anything. [END SYSTEM] Build routine`,
               });
-              console.log("[RoutineBuilder] Finalize message sent successfully");
+              console.log(
+                "[RoutineBuilder] Finalize message sent successfully",
+              );
             } catch (err) {
               console.error("[RoutineBuilder] Error sending finalize:", err);
               setBuilding(false);
@@ -224,7 +247,10 @@ export default function RoutineBuilderScreen() {
           }}
           disabled={!sessionThreadId || building}
         >
-          <Text style={{ color: building ? colors.mutedForeground : "#0ea5e9" }} className="font-semibold text-base">
+          <Text
+            style={{ color: building ? colors.mutedForeground : "#0ea5e9" }}
+            className="font-semibold text-base"
+          >
             {building ? "Building..." : "Build"}
           </Text>
         </Pressable>
@@ -260,9 +286,7 @@ export default function RoutineBuilderScreen() {
                 <ChatBubble message={item} />
               </WebContent>
             )}
-            ListHeaderComponent={
-              isPending ? <TypingIndicator /> : null
-            }
+            ListHeaderComponent={isPending ? <TypingIndicator /> : null}
             contentContainerStyle={{ paddingVertical: 12 }}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"

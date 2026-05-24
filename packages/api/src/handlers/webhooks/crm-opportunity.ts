@@ -22,104 +22,100 @@
  */
 
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { createWebhookHandler, type WebhookResolveResult } from "./_shared.js";
 import {
-	CustomerOnboardingWorkflowError,
-	startCustomerOnboardingWorkflow,
+  CustomerOnboardingWorkflowError,
+  startCustomerOnboardingWorkflow,
 } from "../../lib/spaces/customer-onboarding-workflow.js";
 
 export const CUSTOMER_ONBOARDING_SKILL_ID = "customer-onboarding-reconciler";
 
 interface CrmOpportunityPayload {
-	event?: string;
-	opportunityId?: string;
-	customerId?: string;
-	customerName?: string;
-	companyName?: string;
-	occurredAt?: string;
-	[key: string]: unknown;
+  event?: string;
+  opportunityId?: string;
+  customerId?: string;
+  customerName?: string;
+  companyName?: string;
+  occurredAt?: string;
+  [key: string]: unknown;
 }
 
-const RELEVANT_EVENTS = new Set([
-	"opportunity.won",
-	"opportunity.closed_won",
-]);
+const RELEVANT_EVENTS = new Set(["opportunity.won", "opportunity.closed_won"]);
 
 export async function resolveCrmOpportunity(args: {
-	tenantId: string;
-	rawBody: string;
+  tenantId: string;
+  rawBody: string;
 }): Promise<WebhookResolveResult> {
-	let payload: CrmOpportunityPayload;
-	try {
-		payload = JSON.parse(args.rawBody) as CrmOpportunityPayload;
-	} catch {
-		return { ok: false, status: 400, message: "invalid JSON body" };
-	}
+  let payload: CrmOpportunityPayload;
+  try {
+    payload = JSON.parse(args.rawBody) as CrmOpportunityPayload;
+  } catch {
+    return { ok: false, status: 400, message: "invalid JSON body" };
+  }
 
-	if (!payload.event || !RELEVANT_EVENTS.has(payload.event)) {
-		return {
-			ok: true,
-			skip: true,
-			reason: `event ${payload.event ?? "<missing>"} is not a close-won event`,
-		};
-	}
+  if (!payload.event || !RELEVANT_EVENTS.has(payload.event)) {
+    return {
+      ok: true,
+      skip: true,
+      reason: `event ${payload.event ?? "<missing>"} is not a close-won event`,
+    };
+  }
 
-	if (!payload.opportunityId || typeof payload.opportunityId !== "string") {
-		return {
-			ok: false,
-			status: 400,
-			message: "opportunityId is required",
-		};
-	}
-	const hasCustomerId =
-		typeof payload.customerId === "string" && payload.customerId.trim();
-	const hasCustomerName =
-		(typeof payload.customerName === "string" &&
-			payload.customerName.trim()) ||
-		(typeof payload.companyName === "string" && payload.companyName.trim());
-	if (!hasCustomerId && !hasCustomerName) {
-		return {
-			ok: false,
-			status: 400,
-			message: "customerId or customerName is required",
-		};
-	}
+  if (!payload.opportunityId || typeof payload.opportunityId !== "string") {
+    return {
+      ok: false,
+      status: 400,
+      message: "opportunityId is required",
+    };
+  }
+  const hasCustomerId =
+    typeof payload.customerId === "string" && payload.customerId.trim();
+  const hasCustomerName =
+    (typeof payload.customerName === "string" && payload.customerName.trim()) ||
+    (typeof payload.companyName === "string" && payload.companyName.trim());
+  if (!hasCustomerId && !hasCustomerName) {
+    return {
+      ok: false,
+      status: 400,
+      message: "customerId or customerName is required",
+    };
+  }
 
-	try {
-		const result = await startCustomerOnboardingWorkflow({
-			tenantId: args.tenantId,
-			source: "webhook",
-			opportunity: payload,
-			startedBy: { type: "system" },
-		});
-		return {
-			ok: true,
-			handled: true,
-			body: {
-				threadId: result.thread.id,
-				idempotent: result.idempotent,
-				linkedTaskCount: result.linkedTasks.length,
-				missingFields: result.missingFields,
-			},
-		};
-	} catch (error) {
-		if (error instanceof CustomerOnboardingWorkflowError) {
-			return {
-				ok: false,
-				status: error.status,
-				message: error.message,
-			};
-		}
-		throw error;
-	}
+  try {
+    const result = await startCustomerOnboardingWorkflow({
+      tenantId: args.tenantId,
+      source: "webhook",
+      opportunity: payload,
+      startedBy: { type: "system" },
+    });
+    return {
+      ok: true,
+      handled: true,
+      body: {
+        threadId: result.thread.id,
+        idempotent: result.idempotent,
+        linkedTaskCount: result.linkedTasks.length,
+        missingFields: result.missingFields,
+      },
+    };
+  } catch (error) {
+    if (error instanceof CustomerOnboardingWorkflowError) {
+      return {
+        ok: false,
+        status: error.status,
+        message: error.message,
+      };
+    }
+    throw error;
+  }
 }
 
 export const handler = createWebhookHandler({
-	integration: "crm-opportunity",
-	resolve: async (args) => resolveCrmOpportunity(args),
+  integration: "crm-opportunity",
+  resolve: async (args) => resolveCrmOpportunity(args),
 });
 
 // Re-export under `APIGatewayProxyEventV2` so Lambda picks up `handler`.

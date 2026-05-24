@@ -250,17 +250,13 @@ describe("executeRunbook", () => {
       "rt-3",
     ]);
     expect(api.startRunbookTask).not.toHaveBeenCalledWith("task-1", "rt-2");
-    expect(api.completeRunbookTask).toHaveBeenCalledWith(
-      "task-1",
-      "rt-2",
-      {
-        satisfiedByTaskKey: "produce:1",
-        ok: true,
-        persisted: true,
-        appId: "app-1",
-        validated: true,
-      },
-    );
+    expect(api.completeRunbookTask).toHaveBeenCalledWith("task-1", "rt-2", {
+      satisfiedByTaskKey: "produce:1",
+      ok: true,
+      persisted: true,
+      appId: "app-1",
+      validated: true,
+    });
     expect(api.recordRunbookResponse).toHaveBeenCalledTimes(1);
     expect(api.recordRunbookResponse).toHaveBeenCalledWith("task-1", {
       content: "Dashboard saved. /artifacts/app-1",
@@ -326,7 +322,10 @@ describe("executeRunbook", () => {
       runner,
     );
 
-    expect(runner.mock.calls.map(([task]) => task.id)).toEqual(["rt-1", "rt-2"]);
+    expect(runner.mock.calls.map(([task]) => task.id)).toEqual([
+      "rt-1",
+      "rt-2",
+    ]);
     expect(api.startRunbookTask).toHaveBeenCalledWith("task-1", "rt-2");
   });
 

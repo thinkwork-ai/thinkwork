@@ -1,17 +1,37 @@
 import { useState } from "react";
-import { View, ScrollView, Pressable, Alert, Switch, ActivityIndicator } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  Alert,
+  Switch,
+  ActivityIndicator,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useHeartbeatRunDetail } from "@/lib/hooks/use-heartbeats";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { WebContent } from "@/components/layout/web-content";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { Text, Muted } from "@/components/ui/typography";
-import { CheckCircle, XCircle, Clock, AlertCircle, Trash2, Edit3 } from "lucide-react-native";
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertCircle,
+  Trash2,
+  Edit3,
+} from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useIsLargeScreen } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
 
-type RunStatus = "pending" | "running" | "suspended" | "completed" | "failed" | "cancelled";
+type RunStatus =
+  | "pending"
+  | "running"
+  | "suspended"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 function formatDuration(start: number, end?: number): string {
   const ms = (end ?? Date.now()) - start;
@@ -29,7 +49,13 @@ function formatTime(ts: number): string {
   });
 }
 
-function StatusIcon({ status, size = 16 }: { status: RunStatus; size?: number }) {
+function StatusIcon({
+  status,
+  size = 16,
+}: {
+  status: RunStatus;
+  size?: number;
+}) {
   switch (status) {
     case "completed":
       return <CheckCircle size={size} color="#22c55e" />;
@@ -61,24 +87,31 @@ export default function HeartbeatDetailScreen() {
   const [deleting, setDeleting] = useState(false);
 
   const handleDelete = () => {
-    Alert.alert("Delete Heartbeat", "This will remove the schedule and its EventBridge rule.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            await deleteHeartbeat({ heartbeatId: id });
-            router.back();
-          } catch (err) {
-            Alert.alert("Error", err instanceof Error ? err.message : "Failed to delete");
-          } finally {
-            setDeleting(false);
-          }
+    Alert.alert(
+      "Delete Heartbeat",
+      "This will remove the schedule and its EventBridge rule.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteHeartbeat({ heartbeatId: id });
+              router.back();
+            } catch (err) {
+              Alert.alert(
+                "Error",
+                err instanceof Error ? err.message : "Failed to delete",
+              );
+            } finally {
+              setDeleting(false);
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   if (heartbeat === undefined) {
@@ -118,7 +151,10 @@ export default function HeartbeatDetailScreen() {
 
   return (
     <DetailLayout title={heartbeat.name} headerRight={menu}>
-      <ScrollView className="flex-1 bg-white dark:bg-neutral-950" contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView
+        className="flex-1 bg-white dark:bg-neutral-950"
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
         <WebContent>
           {/* Heartbeat info */}
           <View className="px-4 py-4 border-b border-neutral-200 dark:border-neutral-800">
@@ -143,22 +179,32 @@ export default function HeartbeatDetailScreen() {
                 </Text>
               </View>
               <View className="flex-row items-center justify-between">
-                <Muted className="text-sm">{heartbeat.type === "agent" ? "Agent" : "Routine"}</Muted>
-                <Text className="text-sm text-neutral-900 dark:text-neutral-100">{heartbeat.targetName}</Text>
+                <Muted className="text-sm">
+                  {heartbeat.type === "agent" ? "Agent" : "Routine"}
+                </Muted>
+                <Text className="text-sm text-neutral-900 dark:text-neutral-100">
+                  {heartbeat.targetName}
+                </Text>
               </View>
               {heartbeat.type === "agent" && heartbeat.prompt && (
                 <View className="mt-1">
                   <Muted className="text-sm mb-1">Prompt</Muted>
-                  <Text className="text-sm text-neutral-700 dark:text-neutral-300">{heartbeat.prompt}</Text>
+                  <Text className="text-sm text-neutral-700 dark:text-neutral-300">
+                    {heartbeat.prompt}
+                  </Text>
                 </View>
               )}
               <View className="flex-row items-center justify-between">
                 <Muted className="text-sm">Timezone</Muted>
-                <Text className="text-sm text-neutral-900 dark:text-neutral-100">{heartbeat.timezone}</Text>
+                <Text className="text-sm text-neutral-900 dark:text-neutral-100">
+                  {heartbeat.timezone}
+                </Text>
               </View>
               <View className="flex-row items-center justify-between">
                 <Muted className="text-sm">Cron</Muted>
-                <Text className="text-sm font-mono text-neutral-500 dark:text-neutral-400">{heartbeat.schedule}</Text>
+                <Text className="text-sm font-mono text-neutral-500 dark:text-neutral-400">
+                  {heartbeat.schedule}
+                </Text>
               </View>
               {heartbeat.lastTriggeredAt && (
                 <View className="flex-row items-center justify-between">
@@ -188,17 +234,23 @@ export default function HeartbeatDetailScreen() {
               <Muted className="text-center">No activity yet.</Muted>
             </View>
           ) : (
-            <View className={`bg-white dark:bg-neutral-900 overflow-hidden ${isLarge ? "rounded-xl mx-4 mt-2" : ""}`}>
+            <View
+              className={`bg-white dark:bg-neutral-900 overflow-hidden ${isLarge ? "rounded-xl mx-4 mt-2" : ""}`}
+            >
               {activityList.map((act: any, idx: number) => (
                 <Pressable
                   key={act.id}
                   onPress={() => {
                     if (act.routineRunId && heartbeat.routineId) {
-                      router.push(`/routines/${heartbeat.routineId}/runs/${act.routineRunId}`);
+                      router.push(
+                        `/routines/${heartbeat.routineId}/runs/${act.routineRunId}`,
+                      );
                     }
                   }}
                   className={`flex-row items-start px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${
-                    idx === activityList.length - 1 ? "" : "border-b border-neutral-100 dark:border-neutral-800"
+                    idx === activityList.length - 1
+                      ? ""
+                      : "border-b border-neutral-100 dark:border-neutral-800"
                   }`}
                 >
                   <View className="mt-1">
@@ -206,15 +258,25 @@ export default function HeartbeatDetailScreen() {
                   </View>
                   <View className="flex-1 ml-3">
                     <View className="flex-row items-center justify-between">
-                      <Text className="text-sm text-neutral-900 dark:text-neutral-100" numberOfLines={1}>
+                      <Text
+                        className="text-sm text-neutral-900 dark:text-neutral-100"
+                        numberOfLines={1}
+                      >
                         {formatTime(act.startedAt)}
                       </Text>
-                      <Text className="text-sm text-neutral-500 dark:text-neutral-400" numberOfLines={1}>
-                        {act.durationMs ? formatDuration(0, act.durationMs) : act.status}
+                      <Text
+                        className="text-sm text-neutral-500 dark:text-neutral-400"
+                        numberOfLines={1}
+                      >
+                        {act.durationMs
+                          ? formatDuration(0, act.durationMs)
+                          : act.status}
                       </Text>
                     </View>
                     {act.error && (
-                      <Muted className="text-xs mt-0.5 text-red-500">{act.error}</Muted>
+                      <Muted className="text-xs mt-0.5 text-red-500">
+                        {act.error}
+                      </Muted>
                     )}
                     {act.skipReason && (
                       <Muted className="text-xs mt-0.5">{act.skipReason}</Muted>

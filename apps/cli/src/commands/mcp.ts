@@ -70,8 +70,7 @@ async function resolveServer(
     getId: (s) => s.id,
     getAliases: (s) => [s.slug, s.name],
     resourceLabel: "MCP server",
-    pickerLabel: (s) =>
-      `${s.name}  ${chalk.dim(`(${s.slug}, ${s.id})`)}`,
+    pickerLabel: (s) => `${s.name}  ${chalk.dim(`(${s.slug}, ${s.id})`)}`,
   });
 }
 
@@ -89,7 +88,9 @@ export function registerMcpCommand(program: Command): void {
   mcp
     .command("list")
     .alias("ls")
-    .description("List registered MCP servers. Prompts for stage/tenant in a TTY when omitted.")
+    .description(
+      "List registered MCP servers. Prompts for stage/tenant in a TTY when omitted.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .addHelpText(
@@ -123,13 +124,18 @@ Examples:
         }
         console.log("");
         for (const s of servers as McpServer[]) {
-          const status = s.enabled ? chalk.green("enabled") : chalk.dim("disabled");
-          console.log(`  ${chalk.bold(s.name)}  ${chalk.dim(s.slug)}  ${status}`);
+          const status = s.enabled
+            ? chalk.green("enabled")
+            : chalk.dim("disabled");
+          console.log(
+            `  ${chalk.bold(s.name)}  ${chalk.dim(s.slug)}  ${status}`,
+          );
           console.log(`    ID:        ${s.id}`);
           console.log(`    URL:       ${s.url}`);
           console.log(`    Transport: ${s.transport}`);
           console.log(`    Auth:      ${formatAuth(s)}`);
-          if (s.tools?.length) console.log(`    Tools:     ${s.tools.length} cached`);
+          if (s.tools?.length)
+            console.log(`    Tools:     ${s.tools.length} cached`);
           console.log("");
         }
       } catch (err) {
@@ -145,10 +151,21 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--url <url>", "MCP server URL")
-    .option("--transport <type>", "Transport type (streamable-http|sse)", "streamable-http")
-    .option("--auth-type <type>", "Auth type (none|tenant_api_key|per_user_oauth)", "none")
+    .option(
+      "--transport <type>",
+      "Transport type (streamable-http|sse)",
+      "streamable-http",
+    )
+    .option(
+      "--auth-type <type>",
+      "Auth type (none|tenant_api_key|per_user_oauth)",
+      "none",
+    )
     .option("--api-key <token>", "API key (for tenant_api_key auth)")
-    .option("--oauth-provider <name>", "OAuth provider name (for per_user_oauth auth)")
+    .option(
+      "--oauth-provider <name>",
+      "OAuth provider name (for per_user_oauth auth)",
+    )
     .addHelpText(
       "after",
       `
@@ -206,7 +223,11 @@ Examples:
             });
           }
 
-          const body: Record<string, unknown> = { name, url, transport: opts.transport };
+          const body: Record<string, unknown> = {
+            name,
+            url,
+            transport: opts.transport,
+          };
           if (opts.authType !== "none") body.authType = opts.authType;
           if (opts.apiKey) body.apiKey = opts.apiKey;
           if (opts.oauthProvider) body.oauthProvider = opts.oauthProvider;
@@ -241,7 +262,10 @@ Examples:
     .option("--transport <type>", "streamable-http | sse")
     .option("--auth-type <type>", "none | tenant_api_key | per_user_oauth")
     .option("--api-key <token>", "API key (for tenant_api_key auth)")
-    .option("--oauth-provider <name>", "OAuth provider name (for per_user_oauth auth)")
+    .option(
+      "--oauth-provider <name>",
+      "OAuth provider name (for per_user_oauth auth)",
+    )
     .option("--name <n>", "Rename")
     .option("--enable", "Enable the server")
     .option("--disable", "Disable the server (doesn't delete)")
@@ -288,7 +312,8 @@ Examples:
           if (opts.transport !== undefined) body.transport = opts.transport;
           if (opts.authType !== undefined) body.authType = opts.authType;
           if (opts.apiKey !== undefined) body.apiKey = opts.apiKey;
-          if (opts.oauthProvider !== undefined) body.oauthProvider = opts.oauthProvider;
+          if (opts.oauthProvider !== undefined)
+            body.oauthProvider = opts.oauthProvider;
           if (opts.name !== undefined) body.name = opts.name;
           if (opts.enable) body.enabled = true;
           if (opts.disable) body.enabled = false;
@@ -341,24 +366,29 @@ Examples:
   $ thinkwork mcp remove 629dcee1-1e14-4b83-9907-cb529e6035f6
 `,
     )
-    .action(async (idArg: string | undefined, opts: { stage?: string; tenant?: string }) => {
-      try {
-        const { api, tenant } = await resolveMcpContext(opts);
-        const server = await resolveServer(idArg, api, tenant.slug);
-        await apiFetch(
-          api.apiUrl,
-          api.authSecret,
-          `/api/skills/mcp-servers/${server.id}`,
-          { method: "DELETE" },
-          { "x-tenant-slug": tenant.slug },
-        );
-        printSuccess(`MCP server removed: ${server.name} (${server.slug}).`);
-      } catch (err) {
-        if (isCancellation(err)) return;
-        printError(err instanceof Error ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+    .action(
+      async (
+        idArg: string | undefined,
+        opts: { stage?: string; tenant?: string },
+      ) => {
+        try {
+          const { api, tenant } = await resolveMcpContext(opts);
+          const server = await resolveServer(idArg, api, tenant.slug);
+          await apiFetch(
+            api.apiUrl,
+            api.authSecret,
+            `/api/skills/mcp-servers/${server.id}`,
+            { method: "DELETE" },
+            { "x-tenant-slug": tenant.slug },
+          );
+          printSuccess(`MCP server removed: ${server.name} (${server.slug}).`);
+        } catch (err) {
+          if (isCancellation(err)) return;
+          printError(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        }
+      },
+    );
 
   mcp
     .command("test [id]")
@@ -367,42 +397,49 @@ Examples:
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(async (idArg: string | undefined, opts: { stage?: string; tenant?: string }) => {
-      try {
-        const { stage, api, tenant } = await resolveMcpContext(opts);
-        const server = await resolveServer(idArg, api, tenant.slug);
-        printHeader("mcp test", stage);
-        const result = await apiFetch(
-          api.apiUrl,
-          api.authSecret,
-          `/api/skills/mcp-servers/${server.id}/test`,
-          { method: "POST" },
-          { "x-tenant-slug": tenant.slug },
-        );
+    .action(
+      async (
+        idArg: string | undefined,
+        opts: { stage?: string; tenant?: string },
+      ) => {
+        try {
+          const { stage, api, tenant } = await resolveMcpContext(opts);
+          const server = await resolveServer(idArg, api, tenant.slug);
+          printHeader("mcp test", stage);
+          const result = await apiFetch(
+            api.apiUrl,
+            api.authSecret,
+            `/api/skills/mcp-servers/${server.id}/test`,
+            { method: "POST" },
+            { "x-tenant-slug": tenant.slug },
+          );
 
-        if (result.ok) {
-          printSuccess(`Connection successful: ${server.name}.`);
-          if (result.tools?.length) {
-            console.log(chalk.bold(`\n  Discovered tools (${result.tools.length}):\n`));
-            for (const t of result.tools) {
+          if (result.ok) {
+            printSuccess(`Connection successful: ${server.name}.`);
+            if (result.tools?.length) {
               console.log(
-                `    ${chalk.cyan(t.name)}${t.description ? chalk.dim(` - ${t.description}`) : ""}`,
+                chalk.bold(`\n  Discovered tools (${result.tools.length}):\n`),
               );
+              for (const t of result.tools) {
+                console.log(
+                  `    ${chalk.cyan(t.name)}${t.description ? chalk.dim(` - ${t.description}`) : ""}`,
+                );
+              }
+              console.log("");
+            } else {
+              printWarning("Server connected but reported no tools.");
             }
-            console.log("");
           } else {
-            printWarning("Server connected but reported no tools.");
+            printError(`Connection failed: ${result.error}`);
+            process.exit(1);
           }
-        } else {
-          printError(`Connection failed: ${result.error}`);
+        } catch (err) {
+          if (isCancellation(err)) return;
+          printError(err instanceof Error ? err.message : String(err));
           process.exit(1);
         }
-      } catch (err) {
-        if (isCancellation(err)) return;
-        printError(err instanceof Error ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   mcp
     .command("assign [mcpServer]")
@@ -435,7 +472,10 @@ Examples:
             api.apiUrl,
             api.authSecret,
             `/api/skills/agents/${agent}/mcp-servers`,
-            { method: "POST", body: JSON.stringify({ mcpServerId: server.id }) },
+            {
+              method: "POST",
+              body: JSON.stringify({ mcpServerId: server.id }),
+            },
           );
           printSuccess(
             `MCP server assigned to agent. (${result.created ? "new" : "updated"}) — ${server.name} → ${agent}`,
@@ -481,7 +521,9 @@ Examples:
             `/api/skills/agents/${agent}/mcp-servers/${server.id}`,
             { method: "DELETE" },
           );
-          printSuccess(`MCP server unassigned from agent: ${server.name} ↛ ${agent}`);
+          printSuccess(
+            `MCP server unassigned from agent: ${server.name} ↛ ${agent}`,
+          );
         } catch (err) {
           if (isCancellation(err)) return;
           printError(err instanceof Error ? err.message : String(err));
@@ -502,7 +544,9 @@ Examples:
   const key = mcp
     .command("key")
     .alias("keys")
-    .description("Manage per-tenant Bearer tokens for the admin-ops MCP server.");
+    .description(
+      "Manage per-tenant Bearer tokens for the admin-ops MCP server.",
+    );
 
   key
     .command("create")
@@ -524,83 +568,101 @@ stores only the SHA-256 hash. To rotate, create a new one and revoke the
 old one.
 `,
     )
-    .action(async (opts: { stage?: string; tenant?: string; name?: string }) => {
-      try {
-        const ctx = await resolveMcpContext(opts);
-        const client = createClient({
-          apiUrl: ctx.api.apiUrl,
-          authSecret: ctx.api.authSecret,
-        });
-        const created = await adminKeys.createAdminKey(client, ctx.tenant.slug, {
-          name: opts.name,
-        });
-        printJson(created);
-        printWarning("This token will NOT be shown again. Copy it now.");
-        printSuccess(`MCP admin key created: ${chalk.bold(created.name)} (${created.id})`);
-        console.log(`  ${chalk.dim("Token:")} ${chalk.cyan(created.token)}`);
-      } catch (err) {
-        if (isCancellation(err)) return;
-        printError(err instanceof Error ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+    .action(
+      async (opts: { stage?: string; tenant?: string; name?: string }) => {
+        try {
+          const ctx = await resolveMcpContext(opts);
+          const client = createClient({
+            apiUrl: ctx.api.apiUrl,
+            authSecret: ctx.api.authSecret,
+          });
+          const created = await adminKeys.createAdminKey(
+            client,
+            ctx.tenant.slug,
+            {
+              name: opts.name,
+            },
+          );
+          printJson(created);
+          printWarning("This token will NOT be shown again. Copy it now.");
+          printSuccess(
+            `MCP admin key created: ${chalk.bold(created.name)} (${created.id})`,
+          );
+          console.log(`  ${chalk.dim("Token:")} ${chalk.cyan(created.token)}`);
+        } catch (err) {
+          if (isCancellation(err)) return;
+          printError(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        }
+      },
+    );
 
   key
     .command("list")
     .alias("ls")
-    .description("List MCP admin keys for a tenant (metadata only, never the raw token).")
+    .description(
+      "List MCP admin keys for a tenant (metadata only, never the raw token).",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug or UUID")
     .option("--all", "Include revoked keys")
-    .action(async (opts: { stage?: string; tenant?: string; all?: boolean }) => {
-      try {
-        const ctx = await resolveMcpContext(opts);
-        const client = createClient({
-          apiUrl: ctx.api.apiUrl,
-          authSecret: ctx.api.authSecret,
-        });
-        const all = await adminKeys.listAdminKeys(client, ctx.tenant.slug);
-        const rows = opts.all ? all : all.filter((k) => !k.revoked_at);
+    .action(
+      async (opts: { stage?: string; tenant?: string; all?: boolean }) => {
+        try {
+          const ctx = await resolveMcpContext(opts);
+          const client = createClient({
+            apiUrl: ctx.api.apiUrl,
+            authSecret: ctx.api.authSecret,
+          });
+          const all = await adminKeys.listAdminKeys(client, ctx.tenant.slug);
+          const rows = opts.all ? all : all.filter((k) => !k.revoked_at);
 
-        printJson(rows);
-        printTable(rows as unknown as Array<Record<string, unknown>>, [
-          { key: "name", header: "NAME" },
-          { key: "id", header: "ID" },
-          { key: "created_at", header: "CREATED" },
-          { key: "last_used_at", header: "LAST USED" },
-          { key: "revoked_at", header: "REVOKED" },
-        ]);
-      } catch (err) {
-        if (isCancellation(err)) return;
-        printError(err instanceof Error ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+          printJson(rows);
+          printTable(rows as unknown as Array<Record<string, unknown>>, [
+            { key: "name", header: "NAME" },
+            { key: "id", header: "ID" },
+            { key: "created_at", header: "CREATED" },
+            { key: "last_used_at", header: "LAST USED" },
+            { key: "revoked_at", header: "REVOKED" },
+          ]);
+        } catch (err) {
+          if (isCancellation(err)) return;
+          printError(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        }
+      },
+    );
 
   key
     .command("revoke <id>")
-    .description("Revoke an MCP admin key. Idempotent — revoking an already-revoked key is a no-op.")
+    .description(
+      "Revoke an MCP admin key. Idempotent — revoking an already-revoked key is a no-op.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug or UUID")
-    .action(async (keyId: string, opts: { stage?: string; tenant?: string }) => {
-      try {
-        const ctx = await resolveMcpContext(opts);
-        const client = createClient({
-          apiUrl: ctx.api.apiUrl,
-          authSecret: ctx.api.authSecret,
-        });
-        await adminKeys.revokeAdminKey(client, ctx.tenant.slug, keyId);
-        printSuccess(`MCP admin key revoked: ${keyId}`);
-      } catch (err) {
-        if (err instanceof AdminOpsError && err.status === 404) {
-          printError(`Key ${keyId} not found for tenant ${opts.tenant ?? ""}`);
-          process.exit(2);
+    .action(
+      async (keyId: string, opts: { stage?: string; tenant?: string }) => {
+        try {
+          const ctx = await resolveMcpContext(opts);
+          const client = createClient({
+            apiUrl: ctx.api.apiUrl,
+            authSecret: ctx.api.authSecret,
+          });
+          await adminKeys.revokeAdminKey(client, ctx.tenant.slug, keyId);
+          printSuccess(`MCP admin key revoked: ${keyId}`);
+        } catch (err) {
+          if (err instanceof AdminOpsError && err.status === 404) {
+            printError(
+              `Key ${keyId} not found for tenant ${opts.tenant ?? ""}`,
+            );
+            process.exit(2);
+          }
+          if (isCancellation(err)) return;
+          printError(err instanceof Error ? err.message : String(err));
+          process.exit(1);
         }
-        if (isCancellation(err)) return;
-        printError(err instanceof Error ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   // ---------------------------------------------------------------------------
   // `thinkwork mcp provision` — one-shot tenant provisioning for admin-ops.
@@ -622,7 +684,10 @@ old one.
       "--url <url>",
       "Override the MCP endpoint URL (defaults to the stage's execute-api or MCP_CUSTOM_DOMAIN)",
     )
-    .option("--all", "Provision for every tenant the caller can see (backfill mode)")
+    .option(
+      "--all",
+      "Provision for every tenant the caller can see (backfill mode)",
+    )
     .addHelpText(
       "after",
       `
@@ -642,78 +707,93 @@ provisioning, each agent still needs the server assigned via the admin
 SPA (or a future \`thinkwork mcp assign\` CLI pass).
 `,
     )
-    .action(async (opts: { stage?: string; tenant?: string; url?: string; all?: boolean }) => {
-      try {
-        if (opts.all && opts.tenant) {
-          printError("--all and --tenant are mutually exclusive.");
-          process.exit(1);
-        }
-
-        const stage = await resolveStage({ flag: opts.stage });
-        const api = resolveApiConfig(stage);
-        if (!api) process.exit(1);
-
-        async function provisionOne(tenantIdOrSlug: string, label: string) {
-          const res = await apiFetch(
-            api!.apiUrl,
-            api!.authSecret,
-            `/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-provision`,
-            {
-              method: "POST",
-              body: JSON.stringify(opts.url ? { url: opts.url } : {}),
-            },
-          );
-          printSuccess(
-            `${label}: ${res.provisioned} (tenant_mcp_servers.id=${res.tenantMcpServerId}, url=${res.url})`,
-          );
-          return res;
-        }
-
-        if (opts.all) {
-          const tenantRows = await apiFetch(
-            api!.apiUrl,
-            api!.authSecret,
-            "/api/tenants",
-            {},
-          );
-          if (!Array.isArray(tenantRows) || tenantRows.length === 0) {
-            printWarning("No tenants found.");
-            return;
-          }
-          printHeader("mcp provision --all", stage);
-          const results: Array<{ slug: string; ok: boolean; reason?: string }> = [];
-          for (const t of tenantRows as Array<{ slug: string; name: string; id: string }>) {
-            try {
-              await provisionOne(t.slug, `${t.name} (${t.slug})`);
-              results.push({ slug: t.slug, ok: true });
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              printError(`  ✗ ${t.slug}: ${msg}`);
-              results.push({ slug: t.slug, ok: false, reason: msg });
-            }
-          }
-          const ok = results.filter((r) => r.ok).length;
-          const bad = results.length - ok;
-          if (bad === 0) {
-            printSuccess(`All ${ok} tenants provisioned.`);
-          } else {
-            printWarning(`${ok}/${results.length} succeeded; ${bad} failed.`);
+    .action(
+      async (opts: {
+        stage?: string;
+        tenant?: string;
+        url?: string;
+        all?: boolean;
+      }) => {
+        try {
+          if (opts.all && opts.tenant) {
+            printError("--all and --tenant are mutually exclusive.");
             process.exit(1);
           }
-          return;
-        }
 
-        const tenant = await resolveTenantRest({
-          flag: opts.tenant,
-          stage,
-          apiUrl: api!.apiUrl,
-          authSecret: api!.authSecret,
-        });
-        await provisionOne(tenant.slug, tenant.slug);
-      } catch (err) {
-        if (isCancellation(err)) return;
-        printError(err instanceof Error ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+          const stage = await resolveStage({ flag: opts.stage });
+          const api = resolveApiConfig(stage);
+          if (!api) process.exit(1);
+
+          async function provisionOne(tenantIdOrSlug: string, label: string) {
+            const res = await apiFetch(
+              api!.apiUrl,
+              api!.authSecret,
+              `/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-provision`,
+              {
+                method: "POST",
+                body: JSON.stringify(opts.url ? { url: opts.url } : {}),
+              },
+            );
+            printSuccess(
+              `${label}: ${res.provisioned} (tenant_mcp_servers.id=${res.tenantMcpServerId}, url=${res.url})`,
+            );
+            return res;
+          }
+
+          if (opts.all) {
+            const tenantRows = await apiFetch(
+              api!.apiUrl,
+              api!.authSecret,
+              "/api/tenants",
+              {},
+            );
+            if (!Array.isArray(tenantRows) || tenantRows.length === 0) {
+              printWarning("No tenants found.");
+              return;
+            }
+            printHeader("mcp provision --all", stage);
+            const results: Array<{
+              slug: string;
+              ok: boolean;
+              reason?: string;
+            }> = [];
+            for (const t of tenantRows as Array<{
+              slug: string;
+              name: string;
+              id: string;
+            }>) {
+              try {
+                await provisionOne(t.slug, `${t.name} (${t.slug})`);
+                results.push({ slug: t.slug, ok: true });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                printError(`  ✗ ${t.slug}: ${msg}`);
+                results.push({ slug: t.slug, ok: false, reason: msg });
+              }
+            }
+            const ok = results.filter((r) => r.ok).length;
+            const bad = results.length - ok;
+            if (bad === 0) {
+              printSuccess(`All ${ok} tenants provisioned.`);
+            } else {
+              printWarning(`${ok}/${results.length} succeeded; ${bad} failed.`);
+              process.exit(1);
+            }
+            return;
+          }
+
+          const tenant = await resolveTenantRest({
+            flag: opts.tenant,
+            stage,
+            apiUrl: api!.apiUrl,
+            authSecret: api!.authSecret,
+          });
+          await provisionOne(tenant.slug, tenant.slug);
+        } catch (err) {
+          if (isCancellation(err)) return;
+          printError(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        }
+      },
+    );
 }

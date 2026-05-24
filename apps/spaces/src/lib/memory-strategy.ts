@@ -14,9 +14,12 @@ export const STRATEGY_COLORS: Record<string, string> = {
  */
 export function inferStrategy(strategyId: string, namespace: string): string {
   if (strategyId.includes("semantic")) return "semantic";
-  if (strategyId.includes("summary") || strategyId.includes("Summar")) return "summaries";
-  if (strategyId.includes("Preference") || strategyId.includes("preference")) return "preferences";
-  if (strategyId.includes("Episode") || strategyId.includes("episode")) return "episodes";
+  if (strategyId.includes("summary") || strategyId.includes("Summar"))
+    return "summaries";
+  if (strategyId.includes("Preference") || strategyId.includes("preference"))
+    return "preferences";
+  if (strategyId.includes("Episode") || strategyId.includes("episode"))
+    return "episodes";
   if (namespace.startsWith("assistant_")) return "semantic";
   if (namespace.startsWith("preferences_")) return "preferences";
   if (namespace.startsWith("session_")) return "summaries";
@@ -28,8 +31,11 @@ export function inferStrategy(strategyId: string, namespace: string): string {
  * Parse `<topic name="…">…</topic>` blocks (the format Hindsight's retain step
  * emits) into structured sections. Handles both closed and unclosed tags.
  */
-export function parseMemoryTopics(text: string): { topic: string; content: string }[] {
-  const regex = /<topic\s+name="([^"]*)">\s*([\s\S]*?)(?:<\/topic>|(?=<topic\s)|$)/g;
+export function parseMemoryTopics(
+  text: string,
+): { topic: string; content: string }[] {
+  const regex =
+    /<topic\s+name="([^"]*)">\s*([\s\S]*?)(?:<\/topic>|(?=<topic\s)|$)/g;
   const sections: { topic: string; content: string }[] = [];
   let lastIndex = 0;
   let match;

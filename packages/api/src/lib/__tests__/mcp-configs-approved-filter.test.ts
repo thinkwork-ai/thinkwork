@@ -14,7 +14,12 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockWhereSelector, mockRowsForJoin, mockRowsForUserToken, mockSecretString } = vi.hoisted(() => ({
+const {
+  mockWhereSelector,
+  mockRowsForJoin,
+  mockRowsForUserToken,
+  mockSecretString,
+} = vi.hoisted(() => ({
   mockWhereSelector: vi.fn(),
   mockRowsForJoin: vi.fn(),
   mockRowsForUserToken: vi.fn(),
@@ -214,7 +219,9 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
         expires_at: new Date(Date.now() + 60 * 60 * 1000),
       },
     ]);
-    mockSecretString.mockReturnValue(JSON.stringify({ access_token: "user-scoped-token" }));
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ access_token: "user-scoped-token" }),
+    );
 
     const configs = await buildMcpConfigs(agentId, userId);
 
@@ -226,9 +233,17 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
         auth: { type: "bearer", token: "user-scoped-token" },
       },
     ]);
-    const tokenLookupPredicate = mockWhereSelector.mock.calls[1]?.[0] as { _and: unknown[] };
-    expect(JSON.stringify(tokenLookupPredicate)).toContain(`"userMcpTokens.user_id","${userId}"`);
-    expect(JSON.stringify(tokenLookupPredicate)).not.toContain(`"userMcpTokens.user_id","${agentId}"`);
-    expect(JSON.stringify(tokenLookupPredicate)).toContain('"userMcpTokens.status","active"');
+    const tokenLookupPredicate = mockWhereSelector.mock.calls[1]?.[0] as {
+      _and: unknown[];
+    };
+    expect(JSON.stringify(tokenLookupPredicate)).toContain(
+      `"userMcpTokens.user_id","${userId}"`,
+    );
+    expect(JSON.stringify(tokenLookupPredicate)).not.toContain(
+      `"userMcpTokens.user_id","${agentId}"`,
+    );
+    expect(JSON.stringify(tokenLookupPredicate)).toContain(
+      '"userMcpTokens.status","active"',
+    );
   });
 });

@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import { View, ScrollView, ActivityIndicator, Modal, Pressable } from "react-native";
+import {
+  View,
+  ScrollView,
+  ActivityIndicator,
+  Modal,
+  Pressable,
+} from "react-native";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useColorScheme } from "nativewind";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  ExternalLink,
-  AlertCircle,
-  Check,
-  Star,
-  X,
-} from "lucide-react-native";
+import { ExternalLink, AlertCircle, Check, Star, X } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import { Text, Muted } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,10 @@ function resolveApiUrl(): string {
     (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
     "";
   const fromEnv = process.env.EXPO_PUBLIC_API_URL ?? "";
-  return (fromExtra || fromEnv || "https://api.thinkwork.ai").replace(/\/$/, "");
+  return (fromExtra || fromEnv || "https://api.thinkwork.ai").replace(
+    /\/$/,
+    "",
+  );
 }
 
 interface SubscriptionState {
@@ -167,8 +170,7 @@ export default function BillingScreen() {
       // the iOS Safari sheet when they're finished. Back in ThinkWork
       // the next focus triggers a subscription refetch.
       await WebBrowser.openBrowserAsync(data.url, {
-        presentationStyle:
-          WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -194,8 +196,8 @@ export default function BillingScreen() {
               <View className="flex-1">
                 <Text className="font-semibold mb-1">Owner access only</Text>
                 <Muted className="leading-5">
-                  Billing is managed by the workspace owner. Ask them to
-                  open this screen, or email hello@thinkwork.ai for help.
+                  Billing is managed by the workspace owner. Ask them to open
+                  this screen, or email hello@thinkwork.ai for help.
                 </Muted>
               </View>
             </View>
@@ -220,16 +222,11 @@ export default function BillingScreen() {
                   value={(state?.plan ?? "free").toUpperCase()}
                 />
                 {state?.status && (
-                  <Row
-                    label="Status"
-                    value={state.status.replace(/_/g, " ")}
-                  />
+                  <Row label="Status" value={state.status.replace(/_/g, " ")} />
                 )}
                 {state?.currentPeriodEnd && (
                   <Row
-                    label={
-                      state.cancelAtPeriodEnd ? "Cancels on" : "Renews on"
-                    }
+                    label={state.cancelAtPeriodEnd ? "Cancels on" : "Renews on"}
                     value={formatDate(state.currentPeriodEnd)}
                   />
                 )}
@@ -244,8 +241,8 @@ export default function BillingScreen() {
               {state?.hasCustomer ? (
                 <>
                   <Muted className="leading-5">
-                    Change plan, update your card, download invoices, or
-                    cancel — all from Stripe's secure portal.
+                    Change plan, update your card, download invoices, or cancel
+                    — all from Stripe's secure portal.
                   </Muted>
                   <Button
                     onPress={() => openPortal("home")}
@@ -263,34 +260,23 @@ export default function BillingScreen() {
                     ) : (
                       <View className="flex-row items-center gap-2">
                         <Text>Manage subscription</Text>
-                        <ExternalLink
-                          size={14}
-                          color={colors.background}
-                        />
+                        <ExternalLink size={14} color={colors.background} />
                       </View>
                     )}
                   </Button>
-                  <Text
-                    size="xs"
-                    variant="muted"
-                    className="leading-5 mt-2"
-                  >
-                    Cancel deactivates your workspace after the current
-                    billing period. Data is retained for 30 days —
-                    resubscribe within that window to restore everything.
+                  <Text size="xs" variant="muted" className="leading-5 mt-2">
+                    Cancel deactivates your workspace after the current billing
+                    period. Data is retained for 30 days — resubscribe within
+                    that window to restore everything.
                   </Text>
                 </>
               ) : (
                 <>
                   <Muted className="leading-5">
-                    You're on the free plan. Upgrade to unlock higher
-                    limits, template-level capability grants, and
-                    priority support.
+                    You're on the free plan. Upgrade to unlock higher limits,
+                    template-level capability grants, and priority support.
                   </Muted>
-                  <Button
-                    onPress={() => setPickerOpen(true)}
-                    size="lg"
-                  >
+                  <Button onPress={() => setPickerOpen(true)} size="lg">
                     <Text>See plans</Text>
                   </Button>
                 </>
@@ -322,9 +308,9 @@ export default function BillingScreen() {
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
           >
             <Muted className="leading-5 mb-4">
-              Payment redirects to Stripe Checkout. The subscription
-              attaches to your current workspace on success — your data
-              and settings stay put.
+              Payment redirects to Stripe Checkout. The subscription attaches to
+              your current workspace on success — your data and settings stay
+              put.
             </Muted>
             <View className="gap-4">
               {plans.map((plan) => {

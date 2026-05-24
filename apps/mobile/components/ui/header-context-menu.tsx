@@ -20,7 +20,12 @@ interface HeaderContextMenuProps {
 
 export function HeaderContextMenu({ items, trigger }: HeaderContextMenuProps) {
   const [visible, setVisible] = useState(false);
-  const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [anchor, setAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const triggerRef = useRef<View>(null);
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
@@ -38,10 +43,19 @@ export function HeaderContextMenu({ items, trigger }: HeaderContextMenuProps) {
 
   return (
     <>
-      <Pressable ref={triggerRef} onPress={open} className={trigger ? "" : "p-2"}>
+      <Pressable
+        ref={triggerRef}
+        onPress={open}
+        className={trigger ? "" : "p-2"}
+      >
         {trigger ?? <MoreHorizontal size={22} color={colors.foreground} />}
       </Pressable>
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
         <Pressable className="flex-1" onPress={() => setVisible(false)}>
           <View
             style={{
@@ -58,13 +72,18 @@ export function HeaderContextMenu({ items, trigger }: HeaderContextMenuProps) {
               shadowRadius: 12,
               elevation: 8,
               borderWidth: 1,
-              borderColor: colorScheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
+              borderColor:
+                colorScheme === "dark"
+                  ? "rgba(255,255,255,0.1)"
+                  : "rgba(0,0,0,0.08)",
             }}
           >
             {items.map((item, index) => {
               const isLast = index === items.length - 1;
               const Icon = item.icon;
-              const itemColor = item.destructive ? "#ef4444" : colors.foreground;
+              const itemColor = item.destructive
+                ? "#ef4444"
+                : colors.foreground;
               return (
                 <Pressable
                   key={item.label}

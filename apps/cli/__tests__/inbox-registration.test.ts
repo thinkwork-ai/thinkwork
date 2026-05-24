@@ -56,7 +56,9 @@ describe("inbox command registration", () => {
     const inbox = program.commands.find((c) => c.name() === "inbox")!;
     for (const name of ["approve", "reject", "request-revision", "resubmit"]) {
       const cmd = inbox.commands.find((c) => c.name() === name)!;
-      expect(cmd.helpInformation(), `${name} carries --notes`).toMatch(/--notes/);
+      expect(cmd.helpInformation(), `${name} carries --notes`).toMatch(
+        /--notes/,
+      );
     }
   });
 

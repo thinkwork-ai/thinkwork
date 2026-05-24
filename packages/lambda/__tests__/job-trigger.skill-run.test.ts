@@ -551,7 +551,6 @@ describe("job-trigger eval_scheduled", () => {
       expect.objectContaining({
         tenant_id: "T1",
         agent_id: null,
-        computer_id: null,
         scheduled_job_id: "job-eval-1",
         status: "pending",
         model: "moonshotai.kimi-k2.5",
@@ -562,29 +561,17 @@ describe("job-trigger eval_scheduled", () => {
   });
 });
 
-describe("job-trigger Computer scheduled thread turns", () => {
-  it("queues migrated agent schedules as Computer-owned thread_turn tasks with zero Agent wakeups", async () => {
-    mockSelect
-      .mockReturnValueOnce([
-        {
-          enabled: true,
-          name: "Daily Marco",
-          config: {},
-          created_by_type: "user",
-          created_by_id: "U1",
-        },
-      ])
-      .mockReturnValueOnce([
-        {
-          id: "computer-1",
-          ownerUserId: "U1",
-          migratedAgentId: "A1",
-        },
-      ]);
-    mockInsert
-      .mockReturnValueOnce([{ id: "message-1" }])
-      .mockReturnValueOnce([{ id: "task-1" }])
-      .mockReturnValueOnce([]);
+describe("job-trigger agent_scheduled (Computer kill)", () => {
+  it("logs and does nothing for agent schedules after Computer removal", async () => {
+    mockSelect.mockReturnValueOnce([
+      {
+        enabled: true,
+        name: "Daily Marco",
+        config: {},
+        created_by_type: "user",
+        created_by_id: "U1",
+      },
+    ]);
 
     await handler({
       triggerId: "job-agent-1",
@@ -595,115 +582,9 @@ describe("job-trigger Computer scheduled thread turns", () => {
       scheduleName: "thinkwork-dev-marco-daily",
     });
 
-    expect(mockEnsureThreadForWork).toHaveBeenCalledWith({
-      tenantId: "T1",
-      computerId: "computer-1",
-      userId: "U1",
-      title: "Daily Marco",
-      channel: "schedule",
-    });
-    expect(mockInsertValues).toHaveBeenCalledWith(
-      expect.objectContaining({
-        thread_id: "thread-1",
-        tenant_id: "T1",
-        role: "user",
-        content: "Check the calendar and prepare a summary",
-        sender_type: "user",
-        sender_id: "U1",
-      }),
-    );
-    expect(mockInsertValues).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenant_id: "T1",
-        computer_id: "computer-1",
-        task_type: "thread_turn",
-        status: "pending",
-        input: expect.objectContaining({
-          threadId: "thread-1",
-          messageId: "message-1",
-          source: "schedule",
-          requesterUserId: "U1",
-          triggerId: "job-agent-1",
-        }),
-      }),
-    );
-    expect(
-      mockInsertValues.mock.calls.some((call) => {
-        const value = call[0] as Record<string, unknown>;
-        return value.agent_id === "A1" && value.reason;
-      }),
-    ).toBe(false);
-    expect(mockLambdaSend).not.toHaveBeenCalled();
-  });
-
-  it("skips scheduled shared-Computer work instead of falling back to historical owner credentials when no requester exists", async () => {
-    mockSelect
-      .mockReturnValueOnce([
-        {
-          enabled: true,
-          name: "System schedule",
-          config: {},
-          created_by_type: "system",
-          created_by_id: null,
-        },
-      ])
-      .mockReturnValueOnce([
-        {
-          id: "computer-1",
-          ownerUserId: "legacy-owner",
-          migratedAgentId: "A1",
-        },
-      ]);
-    mockInsert.mockReturnValueOnce([{ id: "event-1" }]);
-
-    await handler({
-      triggerId: "job-agent-system",
-      triggerType: "agent_scheduled",
-      tenantId: "T1",
-      agentId: "A1",
-      prompt: "Check the calendar",
-    });
-
-    expect(mockEnsureThreadForWork).not.toHaveBeenCalled();
-    expect(mockInsertValues).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event_type: "scheduled_thread_turn_skipped",
-        payload: expect.objectContaining({
-          reason: "requester_user_required",
-        }),
-      }),
-    );
-    expect(
-      mockInsertValues.mock.calls.some((call) => {
-        const value = call[0] as Record<string, unknown>;
-        return value.task_type === "thread_turn";
-      }),
-    ).toBe(false);
-  });
-
-  it("does not create legacy Agent wakeups when a scheduled agent has no Computer", async () => {
-    mockSelect
-      .mockReturnValueOnce([
-        {
-          enabled: true,
-          name: "Legacy schedule",
-          config: {},
-          created_by_type: "system",
-          created_by_id: null,
-        },
-      ])
-      .mockReturnValueOnce([]);
-
-    await handler({
-      triggerId: "job-agent-2",
-      triggerType: "agent_scheduled",
-      tenantId: "T1",
-      agentId: "A1",
-      prompt: "This should wait for a Computer",
-    });
-
     expect(mockEnsureThreadForWork).not.toHaveBeenCalled();
     expect(mockInsertValues).not.toHaveBeenCalled();
+    expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 });
 

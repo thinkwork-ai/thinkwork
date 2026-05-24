@@ -19,15 +19,15 @@
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import {
-	wikiPages,
-	wikiPageSections,
-	wikiPageLinks,
-	wikiPageAliases,
-	wikiPlaces,
-	wikiUnresolvedMentions,
-	wikiSectionSources,
-	wikiCompileJobs,
-	wikiCompileCursors,
+  wikiPages,
+  wikiPageSections,
+  wikiPageLinks,
+  wikiPageAliases,
+  wikiPlaces,
+  wikiUnresolvedMentions,
+  wikiSectionSources,
+  wikiCompileJobs,
+  wikiCompileCursors,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
 
@@ -38,192 +38,192 @@ import { db as defaultDb } from "../db.js";
 export type WikiPageType = "entity" | "topic" | "decision";
 export type WikiPageStatus = "active" | "archived";
 export type WikiCompileJobStatus =
-	| "pending"
-	| "running"
-	| "succeeded"
-	| "failed"
-	| "skipped";
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped";
 export type WikiCompileTrigger =
-	| "memory_retain"
-	| "bootstrap_import"
-	| "admin"
-	| "lint"
-	| "enrichment_draft";
+  | "memory_retain"
+  | "bootstrap_import"
+  | "admin"
+  | "lint"
+  | "enrichment_draft";
 export type WikiSectionSourceKind =
-	| "memory_unit"
-	| "artifact"
-	| "journal_idea"
-	| "hindsight_memory_unit"
-	| "erp_customer"
-	| "crm_opportunity"
-	| "erp_order"
-	| "crm_person"
-	| "support_case"
-	| "bedrock_kb"
-	| "web_url"
-	| "mcp_url";
+  | "memory_unit"
+  | "artifact"
+  | "journal_idea"
+  | "hindsight_memory_unit"
+  | "erp_customer"
+  | "crm_opportunity"
+  | "erp_order"
+  | "crm_person"
+  | "support_case"
+  | "bedrock_kb"
+  | "web_url"
+  | "mcp_url";
 export type WikiUnresolvedStatus = "open" | "promoted" | "ignored";
 export type WikiPageLinkKind = "reference" | "parent_of" | "child_of" | string;
 export type SectionPromotionStatus =
-	| "none"
-	| "candidate"
-	| "promoted"
-	| "suppressed";
+  | "none"
+  | "candidate"
+  | "promoted"
+  | "suppressed";
 
 /**
  * Aggregation metadata carried on a section that acts as a rollup. Leaf-style
  * sections (overview, notes, visits) leave this NULL.
  */
 export interface SectionAggregation {
-	linked_page_ids: string[];
-	supporting_record_count: number;
-	first_source_at: string | null;
-	last_source_at: string | null;
-	observed_tags: string[];
-	promotion_status: SectionPromotionStatus;
-	promotion_score: number;
-	promoted_page_id: string | null;
+  linked_page_ids: string[];
+  supporting_record_count: number;
+  first_source_at: string | null;
+  last_source_at: string | null;
+  observed_tags: string[];
+  promotion_status: SectionPromotionStatus;
+  promotion_score: number;
+  promoted_page_id: string | null;
 }
 
 export function emptySectionAggregation(): SectionAggregation {
-	return {
-		linked_page_ids: [],
-		supporting_record_count: 0,
-		first_source_at: null,
-		last_source_at: null,
-		observed_tags: [],
-		promotion_status: "none",
-		promotion_score: 0,
-		promoted_page_id: null,
-	};
+  return {
+    linked_page_ids: [],
+    supporting_record_count: 0,
+    first_source_at: null,
+    last_source_at: null,
+    observed_tags: [],
+    promotion_status: "none",
+    promotion_score: 0,
+    promoted_page_id: null,
+  };
 }
 
 export interface WikiCompileJobRow {
-	id: string;
-	tenant_id: string;
-	owner_id: string;
-	dedupe_key: string;
-	status: WikiCompileJobStatus;
-	trigger: WikiCompileTrigger;
-	attempt: number;
-	claimed_at: Date | null;
-	started_at: Date | null;
-	finished_at: Date | null;
-	error: string | null;
-	metrics: unknown;
-	/** Optional per-trigger input payload (e.g., enrichment-draft candidates). NULL for default compile. */
-	input?: unknown;
-	created_at: Date;
+  id: string;
+  tenant_id: string;
+  owner_id: string;
+  dedupe_key: string;
+  status: WikiCompileJobStatus;
+  trigger: WikiCompileTrigger;
+  attempt: number;
+  claimed_at: Date | null;
+  started_at: Date | null;
+  finished_at: Date | null;
+  error: string | null;
+  metrics: unknown;
+  /** Optional per-trigger input payload (e.g., enrichment-draft candidates). NULL for default compile. */
+  input?: unknown;
+  created_at: Date;
 }
 
 export interface WikiCompileCursorRow {
-	tenant_id: string;
-	owner_id: string;
-	last_record_updated_at: Date | null;
-	last_record_id: string | null;
-	updated_at: Date;
+  tenant_id: string;
+  owner_id: string;
+  last_record_updated_at: Date | null;
+  last_record_id: string | null;
+  updated_at: Date;
 }
 
 export interface WikiPageRow {
-	id: string;
-	tenant_id: string;
-	owner_id: string;
-	type: WikiPageType;
-	entity_subtype?: string | null;
-	slug: string;
-	title: string;
-	summary: string | null;
-	body_md: string | null;
-	status: WikiPageStatus;
-	/** Set when this page was promoted from a section on another page. */
-	parent_page_id: string | null;
-	/** Optional pointer into wiki_places. See wiki-places-v2 plan. */
-	place_id: string | null;
-	/** Coarse, monotonic hubness signal. Recomputed on upsert. */
-	hubness_score: number;
-	/** Soft tag hints — never a structural forcing function. */
-	tags: string[];
-	last_compiled_at: Date | null;
-	created_at: Date;
-	updated_at: Date;
+  id: string;
+  tenant_id: string;
+  owner_id: string;
+  type: WikiPageType;
+  entity_subtype?: string | null;
+  slug: string;
+  title: string;
+  summary: string | null;
+  body_md: string | null;
+  status: WikiPageStatus;
+  /** Set when this page was promoted from a section on another page. */
+  parent_page_id: string | null;
+  /** Optional pointer into wiki_places. See wiki-places-v2 plan. */
+  place_id: string | null;
+  /** Coarse, monotonic hubness signal. Recomputed on upsert. */
+  hubness_score: number;
+  /** Soft tag hints — never a structural forcing function. */
+  tags: string[];
+  last_compiled_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export type WikiPlaceKind =
-	| "country"
-	| "region"
-	| "state"
-	| "city"
-	| "neighborhood"
-	| "poi"
-	| "custom";
+  | "country"
+  | "region"
+  | "state"
+  | "city"
+  | "neighborhood"
+  | "poi"
+  | "custom";
 
 export type WikiPlaceSource =
-	| "google_api"
-	| "journal_metadata"
-	| "manual"
-	| "derived_hierarchy";
+  | "google_api"
+  | "journal_metadata"
+  | "manual"
+  | "derived_hierarchy";
 
 export interface WikiPlaceRow {
-	id: string;
-	tenant_id: string;
-	owner_id: string;
-	name: string;
-	google_place_id: string | null;
-	geo_lat: string | null; // numeric returned as text by pg driver
-	geo_lon: string | null;
-	address: string | null;
-	parent_place_id: string | null;
-	place_kind: WikiPlaceKind | null;
-	source: WikiPlaceSource;
-	source_payload: unknown | null;
-	created_at: Date;
-	updated_at: Date;
+  id: string;
+  tenant_id: string;
+  owner_id: string;
+  name: string;
+  google_place_id: string | null;
+  geo_lat: string | null; // numeric returned as text by pg driver
+  geo_lon: string | null;
+  address: string | null;
+  parent_place_id: string | null;
+  place_kind: WikiPlaceKind | null;
+  source: WikiPlaceSource;
+  source_payload: unknown | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface WikiSectionInput {
-	section_slug: string;
-	heading: string;
-	body_md: string | null | undefined;
-	position: number;
-	/** Source references for provenance; recorded per section on upsert. */
-	sources?: Array<{ kind: WikiSectionSourceKind; ref: string }>;
+  section_slug: string;
+  heading: string;
+  body_md: string | null | undefined;
+  position: number;
+  /** Source references for provenance; recorded per section on upsert. */
+  sources?: Array<{ kind: WikiSectionSourceKind; ref: string }>;
 }
 
 export interface UpsertPageInput {
-	tenant_id: string;
-	owner_id: string;
-	type: WikiPageType;
-	/** Approved ontology entity type slug, when this page materializes one. */
-	entity_subtype?: string | null;
-	slug: string;
-	title: string;
-	summary?: string | null;
-	status?: WikiPageStatus;
-	/** When set, also updates `last_compiled_at` and mirrors `body_md`
-	 * computed from the supplied sections (if any). */
-	markCompiled?: boolean;
-	sections?: WikiSectionInput[];
-	/** Aliases to upsert alongside the page. `source` defaults to 'compiler'. */
-	aliases?: Array<{ alias: string; source?: string }>;
-	/** Optional pointer into wiki_places. First-seen-wins: on UPDATE the
-	 * existing page's place_id is preserved via COALESCE; the new value only
-	 * takes hold when the page had NULL before. See wiki-places-v2 plan. */
-	place_id?: string | null;
+  tenant_id: string;
+  owner_id: string;
+  type: WikiPageType;
+  /** Approved ontology entity type slug, when this page materializes one. */
+  entity_subtype?: string | null;
+  slug: string;
+  title: string;
+  summary?: string | null;
+  status?: WikiPageStatus;
+  /** When set, also updates `last_compiled_at` and mirrors `body_md`
+   * computed from the supplied sections (if any). */
+  markCompiled?: boolean;
+  sections?: WikiSectionInput[];
+  /** Aliases to upsert alongside the page. `source` defaults to 'compiler'. */
+  aliases?: Array<{ alias: string; source?: string }>;
+  /** Optional pointer into wiki_places. First-seen-wins: on UPDATE the
+   * existing page's place_id is preserved via COALESCE; the new value only
+   * takes hold when the page had NULL before. See wiki-places-v2 plan. */
+  place_id?: string | null;
 }
 
 export interface UpsertUnresolvedInput {
-	tenant_id: string;
-	owner_id: string;
-	alias: string;
-	alias_normalized: string;
-	suggested_type?: WikiPageType | null;
-	entity_subtype?: string | null;
-	context?: { quote: string; source_ref: string };
+  tenant_id: string;
+  owner_id: string;
+  alias: string;
+  alias_normalized: string;
+  suggested_type?: WikiPageType | null;
+  entity_subtype?: string | null;
+  context?: { quote: string; source_ref: string };
 }
 
 export interface Cursor {
-	updatedAt: Date | null;
-	recordId: string | null;
+  updatedAt: Date | null;
+  recordId: string | null;
 }
 
 export type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
@@ -242,10 +242,10 @@ export type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
  * the display text).
  */
 export function stripWikilinks(md: string | null | undefined): string {
-	if (!md) return "";
-	return md.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, plain, display) =>
-		(display ?? plain).trim(),
-	);
+  if (!md) return "";
+  return md.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, plain, display) =>
+    (display ?? plain).trim(),
+  );
 }
 
 /**
@@ -256,10 +256,10 @@ export function stripWikilinks(md: string | null | undefined): string {
  * filter through this first and skip rows that fail.
  */
 export function isValidUuid(raw: unknown): raw is string {
-	if (typeof raw !== "string") return false;
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-		raw,
-	);
+  if (typeof raw !== "string") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    raw,
+  );
 }
 
 /**
@@ -269,12 +269,12 @@ export function isValidUuid(raw: unknown): raw is string {
  * Intentionally Unicode-aware so that accented names resolve consistently.
  */
 export function normalizeAlias(raw: string): string {
-	return raw
-		.normalize("NFKC")
-		.toLowerCase()
-		.replace(/[^\p{L}\p{N}\s'\-]/gu, " ")
-		.replace(/\s+/g, " ")
-		.trim();
+  return raw
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s'\-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -284,13 +284,13 @@ export function normalizeAlias(raw: string): string {
 export const DEDUPE_BUCKET_SECONDS = 300;
 
 export function buildCompileDedupeKey(args: {
-	tenantId: string;
-	ownerId: string;
-	nowEpochSeconds?: number;
+  tenantId: string;
+  ownerId: string;
+  nowEpochSeconds?: number;
 }): string {
-	const now = args.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
-	const bucket = Math.floor(now / DEDUPE_BUCKET_SECONDS);
-	return `${args.tenantId}:${args.ownerId}:${bucket}`;
+  const now = args.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
+  const bucket = Math.floor(now / DEDUPE_BUCKET_SECONDS);
+  return `${args.tenantId}:${args.ownerId}:${bucket}`;
 }
 
 /**
@@ -304,10 +304,10 @@ export function buildCompileDedupeKey(args: {
  * slot and the row was INSERTed earlier).
  */
 export function parseCompileDedupeBucket(dedupeKey: string): number | null {
-	const parts = dedupeKey.split(":");
-	if (parts.length !== 3) return null;
-	const n = Number(parts[2]);
-	return Number.isFinite(n) && Number.isInteger(n) ? n : null;
+  const parts = dedupeKey.split(":");
+  if (parts.length !== 3) return null;
+  const n = Number(parts[2]);
+  return Number.isFinite(n) && Number.isInteger(n) ? n : null;
 }
 
 /**
@@ -321,14 +321,14 @@ export function parseCompileDedupeBucket(dedupeKey: string): number | null {
  * of the chained continuation flow.
  */
 export function buildEnrichmentDraftDedupeKey(args: {
-	tenantId: string;
-	ownerId: string;
-	pageId: string;
-	nowEpochSeconds?: number;
+  tenantId: string;
+  ownerId: string;
+  pageId: string;
+  nowEpochSeconds?: number;
 }): string {
-	const now = args.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
-	const bucket = Math.floor(now / DEDUPE_BUCKET_SECONDS);
-	return `enrichment-draft:${args.tenantId}:${args.ownerId}:${args.pageId}:${bucket}`;
+  const now = args.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
+  const bucket = Math.floor(now / DEDUPE_BUCKET_SECONDS);
+  return `enrichment-draft:${args.tenantId}:${args.ownerId}:${args.pageId}:${bucket}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -341,57 +341,57 @@ export function buildEnrichmentDraftDedupeKey(args: {
  * caller uses `inserted` to decide whether to async-invoke the compile Lambda.
  */
 export async function enqueueCompileJob(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		trigger: WikiCompileTrigger;
-		/** Override the epoch-seconds used to derive the dedupe bucket. Used
-		 * by continuation chaining to enqueue a job against the *next*
-		 * bucket so the chain doesn't self-dedupe. Leave unset for the
-		 * normal post-turn path. */
-		nowEpochSeconds?: number;
-		/** Optional suffix for operator-driven reruns that must not dedupe
-		 * against an earlier job in the same 5-minute bucket. */
-		dedupeDiscriminator?: string;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    trigger: WikiCompileTrigger;
+    /** Override the epoch-seconds used to derive the dedupe bucket. Used
+     * by continuation chaining to enqueue a job against the *next*
+     * bucket so the chain doesn't self-dedupe. Leave unset for the
+     * normal post-turn path. */
+    nowEpochSeconds?: number;
+    /** Optional suffix for operator-driven reruns that must not dedupe
+     * against an earlier job in the same 5-minute bucket. */
+    dedupeDiscriminator?: string;
+  },
+  db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
-	const baseDedupeKey = buildCompileDedupeKey({
-		tenantId: args.tenantId,
-		ownerId: args.ownerId,
-		nowEpochSeconds: args.nowEpochSeconds,
-	});
-	const dedupeKey = args.dedupeDiscriminator
-		? `${baseDedupeKey}:${args.dedupeDiscriminator}`
-		: baseDedupeKey;
+  const baseDedupeKey = buildCompileDedupeKey({
+    tenantId: args.tenantId,
+    ownerId: args.ownerId,
+    nowEpochSeconds: args.nowEpochSeconds,
+  });
+  const dedupeKey = args.dedupeDiscriminator
+    ? `${baseDedupeKey}:${args.dedupeDiscriminator}`
+    : baseDedupeKey;
 
-	const [inserted] = await db
-		.insert(wikiCompileJobs)
-		.values({
-			tenant_id: args.tenantId,
-			owner_id: args.ownerId,
-			dedupe_key: dedupeKey,
-			trigger: args.trigger,
-		})
-		.onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
-		.returning();
+  const [inserted] = await db
+    .insert(wikiCompileJobs)
+    .values({
+      tenant_id: args.tenantId,
+      owner_id: args.ownerId,
+      dedupe_key: dedupeKey,
+      trigger: args.trigger,
+    })
+    .onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
+    .returning();
 
-	if (inserted) {
-		return { inserted: true, job: inserted as WikiCompileJobRow };
-	}
+  if (inserted) {
+    return { inserted: true, job: inserted as WikiCompileJobRow };
+  }
 
-	const existing = await db
-		.select()
-		.from(wikiCompileJobs)
-		.where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
-		.limit(1);
+  const existing = await db
+    .select()
+    .from(wikiCompileJobs)
+    .where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
+    .limit(1);
 
-	if (!existing[0]) {
-		throw new Error(
-			`enqueueCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
-		);
-	}
-	return { inserted: false, job: existing[0] as WikiCompileJobRow };
+  if (!existing[0]) {
+    throw new Error(
+      `enqueueCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
+    );
+  }
+  return { inserted: false, job: existing[0] as WikiCompileJobRow };
 }
 
 /**
@@ -413,66 +413,66 @@ export async function enqueueCompileJob(
  *     never see the new draft.
  */
 export async function enqueueEnrichmentDraftCompileJob(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		pageId: string;
-		input: unknown;
-		nowEpochSeconds?: number;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    pageId: string;
+    input: unknown;
+    nowEpochSeconds?: number;
+  },
+  db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
-	const baseDedupeKey = buildEnrichmentDraftDedupeKey({
-		tenantId: args.tenantId,
-		ownerId: args.ownerId,
-		pageId: args.pageId,
-		nowEpochSeconds: args.nowEpochSeconds,
-	});
+  const baseDedupeKey = buildEnrichmentDraftDedupeKey({
+    tenantId: args.tenantId,
+    ownerId: args.ownerId,
+    pageId: args.pageId,
+    nowEpochSeconds: args.nowEpochSeconds,
+  });
 
-	for (let attempt = 0; attempt < 5; attempt++) {
-		const dedupeKey =
-			attempt === 0 ? baseDedupeKey : `${baseDedupeKey}:rerun-${attempt}`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const dedupeKey =
+      attempt === 0 ? baseDedupeKey : `${baseDedupeKey}:rerun-${attempt}`;
 
-		const [inserted] = await db
-			.insert(wikiCompileJobs)
-			.values({
-				tenant_id: args.tenantId,
-				owner_id: args.ownerId,
-				dedupe_key: dedupeKey,
-				trigger: "enrichment_draft",
-				input: args.input as never,
-			})
-			.onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
-			.returning();
+    const [inserted] = await db
+      .insert(wikiCompileJobs)
+      .values({
+        tenant_id: args.tenantId,
+        owner_id: args.ownerId,
+        dedupe_key: dedupeKey,
+        trigger: "enrichment_draft",
+        input: args.input as never,
+      })
+      .onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
+      .returning();
 
-		if (inserted) {
-			return { inserted: true, job: inserted as WikiCompileJobRow };
-		}
+    if (inserted) {
+      return { inserted: true, job: inserted as WikiCompileJobRow };
+    }
 
-		const existing = await db
-			.select()
-			.from(wikiCompileJobs)
-			.where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
-			.limit(1);
+    const existing = await db
+      .select()
+      .from(wikiCompileJobs)
+      .where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
+      .limit(1);
 
-		if (!existing[0]) {
-			throw new Error(
-				`enqueueEnrichmentDraftCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
-			);
-		}
+    if (!existing[0]) {
+      throw new Error(
+        `enqueueEnrichmentDraftCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
+      );
+    }
 
-		const existingJob = existing[0] as WikiCompileJobRow;
-		// In-flight job → collapse to it. The user gets the same draft.
-		if (existingJob.status === "pending" || existingJob.status === "running") {
-			return { inserted: false, job: existingJob };
-		}
-		// Terminal job (succeeded / failed / skipped) → rotate the key with
-		// `:rerun-N` and try again. Loop iteration handles the suffix.
-	}
+    const existingJob = existing[0] as WikiCompileJobRow;
+    // In-flight job → collapse to it. The user gets the same draft.
+    if (existingJob.status === "pending" || existingJob.status === "running") {
+      return { inserted: false, job: existingJob };
+    }
+    // Terminal job (succeeded / failed / skipped) → rotate the key with
+    // `:rerun-N` and try again. Loop iteration handles the suffix.
+  }
 
-	throw new Error(
-		`enqueueEnrichmentDraftCompileJob: exhausted rerun-suffix attempts for base key=${baseDedupeKey}`,
-	);
+  throw new Error(
+    `enqueueEnrichmentDraftCompileJob: exhausted rerun-suffix attempts for base key=${baseDedupeKey}`,
+  );
 }
 
 const STALE_RUNNING_COMPILE_JOB_MINUTES = 10;
@@ -484,9 +484,9 @@ const STALE_RUNNING_COMPILE_JOB_MINUTES = 10;
  * after a short lease window so the queue cannot wedge forever.
  */
 export async function claimNextCompileJob(
-	db: DbClient = defaultDb,
+  db: DbClient = defaultDb,
 ): Promise<WikiCompileJobRow | null> {
-	const result = await db.execute(sql`
+  const result = await db.execute(sql`
 		UPDATE ${wikiCompileJobs}
 		SET status = 'running',
 		    claimed_at = now(),
@@ -511,11 +511,11 @@ export async function claimNextCompileJob(
 		)
 		RETURNING *
 	`);
-	// pg returns { rows: [...] }; some drivers return arrays directly.
-	const row = Array.isArray(result)
-		? result[0]
-		: ((result as { rows?: unknown[] })?.rows?.[0] ?? null);
-	return (row as WikiCompileJobRow | null) ?? null;
+  // pg returns { rows: [...] }; some drivers return arrays directly.
+  const row = Array.isArray(result)
+    ? result[0]
+    : ((result as { rows?: unknown[] })?.rows?.[0] ?? null);
+  return (row as WikiCompileJobRow | null) ?? null;
 }
 
 /**
@@ -524,39 +524,39 @@ export async function claimNextCompileJob(
  * by `created_at DESC`, capped at `limit`.
  */
 export async function listCompileJobsForScope(
-	args: { tenantId: string; ownerId?: string | null; limit?: number | null },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId?: string | null; limit?: number | null },
+  db: DbClient = defaultDb,
 ): Promise<WikiCompileJobRow[]> {
-	const cap = Math.min(Math.max(args.limit ?? 10, 1), 100);
-	const conditions = args.ownerId
-		? and(
-				eq(wikiCompileJobs.tenant_id, args.tenantId),
-				eq(wikiCompileJobs.owner_id, args.ownerId),
-			)
-		: eq(wikiCompileJobs.tenant_id, args.tenantId);
-	const rows = await db
-		.select()
-		.from(wikiCompileJobs)
-		.where(conditions)
-		.orderBy(desc(wikiCompileJobs.created_at))
-		.limit(cap);
-	return rows as WikiCompileJobRow[];
+  const cap = Math.min(Math.max(args.limit ?? 10, 1), 100);
+  const conditions = args.ownerId
+    ? and(
+        eq(wikiCompileJobs.tenant_id, args.tenantId),
+        eq(wikiCompileJobs.owner_id, args.ownerId),
+      )
+    : eq(wikiCompileJobs.tenant_id, args.tenantId);
+  const rows = await db
+    .select()
+    .from(wikiCompileJobs)
+    .where(conditions)
+    .orderBy(desc(wikiCompileJobs.created_at))
+    .limit(cap);
+  return rows as WikiCompileJobRow[];
 }
 
 /**
  * Load a specific compile job (used by admin/compile-now paths).
  */
 export async function getCompileJob(
-	jobId: string,
-	db: DbClient = defaultDb,
+  jobId: string,
+  db: DbClient = defaultDb,
 ): Promise<WikiCompileJobRow | null> {
-	if (!isValidUuid(jobId)) return null;
-	const rows = await db
-		.select()
-		.from(wikiCompileJobs)
-		.where(eq(wikiCompileJobs.id, jobId))
-		.limit(1);
-	return (rows[0] as WikiCompileJobRow | undefined) ?? null;
+  if (!isValidUuid(jobId)) return null;
+  const rows = await db
+    .select()
+    .from(wikiCompileJobs)
+    .where(eq(wikiCompileJobs.id, jobId))
+    .limit(1);
+  return (rows[0] as WikiCompileJobRow | undefined) ?? null;
 }
 
 /**
@@ -574,11 +574,11 @@ export async function getCompileJob(
  * writeback — duplicating user-visible threads.
  */
 export async function claimCompileJobById(
-	jobId: string,
-	db: DbClient = defaultDb,
+  jobId: string,
+  db: DbClient = defaultDb,
 ): Promise<WikiCompileJobRow | null> {
-	if (!isValidUuid(jobId)) return null;
-	const result = await db.execute(sql`
+  if (!isValidUuid(jobId)) return null;
+  const result = await db.execute(sql`
 		UPDATE ${wikiCompileJobs}
 		SET status = 'running',
 		    claimed_at = now(),
@@ -599,31 +599,31 @@ export async function claimCompileJobById(
 		  )
 		RETURNING *
 	`);
-	const row = Array.isArray(result)
-		? result[0]
-		: ((result as { rows?: unknown[] })?.rows?.[0] ?? null);
-	return (row as WikiCompileJobRow | null) ?? null;
+  const row = Array.isArray(result)
+    ? result[0]
+    : ((result as { rows?: unknown[] })?.rows?.[0] ?? null);
+  return (row as WikiCompileJobRow | null) ?? null;
 }
 
 /** Mark a job finished (succeeded | failed | skipped), recording metrics. */
 export async function completeCompileJob(
-	args: {
-		jobId: string;
-		status: Exclude<WikiCompileJobStatus, "pending" | "running">;
-		metrics?: Record<string, unknown>;
-		error?: string | null;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    jobId: string;
+    status: Exclude<WikiCompileJobStatus, "pending" | "running">;
+    metrics?: Record<string, unknown>;
+    error?: string | null;
+  },
+  db: DbClient = defaultDb,
 ): Promise<void> {
-	await db
-		.update(wikiCompileJobs)
-		.set({
-			status: args.status,
-			finished_at: sql`now()`,
-			metrics: args.metrics ?? null,
-			error: args.error ?? null,
-		})
-		.where(eq(wikiCompileJobs.id, args.jobId));
+  await db
+    .update(wikiCompileJobs)
+    .set({
+      status: args.status,
+      finished_at: sql`now()`,
+      metrics: args.metrics ?? null,
+      error: args.error ?? null,
+    })
+    .where(eq(wikiCompileJobs.id, args.jobId));
 }
 
 /**
@@ -634,10 +634,10 @@ export async function completeCompileJob(
  * compiles can resurrect a page through upsertPage once it has a valid triple.
  */
 export async function archiveOntologyNonTriplePages(
-	args: { tenantId: string; ownerId: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string },
+  db: DbClient = defaultDb,
 ): Promise<number> {
-	const result = await db.execute(sql`
+  const result = await db.execute(sql`
 		UPDATE ${wikiPages} p
 		SET status = 'archived',
 		    updated_at = now()
@@ -655,10 +655,10 @@ export async function archiveOntologyNonTriplePages(
 		  )
 		RETURNING p.id
 	`);
-	const rows = Array.isArray(result)
-		? result
-		: ((result as { rows?: unknown[] })?.rows ?? []);
-	return rows.length;
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: unknown[] })?.rows ?? []);
+  return rows.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -670,67 +670,67 @@ export async function archiveOntologyNonTriplePages(
  * cursor (all nulls).
  */
 export async function getCursor(
-	args: { tenantId: string; ownerId: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string },
+  db: DbClient = defaultDb,
 ): Promise<Cursor> {
-	const rows = await db
-		.select()
-		.from(wikiCompileCursors)
-		.where(
-			and(
-				eq(wikiCompileCursors.tenant_id, args.tenantId),
-				eq(wikiCompileCursors.owner_id, args.ownerId),
-			),
-		)
-		.limit(1);
-	const row = rows[0] as WikiCompileCursorRow | undefined;
-	return {
-		updatedAt: row?.last_record_updated_at ?? null,
-		recordId: row?.last_record_id ?? null,
-	};
+  const rows = await db
+    .select()
+    .from(wikiCompileCursors)
+    .where(
+      and(
+        eq(wikiCompileCursors.tenant_id, args.tenantId),
+        eq(wikiCompileCursors.owner_id, args.ownerId),
+      ),
+    )
+    .limit(1);
+  const row = rows[0] as WikiCompileCursorRow | undefined;
+  return {
+    updatedAt: row?.last_record_updated_at ?? null,
+    recordId: row?.last_record_id ?? null,
+  };
 }
 
 /** Advance (or initialize) the cursor for (tenant, owner). */
 export async function setCursor(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		updatedAt: Date;
-		recordId: string;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    updatedAt: Date;
+    recordId: string;
+  },
+  db: DbClient = defaultDb,
 ): Promise<void> {
-	await db
-		.insert(wikiCompileCursors)
-		.values({
-			tenant_id: args.tenantId,
-			owner_id: args.ownerId,
-			last_record_updated_at: args.updatedAt,
-			last_record_id: args.recordId,
-		})
-		.onConflictDoUpdate({
-			target: [wikiCompileCursors.tenant_id, wikiCompileCursors.owner_id],
-			set: {
-				last_record_updated_at: args.updatedAt,
-				last_record_id: args.recordId,
-				updated_at: sql`now()`,
-			},
-		});
+  await db
+    .insert(wikiCompileCursors)
+    .values({
+      tenant_id: args.tenantId,
+      owner_id: args.ownerId,
+      last_record_updated_at: args.updatedAt,
+      last_record_id: args.recordId,
+    })
+    .onConflictDoUpdate({
+      target: [wikiCompileCursors.tenant_id, wikiCompileCursors.owner_id],
+      set: {
+        last_record_updated_at: args.updatedAt,
+        last_record_id: args.recordId,
+        updated_at: sql`now()`,
+      },
+    });
 }
 
 /** Clear the cursor for (tenant, owner) — admin replay path. */
 export async function resetCursor(
-	args: { tenantId: string; ownerId: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string },
+  db: DbClient = defaultDb,
 ): Promise<void> {
-	await db
-		.delete(wikiCompileCursors)
-		.where(
-			and(
-				eq(wikiCompileCursors.tenant_id, args.tenantId),
-				eq(wikiCompileCursors.owner_id, args.ownerId),
-			),
-		);
+  await db
+    .delete(wikiCompileCursors)
+    .where(
+      and(
+        eq(wikiCompileCursors.tenant_id, args.tenantId),
+        eq(wikiCompileCursors.owner_id, args.ownerId),
+      ),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -738,27 +738,27 @@ export async function resetCursor(
 // ---------------------------------------------------------------------------
 
 export async function findPageBySlug(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		type: WikiPageType;
-		slug: string;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    type: WikiPageType;
+    slug: string;
+  },
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow | null> {
-	const rows = await db
-		.select()
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				eq(wikiPages.type, args.type),
-				eq(wikiPages.slug, args.slug),
-			),
-		)
-		.limit(1);
-	return (rows[0] as WikiPageRow | undefined) ?? null;
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        eq(wikiPages.type, args.type),
+        eq(wikiPages.slug, args.slug),
+      ),
+    )
+    .limit(1);
+  return (rows[0] as WikiPageRow | undefined) ?? null;
 }
 
 /**
@@ -783,19 +783,19 @@ export async function findPageBySlug(
  * pass will register them on its own tick.
  */
 export async function bumpSectionLastSeen(
-	args: { pageId: string },
-	db: DbClient = defaultDb,
+  args: { pageId: string },
+  db: DbClient = defaultDb,
 ): Promise<number> {
-	const leafRows = await db
-		.select({ parent_page_id: wikiPages.parent_page_id })
-		.from(wikiPages)
-		.where(eq(wikiPages.id, args.pageId))
-		.limit(1);
-	const parentId = leafRows[0]?.parent_page_id as string | null | undefined;
-	if (!parentId) return 0;
+  const leafRows = await db
+    .select({ parent_page_id: wikiPages.parent_page_id })
+    .from(wikiPages)
+    .where(eq(wikiPages.id, args.pageId))
+    .limit(1);
+  const parentId = leafRows[0]?.parent_page_id as string | null | undefined;
+  if (!parentId) return 0;
 
-	const nowIso = new Date().toISOString();
-	const result = await db.execute(sql`
+  const nowIso = new Date().toISOString();
+  const result = await db.execute(sql`
 		UPDATE ${wikiPageSections}
 		SET aggregation = jsonb_set(
 			aggregation::jsonb,
@@ -808,9 +808,9 @@ export async function bumpSectionLastSeen(
 			AND (aggregation -> 'linked_page_ids') @> to_jsonb(ARRAY[${args.pageId}]::text[])
 		RETURNING ${wikiPageSections.id}
 	`);
-	const rows =
-		(result as unknown as { rows?: Array<{ id: string }> }).rows ?? [];
-	return rows.length;
+  const rows =
+    (result as unknown as { rows?: Array<{ id: string }> }).rows ?? [];
+  return rows.length;
 }
 
 /**
@@ -820,10 +820,10 @@ export async function bumpSectionLastSeen(
  * shows up in CloudWatch next to `links_written_*`.
  */
 export async function countDuplicateTitleCandidates(
-	args: { tenantId: string; ownerId: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string },
+  db: DbClient = defaultDb,
 ): Promise<number> {
-	const result = await db.execute(sql`
+  const result = await db.execute(sql`
 		SELECT COUNT(*)::int AS n
 		FROM (
 			SELECT ${wikiPages.owner_id}, ${wikiPages.title}
@@ -835,8 +835,9 @@ export async function countDuplicateTitleCandidates(
 			HAVING COUNT(*) > 1
 		) dup
 	`);
-	const rows = (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
-	return rows[0]?.n ?? 0;
+  const rows =
+    (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
+  return rows[0]?.n ?? 0;
 }
 
 /**
@@ -852,27 +853,27 @@ export async function countDuplicateTitleCandidates(
  * degrade gracefully if the extension is missing.
  */
 export async function findPagesByFuzzyTitle(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		title: string;
-		threshold?: number;
-		limit?: number;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    title: string;
+    threshold?: number;
+    limit?: number;
+  },
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{
-		id: string;
-		type: WikiPageType;
-		slug: string;
-		title: string;
-		similarity: number;
-	}>
+  Array<{
+    id: string;
+    type: WikiPageType;
+    slug: string;
+    title: string;
+    similarity: number;
+  }>
 > {
-	const threshold = args.threshold ?? FUZZY_ALIAS_THRESHOLD;
-	const limit = Math.max(1, Math.min(args.limit ?? 1, 20));
-	try {
-		const result = await db.execute(sql`
+  const threshold = args.threshold ?? FUZZY_ALIAS_THRESHOLD;
+  const limit = Math.max(1, Math.min(args.limit ?? 1, 20));
+  try {
+    const result = await db.execute(sql`
 			SELECT
 				${wikiPages.id}     AS "id",
 				${wikiPages.type}   AS "type",
@@ -887,65 +888,63 @@ export async function findPagesByFuzzyTitle(
 			ORDER BY similarity(${wikiPages.title}, ${args.title}) DESC
 			LIMIT ${limit}
 		`);
-		const rows =
-			(
-				result as unknown as {
-					rows?: Array<{
-						id: string;
-						type: WikiPageType;
-						slug: string;
-						title: string;
-						similarity: number | string;
-					}>;
-				}
-			).rows ?? [];
-		return rows.map((r) => ({
-			id: r.id,
-			type: r.type,
-			slug: r.slug,
-			title: r.title,
-			similarity:
-				typeof r.similarity === "string"
-					? Number(r.similarity)
-					: r.similarity,
-		}));
-	} catch (err) {
-		console.warn(
-			`[findPagesByFuzzyTitle] similarity query failed, returning empty:`,
-			(err as Error)?.message ?? err,
-		);
-		return [];
-	}
+    const rows =
+      (
+        result as unknown as {
+          rows?: Array<{
+            id: string;
+            type: WikiPageType;
+            slug: string;
+            title: string;
+            similarity: number | string;
+          }>;
+        }
+      ).rows ?? [];
+    return rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      slug: r.slug,
+      title: r.title,
+      similarity:
+        typeof r.similarity === "string" ? Number(r.similarity) : r.similarity,
+    }));
+  } catch (err) {
+    console.warn(
+      `[findPagesByFuzzyTitle] similarity query failed, returning empty:`,
+      (err as Error)?.message ?? err,
+    );
+    return [];
+  }
 }
 
 export async function findPagesByExactTitle(
-	args: { tenantId: string; ownerId: string; title: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string; title: string },
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{ id: string; type: WikiPageType; slug: string; title: string }>
+  Array<{ id: string; type: WikiPageType; slug: string; title: string }>
 > {
-	const rows = await db
-		.select({
-			id: wikiPages.id,
-			type: wikiPages.type,
-			slug: wikiPages.slug,
-			title: wikiPages.title,
-		})
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				eq(wikiPages.title, args.title),
-				eq(wikiPages.status, "active"),
-			),
-		);
-	return rows as Array<{
-		id: string;
-		type: WikiPageType;
-		slug: string;
-		title: string;
-	}>;
+  const rows = await db
+    .select({
+      id: wikiPages.id,
+      type: wikiPages.type,
+      slug: wikiPages.slug,
+      title: wikiPages.title,
+    })
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        eq(wikiPages.title, args.title),
+        eq(wikiPages.status, "active"),
+      ),
+    );
+  return rows as Array<{
+    id: string;
+    type: WikiPageType;
+    slug: string;
+    title: string;
+  }>;
 }
 
 /**
@@ -958,67 +957,67 @@ export async function findPagesByExactTitle(
  * reads this table rather than the planner's pageLinks wire.
  */
 export async function findMemoryUnitPageSources(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		memoryUnitIds: string[];
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    memoryUnitIds: string[];
+  },
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{
-		memory_unit_id: string;
-		page_id: string;
-		page_type: WikiPageType;
-		slug: string;
-		title: string;
-	}>
+  Array<{
+    memory_unit_id: string;
+    page_id: string;
+    page_type: WikiPageType;
+    slug: string;
+    title: string;
+  }>
 > {
-	if (args.memoryUnitIds.length === 0) return [];
-	const rows = await db
-		.selectDistinct({
-			memory_unit_id: wikiSectionSources.source_ref,
-			page_id: wikiPages.id,
-			page_type: wikiPages.type,
-			slug: wikiPages.slug,
-			title: wikiPages.title,
-		})
-		.from(wikiSectionSources)
-		.innerJoin(
-			wikiPageSections,
-			eq(wikiSectionSources.section_id, wikiPageSections.id),
-		)
-		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiSectionSources.source_kind, "memory_unit"),
-				inArray(wikiSectionSources.source_ref, args.memoryUnitIds),
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				eq(wikiPages.status, "active"),
-			),
-		);
-	return rows as Array<{
-		memory_unit_id: string;
-		page_id: string;
-		page_type: WikiPageType;
-		slug: string;
-		title: string;
-	}>;
+  if (args.memoryUnitIds.length === 0) return [];
+  const rows = await db
+    .selectDistinct({
+      memory_unit_id: wikiSectionSources.source_ref,
+      page_id: wikiPages.id,
+      page_type: wikiPages.type,
+      slug: wikiPages.slug,
+      title: wikiPages.title,
+    })
+    .from(wikiSectionSources)
+    .innerJoin(
+      wikiPageSections,
+      eq(wikiSectionSources.section_id, wikiPageSections.id),
+    )
+    .innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiSectionSources.source_kind, "memory_unit"),
+        inArray(wikiSectionSources.source_ref, args.memoryUnitIds),
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        eq(wikiPages.status, "active"),
+      ),
+    );
+  return rows as Array<{
+    memory_unit_id: string;
+    page_id: string;
+    page_type: WikiPageType;
+    slug: string;
+    title: string;
+  }>;
 }
 
 export async function findPageById(
-	pageId: string,
-	db: DbClient = defaultDb,
+  pageId: string,
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow | null> {
-	// LLM-provided plans sometimes carry truncated or fabricated ids; return
-	// null silently so applyPlan skips the update instead of failing the job.
-	if (!isValidUuid(pageId)) return null;
-	const rows = await db
-		.select()
-		.from(wikiPages)
-		.where(eq(wikiPages.id, pageId))
-		.limit(1);
-	return (rows[0] as WikiPageRow | undefined) ?? null;
+  // LLM-provided plans sometimes carry truncated or fabricated ids; return
+  // null silently so applyPlan skips the update instead of failing the job.
+  if (!isValidUuid(pageId)) return null;
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(eq(wikiPages.id, pageId))
+    .limit(1);
+  return (rows[0] as WikiPageRow | undefined) ?? null;
 }
 
 /**
@@ -1027,91 +1026,91 @@ export async function findPageById(
  * update-vs-create against a finite set it has already seen.
  */
 export async function listPagesForScope(
-	args: { tenantId: string; ownerId: string; limit?: number },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string; limit?: number },
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{
-		id: string;
-		type: WikiPageType;
-		entityTypeSlug: string | null;
-		slug: string;
-		title: string;
-		summary: string | null;
-		body_md: string | null;
-		last_compiled_at: Date | null;
-		backlink_count: number;
-		aliases: string[];
-	}>
+  Array<{
+    id: string;
+    type: WikiPageType;
+    entityTypeSlug: string | null;
+    slug: string;
+    title: string;
+    summary: string | null;
+    body_md: string | null;
+    last_compiled_at: Date | null;
+    backlink_count: number;
+    aliases: string[];
+  }>
 > {
-	const limit = Math.max(1, Math.min(args.limit ?? 200, 500));
-	const pageRows = await db
-		.select({
-			id: wikiPages.id,
-			type: wikiPages.type,
-			entityTypeSlug: wikiPages.entity_subtype,
-			slug: wikiPages.slug,
-			title: wikiPages.title,
-			summary: wikiPages.summary,
-			body_md: wikiPages.body_md,
-			last_compiled_at: wikiPages.last_compiled_at,
-		})
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				eq(wikiPages.status, "active"),
-			),
-		)
-		.orderBy(desc(wikiPages.last_compiled_at))
-		.limit(limit);
+  const limit = Math.max(1, Math.min(args.limit ?? 200, 500));
+  const pageRows = await db
+    .select({
+      id: wikiPages.id,
+      type: wikiPages.type,
+      entityTypeSlug: wikiPages.entity_subtype,
+      slug: wikiPages.slug,
+      title: wikiPages.title,
+      summary: wikiPages.summary,
+      body_md: wikiPages.body_md,
+      last_compiled_at: wikiPages.last_compiled_at,
+    })
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        eq(wikiPages.status, "active"),
+      ),
+    )
+    .orderBy(desc(wikiPages.last_compiled_at))
+    .limit(limit);
 
-	if (pageRows.length === 0) return [];
+  if (pageRows.length === 0) return [];
 
-	const ids = pageRows.map((r) => r.id);
-	// pg's node driver doesn't auto-marshal raw JS arrays as Postgres arrays
-	// on the right side of `= ANY (...)`, so the `sql\`ANY\`` form we used
-	// earlier failed at runtime with `requires array on right side`. Drizzle's
-	// `inArray()` emits a parameterized `IN ($1, $2, …)` which works
-	// correctly regardless of driver version.
-	const aliasRows = await db
-		.select({ page_id: wikiPageAliases.page_id, alias: wikiPageAliases.alias })
-		.from(wikiPageAliases)
-		.where(inArray(wikiPageAliases.page_id, ids));
-	const linkRows = await db
-		.select({
-			from_page_id: wikiPageLinks.from_page_id,
-			to_page_id: wikiPageLinks.to_page_id,
-		})
-		.from(wikiPageLinks)
-		.where(inArray(wikiPageLinks.to_page_id, ids));
+  const ids = pageRows.map((r) => r.id);
+  // pg's node driver doesn't auto-marshal raw JS arrays as Postgres arrays
+  // on the right side of `= ANY (...)`, so the `sql\`ANY\`` form we used
+  // earlier failed at runtime with `requires array on right side`. Drizzle's
+  // `inArray()` emits a parameterized `IN ($1, $2, …)` which works
+  // correctly regardless of driver version.
+  const aliasRows = await db
+    .select({ page_id: wikiPageAliases.page_id, alias: wikiPageAliases.alias })
+    .from(wikiPageAliases)
+    .where(inArray(wikiPageAliases.page_id, ids));
+  const linkRows = await db
+    .select({
+      from_page_id: wikiPageLinks.from_page_id,
+      to_page_id: wikiPageLinks.to_page_id,
+    })
+    .from(wikiPageLinks)
+    .where(inArray(wikiPageLinks.to_page_id, ids));
 
-	const aliasesByPage = new Map<string, string[]>();
-	for (const a of aliasRows) {
-		const list = aliasesByPage.get(a.page_id) || [];
-		list.push(a.alias);
-		aliasesByPage.set(a.page_id, list);
-	}
-	const backlinksByPage = new Map<string, number>();
-	for (const link of linkRows) {
-		backlinksByPage.set(
-			link.to_page_id,
-			(backlinksByPage.get(link.to_page_id) ?? 0) + 1,
-		);
-	}
+  const aliasesByPage = new Map<string, string[]>();
+  for (const a of aliasRows) {
+    const list = aliasesByPage.get(a.page_id) || [];
+    list.push(a.alias);
+    aliasesByPage.set(a.page_id, list);
+  }
+  const backlinksByPage = new Map<string, number>();
+  for (const link of linkRows) {
+    backlinksByPage.set(
+      link.to_page_id,
+      (backlinksByPage.get(link.to_page_id) ?? 0) + 1,
+    );
+  }
 
-	return pageRows.map((p) => ({
-		id: p.id,
-		type: p.type as WikiPageType,
-		entityTypeSlug: p.entityTypeSlug,
-		slug: p.slug,
-		title: p.title,
-		summary: p.summary,
-		body_md: p.body_md,
-		last_compiled_at: p.last_compiled_at,
-		backlink_count: backlinksByPage.get(p.id) ?? 0,
-		aliases: aliasesByPage.get(p.id) ?? [],
-	}));
+  return pageRows.map((p) => ({
+    id: p.id,
+    type: p.type as WikiPageType,
+    entityTypeSlug: p.entityTypeSlug,
+    slug: p.slug,
+    title: p.title,
+    summary: p.summary,
+    body_md: p.body_md,
+    last_compiled_at: p.last_compiled_at,
+    backlink_count: backlinksByPage.get(p.id) ?? 0,
+    aliases: aliasesByPage.get(p.id) ?? [],
+  }));
 }
 
 /**
@@ -1120,76 +1119,76 @@ export async function listPagesForScope(
  * promote one explicitly.
  */
 export async function listOpenMentions(
-	args: { tenantId: string; ownerId: string; limit?: number },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string; limit?: number },
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{
-		id: string;
-		alias: string;
-		alias_normalized: string;
-		mention_count: number;
-		suggested_type: WikiPageType | null;
-	}>
+  Array<{
+    id: string;
+    alias: string;
+    alias_normalized: string;
+    mention_count: number;
+    suggested_type: WikiPageType | null;
+  }>
 > {
-	const limit = Math.max(1, Math.min(args.limit ?? 200, 500));
-	const rows = await db
-		.select({
-			id: wikiUnresolvedMentions.id,
-			alias: wikiUnresolvedMentions.alias,
-			alias_normalized: wikiUnresolvedMentions.alias_normalized,
-			mention_count: wikiUnresolvedMentions.mention_count,
-			suggested_type: wikiUnresolvedMentions.suggested_type,
-		})
-		.from(wikiUnresolvedMentions)
-		.where(
-			and(
-				eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
-				eq(wikiUnresolvedMentions.owner_id, args.ownerId),
-				eq(wikiUnresolvedMentions.status, "open"),
-			),
-		)
-		.orderBy(desc(wikiUnresolvedMentions.mention_count))
-		.limit(limit);
-	return rows as any;
+  const limit = Math.max(1, Math.min(args.limit ?? 200, 500));
+  const rows = await db
+    .select({
+      id: wikiUnresolvedMentions.id,
+      alias: wikiUnresolvedMentions.alias,
+      alias_normalized: wikiUnresolvedMentions.alias_normalized,
+      mention_count: wikiUnresolvedMentions.mention_count,
+      suggested_type: wikiUnresolvedMentions.suggested_type,
+    })
+    .from(wikiUnresolvedMentions)
+    .where(
+      and(
+        eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+        eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+        eq(wikiUnresolvedMentions.status, "open"),
+      ),
+    )
+    .orderBy(desc(wikiUnresolvedMentions.mention_count))
+    .limit(limit);
+  return rows as any;
 }
 
 /** Read all sections for a page ordered by position. */
 export async function listPageSections(
-	pageId: string,
-	db: DbClient = defaultDb,
+  pageId: string,
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{
-		id: string;
-		section_slug: string;
-		heading: string;
-		body_md: string;
-		position: number;
-		last_source_at: Date | null;
-		aggregation: SectionAggregation | null;
-	}>
+  Array<{
+    id: string;
+    section_slug: string;
+    heading: string;
+    body_md: string;
+    position: number;
+    last_source_at: Date | null;
+    aggregation: SectionAggregation | null;
+  }>
 > {
-	const rows = await db
-		.select({
-			id: wikiPageSections.id,
-			section_slug: wikiPageSections.section_slug,
-			heading: wikiPageSections.heading,
-			body_md: wikiPageSections.body_md,
-			position: wikiPageSections.position,
-			last_source_at: wikiPageSections.last_source_at,
-			aggregation: wikiPageSections.aggregation,
-		})
-		.from(wikiPageSections)
-		.where(eq(wikiPageSections.page_id, pageId))
-		.orderBy(asc(wikiPageSections.position));
-	return rows.map((r) => ({
-		id: r.id,
-		section_slug: r.section_slug,
-		heading: r.heading,
-		body_md: r.body_md,
-		position: r.position,
-		last_source_at: r.last_source_at,
-		aggregation: (r.aggregation as SectionAggregation | null) ?? null,
-	}));
+  const rows = await db
+    .select({
+      id: wikiPageSections.id,
+      section_slug: wikiPageSections.section_slug,
+      heading: wikiPageSections.heading,
+      body_md: wikiPageSections.body_md,
+      position: wikiPageSections.position,
+      last_source_at: wikiPageSections.last_source_at,
+      aggregation: wikiPageSections.aggregation,
+    })
+    .from(wikiPageSections)
+    .where(eq(wikiPageSections.page_id, pageId))
+    .orderBy(asc(wikiPageSections.position));
+  return rows.map((r) => ({
+    id: r.id,
+    section_slug: r.section_slug,
+    heading: r.heading,
+    body_md: r.body_md,
+    position: r.position,
+    last_source_at: r.last_source_at,
+    aggregation: (r.aggregation as SectionAggregation | null) ?? null,
+  }));
 }
 
 /**
@@ -1202,105 +1201,102 @@ export async function listPageSections(
  * the section diff before invoking this (see lib/wiki/compiler.ts).
  */
 export async function upsertPage(
-	input: UpsertPageInput,
-	db: DbClient = defaultDb,
+  input: UpsertPageInput,
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow> {
-	return db.transaction(async (tx) => {
-		const existing = await findPageBySlug(
-			{
-				tenantId: input.tenant_id,
-				ownerId: input.owner_id,
-				type: input.type,
-				slug: input.slug,
-			},
-			tx as DbClient,
-		);
+  return db.transaction(async (tx) => {
+    const existing = await findPageBySlug(
+      {
+        tenantId: input.tenant_id,
+        ownerId: input.owner_id,
+        type: input.type,
+        slug: input.slug,
+      },
+      tx as DbClient,
+    );
 
-		const body_md = input.sections
-			? renderBodyMarkdown(input.sections)
-			: undefined;
+    const body_md = input.sections
+      ? renderBodyMarkdown(input.sections)
+      : undefined;
 
-		let page: WikiPageRow;
-		if (existing) {
-			// Status resolution: explicit input.status wins; otherwise if we're
-			// compiling (markCompiled) treat this as a resurrection of the page
-			// and flip it back to 'active'. Falling through to existing.status
-			// without that step left archived pages archived forever after a
-			// `resetWikiCursor(force: true)` cycle, which silently lost content.
-			const nextStatus: WikiPageStatus =
-				input.status ??
-				(input.markCompiled
-					? "active"
-					: (existing.status as WikiPageStatus));
-			const [updated] = await tx
-				.update(wikiPages)
-				.set({
-					title: input.title,
-					summary: input.summary ?? existing.summary,
-					entity_subtype:
-						input.entity_subtype !== undefined
-							? (input.entity_subtype ?? null)
-							: existing.entity_subtype,
-					status: nextStatus,
-					...(body_md !== undefined ? { body_md } : {}),
-					...(input.markCompiled
-						? { last_compiled_at: sql`now()` as any }
-						: {}),
-					// First-seen-wins: existing wins when non-null, otherwise the
-					// incoming place_id takes hold. A supplied-null `place_id`
-					// (vs undefined) never clears an existing value — callers
-					// that genuinely want to unset must do it explicitly.
-					...(input.place_id !== undefined
-						? {
-								place_id: sql`COALESCE(${wikiPages.place_id}, ${input.place_id})` as any,
-							}
-						: {}),
-					updated_at: sql`now()` as any,
-				})
-				.where(eq(wikiPages.id, existing.id))
-				.returning();
-			page = updated as WikiPageRow;
-		} else {
-			const [inserted] = await tx
-				.insert(wikiPages)
-				.values({
-					tenant_id: input.tenant_id,
-					owner_id: input.owner_id,
-					type: input.type,
-					entity_subtype: input.entity_subtype ?? null,
-					slug: input.slug,
-					title: input.title,
-					summary: input.summary ?? null,
-					body_md: body_md ?? null,
-					status: input.status ?? "active",
-					last_compiled_at: input.markCompiled
-						? (sql`now()` as any)
-						: null,
-					place_id: input.place_id ?? null,
-				})
-				.returning();
-			page = inserted as WikiPageRow;
-		}
+    let page: WikiPageRow;
+    if (existing) {
+      // Status resolution: explicit input.status wins; otherwise if we're
+      // compiling (markCompiled) treat this as a resurrection of the page
+      // and flip it back to 'active'. Falling through to existing.status
+      // without that step left archived pages archived forever after a
+      // `resetWikiCursor(force: true)` cycle, which silently lost content.
+      const nextStatus: WikiPageStatus =
+        input.status ??
+        (input.markCompiled ? "active" : (existing.status as WikiPageStatus));
+      const [updated] = await tx
+        .update(wikiPages)
+        .set({
+          title: input.title,
+          summary: input.summary ?? existing.summary,
+          entity_subtype:
+            input.entity_subtype !== undefined
+              ? (input.entity_subtype ?? null)
+              : existing.entity_subtype,
+          status: nextStatus,
+          ...(body_md !== undefined ? { body_md } : {}),
+          ...(input.markCompiled
+            ? { last_compiled_at: sql`now()` as any }
+            : {}),
+          // First-seen-wins: existing wins when non-null, otherwise the
+          // incoming place_id takes hold. A supplied-null `place_id`
+          // (vs undefined) never clears an existing value — callers
+          // that genuinely want to unset must do it explicitly.
+          ...(input.place_id !== undefined
+            ? {
+                place_id:
+                  sql`COALESCE(${wikiPages.place_id}, ${input.place_id})` as any,
+              }
+            : {}),
+          updated_at: sql`now()` as any,
+        })
+        .where(eq(wikiPages.id, existing.id))
+        .returning();
+      page = updated as WikiPageRow;
+    } else {
+      const [inserted] = await tx
+        .insert(wikiPages)
+        .values({
+          tenant_id: input.tenant_id,
+          owner_id: input.owner_id,
+          type: input.type,
+          entity_subtype: input.entity_subtype ?? null,
+          slug: input.slug,
+          title: input.title,
+          summary: input.summary ?? null,
+          body_md: body_md ?? null,
+          status: input.status ?? "active",
+          last_compiled_at: input.markCompiled ? (sql`now()` as any) : null,
+          place_id: input.place_id ?? null,
+        })
+        .returning();
+      page = inserted as WikiPageRow;
+    }
 
-		if (input.sections && input.sections.length > 0) {
-			await upsertSections(page.id, input.sections, tx as DbClient);
-		}
+    if (input.sections && input.sections.length > 0) {
+      await upsertSections(page.id, input.sections, tx as DbClient);
+    }
 
-		if (input.aliases && input.aliases.length > 0) {
-			for (const { alias, source } of input.aliases) {
-				await tx
-					.insert(wikiPageAliases)
-					.values({
-						page_id: page.id,
-						alias,
-						source: source ?? "compiler",
-					})
-					.onConflictDoNothing();
-			}
-		}
+    if (input.aliases && input.aliases.length > 0) {
+      for (const { alias, source } of input.aliases) {
+        await tx
+          .insert(wikiPageAliases)
+          .values({
+            page_id: page.id,
+            alias,
+            source: source ?? "compiler",
+          })
+          .onConflictDoNothing();
+      }
+    }
 
-		return page;
-	});
+    return page;
+  });
 }
 
 /**
@@ -1310,80 +1306,83 @@ export async function upsertPage(
  * are left in place.
  */
 export async function upsertSections(
-	pageId: string,
-	sections: WikiSectionInput[],
-	db: DbClient = defaultDb,
+  pageId: string,
+  sections: WikiSectionInput[],
+  db: DbClient = defaultDb,
 ): Promise<void> {
-	for (const section of sections) {
-		const heading = normalizeSectionHeading(section.heading, section.section_slug);
-		// Belt-and-suspenders: strip `[[wikilink]]` brackets before persist.
-		// Prompts already forbid them, but models slip and they render as
-		// literal noise on mobile (links come from wiki_page_links, not
-		// prose). Do this at the repo boundary so every write path is
-		// covered, not just the section-writer path.
-		const cleanBody = normalizeSectionBody(section.body_md);
-		const existing = await db
-			.select({ id: wikiPageSections.id })
-			.from(wikiPageSections)
-			.where(
-				and(
-					eq(wikiPageSections.page_id, pageId),
-					eq(wikiPageSections.section_slug, section.section_slug),
-				),
-			)
-			.limit(1);
+  for (const section of sections) {
+    const heading = normalizeSectionHeading(
+      section.heading,
+      section.section_slug,
+    );
+    // Belt-and-suspenders: strip `[[wikilink]]` brackets before persist.
+    // Prompts already forbid them, but models slip and they render as
+    // literal noise on mobile (links come from wiki_page_links, not
+    // prose). Do this at the repo boundary so every write path is
+    // covered, not just the section-writer path.
+    const cleanBody = normalizeSectionBody(section.body_md);
+    const existing = await db
+      .select({ id: wikiPageSections.id })
+      .from(wikiPageSections)
+      .where(
+        and(
+          eq(wikiPageSections.page_id, pageId),
+          eq(wikiPageSections.section_slug, section.section_slug),
+        ),
+      )
+      .limit(1);
 
-		let sectionId: string;
-		if (existing[0]) {
-			sectionId = existing[0].id;
-			await db
-				.update(wikiPageSections)
-				.set({
-					heading,
-					body_md: cleanBody,
-					position: section.position,
-					last_source_at: sql`now()` as any,
-					updated_at: sql`now()` as any,
-				})
-				.where(eq(wikiPageSections.id, sectionId));
-		} else {
-			const [inserted] = await db
-				.insert(wikiPageSections)
-				.values({
-					page_id: pageId,
-					section_slug: section.section_slug,
-					heading,
-					body_md: cleanBody,
-					position: section.position,
-					last_source_at: sql`now()` as any,
-				})
-				.returning({ id: wikiPageSections.id });
-			sectionId = inserted!.id;
-		}
+    let sectionId: string;
+    if (existing[0]) {
+      sectionId = existing[0].id;
+      await db
+        .update(wikiPageSections)
+        .set({
+          heading,
+          body_md: cleanBody,
+          position: section.position,
+          last_source_at: sql`now()` as any,
+          updated_at: sql`now()` as any,
+        })
+        .where(eq(wikiPageSections.id, sectionId));
+    } else {
+      const [inserted] = await db
+        .insert(wikiPageSections)
+        .values({
+          page_id: pageId,
+          section_slug: section.section_slug,
+          heading,
+          body_md: cleanBody,
+          position: section.position,
+          last_source_at: sql`now()` as any,
+        })
+        .returning({ id: wikiPageSections.id });
+      sectionId = inserted!.id;
+    }
 
-		if (section.sources && section.sources.length > 0) {
-			await recordSectionSources(
-				sectionId,
-				section.sources.map((s) => ({ kind: s.kind, ref: s.ref })),
-				db,
-			);
-		}
-	}
+    if (section.sources && section.sources.length > 0) {
+      await recordSectionSources(
+        sectionId,
+        section.sources.map((s) => ({ kind: s.kind, ref: s.ref })),
+        db,
+      );
+    }
+  }
 
-	// Refresh the page body_md to stay in sync with the section set.
-	const allSections = await listPageSections(pageId, db);
-	const rendered = renderBodyMarkdown(
-		allSections.map((s) => ({
-			section_slug: s.section_slug,
-			heading: s.heading,
-			body_md: s.body_md,
-			position: s.position,
-		})),
-	);
-	await db
-		.update(wikiPages)
-		.set({ body_md: rendered, updated_at: sql`now()` as any })
-		.where(eq(wikiPages.id, pageId));
+  // Refresh the page body_md to stay in sync with the section set.
+  const allSections = await listPageSections(pageId, db);
+  const rendered = renderBodyMarkdown(
+    allSections.map((s) => ({
+      section_slug: s.section_slug,
+      heading: s.heading,
+      body_md: s.body_md,
+      position: s.position,
+    })),
+  );
+  await db
+    .update(wikiPages)
+    .set({ body_md: rendered, updated_at: sql`now()` as any })
+    .where(eq(wikiPages.id, pageId));
 }
 
 // ---------------------------------------------------------------------------
@@ -1395,33 +1394,33 @@ export async function upsertSections(
  * normalized input. v1 is strictly owner-scoped — no cross-agent alias lookup.
  */
 export async function findAliasMatches(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		aliasNormalized: string;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    aliasNormalized: string;
+  },
+  db: DbClient = defaultDb,
 ): Promise<Array<{ pageId: string; aliasId: string; aliasText: string }>> {
-	const rows = await db
-		.select({
-			pageId: wikiPageAliases.page_id,
-			aliasId: wikiPageAliases.id,
-			aliasText: wikiPageAliases.alias,
-		})
-		.from(wikiPageAliases)
-		.innerJoin(wikiPages, eq(wikiPageAliases.page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPageAliases.alias, args.aliasNormalized),
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-			),
-		);
-	return rows.map((r) => ({
-		pageId: r.pageId,
-		aliasId: r.aliasId,
-		aliasText: r.aliasText,
-	}));
+  const rows = await db
+    .select({
+      pageId: wikiPageAliases.page_id,
+      aliasId: wikiPageAliases.id,
+      aliasText: wikiPageAliases.alias,
+    })
+    .from(wikiPageAliases)
+    .innerJoin(wikiPages, eq(wikiPageAliases.page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiPageAliases.alias, args.aliasNormalized),
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+      ),
+    );
+  return rows.map((r) => ({
+    pageId: r.pageId,
+    aliasId: r.aliasId,
+    aliasText: r.aliasText,
+  }));
 }
 
 /** Trigram similarity threshold for fuzzy alias / title matching. Matches
@@ -1453,26 +1452,26 @@ export const PARENT_TITLE_FUZZY_THRESHOLD = 0.5;
  * scan + returns empty if `pg_trgm` isn't installed (see Unit 3 fallback).
  */
 export async function findAliasMatchesFuzzy(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		aliasNormalized: string;
-		threshold?: number;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    aliasNormalized: string;
+    threshold?: number;
+  },
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{
-		pageId: string;
-		aliasId: string;
-		aliasText: string;
-		similarity: number;
-		pageType: WikiPageType;
-		pageStatus: string;
-	}>
+  Array<{
+    pageId: string;
+    aliasId: string;
+    aliasText: string;
+    similarity: number;
+    pageType: WikiPageType;
+    pageStatus: string;
+  }>
 > {
-	const threshold = args.threshold ?? FUZZY_ALIAS_THRESHOLD;
-	try {
-		const result = await db.execute(sql`
+  const threshold = args.threshold ?? FUZZY_ALIAS_THRESHOLD;
+  try {
+    const result = await db.execute(sql`
 			SELECT
 				${wikiPageAliases.page_id}    AS "pageId",
 				${wikiPageAliases.id}         AS "aliasId",
@@ -1490,40 +1489,38 @@ export async function findAliasMatchesFuzzy(
 			ORDER BY similarity(${wikiPageAliases.alias}, ${args.aliasNormalized}) DESC
 			LIMIT 20
 		`);
-		const rows =
-			(
-				result as unknown as {
-					rows?: Array<{
-						pageId: string;
-						aliasId: string;
-						aliasText: string;
-						similarity: number | string;
-						pageType: WikiPageType;
-						pageStatus: string;
-					}>;
-				}
-			).rows ?? [];
-		return rows.map((r) => ({
-			pageId: r.pageId,
-			aliasId: r.aliasId,
-			aliasText: r.aliasText,
-			similarity:
-				typeof r.similarity === "string"
-					? Number(r.similarity)
-					: r.similarity,
-			pageType: r.pageType,
-			pageStatus: r.pageStatus,
-		}));
-	} catch (err) {
-		// pg_trgm extension missing / permission issue / syntax reject. Caller
-		// treats this as "no fuzzy matches" so the exact-match code path can
-		// carry on unchanged.
-		console.warn(
-			`[findAliasMatchesFuzzy] similarity query failed, falling back to exact-only:`,
-			(err as Error)?.message ?? err,
-		);
-		return [];
-	}
+    const rows =
+      (
+        result as unknown as {
+          rows?: Array<{
+            pageId: string;
+            aliasId: string;
+            aliasText: string;
+            similarity: number | string;
+            pageType: WikiPageType;
+            pageStatus: string;
+          }>;
+        }
+      ).rows ?? [];
+    return rows.map((r) => ({
+      pageId: r.pageId,
+      aliasId: r.aliasId,
+      aliasText: r.aliasText,
+      similarity:
+        typeof r.similarity === "string" ? Number(r.similarity) : r.similarity,
+      pageType: r.pageType,
+      pageStatus: r.pageStatus,
+    }));
+  } catch (err) {
+    // pg_trgm extension missing / permission issue / syntax reject. Caller
+    // treats this as "no fuzzy matches" so the exact-match code path can
+    // carry on unchanged.
+    console.warn(
+      `[findAliasMatchesFuzzy] similarity query failed, falling back to exact-only:`,
+      (err as Error)?.message ?? err,
+    );
+    return [];
+  }
 }
 
 /**
@@ -1560,147 +1557,147 @@ const MAX_SAMPLE_CONTEXTS = 5;
  * The optional `context` is appended to `sample_contexts` (capped at 5).
  */
 export async function upsertUnresolvedMention(
-	input: UpsertUnresolvedInput,
-	db: DbClient = defaultDb,
+  input: UpsertUnresolvedInput,
+  db: DbClient = defaultDb,
 ): Promise<{ id: string; mention_count: number; inserted: boolean }> {
-	const existing = await db
-		.select()
-		.from(wikiUnresolvedMentions)
-		.where(
-			and(
-				eq(wikiUnresolvedMentions.tenant_id, input.tenant_id),
-				eq(wikiUnresolvedMentions.owner_id, input.owner_id),
-				eq(wikiUnresolvedMentions.alias_normalized, input.alias_normalized),
-				eq(wikiUnresolvedMentions.status, "open"),
-			),
-		)
-		.limit(1);
+  const existing = await db
+    .select()
+    .from(wikiUnresolvedMentions)
+    .where(
+      and(
+        eq(wikiUnresolvedMentions.tenant_id, input.tenant_id),
+        eq(wikiUnresolvedMentions.owner_id, input.owner_id),
+        eq(wikiUnresolvedMentions.alias_normalized, input.alias_normalized),
+        eq(wikiUnresolvedMentions.status, "open"),
+      ),
+    )
+    .limit(1);
 
-	const contextEntry = input.context
-		? {
-				quote: input.context.quote,
-				source_ref: input.context.source_ref,
-				seen_at: new Date().toISOString(),
-			}
-		: null;
+  const contextEntry = input.context
+    ? {
+        quote: input.context.quote,
+        source_ref: input.context.source_ref,
+        seen_at: new Date().toISOString(),
+      }
+    : null;
 
-	if (existing[0]) {
-		const row = existing[0] as any;
-		const nextSamples = contextEntry
-			? [contextEntry, ...((row.sample_contexts ?? []) as any[])].slice(
-					0,
-					MAX_SAMPLE_CONTEXTS,
-				)
-			: row.sample_contexts;
-		await db
-			.update(wikiUnresolvedMentions)
-			.set({
-				mention_count: sql`${wikiUnresolvedMentions.mention_count} + 1`,
-				last_seen_at: sql`now()` as any,
-				sample_contexts: nextSamples,
-				suggested_type: input.suggested_type ?? row.suggested_type,
-				updated_at: sql`now()` as any,
-			})
-			.where(eq(wikiUnresolvedMentions.id, row.id));
-		return {
-			id: row.id,
-			mention_count: (row.mention_count as number) + 1,
-			inserted: false,
-		};
-	}
+  if (existing[0]) {
+    const row = existing[0] as any;
+    const nextSamples = contextEntry
+      ? [contextEntry, ...((row.sample_contexts ?? []) as any[])].slice(
+          0,
+          MAX_SAMPLE_CONTEXTS,
+        )
+      : row.sample_contexts;
+    await db
+      .update(wikiUnresolvedMentions)
+      .set({
+        mention_count: sql`${wikiUnresolvedMentions.mention_count} + 1`,
+        last_seen_at: sql`now()` as any,
+        sample_contexts: nextSamples,
+        suggested_type: input.suggested_type ?? row.suggested_type,
+        updated_at: sql`now()` as any,
+      })
+      .where(eq(wikiUnresolvedMentions.id, row.id));
+    return {
+      id: row.id,
+      mention_count: (row.mention_count as number) + 1,
+      inserted: false,
+    };
+  }
 
-	// Race-tolerant insert: the SELECT-then-INSERT window above is not
-	// atomic. On a cursor-reset recompile (or any flow that re-emits the
-	// same alias quickly), a sibling process can land the open row between
-	// our SELECT and our INSERT, yielding a unique-index violation on
-	// `(tenant_id, owner_id, alias_normalized, status)`. Switching to
-	// ON CONFLICT DO NOTHING lets the caller progress; when the conflict
-	// fires, we re-read the winning row and drive the same update path the
-	// happy case would — so mention_count and sample_contexts still
-	// accumulate (just one generation behind in the race case).
-	const insertedRows = await db
-		.insert(wikiUnresolvedMentions)
-		.values({
-			tenant_id: input.tenant_id,
-			owner_id: input.owner_id,
-			alias: input.alias,
-			alias_normalized: input.alias_normalized,
-			suggested_type: input.suggested_type ?? null,
-			sample_contexts: contextEntry ? [contextEntry] : [],
-		})
-		.onConflictDoNothing()
-		.returning({
-			id: wikiUnresolvedMentions.id,
-			mention_count: wikiUnresolvedMentions.mention_count,
-		});
+  // Race-tolerant insert: the SELECT-then-INSERT window above is not
+  // atomic. On a cursor-reset recompile (or any flow that re-emits the
+  // same alias quickly), a sibling process can land the open row between
+  // our SELECT and our INSERT, yielding a unique-index violation on
+  // `(tenant_id, owner_id, alias_normalized, status)`. Switching to
+  // ON CONFLICT DO NOTHING lets the caller progress; when the conflict
+  // fires, we re-read the winning row and drive the same update path the
+  // happy case would — so mention_count and sample_contexts still
+  // accumulate (just one generation behind in the race case).
+  const insertedRows = await db
+    .insert(wikiUnresolvedMentions)
+    .values({
+      tenant_id: input.tenant_id,
+      owner_id: input.owner_id,
+      alias: input.alias,
+      alias_normalized: input.alias_normalized,
+      suggested_type: input.suggested_type ?? null,
+      sample_contexts: contextEntry ? [contextEntry] : [],
+    })
+    .onConflictDoNothing()
+    .returning({
+      id: wikiUnresolvedMentions.id,
+      mention_count: wikiUnresolvedMentions.mention_count,
+    });
 
-	if (insertedRows.length > 0) {
-		return {
-			id: insertedRows[0]!.id,
-			mention_count: insertedRows[0]!.mention_count,
-			inserted: true,
-		};
-	}
+  if (insertedRows.length > 0) {
+    return {
+      id: insertedRows[0]!.id,
+      mention_count: insertedRows[0]!.mention_count,
+      inserted: true,
+    };
+  }
 
-	// Conflict path: someone else inserted the open row. Re-read it and
-	// apply the same update the first branch would have applied if the
-	// SELECT had found it.
-	const winnerRows = await db
-		.select()
-		.from(wikiUnresolvedMentions)
-		.where(
-			and(
-				eq(wikiUnresolvedMentions.tenant_id, input.tenant_id),
-				eq(wikiUnresolvedMentions.owner_id, input.owner_id),
-				eq(wikiUnresolvedMentions.alias_normalized, input.alias_normalized),
-				eq(wikiUnresolvedMentions.status, "open"),
-			),
-		)
-		.limit(1);
-	if (!winnerRows[0]) {
-		// Conflict reported but re-read returned nothing — possible only if
-		// the winning row was promoted/archived in the micro-gap between our
-		// INSERT and our follow-up SELECT. Treat as a no-op; the next
-		// planner invocation will re-attempt cleanly.
-		console.warn(
-			`[upsertUnresolvedMention] conflict without winner for ` +
-				`(tenant=${input.tenant_id}, owner=${input.owner_id}, ` +
-				`alias=${input.alias_normalized})`,
-		);
-		return { id: "", mention_count: 0, inserted: false };
-	}
-	const winner = winnerRows[0] as any;
-	const winnerSamples = contextEntry
-		? [contextEntry, ...((winner.sample_contexts ?? []) as any[])].slice(
-				0,
-				MAX_SAMPLE_CONTEXTS,
-			)
-		: winner.sample_contexts;
-	await db
-		.update(wikiUnresolvedMentions)
-		.set({
-			mention_count: sql`${wikiUnresolvedMentions.mention_count} + 1`,
-			last_seen_at: sql`now()` as any,
-			sample_contexts: winnerSamples,
-			suggested_type: input.suggested_type ?? winner.suggested_type,
-			updated_at: sql`now()` as any,
-		})
-		.where(eq(wikiUnresolvedMentions.id, winner.id));
-	return {
-		id: winner.id,
-		mention_count: (winner.mention_count as number) + 1,
-		inserted: false,
-	};
+  // Conflict path: someone else inserted the open row. Re-read it and
+  // apply the same update the first branch would have applied if the
+  // SELECT had found it.
+  const winnerRows = await db
+    .select()
+    .from(wikiUnresolvedMentions)
+    .where(
+      and(
+        eq(wikiUnresolvedMentions.tenant_id, input.tenant_id),
+        eq(wikiUnresolvedMentions.owner_id, input.owner_id),
+        eq(wikiUnresolvedMentions.alias_normalized, input.alias_normalized),
+        eq(wikiUnresolvedMentions.status, "open"),
+      ),
+    )
+    .limit(1);
+  if (!winnerRows[0]) {
+    // Conflict reported but re-read returned nothing — possible only if
+    // the winning row was promoted/archived in the micro-gap between our
+    // INSERT and our follow-up SELECT. Treat as a no-op; the next
+    // planner invocation will re-attempt cleanly.
+    console.warn(
+      `[upsertUnresolvedMention] conflict without winner for ` +
+        `(tenant=${input.tenant_id}, owner=${input.owner_id}, ` +
+        `alias=${input.alias_normalized})`,
+    );
+    return { id: "", mention_count: 0, inserted: false };
+  }
+  const winner = winnerRows[0] as any;
+  const winnerSamples = contextEntry
+    ? [contextEntry, ...((winner.sample_contexts ?? []) as any[])].slice(
+        0,
+        MAX_SAMPLE_CONTEXTS,
+      )
+    : winner.sample_contexts;
+  await db
+    .update(wikiUnresolvedMentions)
+    .set({
+      mention_count: sql`${wikiUnresolvedMentions.mention_count} + 1`,
+      last_seen_at: sql`now()` as any,
+      sample_contexts: winnerSamples,
+      suggested_type: input.suggested_type ?? winner.suggested_type,
+      updated_at: sql`now()` as any,
+    })
+    .where(eq(wikiUnresolvedMentions.id, winner.id));
+  return {
+    id: winner.id,
+    mention_count: (winner.mention_count as number) + 1,
+    inserted: false,
+  };
 }
 
 /** Mark an unresolved mention as promoted and point it at the new page. */
 export async function markUnresolvedPromoted(
-	args: { mentionId: string; pageId: string },
-	db: DbClient = defaultDb,
+  args: { mentionId: string; pageId: string },
+  db: DbClient = defaultDb,
 ): Promise<void> {
-	// Guard against hallucinated mention ids from the planner.
-	if (!isValidUuid(args.mentionId) || !isValidUuid(args.pageId)) return;
-	const result = await db.execute(sql`
+  // Guard against hallucinated mention ids from the planner.
+  if (!isValidUuid(args.mentionId) || !isValidUuid(args.pageId)) return;
+  const result = await db.execute(sql`
 		WITH target AS (
 			SELECT id, tenant_id, owner_id, alias_normalized
 			FROM wiki.unresolved_mentions
@@ -1727,12 +1724,12 @@ export async function markUnresolvedPromoted(
 		SELECT id FROM updated
 	`);
 
-	if (((result as any).rows?.length ?? 0) > 0) return;
+  if (((result as any).rows?.length ?? 0) > 0) return;
 
-	// Retry/idempotency path: the same alias is already represented by a
-	// promoted mention in this scope. Remove the stale open mention so future
-	// planner passes do not keep trying to promote it into the same unique key.
-	await db.execute(sql`
+  // Retry/idempotency path: the same alias is already represented by a
+  // promoted mention in this scope. Remove the stale open mention so future
+  // planner passes do not keep trying to promote it into the same unique key.
+  await db.execute(sql`
 		DELETE FROM wiki.unresolved_mentions mention
 		WHERE mention.id = ${args.mentionId}
 		  AND mention.status = 'open'
@@ -1754,46 +1751,46 @@ export async function markUnresolvedPromoted(
  * build plan (count ≥ 3, last_seen within 30 days).
  */
 export async function listPromotionCandidates(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		minCount?: number;
-		withinDays?: number;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    minCount?: number;
+    withinDays?: number;
+  },
+  db: DbClient = defaultDb,
 ): Promise<
-	Array<{
-		id: string;
-		alias: string;
-		alias_normalized: string;
-		mention_count: number;
-		suggested_type: WikiPageType | null;
-		sample_contexts: unknown;
-	}>
+  Array<{
+    id: string;
+    alias: string;
+    alias_normalized: string;
+    mention_count: number;
+    suggested_type: WikiPageType | null;
+    sample_contexts: unknown;
+  }>
 > {
-	const minCount = args.minCount ?? 3;
-	const withinDays = args.withinDays ?? 30;
-	const rows = await db
-		.select({
-			id: wikiUnresolvedMentions.id,
-			alias: wikiUnresolvedMentions.alias,
-			alias_normalized: wikiUnresolvedMentions.alias_normalized,
-			mention_count: wikiUnresolvedMentions.mention_count,
-			suggested_type: wikiUnresolvedMentions.suggested_type,
-			sample_contexts: wikiUnresolvedMentions.sample_contexts,
-		})
-		.from(wikiUnresolvedMentions)
-		.where(
-			and(
-				eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
-				eq(wikiUnresolvedMentions.owner_id, args.ownerId),
-				eq(wikiUnresolvedMentions.status, "open"),
-				sql`${wikiUnresolvedMentions.mention_count} >= ${minCount}`,
-				sql`${wikiUnresolvedMentions.last_seen_at} >= now() - (${withinDays} || ' days')::interval`,
-			),
-		)
-		.orderBy(desc(wikiUnresolvedMentions.mention_count));
-	return rows as any;
+  const minCount = args.minCount ?? 3;
+  const withinDays = args.withinDays ?? 30;
+  const rows = await db
+    .select({
+      id: wikiUnresolvedMentions.id,
+      alias: wikiUnresolvedMentions.alias,
+      alias_normalized: wikiUnresolvedMentions.alias_normalized,
+      mention_count: wikiUnresolvedMentions.mention_count,
+      suggested_type: wikiUnresolvedMentions.suggested_type,
+      sample_contexts: wikiUnresolvedMentions.sample_contexts,
+    })
+    .from(wikiUnresolvedMentions)
+    .where(
+      and(
+        eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+        eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+        eq(wikiUnresolvedMentions.status, "open"),
+        sql`${wikiUnresolvedMentions.mention_count} >= ${minCount}`,
+        sql`${wikiUnresolvedMentions.last_seen_at} >= now() - (${withinDays} || ' days')::interval`,
+      ),
+    )
+    .orderBy(desc(wikiUnresolvedMentions.mention_count));
+  return rows as any;
 }
 
 // ---------------------------------------------------------------------------
@@ -1805,21 +1802,21 @@ export async function listPromotionCandidates(
  * Safe to call repeatedly; existing rows keep their `first_seen_at`.
  */
 export async function recordSectionSources(
-	sectionId: string,
-	sources: Array<{ kind: WikiSectionSourceKind; ref: string }>,
-	db: DbClient = defaultDb,
+  sectionId: string,
+  sources: Array<{ kind: WikiSectionSourceKind; ref: string }>,
+  db: DbClient = defaultDb,
 ): Promise<void> {
-	if (sources.length === 0) return;
-	await db
-		.insert(wikiSectionSources)
-		.values(
-			sources.map((s) => ({
-				section_id: sectionId,
-				source_kind: s.kind,
-				source_ref: s.ref,
-			})),
-		)
-		.onConflictDoNothing();
+  if (sources.length === 0) return;
+  await db
+    .insert(wikiSectionSources)
+    .values(
+      sources.map((s) => ({
+        section_id: sectionId,
+        source_kind: s.kind,
+        source_ref: s.ref,
+      })),
+    )
+    .onConflictDoNothing();
 }
 
 // ---------------------------------------------------------------------------
@@ -1827,49 +1824,51 @@ export async function recordSectionSources(
 // ---------------------------------------------------------------------------
 
 export async function upsertPageLink(
-	args: {
-		fromPageId: string;
-		toPageId: string;
-		context?: string | null;
-		/** Link discriminator. Defaults to 'reference' for the historical
-		 * wikilink case. 'parent_of' / 'child_of' express durable hierarchy
-		 * created by section promotion. */
-		kind?: WikiPageLinkKind;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    fromPageId: string;
+    toPageId: string;
+    context?: string | null;
+    /** Link discriminator. Defaults to 'reference' for the historical
+     * wikilink case. 'parent_of' / 'child_of' express durable hierarchy
+     * created by section promotion. */
+    kind?: WikiPageLinkKind;
+  },
+  db: DbClient = defaultDb,
 ): Promise<boolean> {
-	if (args.fromPageId === args.toPageId) return false; // no self-links
-	const returned = await db
-		.insert(wikiPageLinks)
-		.values({
-			from_page_id: args.fromPageId,
-			to_page_id: args.toPageId,
-			kind: args.kind ?? "reference",
-			context: args.context ?? null,
-		})
-		.onConflictDoNothing()
-		.returning({ id: wikiPageLinks.id });
-	// Empty array = the ON CONFLICT DO NOTHING path fired (edge already
-	// existed). Callers that track metrics should NOT double-count on
-	// re-runs.
-	return returned.length > 0;
+  if (args.fromPageId === args.toPageId) return false; // no self-links
+  const returned = await db
+    .insert(wikiPageLinks)
+    .values({
+      from_page_id: args.fromPageId,
+      to_page_id: args.toPageId,
+      kind: args.kind ?? "reference",
+      context: args.context ?? null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: wikiPageLinks.id });
+  // Empty array = the ON CONFLICT DO NOTHING path fired (edge already
+  // existed). Callers that track metrics should NOT double-count on
+  // re-runs.
+  return returned.length > 0;
 }
 
 export async function listBacklinks(
-	pageId: string,
-	db: DbClient = defaultDb,
-): Promise<Array<{ id: string; type: WikiPageType; slug: string; title: string }>> {
-	const rows = await db
-		.select({
-			id: wikiPages.id,
-			type: wikiPages.type,
-			slug: wikiPages.slug,
-			title: wikiPages.title,
-		})
-		.from(wikiPageLinks)
-		.innerJoin(wikiPages, eq(wikiPageLinks.from_page_id, wikiPages.id))
-		.where(eq(wikiPageLinks.to_page_id, pageId));
-	return rows as any;
+  pageId: string,
+  db: DbClient = defaultDb,
+): Promise<
+  Array<{ id: string; type: WikiPageType; slug: string; title: string }>
+> {
+  const rows = await db
+    .select({
+      id: wikiPages.id,
+      type: wikiPages.type,
+      slug: wikiPages.slug,
+      title: wikiPages.title,
+    })
+    .from(wikiPageLinks)
+    .innerJoin(wikiPages, eq(wikiPageLinks.from_page_id, wikiPages.id))
+    .where(eq(wikiPageLinks.to_page_id, pageId));
+  return rows as any;
 }
 
 // ---------------------------------------------------------------------------
@@ -1886,84 +1885,84 @@ export async function listBacklinks(
  * between the same pages untouched, since link uniqueness now includes kind).
  */
 export async function setParentPage(
-	args: { pageId: string; parentPageId: string | null },
-	db: DbClient = defaultDb,
+  args: { pageId: string; parentPageId: string | null },
+  db: DbClient = defaultDb,
 ): Promise<void> {
-	if (args.pageId === args.parentPageId) {
-		throw new Error("setParentPage: a page cannot be its own parent");
-	}
-	await db.transaction(async (tx) => {
-		const [existing] = await tx
-			.select({ parent_page_id: wikiPages.parent_page_id })
-			.from(wikiPages)
-			.where(eq(wikiPages.id, args.pageId))
-			.limit(1);
-		if (!existing) {
-			throw new Error(`setParentPage: page ${args.pageId} not found`);
-		}
+  if (args.pageId === args.parentPageId) {
+    throw new Error("setParentPage: a page cannot be its own parent");
+  }
+  await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ parent_page_id: wikiPages.parent_page_id })
+      .from(wikiPages)
+      .where(eq(wikiPages.id, args.pageId))
+      .limit(1);
+    if (!existing) {
+      throw new Error(`setParentPage: page ${args.pageId} not found`);
+    }
 
-		const previousParent = existing.parent_page_id as string | null;
+    const previousParent = existing.parent_page_id as string | null;
 
-		await tx
-			.update(wikiPages)
-			.set({
-				parent_page_id: args.parentPageId,
-				updated_at: sql`now()` as any,
-			})
-			.where(eq(wikiPages.id, args.pageId));
+    await tx
+      .update(wikiPages)
+      .set({
+        parent_page_id: args.parentPageId,
+        updated_at: sql`now()` as any,
+      })
+      .where(eq(wikiPages.id, args.pageId));
 
-		// Remove stale hierarchy links when the parent changes or is cleared.
-		if (previousParent && previousParent !== args.parentPageId) {
-			await tx
-				.delete(wikiPageLinks)
-				.where(
-					and(
-						eq(wikiPageLinks.from_page_id, previousParent),
-						eq(wikiPageLinks.to_page_id, args.pageId),
-						eq(wikiPageLinks.kind, "parent_of"),
-					),
-				);
-			await tx
-				.delete(wikiPageLinks)
-				.where(
-					and(
-						eq(wikiPageLinks.from_page_id, args.pageId),
-						eq(wikiPageLinks.to_page_id, previousParent),
-						eq(wikiPageLinks.kind, "child_of"),
-					),
-				);
-		}
+    // Remove stale hierarchy links when the parent changes or is cleared.
+    if (previousParent && previousParent !== args.parentPageId) {
+      await tx
+        .delete(wikiPageLinks)
+        .where(
+          and(
+            eq(wikiPageLinks.from_page_id, previousParent),
+            eq(wikiPageLinks.to_page_id, args.pageId),
+            eq(wikiPageLinks.kind, "parent_of"),
+          ),
+        );
+      await tx
+        .delete(wikiPageLinks)
+        .where(
+          and(
+            eq(wikiPageLinks.from_page_id, args.pageId),
+            eq(wikiPageLinks.to_page_id, previousParent),
+            eq(wikiPageLinks.kind, "child_of"),
+          ),
+        );
+    }
 
-		if (args.parentPageId) {
-			await tx
-				.insert(wikiPageLinks)
-				.values([
-					{
-						from_page_id: args.parentPageId,
-						to_page_id: args.pageId,
-						kind: "parent_of",
-					},
-					{
-						from_page_id: args.pageId,
-						to_page_id: args.parentPageId,
-						kind: "child_of",
-					},
-				])
-				.onConflictDoNothing();
-		}
-	});
+    if (args.parentPageId) {
+      await tx
+        .insert(wikiPageLinks)
+        .values([
+          {
+            from_page_id: args.parentPageId,
+            to_page_id: args.pageId,
+            kind: "parent_of",
+          },
+          {
+            from_page_id: args.pageId,
+            to_page_id: args.parentPageId,
+            kind: "child_of",
+          },
+        ])
+        .onConflictDoNothing();
+    }
+  });
 }
 
 /** Read all direct children of a page. */
 export async function listChildPages(
-	parentPageId: string,
-	db: DbClient = defaultDb,
+  parentPageId: string,
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow[]> {
-	const rows = await db
-		.select()
-		.from(wikiPages)
-		.where(eq(wikiPages.parent_page_id, parentPageId));
-	return rows as WikiPageRow[];
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(eq(wikiPages.parent_page_id, parentPageId));
+  return rows as WikiPageRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1981,11 +1980,11 @@ export const SOURCE_MEMORY_IDS_MAX_LIMIT = 50;
  * hasn't cited them yet, or they're pure-aggregation sections).
  */
 export async function countSourceMemoriesForPage(
-	pageId: string,
-	db: DbClient = defaultDb,
+  pageId: string,
+  db: DbClient = defaultDb,
 ): Promise<number> {
-	if (!isValidUuid(pageId)) return 0;
-	const result = await db.execute(sql`
+  if (!isValidUuid(pageId)) return 0;
+  const result = await db.execute(sql`
 		SELECT COUNT(DISTINCT ${wikiSectionSources.source_ref})::int AS n
 		FROM ${wikiSectionSources}
 		INNER JOIN ${wikiPageSections}
@@ -1993,8 +1992,9 @@ export async function countSourceMemoriesForPage(
 		WHERE ${wikiPageSections.page_id} = ${pageId}
 			AND ${wikiSectionSources.source_kind} = 'memory_unit'
 	`);
-	const rows = (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
-	return rows[0]?.n ?? 0;
+  const rows =
+    (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
+  return rows[0]?.n ?? 0;
 }
 
 /**
@@ -2004,13 +2004,13 @@ export async function countSourceMemoriesForPage(
  * unbounded scans when a mobile client accidentally asks for 100k.
  */
 export async function listSourceMemoryIdsForPage(
-	pageId: string,
-	limit: number,
-	db: DbClient = defaultDb,
+  pageId: string,
+  limit: number,
+  db: DbClient = defaultDb,
 ): Promise<string[]> {
-	if (!isValidUuid(pageId)) return [];
-	const bounded = Math.max(1, Math.min(limit, SOURCE_MEMORY_IDS_MAX_LIMIT));
-	const result = await db.execute(sql`
+  if (!isValidUuid(pageId)) return [];
+  const bounded = Math.max(1, Math.min(limit, SOURCE_MEMORY_IDS_MAX_LIMIT));
+  const result = await db.execute(sql`
 		SELECT DISTINCT ON (${wikiSectionSources.source_ref})
 			${wikiSectionSources.source_ref} AS "sourceRef",
 			${wikiSectionSources.first_seen_at} AS "firstSeenAt"
@@ -2022,11 +2022,13 @@ export async function listSourceMemoryIdsForPage(
 		ORDER BY ${wikiSectionSources.source_ref}, ${wikiSectionSources.first_seen_at} DESC
 		LIMIT ${bounded}
 	`);
-	const rows =
-		(result as unknown as {
-			rows?: Array<{ sourceRef: string; firstSeenAt: string | Date }>;
-		}).rows ?? [];
-	return rows.map((r) => r.sourceRef);
+  const rows =
+    (
+      result as unknown as {
+        rows?: Array<{ sourceRef: string; firstSeenAt: string | Date }>;
+      }
+    ).rows ?? [];
+  return rows.map((r) => r.sourceRef);
 }
 
 /**
@@ -2036,21 +2038,21 @@ export async function listSourceMemoryIdsForPage(
  * for list surfaces.
  */
 export async function listActiveChildPages(
-	parentPageId: string,
-	db: DbClient = defaultDb,
+  parentPageId: string,
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow[]> {
-	if (!isValidUuid(parentPageId)) return [];
-	const rows = await db
-		.select()
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.parent_page_id, parentPageId),
-				eq(wikiPages.status, "active"),
-			),
-		)
-		.orderBy(asc(wikiPages.type), asc(wikiPages.slug));
-	return rows as WikiPageRow[];
+  if (!isValidUuid(parentPageId)) return [];
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.parent_page_id, parentPageId),
+        eq(wikiPages.status, "active"),
+      ),
+    )
+    .orderBy(asc(wikiPages.type), asc(wikiPages.slug));
+  return rows as WikiPageRow[];
 }
 
 /**
@@ -2062,48 +2064,50 @@ export async function listActiveChildPages(
  * is intentionally directional — we scan for the section on the parent.
  */
 export async function findPromotedFromSection(
-	pageId: string,
-	db: DbClient = defaultDb,
+  pageId: string,
+  db: DbClient = defaultDb,
 ): Promise<{
-	parentPageId: string;
-	sectionId: string;
-	sectionSlug: string;
-	sectionHeading: string;
+  parentPageId: string;
+  sectionId: string;
+  sectionSlug: string;
+  sectionHeading: string;
 } | null> {
-	if (!isValidUuid(pageId)) return null;
-	const [page] = await db
-		.select({
-			id: wikiPages.id,
-			parent_page_id: wikiPages.parent_page_id,
-		})
-		.from(wikiPages)
-		.where(eq(wikiPages.id, pageId))
-		.limit(1);
-	if (!page?.parent_page_id) return null;
+  if (!isValidUuid(pageId)) return null;
+  const [page] = await db
+    .select({
+      id: wikiPages.id,
+      parent_page_id: wikiPages.parent_page_id,
+    })
+    .from(wikiPages)
+    .where(eq(wikiPages.id, pageId))
+    .limit(1);
+  if (!page?.parent_page_id) return null;
 
-	// pg_jsonb `@>` containment — matches the section whose aggregation
-	// jsonb has `promoted_page_id = <pageId>`. Cheaper than `->>` scans
-	// because jsonb_path_ops supports containment via GIN when present.
-	const needle = JSON.stringify({ promoted_page_id: pageId });
-	const result = await db.execute(sql`
+  // pg_jsonb `@>` containment — matches the section whose aggregation
+  // jsonb has `promoted_page_id = <pageId>`. Cheaper than `->>` scans
+  // because jsonb_path_ops supports containment via GIN when present.
+  const needle = JSON.stringify({ promoted_page_id: pageId });
+  const result = await db.execute(sql`
 		SELECT id, section_slug AS "sectionSlug", heading
 		FROM ${wikiPageSections}
 		WHERE page_id = ${page.parent_page_id}
 			AND aggregation @> ${needle}::jsonb
 		LIMIT 1
 	`);
-	const rows =
-		(result as unknown as {
-			rows?: Array<{ id: string; sectionSlug: string; heading: string }>;
-		}).rows ?? [];
-	const row = rows[0];
-	if (!row) return null;
-	return {
-		parentPageId: page.parent_page_id,
-		sectionId: row.id,
-		sectionSlug: row.sectionSlug,
-		sectionHeading: row.heading,
-	};
+  const rows =
+    (
+      result as unknown as {
+        rows?: Array<{ id: string; sectionSlug: string; heading: string }>;
+      }
+    ).rows ?? [];
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    parentPageId: page.parent_page_id,
+    sectionId: row.id,
+    sectionSlug: row.sectionSlug,
+    sectionHeading: row.heading,
+  };
 }
 
 /**
@@ -2114,34 +2118,34 @@ export async function findPromotedFromSection(
  * metadata, or every linked page has been archived.
  */
 export async function listSectionChildPages(
-	args: { pageId: string; sectionSlug: string },
-	db: DbClient = defaultDb,
+  args: { pageId: string; sectionSlug: string },
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow[]> {
-	if (!isValidUuid(args.pageId)) return [];
-	const [section] = await db
-		.select({ aggregation: wikiPageSections.aggregation })
-		.from(wikiPageSections)
-		.where(
-			and(
-				eq(wikiPageSections.page_id, args.pageId),
-				eq(wikiPageSections.section_slug, args.sectionSlug),
-			),
-		)
-		.limit(1);
-	const agg = section?.aggregation as SectionAggregation | null | undefined;
-	const linkedIds = Array.isArray(agg?.linked_page_ids)
-		? agg!.linked_page_ids.filter(isValidUuid)
-		: [];
-	if (linkedIds.length === 0) return [];
+  if (!isValidUuid(args.pageId)) return [];
+  const [section] = await db
+    .select({ aggregation: wikiPageSections.aggregation })
+    .from(wikiPageSections)
+    .where(
+      and(
+        eq(wikiPageSections.page_id, args.pageId),
+        eq(wikiPageSections.section_slug, args.sectionSlug),
+      ),
+    )
+    .limit(1);
+  const agg = section?.aggregation as SectionAggregation | null | undefined;
+  const linkedIds = Array.isArray(agg?.linked_page_ids)
+    ? agg!.linked_page_ids.filter(isValidUuid)
+    : [];
+  if (linkedIds.length === 0) return [];
 
-	const rows = await db
-		.select()
-		.from(wikiPages)
-		.where(
-			and(inArray(wikiPages.id, linkedIds), eq(wikiPages.status, "active")),
-		)
-		.orderBy(asc(wikiPages.type), asc(wikiPages.slug));
-	return rows as WikiPageRow[];
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(inArray(wikiPages.id, linkedIds), eq(wikiPages.status, "active")),
+    )
+    .orderBy(asc(wikiPages.type), asc(wikiPages.slug));
+  return rows as WikiPageRow[];
 }
 
 /**
@@ -2154,18 +2158,18 @@ export async function listSectionChildPages(
  *     accumulate should pass `current + n`
  */
 export function mergeSectionAggregation(
-	current: SectionAggregation | null,
-	patch: Partial<SectionAggregation>,
+  current: SectionAggregation | null,
+  patch: Partial<SectionAggregation>,
 ): SectionAggregation {
-	const base = current ?? emptySectionAggregation();
-	return {
-		...base,
-		...patch,
-		linked_page_ids: dedupe(
-			(patch.linked_page_ids ?? base.linked_page_ids) || [],
-		),
-		observed_tags: dedupe((patch.observed_tags ?? base.observed_tags) || []),
-	};
+  const base = current ?? emptySectionAggregation();
+  return {
+    ...base,
+    ...patch,
+    linked_page_ids: dedupe(
+      (patch.linked_page_ids ?? base.linked_page_ids) || [],
+    ),
+    observed_tags: dedupe((patch.observed_tags ?? base.observed_tags) || []),
+  };
 }
 
 /**
@@ -2176,33 +2180,33 @@ export function mergeSectionAggregation(
  * the row keep its history.
  */
 export async function upsertSectionAggregation(
-	args: { sectionId: string; patch: Partial<SectionAggregation> },
-	db: DbClient = defaultDb,
+  args: { sectionId: string; patch: Partial<SectionAggregation> },
+  db: DbClient = defaultDb,
 ): Promise<SectionAggregation> {
-	return db.transaction(async (tx) => {
-		const [row] = await tx
-			.select({ aggregation: wikiPageSections.aggregation })
-			.from(wikiPageSections)
-			.where(eq(wikiPageSections.id, args.sectionId))
-			.limit(1);
-		if (!row) {
-			throw new Error(
-				`upsertSectionAggregation: section ${args.sectionId} not found`,
-			);
-		}
-		const merged = mergeSectionAggregation(
-			row.aggregation as SectionAggregation | null,
-			args.patch,
-		);
-		await tx
-			.update(wikiPageSections)
-			.set({
-				aggregation: merged as any,
-				updated_at: sql`now()` as any,
-			})
-			.where(eq(wikiPageSections.id, args.sectionId));
-		return merged;
-	});
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ aggregation: wikiPageSections.aggregation })
+      .from(wikiPageSections)
+      .where(eq(wikiPageSections.id, args.sectionId))
+      .limit(1);
+    if (!row) {
+      throw new Error(
+        `upsertSectionAggregation: section ${args.sectionId} not found`,
+      );
+    }
+    const merged = mergeSectionAggregation(
+      row.aggregation as SectionAggregation | null,
+      args.patch,
+    );
+    await tx
+      .update(wikiPageSections)
+      .set({
+        aggregation: merged as any,
+        updated_at: sql`now()` as any,
+      })
+      .where(eq(wikiPageSections.id, args.sectionId));
+    return merged;
+  });
 }
 
 /**
@@ -2216,45 +2220,45 @@ export async function upsertSectionAggregation(
  * Returns the freshly-written score.
  */
 export async function recomputeHubness(
-	pageId: string,
-	db: DbClient = defaultDb,
+  pageId: string,
+  db: DbClient = defaultDb,
 ): Promise<number> {
-	const [inboundRefs] = await db
-		.select({
-			count: sql<number>`count(*)::int`,
-		})
-		.from(wikiPageLinks)
-		.where(
-			and(
-				eq(wikiPageLinks.to_page_id, pageId),
-				eq(wikiPageLinks.kind, "reference"),
-			),
-		);
+  const [inboundRefs] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+    })
+    .from(wikiPageLinks)
+    .where(
+      and(
+        eq(wikiPageLinks.to_page_id, pageId),
+        eq(wikiPageLinks.kind, "reference"),
+      ),
+    );
 
-	const [promotedChildren] = await db
-		.select({
-			count: sql<number>`count(*)::int`,
-		})
-		.from(wikiPages)
-		.where(eq(wikiPages.parent_page_id, pageId));
+  const [promotedChildren] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+    })
+    .from(wikiPages)
+    .where(eq(wikiPages.parent_page_id, pageId));
 
-	const [sectionAvg] = await db
-		.select({
-			avgRecords: sql<number>`coalesce(avg((aggregation->>'supporting_record_count')::int), 0)::float`,
-		})
-		.from(wikiPageSections)
-		.where(eq(wikiPageSections.page_id, pageId));
+  const [sectionAvg] = await db
+    .select({
+      avgRecords: sql<number>`coalesce(avg((aggregation->>'supporting_record_count')::int), 0)::float`,
+    })
+    .from(wikiPageSections)
+    .where(eq(wikiPageSections.page_id, pageId));
 
-	const score =
-		(inboundRefs?.count ?? 0) +
-		2 * (promotedChildren?.count ?? 0) +
-		Math.floor((sectionAvg?.avgRecords ?? 0) / 10);
+  const score =
+    (inboundRefs?.count ?? 0) +
+    2 * (promotedChildren?.count ?? 0) +
+    Math.floor((sectionAvg?.avgRecords ?? 0) / 10);
 
-	await db
-		.update(wikiPages)
-		.set({ hubness_score: score, updated_at: sql`now()` as any })
-		.where(eq(wikiPages.id, pageId));
-	return score;
+  await db
+    .update(wikiPages)
+    .set({ hubness_score: score, updated_at: sql`now()` as any })
+    .where(eq(wikiPages.id, pageId));
+  return score;
 }
 
 /**
@@ -2263,30 +2267,30 @@ export async function recomputeHubness(
  * callers can clamp to a reasonable window without missing hot pages.
  */
 export async function listRecentlyChangedPagesForAggregation(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		sinceUpdatedAt: Date | null;
-		limit?: number;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    sinceUpdatedAt: Date | null;
+    limit?: number;
+  },
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow[]> {
-	const limit = Math.max(1, Math.min(args.limit ?? 100, 500));
-	const since = args.sinceUpdatedAt ?? new Date(0);
-	const rows = await db
-		.select()
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				eq(wikiPages.status, "active"),
-				gte(wikiPages.updated_at, since),
-			),
-		)
-		.orderBy(desc(wikiPages.updated_at))
-		.limit(limit);
-	return rows as WikiPageRow[];
+  const limit = Math.max(1, Math.min(args.limit ?? 100, 500));
+  const since = args.sinceUpdatedAt ?? new Date(0);
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        eq(wikiPages.status, "active"),
+        gte(wikiPages.updated_at, since),
+      ),
+    )
+    .orderBy(desc(wikiPages.updated_at))
+    .limit(limit);
+  return rows as WikiPageRow[];
 }
 
 /**
@@ -2294,137 +2298,137 @@ export async function listRecentlyChangedPagesForAggregation(
  * rebuild tooling to report before/after counts.
  */
 export interface WikiScopeCounts {
-	pages: number;
-	sections: number;
-	links: number;
-	aliases: number;
-	unresolved_mentions: number;
-	compile_jobs: number;
-	has_cursor: boolean;
-	/** Pages whose parent_page_id is set — emergent hierarchy count. */
-	pages_with_parent: number;
-	/** Sections whose aggregation.promotion_status is 'promoted'. */
-	sections_promoted: number;
-	/** Sections whose aggregation.promotion_status is 'candidate'. */
-	sections_promotion_candidate: number;
+  pages: number;
+  sections: number;
+  links: number;
+  aliases: number;
+  unresolved_mentions: number;
+  compile_jobs: number;
+  has_cursor: boolean;
+  /** Pages whose parent_page_id is set — emergent hierarchy count. */
+  pages_with_parent: number;
+  /** Sections whose aggregation.promotion_status is 'promoted'. */
+  sections_promoted: number;
+  /** Sections whose aggregation.promotion_status is 'candidate'. */
+  sections_promotion_candidate: number;
 }
 
 /** Count everything in the scope without reading row bodies. */
 export async function countWikiScope(
-	args: { tenantId: string; ownerId: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string },
+  db: DbClient = defaultDb,
 ): Promise<WikiScopeCounts> {
-	const [pages] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-			),
-		);
-	const [sections] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiPageSections)
-		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-			),
-		);
-	const [links] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiPageLinks)
-		.innerJoin(wikiPages, eq(wikiPageLinks.from_page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-			),
-		);
-	const [aliases] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiPageAliases)
-		.innerJoin(wikiPages, eq(wikiPageAliases.page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-			),
-		);
-	const [mentions] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiUnresolvedMentions)
-		.where(
-			and(
-				eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
-				eq(wikiUnresolvedMentions.owner_id, args.ownerId),
-			),
-		);
-	const [jobs] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiCompileJobs)
-		.where(
-			and(
-				eq(wikiCompileJobs.tenant_id, args.tenantId),
-				eq(wikiCompileJobs.owner_id, args.ownerId),
-			),
-		);
-	const [cursor] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiCompileCursors)
-		.where(
-			and(
-				eq(wikiCompileCursors.tenant_id, args.tenantId),
-				eq(wikiCompileCursors.owner_id, args.ownerId),
-			),
-		);
-	const [pagesWithParent] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				sql`${wikiPages.parent_page_id} is not null`,
-			),
-		);
-	const [sectionsPromoted] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiPageSections)
-		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				sql`${wikiPageSections.aggregation}->>'promotion_status' = 'promoted'`,
-			),
-		);
-	const [sectionsCandidate] = await db
-		.select({ n: sql<number>`count(*)::int` })
-		.from(wikiPageSections)
-		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				sql`${wikiPageSections.aggregation}->>'promotion_status' = 'candidate'`,
-			),
-		);
+  const [pages] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+      ),
+    );
+  const [sections] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiPageSections)
+    .innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+      ),
+    );
+  const [links] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiPageLinks)
+    .innerJoin(wikiPages, eq(wikiPageLinks.from_page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+      ),
+    );
+  const [aliases] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiPageAliases)
+    .innerJoin(wikiPages, eq(wikiPageAliases.page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+      ),
+    );
+  const [mentions] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiUnresolvedMentions)
+    .where(
+      and(
+        eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+        eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+      ),
+    );
+  const [jobs] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiCompileJobs)
+    .where(
+      and(
+        eq(wikiCompileJobs.tenant_id, args.tenantId),
+        eq(wikiCompileJobs.owner_id, args.ownerId),
+      ),
+    );
+  const [cursor] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiCompileCursors)
+    .where(
+      and(
+        eq(wikiCompileCursors.tenant_id, args.tenantId),
+        eq(wikiCompileCursors.owner_id, args.ownerId),
+      ),
+    );
+  const [pagesWithParent] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        sql`${wikiPages.parent_page_id} is not null`,
+      ),
+    );
+  const [sectionsPromoted] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiPageSections)
+    .innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        sql`${wikiPageSections.aggregation}->>'promotion_status' = 'promoted'`,
+      ),
+    );
+  const [sectionsCandidate] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wikiPageSections)
+    .innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        sql`${wikiPageSections.aggregation}->>'promotion_status' = 'candidate'`,
+      ),
+    );
 
-	return {
-		pages: pages?.n ?? 0,
-		sections: sections?.n ?? 0,
-		links: links?.n ?? 0,
-		aliases: aliases?.n ?? 0,
-		unresolved_mentions: mentions?.n ?? 0,
-		compile_jobs: jobs?.n ?? 0,
-		has_cursor: (cursor?.n ?? 0) > 0,
-		pages_with_parent: pagesWithParent?.n ?? 0,
-		sections_promoted: sectionsPromoted?.n ?? 0,
-		sections_promotion_candidate: sectionsCandidate?.n ?? 0,
-	};
+  return {
+    pages: pages?.n ?? 0,
+    sections: sections?.n ?? 0,
+    links: links?.n ?? 0,
+    aliases: aliases?.n ?? 0,
+    unresolved_mentions: mentions?.n ?? 0,
+    compile_jobs: jobs?.n ?? 0,
+    has_cursor: (cursor?.n ?? 0) > 0,
+    pages_with_parent: pagesWithParent?.n ?? 0,
+    sections_promoted: sectionsPromoted?.n ?? 0,
+    sections_promotion_candidate: sectionsCandidate?.n ?? 0,
+  };
 }
 
 /**
@@ -2440,72 +2444,72 @@ export async function countWikiScope(
  * mentions and compile jobs/cursor are scoped directly.
  */
 export async function wipeWikiScope(
-	args: { tenantId: string; ownerId: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string },
+  db: DbClient = defaultDb,
 ): Promise<{
-	before: WikiScopeCounts;
-	after: WikiScopeCounts;
+  before: WikiScopeCounts;
+  after: WikiScopeCounts;
 }> {
-	if (!args.tenantId || !args.ownerId) {
-		throw new Error(
-			"wipeWikiScope: tenantId and ownerId are both required — refusing to wipe unscoped",
-		);
-	}
-	const before = await countWikiScope(args, db);
-	await db.transaction(async (tx) => {
-		// Delete unresolved mentions FIRST so the page delete that follows isn't
-		// blocked by the FK from wiki_unresolved_mentions.promoted_page_id →
-		// wiki_pages.id. The FK is not set to cascade (nulling promoted_page_id
-		// would preserve mention history, but the wipe explicitly discards the
-		// whole scope's mention set anyway, so just delete the mentions up
-		// front).
-		await tx
-			.delete(wikiUnresolvedMentions)
-			.where(
-				and(
-					eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
-					eq(wikiUnresolvedMentions.owner_id, args.ownerId),
-				),
-			);
-		// Cascades delete sections / links / aliases / section_sources.
-		await tx
-			.delete(wikiPages)
-			.where(
-				and(
-					eq(wikiPages.tenant_id, args.tenantId),
-					eq(wikiPages.owner_id, args.ownerId),
-				),
-			);
-		await tx
-			.delete(wikiCompileJobs)
-			.where(
-				and(
-					eq(wikiCompileJobs.tenant_id, args.tenantId),
-					eq(wikiCompileJobs.owner_id, args.ownerId),
-				),
-			);
-		await tx
-			.delete(wikiCompileCursors)
-			.where(
-				and(
-					eq(wikiCompileCursors.tenant_id, args.tenantId),
-					eq(wikiCompileCursors.owner_id, args.ownerId),
-				),
-			);
-	});
-	const after = await countWikiScope(args, db);
-	return { before, after };
+  if (!args.tenantId || !args.ownerId) {
+    throw new Error(
+      "wipeWikiScope: tenantId and ownerId are both required — refusing to wipe unscoped",
+    );
+  }
+  const before = await countWikiScope(args, db);
+  await db.transaction(async (tx) => {
+    // Delete unresolved mentions FIRST so the page delete that follows isn't
+    // blocked by the FK from wiki_unresolved_mentions.promoted_page_id →
+    // wiki_pages.id. The FK is not set to cascade (nulling promoted_page_id
+    // would preserve mention history, but the wipe explicitly discards the
+    // whole scope's mention set anyway, so just delete the mentions up
+    // front).
+    await tx
+      .delete(wikiUnresolvedMentions)
+      .where(
+        and(
+          eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+          eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+        ),
+      );
+    // Cascades delete sections / links / aliases / section_sources.
+    await tx
+      .delete(wikiPages)
+      .where(
+        and(
+          eq(wikiPages.tenant_id, args.tenantId),
+          eq(wikiPages.owner_id, args.ownerId),
+        ),
+      );
+    await tx
+      .delete(wikiCompileJobs)
+      .where(
+        and(
+          eq(wikiCompileJobs.tenant_id, args.tenantId),
+          eq(wikiCompileJobs.owner_id, args.ownerId),
+        ),
+      );
+    await tx
+      .delete(wikiCompileCursors)
+      .where(
+        and(
+          eq(wikiCompileCursors.tenant_id, args.tenantId),
+          eq(wikiCompileCursors.owner_id, args.ownerId),
+        ),
+      );
+  });
+  const after = await countWikiScope(args, db);
+  return { before, after };
 }
 
 function dedupe<T>(items: T[]): T[] {
-	const seen = new Set<T>();
-	const out: T[] = [];
-	for (const x of items) {
-		if (seen.has(x)) continue;
-		seen.add(x);
-		out.push(x);
-	}
-	return out;
+  const seen = new Set<T>();
+  const out: T[] = [];
+  for (const x of items) {
+    if (seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -2518,17 +2522,17 @@ function dedupe<T>(items: T[]): T[] {
 // ---------------------------------------------------------------------------
 
 export interface UpsertWikiPlaceInput {
-	tenant_id: string;
-	owner_id: string;
-	name: string;
-	google_place_id?: string | null;
-	geo_lat?: number | string | null;
-	geo_lon?: number | string | null;
-	address?: string | null;
-	parent_place_id?: string | null;
-	place_kind?: WikiPlaceKind | null;
-	source: WikiPlaceSource;
-	source_payload?: unknown | null;
+  tenant_id: string;
+  owner_id: string;
+  name: string;
+  google_place_id?: string | null;
+  geo_lat?: number | string | null;
+  geo_lon?: number | string | null;
+  address?: string | null;
+  parent_place_id?: string | null;
+  place_kind?: WikiPlaceKind | null;
+  source: WikiPlaceSource;
+  source_payload?: unknown | null;
 }
 
 /**
@@ -2537,47 +2541,47 @@ export interface UpsertWikiPlaceInput {
  * Google API calls when a record's POI id has already been materialized.
  */
 export async function findPlaceByGooglePlaceId(
-	args: {
-		tenantId: string;
-		ownerId: string;
-		googlePlaceId: string;
-	},
-	db: DbClient = defaultDb,
+  args: {
+    tenantId: string;
+    ownerId: string;
+    googlePlaceId: string;
+  },
+  db: DbClient = defaultDb,
 ): Promise<WikiPlaceRow | null> {
-	if (!args.googlePlaceId) return null;
-	const rows = await db
-		.select()
-		.from(wikiPlaces)
-		.where(
-			and(
-				eq(wikiPlaces.tenant_id, args.tenantId),
-				eq(wikiPlaces.owner_id, args.ownerId),
-				eq(wikiPlaces.google_place_id, args.googlePlaceId),
-			),
-		)
-		.limit(1);
-	return (rows[0] as WikiPlaceRow) ?? null;
+  if (!args.googlePlaceId) return null;
+  const rows = await db
+    .select()
+    .from(wikiPlaces)
+    .where(
+      and(
+        eq(wikiPlaces.tenant_id, args.tenantId),
+        eq(wikiPlaces.owner_id, args.ownerId),
+        eq(wikiPlaces.google_place_id, args.googlePlaceId),
+      ),
+    )
+    .limit(1);
+  return (rows[0] as WikiPlaceRow) ?? null;
 }
 
 /**
  * Look up a wiki_places row by id, scope-checked. Returns null on mismatch.
  */
 export async function findPlaceById(
-	args: { tenantId: string; ownerId: string; id: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string; id: string },
+  db: DbClient = defaultDb,
 ): Promise<WikiPlaceRow | null> {
-	const rows = await db
-		.select()
-		.from(wikiPlaces)
-		.where(
-			and(
-				eq(wikiPlaces.id, args.id),
-				eq(wikiPlaces.tenant_id, args.tenantId),
-				eq(wikiPlaces.owner_id, args.ownerId),
-			),
-		)
-		.limit(1);
-	return (rows[0] as WikiPlaceRow) ?? null;
+  const rows = await db
+    .select()
+    .from(wikiPlaces)
+    .where(
+      and(
+        eq(wikiPlaces.id, args.id),
+        eq(wikiPlaces.tenant_id, args.tenantId),
+        eq(wikiPlaces.owner_id, args.ownerId),
+      ),
+    )
+    .limit(1);
+  return (rows[0] as WikiPlaceRow) ?? null;
 }
 
 /**
@@ -2587,22 +2591,22 @@ export async function findPlaceById(
  * create-backing-page step in places-service should have ensured one).
  */
 export async function findPageByPlaceId(
-	args: { tenantId: string; ownerId: string; placeId: string },
-	db: DbClient = defaultDb,
+  args: { tenantId: string; ownerId: string; placeId: string },
+  db: DbClient = defaultDb,
 ): Promise<WikiPageRow | null> {
-	const rows = await db
-		.select()
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
-				eq(wikiPages.place_id, args.placeId),
-				eq(wikiPages.status, "active"),
-			),
-		)
-		.limit(1);
-	return (rows[0] as WikiPageRow) ?? null;
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        eq(wikiPages.owner_id, args.ownerId),
+        eq(wikiPages.place_id, args.placeId),
+        eq(wikiPages.status, "active"),
+      ),
+    )
+    .limit(1);
+  return (rows[0] as WikiPageRow) ?? null;
 }
 
 /**
@@ -2621,66 +2625,66 @@ export async function findPageByPlaceId(
  * from "existing row returned" — useful for metrics and logs.
  */
 export async function upsertPlace(
-	input: UpsertWikiPlaceInput,
-	db: DbClient = defaultDb,
+  input: UpsertWikiPlaceInput,
+  db: DbClient = defaultDb,
 ): Promise<{ row: WikiPlaceRow; inserted: boolean }> {
-	const values = {
-		tenant_id: input.tenant_id,
-		owner_id: input.owner_id,
-		name: input.name,
-		google_place_id: input.google_place_id ?? null,
-		// numeric columns accept string; stringify numbers to preserve precision.
-		geo_lat:
-			input.geo_lat === null || input.geo_lat === undefined
-				? null
-				: String(input.geo_lat),
-		geo_lon:
-			input.geo_lon === null || input.geo_lon === undefined
-				? null
-				: String(input.geo_lon),
-		address: input.address ?? null,
-		parent_place_id: input.parent_place_id ?? null,
-		place_kind: input.place_kind ?? null,
-		source: input.source,
-		source_payload: (input.source_payload ?? null) as any,
-	};
+  const values = {
+    tenant_id: input.tenant_id,
+    owner_id: input.owner_id,
+    name: input.name,
+    google_place_id: input.google_place_id ?? null,
+    // numeric columns accept string; stringify numbers to preserve precision.
+    geo_lat:
+      input.geo_lat === null || input.geo_lat === undefined
+        ? null
+        : String(input.geo_lat),
+    geo_lon:
+      input.geo_lon === null || input.geo_lon === undefined
+        ? null
+        : String(input.geo_lon),
+    address: input.address ?? null,
+    parent_place_id: input.parent_place_id ?? null,
+    place_kind: input.place_kind ?? null,
+    source: input.source,
+    source_payload: (input.source_payload ?? null) as any,
+  };
 
-	const inserted = await db
-		.insert(wikiPlaces)
-		.values(values as any)
-		.onConflictDoNothing()
-		.returning();
+  const inserted = await db
+    .insert(wikiPlaces)
+    .values(values as any)
+    .onConflictDoNothing()
+    .returning();
 
-	if (inserted[0]) {
-		return { row: inserted[0] as WikiPlaceRow, inserted: true };
-	}
+  if (inserted[0]) {
+    return { row: inserted[0] as WikiPlaceRow, inserted: true };
+  }
 
-	// Conflict — read the existing row via google_place_id (the partial
-	// unique key). If google_place_id is null, the conflict can't have
-	// fired on the partial unique and we should never land here; log and
-	// bail gracefully.
-	if (!input.google_place_id) {
-		throw new Error(
-			`upsertPlace: INSERT returned no row with null google_place_id — scope (${input.tenant_id}, ${input.owner_id}) name=${input.name}`,
-		);
-	}
-	const existing = await findPlaceByGooglePlaceId(
-		{
-			tenantId: input.tenant_id,
-			ownerId: input.owner_id,
-			googlePlaceId: input.google_place_id,
-		},
-		db,
-	);
-	if (!existing) {
-		throw new Error(
-			`upsertPlace: conflict on google_place_id=${input.google_place_id} but no existing row in scope (${input.tenant_id}, ${input.owner_id})`,
-		);
-	}
-	console.warn(
-		`[wiki-places] upsert_conflict_reused: google_place_id=${input.google_place_id} scope=(${input.tenant_id.slice(0, 8)},${input.owner_id.slice(0, 8)})`,
-	);
-	return { row: existing, inserted: false };
+  // Conflict — read the existing row via google_place_id (the partial
+  // unique key). If google_place_id is null, the conflict can't have
+  // fired on the partial unique and we should never land here; log and
+  // bail gracefully.
+  if (!input.google_place_id) {
+    throw new Error(
+      `upsertPlace: INSERT returned no row with null google_place_id — scope (${input.tenant_id}, ${input.owner_id}) name=${input.name}`,
+    );
+  }
+  const existing = await findPlaceByGooglePlaceId(
+    {
+      tenantId: input.tenant_id,
+      ownerId: input.owner_id,
+      googlePlaceId: input.google_place_id,
+    },
+    db,
+  );
+  if (!existing) {
+    throw new Error(
+      `upsertPlace: conflict on google_place_id=${input.google_place_id} but no existing row in scope (${input.tenant_id}, ${input.owner_id})`,
+    );
+  }
+  console.warn(
+    `[wiki-places] upsert_conflict_reused: google_place_id=${input.google_place_id} scope=(${input.tenant_id.slice(0, 8)},${input.owner_id.slice(0, 8)})`,
+  );
+  return { row: existing, inserted: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -2688,22 +2692,22 @@ export async function upsertPlace(
 // ---------------------------------------------------------------------------
 
 export function normalizeSectionHeading(
-	rawHeading: unknown,
-	sectionSlug: string,
+  rawHeading: unknown,
+  sectionSlug: string,
 ): string {
-	const heading = typeof rawHeading === "string" ? rawHeading.trim() : "";
-	if (heading) return heading;
+  const heading = typeof rawHeading === "string" ? rawHeading.trim() : "";
+  if (heading) return heading;
 
-	const fromSlug = sectionSlug
-		.replace(/[_-]+/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
-	if (!fromSlug) return "Overview";
-	return fromSlug.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  const fromSlug = sectionSlug
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!fromSlug) return "Overview";
+  return fromSlug.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 export function normalizeSectionBody(rawBody: unknown): string {
-	return typeof rawBody === "string" ? stripWikilinks(rawBody) : "";
+  return typeof rawBody === "string" ? stripWikilinks(rawBody) : "";
 }
 
 /**
@@ -2712,18 +2716,18 @@ export function normalizeSectionBody(rawBody: unknown): string {
  * `body_md` comparisons during compile can detect drift.
  */
 export function renderBodyMarkdown(
-	sections: Array<
-		Pick<WikiSectionInput, "heading" | "body_md" | "position"> & {
-			section_slug?: string;
-		}
-	>,
+  sections: Array<
+    Pick<WikiSectionInput, "heading" | "body_md" | "position"> & {
+      section_slug?: string;
+    }
+  >,
 ): string {
-	const sorted = [...sections].sort((a, b) => a.position - b.position);
-	return sorted
-		.map((s) => {
-			const heading = normalizeSectionHeading(s.heading, s.section_slug ?? "");
-			const body = normalizeSectionBody(s.body_md);
-			return `## ${heading}\n\n${body}`.trim();
-		})
-		.join("\n\n");
+  const sorted = [...sections].sort((a, b) => a.position - b.position);
+  return sorted
+    .map((s) => {
+      const heading = normalizeSectionHeading(s.heading, s.section_slug ?? "");
+      const body = normalizeSectionBody(s.body_md);
+      return `## ${heading}\n\n${body}`.trim();
+    })
+    .join("\n\n");
 }

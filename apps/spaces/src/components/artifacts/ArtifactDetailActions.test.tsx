@@ -24,10 +24,9 @@ const {
 }));
 
 vi.mock("@tanstack/react-router", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-router")>(
-      "@tanstack/react-router",
-    );
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -70,17 +69,13 @@ void toastErrorMock;
 
 describe("ArtifactDetailActions (dropdown trigger)", () => {
   it("renders the overflow trigger accessibly", () => {
-    render(
-      <ArtifactDetailActions artifactId="art-1" artifactTitle="Demo" />,
-    );
+    render(<ArtifactDetailActions artifactId="art-1" artifactTitle="Demo" />);
     const trigger = screen.getByTestId("artifact-actions-trigger");
     expect(trigger.getAttribute("aria-label")).toBe("Artifact actions");
   });
 
   it("does not render the favorite/pin menu item (moved to header pin button)", () => {
-    render(
-      <ArtifactDetailActions artifactId="art-1" artifactTitle="Demo" />,
-    );
+    render(<ArtifactDetailActions artifactId="art-1" artifactTitle="Demo" />);
     expect(screen.queryByTestId("artifact-actions-favorite")).toBeNull();
   });
 });
@@ -133,4 +128,3 @@ describe("ArtifactDeleteDialog", () => {
     expect(deleteArtifactMock).not.toHaveBeenCalled();
   });
 });
-

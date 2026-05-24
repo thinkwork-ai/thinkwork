@@ -58,9 +58,7 @@ export const skillCatalog = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (table) => [
-    index("idx_skill_catalog_category").on(table.category),
-  ],
+  (table) => [index("idx_skill_catalog_category").on(table.category)],
 );
 
 // ---------------------------------------------------------------------------

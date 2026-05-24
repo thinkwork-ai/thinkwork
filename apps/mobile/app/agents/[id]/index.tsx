@@ -32,41 +32,60 @@ export default function AgentDetailScreen() {
   const gwAny = gateway as any;
   const headerStatusBadge = (() => {
     if (!gwAny) return null;
-    const isDigestUpdating = gwAny.targetDigest && gwAny.targetDigest !== gwAny.imageDigest;
-    if (isDigestUpdating || gwAny.status === "updating") return <StatusBadge className="self-auto" status="updating" />;
-    if (gwAny.status === "provisioning") return <Badge className="self-auto" variant="outline">Starting</Badge>;
-    if (gwAny.status === "stopped" || gwAny.status === "failed") return <Badge className="self-auto" variant="outline">Stopped</Badge>;
-    return <Badge className="self-auto" variant={gwAny.connectionStatus === "online" ? "success" : "outline"}>{gwAny.connectionStatus === "online" ? "Online" : "Offline"}</Badge>;
+    const isDigestUpdating =
+      gwAny.targetDigest && gwAny.targetDigest !== gwAny.imageDigest;
+    if (isDigestUpdating || gwAny.status === "updating")
+      return <StatusBadge className="self-auto" status="updating" />;
+    if (gwAny.status === "provisioning")
+      return (
+        <Badge className="self-auto" variant="outline">
+          Starting
+        </Badge>
+      );
+    if (gwAny.status === "stopped" || gwAny.status === "failed")
+      return (
+        <Badge className="self-auto" variant="outline">
+          Stopped
+        </Badge>
+      );
+    return (
+      <Badge
+        className="self-auto"
+        variant={gwAny.connectionStatus === "online" ? "success" : "outline"}
+      >
+        {gwAny.connectionStatus === "online" ? "Online" : "Offline"}
+      </Badge>
+    );
   })();
 
-  const isRestartAction = gwAny?.status === "running" || gwAny?.status === "updating";
+  const isRestartAction =
+    gwAny?.status === "running" || gwAny?.status === "updating";
   const handleLifecycleAction = () => {
     const title = isRestartAction ? "Restart Agent" : "Relaunch Agent";
     const body = isRestartAction
       ? "This will roll the agent container. It may be briefly unavailable."
       : "This agent is failed/terminated/unreachable. Relaunch will request a fresh control-plane start.";
     const confirm = isRestartAction ? "Restart" : "Relaunch";
-    Alert.alert(
-      title,
-      body,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: confirm,
-          onPress: async () => {
-            try {
-              if (isRestartAction) {
-                await restartAgent({ agentId: id! });
-              } else {
-                await startAgent({ agentId: id! });
-              }
-            } catch (e: any) {
-              Alert.alert("Error", e?.message || `Failed to ${confirm.toLowerCase()} agent`);
+    Alert.alert(title, body, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: confirm,
+        onPress: async () => {
+          try {
+            if (isRestartAction) {
+              await restartAgent({ agentId: id! });
+            } else {
+              await startAgent({ agentId: id! });
             }
-          },
+          } catch (e: any) {
+            Alert.alert(
+              "Error",
+              e?.message || `Failed to ${confirm.toLowerCase()} agent`,
+            );
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   if (gateways === undefined) {
@@ -139,7 +158,11 @@ export default function AgentDetailScreen() {
         </View>
       }
     >
-      <AgentDetailContent gatewayId={id} onRequestDeleteRef={deleteRef} onRequestInfoRef={infoRef} />
+      <AgentDetailContent
+        gatewayId={id}
+        onRequestDeleteRef={deleteRef}
+        onRequestInfoRef={infoRef}
+      />
     </DetailLayout>
   );
 }

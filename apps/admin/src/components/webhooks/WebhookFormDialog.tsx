@@ -7,13 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Form, FormField, FormItem, FormLabel, FormControl, FormMessage,
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
 } from "@/components/ui/form";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api-fetch";
 
@@ -52,7 +65,12 @@ const webhookFormSchema = z.object({
 type FormValues = z.infer<typeof webhookFormSchema>;
 
 export function WebhookFormDialog({
-  open, onOpenChange, mode, tenantId, initial, onSubmit,
+  open,
+  onOpenChange,
+  mode,
+  tenantId,
+  initial,
+  onSubmit,
 }: WebhookFormDialogProps) {
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [routines, setRoutines] = useState<RoutineOption[]>([]);
@@ -78,13 +96,25 @@ export function WebhookFormDialog({
     apiFetch<any[]>(`/api/agents?tenant_id=${tenantId}`, {
       extraHeaders: { "x-tenant-id": tenantId },
     })
-      .then((data) => setAgents(Array.isArray(data) ? data.map((a: any) => ({ id: a.id, name: a.name })) : []))
+      .then((data) =>
+        setAgents(
+          Array.isArray(data)
+            ? data.map((a: any) => ({ id: a.id, name: a.name }))
+            : [],
+        ),
+      )
       .catch(() => setAgents([]));
 
     apiFetch<any[]>("/api/routines", {
       extraHeaders: { "x-tenant-id": tenantId },
     })
-      .then((data) => setRoutines(Array.isArray(data) ? data.map((r: any) => ({ id: r.id, name: r.name })) : []))
+      .then((data) =>
+        setRoutines(
+          Array.isArray(data)
+            ? data.map((r: any) => ({ id: r.id, name: r.name }))
+            : [],
+        ),
+      )
       .catch(() => setRoutines([]));
   }, [open, tenantId]);
 
@@ -110,7 +140,8 @@ export function WebhookFormDialog({
         description: values.description,
         target_type: values.targetType,
         agent_id: values.targetType === "agent" ? values.agentId : undefined,
-        routine_id: values.targetType === "routine" ? values.routineId : undefined,
+        routine_id:
+          values.targetType === "routine" ? values.routineId : undefined,
         prompt: values.prompt,
         rate_limit: values.rateLimit,
       });
@@ -126,17 +157,24 @@ export function WebhookFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "New Webhook" : "Edit Webhook"}</DialogTitle>
+          <DialogTitle>
+            {mode === "create" ? "New Webhook" : "Edit Webhook"}
+          </DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-4"
+          >
             <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Name</FormLabel>
-                  <FormControl><Input {...field} placeholder="e.g. GitHub Push Handler" /></FormControl>
+                  <FormControl>
+                    <Input {...field} placeholder="e.g. GitHub Push Handler" />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -148,7 +186,13 @@ export function WebhookFormDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>
-                  <FormControl><Textarea {...field} placeholder="Optional description..." rows={2} /></FormControl>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      placeholder="Optional description..."
+                      rows={2}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -162,7 +206,9 @@ export function WebhookFormDialog({
                   <FormLabel>Target Type</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="agent">Agent</SelectItem>
@@ -183,11 +229,15 @@ export function WebhookFormDialog({
                     <FormLabel>Agent</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select agent..." /></SelectTrigger>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select agent..." />
+                        </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {agents.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -206,11 +256,15 @@ export function WebhookFormDialog({
                     <FormLabel>Routine</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select routine..." /></SelectTrigger>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select routine..." />
+                        </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {routines.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -228,7 +282,11 @@ export function WebhookFormDialog({
                   <FormItem>
                     <FormLabel>Prompt</FormLabel>
                     <FormControl>
-                      <Textarea {...field} placeholder="Optional prompt to inject with webhook payload..." rows={3} />
+                      <Textarea
+                        {...field}
+                        placeholder="Optional prompt to inject with webhook payload..."
+                        rows={3}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -248,7 +306,9 @@ export function WebhookFormDialog({
                       min={1}
                       max={10000}
                       value={field.value}
-                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 60)}
+                      onChange={(e) =>
+                        field.onChange(parseInt(e.target.value, 10) || 60)
+                      }
                     />
                   </FormControl>
                   <FormMessage />
@@ -257,9 +317,17 @@ export function WebhookFormDialog({
             />
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
               <Button type="submit" disabled={submitting}>
-                {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                {submitting && (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                )}
                 {mode === "create" ? "Create" : "Save"}
               </Button>
             </DialogFooter>

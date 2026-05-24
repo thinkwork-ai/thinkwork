@@ -1,8 +1,23 @@
 import { useState } from "react";
-import { View, ScrollView, Pressable, ActivityIndicator, Alert, Platform } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Platform,
+} from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Trash2, Shield, Activity, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react-native";
+import {
+  Trash2,
+  Shield,
+  Activity,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+} from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,19 +50,21 @@ function relativeTime(ts: number): string {
 }
 
 function humanizeScope(scope: string): string {
-  return scope
-    .replace(/[._]/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return scope.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function StatusIcon({ code }: { code?: number }) {
   if (!code) return <AlertCircle size={14} color="#a3a3a3" />;
-  if (code >= 200 && code < 300) return <CheckCircle size={14} color="#22c55e" />;
+  if (code >= 200 && code < 300)
+    return <CheckCircle size={14} color="#22c55e" />;
   return <XCircle size={14} color="#ef4444" />;
 }
 
 export default function CredentialDetailScreen() {
-  const { providerId, connectionId } = useLocalSearchParams<{ providerId: string; connectionId: string }>();
+  const { providerId, connectionId } = useLocalSearchParams<{
+    providerId: string;
+    connectionId: string;
+  }>();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   const router = useRouter();
@@ -86,7 +103,9 @@ export default function CredentialDetailScreen() {
     };
 
     if (Platform.OS === "web") {
-      if (confirm("Disconnect this OAuth integration? This will revoke access.")) {
+      if (
+        confirm("Disconnect this OAuth integration? This will revoke access.")
+      ) {
         await doRevoke();
       }
     } else {
@@ -127,7 +146,11 @@ export default function CredentialDetailScreen() {
     <DetailLayout title={provider.name}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 8,
+          paddingBottom: 24,
+        }}
       >
         <View style={{ maxWidth: 600 }}>
           {/* Provider Info */}
@@ -144,7 +167,9 @@ export default function CredentialDetailScreen() {
                   </Text>
                 </View>
                 {provider.description && (
-                  <Muted className="text-sm mt-0.5">{provider.description}</Muted>
+                  <Muted className="text-sm mt-0.5">
+                    {provider.description}
+                  </Muted>
                 )}
               </View>
             </View>
@@ -251,7 +276,9 @@ export default function CredentialDetailScreen() {
                       </View>
                     </View>
                     {entry.timestamp && (
-                      <Muted className="text-xs">{relativeTime(entry.timestamp)}</Muted>
+                      <Muted className="text-xs">
+                        {relativeTime(entry.timestamp)}
+                      </Muted>
                     )}
                   </View>
                 ))}

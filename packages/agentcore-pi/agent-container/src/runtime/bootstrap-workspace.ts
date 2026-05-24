@@ -59,7 +59,9 @@ function normalizeRenderedWorkspacePrefix(
   const normalized = trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
   const segments = normalized.split("/").filter(Boolean);
   if (segments.some((segment) => segment === "." || segment === "..")) {
-    throw new Error("rendered_workspace_prefix contains an unsafe path segment.");
+    throw new Error(
+      "rendered_workspace_prefix contains an unsafe path segment.",
+    );
   }
 
   const allowedPrefix = `tenants/${tenantSlug}/rendered/${agentSlug}/`;

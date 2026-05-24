@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { View, ScrollView, Pressable, ActivityIndicator, Platform } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { DetailLayout } from "@/components/layout/detail-layout";
@@ -39,7 +45,9 @@ export default function WorkspaceFileView() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [assistantId, fileName]);
 
   const editButton = (
@@ -51,12 +59,20 @@ export default function WorkspaceFileView() {
       }
       className="active:opacity-70"
     >
-      <Text style={{ color: colors.primary }} className="font-semibold text-base">Edit</Text>
+      <Text
+        style={{ color: colors.primary }}
+        className="font-semibold text-base"
+      >
+        Edit
+      </Text>
     </Pressable>
   );
 
   return (
-    <DetailLayout title={fileName} headerRight={!loading ? editButton : undefined}>
+    <DetailLayout
+      title={fileName}
+      headerRight={!loading ? editButton : undefined}
+    >
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.mutedForeground} />
@@ -69,7 +85,9 @@ export default function WorkspaceFileView() {
           {content ? (
             <Text
               className="text-sm leading-6 text-neutral-700 dark:text-neutral-300 px-4 pt-4"
-              style={{ fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" }}
+              style={{
+                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+              }}
               selectable
             >
               {content}

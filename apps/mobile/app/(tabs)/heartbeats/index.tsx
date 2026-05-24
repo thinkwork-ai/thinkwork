@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { View, ScrollView, Pressable, ActivityIndicator, useWindowDimensions } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  useWindowDimensions,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 import { useTriggers } from "@/lib/hooks/use-triggers";
@@ -57,8 +63,9 @@ function getOccurrences(
   const times: number[] = [];
 
   const hasMinuteStep = minPart.includes("/");
-  const isEveryHour = !hasMinuteStep && (hourPart === "*" || hourPart.includes("/"));
-  const stepMs = (hasMinuteStep || isEveryHour) ? 60_000 : 3_600_000;
+  const isEveryHour =
+    !hasMinuteStep && (hourPart === "*" || hourPart.includes("/"));
+  const stepMs = hasMinuteStep || isEveryHour ? 60_000 : 3_600_000;
 
   const cursor = new Date(windowStart);
   cursor.setSeconds(0, 0);
@@ -88,7 +95,10 @@ function matchField(f: string, v: number): boolean {
   if (f === "*" || f === "?") return true;
   if (f.includes("/")) return v % parseInt(f.split("/")[1], 10) === 0;
   if (f.includes(",")) return f.split(",").some((x) => parseInt(x, 10) === v);
-  if (f.includes("-")) { const [a, b] = f.split("-").map(Number); return v >= a && v <= b; }
+  if (f.includes("-")) {
+    const [a, b] = f.split("-").map(Number);
+    return v >= a && v <= b;
+  }
   return parseInt(f, 10) === v;
 }
 
@@ -96,11 +106,15 @@ function matchDow(f: string, dow: number): boolean {
   if (f === "*" || f === "?") return true;
   const eb = dow === 0 ? 1 : dow + 1; // JS -> EventBridge
   if (f === "MON-FRI" || f === "2-6") return eb >= 2 && eb <= 6;
-  if (f.includes(",")) return f.split(",").some((x) => {
-    const n = parseInt(x, 10);
-    return Number.isNaN(n) ? false : n === eb;
-  });
-  if (f.includes("-")) { const [a, b] = f.split("-").map(Number); return eb >= a && eb <= b; }
+  if (f.includes(","))
+    return f.split(",").some((x) => {
+      const n = parseInt(x, 10);
+      return Number.isNaN(n) ? false : n === eb;
+    });
+  if (f.includes("-")) {
+    const [a, b] = f.split("-").map(Number);
+    return eb >= a && eb <= b;
+  }
   return parseInt(f, 10) === eb;
 }
 
@@ -196,7 +210,13 @@ function Timeline({
   );
 }
 
-function TimelineLabels({ windowStart, width }: { windowStart: number; width: number }) {
+function TimelineLabels({
+  windowStart,
+  width,
+}: {
+  windowStart: number;
+  width: number;
+}) {
   const totalHours = HOURS_BACK + HOURS_FORWARD;
   const labels = [];
   for (let i = 0; i <= totalHours; i++) {
@@ -210,10 +230,12 @@ function TimelineLabels({ windowStart, width }: { windowStart: number; width: nu
         style={{ position: "absolute", left: x - 12 }}
       >
         {label}
-      </Text>
+      </Text>,
     );
   }
-  return <View style={{ width, height: 16, position: "relative" }}>{labels}</View>;
+  return (
+    <View style={{ width, height: 16, position: "relative" }}>{labels}</View>
+  );
 }
 
 // --- Screen ---
@@ -227,10 +249,12 @@ export default function TriggersScreen() {
   const { user } = useAuth();
   const tenantId = user?.tenantId;
 
-  const [{ data: triggersData, fetching: triggersFetching }] = useTriggers(tenantId);
+  const [{ data: triggersData, fetching: triggersFetching }] =
+    useTriggers(tenantId);
   const [{ data: runsData }] = useHeartbeatRuns(tenantId, { limit: 200 });
 
-  const jobs = (triggersData as any)?.scheduledJobs ?? (triggersData as any)?.triggers;
+  const jobs =
+    (triggersData as any)?.scheduledJobs ?? (triggersData as any)?.triggers;
   const recentRuns = runsData?.threadTurns;
 
   const nowMs = useMemo(() => Date.now(), []);
@@ -252,7 +276,9 @@ export default function TriggersScreen() {
     const result: Record<string, TimelineDot[]> = {};
     for (const job of jobs) {
       const dots: TimelineDot[] = [];
-      const cronExpr = job.scheduleExpression ? extractCron(job.scheduleExpression) : null;
+      const cronExpr = job.scheduleExpression
+        ? extractCron(job.scheduleExpression)
+        : null;
 
       if (cronExpr) {
         // Calculate ALL cron occurrences across the full window
@@ -266,15 +292,24 @@ export default function TriggersScreen() {
         // Actual runs for this job's agent within window
         const agentRuns = job.agentId ? (runsByAgent[job.agentId] ?? []) : [];
         for (const r of agentRuns) {
-          const startedAtMs = typeof r.startedAt === "string" ? new Date(r.startedAt).getTime() : (r.startedAt as number);
-          if (startedAtMs && startedAtMs >= windowStart && startedAtMs <= windowEnd) {
+          const startedAtMs =
+            typeof r.startedAt === "string"
+              ? new Date(r.startedAt).getTime()
+              : (r.startedAt as number);
+          if (
+            startedAtMs &&
+            startedAtMs >= windowStart &&
+            startedAtMs <= windowEnd
+          ) {
             dots.push({ ts: startedAtMs, type: "past", status: r.status });
           }
         }
 
         // Add cron occurrences as dots
         for (const ts of allOccs) {
-          const hasActivity = dots.some((d) => d.type === "past" && Math.abs(d.ts - ts) < 60_000);
+          const hasActivity = dots.some(
+            (d) => d.type === "past" && Math.abs(d.ts - ts) < 60_000,
+          );
           if (hasActivity) continue;
 
           if (ts <= nowMs) {
@@ -308,13 +343,22 @@ export default function TriggersScreen() {
           <Pressable onPress={() => router.push("/heartbeats/new")} hitSlop={8}>
             <View className="flex-row items-center gap-1">
               <Plus size={18} color={colors.primary} />
-              <Text style={{ color: colors.primary }} className="font-semibold text-base">New</Text>
+              <Text
+                style={{ color: colors.primary }}
+                className="font-semibold text-base"
+              >
+                New
+              </Text>
             </View>
           </Pressable>
         }
       >
         <View className="flex-1 items-center justify-center px-6">
-          <IconBolt size={48} strokeWidth={1.5} color={colors.mutedForeground} />
+          <IconBolt
+            size={48}
+            strokeWidth={1.5}
+            color={colors.mutedForeground}
+          />
           <Text className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 mt-4">
             No Automations
           </Text>
@@ -333,7 +377,12 @@ export default function TriggersScreen() {
         <Pressable onPress={() => router.push("/heartbeats/new")} hitSlop={8}>
           <View className="flex-row items-center gap-1">
             <Plus size={18} color={colors.primary} />
-            <Text style={{ color: colors.primary }} className="font-semibold text-base">New</Text>
+            <Text
+              style={{ color: colors.primary }}
+              className="font-semibold text-base"
+            >
+              New
+            </Text>
           </View>
         </Pressable>
       }
@@ -343,7 +392,10 @@ export default function TriggersScreen() {
         <TimelineLabels windowStart={windowStart} width={timelineWidth} />
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
         {(jobs ?? []).map((job: any) => (
           <Pressable
             key={job.id}
@@ -353,16 +405,25 @@ export default function TriggersScreen() {
             {/* Header row */}
             <View className="flex-row items-center justify-between px-4 pt-3 pb-1">
               <View className="flex-1 flex-row items-center gap-2">
-                <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100 flex-shrink" numberOfLines={1}>
+                <Text
+                  className="text-sm font-medium text-neutral-900 dark:text-neutral-100 flex-shrink"
+                  numberOfLines={1}
+                >
                   {job.name}
                 </Text>
                 {!job.enabled && (
                   <View className="bg-neutral-200 dark:bg-neutral-700 rounded px-1.5 py-0.5">
-                    <Text className="text-[10px] text-neutral-500 dark:text-neutral-400">Paused</Text>
+                    <Text className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                      Paused
+                    </Text>
                   </View>
                 )}
               </View>
-              <Muted className="text-xs ml-2">{job.scheduleExpression ? scheduleLabel(job.scheduleExpression) : job.triggerType}</Muted>
+              <Muted className="text-xs ml-2">
+                {job.scheduleExpression
+                  ? scheduleLabel(job.scheduleExpression)
+                  : job.triggerType}
+              </Muted>
             </View>
             {/* Timeline strip */}
             <View className="px-4 pb-3">

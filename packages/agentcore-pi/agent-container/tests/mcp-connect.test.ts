@@ -65,7 +65,9 @@ describe("createConnectMcpServer", () => {
   it("forwards URL + headers to the transport factory", async () => {
     const transport = makeFakeTransport();
     const fake = makeFakeClient([]);
-    let capturedArgs: { url: URL; headers: Record<string, string>; transport: string } | undefined;
+    let capturedArgs:
+      | { url: URL; headers: Record<string, string>; transport: string }
+      | undefined;
     const factory = createConnectMcpServer({
       cleanup: [],
       transportFactory: (args) => {
@@ -214,10 +216,10 @@ describe("createConnectMcpServer", () => {
   });
 
   it("throws when callTool returns isError", async () => {
-    const fake = makeFakeClient(
-      [{ name: "broken" }],
-      { content: [{ type: "text", text: "boom" }], isError: true },
-    );
+    const fake = makeFakeClient([{ name: "broken" }], {
+      content: [{ type: "text", text: "boom" }],
+      isError: true,
+    });
     const factory = createConnectMcpServer({
       cleanup: [],
       transportFactory: () => makeFakeTransport(),

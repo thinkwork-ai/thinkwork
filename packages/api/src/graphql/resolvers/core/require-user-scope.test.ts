@@ -9,12 +9,10 @@ vi.mock("./resolve-auth-user.js", () => ({
 
 vi.mock("../../utils.js", () => ({
   db: { execute: vi.fn() },
-  sql: vi.fn(
-    (strings: TemplateStringsArray, ...values: unknown[]) => ({
-      strings: Array.from(strings),
-      values,
-    }),
-  ),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings: Array.from(strings),
+    values,
+  })),
 }));
 
 const resolveCallerMock = vi.mocked(resolveCaller);

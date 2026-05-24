@@ -17,17 +17,17 @@ import { priceIdToInternalPlan } from "./stripe-plans.js";
 const { stripeCustomers, stripeSubscriptions } = schema;
 
 export interface ProvisionInput {
-	session: Stripe.Checkout.Session;
-	customer: Stripe.Customer;
-	subscription: Stripe.Subscription;
+  session: Stripe.Checkout.Session;
+  customer: Stripe.Customer;
+  subscription: Stripe.Subscription;
 }
 
 export interface ProvisionResult {
-	tenantId: string;
-	email: string;
-	plan: string;
-	stripeCustomerId: string;
-	stripeSubscriptionId: string;
+  tenantId: string;
+  email: string;
+  plan: string;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
 }
 
 const UNKNOWN_PLAN = "unknown";
@@ -39,98 +39,94 @@ const UNKNOWN_PLAN = "unknown";
  * dedup gate; this is belt-and-suspenders.
  */
 export async function provisionTenantFromStripeSession(
-	input: ProvisionInput,
+  input: ProvisionInput,
 ): Promise<ProvisionResult> {
-	const { session, customer, subscription } = input;
+  const { session, customer, subscription } = input;
 
-	const email = (
-		session.customer_details?.email ||
-		customer.email ||
-		""
-	)
-		.trim()
-		.toLowerCase();
-	if (!email) {
-		throw new Error(
-			"Cannot provision tenant: checkout session has no customer email",
-		);
-	}
+  const email = (session.customer_details?.email || customer.email || "")
+    .trim()
+    .toLowerCase();
+  if (!email) {
+    throw new Error(
+      "Cannot provision tenant: checkout session has no customer email",
+    );
+  }
 
-	const priceId = subscription.items.data[0]?.price.id;
-	if (!priceId) {
-		throw new Error(
-			`Cannot provision tenant: subscription ${subscription.id} has no price`,
-		);
-	}
+  const priceId = subscription.items.data[0]?.price.id;
+  if (!priceId) {
+    throw new Error(
+      `Cannot provision tenant: subscription ${subscription.id} has no price`,
+    );
+  }
 
-	const internalPlan = priceIdToInternalPlan(priceId) ?? UNKNOWN_PLAN;
-	if (internalPlan === UNKNOWN_PLAN) {
-		console.warn(
-			`[stripe-provision-tenant] Unrecognized price_id=${priceId} on subscription=${subscription.id}; writing plan="${UNKNOWN_PLAN}" and continuing so Stripe stops retrying. Operator follow-up required.`,
-		);
-	}
+  const internalPlan = priceIdToInternalPlan(priceId) ?? UNKNOWN_PLAN;
+  if (internalPlan === UNKNOWN_PLAN) {
+    console.warn(
+      `[stripe-provision-tenant] Unrecognized price_id=${priceId} on subscription=${subscription.id}; writing plan="${UNKNOWN_PLAN}" and continuing so Stripe stops retrying. Operator follow-up required.`,
+    );
+  }
 
-	const emailLocal = email.split("@")[0] || "workspace";
-	const displayName =
-		session.customer_details?.name?.trim() ||
-		customer.name?.trim() ||
-		`${emailLocal}'s Workspace`;
+  const emailLocal = email.split("@")[0] || "workspace";
+  const displayName =
+    session.customer_details?.name?.trim() ||
+    customer.name?.trim() ||
+    `${emailLocal}'s Workspace`;
 
-	// Stripe's `Subscription` type pins `current_period_end` to a number, but
-	// newer API versions report it as optional at runtime on some paused /
-	// incomplete states. Coerce defensively so this module keeps working
-	// through API upgrades without a typings chase.
-	const currentPeriodEndRaw =
-		(subscription as unknown as { current_period_end?: number | null })
-			.current_period_end ?? null;
+  // Stripe's `Subscription` type pins `current_period_end` to a number, but
+  // newer API versions report it as optional at runtime on some paused /
+  // incomplete states. Coerce defensively so this module keeps working
+  // through API upgrades without a typings chase.
+  const currentPeriodEndRaw =
+    (subscription as unknown as { current_period_end?: number | null })
+      .current_period_end ?? null;
 
-	return await db.transaction(async (tx) => {
-		const [tenant] = await tx
-			.insert(tenants)
-			.values({
-				name: displayName,
-				slug: generateSlug(),
-				plan: internalPlan,
-				issue_prefix: "TW",
-				issue_counter: 0,
-				pending_owner_email: email,
-			})
-			.returning();
+  return await db.transaction(async (tx) => {
+    const [tenant] = await tx
+      .insert(tenants)
+      .values({
+        name: displayName,
+        slug: generateSlug(),
+        plan: internalPlan,
+        issue_prefix: "TW",
+        issue_counter: 0,
+        pending_owner_email: email,
+      })
+      .returning();
 
-		await tx
-			.insert(tenantSettings)
-			.values({ tenant_id: tenant.id })
-			.onConflictDoNothing();
+    await tx
+      .insert(tenantSettings)
+      .values({ tenant_id: tenant.id })
+      .onConflictDoNothing();
 
-		await tx
-			.insert(stripeCustomers)
-			.values({
-				tenant_id: tenant.id,
-				stripe_customer_id: customer.id,
-				email,
-			})
-			.onConflictDoNothing();
+    await tx
+      .insert(stripeCustomers)
+      .values({
+        tenant_id: tenant.id,
+        stripe_customer_id: customer.id,
+        email,
+      })
+      .onConflictDoNothing();
 
-		await tx
-			.insert(stripeSubscriptions)
-			.values({
-				tenant_id: tenant.id,
-				stripe_subscription_id: subscription.id,
-				stripe_price_id: priceId,
-				status: subscription.status,
-				current_period_end: currentPeriodEndRaw
-					? new Date(currentPeriodEndRaw * 1000)
-					: null,
-				cancel_at_period_end: subscription.cancel_at_period_end ?? false,
-			})
-			.onConflictDoNothing();
+    await tx
+      .insert(stripeSubscriptions)
+      .values({
+        tenant_id: tenant.id,
+        stripe_subscription_id: subscription.id,
+        stripe_price_id: priceId,
+        status: subscription.status,
+        current_period_end: currentPeriodEndRaw
+          ? new Date(currentPeriodEndRaw * 1000)
+          : null,
+        cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+      })
+      .onConflictDoNothing();
 
-		return {
-			tenantId: tenant.id,
-			email,
-			plan: internalPlan,
-			stripeCustomerId: customer.id,
-			stripeSubscriptionId: subscription.id,
-		};
-	});
+    return {
+      tenantId: tenant.id,
+      email,
+      plan: internalPlan,
+      stripeCustomerId: customer.id,
+      stripeSubscriptionId: subscription.id,
+    };
+  });
 }

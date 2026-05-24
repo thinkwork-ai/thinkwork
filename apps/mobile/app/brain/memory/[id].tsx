@@ -19,7 +19,10 @@ export default function BrainMemoryDetailScreen() {
   const hit = decodedId ? getRememberedBrainMemoryHit(decodedId) : undefined;
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
-  const markdownStyles = useMemo(() => buildBrainMarkdownStyles(colors), [colors]);
+  const markdownStyles = useMemo(
+    () => buildBrainMarkdownStyles(colors),
+    [colors],
+  );
   const content = hit ? displayBrainResultSnippet(hit, "MEMORY") : null;
   const sourceId = hit?.provenance.sourceId;
 
@@ -27,13 +30,18 @@ export default function BrainMemoryDetailScreen() {
     <DetailLayout title={hit?.title || "Memory"}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 18, paddingBottom: 48 }}
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingTop: 18,
+          paddingBottom: 48,
+        }}
         showsVerticalScrollIndicator={false}
       >
         {!hit || !content ? (
           <View className="items-center justify-center py-16 px-6">
             <Muted className="text-center">
-              This memory result is no longer available. Run the Brain search again to reopen it.
+              This memory result is no longer available. Run the Brain search
+              again to reopen it.
             </Muted>
           </View>
         ) : (

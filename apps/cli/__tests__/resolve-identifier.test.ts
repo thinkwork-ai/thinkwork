@@ -129,7 +129,10 @@ describe("resolveIdentifier — alias path", () => {
 describe("resolveIdentifier — missing-arg path (non-TTY)", () => {
   it("exits cleanly when stdin is not a TTY", async () => {
     const originalTty = process.stdin.isTTY;
-    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
     const exitSpy = vi
       .spyOn(process, "exit")
       .mockImplementation(() => undefined as never);

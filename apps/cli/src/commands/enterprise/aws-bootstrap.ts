@@ -230,9 +230,7 @@ export function buildEnterpriseDeployRolePolicy(options: {
   };
 }
 
-export class AwsCliEnterpriseBootstrapClient
-  implements EnterpriseAwsBootstrapClient
-{
+export class AwsCliEnterpriseBootstrapClient implements EnterpriseAwsBootstrapClient {
   async ensureStateBucket(
     bucket: string,
     region: string,

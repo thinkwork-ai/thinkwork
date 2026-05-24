@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 export interface BreadcrumbPopoverItem {
   label: string;
@@ -47,7 +54,8 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
 
 export function useBreadcrumbs(crumbs?: Breadcrumb[]) {
   const ctx = useContext(BreadcrumbContext);
-  if (!ctx) throw new Error("useBreadcrumbs must be used within BreadcrumbProvider");
+  if (!ctx)
+    throw new Error("useBreadcrumbs must be used within BreadcrumbProvider");
 
   // Convenience: set breadcrumbs on mount when passed directly
   // eslint-disable-next-line react-hooks/rules-of-hooks

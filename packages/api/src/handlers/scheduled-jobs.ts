@@ -30,9 +30,6 @@ import {
   threadTurnEvents,
   agentWakeupRequests,
   agents,
-  computers,
-  computerTasks,
-  computerEvents,
   evalRuns,
   messages,
   spaces,
@@ -45,10 +42,6 @@ import {
 import { json, error, notFound } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
-import {
-  hasConnectorTriggerDefinition,
-  prepareConnectorTriggerDefinition,
-} from "../lib/computers/connector-trigger-routing.js";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
@@ -107,9 +100,8 @@ async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -137,9 +129,8 @@ async function invokeJobScheduleManager(
       console.error("[scheduled-jobs]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -387,8 +378,6 @@ async function listScheduledJobs(
   if (spaceId) conditions.push(eq(scheduledJobs.space_id, spaceId));
   if (params.agent_id)
     conditions.push(eq(scheduledJobs.agent_id, params.agent_id));
-  if (params.computer_id)
-    conditions.push(eq(scheduledJobs.computer_id, params.computer_id));
   if (params.routine_id)
     conditions.push(eq(scheduledJobs.routine_id, params.routine_id));
   if (params.trigger_type)
@@ -446,30 +435,10 @@ async function createScheduledJob(
     );
   }
 
-  const computerId = (body.computer_id as string) || null;
   const spaceId =
     ((body.space_id ?? body.spaceId) as string | null | undefined) || null;
   const spaceError = await validateSpaceForTenant(spaceId, tenantId);
   if (spaceError) return spaceError;
-
-  if (computerId) {
-    // Verify the named Computer belongs to the caller's tenant before
-    // persisting the FK reference. The DB FK only enforces referential
-    // integrity against `computers(id)`; without this check a tenant
-    // admin could create a scheduled job referencing a foreign-tenant
-    // Computer UUID. The tenant filter on later GETs would scope it
-    // out, but the FK row would still belong to someone else.
-    const [computerRow] = await db
-      .select({ tenant_id: computers.tenant_id })
-      .from(computers)
-      .where(eq(computers.id, computerId));
-    if (!computerRow) {
-      return error(`Computer ${computerId} not found`, 400);
-    }
-    if (computerRow.tenant_id !== tenantId) {
-      return error("Computer does not belong to this tenant", 403);
-    }
-  }
 
   const createdByType = (
     (body.created_by_type as string) || "user"
@@ -484,27 +453,8 @@ async function createScheduledJob(
     !Array.isArray(body.config)
       ? (body.config as Record<string, unknown>)
       : null;
-  let triggerType = String(body.trigger_type);
-  let normalizedComputerId = computerId;
-  let scheduleType = (body.schedule_type as string) || null;
-  let normalizedConfig = config;
-  if (triggerType === "event" && hasConnectorTriggerDefinition(config)) {
-    try {
-      const connectorTrigger = await prepareConnectorTriggerDefinition({
-        tenantId,
-        requesterUserId: createdByType === "user" ? createdById : null,
-        computerId,
-        config,
-      });
-      triggerType = connectorTrigger.triggerType;
-      normalizedComputerId = connectorTrigger.computerId;
-      scheduleType = connectorTrigger.scheduleType;
-      normalizedConfig = connectorTrigger.config;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return error(message, 400);
-    }
-  }
+  const triggerType = String(body.trigger_type);
+  const scheduleType = (body.schedule_type as string) || null;
 
   const [row] = await db
     .insert(scheduledJobs)
@@ -513,12 +463,11 @@ async function createScheduledJob(
       trigger_type: triggerType,
       agent_id: (body.agent_id as string) || null,
       space_id: spaceId,
-      computer_id: normalizedComputerId,
       routine_id: (body.routine_id as string) || null,
       name: body.name as string,
       description: (body.description as string) || null,
       prompt: (body.prompt as string) || null,
-      config: normalizedConfig,
+      config,
       schedule_type: scheduleType,
       schedule_expression: (body.schedule_expression as string) || null,
       timezone: (body.timezone as string) || "UTC",
@@ -733,17 +682,11 @@ async function fireScheduledJob(
     // packages/lambda/job-trigger.ts.
     const cfg = (trig.config ?? {}) as {
       agentId?: string;
-      computerId?: string;
       model?: string;
       categories?: string[];
     };
     let targetAgentId: string;
     try {
-      if (cfg.computerId) {
-        throw new Error(
-          "Scheduled eval Computer targets are no longer supported",
-        );
-      }
       if (cfg.model && cfg.model !== DEFAULT_EVAL_MODEL_ID) {
         throw new Error(
           `Scheduled eval model overrides are no longer supported; use ${DEFAULT_EVAL_MODEL_ID}`,
@@ -765,7 +708,6 @@ async function fireScheduledJob(
       .values({
         tenant_id: tenantId,
         agent_id: targetAgentId,
-        computer_id: null,
         scheduled_job_id: trig.id,
         status: "pending",
         model: DEFAULT_EVAL_MODEL_ID,
@@ -774,9 +716,8 @@ async function fireScheduledJob(
       .returning();
 
     try {
-      const { LambdaClient, InvokeCommand } = await import(
-        "@aws-sdk/client-lambda"
-      );
+      const { LambdaClient, InvokeCommand } =
+        await import("@aws-sdk/client-lambda");
       const lambda = new LambdaClient({});
       const stage = process.env.STAGE || "dev";
       const fnName =
@@ -809,205 +750,10 @@ async function fireScheduledJob(
     return json({ ok: true, runId: run.id }, 201);
   }
 
-  if (isAgentTrigger && (trig.agent_id || trig.computer_id)) {
-    // Manual fires for agent-typed schedules MUST route through the linked
-    // Computer's task queue — never through the legacy `agent_wakeup_requests`
-    // path. The legacy path lands at wakeup-processor, which reads the
-    // agent's `runtime` column and can dispatch to the Pi Lambda; Pi is
-    // an experimental runtime that does not belong in any automation hot
-    // path. The scheduled (cron) firing path in
-    // `packages/lambda/job-trigger.ts` already routes through Computers —
-    // this branch is the manual-fire mirror so behavior matches whichever
-    // way the schedule was triggered.
-
-    // Prefer the explicit `scheduled_jobs.computer_id` link. Fall back to
-    // the `computers.migrated_from_agent_id` lookup used by the cron path
-    // so legacy agent-only schedules that were migrated to a Computer keep
-    // working without re-creating the row.
-    let computer: {
-      id: string;
-      ownerUserId: string | null;
-      migratedAgentId: string | null;
-    } | null = null;
-
-    if (trig.computer_id) {
-      const [row] = await db
-        .select({
-          id: computers.id,
-          ownerUserId: computers.owner_user_id,
-          migratedAgentId: computers.migrated_from_agent_id,
-        })
-        .from(computers)
-        .where(
-          and(
-            eq(computers.id, trig.computer_id),
-            eq(computers.tenant_id, tenantId),
-            sql`${computers.status} <> 'archived'`,
-          ),
-        )
-        .limit(1);
-      computer = row ?? null;
-    }
-
-    if (!computer && trig.agent_id) {
-      const [row] = await db
-        .select({
-          id: computers.id,
-          ownerUserId: computers.owner_user_id,
-          migratedAgentId: computers.migrated_from_agent_id,
-        })
-        .from(computers)
-        .where(
-          and(
-            eq(computers.tenant_id, tenantId),
-            eq(computers.migrated_from_agent_id, trig.agent_id),
-            sql`${computers.status} <> 'archived'`,
-          ),
-        )
-        .limit(1);
-      computer = row ?? null;
-    }
-
-    if (!computer) {
-      return error(
-        "This scheduled job has no Computer linked to it. Automations must run through a Computer — attach one to this schedule before firing.",
-        409,
-      );
-    }
-
-    // Identity for the run: the firing operator is the actor. Without it
-    // the Computer task lands with no `created_by_user_id`, which means
-    // downstream skills/memory cannot scope to a human — the same defect
-    // that caused the Pi 400 in the legacy path.
-    if (!firingUserId) {
-      return error("Manual fire requires an authenticated user identity.", 401);
-    }
-
-    const { threadId } = await ensureThreadForWork({
-      tenantId,
-      computerId: computer.id,
-      spaceId: trig.space_id ?? undefined,
-      userId: firingUserId,
-      title: trig.name,
-      channel: "schedule",
-    });
-
-    const messageContent =
-      (trig.prompt && trig.prompt.trim()) ||
-      `Manual fire of ${trig.name}. Handle the scheduled work for this Computer.`;
-
-    const [message] = await db
-      .insert(messages)
-      .values({
-        thread_id: threadId,
-        tenant_id: tenantId,
-        role: "user",
-        content: messageContent,
-        sender_type: "user",
-        sender_id: firingUserId,
-        metadata: {
-          source: "scheduled_job_manual_fire",
-          triggerId,
-          triggerType: trig.trigger_type,
-          spaceId: trig.space_id,
-        },
-      })
-      .returning({ id: messages.id });
-
-    // Idempotency key mirrors `enqueueScheduledComputerThreadTurn` in
-    // job-trigger.ts so a duplicated request (double-clicked button,
-    // API retry) collapses cleanly.
-    const idempotencyKey = [
-      "manual-fire-thread-turn",
-      triggerId,
-      message.id,
-    ].join(":");
-
-    const [task] = await db
-      .insert(computerTasks)
-      .values({
-        tenant_id: tenantId,
-        computer_id: computer.id,
-        task_type: "thread_turn",
-        status: "pending",
-        input: {
-          threadId,
-          messageId: message.id,
-          source: "schedule",
-          actorType: "user",
-          actorId: firingUserId,
-          requesterUserId: firingUserId,
-          contextClass: "user",
-          triggerId,
-          triggerType: trig.trigger_type,
-          spaceId: trig.space_id,
-          surfaceContext: {
-            source: "schedule",
-            triggerId,
-            triggerType: trig.trigger_type,
-            spaceId: trig.space_id,
-            scheduleName: trig.name,
-          },
-        },
-        idempotency_key: idempotencyKey,
-        created_by_user_id: firingUserId,
-      })
-      .onConflictDoNothing({
-        target: [
-          computerTasks.tenant_id,
-          computerTasks.computer_id,
-          computerTasks.idempotency_key,
-        ],
-        where: sql`${computerTasks.idempotency_key} IS NOT NULL`,
-      })
-      .returning({ id: computerTasks.id });
-
-    if (task) {
-      await db.insert(computerEvents).values({
-        tenant_id: tenantId,
-        computer_id: computer.id,
-        task_id: task.id,
-        event_type: "manual_fire_thread_turn_enqueued",
-        level: "info",
-        payload: {
-          threadId,
-          messageId: message.id,
-          triggerId,
-          triggerType: trig.trigger_type,
-          spaceId: trig.space_id,
-          requesterUserId: firingUserId,
-        },
-      });
-    }
-
-    // Keep the migrated Agent heartbeat fresh for visibility parity with
-    // the cron path. Best-effort — a heartbeat write failure must not
-    // fail the fire.
-    const heartbeatAgentId = trig.agent_id || computer.migratedAgentId;
-    if (heartbeatAgentId) {
-      try {
-        await db
-          .update(agents)
-          .set({ last_heartbeat_at: new Date() })
-          .where(eq(agents.id, heartbeatAgentId));
-      } catch (err) {
-        console.warn(
-          "[scheduled-jobs] Failed to bump agent heartbeat on manual fire:",
-          err,
-        );
-      }
-    }
-
-    return json(
-      {
-        ok: true,
-        computerId: computer.id,
-        threadId,
-        messageId: message.id,
-        taskId: task?.id ?? null,
-        dedup: task ? false : true,
-      },
-      201,
+  if (isAgentTrigger && trig.agent_id) {
+    return error(
+      "Manual fires for agent schedules have been disabled with the Computer feature removal. Use the routine substrate or wait for the scheduled cron to fire.",
+      410,
     );
   } else if (trig.routine_id) {
     const [run] = await db

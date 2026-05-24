@@ -65,6 +65,9 @@ export async function uploadDocument(kbId: string, file: File): Promise<void> {
   }
 }
 
-export async function deleteDocument(kbId: string, filename: string): Promise<void> {
+export async function deleteDocument(
+  kbId: string,
+  filename: string,
+): Promise<void> {
   await kbFilesApi({ action: "delete", kbId, filename });
 }

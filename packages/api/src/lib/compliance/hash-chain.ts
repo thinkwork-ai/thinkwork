@@ -35,8 +35,8 @@ import { createHash } from "node:crypto";
  * different orders for the same logical event).
  */
 const SET_LIKE_ARRAY_FIELDS = new Set([
-	"control_ids",
-	"payload_redacted_fields",
+  "control_ids",
+  "payload_redacted_fields",
 ]);
 
 /**
@@ -50,25 +50,25 @@ const SET_LIKE_ARRAY_FIELDS = new Set([
  * (outbox-only).
  */
 export interface HashableEnvelope {
-	event_id: string;
-	tenant_id: string;
-	occurred_at: Date | string;
-	actor: string;
-	actor_type: string;
-	source: string;
-	event_type: string;
-	resource_type: string | null;
-	resource_id: string | null;
-	action: string | null;
-	outcome: string | null;
-	request_id: string | null;
-	thread_id: string | null;
-	agent_id: string | null;
-	payload: Record<string, unknown>;
-	payload_schema_version: number;
-	control_ids: string[];
-	payload_redacted_fields: string[];
-	payload_oversize_s3_key: string | null;
+  event_id: string;
+  tenant_id: string;
+  occurred_at: Date | string;
+  actor: string;
+  actor_type: string;
+  source: string;
+  event_type: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  action: string | null;
+  outcome: string | null;
+  request_id: string | null;
+  thread_id: string | null;
+  agent_id: string | null;
+  payload: Record<string, unknown>;
+  payload_schema_version: number;
+  control_ids: string[];
+  payload_redacted_fields: string[];
+  payload_oversize_s3_key: string | null;
 }
 
 /**
@@ -80,41 +80,41 @@ export interface HashableEnvelope {
  * doesn't). Top-level call passes `parentKey = null`.
  */
 function canonicalize(value: unknown, parentKey: string | null): string {
-	if (value === undefined || value === null) return "null";
-	if (value instanceof Date) return JSON.stringify(value.toISOString());
-	if (typeof value !== "object") return JSON.stringify(value);
+  if (value === undefined || value === null) return "null";
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (typeof value !== "object") return JSON.stringify(value);
 
-	if (Array.isArray(value)) {
-		let items: unknown[];
-		if (parentKey !== null && SET_LIKE_ARRAY_FIELDS.has(parentKey)) {
-			// Set-like fields (control_ids, payload_redacted_fields) are
-			// typed string[] in TS and text[] in Postgres. If a non-string
-			// somehow leaks in (a future schema change, a bypass), throw
-			// rather than coerce via String() — coercion silently produces
-			// "[object Object]" and the hash commits to the wrong string,
-			// which subsequent verification can't distinguish from a
-			// legitimate value. Per ce-security-reviewer SEC-005.
-			for (const v of value) {
-				if (typeof v !== "string") {
-					throw new Error(
-						`canonicalizeEvent: non-string element in set-like array field "${parentKey}" (got ${typeof v})`,
-					);
-				}
-			}
-			items = [...(value as string[])].sort();
-		} else {
-			items = value;
-		}
-		const serialized = items.map((v) => canonicalize(v, null));
-		return `[${serialized.join(",")}]`;
-	}
+  if (Array.isArray(value)) {
+    let items: unknown[];
+    if (parentKey !== null && SET_LIKE_ARRAY_FIELDS.has(parentKey)) {
+      // Set-like fields (control_ids, payload_redacted_fields) are
+      // typed string[] in TS and text[] in Postgres. If a non-string
+      // somehow leaks in (a future schema change, a bypass), throw
+      // rather than coerce via String() — coercion silently produces
+      // "[object Object]" and the hash commits to the wrong string,
+      // which subsequent verification can't distinguish from a
+      // legitimate value. Per ce-security-reviewer SEC-005.
+      for (const v of value) {
+        if (typeof v !== "string") {
+          throw new Error(
+            `canonicalizeEvent: non-string element in set-like array field "${parentKey}" (got ${typeof v})`,
+          );
+        }
+      }
+      items = [...(value as string[])].sort();
+    } else {
+      items = value;
+    }
+    const serialized = items.map((v) => canonicalize(v, null));
+    return `[${serialized.join(",")}]`;
+  }
 
-	const obj = value as Record<string, unknown>;
-	const keys = Object.keys(obj).sort();
-	const entries = keys.map(
-		(k) => `${JSON.stringify(k)}:${canonicalize(obj[k], k)}`,
-	);
-	return `{${entries.join(",")}}`;
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  const entries = keys.map(
+    (k) => `${JSON.stringify(k)}:${canonicalize(obj[k], k)}`,
+  );
+  return `{${entries.join(",")}}`;
 }
 
 /**
@@ -122,7 +122,7 @@ function canonicalize(value: unknown, parentKey: string | null): string {
  * Deterministic: same input → byte-identical output.
  */
 export function canonicalizeEvent(envelope: HashableEnvelope): string {
-	return canonicalize(envelope, null);
+  return canonicalize(envelope, null);
 }
 
 /**
@@ -134,12 +134,9 @@ export function canonicalizeEvent(envelope: HashableEnvelope): string {
  *   so the hash input is well-defined (a `null` would be coerced to
  *   the string "null" which is not what we want).
  */
-export function computeEventHash(
-	canonical: string,
-	prevHash: string,
-): string {
-	return createHash("sha256")
-		.update(prevHash, "utf-8")
-		.update(canonical, "utf-8")
-		.digest("hex");
+export function computeEventHash(canonical: string, prevHash: string): string {
+  return createHash("sha256")
+    .update(prevHash, "utf-8")
+    .update(canonical, "utf-8")
+    .digest("hex");
 }

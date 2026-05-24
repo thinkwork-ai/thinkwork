@@ -10,7 +10,7 @@
  * 2. Register it here with its _type key
  */
 
-import React from 'react';
+import React from "react";
 
 export interface GenUIProps {
   data: Record<string, unknown>;
@@ -24,7 +24,7 @@ export interface GenUIProps {
 }
 
 export type GenUIAction = {
-  type: 'tool.invoke';
+  type: "tool.invoke";
   tool: string;
   args: Record<string, unknown>;
 };
@@ -67,11 +67,16 @@ export interface GenUIContext {
 }
 
 // Lazy imports to keep bundle size down
-const TaskList = React.lazy(() => import('@/components/genui/TaskList'));
-const TaskCard = React.lazy(() => import('@/components/genui/TaskCard'));
-const QuestionCard = React.lazy(() => import('@/components/genui/QuestionCard'));
+const TaskList = React.lazy(() => import("@/components/genui/TaskList"));
+const TaskCard = React.lazy(() => import("@/components/genui/TaskCard"));
+const QuestionCard = React.lazy(
+  () => import("@/components/genui/QuestionCard"),
+);
 
-const REGISTRY: Record<string, React.LazyExoticComponent<React.ComponentType<GenUIProps>>> = {
+const REGISTRY: Record<
+  string,
+  React.LazyExoticComponent<React.ComponentType<GenUIProps>>
+> = {
   task_list: TaskList,
   task: TaskCard,
   question_card: QuestionCard,
@@ -81,12 +86,18 @@ const REGISTRY: Record<string, React.LazyExoticComponent<React.ComponentType<Gen
  * Try to parse a string as typed JSON.
  * Returns the parsed object if it has a `_type` field, null otherwise.
  */
-export function parseTypedJson(content: string): Record<string, unknown> | null {
+export function parseTypedJson(
+  content: string,
+): Record<string, unknown> | null {
   const trimmed = content.trim();
-  if (!trimmed.startsWith('{')) return null;
+  if (!trimmed.startsWith("{")) return null;
   try {
     const parsed = JSON.parse(trimmed);
-    if (parsed && typeof parsed === 'object' && typeof parsed._type === 'string') {
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed._type === "string"
+    ) {
       return parsed;
     }
   } catch {
@@ -98,7 +109,9 @@ export function parseTypedJson(content: string): Record<string, unknown> | null 
 /**
  * Look up a component for the given _type.
  */
-export function getGenUIComponent(type: string): React.LazyExoticComponent<React.ComponentType<GenUIProps>> | null {
+export function getGenUIComponent(
+  type: string,
+): React.LazyExoticComponent<React.ComponentType<GenUIProps>> | null {
   return REGISTRY[type] || null;
 }
 
@@ -107,8 +120,12 @@ export function getGenUIComponent(type: string): React.LazyExoticComponent<React
 // ---------------------------------------------------------------------------
 
 export type MessageBlock =
-  | { type: 'text'; content: string }
-  | { type: 'genui'; data: Record<string, unknown>; component: React.LazyExoticComponent<React.ComponentType<GenUIProps>> };
+  | { type: "text"; content: string }
+  | {
+      type: "genui";
+      data: Record<string, unknown>;
+      component: React.LazyExoticComponent<React.ComponentType<GenUIProps>>;
+    };
 
 /**
  * Parse message content into blocks of text and GenUI components.
@@ -126,11 +143,11 @@ export function parseMessageBlocks(content: string): MessageBlock[] | null {
   const pureJson = parseTypedJson(content);
   if (pureJson) {
     const comp = getGenUIComponent(String(pureJson._type));
-    if (comp) return [{ type: 'genui', data: pureJson, component: comp }];
+    if (comp) return [{ type: "genui", data: pureJson, component: comp }];
   }
 
   // Case 2: mixed content with ```genui fences
-  if (!content.includes('```genui')) return null;
+  if (!content.includes("```genui")) return null;
 
   const blocks: MessageBlock[] = [];
   const parts = content.split(/```genui\s*\n?/);
@@ -139,16 +156,16 @@ export function parseMessageBlocks(content: string): MessageBlock[] | null {
     if (i === 0) {
       // Text before first fence
       const text = parts[0].trim();
-      if (text) blocks.push({ type: 'text', content: text });
+      if (text) blocks.push({ type: "text", content: text });
       continue;
     }
 
     // This part starts after a ```genui — split on closing ```
-    const closingIdx = parts[i].indexOf('```');
+    const closingIdx = parts[i].indexOf("```");
     if (closingIdx === -1) {
       // No closing fence — treat as text
       const text = parts[i].trim();
-      if (text) blocks.push({ type: 'text', content: text });
+      if (text) blocks.push({ type: "text", content: text });
       continue;
     }
 
@@ -160,18 +177,18 @@ export function parseMessageBlocks(content: string): MessageBlock[] | null {
     if (data) {
       const comp = getGenUIComponent(String(data._type));
       if (comp) {
-        blocks.push({ type: 'genui', data, component: comp });
+        blocks.push({ type: "genui", data, component: comp });
       } else {
         // Unknown _type — render as code block text
-        blocks.push({ type: 'text', content: '```json\n' + jsonStr + '\n```' });
+        blocks.push({ type: "text", content: "```json\n" + jsonStr + "\n```" });
       }
     } else {
       // Invalid JSON — render as text
-      blocks.push({ type: 'text', content: jsonStr });
+      blocks.push({ type: "text", content: jsonStr });
     }
 
     // Text after closing fence
-    if (afterFence) blocks.push({ type: 'text', content: afterFence });
+    if (afterFence) blocks.push({ type: "text", content: afterFence });
   }
 
   return blocks.length > 0 ? blocks : null;

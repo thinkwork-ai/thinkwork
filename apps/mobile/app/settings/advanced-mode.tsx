@@ -27,11 +27,13 @@ export default function AdvancedModeScreen() {
 
           <View className="gap-3">
             <Muted className="text-sm leading-5">
-              When enabled, Advanced Mode shows additional technical details throughout the app:
+              When enabled, Advanced Mode shows additional technical details
+              throughout the app:
             </Muted>
             <View className="gap-2 pl-2">
               <Muted className="text-sm leading-5">
-                {"\u2022"} Agent turn rows in thread conversations (status, duration, token counts, cost)
+                {"\u2022"} Agent turn rows in thread conversations (status,
+                duration, token counts, cost)
               </Muted>
               <Muted className="text-sm leading-5">
                 {"\u2022"} Model selection and skill configuration in Settings
@@ -44,7 +46,8 @@ export default function AdvancedModeScreen() {
               </Muted>
             </View>
             <Muted className="text-sm leading-5">
-              This is useful for debugging agent behavior, monitoring costs, and fine-tuning your setup.
+              This is useful for debugging agent behavior, monitoring costs, and
+              fine-tuning your setup.
             </Muted>
           </View>
         </View>

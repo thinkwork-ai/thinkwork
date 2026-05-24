@@ -21,7 +21,7 @@ const mockGateways = [
     lastSyncedAt: Date.now() - 1000 * 60 * 5,
   },
   {
-    _id: "2", 
+    _id: "2",
     name: "Production Bot",
     type: "cloud",
     isDefault: false,
@@ -49,7 +49,7 @@ const mockGateways = [
   },
 ];
 
-type Gateway = typeof mockGateways[0];
+type Gateway = (typeof mockGateways)[0];
 
 function TypeBadge({ type }: { type?: string }) {
   if (type === "local") {
@@ -66,7 +66,13 @@ function TypeBadge({ type }: { type?: string }) {
   );
 }
 
-function ConnectionBadge({ status, lastHeartbeat }: { status?: string; lastHeartbeat?: number | null }) {
+function ConnectionBadge({
+  status,
+  lastHeartbeat,
+}: {
+  status?: string;
+  lastHeartbeat?: number | null;
+}) {
   const now = Date.now();
   const isStale = lastHeartbeat && now - lastHeartbeat > 5 * 60 * 1000;
 
@@ -139,7 +145,8 @@ export default function DemoScreen() {
         <View>
           <H2>DataTable Demo</H2>
           <Muted className="mt-1">
-            Testing the table component — resize window to see responsive behavior
+            Testing the table component — resize window to see responsive
+            behavior
           </Muted>
         </View>
         <Pressable
@@ -199,8 +206,12 @@ export default function DemoScreen() {
               <View className="flex-row items-center justify-between">
                 <View className="flex-1">
                   <View className="flex-row items-center gap-2 flex-wrap">
-                    <Text className="text-base font-medium">{gateway.name}</Text>
-                    {gateway.isDefault && <Badge variant="secondary">Default</Badge>}
+                    <Text className="text-base font-medium">
+                      {gateway.name}
+                    </Text>
+                    {gateway.isDefault && (
+                      <Badge variant="secondary">Default</Badge>
+                    )}
                   </View>
                   <Muted className="mt-1 text-sm">
                     {gateway.lastSyncedAt

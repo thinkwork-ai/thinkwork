@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CombinedError,
-  type OperationResult,
-} from "@urql/core";
+import { CombinedError, type OperationResult } from "@urql/core";
 import { parse } from "graphql";
 import {
   createCliGqlClient,
@@ -88,9 +85,7 @@ describe("gql-client unwrap", () => {
       stale: false,
       hasNext: false,
     } as OperationResult<unknown>);
-    await expect(gqlQuery(client, {} as any, {})).rejects.toThrow(
-      /no data/,
-    );
+    await expect(gqlQuery(client, {} as any, {})).rejects.toThrow(/no data/);
   });
 
   it("gqlMutate uses the same error path as gqlQuery", async () => {
@@ -147,10 +142,11 @@ describe("createCliGqlClient", () => {
   });
 
   it("posts generated AST documents as GraphQL query strings", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ data: { me: { id: "u1" } } }), {
-        status: 200,
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: { me: { id: "u1" } } }), {
+          status: 200,
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -184,11 +180,14 @@ describe("createCliGqlClient", () => {
   it("returns GraphQL errors in the same CombinedError shape as urql", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({ errors: [{ message: "Must provide query string." }] }),
-          { status: 200 },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              errors: [{ message: "Must provide query string." }],
+            }),
+            { status: 200 },
+          ),
       ),
     );
 
@@ -205,10 +204,14 @@ describe("createCliGqlClient", () => {
   it("preserves GraphQL error messages from non-2xx responses", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ errors: [{ message: "Bad request" }] }), {
-          status: 400,
-        }),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ errors: [{ message: "Bad request" }] }),
+            {
+              status: 400,
+            },
+          ),
       ),
     );
 

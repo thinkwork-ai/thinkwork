@@ -24,4 +24,3 @@ export function validateWorkspaceEventTarget(
     depth: result.depth,
   };
 }
-

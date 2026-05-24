@@ -1,4 +1,7 @@
-import type { AppletAPI, ThinkworkAppletHost } from "@thinkwork/computer-stdlib";
+import type {
+  AppletAPI,
+  ThinkworkAppletHost,
+} from "@thinkwork/computer-stdlib";
 import { createElement, type ComponentProps, type ComponentType } from "react";
 import { createHostAppletAPI } from "./host-applet-api";
 
@@ -91,11 +94,13 @@ function mapboxAttribution(): string {
   return '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://openstreetmap.org">OpenStreetMap</a>';
 }
 
-function normalizeTileLayerProps<P extends { url?: string }>(
-  props: P,
-): P {
+function normalizeTileLayerProps<P extends { url?: string }>(props: P): P {
   const token = readMapboxToken();
-  if (!token || typeof props.url !== "string" || !isOpenStreetMapTileUrl(props.url)) {
+  if (
+    !token ||
+    typeof props.url !== "string" ||
+    !isOpenStreetMapTileUrl(props.url)
+  ) {
     return props;
   }
 
@@ -109,13 +114,19 @@ function normalizeTileLayerProps<P extends { url?: string }>(
 }
 
 function createLeafletCompatModule(leaflet: LeafletModule): LeafletModule {
-  const source = ((leaflet as LeafletModuleWithDefault).default ?? leaflet) as LeafletModule;
-  if (typeof source.map !== "function" || typeof source.tileLayer !== "function") {
+  const source = ((leaflet as LeafletModuleWithDefault).default ??
+    leaflet) as LeafletModule;
+  if (
+    typeof source.map !== "function" ||
+    typeof source.tileLayer !== "function"
+  ) {
     return leaflet;
   }
 
   const originalMap = source.map.bind(source) as LeafletMapFactory;
-  const originalTileLayer = source.tileLayer.bind(source) as LeafletTileLayerFactory;
+  const originalTileLayer = source.tileLayer.bind(
+    source,
+  ) as LeafletTileLayerFactory;
   const compat = Object.create(source) as LeafletModule;
   (compat as LeafletModule & { default?: LeafletModule }).default = compat;
 
@@ -169,7 +180,8 @@ function createReactLeafletCompatModule(
         ...props,
         scrollWheelZoom: false,
       }),
-    TileLayer: (props) => createElement(TileLayer, normalizeTileLayerProps(props)),
+    TileLayer: (props) =>
+      createElement(TileLayer, normalizeTileLayerProps(props)),
   } as ReactLeafletModule;
 }
 

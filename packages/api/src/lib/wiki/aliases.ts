@@ -21,16 +21,16 @@ export const normalizeAlias = normalizeAliasRepo;
  * existing page instead of creating a duplicate.
  */
 export function slugifyTitle(title: string): string {
-	return title
-		.normalize("NFKD")
-		.replace(/[\u0300-\u036f]/g, "") // strip combining diacritics
-		.toLowerCase()
-		.replace(/[^a-z0-9\s-]+/g, " ") // drop symbols/punctuation
-		.trim()
-		.replace(/\s+/g, "-") // whitespace → single dash
-		.replace(/-+/g, "-") // collapse runs of dashes
-		.replace(/^-+|-+$/g, "") // trim leading/trailing dashes
-		.slice(0, 120); // keep slugs indexable
+  return title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip combining diacritics
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]+/g, " ") // drop symbols/punctuation
+    .trim()
+    .replace(/\s+/g, "-") // whitespace → single dash
+    .replace(/-+/g, "-") // collapse runs of dashes
+    .replace(/^-+|-+$/g, "") // trim leading/trailing dashes
+    .slice(0, 120); // keep slugs indexable
 }
 
 /**
@@ -44,6 +44,6 @@ export function slugifyTitle(title: string): string {
  *   are deferred — too noisy without real examples to tune against.
  */
 export function seedAliasesForTitle(title: string): string[] {
-	const primary = normalizeAlias(title);
-	return primary ? [primary] : [];
+  const primary = normalizeAlias(title);
+  return primary ? [primary] : [];
 }

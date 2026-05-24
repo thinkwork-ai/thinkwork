@@ -1,6 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, Play, Pause, Bot, Repeat, Webhook, Plus, Copy, Check } from "lucide-react";
+import {
+  Search,
+  Play,
+  Pause,
+  Bot,
+  Repeat,
+  Webhook,
+  Plus,
+  Copy,
+  Check,
+} from "lucide-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -44,11 +54,18 @@ type WebhookRow = {
 // REST helpers
 // ---------------------------------------------------------------------------
 
-async function apiFetch<T>(path: string, tenantId: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  tenantId: string,
+  options: RequestInit = {},
+): Promise<T> {
   const { headers, ...rest } = options;
   return authedApiFetch<T>(path, {
     ...rest,
-    extraHeaders: { "x-tenant-id": tenantId, ...(headers as Record<string, string> | undefined) },
+    extraHeaders: {
+      "x-tenant-id": tenantId,
+      ...(headers as Record<string, string> | undefined),
+    },
   });
 }
 
@@ -69,12 +86,19 @@ function webhookColumns(): ColumnDef<WebhookRow>[] {
       accessorKey: "target_type",
       header: "Type",
       cell: ({ row }) => (
-        <Badge variant="secondary" className={`text-xs gap-1 ${
-          row.original.target_type === "agent"
-            ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
-            : "bg-green-500/15 text-green-600 dark:text-green-400"
-        }`}>
-          {row.original.target_type === "agent" ? <Bot className="h-3.5 w-3.5" /> : <Repeat className="h-3.5 w-3.5" />}
+        <Badge
+          variant="secondary"
+          className={`text-xs gap-1 ${
+            row.original.target_type === "agent"
+              ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+              : "bg-green-500/15 text-green-600 dark:text-green-400"
+          }`}
+        >
+          {row.original.target_type === "agent" ? (
+            <Bot className="h-3.5 w-3.5" />
+          ) : (
+            <Repeat className="h-3.5 w-3.5" />
+          )}
           {row.original.target_type === "agent" ? "Agent" : "Routine"}
         </Badge>
       ),
@@ -85,24 +109,31 @@ function webhookColumns(): ColumnDef<WebhookRow>[] {
       header: "Target",
       cell: ({ row }) => (
         <span className="text-sm">
-          {row.original.target_name || <span className="text-muted-foreground">—</span>}
+          {row.original.target_name || (
+            <span className="text-muted-foreground">—</span>
+          )}
         </span>
       ),
     },
     {
       accessorKey: "enabled",
       header: "Status",
-      cell: ({ row }) => (
+      cell: ({ row }) =>
         row.original.enabled ? (
-          <Badge variant="secondary" className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400">
+          <Badge
+            variant="secondary"
+            className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400"
+          >
             <Play className="h-3 w-3 fill-current" /> Enabled
           </Badge>
         ) : (
-          <Badge variant="secondary" className="text-xs gap-1 bg-muted text-muted-foreground">
+          <Badge
+            variant="secondary"
+            className="text-xs gap-1 bg-muted text-muted-foreground"
+          >
             <Pause className="h-3 w-3" /> Disabled
           </Badge>
-        )
-      ),
+        ),
       size: 110,
     },
     {
@@ -110,7 +141,9 @@ function webhookColumns(): ColumnDef<WebhookRow>[] {
       header: "Last Invoked",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {row.original.last_invoked_at ? relativeTime(row.original.last_invoked_at) : "Never"}
+          {row.original.last_invoked_at
+            ? relativeTime(row.original.last_invoked_at)
+            : "Never"}
         </span>
       ),
       size: 120,
@@ -119,7 +152,9 @@ function webhookColumns(): ColumnDef<WebhookRow>[] {
       accessorKey: "invocation_count",
       header: "Invocations",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{row.original.invocation_count}</span>
+        <span className="text-xs text-muted-foreground">
+          {row.original.invocation_count}
+        </span>
       ),
       size: 100,
     },
@@ -130,7 +165,13 @@ function webhookColumns(): ColumnDef<WebhookRow>[] {
 // Create Button
 // ---------------------------------------------------------------------------
 
-function CreateWebhookButton({ tenantId, onCreated }: { tenantId: string; onCreated: () => void }) {
+function CreateWebhookButton({
+  tenantId,
+  onCreated,
+}: {
+  tenantId: string;
+  onCreated: () => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -181,10 +222,18 @@ function WebhooksPage() {
     }
   }, [tenantId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  const enabledWebhooks = useMemo(() => webhooks.filter((w) => w.enabled), [webhooks]);
-  const disabledWebhooks = useMemo(() => webhooks.filter((w) => !w.enabled), [webhooks]);
+  const enabledWebhooks = useMemo(
+    () => webhooks.filter((w) => w.enabled),
+    [webhooks],
+  );
+  const disabledWebhooks = useMemo(
+    () => webhooks.filter((w) => !w.enabled),
+    [webhooks],
+  );
 
   const filteredWebhooks = useMemo(() => {
     if (!search) return webhooks;
@@ -206,16 +255,25 @@ function WebhooksPage() {
           <PageHeader
             title="Webhooks"
             description={`${enabledWebhooks.length} active, ${disabledWebhooks.length} disabled`}
-            actions={<CreateWebhookButton tenantId={tenantId} onCreated={fetchData} />}
+            actions={
+              <CreateWebhookButton tenantId={tenantId} onCreated={fetchData} />
+            }
           />
 
           {webhooks.length > 0 && (
             <div className="flex items-center gap-2 mt-4">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search webhooks..." className="pl-9" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search webhooks..."
+                  className="pl-9"
+                />
               </div>
-              <Button variant="outline" size="sm" onClick={fetchData}>Refresh</Button>
+              <Button variant="outline" size="sm" onClick={fetchData}>
+                Refresh
+              </Button>
             </div>
           )}
         </>
@@ -230,14 +288,21 @@ function WebhooksPage() {
           description="Create a webhook to let external services trigger agent or routine work via HTTP."
         />
       ) : filteredWebhooks.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-4">No matching webhooks.</p>
+        <p className="text-sm text-muted-foreground py-4">
+          No matching webhooks.
+        </p>
       ) : (
         <DataTable
           columns={webhookColumns()}
           data={filteredWebhooks}
           filterValue={search}
           filterColumn="name"
-          onRowClick={(row) => navigate({ to: "/automations/webhooks/$webhookId", params: { webhookId: row.id } })}
+          onRowClick={(row) =>
+            navigate({
+              to: "/automations/webhooks/$webhookId",
+              params: { webhookId: row.id },
+            })
+          }
         />
       )}
     </PageLayout>

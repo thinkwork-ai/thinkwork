@@ -72,7 +72,10 @@ export async function runInboxList(opts: ListOptions): Promise<void> {
     id: item.id,
     type: item.type,
     status: item.status,
-    title: (item.title ?? "—").length > 40 ? `${(item.title ?? "").slice(0, 37)}…` : (item.title ?? "—"),
+    title:
+      (item.title ?? "—").length > 40
+        ? `${(item.title ?? "").slice(0, 37)}…`
+        : (item.title ?? "—"),
     requester: fmtRequester(item.requesterType, item.requesterId),
     age: fmtAge(item.createdAt),
   }));

@@ -19,32 +19,54 @@ export interface AgentCliContext {
   principalId: string | null;
 }
 
-export async function resolveAgentContext(opts: AgentCliOptions): Promise<AgentCliContext> {
+export async function resolveAgentContext(
+  opts: AgentCliOptions,
+): Promise<AgentCliContext> {
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
-  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({ stage, region });
-  const principalId = session && session.kind === "cognito" ? session.principalId : null;
+  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({
+    stage,
+    region,
+  });
+  const principalId =
+    session && session.kind === "cognito" ? session.principalId : null;
 
   const flagOrEnv = opts.tenant ?? process.env.THINKWORK_TENANT;
   if (flagOrEnv) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId, principalId };
     }
-    const data = await gqlQuery(client, AgentTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, AgentTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
-    return { stage, region, client, tenantId: data.tenantBySlug.id, principalId };
+    return {
+      stage,
+      region,
+      client,
+      tenantId: data.tenantBySlug.id,
+      principalId,
+    };
   }
   if (session?.tenantId) {
     return { stage, region, client, tenantId: session.tenantId, principalId };
   }
   if (ctxTenantSlug) {
-    const data = await gqlQuery(client, AgentTenantBySlugDoc, { slug: ctxTenantSlug });
+    const data = await gqlQuery(client, AgentTenantBySlugDoc, {
+      slug: ctxTenantSlug,
+    });
     if (data.tenantBySlug) {
-      return { stage, region, client, tenantId: data.tenantBySlug.id, principalId };
+      return {
+        stage,
+        region,
+        client,
+        tenantId: data.tenantBySlug.id,
+        principalId,
+      };
     }
   }
   printMissingApiSessionError(stage, session !== null);

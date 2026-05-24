@@ -12,24 +12,20 @@ describe("extractSkillName", () => {
   });
 
   it("accepts the capitalized 'Skill' meta-tool name with skill_name", () => {
-    expect(
-      extractSkillName("Skill", '{"skill_name": "sales-prep"}'),
-    ).toBe("sales-prep");
+    expect(extractSkillName("Skill", '{"skill_name": "sales-prep"}')).toBe(
+      "sales-prep",
+    );
   });
 
   it("accepts the `name` field as a fallback (in-house meta-tool shape)", () => {
-    expect(
-      extractSkillName("Skill", '{"name": "finance-audit-xls"}'),
-    ).toBe("finance-audit-xls");
+    expect(extractSkillName("Skill", '{"name": "finance-audit-xls"}')).toBe(
+      "finance-audit-xls",
+    );
   });
 
   it("returns null for non-skills tools regardless of input shape", () => {
-    expect(
-      extractSkillName("file_read", '{"path": "/tmp/x.xlsx"}'),
-    ).toBeNull();
-    expect(
-      extractSkillName("delegate", '{"task": "..."}'),
-    ).toBeNull();
+    expect(extractSkillName("file_read", '{"path": "/tmp/x.xlsx"}')).toBeNull();
+    expect(extractSkillName("delegate", '{"task": "..."}')).toBeNull();
   });
 
   it("returns null when input is missing or empty", () => {

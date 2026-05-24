@@ -102,9 +102,8 @@ export function useGraphCamera(
         isPinching.value = true;
       })
       .onUpdate((e) => {
-        const pointerCount = (
-          e as typeof e & { numberOfPointers?: number }
-        ).numberOfPointers;
+        const pointerCount = (e as typeof e & { numberOfPointers?: number })
+          .numberOfPointers;
         if (typeof pointerCount === "number" && pointerCount < 2) return;
         if (!Number.isFinite(e.focalX) || !Number.isFinite(e.focalY)) return;
         const next = Math.min(

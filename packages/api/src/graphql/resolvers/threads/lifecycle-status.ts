@@ -27,56 +27,56 @@
 // GraphQL codegen, so this union is hand-maintained — adding or renaming
 // a value here must match the canonical GraphQL enum and vice versa.
 export type ThreadLifecycleStatus =
-	| "RUNNING"
-	| "COMPLETED"
-	| "CANCELLED"
-	| "FAILED"
-	| "IDLE"
-	| "AWAITING_USER";
+  | "RUNNING"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "FAILED"
+  | "IDLE"
+  | "AWAITING_USER";
 
 export const QUEUED_FRESHNESS_MS = 5 * 60 * 1000;
 
 export interface DeriveLifecycleStatusInput {
-	hasActiveTurn: boolean;
-	latestTurn: { status: string; created_at: Date } | null;
-	now?: Date;
+  hasActiveTurn: boolean;
+  latestTurn: { status: string; created_at: Date } | null;
+  now?: Date;
 }
 
 export function deriveLifecycleStatus({
-	hasActiveTurn,
-	latestTurn,
-	now = new Date(),
+  hasActiveTurn,
+  latestTurn,
+  now = new Date(),
 }: DeriveLifecycleStatusInput): ThreadLifecycleStatus {
-	if (hasActiveTurn) return "RUNNING";
-	if (!latestTurn) return "IDLE";
+  if (hasActiveTurn) return "RUNNING";
+  if (!latestTurn) return "IDLE";
 
-	const { status, created_at } = latestTurn;
-	const ageMs = now.getTime() - created_at.getTime();
+  const { status, created_at } = latestTurn;
+  const ageMs = now.getTime() - created_at.getTime();
 
-	switch (status) {
-		case "queued":
-			// Defensive: if the active probe missed but the latest row is
-			// fresh queued, treat as running. Stale queued → stuck dispatch.
-			return ageMs <= QUEUED_FRESHNESS_MS ? "RUNNING" : "FAILED";
-		case "running":
-			return "RUNNING";
-		case "succeeded":
-			return "COMPLETED";
-		case "cancelled":
-			return "CANCELLED";
-		case "failed":
-		case "timed_out":
-			return "FAILED";
-		case "skipped":
-			return "IDLE";
-		default:
-			// Unknown status — route to FAILED so operators notice and the
-			// mapping gets updated. Log so silent drift surfaces in
-			// CloudWatch; the mapping table needs updating when
-			// thread_turns.status adds a new value.
-			console.warn(
-				`[lifecycle-status] Unknown thread_turns.status value "${status}" — routing to FAILED`,
-			);
-			return "FAILED";
-	}
+  switch (status) {
+    case "queued":
+      // Defensive: if the active probe missed but the latest row is
+      // fresh queued, treat as running. Stale queued → stuck dispatch.
+      return ageMs <= QUEUED_FRESHNESS_MS ? "RUNNING" : "FAILED";
+    case "running":
+      return "RUNNING";
+    case "succeeded":
+      return "COMPLETED";
+    case "cancelled":
+      return "CANCELLED";
+    case "failed":
+    case "timed_out":
+      return "FAILED";
+    case "skipped":
+      return "IDLE";
+    default:
+      // Unknown status — route to FAILED so operators notice and the
+      // mapping gets updated. Log so silent drift surfaces in
+      // CloudWatch; the mapping table needs updating when
+      // thread_turns.status adds a new value.
+      console.warn(
+        `[lifecycle-status] Unknown thread_turns.status value "${status}" — routing to FAILED`,
+      );
+      return "FAILED";
+  }
 }

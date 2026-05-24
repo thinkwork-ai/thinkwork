@@ -45,7 +45,9 @@ export async function resolveTenantContext(
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, TenantBySlugForCmdDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, TenantBySlugForCmdDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
@@ -56,7 +58,9 @@ export async function resolveTenantContext(
     return { stage, region, client, tenantId: session.tenantId };
   }
   if (ctxSlug) {
-    const data = await gqlQuery(client, TenantBySlugForCmdDoc, { slug: ctxSlug });
+    const data = await gqlQuery(client, TenantBySlugForCmdDoc, {
+      slug: ctxSlug,
+    });
     if (data.tenantBySlug) {
       return { stage, region, client, tenantId: data.tenantBySlug.id };
     }

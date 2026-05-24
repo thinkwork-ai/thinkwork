@@ -31,14 +31,14 @@ import type { GraphQLContext } from "../../graphql/context.js";
 import { resolveCallerTenantId } from "../../graphql/resolvers/core/resolve-auth-user.js";
 
 export function isPlatformOperator(ctx: GraphQLContext): boolean {
-	const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
-		.split(",")
-		.map((e) => e.trim().toLowerCase())
-		.filter(Boolean);
-	if (allowlist.length === 0) return false;
-	const email =
-		typeof ctx.auth.email === "string" ? ctx.auth.email.toLowerCase() : "";
-	return email !== "" && allowlist.includes(email);
+  const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowlist.length === 0) return false;
+  const email =
+    typeof ctx.auth.email === "string" ? ctx.auth.email.toLowerCase() : "";
+  return email !== "" && allowlist.includes(email);
 }
 
 /**
@@ -48,8 +48,8 @@ export function isPlatformOperator(ctx: GraphQLContext): boolean {
  * own tenant scope, with null fail-closed.
  */
 export interface ResolverAuthScope {
-	isOperator: boolean;
-	effectiveTenantId: string | undefined;
+  isOperator: boolean;
+  effectiveTenantId: string | undefined;
 }
 
 /**
@@ -63,39 +63,39 @@ export interface ResolverAuthScope {
  * replaced with their resolved tenant scope.
  */
 export async function requireComplianceReader(
-	ctx: GraphQLContext,
-	requestedTenantId: string | undefined,
+  ctx: GraphQLContext,
+  requestedTenantId: string | undefined,
 ): Promise<ResolverAuthScope> {
-	// 1. apikey hard-block. Compliance reads are Cognito-only.
-	if (ctx.auth.authType !== "cognito") {
-		throw new GraphQLError(
-			"Compliance reads are restricted to Cognito-authenticated callers.",
-			{ extensions: { code: "FORBIDDEN" } },
-		);
-	}
+  // 1. apikey hard-block. Compliance reads are Cognito-only.
+  if (ctx.auth.authType !== "cognito") {
+    throw new GraphQLError(
+      "Compliance reads are restricted to Cognito-authenticated callers.",
+      { extensions: { code: "FORBIDDEN" } },
+    );
+  }
 
-	// 2. Required env var.
-	if (!process.env.COMPLIANCE_READER_SECRET_ARN) {
-		throw new GraphQLError(
-			"Compliance event browsing is not available in this environment — COMPLIANCE_READER_SECRET_ARN env var is unset on the graphql-http Lambda.",
-			{ extensions: { code: "INTERNAL_SERVER_ERROR" } },
-		);
-	}
+  // 2. Required env var.
+  if (!process.env.COMPLIANCE_READER_SECRET_ARN) {
+    throw new GraphQLError(
+      "Compliance event browsing is not available in this environment — COMPLIANCE_READER_SECRET_ARN env var is unset on the graphql-http Lambda.",
+      { extensions: { code: "INTERNAL_SERVER_ERROR" } },
+    );
+  }
 
-	// 3. Operator-vs-tenant gate.
-	const isOperator = isPlatformOperator(ctx);
-	if (isOperator) {
-		return { isOperator: true, effectiveTenantId: requestedTenantId };
-	}
+  // 3. Operator-vs-tenant gate.
+  const isOperator = isPlatformOperator(ctx);
+  if (isOperator) {
+    return { isOperator: true, effectiveTenantId: requestedTenantId };
+  }
 
-	// Non-operator: forced to their own tenant. Resolve via the
-	// Google-OAuth-friendly fallback per `feedback_oauth_tenant_resolver`.
-	const resolved = await resolveCallerTenantId(ctx);
-	if (!resolved) {
-		throw new GraphQLError(
-			"Compliance access requires either platform-operator email or a resolved tenant scope. Your session has neither — contact a Thinkwork administrator.",
-			{ extensions: { code: "UNAUTHENTICATED" } },
-		);
-	}
-	return { isOperator: false, effectiveTenantId: resolved };
+  // Non-operator: forced to their own tenant. Resolve via the
+  // Google-OAuth-friendly fallback per `feedback_oauth_tenant_resolver`.
+  const resolved = await resolveCallerTenantId(ctx);
+  if (!resolved) {
+    throw new GraphQLError(
+      "Compliance access requires either platform-operator email or a resolved tenant scope. Your session has neither — contact a Thinkwork administrator.",
+      { extensions: { code: "UNAUTHENTICATED" } },
+    );
+  }
+  return { isOperator: false, effectiveTenantId: resolved };
 }

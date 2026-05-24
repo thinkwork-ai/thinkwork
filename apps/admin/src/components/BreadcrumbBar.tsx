@@ -1,7 +1,11 @@
 import { Fragment, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, ChevronDown } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +62,8 @@ export function BreadcrumbBar() {
                           key={item.href}
                           className={cn(
                             "flex w-full items-center px-2.5 py-1.5 text-sm hover:bg-accent/50",
-                            item.label === crumb.label && "bg-accent text-accent-foreground",
+                            item.label === crumb.label &&
+                              "bg-accent text-accent-foreground",
                           )}
                           onClick={() => {
                             setPopoverOpen(false);
@@ -74,9 +79,7 @@ export function BreadcrumbBar() {
               ) : isLast || !crumb.href ? (
                 <span
                   className={
-                    isLast
-                      ? "truncate text-foreground"
-                      : "shrink-0 truncate"
+                    isLast ? "truncate text-foreground" : "shrink-0 truncate"
                   }
                 >
                   {crumb.label}

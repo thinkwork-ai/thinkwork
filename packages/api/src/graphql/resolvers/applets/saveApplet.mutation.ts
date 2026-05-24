@@ -1,8 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import {
-  saveAppletInner,
-  type SaveAppletInput,
-} from "./applet.shared.js";
+import { saveAppletInner, type SaveAppletInput } from "./applet.shared.js";
 
 export async function saveApplet(
   _parent: any,

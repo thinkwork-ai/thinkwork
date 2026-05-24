@@ -748,155 +748,6 @@ export type CompositionFeedbackSummary = {
   total: Scalars['Int']['output'];
 };
 
-export type Computer = {
-  __typename?: 'Computer';
-  budgetMonthlyCents?: Maybe<Scalars['Int']['output']>;
-  budgetPausedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  budgetPausedReason?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdBy?: Maybe<Scalars['ID']['output']>;
-  desiredRuntimeStatus: ComputerDesiredRuntimeStatus;
-  ecsServiceName?: Maybe<Scalars['String']['output']>;
-  efsAccessPointId?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  lastActiveAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  liveWorkspaceRoot?: Maybe<Scalars['String']['output']>;
-  migratedFromAgentId?: Maybe<Scalars['ID']['output']>;
-  migrationMetadata?: Maybe<Scalars['AWSJSON']['output']>;
-  name: Scalars['String']['output'];
-  owner?: Maybe<User>;
-  ownerUserId?: Maybe<Scalars['ID']['output']>;
-  primaryAgentId?: Maybe<Scalars['ID']['output']>;
-  runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
-  runtimeStatus: ComputerRuntimeStatus;
-  scope: ComputerScope;
-  slug: Scalars['String']['output'];
-  sourceAgent?: Maybe<Agent>;
-  spentMonthlyCents?: Maybe<Scalars['Int']['output']>;
-  status: ComputerStatus;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type ComputerAssignment = {
-  __typename?: 'ComputerAssignment';
-  assignedBy?: Maybe<User>;
-  assignedByUserId?: Maybe<Scalars['ID']['output']>;
-  computer?: Maybe<Computer>;
-  computerId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  role: Scalars['String']['output'];
-  subjectType: ComputerAssignmentSubjectType;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  user?: Maybe<User>;
-  userId?: Maybe<Scalars['ID']['output']>;
-};
-
-export enum ComputerAssignmentAccessSource {
-  Both = 'BOTH',
-  Direct = 'DIRECT',
-  Team = 'TEAM'
-}
-
-export enum ComputerAssignmentSubjectType {
-  Team = 'TEAM',
-  User = 'USER'
-}
-
-export enum ComputerDesiredRuntimeStatus {
-  Running = 'RUNNING',
-  Stopped = 'STOPPED'
-}
-
-export type ComputerEvent = {
-  __typename?: 'ComputerEvent';
-  computerId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  eventType: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  level: ComputerEventLevel;
-  payload?: Maybe<Scalars['AWSJSON']['output']>;
-  taskId?: Maybe<Scalars['ID']['output']>;
-  tenantId: Scalars['ID']['output'];
-};
-
-export enum ComputerEventLevel {
-  Debug = 'DEBUG',
-  Error = 'ERROR',
-  Info = 'INFO',
-  Warn = 'WARN'
-}
-
-export enum ComputerRuntimeStatus {
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Running = 'RUNNING',
-  Starting = 'STARTING',
-  Stopped = 'STOPPED',
-  Unknown = 'UNKNOWN'
-}
-
-export enum ComputerScope {
-  HistoricalPersonal = 'HISTORICAL_PERSONAL',
-  Shared = 'SHARED'
-}
-
-export enum ComputerStatus {
-  Active = 'ACTIVE',
-  Archived = 'ARCHIVED',
-  Failed = 'FAILED',
-  Provisioning = 'PROVISIONING'
-}
-
-export type ComputerTask = {
-  __typename?: 'ComputerTask';
-  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  computerId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdByUserId?: Maybe<Scalars['ID']['output']>;
-  error?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  idempotencyKey?: Maybe<Scalars['String']['output']>;
-  input?: Maybe<Scalars['AWSJSON']['output']>;
-  output?: Maybe<Scalars['AWSJSON']['output']>;
-  status: ComputerTaskStatus;
-  taskType: ComputerTaskType;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export enum ComputerTaskStatus {
-  Cancelled = 'CANCELLED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Running = 'RUNNING'
-}
-
-export enum ComputerTaskType {
-  GoogleCalendarUpcoming = 'GOOGLE_CALENDAR_UPCOMING',
-  GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
-  GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
-  HealthCheck = 'HEALTH_CHECK',
-  ThreadTurn = 'THREAD_TURN',
-  WorkspaceFileDelete = 'WORKSPACE_FILE_DELETE',
-  WorkspaceFileList = 'WORKSPACE_FILE_LIST',
-  WorkspaceFileRead = 'WORKSPACE_FILE_READ',
-  WorkspaceFileWrite = 'WORKSPACE_FILE_WRITE'
-}
-
-export type ComputerThreadChunkEvent = {
-  __typename?: 'ComputerThreadChunkEvent';
-  chunk?: Maybe<Scalars['AWSJSON']['output']>;
-  publishedAt: Scalars['AWSDateTime']['output'];
-  seq?: Maybe<Scalars['Int']['output']>;
-  threadId: Scalars['ID']['output'];
-};
-
 export type ConcurrencySnapshot = {
   __typename?: 'ConcurrencySnapshot';
   byAgent: Array<AgentCount>;
@@ -958,18 +809,6 @@ export type CreateArtifactInput = {
   threadId?: InputMaybe<Scalars['ID']['input']>;
   title: Scalars['String']['input'];
   type: ArtifactType;
-};
-
-export type CreateComputerInput = {
-  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
-  migratedFromAgentId?: InputMaybe<Scalars['ID']['input']>;
-  migrationMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  name: Scalars['String']['input'];
-  primaryAgentId?: InputMaybe<Scalars['ID']['input']>;
-  runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-  scope?: InputMaybe<ComputerScope>;
-  slug?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
 };
 
 export type CreateEvalTestCaseInput = {
@@ -1088,7 +927,6 @@ export type CreateThreadInput = {
   assigneeType?: InputMaybe<Scalars['String']['input']>;
   billingCode?: InputMaybe<Scalars['String']['input']>;
   channel?: InputMaybe<ThreadChannel>;
-  computerId?: InputMaybe<Scalars['ID']['input']>;
   createdById?: InputMaybe<Scalars['String']['input']>;
   createdByType?: InputMaybe<Scalars['String']['input']>;
   dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
@@ -1145,7 +983,7 @@ export type CustomerOnboardingLinkedTaskResult = {
 
 export type CustomizeBindings = {
   __typename?: 'CustomizeBindings';
-  computerId: Scalars['ID']['output'];
+  agentId: Scalars['ID']['output'];
   connectedSkillIds: Array<Scalars['String']['output']>;
   connectedWorkflowSlugs: Array<Scalars['String']['output']>;
 };
@@ -1206,30 +1044,23 @@ export type DeploymentStatus = {
 };
 
 export type DisableSkillInput = {
-  computerId: Scalars['ID']['input'];
+  agentId: Scalars['ID']['input'];
   skillId: Scalars['String']['input'];
 };
 
 export type DisableWorkflowInput = {
-  computerId: Scalars['ID']['input'];
+  agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
 };
 
 export type EnableSkillInput = {
-  computerId: Scalars['ID']['input'];
+  agentId: Scalars['ID']['input'];
   skillId: Scalars['String']['input'];
 };
 
 export type EnableWorkflowInput = {
-  computerId: Scalars['ID']['input'];
+  agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
-};
-
-export type EnqueueComputerTaskInput = {
-  computerId: Scalars['ID']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  input?: InputMaybe<Scalars['AWSJSON']['input']>;
-  taskType: ComputerTaskType;
 };
 
 export type EscalateThreadInput = {
@@ -1886,7 +1717,6 @@ export type Mutation = {
    * with jobError set.
    */
   createComplianceExport: ComplianceExport;
-  createComputer: Computer;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
@@ -1927,7 +1757,6 @@ export type Mutation = {
   editTenantEntityFact: TenantEntitySection;
   enableSkill: AgentSkill;
   enableWorkflow: WorkflowBinding;
-  enqueueComputerTask: ComputerTask;
   escalateThread: Thread;
   importN8nRoutine: Routine;
   /**
@@ -1949,7 +1778,6 @@ export type Mutation = {
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
-  publishComputerThreadChunk: ComputerThreadChunkEvent;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
   refreshGenUI?: Maybe<Message>;
@@ -1991,7 +1819,6 @@ export type Mutation = {
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
   setSpaceTools: Space;
-  setUserComputerAssignments: Array<ComputerAssignment>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startEvalRun: EvalRun;
   startOntologySuggestionScan: OntologySuggestionScanJob;
@@ -2021,7 +1848,6 @@ export type Mutation = {
   unpauseAgent: Agent;
   unregisterPushToken: Scalars['Boolean']['output'];
   updateArtifact: Artifact;
-  updateComputer: Computer;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
@@ -2179,11 +2005,6 @@ export type MutationCreateArtifactArgs = {
 export type MutationCreateComplianceExportArgs = {
   filter: ComplianceEventFilter;
   format: ComplianceExportFormat;
-};
-
-
-export type MutationCreateComputerArgs = {
-  input: CreateComputerInput;
 };
 
 
@@ -2396,11 +2217,6 @@ export type MutationEnableWorkflowArgs = {
 };
 
 
-export type MutationEnqueueComputerTaskArgs = {
-  input: EnqueueComputerTaskInput;
-};
-
-
 export type MutationEscalateThreadArgs = {
   input: EscalateThreadInput;
 };
@@ -2516,13 +2332,6 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
-};
-
-
-export type MutationPublishComputerThreadChunkArgs = {
-  chunk: Scalars['AWSJSON']['input'];
-  seq: Scalars['Int']['input'];
-  threadId: Scalars['ID']['input'];
 };
 
 
@@ -2725,11 +2534,6 @@ export type MutationSetSpaceToolsArgs = {
 };
 
 
-export type MutationSetUserComputerAssignmentsArgs = {
-  input: SetUserComputerAssignmentsInput;
-};
-
-
 export type MutationStartCustomerOnboardingArgs = {
   input: StartCustomerOnboardingInput;
 };
@@ -2806,12 +2610,6 @@ export type MutationUnregisterPushTokenArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars['ID']['input'];
   input: UpdateArtifactInput;
-};
-
-
-export type MutationUpdateComputerArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateComputerInput;
 };
 
 
@@ -3288,7 +3086,6 @@ export type Query = {
   applets: AppletConnection;
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
-  assignedComputers: Array<Computer>;
   brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
@@ -3336,11 +3133,6 @@ export type Query = {
    */
   complianceTenants: Array<Scalars['ID']['output']>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
-  computer?: Maybe<Computer>;
-  computerAssignments: Array<ComputerAssignment>;
-  computerEvents: Array<ComputerEvent>;
-  computerTasks: Array<ComputerTask>;
-  computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
@@ -3393,7 +3185,6 @@ export type Query = {
    */
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
-  myComputer?: Maybe<Computer>;
   mySlackLinks: Array<SlackUserLink>;
   ontologyChangeSets: Array<OntologyChangeSet>;
   ontologyDefinitions: OntologyDefinitions;
@@ -3646,36 +3437,6 @@ export type QueryComplianceEventsArgs = {
 export type QueryCompositionFeedbackSummaryArgs = {
   skillId?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryComputerArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryComputerAssignmentsArgs = {
-  computerId: Scalars['ID']['input'];
-};
-
-
-export type QueryComputerEventsArgs = {
-  computerId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryComputerTasksArgs = {
-  computerId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<ComputerTaskStatus>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryComputersArgs = {
-  status?: InputMaybe<ComputerStatus>;
-  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4144,7 +3905,6 @@ export type QueryThreadsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   assigneeId?: InputMaybe<Scalars['ID']['input']>;
   channel?: InputMaybe<ThreadChannel>;
-  computerId?: InputMaybe<Scalars['ID']['input']>;
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
@@ -4154,7 +3914,6 @@ export type QueryThreadsArgs = {
 
 
 export type QueryThreadsPagedArgs = {
-  computerId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
@@ -4706,12 +4465,6 @@ export type SetSpaceToolsInput = {
   tenantId: Scalars['ID']['input'];
 };
 
-export type SetUserComputerAssignmentsInput = {
-  computerIds: Array<Scalars['ID']['input']>;
-  role?: InputMaybe<Scalars['String']['input']>;
-  userId: Scalars['ID']['input'];
-};
-
 export type SkillCatalogItem = {
   __typename?: 'SkillCatalogItem';
   category?: Maybe<Scalars['String']['output']>;
@@ -5045,7 +4798,6 @@ export type Subscription = {
   __typename?: 'Subscription';
   _empty?: Maybe<Scalars['String']['output']>;
   onAgentStatusChanged?: Maybe<AgentStatusEvent>;
-  onComputerThreadChunk?: Maybe<ComputerThreadChunkEvent>;
   onCostRecorded?: Maybe<CostRecordedEvent>;
   onEvalRunUpdated?: Maybe<EvalRunUpdateEvent>;
   onHeartbeatActivity?: Maybe<HeartbeatActivityEvent>;
@@ -5059,11 +4811,6 @@ export type Subscription = {
 
 export type SubscriptionOnAgentStatusChangedArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type SubscriptionOnComputerThreadChunkArgs = {
-  threadId: Scalars['ID']['input'];
 };
 
 
@@ -5328,8 +5075,6 @@ export type Thread = {
   checkoutVersion: Scalars['Int']['output'];
   closedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  computer?: Maybe<Computer>;
-  computerId?: Maybe<Scalars['ID']['output']>;
   costSummary?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   createdById?: Maybe<Scalars['String']['output']>;
@@ -5620,23 +5365,6 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
-};
-
-export type UpdateComputerInput = {
-  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
-  budgetPausedReason?: InputMaybe<Scalars['String']['input']>;
-  desiredRuntimeStatus?: InputMaybe<ComputerDesiredRuntimeStatus>;
-  ecsServiceName?: InputMaybe<Scalars['String']['input']>;
-  efsAccessPointId?: InputMaybe<Scalars['String']['input']>;
-  lastActiveAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  lastHeartbeatAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  liveWorkspaceRoot?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-  runtimeStatus?: InputMaybe<ComputerRuntimeStatus>;
-  slug?: InputMaybe<Scalars['String']['input']>;
-  spentMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<ComputerStatus>;
 };
 
 export type UpdateEvalTestCaseInput = {
@@ -6217,7 +5945,6 @@ export type WorkflowBinding = {
   __typename?: 'WorkflowBinding';
   agentId: Scalars['ID']['output'];
   catalogSlug: Scalars['String']['output'];
-  computerId: Scalars['ID']['output'];
   enabled: Scalars['Boolean']['output'];
   id: Scalars['ID']['output'];
   status: Scalars['String']['output'];
@@ -6388,13 +6115,6 @@ export type CliEvalTestCaseQueryVariables = Exact<{
 
 
 export type CliEvalTestCaseQuery = { __typename?: 'Query', evalTestCase?: { __typename?: 'EvalTestCase', id: string, tenantId: string, name: string, category: string, query: string, systemPrompt?: string | null, assertions: any, agentcoreEvaluatorIds: Array<string>, tags: Array<string>, enabled: boolean, source: string, createdAt: any, updatedAt: any } | null };
-
-export type CliComputersForEvalQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type CliComputersForEvalQuery = { __typename?: 'Query', computers: Array<{ __typename?: 'Computer', id: string, name: string, slug: string, runtimeStatus: ComputerRuntimeStatus }> };
 
 export type CliTenantBySlugQueryVariables = Exact<{
   slug: Scalars['String']['input'];
@@ -7349,7 +7069,6 @@ export const CliEvalRunDocument = {"kind":"Document","definitions":[{"kind":"Ope
 export const CliEvalRunResultsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRunResults"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"runId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRunResults"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"runId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"runId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"testCaseId"}},{"kind":"Field","name":{"kind":"Name","value":"testCaseName"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"score"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}},{"kind":"Field","name":{"kind":"Name","value":"agentSessionId"}},{"kind":"Field","name":{"kind":"Name","value":"input"}},{"kind":"Field","name":{"kind":"Name","value":"expected"}},{"kind":"Field","name":{"kind":"Name","value":"actualOutput"}},{"kind":"Field","name":{"kind":"Name","value":"evaluatorResults"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalRunResultsQuery, CliEvalRunResultsQueryVariables>;
 export const CliEvalTestCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"category"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"search"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"category"},"value":{"kind":"Variable","name":{"kind":"Name","value":"category"}}},{"kind":"Argument","name":{"kind":"Name","value":"search"},"value":{"kind":"Variable","name":{"kind":"Name","value":"search"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCasesQuery, CliEvalTestCasesQueryVariables>;
 export const CliEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCaseQuery, CliEvalTestCaseQueryVariables>;
-export const CliComputersForEvalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliComputersForEval"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}}]}}]}}]} as unknown as DocumentNode<CliComputersForEvalQuery, CliComputersForEvalQueryVariables>;
 export const CliTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliTenantBySlugQuery, CliTenantBySlugQueryVariables>;
 export const CliStartEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliStartEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"StartEvalRunInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"startEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliStartEvalRunMutation, CliStartEvalRunMutationVariables>;
 export const CliCancelEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCancelEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cancelEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]}}]} as unknown as DocumentNode<CliCancelEvalRunMutation, CliCancelEvalRunMutationVariables>;

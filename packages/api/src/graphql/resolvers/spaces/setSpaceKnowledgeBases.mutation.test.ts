@@ -111,9 +111,8 @@ describe("setSpaceKnowledgeBases", () => {
         { id: "kb-2", name: "Customer Docs", status: "active" },
       ],
     );
-    const { setSpaceKnowledgeBases } = await import(
-      "./setSpaceKnowledgeBases.mutation.js"
-    );
+    const { setSpaceKnowledgeBases } =
+      await import("./setSpaceKnowledgeBases.mutation.js");
 
     const result = await setSpaceKnowledgeBases(
       null,
@@ -178,9 +177,8 @@ describe("setSpaceKnowledgeBases", () => {
 
   it("allows clearing all Space knowledge bases", async () => {
     selectQueue.push([{ id: "space-1" }]);
-    const { setSpaceKnowledgeBases } = await import(
-      "./setSpaceKnowledgeBases.mutation.js"
-    );
+    const { setSpaceKnowledgeBases } =
+      await import("./setSpaceKnowledgeBases.mutation.js");
 
     const result = await setSpaceKnowledgeBases(
       null,
@@ -201,9 +199,8 @@ describe("setSpaceKnowledgeBases", () => {
 
   it("rejects missing or cross-tenant knowledge bases before writing", async () => {
     selectQueue.push([{ id: "space-1" }], [{ id: "kb-1" }]);
-    const { setSpaceKnowledgeBases } = await import(
-      "./setSpaceKnowledgeBases.mutation.js"
-    );
+    const { setSpaceKnowledgeBases } =
+      await import("./setSpaceKnowledgeBases.mutation.js");
 
     await expect(
       setSpaceKnowledgeBases(

@@ -43,8 +43,7 @@ export async function skillCatalog(
 
   return installed.map((tenant) => {
     const meta = catalogBySlug.get(tenant.skill_id);
-    const displayName =
-      meta?.display_name ?? humanizeSlug(tenant.skill_id);
+    const displayName = meta?.display_name ?? humanizeSlug(tenant.skill_id);
     return {
       id: tenant.id,
       tenantId: tenant.tenant_id,

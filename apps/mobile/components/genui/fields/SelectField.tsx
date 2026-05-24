@@ -42,8 +42,14 @@ export function SelectField({
 
   return (
     <View className="mb-4">
-      <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
-        {label}{required ? " *" : ""}
+      <Text
+        size="xs"
+        weight="medium"
+        variant="muted"
+        className="uppercase tracking-wide mb-1.5"
+      >
+        {label}
+        {required ? " *" : ""}
       </Text>
       <Pressable
         testID={`questioncard-field-${id}`}
@@ -55,12 +61,19 @@ export function SelectField({
           opacity: disabled ? 0.6 : 1,
         }}
       >
-        <Text size="base" style={{ color: selectedLabel ? colors.foreground : colors.mutedForeground }}>
+        <Text
+          size="base"
+          style={{
+            color: selectedLabel ? colors.foreground : colors.mutedForeground,
+          }}
+        >
           {selectedLabel || placeholder}
         </Text>
-        {open
-          ? <ChevronUp size={18} color={colors.mutedForeground} />
-          : <ChevronDown size={18} color={colors.mutedForeground} />}
+        {open ? (
+          <ChevronUp size={18} color={colors.mutedForeground} />
+        ) : (
+          <ChevronDown size={18} color={colors.mutedForeground} />
+        )}
       </Pressable>
       {open && (
         <View
@@ -77,15 +90,26 @@ export function SelectField({
               <Pressable
                 key={opt.value}
                 testID={`questioncard-field-${id}-option-${opt.value}`}
-                onPress={() => { onChange(opt.value); setOpen(false); }}
+                onPress={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
                 className="px-3 py-2.5 active:opacity-70"
                 style={{
                   borderBottomWidth: 0.5,
-                  borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                  backgroundColor: active ? (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") : "transparent",
+                  borderBottomColor: isDark
+                    ? "rgba(255,255,255,0.08)"
+                    : "rgba(0,0,0,0.06)",
+                  backgroundColor: active
+                    ? isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(0,0,0,0.04)"
+                    : "transparent",
                 }}
               >
-                <Text size="sm" style={{ color: colors.foreground }}>{opt.label}</Text>
+                <Text size="sm" style={{ color: colors.foreground }}>
+                  {opt.label}
+                </Text>
               </Pressable>
             );
           })}

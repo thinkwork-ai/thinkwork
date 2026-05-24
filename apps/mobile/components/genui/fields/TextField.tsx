@@ -34,8 +34,14 @@ export function TextField({
 
   return (
     <View className="mb-4">
-      <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
-        {label}{required ? " *" : ""}
+      <Text
+        size="xs"
+        weight="medium"
+        variant="muted"
+        className="uppercase tracking-wide mb-1.5"
+      >
+        {label}
+        {required ? " *" : ""}
       </Text>
       <TextInput
         testID={`questioncard-field-${id}`}
@@ -48,13 +54,19 @@ export function TextField({
         numberOfLines={multiline ? 4 : 1}
         className={cn(
           "rounded-xl border px-3 py-3 text-base",
-          isDark ? "bg-neutral-800 border-neutral-700 text-neutral-100" : "bg-white border-neutral-300 text-neutral-900",
+          isDark
+            ? "bg-neutral-800 border-neutral-700 text-neutral-100"
+            : "bg-white border-neutral-300 text-neutral-900",
           disabled && "opacity-60",
         )}
-        style={[
-          multiline ? { minHeight: 96, textAlignVertical: "top" } : undefined,
-          Platform.OS === "android" && !multiline ? { textAlignVertical: "center" as const } : undefined,
-        ].filter(Boolean) as any}
+        style={
+          [
+            multiline ? { minHeight: 96, textAlignVertical: "top" } : undefined,
+            Platform.OS === "android" && !multiline
+              ? { textAlignVertical: "center" as const }
+              : undefined,
+          ].filter(Boolean) as any
+        }
       />
     </View>
   );

@@ -1,11 +1,6 @@
 import type { ReactNode } from "react";
-import {
-  Artifact,
-  ArtifactContent,
-} from "@/components/ai-elements/artifact";
-import {
-  GeneratedAppArtifactShell,
-} from "@/components/apps/GeneratedAppArtifactShell";
+import { Artifact, ArtifactContent } from "@/components/ai-elements/artifact";
+import { GeneratedAppArtifactShell } from "@/components/apps/GeneratedAppArtifactShell";
 import {
   GENERATED_APP_RUNTIME_MODE,
   type AppArtifactRuntimeMode,
@@ -43,9 +38,7 @@ export function AppCanvasPanel({
         {chrome ? (
           <Artifact className="h-full border-0 bg-transparent shadow-none">
             {chrome}
-            <ArtifactContent className="h-full p-0">
-              {children}
-            </ArtifactContent>
+            <ArtifactContent className="h-full p-0">{children}</ArtifactContent>
           </Artifact>
         ) : (
           <GeneratedAppArtifactShell

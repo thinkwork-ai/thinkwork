@@ -22,8 +22,8 @@
  */
 
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
@@ -33,8 +33,8 @@ import { provisionTenantFromStripeSession } from "../lib/stripe-provision-tenant
 import { attachStripeSubscriptionToTenant } from "../lib/stripe-attach-subscription.js";
 import { sendStripeWelcomeEmail } from "../lib/stripe-welcome-email.js";
 import {
-	applyStripeSubscriptionUpdate,
-	applyStripePaymentFailed,
+  applyStripeSubscriptionUpdate,
+  applyStripePaymentFailed,
 } from "../lib/stripe-update-subscription.js";
 import { db, tenants } from "../graphql/utils.js";
 import { schema } from "@thinkwork/database-pg";
@@ -42,274 +42,282 @@ import { schema } from "@thinkwork/database-pg";
 const { stripeEvents } = schema;
 
 const UUID_RE =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function json(
-	body: unknown,
-	statusCode = 200,
+  body: unknown,
+  statusCode = 200,
 ): APIGatewayProxyStructuredResultV2 {
-	return {
-		statusCode,
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(body),
-	};
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
 }
 
 function readRawBody(event: APIGatewayProxyEventV2): string {
-	if (!event.body) return "";
-	if (event.isBase64Encoded) {
-		return Buffer.from(event.body, "base64").toString("utf8");
-	}
-	return event.body;
+  if (!event.body) return "";
+  if (event.isBase64Encoded) {
+    return Buffer.from(event.body, "base64").toString("utf8");
+  }
+  return event.body;
 }
 
 export async function handler(
-	event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const method = event.requestContext.http.method;
-	if (method !== "POST") {
-		return json({ error: "Method not allowed" }, 405);
-	}
+  const method = event.requestContext.http.method;
+  if (method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
+  }
 
-	const signature =
-		event.headers?.["stripe-signature"] ||
-		event.headers?.["Stripe-Signature"] ||
-		"";
-	if (!signature) {
-		console.warn("[stripe-webhook] Missing Stripe-Signature header");
-		return json({ error: "Missing signature" }, 400);
-	}
+  const signature =
+    event.headers?.["stripe-signature"] ||
+    event.headers?.["Stripe-Signature"] ||
+    "";
+  if (!signature) {
+    console.warn("[stripe-webhook] Missing Stripe-Signature header");
+    return json({ error: "Missing signature" }, 400);
+  }
 
-	const rawBody = readRawBody(event);
-	if (!rawBody) {
-		return json({ error: "Empty body" }, 400);
-	}
+  const rawBody = readRawBody(event);
+  if (!rawBody) {
+    return json({ error: "Empty body" }, 400);
+  }
 
-	let stripe: Stripe;
-	let webhookSecret: string;
-	try {
-		stripe = await getStripeClient();
-		const creds = await getStripeCredentials();
-		webhookSecret = creds.webhookSigningSecret;
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		console.error("[stripe-webhook] Credential load failed:", msg);
-		// 500 so Stripe retries with its standard backoff — this is a server
-		// misconfiguration, not a client signature problem.
-		return json({ error: "Server misconfigured" }, 500);
-	}
+  let stripe: Stripe;
+  let webhookSecret: string;
+  try {
+    stripe = await getStripeClient();
+    const creds = await getStripeCredentials();
+    webhookSecret = creds.webhookSigningSecret;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[stripe-webhook] Credential load failed:", msg);
+    // 500 so Stripe retries with its standard backoff — this is a server
+    // misconfiguration, not a client signature problem.
+    return json({ error: "Server misconfigured" }, 500);
+  }
 
-	let stripeEvent: Stripe.Event;
-	try {
-		stripeEvent = stripe.webhooks.constructEvent(
-			rawBody,
-			signature,
-			webhookSecret,
-		);
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		console.warn(`[stripe-webhook] Signature verification failed: ${msg}`);
-		return json({ error: "Invalid signature" }, 400);
-	}
+  let stripeEvent: Stripe.Event;
+  try {
+    stripeEvent = stripe.webhooks.constructEvent(
+      rawBody,
+      signature,
+      webhookSecret,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[stripe-webhook] Signature verification failed: ${msg}`);
+    return json({ error: "Invalid signature" }, 400);
+  }
 
-	// Idempotency gate — DB constraint, not application logic. Replays hit
-	// the unique primary key and return 200 without touching anything else.
-	try {
-		await db.insert(stripeEvents).values({
-			stripe_event_id: stripeEvent.id,
-			event_type: stripeEvent.type,
-		});
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		if (
-			msg.includes("duplicate key") ||
-			msg.includes("stripe_events_pkey") ||
-			msg.toLowerCase().includes("unique")
-		) {
-			console.log(
-				`[stripe-webhook] Replay of event ${stripeEvent.id} (${stripeEvent.type}) — acking`,
-			);
-			return json({ received: true, replayed: true });
-		}
-		// Any other DB error → 500 so Stripe retries.
-		console.error("[stripe-webhook] stripe_events insert failed:", msg);
-		return json({ error: "DB error" }, 500);
-	}
+  // Idempotency gate — DB constraint, not application logic. Replays hit
+  // the unique primary key and return 200 without touching anything else.
+  try {
+    await db.insert(stripeEvents).values({
+      stripe_event_id: stripeEvent.id,
+      event_type: stripeEvent.type,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      msg.includes("duplicate key") ||
+      msg.includes("stripe_events_pkey") ||
+      msg.toLowerCase().includes("unique")
+    ) {
+      console.log(
+        `[stripe-webhook] Replay of event ${stripeEvent.id} (${stripeEvent.type}) — acking`,
+      );
+      return json({ received: true, replayed: true });
+    }
+    // Any other DB error → 500 so Stripe retries.
+    console.error("[stripe-webhook] stripe_events insert failed:", msg);
+    return json({ error: "DB error" }, 500);
+  }
 
-	try {
-		switch (stripeEvent.type) {
-			case "checkout.session.completed": {
-				const session = stripeEvent.data.object as Stripe.Checkout.Session;
-				if (session.mode !== "subscription") {
-					console.log(
-						`[stripe-webhook] Ignoring non-subscription checkout session ${session.id} (mode=${session.mode})`,
-					);
-					return json({ received: true });
-				}
-				// Re-fetch with expands so we have authoritative customer + sub
-				// state (the webhook payload sends IDs only for some fields).
-				const full = (await stripe.checkout.sessions.retrieve(session.id, {
-					expand: ["customer", "subscription"],
-				})) as Stripe.Response<Stripe.Checkout.Session>;
+  try {
+    switch (stripeEvent.type) {
+      case "checkout.session.completed": {
+        const session = stripeEvent.data.object as Stripe.Checkout.Session;
+        if (session.mode !== "subscription") {
+          console.log(
+            `[stripe-webhook] Ignoring non-subscription checkout session ${session.id} (mode=${session.mode})`,
+          );
+          return json({ received: true });
+        }
+        // Re-fetch with expands so we have authoritative customer + sub
+        // state (the webhook payload sends IDs only for some fields).
+        const full = (await stripe.checkout.sessions.retrieve(session.id, {
+          expand: ["customer", "subscription"],
+        })) as Stripe.Response<Stripe.Checkout.Session>;
 
-				const customer = full.customer;
-				const subscription = full.subscription;
-				if (
-					!customer ||
-					typeof customer === "string" ||
-					customer.deleted ||
-					!subscription ||
-					typeof subscription === "string"
-				) {
-					console.error(
-						`[stripe-webhook] Session ${session.id} is missing customer or subscription after expand`,
-					);
-					return json({ error: "Session incomplete" }, 500);
-				}
+        const customer = full.customer;
+        const subscription = full.subscription;
+        if (
+          !customer ||
+          typeof customer === "string" ||
+          customer.deleted ||
+          !subscription ||
+          typeof subscription === "string"
+        ) {
+          console.error(
+            `[stripe-webhook] Session ${session.id} is missing customer or subscription after expand`,
+          );
+          return json({ error: "Session incomplete" }, 500);
+        }
 
-				// Branch: "tenant:<uuid>" client_reference_id = upgrade flow
-				// for an existing authenticated tenant. Otherwise it's a new
-				// signup; pre-provision + send welcome email.
-				const cref = full.client_reference_id || "";
-				if (cref.startsWith("tenant:")) {
-					const tenantId = cref.slice("tenant:".length);
-					if (!UUID_RE.test(tenantId)) {
-						console.error(
-							`[stripe-webhook] Upgrade session ${session.id} has malformed client_reference_id=${cref}`,
-						);
-						return json({ error: "Malformed client_reference_id" }, 400);
-					}
-					const attached = await attachStripeSubscriptionToTenant({
-						tenantId,
-						customer: customer as Stripe.Customer,
-						subscription: subscription as Stripe.Subscription,
-					});
-					console.log(
-						`[stripe-webhook] Upgrade attached sub=${attached.stripeSubscriptionId} plan=${attached.plan} tenant=${attached.tenantId} from session ${session.id}`,
-					);
-					return json({ received: true, tenantId: attached.tenantId, upgrade: true });
-				}
+        // Branch: "tenant:<uuid>" client_reference_id = upgrade flow
+        // for an existing authenticated tenant. Otherwise it's a new
+        // signup; pre-provision + send welcome email.
+        const cref = full.client_reference_id || "";
+        if (cref.startsWith("tenant:")) {
+          const tenantId = cref.slice("tenant:".length);
+          if (!UUID_RE.test(tenantId)) {
+            console.error(
+              `[stripe-webhook] Upgrade session ${session.id} has malformed client_reference_id=${cref}`,
+            );
+            return json({ error: "Malformed client_reference_id" }, 400);
+          }
+          const attached = await attachStripeSubscriptionToTenant({
+            tenantId,
+            customer: customer as Stripe.Customer,
+            subscription: subscription as Stripe.Subscription,
+          });
+          console.log(
+            `[stripe-webhook] Upgrade attached sub=${attached.stripeSubscriptionId} plan=${attached.plan} tenant=${attached.tenantId} from session ${session.id}`,
+          );
+          return json({
+            received: true,
+            tenantId: attached.tenantId,
+            upgrade: true,
+          });
+        }
 
-				const result = await provisionTenantFromStripeSession({
-					session: full,
-					customer: customer as Stripe.Customer,
-					subscription: subscription as Stripe.Subscription,
-				});
-				console.log(
-					`[stripe-webhook] Provisioned tenant ${result.tenantId} plan=${result.plan} from session ${session.id}`,
-				);
+        const result = await provisionTenantFromStripeSession({
+          session: full,
+          customer: customer as Stripe.Customer,
+          subscription: subscription as Stripe.Subscription,
+        });
+        console.log(
+          `[stripe-webhook] Provisioned tenant ${result.tenantId} plan=${result.plan} from session ${session.id}`,
+        );
 
-				// Fire the welcome email. Non-fatal on SES failure — the tenant
-				// row already carries pending_owner_email, so the webhook ack's
-				// 200 either way (Stripe won't retry, and the operator has a
-				// manual-recovery path via the logs).
-				const adminUrl = process.env.ADMIN_URL || "https://admin.thinkwork.ai";
-				await sendStripeWelcomeEmail({
-					email: result.email,
-					plan: result.plan,
-					tenantId: result.tenantId,
-					sessionId: session.id,
-					adminUrl,
-				});
+        // Fire the welcome email. Non-fatal on SES failure — the tenant
+        // row already carries pending_owner_email, so the webhook ack's
+        // 200 either way (Stripe won't retry, and the operator has a
+        // manual-recovery path via the logs).
+        const adminUrl = process.env.ADMIN_URL || "https://admin.thinkwork.ai";
+        await sendStripeWelcomeEmail({
+          email: result.email,
+          plan: result.plan,
+          tenantId: result.tenantId,
+          sessionId: session.id,
+          adminUrl,
+        });
 
-				return json({ received: true, tenantId: result.tenantId });
-			}
-			case "customer.subscription.updated":
-			case "customer.subscription.deleted": {
-				const sub = stripeEvent.data.object as Stripe.Subscription;
-				const res = await applyStripeSubscriptionUpdate(sub);
-				if (!res.updated) {
-					console.warn(
-						`[stripe-webhook] ${stripeEvent.type} for sub=${sub.id}: no stripe_customer row yet; acking`,
-					);
-					return json({ received: true, skipped: "no_customer_row" });
-				}
+        return json({ received: true, tenantId: result.tenantId });
+      }
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        const sub = stripeEvent.data.object as Stripe.Subscription;
+        const res = await applyStripeSubscriptionUpdate(sub);
+        if (!res.updated) {
+          console.warn(
+            `[stripe-webhook] ${stripeEvent.type} for sub=${sub.id}: no stripe_customer row yet; acking`,
+          );
+          return json({ received: true, skipped: "no_customer_row" });
+        }
 
-				// Soft-delete the tenant when Stripe confirms the subscription
-				// is gone. Hard-delete (cascade-drop data) runs separately via
-				// a scheduled sweeper 30 days later — deliberate grace window
-				// so accidental cancels can be reversed by clearing
-				// deactivated_at (or by the user re-subscribing, which the
-				// upgrade path in stripe-attach-subscription.ts handles).
-				if (
-					stripeEvent.type === "customer.subscription.deleted" &&
-					res.tenantId
-				) {
-					await db
-						.update(tenants)
-						.set({
-							deactivated_at: new Date(),
-							deactivation_reason: "stripe_subscription_canceled",
-							updated_at: new Date(),
-						})
-						.where(eq(tenants.id, res.tenantId));
-					console.log(
-						`[stripe-webhook] Soft-deleted tenant=${res.tenantId} (sub=${sub.id} canceled)`,
-					);
-				}
+        // Soft-delete the tenant when Stripe confirms the subscription
+        // is gone. Hard-delete (cascade-drop data) runs separately via
+        // a scheduled sweeper 30 days later — deliberate grace window
+        // so accidental cancels can be reversed by clearing
+        // deactivated_at (or by the user re-subscribing, which the
+        // upgrade path in stripe-attach-subscription.ts handles).
+        if (
+          stripeEvent.type === "customer.subscription.deleted" &&
+          res.tenantId
+        ) {
+          await db
+            .update(tenants)
+            .set({
+              deactivated_at: new Date(),
+              deactivation_reason: "stripe_subscription_canceled",
+              updated_at: new Date(),
+            })
+            .where(eq(tenants.id, res.tenantId));
+          console.log(
+            `[stripe-webhook] Soft-deleted tenant=${res.tenantId} (sub=${sub.id} canceled)`,
+          );
+        }
 
-				console.log(
-					`[stripe-webhook] ${stripeEvent.type} tenant=${res.tenantId} status=${res.newStatus} plan=${res.newPlan ?? "unchanged"}`,
-				);
-				return json({ received: true, tenantId: res.tenantId });
-			}
-			case "invoice.payment_succeeded": {
-				// Stripe typings mark subscription on Invoice as optional; for
-				// subscription invoices it's always present. Re-fetch the sub
-				// so we pick up the refreshed current_period_end.
-				const invoice = stripeEvent.data.object as Stripe.Invoice;
-				const subId =
-					typeof (invoice as unknown as { subscription?: unknown }).subscription === "string"
-						? ((invoice as unknown as { subscription: string }).subscription)
-						: (invoice as unknown as { subscription?: { id?: string } }).subscription?.id;
-				if (!subId) {
-					console.log(
-						`[stripe-webhook] invoice.payment_succeeded without subscription (id=${invoice.id}) — acking`,
-					);
-					return json({ received: true });
-				}
-				const freshSub = (await stripe.subscriptions.retrieve(
-					subId,
-				)) as Stripe.Subscription;
-				const res = await applyStripeSubscriptionUpdate(freshSub);
-				console.log(
-					`[stripe-webhook] invoice.payment_succeeded tenant=${res.tenantId} period_end renewed`,
-				);
-				return json({ received: true, tenantId: res.tenantId });
-			}
-			case "invoice.payment_failed": {
-				const invoice = stripeEvent.data.object as Stripe.Invoice;
-				const subId =
-					typeof (invoice as unknown as { subscription?: unknown }).subscription === "string"
-						? ((invoice as unknown as { subscription: string }).subscription)
-						: (invoice as unknown as { subscription?: { id?: string } }).subscription?.id;
-				if (!subId) {
-					return json({ received: true });
-				}
-				const res = await applyStripePaymentFailed(subId);
-				console.log(
-					`[stripe-webhook] invoice.payment_failed sub=${subId} tenant=${res.tenantId ?? "unknown"} → past_due`,
-				);
-				return json({ received: true, tenantId: res.tenantId });
-			}
-			default:
-				console.log(
-					`[stripe-webhook] Acked unhandled event type=${stripeEvent.type} id=${stripeEvent.id}`,
-				);
-				return json({ received: true });
-		}
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		console.error(
-			`[stripe-webhook] Dispatch failure for ${stripeEvent.type} (${stripeEvent.id}):`,
-			msg,
-		);
-		// 500 so Stripe retries. The stripe_events row is already written, so
-		// a later retry will hit the dedup gate and return 200 without
-		// re-doing side effects — BUT the provision work never committed, so
-		// the tenant row is absent. That's an incident-path scenario: operator
-		// needs to manually inspect and either re-drive the provisioning or
-		// delete the stripe_events row to let Stripe retry from scratch.
-		return json({ error: "Provision failed" }, 500);
-	}
+        console.log(
+          `[stripe-webhook] ${stripeEvent.type} tenant=${res.tenantId} status=${res.newStatus} plan=${res.newPlan ?? "unchanged"}`,
+        );
+        return json({ received: true, tenantId: res.tenantId });
+      }
+      case "invoice.payment_succeeded": {
+        // Stripe typings mark subscription on Invoice as optional; for
+        // subscription invoices it's always present. Re-fetch the sub
+        // so we pick up the refreshed current_period_end.
+        const invoice = stripeEvent.data.object as Stripe.Invoice;
+        const subId =
+          typeof (invoice as unknown as { subscription?: unknown })
+            .subscription === "string"
+            ? (invoice as unknown as { subscription: string }).subscription
+            : (invoice as unknown as { subscription?: { id?: string } })
+                .subscription?.id;
+        if (!subId) {
+          console.log(
+            `[stripe-webhook] invoice.payment_succeeded without subscription (id=${invoice.id}) — acking`,
+          );
+          return json({ received: true });
+        }
+        const freshSub = (await stripe.subscriptions.retrieve(
+          subId,
+        )) as Stripe.Subscription;
+        const res = await applyStripeSubscriptionUpdate(freshSub);
+        console.log(
+          `[stripe-webhook] invoice.payment_succeeded tenant=${res.tenantId} period_end renewed`,
+        );
+        return json({ received: true, tenantId: res.tenantId });
+      }
+      case "invoice.payment_failed": {
+        const invoice = stripeEvent.data.object as Stripe.Invoice;
+        const subId =
+          typeof (invoice as unknown as { subscription?: unknown })
+            .subscription === "string"
+            ? (invoice as unknown as { subscription: string }).subscription
+            : (invoice as unknown as { subscription?: { id?: string } })
+                .subscription?.id;
+        if (!subId) {
+          return json({ received: true });
+        }
+        const res = await applyStripePaymentFailed(subId);
+        console.log(
+          `[stripe-webhook] invoice.payment_failed sub=${subId} tenant=${res.tenantId ?? "unknown"} → past_due`,
+        );
+        return json({ received: true, tenantId: res.tenantId });
+      }
+      default:
+        console.log(
+          `[stripe-webhook] Acked unhandled event type=${stripeEvent.type} id=${stripeEvent.id}`,
+        );
+        return json({ received: true });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[stripe-webhook] Dispatch failure for ${stripeEvent.type} (${stripeEvent.id}):`,
+      msg,
+    );
+    // 500 so Stripe retries. The stripe_events row is already written, so
+    // a later retry will hit the dedup gate and return 200 without
+    // re-doing side effects — BUT the provision work never committed, so
+    // the tenant row is absent. That's an incident-path scenario: operator
+    // needs to manually inspect and either re-drive the provisioning or
+    // delete the stripe_events row to let Stripe retry from scratch.
+    return json({ error: "Provision failed" }, 500);
+  }
 }

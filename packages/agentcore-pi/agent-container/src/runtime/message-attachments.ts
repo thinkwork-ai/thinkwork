@@ -121,7 +121,9 @@ export async function stageMessageAttachments(
   return { turnDir, staged };
 }
 
-export async function cleanupMessageAttachments(turnDir: string): Promise<void> {
+export async function cleanupMessageAttachments(
+  turnDir: string,
+): Promise<void> {
   if (!turnDir) return;
   await rm(path.dirname(turnDir), { recursive: true, force: true });
 }
@@ -213,15 +215,13 @@ export function buildFileReadTool(
   };
 }
 
-function normalizeAttachmentRef(raw: unknown):
-  | {
-      attachmentId: string;
-      s3Key: string;
-      name: string;
-      mimeType: string;
-      sizeBytes: number;
-    }
-  | null {
+function normalizeAttachmentRef(raw: unknown): {
+  attachmentId: string;
+  s3Key: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+} | null {
   if (!raw || typeof raw !== "object") return null;
   const ref = raw as MessageAttachmentRef;
   const attachmentId = stringValue(ref.attachment_id ?? ref.attachmentId);

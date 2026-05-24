@@ -23,7 +23,11 @@ export async function uninstallSlackWorkspace(
     .limit(1);
   if (!current) throw new Error("Slack workspace not found");
 
-  await requireAdminOrServiceCaller(ctx, current.tenant_id, "uninstall_slack_workspace");
+  await requireAdminOrServiceCaller(
+    ctx,
+    current.tenant_id,
+    "uninstall_slack_workspace",
+  );
 
   const [updated] = await db
     .update(slackWorkspacesTable)

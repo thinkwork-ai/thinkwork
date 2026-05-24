@@ -23,9 +23,13 @@ const CHANNEL_OPTIONS = [
   { label: "Webhook", value: "WEBHOOK" },
 ];
 
-function summarize(selected: string[], options: Array<{ label: string; value: string }>): string {
+function summarize(
+  selected: string[],
+  options: Array<{ label: string; value: string }>,
+): string {
   if (selected.length === 0) return "All";
-  if (selected.length === 1) return options.find((o) => o.value === selected[0])?.label ?? selected[0];
+  if (selected.length === 1)
+    return options.find((o) => o.value === selected[0])?.label ?? selected[0];
   return `${selected.length} selected`;
 }
 
@@ -57,7 +61,12 @@ function MultiSelectDropdown({
   const dropdownLeft = Math.min(anchor.x, screenWidth - 200);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       {/* Tap outside to close */}
       <Pressable style={{ flex: 1 }} onPress={onClose}>
         <View
@@ -92,11 +101,18 @@ function MultiSelectDropdown({
             className="px-4 py-2.5 active:opacity-70"
             style={{
               borderBottomWidth: 0.5,
-              borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+              borderBottomColor: isDark
+                ? "rgba(255,255,255,0.08)"
+                : "rgba(0,0,0,0.06)",
             }}
           >
-            <Text className={`text-xs font-medium ${selected.length === 0 ? "text-primary" : ""}`}
-              style={selected.length === 0 ? { color: colors.primary } : { color: colors.mutedForeground }}
+            <Text
+              className={`text-xs font-medium ${selected.length === 0 ? "text-primary" : ""}`}
+              style={
+                selected.length === 0
+                  ? { color: colors.primary }
+                  : { color: colors.mutedForeground }
+              }
             >
               {selected.length === 0 ? "✓ All (no filter)" : "Clear filter"}
             </Text>
@@ -110,12 +126,19 @@ function MultiSelectDropdown({
                 key={opt.value}
                 onPress={() => onToggle(opt.value)}
                 className="flex-row items-center justify-between px-4 py-3 active:opacity-70"
-                style={!isLast ? {
-                  borderBottomWidth: 0.5,
-                  borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                } : undefined}
+                style={
+                  !isLast
+                    ? {
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.06)",
+                      }
+                    : undefined
+                }
               >
-                <Text className={`text-sm ${isSelected ? "font-semibold" : ""}`}
+                <Text
+                  className={`text-sm ${isSelected ? "font-semibold" : ""}`}
                   style={isSelected ? { color: colors.primary } : undefined}
                 >
                   {opt.label}
@@ -161,39 +184,56 @@ function FilterButton({
       <Text className={`text-xs font-medium ${isActive ? "text-primary" : ""}`}>
         {label}: {value}
       </Text>
-      <ChevronDown size={12} color={isActive ? colors.primary : colors.mutedForeground} />
+      <ChevronDown
+        size={12}
+        color={isActive ? colors.primary : colors.mutedForeground}
+      />
     </Pressable>
   );
 }
 
 // ── Exported component ────────────────────────────────────────────────────
 
-export function ThreadFilterBar({ filters, onFiltersChange }: ThreadFilterBarProps) {
+export function ThreadFilterBar({
+  filters,
+  onFiltersChange,
+}: ThreadFilterBarProps) {
   const { colorScheme } = useColorScheme();
   const fColors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   const [activeDropdown, setActiveDropdown] = useState<"channel" | null>(null);
-  const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [anchor, setAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const channelRef = useRef<View>(null);
 
-  const openDropdown = useCallback((type: "channel", ref: React.RefObject<View | null>) => {
-    ref.current?.measureInWindow((x, y, width, height) => {
-      setAnchor({ x, y, width, height });
-      setActiveDropdown(type);
-    });
-  }, []);
+  const openDropdown = useCallback(
+    (type: "channel", ref: React.RefObject<View | null>) => {
+      ref.current?.measureInWindow((x, y, width, height) => {
+        setAnchor({ x, y, width, height });
+        setActiveDropdown(type);
+      });
+    },
+    [],
+  );
 
-  const toggleChannel = useCallback((value: string) => {
-    if (value === "__CLEAR__") {
-      onFiltersChange({ ...filters, channels: [] });
-      return;
-    }
-    const current = filters.channels;
-    const next = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
-    onFiltersChange({ ...filters, channels: next });
-  }, [filters, onFiltersChange]);
+  const toggleChannel = useCallback(
+    (value: string) => {
+      if (value === "__CLEAR__") {
+        onFiltersChange({ ...filters, channels: [] });
+        return;
+      }
+      const current = filters.channels;
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      onFiltersChange({ ...filters, channels: next });
+    },
+    [filters, onFiltersChange],
+  );
 
   return (
     <View className="flex-row items-center gap-2 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-800">
@@ -206,15 +246,24 @@ export function ThreadFilterBar({ filters, onFiltersChange }: ThreadFilterBarPro
       />
 
       <Pressable
-        onPress={() => onFiltersChange({ ...filters, showArchived: !filters.showArchived })}
+        onPress={() =>
+          onFiltersChange({ ...filters, showArchived: !filters.showArchived })
+        }
         className={`flex-row items-center gap-1 px-3 py-1.5 rounded-lg border active:opacity-70 ${
           filters.showArchived
             ? "border-primary bg-primary/10"
             : "border-neutral-300 dark:border-neutral-700"
         }`}
       >
-        <Archive size={12} color={filters.showArchived ? fColors.primary : fColors.mutedForeground} />
-        <Text className={`text-xs font-medium ${filters.showArchived ? "text-primary" : ""}`}>
+        <Archive
+          size={12}
+          color={
+            filters.showArchived ? fColors.primary : fColors.mutedForeground
+          }
+        />
+        <Text
+          className={`text-xs font-medium ${filters.showArchived ? "text-primary" : ""}`}
+        >
           Archived
         </Text>
       </Pressable>

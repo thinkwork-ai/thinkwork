@@ -27,10 +27,14 @@ export async function resolveInboxContext(
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
-  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({ stage, region });
+  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({
+    stage,
+    region,
+  });
 
   const flagOrEnv = opts.tenant ?? process.env.THINKWORK_TENANT;
-  const principalId = session && session.kind === "cognito" ? session.principalId : null;
+  const principalId =
+    session && session.kind === "cognito" ? session.principalId : null;
 
   if (flagOrEnv) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
@@ -43,7 +47,9 @@ export async function resolveInboxContext(
         principalId,
       };
     }
-    const data = await gqlQuery(client, InboxTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, InboxTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
@@ -70,7 +76,9 @@ export async function resolveInboxContext(
   }
 
   if (ctxTenantSlug) {
-    const data = await gqlQuery(client, InboxTenantBySlugDoc, { slug: ctxTenantSlug });
+    const data = await gqlQuery(client, InboxTenantBySlugDoc, {
+      slug: ctxTenantSlug,
+    });
     if (data.tenantBySlug) {
       return {
         stage,

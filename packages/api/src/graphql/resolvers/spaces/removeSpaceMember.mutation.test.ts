@@ -75,9 +75,8 @@ describe("removeSpaceMember", () => {
     selectQueue.push([{ role: "member" }]);
     deleteResults.push([{ id: "member-1" }]);
 
-    const { removeSpaceMember } = await import(
-      "./removeSpaceMember.mutation.js"
-    );
+    const { removeSpaceMember } =
+      await import("./removeSpaceMember.mutation.js");
 
     const result = await removeSpaceMember(
       null,
@@ -97,16 +96,13 @@ describe("removeSpaceMember", () => {
     selectQueue.push([{ tenant_id: "tenant-1" }]);
     selectQueue.push([{ role: "owner" }]);
 
-    const { removeSpaceMember } = await import(
-      "./removeSpaceMember.mutation.js"
-    );
+    const { removeSpaceMember } =
+      await import("./removeSpaceMember.mutation.js");
 
     await expect(
-      removeSpaceMember(
-        null,
-        { spaceId: "space-1", userId: "owner-user" },
-        { auth: { authType: "cognito" } } as any,
-      ),
+      removeSpaceMember(null, { spaceId: "space-1", userId: "owner-user" }, {
+        auth: { authType: "cognito" },
+      } as any),
     ).rejects.toMatchObject({
       extensions: { code: "CANNOT_REMOVE_OWNER" },
     });
@@ -117,9 +113,8 @@ describe("removeSpaceMember", () => {
     selectQueue.push([{ tenant_id: "tenant-1" }]);
     selectQueue.push([]);
 
-    const { removeSpaceMember } = await import(
-      "./removeSpaceMember.mutation.js"
-    );
+    const { removeSpaceMember } =
+      await import("./removeSpaceMember.mutation.js");
 
     const result = await removeSpaceMember(
       null,
@@ -136,9 +131,8 @@ describe("removeSpaceMember", () => {
     selectQueue.push([{ role: "member" }]);
     deleteResults.push([]);
 
-    const { removeSpaceMember } = await import(
-      "./removeSpaceMember.mutation.js"
-    );
+    const { removeSpaceMember } =
+      await import("./removeSpaceMember.mutation.js");
 
     const result = await removeSpaceMember(
       null,
@@ -153,16 +147,13 @@ describe("removeSpaceMember", () => {
   it("rejects when the Space is missing", async () => {
     selectQueue.push([]);
 
-    const { removeSpaceMember } = await import(
-      "./removeSpaceMember.mutation.js"
-    );
+    const { removeSpaceMember } =
+      await import("./removeSpaceMember.mutation.js");
 
     await expect(
-      removeSpaceMember(
-        null,
-        { spaceId: "missing", userId: "user-2" },
-        { auth: { authType: "cognito" } } as any,
-      ),
+      removeSpaceMember(null, { spaceId: "missing", userId: "user-2" }, {
+        auth: { authType: "cognito" },
+      } as any),
     ).rejects.toThrow("Space not found");
     expect(authCalls).toEqual([]);
     expect(deletes).toEqual([]);

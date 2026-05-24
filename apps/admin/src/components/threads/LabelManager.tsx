@@ -72,7 +72,11 @@ interface LabelManagerProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function LabelManager({ threadId, tenantId, currentLabels }: LabelManagerProps) {
+export function LabelManager({
+  threadId,
+  tenantId,
+  currentLabels,
+}: LabelManagerProps) {
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#6366f1");
 
@@ -127,10 +131,14 @@ export function LabelManager({ threadId, tenantId, currentLabels }: LabelManager
       <PopoverContent className="w-72 space-y-4" align="start">
         {/* Existing labels */}
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Tenant Labels</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Tenant Labels
+          </p>
 
           {tenantLabels.length === 0 && (
-            <p className="text-xs text-muted-foreground">No labels defined yet.</p>
+            <p className="text-xs text-muted-foreground">
+              No labels defined yet.
+            </p>
           )}
 
           {tenantLabels.map((label) => {
@@ -148,7 +156,10 @@ export function LabelManager({ threadId, tenantId, currentLabels }: LabelManager
                 >
                   <Badge
                     variant="outline"
-                    style={{ borderColor: label.color ?? undefined, color: label.color ?? undefined }}
+                    style={{
+                      borderColor: label.color ?? undefined,
+                      color: label.color ?? undefined,
+                    }}
                   >
                     {label.name}
                   </Badge>

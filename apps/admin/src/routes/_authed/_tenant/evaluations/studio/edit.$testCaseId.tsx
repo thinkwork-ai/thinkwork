@@ -9,13 +9,19 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { EvalTestCaseForm } from "@/components/evaluations/EvalTestCaseForm";
 import { EvalTestCaseQuery } from "@/lib/graphql-queries";
 
-export const Route = createFileRoute("/_authed/_tenant/evaluations/studio/edit/$testCaseId")({
+export const Route = createFileRoute(
+  "/_authed/_tenant/evaluations/studio/edit/$testCaseId",
+)({
   component: EditEvalTestCasePage,
 });
 
 function EditEvalTestCasePage() {
   const { testCaseId } = Route.useParams();
-  const [tc] = useQuery({ query: EvalTestCaseQuery, variables: { id: testCaseId }, pause: !testCaseId });
+  const [tc] = useQuery({
+    query: EvalTestCaseQuery,
+    variables: { id: testCaseId },
+    pause: !testCaseId,
+  });
   const [actions, setActions] = useState<React.ReactNode>(null);
 
   useBreadcrumbs([
@@ -29,8 +35,14 @@ function EditEvalTestCasePage() {
   if (!initial) return <div className="p-6">Test case not found.</div>;
 
   return (
-    <PageLayout header={<PageHeader title={`Edit: ${initial.name}`} actions={actions} />}>
-      <EvalTestCaseForm initial={initial as any} isEdit onActions={setActions} />
+    <PageLayout
+      header={<PageHeader title={`Edit: ${initial.name}`} actions={actions} />}
+    >
+      <EvalTestCaseForm
+        initial={initial as any}
+        isEdit
+        onActions={setActions}
+      />
     </PageLayout>
   );
 }

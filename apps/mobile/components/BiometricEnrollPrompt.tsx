@@ -11,7 +11,9 @@ interface BiometricEnrollPromptProps {
   onComplete: () => void;
 }
 
-export function BiometricEnrollPrompt({ onComplete }: BiometricEnrollPromptProps) {
+export function BiometricEnrollPrompt({
+  onComplete,
+}: BiometricEnrollPromptProps) {
   const { isSupported, biometricType, enableBiometric } = useBiometricAuth();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
@@ -42,20 +44,19 @@ export function BiometricEnrollPrompt({ onComplete }: BiometricEnrollPromptProps
           <View className="w-16 h-16 rounded-full bg-sky-100 dark:bg-sky-900/30 items-center justify-center mb-4">
             <Scan size={32} color={colors.primary} />
           </View>
-          
+
           <Text className="text-xl font-semibold text-neutral-900 dark:text-neutral-100 mb-2 text-center">
             Enable {biometricName}?
           </Text>
-          
+
           <Text className="text-neutral-500 dark:text-neutral-400 text-center mb-6">
-            Sign in faster next time with {biometricName}. You can change this in Settings.
+            Sign in faster next time with {biometricName}. You can change this
+            in Settings.
           </Text>
 
           <View className="w-full gap-3">
-            <Button onPress={handleEnable}>
-              Enable {biometricName}
-            </Button>
-            
+            <Button onPress={handleEnable}>Enable {biometricName}</Button>
+
             <Button variant="ghost" onPress={handleSkip}>
               Not Now
             </Button>

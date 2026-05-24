@@ -21,7 +21,8 @@ beforeEach(() => {
 afterEach(() => {
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
-  if (originalTenantEnv !== undefined) process.env.THINKWORK_TENANT = originalTenantEnv;
+  if (originalTenantEnv !== undefined)
+    process.env.THINKWORK_TENANT = originalTenantEnv;
   else delete process.env.THINKWORK_TENANT;
   rmSync(sandbox, { recursive: true, force: true });
   vi.restoreAllMocks();

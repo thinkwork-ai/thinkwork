@@ -276,15 +276,10 @@ describe("GraphQL Schema Contract", () => {
   describe("Computers and evals no longer expose Template wiring", () => {
     const schema = buildSchema(loadFullSchema());
 
-    it("uses primaryAgentId for Computer creation instead of templateId", () => {
-      const computer = schema.getType("Computer") as any;
-      const createInput = schema.getType("CreateComputerInput") as any;
-      const updateInput = schema.getType("UpdateComputerInput") as any;
-
-      expect(computer.getFields().templateId).toBeUndefined();
-      expect(createInput.getFields().templateId).toBeUndefined();
-      expect(updateInput.getFields().templateId).toBeUndefined();
-      expect(createInput.getFields().primaryAgentId.type.toString()).toBe("ID");
+    it("Computer types are fully retired", () => {
+      expect(schema.getType("Computer")).toBeUndefined();
+      expect(schema.getType("CreateComputerInput")).toBeUndefined();
+      expect(schema.getType("UpdateComputerInput")).toBeUndefined();
     });
 
     it("resolves eval targets through the tenant platform agent, not a per-input agentId", () => {
@@ -515,25 +510,18 @@ describe("GraphQL Schema Contract", () => {
       expect(fields).toContain("notifyAgentStatus");
       expect(fields).toContain("notifyNewMessage");
       expect(fields).toContain("notifyThreadUpdate");
-      expect(fields).toContain("publishComputerThreadChunk");
     });
 
-    it("has Computer thread chunk subscription contract", () => {
+    it("Computer thread chunk subscription is retired", () => {
       const mutationType = tfSchema.getMutationType();
       const subscriptionType = tfSchema.getSubscriptionType();
-      const eventType = tfSchema.getType("ComputerThreadChunkEvent") as any;
-
-      expect(eventType).toBeDefined();
-      expect(Object.keys(eventType.getFields())).toEqual([
-        "threadId",
-        "chunk",
-        "seq",
-        "publishedAt",
-      ]);
+      expect(tfSchema.getType("ComputerThreadChunkEvent")).toBeUndefined();
       expect(
         mutationType?.getFields().publishComputerThreadChunk,
-      ).toBeDefined();
-      expect(subscriptionType?.getFields().onComputerThreadChunk).toBeDefined();
+      ).toBeUndefined();
+      expect(
+        subscriptionType?.getFields().onComputerThreadChunk,
+      ).toBeUndefined();
     });
 
     it("does NOT have product Query fields", () => {

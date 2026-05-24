@@ -103,12 +103,17 @@ export async function gqlQuery<Data, Variables extends Record<string, unknown>>(
   return unwrap(res);
 }
 
-export async function gqlMutate<Data, Variables extends Record<string, unknown>>(
+export async function gqlMutate<
+  Data,
+  Variables extends Record<string, unknown>,
+>(
   client: Client,
   doc: TypedDocumentNode<Data, Variables>,
   variables: Variables,
 ): Promise<Data> {
-  const res = await client.mutation(serializeDocument(doc), variables).toPromise();
+  const res = await client
+    .mutation(serializeDocument(doc), variables)
+    .toPromise();
   return unwrap(res);
 }
 

@@ -55,7 +55,8 @@ export class CognitoSecureStorage {
   clear(): void {
     const keys = Object.keys(this.cache);
     this.cache = {};
-    for (const key of keys) void SecureStore.deleteItemAsync(this.sanitize(key));
+    for (const key of keys)
+      void SecureStore.deleteItemAsync(this.sanitize(key));
     void SecureStore.deleteItemAsync("thinkwork.cognito.keys");
   }
 

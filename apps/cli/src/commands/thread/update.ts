@@ -22,7 +22,9 @@ export async function runThreadUpdate(
   if (opts.due !== undefined) input.dueAt = opts.due;
 
   if (Object.keys(input).length === 0) {
-    printError("Nothing to update. Pass at least one of --title, --assignee, --due.");
+    printError(
+      "Nothing to update. Pass at least one of --title, --assignee, --due.",
+    );
     process.exit(1);
   }
 

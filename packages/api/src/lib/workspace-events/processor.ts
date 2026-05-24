@@ -259,13 +259,7 @@ export async function persistWorkspaceEvent(
   );
 
   if (run) {
-    await maybeMaterializeOrSyncInbox(
-      run,
-      draft,
-      metadata,
-      deps,
-      logger,
-    );
+    await maybeMaterializeOrSyncInbox(run, draft, metadata, deps, logger);
   }
 
   return {

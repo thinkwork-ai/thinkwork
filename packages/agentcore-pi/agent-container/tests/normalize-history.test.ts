@@ -104,9 +104,13 @@ describe("normalizeHistory", () => {
     expect((out[0] as { role: string }).role).toBe("user");
     expect((out[0] as { content: string }).content).toBe("Q1");
     expect((out[1] as { role: string }).role).toBe("assistant");
-    expect((out[1] as { content: { text: string }[] }).content[0]!.text).toBe("A1");
+    expect((out[1] as { content: { text: string }[] }).content[0]!.text).toBe(
+      "A1",
+    );
     expect((out[2] as { content: string }).content).toBe("Q2");
-    expect((out[3] as { content: { text: string }[] }).content[0]!.text).toBe("A2");
+    expect((out[3] as { content: { text: string }[] }).content[0]!.text).toBe(
+      "A2",
+    );
   });
 
   it("drops entries with empty/whitespace-only content", () => {

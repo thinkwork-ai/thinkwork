@@ -109,7 +109,8 @@ export const useCostStore = create<CostStore>((set) => ({
   applyEvent: (event) =>
     set((state) => {
       const amt = event.amountUsd;
-      const isLlm = event.eventType === "llm" || event.eventType === "inference";
+      const isLlm =
+        event.eventType === "llm" || event.eventType === "inference";
       const isTool = event.eventType.startsWith("exa_");
       const isCompute = event.eventType === "agentcore_compute";
 

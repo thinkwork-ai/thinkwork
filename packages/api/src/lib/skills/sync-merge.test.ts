@@ -121,9 +121,7 @@ describe("mergeTemplateSkillsIntoAgent — permissions_model: operations skills"
           permissions: '{"operations":["me","list_agents"]}',
         }),
       ],
-      currentBySkillId: new Map([
-        [ADMIN, cur('{"operations":["me"]}')],
-      ]),
+      currentBySkillId: new Map([[ADMIN, cur('{"operations":["me"]}')]]),
       permissionsModelOptIns: OPT_IN,
     });
     expect(out[0].permissions).toEqual({ operations: ["me"] });
@@ -139,9 +137,7 @@ describe("mergeTemplateSkillsIntoAgent — non-opt-in skills", () => {
           permissions: { templateField: "tpl" },
         }),
       ],
-      currentBySkillId: new Map([
-        [NON_ADMIN, cur({ agentField: "agent" })],
-      ]),
+      currentBySkillId: new Map([[NON_ADMIN, cur({ agentField: "agent" })]]),
       permissionsModelOptIns: OPT_IN, // does NOT include NON_ADMIN
     });
     expect(out[0].permissions).toEqual({ agentField: "agent" });

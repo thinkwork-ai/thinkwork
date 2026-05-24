@@ -26,58 +26,60 @@
 import { useCallback, useState } from "react";
 
 export interface ComposerStateInternals {
-	text: string;
-	files: File[];
-	isSubmitting: boolean;
-	error: string | null;
+  text: string;
+  files: File[];
+  isSubmitting: boolean;
+  error: string | null;
 }
 
 export interface ComposerState extends ComposerStateInternals {
-	setText: (next: string) => void;
-	addFile: (file: File) => void;
-	removeFile: (file: File) => void;
-	clearFiles: () => void;
-	clear: () => void;
-	setError: (next: string | null) => void;
-	setSubmitting: (submitting: boolean) => void;
+  setText: (next: string) => void;
+  addFile: (file: File) => void;
+  removeFile: (file: File) => void;
+  clearFiles: () => void;
+  clear: () => void;
+  setError: (next: string | null) => void;
+  setSubmitting: (submitting: boolean) => void;
 }
 
-export function useComposerState(threadId: string | null | undefined): ComposerState {
-	void threadId;
-	const [text, setText] = useState("");
-	const [files, setFiles] = useState<File[]>([]);
-	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+export function useComposerState(
+  threadId: string | null | undefined,
+): ComposerState {
+  void threadId;
+  const [text, setText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-	const addFile = useCallback((file: File) => {
-		setFiles((current) => [...current, file]);
-	}, []);
+  const addFile = useCallback((file: File) => {
+    setFiles((current) => [...current, file]);
+  }, []);
 
-	const removeFile = useCallback((file: File) => {
-		setFiles((current) => current.filter((f) => f !== file));
-	}, []);
+  const removeFile = useCallback((file: File) => {
+    setFiles((current) => current.filter((f) => f !== file));
+  }, []);
 
-	const clearFiles = useCallback(() => {
-		setFiles([]);
-	}, []);
+  const clearFiles = useCallback(() => {
+    setFiles([]);
+  }, []);
 
-	const clear = useCallback(() => {
-		setText("");
-		setFiles([]);
-		setError(null);
-	}, []);
+  const clear = useCallback(() => {
+    setText("");
+    setFiles([]);
+    setError(null);
+  }, []);
 
-	return {
-		text,
-		files,
-		isSubmitting,
-		error,
-		setText,
-		addFile,
-		removeFile,
-		clearFiles,
-		clear,
-		setError,
-		setSubmitting: setIsSubmitting,
-	};
+  return {
+    text,
+    files,
+    isSubmitting,
+    error,
+    setText,
+    addFile,
+    removeFile,
+    clearFiles,
+    clear,
+    setError,
+    setSubmitting: setIsSubmitting,
+  };
 }

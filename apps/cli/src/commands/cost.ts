@@ -5,8 +5,16 @@
 import { Command } from "commander";
 import { graphql } from "../gql/index.js";
 import { gqlQuery } from "../lib/gql-client.js";
-import { isJsonMode, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { resolveTenantContext, type TenantCliOptions } from "../lib/resolve-tenant-id.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  resolveTenantContext,
+  type TenantCliOptions,
+} from "../lib/resolve-tenant-id.js";
 
 const CostSummaryDoc = graphql(`
   query CliCostSummary($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
@@ -181,7 +189,9 @@ async function runCostSeries(opts: SeriesOptions): Promise<void> {
 export function registerCostCommand(program: Command): void {
   const cost = program
     .command("cost")
-    .description("Tenant spend summaries — total, per-agent, per-model, and daily series.");
+    .description(
+      "Tenant spend summaries — total, per-agent, per-model, and daily series.",
+    );
 
   cost
     .command("summary")

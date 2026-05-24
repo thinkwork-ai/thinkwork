@@ -8,7 +8,12 @@ import {
 } from "react";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
-import { setAuthToken, setTokenProvider, startTokenRefresh, stopTokenRefresh } from "@/lib/graphql-client";
+import {
+  setAuthToken,
+  setTokenProvider,
+  startTokenRefresh,
+  stopTokenRefresh,
+} from "@/lib/graphql-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,11 +23,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (
-    email: string,
-    password: string,
-    name: string,
-  ) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<void>;
   confirmSignUp: (email: string, code: string) => Promise<void>;
   signOut: () => void;
   getToken: () => Promise<string | null>;
@@ -58,18 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => stopTokenRefresh();
   }, []);
 
-  const handleSignIn = useCallback(
-    async (email: string, password: string) => {
-      const session = await auth.signIn(email, password);
-      void session;
-      const token = await auth.getIdToken();
-      setAuthToken(token);
-      setTokenProvider(() => auth.getIdToken());
-      startTokenRefresh();
-      setUser(auth.getCurrentUser());
-    },
-    [],
-  );
+  const handleSignIn = useCallback(async (email: string, password: string) => {
+    const session = await auth.signIn(email, password);
+    void session;
+    const token = await auth.getIdToken();
+    setAuthToken(token);
+    setTokenProvider(() => auth.getIdToken());
+    startTokenRefresh();
+    setUser(auth.getCurrentUser());
+  }, []);
 
   const handleSignUp = useCallback(
     async (email: string, password: string, name: string) => {

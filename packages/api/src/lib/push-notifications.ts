@@ -12,52 +12,61 @@ import { agents, users } from "@thinkwork/database-pg/schema";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 interface SendPushParams {
-	threadId: string;
-	tenantId: string;
-	agentId: string;
-	title: string;
-	body: string;
+  threadId: string;
+  tenantId: string;
+  agentId: string;
+  title: string;
+  body: string;
 }
 
 function isExpoPushToken(token: string): boolean {
-	return typeof token === "string" && token.startsWith("ExponentPushToken[") && token.endsWith("]");
+  return (
+    typeof token === "string" &&
+    token.startsWith("ExponentPushToken[") &&
+    token.endsWith("]")
+  );
 }
 
 interface SendExternalTaskPushParams {
-	userId: string;
-	tenantId: string;
-	threadId: string;
-	title: string;
-	body: string;
-	eventKind: string;
+  userId: string;
+  tenantId: string;
+  threadId: string;
+  title: string;
+  body: string;
+  eventKind: string;
 }
 
 interface SendComputerApprovalPushParams {
-	userId: string;
-	tenantId: string;
-	approvalId: string;
-	question: string;
-	computerBaseUrl?: string;
+  userId: string;
+  tenantId: string;
+  approvalId: string;
+  question: string;
+  computerBaseUrl?: string;
 }
 
 export function buildComputerApprovalPushMessage(input: {
-	token: string;
-	approvalId: string;
-	question: string;
-	computerBaseUrl?: string;
+  token: string;
+  approvalId: string;
+  question: string;
+  computerBaseUrl?: string;
 }) {
-	const baseUrl = (input.computerBaseUrl || "https://computer.thinkwork.ai").replace(/\/+$/, "");
-	return {
-		to: input.token,
-		sound: "default",
-		title: "Approval needed",
-		body: input.question.length > 100 ? input.question.slice(0, 97) + "..." : input.question,
-		data: {
-			type: "computer_approval",
-			approvalId: input.approvalId,
-			deepLinkUrl: `${baseUrl}/approvals/${input.approvalId}`,
-		},
-	};
+  const baseUrl = (
+    input.computerBaseUrl || "https://computer.thinkwork.ai"
+  ).replace(/\/+$/, "");
+  return {
+    to: input.token,
+    sound: "default",
+    title: "Approval needed",
+    body:
+      input.question.length > 100
+        ? input.question.slice(0, 97) + "..."
+        : input.question,
+    data: {
+      type: "computer_approval",
+      approvalId: input.approvalId,
+      deepLinkUrl: `${baseUrl}/approvals/${input.approvalId}`,
+    },
+  };
 }
 
 /**
@@ -70,192 +79,235 @@ export function buildComputerApprovalPushMessage(input: {
  * link on tap, so the tap always routes to the task detail screen.
  */
 export async function sendExternalTaskPush({
-	userId,
-	tenantId: _tenantId,
-	threadId,
-	title,
-	body,
-	eventKind,
+  userId,
+  tenantId: _tenantId,
+  threadId,
+  title,
+  body,
+  eventKind,
 }: SendExternalTaskPushParams) {
-	try {
-		const db = getDb();
+  try {
+    const db = getDb();
 
-		const rows = await db
-			.select({ id: users.id, email: users.email, token: users.expo_push_token })
-			.from(users)
-			.where(eq(users.id, userId));
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        token: users.expo_push_token,
+      })
+      .from(users)
+      .where(eq(users.id, userId));
 
-		if (rows.length === 0) {
-			console.log(`[push-notifications] User ${userId}: not found, skipping external task push`);
-			return;
-		}
+    if (rows.length === 0) {
+      console.log(
+        `[push-notifications] User ${userId}: not found, skipping external task push`,
+      );
+      return;
+    }
 
-		const row = rows[0];
-		if (!row.token) {
-			console.log(`[push-notifications] User ${row.email}: no Expo push token, skipping`);
-			return;
-		}
-		if (!isExpoPushToken(row.token)) {
-			console.warn(`[push-notifications] Invalid token for user ${row.email}: ${row.token.slice(0, 30)}`);
-			return;
-		}
+    const row = rows[0];
+    if (!row.token) {
+      console.log(
+        `[push-notifications] User ${row.email}: no Expo push token, skipping`,
+      );
+      return;
+    }
+    if (!isExpoPushToken(row.token)) {
+      console.warn(
+        `[push-notifications] Invalid token for user ${row.email}: ${row.token.slice(0, 30)}`,
+      );
+      return;
+    }
 
-		const message = {
-			to: row.token,
-			sound: "default",
-			title,
-			body: body.length > 150 ? body.slice(0, 147) + "..." : body,
-			data: { threadId, type: "external_task_event", eventKind },
-		};
+    const message = {
+      to: row.token,
+      sound: "default",
+      title,
+      body: body.length > 150 ? body.slice(0, 147) + "..." : body,
+      data: { threadId, type: "external_task_event", eventKind },
+    };
 
-		try {
-			const res = await fetch(EXPO_PUSH_URL, {
-				method: "POST",
-				headers: {
-					"Accept": "application/json",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify([message]),
-			});
-			const result = await res.json();
-			console.log(
-				`[push-notifications] external_task_event push (${res.status}) to ${row.email}:`,
-				JSON.stringify(result),
-			);
-		} catch (err) {
-			console.error("[push-notifications] External task push failed:", err);
-		}
-	} catch (err) {
-		// Never let push failures break the ingest pipeline.
-		console.error("[push-notifications] sendExternalTaskPush error:", err);
-	}
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([message]),
+      });
+      const result = await res.json();
+      console.log(
+        `[push-notifications] external_task_event push (${res.status}) to ${row.email}:`,
+        JSON.stringify(result),
+      );
+    } catch (err) {
+      console.error("[push-notifications] External task push failed:", err);
+    }
+  } catch (err) {
+    // Never let push failures break the ingest pipeline.
+    console.error("[push-notifications] sendExternalTaskPush error:", err);
+  }
 }
 
 export async function sendComputerApprovalPush({
-	userId,
-	tenantId: _tenantId,
-	approvalId,
-	question,
-	computerBaseUrl = process.env.COMPUTER_APP_URL,
+  userId,
+  tenantId: _tenantId,
+  approvalId,
+  question,
+  computerBaseUrl = process.env.COMPUTER_APP_URL,
 }: SendComputerApprovalPushParams) {
-	try {
-		const db = getDb();
+  try {
+    const db = getDb();
 
-		const rows = await db
-			.select({ id: users.id, email: users.email, token: users.expo_push_token })
-			.from(users)
-			.where(eq(users.id, userId));
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        token: users.expo_push_token,
+      })
+      .from(users)
+      .where(eq(users.id, userId));
 
-		if (rows.length === 0) {
-			console.log(`[push-notifications] User ${userId}: not found, skipping computer approval push`);
-			return;
-		}
+    if (rows.length === 0) {
+      console.log(
+        `[push-notifications] User ${userId}: not found, skipping computer approval push`,
+      );
+      return;
+    }
 
-		const row = rows[0];
-		if (!row.token) {
-			console.log(`[push-notifications] User ${row.email}: no Expo push token, skipping`);
-			return;
-		}
-		if (!isExpoPushToken(row.token)) {
-			console.warn(`[push-notifications] Invalid token for user ${row.email}: ${row.token.slice(0, 30)}`);
-			return;
-		}
+    const row = rows[0];
+    if (!row.token) {
+      console.log(
+        `[push-notifications] User ${row.email}: no Expo push token, skipping`,
+      );
+      return;
+    }
+    if (!isExpoPushToken(row.token)) {
+      console.warn(
+        `[push-notifications] Invalid token for user ${row.email}: ${row.token.slice(0, 30)}`,
+      );
+      return;
+    }
 
-		try {
-			const res = await fetch(EXPO_PUSH_URL, {
-				method: "POST",
-				headers: {
-					"Accept": "application/json",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify([
-					buildComputerApprovalPushMessage({
-						token: row.token,
-						approvalId,
-						question,
-						computerBaseUrl,
-					}),
-				]),
-			});
-			const result = await res.json();
-			console.log(
-				`[push-notifications] computer_approval push (${res.status}) to ${row.email}:`,
-				JSON.stringify(result),
-			);
-		} catch (err) {
-			console.error("[push-notifications] Computer approval push failed:", err);
-		}
-	} catch (err) {
-		console.error("[push-notifications] sendComputerApprovalPush error:", err);
-	}
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([
+          buildComputerApprovalPushMessage({
+            token: row.token,
+            approvalId,
+            question,
+            computerBaseUrl,
+          }),
+        ]),
+      });
+      const result = await res.json();
+      console.log(
+        `[push-notifications] computer_approval push (${res.status}) to ${row.email}:`,
+        JSON.stringify(result),
+      );
+    } catch (err) {
+      console.error("[push-notifications] Computer approval push failed:", err);
+    }
+  } catch (err) {
+    console.error("[push-notifications] sendComputerApprovalPush error:", err);
+  }
 }
 
 /**
  * Send a push notification to the user paired with the agent (agents.human_pair_id).
  */
-export async function sendTurnCompletedPush({ threadId, tenantId, agentId, title, body }: SendPushParams) {
-	try {
-		const db = getDb();
+export async function sendTurnCompletedPush({
+  threadId,
+  tenantId,
+  agentId,
+  title,
+  body,
+}: SendPushParams) {
+  try {
+    const db = getDb();
 
-		// Get the paired user's push token via agents.human_pair_id → users
-		const rows = await db
-			.select({ id: users.id, email: users.email, token: users.expo_push_token })
-			.from(agents)
-			.innerJoin(users, eq(agents.human_pair_id, users.id))
-			.where(eq(agents.id, agentId));
+    // Get the paired user's push token via agents.human_pair_id → users
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        token: users.expo_push_token,
+      })
+      .from(agents)
+      .innerJoin(users, eq(agents.human_pair_id, users.id))
+      .where(eq(agents.id, agentId));
 
-		if (rows.length === 0) {
-			console.log(`[push-notifications] Agent ${agentId}: no paired user, skipping`);
-			return;
-		}
+    if (rows.length === 0) {
+      console.log(
+        `[push-notifications] Agent ${agentId}: no paired user, skipping`,
+      );
+      return;
+    }
 
-		console.log(`[push-notifications] Agent ${agentId}: paired user ${rows[0].email}`);
+    console.log(
+      `[push-notifications] Agent ${agentId}: paired user ${rows[0].email}`,
+    );
 
-		// Validate tokens
-		const pushTokens: string[] = [];
-		for (const row of rows) {
-			if (row.token && isExpoPushToken(row.token)) {
-				pushTokens.push(row.token);
-			} else {
-				console.warn(`[push-notifications] Invalid token for user ${row.email}: ${row.token?.slice(0, 30)}`);
-			}
-		}
+    // Validate tokens
+    const pushTokens: string[] = [];
+    for (const row of rows) {
+      if (row.token && isExpoPushToken(row.token)) {
+        pushTokens.push(row.token);
+      } else {
+        console.warn(
+          `[push-notifications] Invalid token for user ${row.email}: ${row.token?.slice(0, 30)}`,
+        );
+      }
+    }
 
-		if (pushTokens.length === 0) {
-			console.warn("[push-notifications] No valid Expo push tokens found");
-			return;
-		}
+    if (pushTokens.length === 0) {
+      console.warn("[push-notifications] No valid Expo push tokens found");
+      return;
+    }
 
-		console.log(`[push-notifications] Sending to ${pushTokens.length} token(s) for thread ${threadId}`);
+    console.log(
+      `[push-notifications] Sending to ${pushTokens.length} token(s) for thread ${threadId}`,
+    );
 
-		// Build messages
-		const messages = pushTokens.map((token) => ({
-			to: token,
-			sound: "default",
-			title,
-			body: body.length > 150 ? body.slice(0, 147) + "..." : body,
-			data: { threadId, type: "turn_completed" },
-		}));
+    // Build messages
+    const messages = pushTokens.map((token) => ({
+      to: token,
+      sound: "default",
+      title,
+      body: body.length > 150 ? body.slice(0, 147) + "..." : body,
+      data: { threadId, type: "turn_completed" },
+    }));
 
-		// Send via Expo HTTP API
-		try {
-			const res = await fetch(EXPO_PUSH_URL, {
-				method: "POST",
-				headers: {
-					"Accept": "application/json",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(messages),
-			});
-			const result = await res.json();
-			console.log(`[push-notifications] Expo response (${res.status}):`, JSON.stringify(result));
-		} catch (err) {
-			console.error("[push-notifications] Failed to send:", err);
-		}
+    // Send via Expo HTTP API
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(messages),
+      });
+      const result = await res.json();
+      console.log(
+        `[push-notifications] Expo response (${res.status}):`,
+        JSON.stringify(result),
+      );
+    } catch (err) {
+      console.error("[push-notifications] Failed to send:", err);
+    }
 
-		console.log(`[push-notifications] Done — sent ${pushTokens.length} notification(s) for thread ${threadId}`);
-	} catch (err) {
-		// Never let push notification failures break the turn completion flow
-		console.error("[push-notifications] Error:", err);
-	}
+    console.log(
+      `[push-notifications] Done — sent ${pushTokens.length} notification(s) for thread ${threadId}`,
+    );
+  } catch (err) {
+    // Never let push notification failures break the turn completion flow
+    console.error("[push-notifications] Error:", err);
+  }
 }

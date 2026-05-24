@@ -1,7 +1,14 @@
 // Shared activity types, normalizers, and constants used by both
 // the Activity page and the Agent detail page.
 
-export type ActivityType = "chat" | "routine" | "task" | "scheduled" | "thread" | "email" | "webhook";
+export type ActivityType =
+  | "chat"
+  | "routine"
+  | "task"
+  | "scheduled"
+  | "thread"
+  | "email"
+  | "webhook";
 
 export type ActivityItem = {
   id: string;
@@ -67,8 +74,26 @@ export function formatDuration(ms: number | null | undefined): string {
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
-export const ALL_TYPES: ActivityType[] = ["chat", "scheduled", "thread", "routine", "task", "email", "webhook"];
-export const ALL_STATUSES = ["succeeded", "failed", "running", "pending", "in_progress", "done", "open", "closed", "cancelled"];
+export const ALL_TYPES: ActivityType[] = [
+  "chat",
+  "scheduled",
+  "thread",
+  "routine",
+  "task",
+  "email",
+  "webhook",
+];
+export const ALL_STATUSES = [
+  "succeeded",
+  "failed",
+  "running",
+  "pending",
+  "in_progress",
+  "done",
+  "open",
+  "closed",
+  "cancelled",
+];
 
 const SOURCE_TYPE_MAP: Record<string, ActivityType> = {
   webhook: "webhook",
@@ -88,7 +113,9 @@ export function mapRuns(
   agentMap: Map<string, string>,
 ): ActivityItem[] {
   return runs.map((r: any) => {
-    const startMs = r.startedAt ? new Date(r.startedAt).getTime() : new Date(r.createdAt).getTime();
+    const startMs = r.startedAt
+      ? new Date(r.startedAt).getTime()
+      : new Date(r.createdAt).getTime();
     const endMs = r.finishedAt ? new Date(r.finishedAt).getTime() : undefined;
     return {
       id: `run:${r.id}`,

@@ -12,13 +12,8 @@
  * file in the lift; that belongs in a follow-up.
  */
 
-import { and, eq } from "drizzle-orm";
+import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
-import {
-  computerEvents,
-  computerTasks,
-  messages,
-} from "@thinkwork/database-pg/schema";
 
 const db = getDb();
 
@@ -255,7 +250,7 @@ export async function notifyThreadTurnUpdate(payload: {
   }
 }
 
-export async function markComputerTaskFailedFromFinalize(input: {
+export async function markComputerTaskFailedFromFinalize(_input: {
   tenantId: string;
   computerId?: string | null;
   taskId?: string | null;
@@ -264,45 +259,8 @@ export async function markComputerTaskFailedFromFinalize(input: {
   message: string;
   code: string;
 }): Promise<void> {
-  if (!input.computerId || !input.taskId) return;
-  const error = { message: input.message, code: input.code };
-  try {
-    const [task] = await db
-      .update(computerTasks)
-      .set({
-        status: "failed",
-        error,
-        completed_at: new Date(),
-        updated_at: new Date(),
-      })
-      .where(
-        and(
-          eq(computerTasks.tenant_id, input.tenantId),
-          eq(computerTasks.computer_id, input.computerId),
-          eq(computerTasks.id, input.taskId),
-        ),
-      )
-      .returning({ id: computerTasks.id });
-
-    if (!task) return;
-
-    await db.insert(computerEvents).values({
-      tenant_id: input.tenantId,
-      computer_id: input.computerId,
-      task_id: input.taskId,
-      event_type: "task_failed",
-      level: "error",
-      payload: {
-        threadId: input.threadId,
-        messageId: input.messageId ?? null,
-        error,
-        source: "chat-finalize",
-      },
-    });
-  } catch (taskErr) {
-    console.error(
-      `[chat-finalize] Failed to mark computer task failed:`,
-      taskErr,
-    );
-  }
+  // Computer feature removed; the callback substrate that surfaced
+  // task failures into computer_tasks/computer_events is gone. Callers
+  // are kept in place pending broader chat-finalize refactor.
+  return;
 }

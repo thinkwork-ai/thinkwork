@@ -8,7 +8,8 @@ export const queryKeys = {
   agents: {
     all: (tenantId: string) => ["agents", tenantId] as const,
     detail: (id: string) => ["agents", "detail", id] as const,
-    capabilities: (agentId: string) => ["agents", agentId, "capabilities"] as const,
+    capabilities: (agentId: string) =>
+      ["agents", agentId, "capabilities"] as const,
     skills: (agentId: string) => ["agents", agentId, "skills"] as const,
     budget: (agentId: string) => ["agents", agentId, "budget"] as const,
   },
@@ -52,7 +53,8 @@ export const queryKeys = {
     summary: (tenantId: string) => ["costs", tenantId, "summary"] as const,
     byAgent: (tenantId: string) => ["costs", tenantId, "by-agent"] as const,
     byModel: (tenantId: string) => ["costs", tenantId, "by-model"] as const,
-    timeSeries: (tenantId: string) => ["costs", tenantId, "time-series"] as const,
+    timeSeries: (tenantId: string) =>
+      ["costs", tenantId, "time-series"] as const,
     budgets: (tenantId: string) => ["costs", tenantId, "budgets"] as const,
   },
   skills: {

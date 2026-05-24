@@ -19,7 +19,12 @@ interface ActionSheetProps {
   title?: string;
 }
 
-export function ActionSheet({ visible, onClose, actions, title }: ActionSheetProps) {
+export function ActionSheet({
+  visible,
+  onClose,
+  actions,
+  title,
+}: ActionSheetProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
@@ -49,15 +54,31 @@ export function ActionSheet({ visible, onClose, actions, title }: ActionSheetPro
 
   const handleClose = () => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
     ]).start(() => onClose());
   };
 
   const handleAction = (action: ActionItem) => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
     ]).start(() => {
       onClose();
       setTimeout(action.onPress, 50);
@@ -74,11 +95,19 @@ export function ActionSheet({ visible, onClose, actions, title }: ActionSheetPro
   const disabledColor = isDark ? "#6b7280" : "#9ca3af";
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={handleClose}
+    >
       <View style={StyleSheet.absoluteFill}>
         {/* Backdrop */}
         <Animated.View
-          style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.4)", opacity: fadeAnim }]}
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: "rgba(0,0,0,0.4)", opacity: fadeAnim },
+          ]}
         >
           <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
         </Animated.View>
@@ -105,7 +134,11 @@ export function ActionSheet({ visible, onClose, actions, title }: ActionSheetPro
             {title && (
               <View style={[styles.titleRow, { borderBottomColor: separator }]}>
                 <Text
-                  style={{ color: isDark ? "#8e8e93" : "#8e8e93", fontSize: 13, textAlign: "center" }}
+                  style={{
+                    color: isDark ? "#8e8e93" : "#8e8e93",
+                    fontSize: 13,
+                    textAlign: "center",
+                  }}
                 >
                   {title}
                 </Text>
@@ -122,7 +155,9 @@ export function ActionSheet({ visible, onClose, actions, title }: ActionSheetPro
                     backgroundColor: action.disabled
                       ? itemBg
                       : pressed
-                        ? (isDark ? "#48484a" : "#e5e5ea")
+                        ? isDark
+                          ? "#48484a"
+                          : "#e5e5ea"
                         : itemBg,
                     opacity: action.disabled ? 0.5 : 1,
                   },
@@ -138,7 +173,11 @@ export function ActionSheet({ visible, onClose, actions, title }: ActionSheetPro
                 <Text
                   style={{
                     fontSize: 20,
-                    color: action.disabled ? disabledColor : action.destructive ? destructiveColor : textColor,
+                    color: action.disabled
+                      ? disabledColor
+                      : action.destructive
+                        ? destructiveColor
+                        : textColor,
                     fontWeight: "400",
                   }}
                 >
@@ -154,7 +193,11 @@ export function ActionSheet({ visible, onClose, actions, title }: ActionSheetPro
             style={({ pressed }) => [
               styles.cancelButton,
               {
-                backgroundColor: pressed ? (isDark ? "#48484a" : "#e5e5ea") : itemBg,
+                backgroundColor: pressed
+                  ? isDark
+                    ? "#48484a"
+                    : "#e5e5ea"
+                  : itemBg,
               },
             ]}
           >

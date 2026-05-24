@@ -15,5 +15,5 @@ const result = await db.execute(sql`
 
 console.log("tenant_id,action,count");
 for (const row of (result as unknown as { rows: any[] }).rows ?? []) {
-	console.log(`${row.tenant_id},${row.action},${row.count}`);
+  console.log(`${row.tenant_id},${row.action},${row.count}`);
 }

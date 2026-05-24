@@ -194,10 +194,6 @@ describe("classifyWorkspaceReview (orchestrator)", () => {
       depthCap: 4,
     });
 
-    expect(store.fetchAgentChain).toHaveBeenCalledWith(
-      TENANT,
-      "agent-1",
-      4,
-    );
+    expect(store.fetchAgentChain).toHaveBeenCalledWith(TENANT, "agent-1", 4);
   });
 });

@@ -34,7 +34,12 @@ type ServerResponse = {
  * source memory units. One GraphQL round-trip — server handles recall,
  * dedup, and scoring. Paused until userId + non-empty query are set.
  */
-export function useMobileMemorySearch({ userId, agentId, query, limit }: UseMobileMemorySearchArgs) {
+export function useMobileMemorySearch({
+  userId,
+  agentId,
+  query,
+  limit,
+}: UseMobileMemorySearchArgs) {
   const scopeUserId = userId ?? agentId;
   const trimmed = (query || "").trim();
   const [{ data, fetching, error }, refetch] = useQuery<ServerResponse>({
