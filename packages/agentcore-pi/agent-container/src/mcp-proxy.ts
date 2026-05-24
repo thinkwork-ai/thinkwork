@@ -28,7 +28,7 @@
  */
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { Type, type Static, type TSchema } from "typebox";
+import { Type, type Static } from "typebox";
 import type { ConnectMcpServerFn } from "./mcp.js";
 import type { McpToolRegistry } from "./mcp-registry.js";
 
@@ -85,7 +85,7 @@ const McpProxyParamsSchema = Type.Object(
     description:
       "Provide exactly one of `list`, `search`, or `call`. `includeSchemas` is optional and applies to list/search.",
   },
-) as TSchema;
+);
 
 export type McpProxyParams = Static<typeof McpProxyParamsSchema>;
 
@@ -135,7 +135,7 @@ class McpProxyModeUnsupportedError extends Error {
  */
 export function buildMcpProxyTool(
   options: BuildMcpProxyToolOptions,
-): AgentTool<McpProxyParams> {
+): AgentTool<any> {
   const { mode } = options;
 
   return {
@@ -149,6 +149,8 @@ export function buildMcpProxyTool(
         throw new McpProxyInertError();
       }
       // U5 replaces this branch with the live list/search/call dispatcher.
+      // The body will narrow `_params` to McpProxyParams (the Static type
+      // of McpProxyParamsSchema) and dispatch by discriminator.
       throw new McpProxyModeUnsupportedError(mode);
     },
   };

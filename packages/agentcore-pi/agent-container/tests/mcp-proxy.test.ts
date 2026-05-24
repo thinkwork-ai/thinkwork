@@ -119,7 +119,7 @@ describe("buildMcpProxyTool — telemetry-shape compatibility", () => {
   // proxy participates in the same telemetry pipeline as today's per-tool
   // surface (server.ts:593-629).
   it("a fake subscribe captures a start and an end event with toolName=mcp", async () => {
-    const tool: AgentTool<unknown> = buildMcpProxyTool({ mode: "inert" });
+    const tool: AgentTool<any> = buildMcpProxyTool({ mode: "inert" });
     const events: Array<{ type: string; toolName: string }> = [];
     const subscribe = (event: { type: string; toolName: string }) =>
       events.push(event);
