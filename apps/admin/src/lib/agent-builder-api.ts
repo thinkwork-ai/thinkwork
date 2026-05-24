@@ -3,12 +3,14 @@ import {
   createSubAgentWorkspaceFiles,
   generateFolderStructure,
   getWorkspaceFile,
+  installWorkspaceSkill,
   listWorkspaceFiles,
   moveWorkspaceFile,
   putWorkspaceFile,
   regenerateWorkspaceMap,
   renameWorkspacePath,
   type ComposeSource,
+  type InstallSkillResult,
   type MoveResult,
   type Target,
   type WorkspaceFileMeta,
@@ -23,6 +25,14 @@ export async function createSubAgent(
   contextContent: string,
 ): Promise<void> {
   await createSubAgentWorkspaceFiles(agentId, slug, contextContent);
+}
+
+export async function installSkill(
+  target: Target,
+  slug: string,
+  wiringChoice: string,
+): Promise<InstallSkillResult> {
+  return installWorkspaceSkill(target, slug, wiringChoice);
 }
 
 const API_URL = import.meta.env.VITE_API_URL || "";
