@@ -102,26 +102,18 @@ export function buildWorkspaceTree(
   }
 
   const routedPaths = routedFolderPaths(routingRows);
-  const routedTopFolders = new Set(
-    routedPaths
-      .filter((path) => !path.includes("/"))
-      .map((path) => path.replace(/\/$/, "")),
-  );
   const subAgentChildren: TreeNode[] = [];
-  const remainingRoot: TreeNode[] = [];
-
-  for (const node of root) {
-    if (node.isFolder && routedTopFolders.has(node.path)) {
-      subAgentChildren.push(node);
-    } else {
-      remainingRoot.push(node);
-    }
-  }
 
   const existingSubAgentPaths = new Set(
     subAgentChildren.map((node) => node.path),
   );
   for (const path of routedPaths) {
+    const existing = popFolderNodeByPath(root, path);
+    if (existing) {
+      subAgentChildren.push(existing);
+      existingSubAgentPaths.add(path);
+      continue;
+    }
     if (existingSubAgentPaths.has(path)) continue;
     subAgentChildren.push({
       name: path,
@@ -144,8 +136,31 @@ export function buildWorkspaceTree(
           },
         ]
       : []),
-    ...sortNodes(remainingRoot),
+    ...sortNodes(root),
   ];
+}
+
+function popFolderNodeByPath(nodes: TreeNode[], path: string): TreeNode | null {
+  const index = nodes.findIndex((node) => node.isFolder && node.path === path);
+  if (index !== -1) {
+    return nodes.splice(index, 1)[0] ?? null;
+  }
+
+  for (const node of [...nodes]) {
+    if (!node.isFolder) continue;
+    const match = popFolderNodeByPath(node.children, path);
+    if (!match) continue;
+    if (
+      node.children.length === 0 &&
+      !RESERVED_ROOT_FOLDERS.some((folder) => folder === node.name)
+    ) {
+      const parentIndex = nodes.indexOf(node);
+      if (parentIndex !== -1) nodes.splice(parentIndex, 1);
+    }
+    return match;
+  }
+
+  return null;
 }
 
 function sortNodes(nodes: TreeNode[]) {

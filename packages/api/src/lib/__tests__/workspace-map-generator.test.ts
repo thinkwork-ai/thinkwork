@@ -770,6 +770,60 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
     expect(md).not.toContain(".gitkeep");
     expect(md).not.toContain(".DS_Store");
   });
+
+  it("discovers both legacy flat and workspaces-parent subagent contexts during transition", async () => {
+    state.listObjectsResponses = [
+      "AGENTS.md",
+      "legacy-flat/CONTEXT.md",
+      "workspaces/sql/CONTEXT.md",
+      "workspaces/sql/skills/snowflake/SKILL.md",
+    ];
+    state.s3GetResponses.set(
+      `${PREFIX}legacy-flat/CONTEXT.md`,
+      "# Legacy Flat\n\n## What This Workspace Is\nLegacy context.\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}workspaces/sql/CONTEXT.md`,
+      "# SQL\n\n## What This Workspace Is\nWarehouse context.\n",
+    );
+
+    await regenerateWorkspaceMap("agent-1");
+    const md = lastWrittenAgentsMd() ?? "";
+    const context = lastWritten("CONTEXT.md") ?? "";
+
+    expect(md).toContain("legacy-flat/ ← Legacy Flat");
+    expect(md).toContain("workspaces/");
+    expect(md).toContain("sql/ ← SQL");
+    expect(context).toContain("| Legacy Flat | Legacy context. |");
+    expect(context).toContain("| SQL | Warehouse context. |");
+  });
+
+  it("prefers workspaces-parent context over legacy flat context for the same slug", async () => {
+    state.listObjectsResponses = [
+      "AGENTS.md",
+      "expenses/CONTEXT.md",
+      "workspaces/expenses/CONTEXT.md",
+      "workspaces/expenses/reports/summary.md",
+    ];
+    state.s3GetResponses.set(
+      `${PREFIX}expenses/CONTEXT.md`,
+      "# Legacy Expenses\n\n## What This Workspace Is\nLegacy context.\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}workspaces/expenses/CONTEXT.md`,
+      "# Workspace Expenses\n\n## What This Workspace Is\nNew context.\n",
+    );
+
+    await regenerateWorkspaceMap("agent-1");
+    const md = lastWrittenAgentsMd() ?? "";
+    const context = lastWritten("CONTEXT.md") ?? "";
+
+    expect(md).toContain("workspaces/");
+    expect(md).toContain("expenses/ ← Workspace Expenses");
+    expect(md).not.toContain("expenses/ ← Legacy Expenses");
+    expect(context).toContain("| Workspace Expenses | New context. |");
+    expect(context).not.toContain("| Legacy Expenses | Legacy context. |");
+  });
 });
 
 describe("regenerateWorkspaceMap — built-in tool filter", () => {

@@ -12,13 +12,13 @@ A delegator agent for testing the AGENTS.md routing-table parser.
 
 ## Routing
 
-| Task             | Go to       | Read                  | Skills                       |
-| ---------------- | ----------- | --------------------- | ---------------------------- |
-| Expense receipts | expenses/   | expenses/CONTEXT.md   | approve-receipt,tag-vendor   |
-| Recruiting       | recruiting/ | recruiting/CONTEXT.md | score-candidate              |
-| Legal review     | legal/      | legal/CONTEXT.md      | review-contract              |
+| Task             | Go to       | Read                  | Skills                     |
+| ---------------- | ----------- | --------------------- | -------------------------- |
+| Expense receipts | expenses/   | expenses/CONTEXT.md   | approve-receipt,tag-vendor |
+| Recruiting       | recruiting/ | recruiting/CONTEXT.md | score-candidate            |
+| Legal review     | legal/      | legal/CONTEXT.md      | review-contract            |
 
 ## Naming conventions
 
 - Sub-agent folders are short, lowercase, hyphenated.
-- `memory/` and `skills/` are reserved at any depth — never sub-agents.
+- `memory/`, `skills/`, and `workspaces/` are reserved at any depth — never sub-agents.

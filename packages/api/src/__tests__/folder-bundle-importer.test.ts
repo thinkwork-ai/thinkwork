@@ -35,7 +35,7 @@ function fakeStorage(existing: Record<string, string> = {}) {
 }
 
 describe("importFolderBundle", () => {
-  it("imports a Claude agent zip into FOG-pure paths and adds a routing row", async () => {
+  it("imports a Claude agent zip into workspace paths and adds a routing row", async () => {
     const { storage, files } = fakeStorage({
       "AGENTS.md": `# AGENTS.md
 
@@ -62,12 +62,12 @@ describe("importFolderBundle", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     expect(result.importedPaths).toEqual([
-      "expenses/CONTEXT.md",
-      "expenses/NOTES.md",
+      "workspaces/expenses/CONTEXT.md",
+      "workspaces/expenses/NOTES.md",
     ]);
-    expect(files.get("expenses/CONTEXT.md")).toBe("# Expenses");
+    expect(files.get("workspaces/expenses/CONTEXT.md")).toBe("# Expenses");
     expect(files.get("AGENTS.md")).toContain(
-      "| Specialist for expenses | expenses/ | expenses/CONTEXT.md |  |",
+      "| Specialist for expenses | workspaces/expenses/ | workspaces/expenses/CONTEXT.md |  |",
     );
   });
 
@@ -94,7 +94,9 @@ describe("importFolderBundle", () => {
   });
 
   it("rejects a bundle that collides with an existing sub-agent folder", async () => {
-    const { storage } = fakeStorage({ "expenses/CONTEXT.md": "old" });
+    const { storage } = fakeStorage({
+      "workspaces/expenses/CONTEXT.md": "old",
+    });
     const body = await zipBody({
       ".claude/agents/expenses/CONTEXT.md": "new",
     });
@@ -111,6 +113,29 @@ describe("importFolderBundle", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.code).toBe("ExistingSubAgentCollision");
+  });
+
+  it("rejects a vendor agent bundle that collides with an existing legacy-flat sub-agent", async () => {
+    const { storage } = fakeStorage({
+      "expenses/CONTEXT.md": "old",
+    });
+    const body = await zipBody({
+      ".claude/agents/expenses/CONTEXT.md": "new",
+    });
+
+    const result = await importFolderBundle(
+      { source: "zip", body },
+      {
+        agentId: "00000000-0000-0000-0000-000000000001",
+        storage,
+        lease: fakeLease(),
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("ExistingSubAgentCollision");
+    expect(result.details).toMatchObject({ folder: "workspaces/expenses" });
   });
 
   it("rejects two vendor-prefixed paths that normalize to the same target", async () => {
@@ -137,7 +162,7 @@ describe("importFolderBundle", () => {
   it("lets a vendor-prefixed path win over the same plain path", async () => {
     const { storage, files } = fakeStorage();
     const body = await zipBody({
-      "expenses/CONTEXT.md": "plain",
+      "workspaces/expenses/CONTEXT.md": "plain",
       ".claude/agents/expenses/CONTEXT.md": "vendor",
     });
 
@@ -151,7 +176,58 @@ describe("importFolderBundle", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(files.get("expenses/CONTEXT.md")).toBe("vendor");
+    expect(files.get("workspaces/expenses/CONTEXT.md")).toBe("vendor");
+  });
+
+  it("imports nested workspace folders under a workspace parent", async () => {
+    const { storage, files } = fakeStorage();
+    const body = await zipBody({
+      "workspaces/parent/CONTEXT.md": "# Parent",
+      "workspaces/parent/workspaces/child/CONTEXT.md": "# Child",
+    });
+
+    const result = await importFolderBundle(
+      { source: "zip", body },
+      {
+        agentId: "00000000-0000-0000-0000-000000000001",
+        storage,
+        lease: fakeLease(),
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.importedPaths).toEqual([
+      "workspaces/parent/CONTEXT.md",
+      "workspaces/parent/workspaces/child/CONTEXT.md",
+    ]);
+    expect(files.get("workspaces/parent/workspaces/child/CONTEXT.md")).toBe(
+      "# Child",
+    );
+  });
+
+  it.each([
+    "workspaces/.hidden/CONTEXT.md",
+    "workspaces/Foo/CONTEXT.md",
+    "workspaces/foo.bar/CONTEXT.md",
+    "workspaces/workspaces/CONTEXT.md",
+  ])("rejects invalid workspace slug paths: %s", async (path) => {
+    const { storage, writes } = fakeStorage();
+    const body = await zipBody({ [path]: "# Invalid" });
+
+    const result = await importFolderBundle(
+      { source: "zip", body },
+      {
+        agentId: "00000000-0000-0000-0000-000000000001",
+        storage,
+        lease: fakeLease(),
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("InvalidWorkspaceSlug");
+    expect(writes).toEqual([]);
   });
 
   it("rolls back files already written when a later write fails", async () => {
@@ -178,7 +254,7 @@ describe("importFolderBundle", () => {
         },
       ),
     ).rejects.toThrow("S3 write failed");
-    expect(files.has("expenses/CONTEXT.md")).toBe(false);
+    expect(files.has("workspaces/expenses/CONTEXT.md")).toBe(false);
   });
 
   it("imports a git ref using the injectable fetcher and discards PAT after fetch", async () => {
@@ -209,7 +285,7 @@ describe("importFolderBundle", () => {
       ref: "main",
       pat: "secret",
     });
-    expect(files.get("support/CONTEXT.md")).toBe("# Support");
+    expect(files.get("workspaces/support/CONTEXT.md")).toBe("# Support");
   });
 });
 

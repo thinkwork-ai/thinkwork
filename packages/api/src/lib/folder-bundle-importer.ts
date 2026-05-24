@@ -68,6 +68,7 @@ const MEMORY_PATH_RE =
   /^(?:[a-z0-9][a-z0-9-]*\/){0,5}memory\/(lessons|preferences|contacts)\.md$/;
 const SKILL_PATH_RE =
   /^(?:[a-z0-9][a-z0-9-]*\/){0,5}skills\/[a-z0-9][a-z0-9-]*\/.+$/;
+const WORKSPACE_SLUG_RE = /^[a-z][a-z0-9-]{0,31}$/;
 
 export async function importFolderBundle(
   request: ImportBundleRequest,
@@ -240,13 +241,14 @@ async function validateNormalizedTree(
   }
 
   const existing = await storage.listPaths();
-  const existingTopFolders = new Set(
+  const existingWorkspaceSlugs = new Set(
     existing
-      .map((path) => path.split("/")[0])
-      .filter((segment): segment is string => !!segment),
+      .map(workspaceSlugFromFolderPath)
+      .filter((slug): slug is string => Boolean(slug)),
   );
-  for (const folder of importedTopFolders(tree)) {
-    if (existingTopFolders.has(folder)) {
+  for (const folder of importedWorkspaceFolders(tree)) {
+    const slug = workspaceSlugFromFolderPath(folder);
+    if (slug && existingWorkspaceSlugs.has(slug)) {
       return invalid(
         "ExistingSubAgentCollision",
         `A sub-agent folder already exists at ${folder}/`,
@@ -275,8 +277,9 @@ async function ensureParentRoutingRow(
   storage: ImportBundleStorage,
   tree: FileTree,
 ): Promise<boolean> {
-  const folder = Array.from(importedTopFolders(tree)).sort()[0];
+  const folder = Array.from(importedWorkspaceFolders(tree)).sort()[0];
   if (!folder) return false;
+  const slug = workspaceSlugFromFolderPath(folder) ?? folder;
   const existing = (await storage.getText("AGENTS.md")) ?? defaultAgentsMd();
   const subAgentsMd = tree[`${folder}/AGENTS.md`] ?? "";
   const parsed = subAgentsMd ? parseAgentsMd(subAgentsMd) : null;
@@ -284,7 +287,7 @@ async function ensureParentRoutingRow(
     ? Array.from(new Set(parsed.routing.flatMap((row) => row.skills))).sort()
     : [];
   const next = appendRoutingRowIfMissing(existing, {
-    task: `Specialist for ${folder}`,
+    task: `Specialist for ${slug}`,
     goTo: `${folder}/`,
     read: `${folder}/CONTEXT.md`,
     skills,
@@ -301,6 +304,26 @@ function invalidReservedFolderPath(path: string): ImportBundleResult | null {
     if (!isReservedFolderSegment(segment)) continue;
     if (segment === "memory" && MEMORY_PATH_RE.test(path)) return null;
     if (segment === "skills" && SKILL_PATH_RE.test(path)) return null;
+    if (segment === "workspaces" && parts[i + 1] && i + 2 < parts.length) {
+      const slug = parts[i + 1]!;
+      if (WORKSPACE_SLUG_RE.test(slug) && !isReservedFolderSegment(slug)) {
+        continue;
+      }
+      return invalid(
+        "InvalidWorkspaceSlug",
+        `${slug} is not a valid workspace slug at ${path}`,
+        409,
+        { path, slug },
+      );
+    }
+    if (segment === "workspaces") {
+      return invalid(
+        "ReservedFolderName",
+        `${segment}/ is reserved and cannot be imported at ${path}`,
+        409,
+        { path, reservedFolder: segment },
+      );
+    }
     return invalid(
       "ReservedFolderName",
       `${segment}/ is reserved and cannot be imported at ${path}`,
@@ -311,16 +334,26 @@ function invalidReservedFolderPath(path: string): ImportBundleResult | null {
   return null;
 }
 
-function importedTopFolders(tree: FileTree): Set<string> {
+function importedWorkspaceFolders(tree: FileTree): Set<string> {
   const out = new Set<string>();
   for (const path of Object.keys(tree)) {
     const [first, ...rest] = path.split("/");
     if (!first || rest.length === 0) continue;
+    if (first === "workspaces" && rest[0] && rest.length > 1) {
+      out.add(`workspaces/${rest[0]}`);
+      continue;
+    }
     if (isReservedFolderSegment(first)) continue;
     if (first.startsWith(".")) continue;
     out.add(first);
   }
   return out;
+}
+
+function workspaceSlugFromFolderPath(path: string): string | null {
+  const segments = path.split("/").filter(Boolean);
+  if (segments[0] === "workspaces") return segments[1] ?? null;
+  return segments[0] ?? null;
 }
 
 function defaultAgentsMd(): string {

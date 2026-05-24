@@ -1402,7 +1402,12 @@ async function handleCreateSubAgent(
       .map((path) => path.split("/")[0])
       .filter((segment): segment is string => Boolean(segment)),
   );
-  if (existingTopFolders.has(cleanSlug)) {
+  const subAgentFolderExists = existingPaths.some(
+    (path) =>
+      path.startsWith(`${cleanSlug}/`) ||
+      path.startsWith(`workspaces/${cleanSlug}/`),
+  );
+  if (existingTopFolders.has(cleanSlug) || subAgentFolderExists) {
     return json(409, {
       ok: false,
       error: `A folder named \`${cleanSlug}\` already exists at this agent's root.`,
@@ -1424,15 +1429,15 @@ async function handleCreateSubAgent(
 
   const nextAgentsMd = appendRoutingRowIfMissing(agentsMd, {
     task: `${cleanSlug} specialist`,
-    goTo: `${cleanSlug}/`,
-    read: `${cleanSlug}/CONTEXT.md`,
+    goTo: `workspaces/${cleanSlug}/`,
+    read: `workspaces/${cleanSlug}/CONTEXT.md`,
     skills: [],
   });
 
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket(),
-      Key: target.key(`${cleanSlug}/CONTEXT.md`),
+      Key: target.key(`workspaces/${cleanSlug}/CONTEXT.md`),
       Body: contextContent,
       ContentType: "text/plain; charset=utf-8",
     }),

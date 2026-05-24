@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SkillEntry:
     """A skill declared in a workspace CONTEXT.md."""
+
     name: str
     when: str = ""
     model_override: str = ""
@@ -55,6 +56,7 @@ class SkillEntry:
 @dataclass
 class LoadRule:
     """A task-specific loading rule from the 'What to Load' table."""
+
     task: str
     load: list[str] = field(default_factory=list)
     skip: list[str] = field(default_factory=list)
@@ -63,6 +65,7 @@ class LoadRule:
 @dataclass
 class WorkspaceConfig:
     """Parsed workspace configuration from CONTEXT.md."""
+
     name: str
     slug: str  # Derived from folder name
     folder: str  # Absolute path to workspace folder
@@ -177,12 +180,14 @@ def parse_context_md(filepath: str, slug: str = "") -> WorkspaceConfig | None:
                 # Normalize "—" and "-" to empty
                 if model_override in ("—", "-", "–"):
                     model_override = ""
-                skills.append(SkillEntry(
-                    name=skill_name,
-                    when=when,
-                    model_override=model_override,
-                    purpose=purpose,
-                ))
+                skills.append(
+                    SkillEntry(
+                        name=skill_name,
+                        when=when,
+                        model_override=model_override,
+                        purpose=purpose,
+                    )
+                )
 
     # Extract load rules from "What to Load" table
     load_rules = []
@@ -193,7 +198,9 @@ def parse_context_md(filepath: str, slug: str = "") -> WorkspaceConfig | None:
             if len(row) >= 2:
                 task = row[0].strip()
                 load_files = [f.strip() for f in row[1].split(",") if f.strip()]
-                skip_files = [f.strip() for f in row[2].split(",") if f.strip()] if len(row) > 2 else []
+                skip_files = (
+                    [f.strip() for f in row[2].split(",") if f.strip()] if len(row) > 2 else []
+                )
                 load_rules.append(LoadRule(task=task, load=load_files, skip=skip_files))
 
     # Extract process
@@ -214,20 +221,27 @@ def parse_context_md(filepath: str, slug: str = "") -> WorkspaceConfig | None:
         guardrails=guardrails,
         raw_content=content,
     )
-    logger.info("Parsed workspace %s: model=%s, skills=%d, load_rules=%d",
-                slug, model or "(inherit)", len(skills), len(load_rules))
+    logger.info(
+        "Parsed workspace %s: model=%s, skills=%d, load_rules=%d",
+        slug,
+        model or "(inherit)",
+        len(skills),
+        len(load_rules),
+    )
     return config
 
 
 def discover_workspaces(workspace_dir: str) -> list[WorkspaceConfig]:
     """Scan a workspace directory for sub-workspace folders with CONTEXT.md.
 
-    Returns a list of WorkspaceConfig for each discovered workspace.
-    Only scans one level deep (immediate subdirectories).
+    Returns a list of WorkspaceConfig for each discovered workspace. During
+    the storage-layout transition this scans legacy flat ``<slug>/CONTEXT.md``
+    and the current ``workspaces/<slug>/CONTEXT.md`` layout, preferring the
+    current layout when both exist for a slug.
     """
-    configs = []
+    configs_by_slug: dict[str, WorkspaceConfig] = {}
     if not os.path.isdir(workspace_dir):
-        return configs
+        return []
 
     for entry in sorted(os.listdir(workspace_dir)):
         subdir = os.path.join(workspace_dir, entry)
@@ -240,8 +254,27 @@ def discover_workspaces(workspace_dir: str) -> list[WorkspaceConfig]:
         if os.path.isfile(context_path):
             config = parse_context_md(context_path, slug=entry)
             if config:
-                configs.append(config)
+                configs_by_slug[entry] = config
 
-    logger.info("Discovered %d workspace(s) in %s: %s",
-                len(configs), workspace_dir, [c.slug for c in configs])
+    workspaces_root = os.path.join(workspace_dir, "workspaces")
+    if os.path.isdir(workspaces_root):
+        for entry in sorted(os.listdir(workspaces_root)):
+            subdir = os.path.join(workspaces_root, entry)
+            if not os.path.isdir(subdir):
+                continue
+            if entry.startswith(".") or entry.startswith("_"):
+                continue
+            context_path = os.path.join(subdir, "CONTEXT.md")
+            if os.path.isfile(context_path):
+                config = parse_context_md(context_path, slug=entry)
+                if config:
+                    configs_by_slug[entry] = config
+
+    configs = [configs_by_slug[slug] for slug in sorted(configs_by_slug)]
+    logger.info(
+        "Discovered %d workspace(s) in %s: %s",
+        len(configs),
+        workspace_dir,
+        [c.slug for c in configs],
+    )
     return configs

@@ -409,14 +409,15 @@ Long-term facts belong in post-turn retention, not in workspace files.
 
 ### Sub-agent path prefix
 
-Sub-agents rooted at \`{folder}/\` prefix workspace-note paths with their
-folder:
+Workspaces rooted at \`workspaces/{slug}/\` prefix workspace-note paths
+with their full folder path:
 
-- Sub-agent at \`expenses/\` → \`write_memory("expenses/memory/lessons.md", ...)\`
-- Sub-agent at \`support/escalation/\` → \`write_memory("support/escalation/memory/lessons.md", ...)\`
+- Workspace at \`workspaces/expenses/\` → \`write_memory("workspaces/expenses/memory/lessons.md", ...)\`
+- Nested workspace at \`workspaces/support/workspaces/escalation/\` → \`write_memory("workspaces/support/workspaces/escalation/memory/lessons.md", ...)\`
 
 The path is from the agent root, not the sub-folder. Passing only
-\`"memory/lessons.md"\` writes to the parent agent's notes.
+\`"memory/lessons.md"\` writes to the parent agent's notes. Legacy flat
+paths such as \`"expenses/memory/lessons.md"\` are transition-only.
 
 ## Distilled-knowledge block
 
