@@ -154,6 +154,19 @@ function sortNodes(nodes: TreeNode[]) {
   return nodes;
 }
 
+export function isSkillInstallFolder(
+  node: Pick<TreeNode, "name" | "isFolder" | "synthetic" | "missing">,
+  addSkillAvailable: boolean,
+): boolean {
+  return (
+    addSkillAvailable &&
+    node.isFolder &&
+    node.name === "skills" &&
+    !node.synthetic &&
+    !node.missing
+  );
+}
+
 export interface ClipboardItem {
   path: string;
   kind: "file" | "folder";
@@ -188,6 +201,7 @@ export interface FolderTreeProps {
     label: string,
     folderPaths: string[],
   ) => void;
+  onAddSkill?: (skillsFolderPath: string) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
   onRegenerateMap?: (path: string) => void;
   onGenerateFolderStructure?: (path: string) => void;
@@ -457,6 +471,7 @@ function FolderTreeItem(
     onNewFolder,
     onDelete,
     onDeleteSyntheticGroup,
+    onAddSkill,
     onRename,
     onRegenerateMap,
     onGenerateFolderStructure,
@@ -487,6 +502,7 @@ function FolderTreeItem(
       node.synthetic &&
       syntheticFolderPaths.length > 0 &&
       onDeleteSyntheticGroup;
+    const canAddSkill = isSkillInstallFolder(node, Boolean(onAddSkill));
 
     const hasPendingNewItem =
       (inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder") &&
@@ -521,6 +537,7 @@ function FolderTreeItem(
                 onNewFolder={onNewFolder}
                 onDelete={onDelete}
                 onDeleteSyntheticGroup={onDeleteSyntheticGroup}
+                onAddSkill={onAddSkill}
                 onRename={onRename}
                 onRegenerateMap={onRegenerateMap}
                 onGenerateFolderStructure={onGenerateFolderStructure}
@@ -554,6 +571,14 @@ function FolderTreeItem(
           </FileTreeFolder>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          {canAddSkill ? (
+            <>
+              <ContextMenuItem onSelect={() => onAddSkill?.(node.path)}>
+                Add Skill
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          ) : null}
           <ContextMenuItem onSelect={() => onNewFile(contextParent)}>
             New File
           </ContextMenuItem>

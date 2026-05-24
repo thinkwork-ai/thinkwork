@@ -39,6 +39,7 @@ import {
   buildWorkspaceTree,
   type InlineEditState,
 } from "./FolderTree";
+import { AddSkillDialog } from "./AddSkillDialog";
 import {
   basenameOf,
   joinFolderPath,
@@ -185,6 +186,7 @@ export function WorkspaceEditor({
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
   const [deleteConfirmTarget, setDeleteConfirmTarget] =
     useState<DeleteConfirmTarget | null>(null);
+  const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false);
   const [pendingFileSwitchPath, setPendingFileSwitchPath] = useState<
     string | null
   >(null);
@@ -239,6 +241,11 @@ export function WorkspaceEditor({
   const refreshFilesInBackground = useCallback(() => {
     void fetchFiles({ showLoading: false });
   }, [fetchFiles]);
+
+  const skillInstallTarget =
+    "agentId" in stableTarget || "spaceId" in stableTarget
+      ? stableTarget
+      : null;
 
   useEffect(() => {
     if (!files.includes("AGENTS.md")) {
@@ -968,6 +975,14 @@ export function WorkspaceEditor({
                     folderPaths,
                   })
                 }
+                onAddSkill={
+                  skillInstallTarget
+                    ? (path) => {
+                        setFocusedTreePath(path);
+                        setAddSkillDialogOpen(true);
+                      }
+                    : undefined
+                }
                 onRename={startRename}
                 onRegenerateMap={
                   "agentId" in stableTarget ? handleRegenerateMap : undefined
@@ -1031,6 +1046,14 @@ export function WorkspaceEditor({
           }
         }}
       />
+      {skillInstallTarget ? (
+        <AddSkillDialog
+          open={addSkillDialogOpen}
+          onOpenChange={setAddSkillDialogOpen}
+          target={skillInstallTarget}
+          onInstalled={refreshFilesInBackground}
+        />
+      ) : null}
       <PendingChangesDialog
         open={
           pendingFileSwitchPath !== null ||
