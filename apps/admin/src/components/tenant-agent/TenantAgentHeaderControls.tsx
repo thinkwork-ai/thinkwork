@@ -55,16 +55,6 @@ export function TenantAgentHeaderControls({
         <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
       ) : null}
       <BadgeSelectorSelect
-        icon={<Box className="h-3.5 w-3.5" />}
-        value={currentModel}
-        emptyLabel={modelLabel}
-        options={modelOptions}
-        searchable
-        searchPlaceholder="Search models..."
-        onSelect={(value) => save({ model: value })}
-        className="max-w-[14rem] truncate text-xs"
-      />
-      <BadgeSelectorSelect
         icon={<Cpu className="h-3.5 w-3.5" />}
         value={agent.runtime}
         options={[
@@ -75,6 +65,16 @@ export function TenantAgentHeaderControls({
           value ? save({ runtime: value as AgentRuntime }) : Promise.resolve()
         }
         className="text-xs"
+      />
+      <BadgeSelectorSelect
+        icon={<Box className="h-3.5 w-3.5" />}
+        value={currentModel}
+        emptyLabel={modelLabel}
+        options={modelOptions}
+        searchable
+        searchPlaceholder="Search models..."
+        onSelect={(value) => save({ model: value })}
+        className="max-w-[14rem] truncate text-xs"
       />
     </div>
   );
