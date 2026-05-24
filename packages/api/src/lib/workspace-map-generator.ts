@@ -1514,6 +1514,24 @@ function renderSkillsBody(skills: SkillInfo[]): string {
     "**IMPORTANT**: Tools like `create_sub_thread`, `search_users`, `schedule_followup`, `list_sub_threads` etc. are registered directly on you. Always call these tools directly — do NOT delegate to another agent when you already have the required tool.",
   );
   lines.push("");
+  lines.push("### Tool selection");
+  lines.push("");
+  lines.push(
+    "- **Information lookup** — Prefer `web_search` (Exa) for ordinary factual questions: locations, business hours, current events, prices, schedules, news, definitions. It's fast, cheap, and indexed.",
+  );
+  lines.push(
+    "- **Browser automation** — Use `browser_automation` only when the task genuinely requires interacting with a page: filling forms, clicking through auth flows, scraping JS-rendered content that search engines don't index, or following a multi-step user journey. It is expensive and slow; do not reach for it as a default search tool.",
+  );
+  lines.push(
+    "- **When both are available** — Start with `web_search`. Only escalate to `browser_automation` if the search results are insufficient and you can articulate why navigation is required.",
+  );
+  lines.push(
+    "- **Code execution** — Use `execute_code` for Python execution, data analysis, calculations, and validation. Do not simulate code results in chat.",
+  );
+  lines.push(
+    "- **Memory** — `recall()` first for prior conversations, preferences, and past decisions. Don't call `remember()` on every turn; post-turn retention is automatic.",
+  );
+  lines.push("");
   lines.push(
     "Use the `Skill` meta-tool with a skill name to invoke a skill; nested skills are supported up to the plan's depth budget.",
   );

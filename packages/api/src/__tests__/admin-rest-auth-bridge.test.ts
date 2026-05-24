@@ -246,10 +246,6 @@ import { handler as scheduledJobs } from "../handlers/scheduled-jobs.js";
 // eslint-disable-next-line import/first
 import { handler as skills } from "../handlers/skills.js";
 // eslint-disable-next-line import/first
-import { handler as teamMembers } from "../handlers/team-members.js";
-// eslint-disable-next-line import/first
-import { handler as teams } from "../handlers/teams.js";
-// eslint-disable-next-line import/first
 import { handler as tenants } from "../handlers/tenants.js";
 // eslint-disable-next-line import/first
 import { handler as webhooksAdmin } from "../handlers/webhooks-admin.js";
@@ -401,24 +397,6 @@ const CASES: HandlerCase[] = [
 		path: "/api/skills/catalog",
 		method: "GET",
 		checksMembership: false,
-	},
-	{
-		name: "team-members",
-		fn: teamMembers,
-		path: "/api/teams/00000000-0000-0000-0000-000000000001/agents",
-		method: "GET",
-		mutationPath: "/api/teams/00000000-0000-0000-0000-000000000001/agents",
-		mutationMethod: "POST",
-		mutationBody: "{}",
-	},
-	{
-		name: "teams",
-		fn: teams,
-		path: "/api/teams",
-		method: "GET",
-		mutationPath: "/api/teams",
-		mutationMethod: "POST",
-		mutationBody: "{}",
 	},
 	{
 		// /api/tenants (GET list) gates on `authenticate()` only; filtering

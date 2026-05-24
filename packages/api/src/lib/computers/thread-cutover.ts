@@ -6,7 +6,6 @@ import {
   computerEvents,
   computerTasks,
   messages,
-  teamUsers,
   threadAttachments,
   threads,
 } from "@thinkwork/database-pg/schema";
@@ -89,23 +88,7 @@ export async function hasComputerRequesterAccess(input: {
       ),
     )
     .limit(1);
-  if (direct) return true;
-
-  const [team] = await db
-    .select({ id: computerAssignments.id })
-    .from(computerAssignments)
-    .innerJoin(teamUsers, eq(teamUsers.team_id, computerAssignments.team_id))
-    .where(
-      and(
-        eq(computerAssignments.tenant_id, input.tenantId),
-        eq(computerAssignments.computer_id, input.computerId),
-        eq(computerAssignments.subject_type, "team"),
-        eq(teamUsers.tenant_id, input.tenantId),
-        eq(teamUsers.user_id, input.requesterUserId),
-      ),
-    )
-    .limit(1);
-  return Boolean(team);
+  return Boolean(direct);
 }
 
 export async function enqueueComputerThreadTurn(input: {

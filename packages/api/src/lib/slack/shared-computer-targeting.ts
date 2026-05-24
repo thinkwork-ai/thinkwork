@@ -3,7 +3,6 @@ import {
   computerAssignments,
   computers,
   slackUserLinks,
-  teamUsers,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../db.js";
 
@@ -241,27 +240,8 @@ export async function loadSlackTargetingContext(
       ),
     );
 
-  const teamRows = await dbClient
-    .select({
-      computerId: computers.id,
-      computerName: computers.name,
-      computerSlug: computers.slug,
-    })
-    .from(computerAssignments)
-    .innerJoin(teamUsers, eq(teamUsers.team_id, computerAssignments.team_id))
-    .innerJoin(computers, eq(computers.id, computerAssignments.computer_id))
-    .where(
-      and(
-        eq(computerAssignments.tenant_id, input.tenantId),
-        eq(computerAssignments.subject_type, "team"),
-        eq(teamUsers.tenant_id, input.tenantId),
-        eq(teamUsers.user_id, link.userId),
-        ne(computers.status, "archived"),
-      ),
-    );
-
   const byId = new Map<string, SlackAssignedComputer>();
-  for (const row of [...directRows, ...teamRows]) {
+  for (const row of directRows) {
     byId.set(row.computerId, row);
   }
 

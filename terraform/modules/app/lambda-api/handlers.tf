@@ -314,8 +314,6 @@ resource "aws_lambda_function" "handler" {
     "stripe-subscription",
     "auth-me",
     "extension-proxy",
-    "teams",
-    "team-members",
     "tenants",
     "users",
     "invites",
@@ -351,7 +349,6 @@ resource "aws_lambda_function" "handler" {
     "slack-oauth-install",
     "slack-dispatch",
     "github-app",
-    "github-repos",
     "memory",
     "memory-retain",
     "wiki-compile",
@@ -374,7 +371,6 @@ resource "aws_lambda_function" "handler" {
     # to ssmmessages. Plan:
     # docs/plans/2026-05-13-004-feat-computer-terminal-ecs-exec-plan.md.
     "computer-terminal-start",
-    "code-factory",
     "eval-runner",
     "eval-worker",
     "eval-runs-reconciler",
@@ -832,11 +828,6 @@ locals {
     # Messages
     "ANY /api/messages/{proxy+}" = "messages"
     "ANY /api/messages"          = "messages"
-
-    # Teams
-    "ANY /api/teams/{proxy+}"        = "teams"
-    "ANY /api/teams"                 = "teams"
-    "ANY /api/team-members/{proxy+}" = "team-members"
 
     # Tenants
     "ANY /api/tenants/{proxy+}" = "tenants"

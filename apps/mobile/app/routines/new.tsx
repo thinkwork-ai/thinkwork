@@ -35,8 +35,7 @@ export default function NewRoutineScreen() {
 
   // TODO: Migrate api.routines.updateBuildStatus to GraphQL
   // TODO: Migrate api.routines.linkBuilderThread to GraphQL
-  // TODO: Migrate api.codeFactoryChat.createSession to GraphQL
-  // TODO: Migrate api.codeFactoryChat.sendMessage to GraphQL
+  // TODO: chat session creation + send-message GraphQL operations not yet available.
 
   const canSave = name.trim().length > 0 && description.trim().length > 0;
 

@@ -15,16 +15,6 @@ export type {
   AdminKeySummary,
 } from "./admin-keys.js";
 
-export * as teams from "./teams.js";
-export type {
-  Team,
-  TeamAgent,
-  TeamUser,
-  CreateTeamInput,
-  AddTeamAgentInput,
-  AddTeamUserInput,
-} from "./teams.js";
-
 export * as agents from "./agents.js";
 export type {
   Agent,

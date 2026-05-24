@@ -82,9 +82,6 @@ describe("GraphQL Schema Contract", () => {
       "tenantBySlug",
       "tenantMembers",
       "user",
-      // Teams
-      "team",
-      "teams",
       // Triggers
       "routines",
       "routine",

@@ -1048,17 +1048,35 @@ describe("tenant skill catalog target", () => {
     });
   });
 
-  it("returns an empty list for an empty tenant catalog", async () => {
+  it("bootstraps an empty tenant catalog from the bundled skill catalog before listing", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminCatalogTargetRows();
-    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/",
+      })
+      .resolvesOnce({ Contents: [] })
+      .resolvesOnce({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
+          { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
+        ],
+      });
 
     const res = await parse(
       await handler(event({ action: "list", catalog: true })),
     );
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.files).toEqual([]);
+    expect(res.body.files.map((file: { path: string }) => file.path)).toEqual([
+      "finance-audit-xls/SKILL.md",
+      "finance-audit-xls/WIRING.md",
+    ]);
+    expect(seedTenantSkillCatalogMock).toHaveBeenCalledWith({
+      s3: expect.any(S3Client),
+      bucket: "test-bucket",
+      tenantSlug: "acme",
+    });
   });
 
   it("writes and deletes catalog files under the tenant skill-catalog prefix", async () => {
@@ -1192,6 +1210,193 @@ describe("tenant skill catalog target", () => {
       bucket: "test-bucket",
       tenantSlug: "acme",
     });
+  });
+});
+
+// ─── 4c. Catalog skill install action ───────────────────────────────────────
+
+function mockCatalogInstallS3(
+  targetPrefix = "tenants/acme/agents/marco/workspace/",
+): void {
+  s3Mock
+    .on(ListObjectsV2Command, {
+      Prefix: "tenants/acme/skill-catalog/finance-audit-xls/",
+    })
+    .resolves({
+      Contents: [
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
+      ],
+    });
+  s3Mock
+    .on(ListObjectsV2Command, {
+      Prefix: `${targetPrefix}skills/finance-audit-xls/`,
+    })
+    .resolves({ Contents: [] });
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+    })
+    .resolves(body("# Finance Audit\n"));
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
+    })
+    .resolves(
+      body(`# Wiring suggestions
+
+## Stage 3 Gate
+Use this for stage-three reviews.
+
+\`\`\`context-md
+| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |
+\`\`\`
+`),
+    );
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}CONTEXT.md`,
+    })
+    .resolves(body("# Context\n"));
+  s3Mock.on(CopyObjectCommand).resolves({});
+  s3Mock.on(PutObjectCommand).resolves({});
+}
+
+describe("agent install-skill action", () => {
+  it("copies a catalog skill into the agent workspace and refreshes agent state", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    mockCatalogInstallS3();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "install-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+          wiring_choice: "stage-3-gate",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.installed_paths).toEqual([
+      "skills/finance-audit-xls/.catalog-ref.json",
+      "skills/finance-audit-xls/SKILL.md",
+      "skills/finance-audit-xls/WIRING.md",
+    ]);
+    expect(
+      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
+    ).toEqual([
+      expect.objectContaining({
+        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+      }),
+      expect.objectContaining({
+        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+      }),
+    ]);
+    const contextPut = s3Mock
+      .commandCalls(PutObjectCommand)
+      .find(
+        (call) =>
+          call.args[0].input.Key ===
+          "tenants/acme/agents/marco/workspace/CONTEXT.md",
+      );
+    expect(String(contextPut?.args[0].input.Body)).toContain(
+      "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |",
+    );
+    expect(deriveMockImpl).toHaveBeenCalledWith(
+      { tenantId: TENANT_A },
+      AGENT_ID,
+    );
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
+  it("surfaces install worker errors with typed codes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    mockCatalogInstallS3();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "install-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+          wiring_choice: "always-on",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe("wiring_choice_not_found");
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
+  it("installs into a Space source scope without refreshing agent state", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    mockCatalogInstallS3("tenants/acme/spaces/engineering/source/");
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "install-skill",
+          spaceId: SPACE_ID,
+          slug: "finance-audit-xls",
+          wiring_choice: "stage-3-gate",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.installed_paths).toContain(
+      "skills/finance-audit-xls/SKILL.md",
+    );
+    expect(
+      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
+    ).toEqual([
+      expect.objectContaining({
+        Key: "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/SKILL.md",
+      }),
+      expect.objectContaining({
+        Key: "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/WIRING.md",
+      }),
+    ]);
+    const contextPut = s3Mock
+      .commandCalls(PutObjectCommand)
+      .find(
+        (call) =>
+          call.args[0].input.Key ===
+          "tenants/acme/spaces/engineering/source/CONTEXT.md",
+      );
+    expect(String(contextPut?.args[0].input.Body)).toContain(
+      "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |",
+    );
+    expect(deriveMockImpl).not.toHaveBeenCalled();
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+
+  it("requires tenant admin before installing a skill", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "install-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+          wiring_choice: "stage-3-gate",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
   });
 });
 

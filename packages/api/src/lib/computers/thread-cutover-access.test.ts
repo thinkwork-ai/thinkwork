@@ -78,25 +78,9 @@ describe("resolveThreadComputer assignment routing", () => {
     ).resolves.toEqual({ id: "c1", owner_user_id: null });
   });
 
-  it("allows a requester with a team shared-Computer assignment", async () => {
-    mockSelect
-      .mockReturnValueOnce(queryRows([{ id: "c1", owner_user_id: null }]))
-      .mockReturnValueOnce(queryRows([]))
-      .mockReturnValueOnce(queryRows([{ id: "assignment-team-1" }]));
-
-    await expect(
-      resolver.resolveThreadComputer({
-        tenantId: "t1",
-        requesterUserId: "user-1",
-        requestedComputerId: "c1",
-      }),
-    ).resolves.toEqual({ id: "c1", owner_user_id: null });
-  });
-
   it("rejects an unassigned requester for a shared Computer", async () => {
     mockSelect
       .mockReturnValueOnce(queryRows([{ id: "c1", owner_user_id: null }]))
-      .mockReturnValueOnce(queryRows([]))
       .mockReturnValueOnce(queryRows([]));
 
     await expect(

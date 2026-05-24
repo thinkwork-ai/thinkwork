@@ -403,87 +403,8 @@ export const ComputerAssignmentsQuery = graphql(`
         name
         email
       }
-      teamId
-      team {
-        id
-        name
-        status
-      }
       role
       createdAt
-    }
-  }
-`);
-
-export const ComputerAccessUsersQuery = graphql(`
-  query ComputerAccessUsers($computerId: ID!) {
-    computerAccessUsers(computerId: $computerId) {
-      userId
-      user {
-        id
-        name
-        email
-      }
-      accessSource
-      directAssignment {
-        id
-        role
-      }
-      teams {
-        id
-        name
-        status
-      }
-      teamAssignments {
-        id
-        teamId
-        role
-      }
-    }
-  }
-`);
-
-export const UserComputerAssignmentsQuery = graphql(`
-  query UserComputerAssignments($userId: ID!) {
-    userComputerAssignments(userId: $userId) {
-      computerId
-      computer {
-        id
-        name
-        slug
-        scope
-        status
-        runtimeStatus
-      }
-      accessSource
-      directAssignment {
-        id
-        role
-      }
-      teams {
-        id
-        name
-        status
-      }
-      teamAssignments {
-        id
-        teamId
-        role
-      }
-    }
-  }
-`);
-
-export const SetComputerAssignmentsMutation = graphql(`
-  mutation SetComputerAssignments($input: SetComputerAssignmentsInput!) {
-    setComputerAssignments(input: $input) {
-      id
-      computerId
-      subjectType
-      userId
-      teamId
-      role
-      updatedAt
     }
   }
 `);
@@ -497,7 +418,6 @@ export const SetUserComputerAssignmentsMutation = graphql(`
       computerId
       subjectType
       userId
-      teamId
       role
       updatedAt
     }
@@ -892,81 +812,6 @@ export const ReleaseThreadMutation = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
-// Teams
-// ---------------------------------------------------------------------------
-
-export const TeamsListQuery = graphql(`
-  query TeamsList($tenantId: ID!) {
-    teams(tenantId: $tenantId) {
-      id
-      name
-      description
-      type
-      status
-      budgetMonthlyCents
-      agents {
-        id
-        agentId
-        agent {
-          id
-          name
-          status
-          avatarUrl
-        }
-        role
-      }
-      users {
-        id
-        userId
-        role
-      }
-      createdAt
-    }
-  }
-`);
-
-export const TeamDetailQuery = graphql(`
-  query TeamDetail($id: ID!) {
-    team(id: $id) {
-      id
-      tenantId
-      name
-      description
-      type
-      status
-      budgetMonthlyCents
-      metadata
-      agents {
-        id
-        agentId
-        agent {
-          id
-          name
-          role
-          status
-          avatarUrl
-        }
-        role
-        createdAt
-      }
-      users {
-        id
-        userId
-        user {
-          id
-          name
-          email
-        }
-        role
-        createdAt
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-// ---------------------------------------------------------------------------
 // Routines
 // ---------------------------------------------------------------------------
 
@@ -1004,11 +849,6 @@ export const RoutineDetailQuery = graphql(`
         id
         name
         avatarUrl
-      }
-      teamId
-      team {
-        id
-        name
       }
       triggers {
         id

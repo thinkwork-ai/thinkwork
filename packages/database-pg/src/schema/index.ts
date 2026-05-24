@@ -8,7 +8,6 @@
 export * from "./core";
 export * from "./agents";
 export * from "./messages";
-export * from "./teams";
 export * from "./routines";
 export * from "./routine-executions";
 export * from "./routine-step-events";
@@ -17,7 +16,7 @@ export * from "./routine-approval-tokens";
 export * from "./integrations";
 export * from "./tenant-credentials";
 export * from "./tenant-customize-catalog";
-export * from "./code-factory";
+export * from "./github-app";
 export * from "./threads";
 export * from "./inbox-items";
 export * from "./heartbeats";

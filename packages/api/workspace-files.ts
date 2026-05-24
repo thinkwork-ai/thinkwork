@@ -90,6 +90,10 @@ import {
   type ComputerTaskType,
 } from "./src/lib/computers/tasks.js";
 import { seedTenantSkillCatalog } from "./src/lib/catalog-seed.js";
+import {
+  CatalogInstallError,
+  installCatalogSkill,
+} from "./src/lib/catalog-install.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -474,6 +478,7 @@ const WRITE_ACTIONS = new Set([
   "move",
   "rename",
   "create-sub-agent",
+  "install-skill",
   "catalog-seed",
   "generate-folder-structure",
   "regenerate-map",
@@ -567,7 +572,17 @@ async function handleList(
   // Operational artifacts (manifest.json, _defaults_version) are
   // filtered so callers don't accidentally treat them as workspace
   // files.
-  const paths = await listPrefix(target.prefix);
+  let paths = await listPrefix(target.prefix);
+  if (target.kind === "catalog" && paths.length === 0) {
+    const seedResult = await seedTenantSkillCatalog({
+      s3,
+      bucket: bucket(),
+      tenantSlug: target.tenantSlug,
+    });
+    if (seedResult.imported_slugs.length > 0) {
+      paths = await listPrefix(target.prefix);
+    }
+  }
   const visiblePaths = paths.filter(
     (p) =>
       p !== "manifest.json" &&
@@ -1472,6 +1487,74 @@ async function handleCatalogSeed(
     tenantSlug: target.tenantSlug,
   });
   return json(200, result);
+}
+
+async function handleInstallSkill(
+  deps: HandlerDeps,
+  slug: string,
+  wiringChoice: string,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "agent" && target.kind !== "space") {
+    return json(400, {
+      ok: false,
+      error: "install-skill requires an agent or space target",
+      code: "unsupported_target",
+    });
+  }
+
+  let result;
+  try {
+    result = await installCatalogSkill({
+      s3,
+      bucket: bucket(),
+      tenantSlug: target.tenantSlug,
+      targetPrefix: target.prefix,
+      slug,
+      wiringChoice,
+    });
+  } catch (err) {
+    if (err instanceof CatalogInstallError) {
+      return json(err.status, {
+        ok: false,
+        error: err.message,
+        code: err.code,
+      });
+    }
+    throw err;
+  }
+
+  if (target.kind !== "agent") {
+    return json(200, result);
+  }
+
+  await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+  try {
+    const deriveResult = await deriveAgentSkills({ tenantId }, target.agentId);
+    const summary =
+      `agent=${target.agentId} skill_paths=${deriveResult.agentsMdPathsScanned.length} ` +
+      `changed=${deriveResult.changed} added=${deriveResult.addedSlugs.join(",") || "-"} ` +
+      `removed=${deriveResult.removedSlugs.join(",") || "-"}`;
+    console.log(`[derive-agent-skills] install-skill ${summary}`);
+    const refreshError = await refreshAgentAgentsMdSections(
+      target,
+      "install-skill",
+    );
+    if (refreshError) return refreshError;
+    return json(200, {
+      ...result,
+      ...(deriveResult.warnings.length > 0
+        ? { deriveWarnings: deriveResult.warnings }
+        : {}),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[derive-agent-skills] install-skill failed: ${message}`);
+    return json(500, {
+      ok: false,
+      error: "Skill installed but agent_skills derive failed: " + message,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2447,6 +2530,8 @@ interface RequestBody {
   slug?: string;
   /** For `create-sub-agent`: seeded {slug}/CONTEXT.md content. */
   contextContent?: string;
+  /** For `install-skill`: selected WIRING.md suggestion id. */
+  wiring_choice?: string;
   /** For `move`: source file or folder path (relative to workspace). */
   fromPath?: string;
   /**
@@ -2608,6 +2693,15 @@ export async function handler(
           });
         }
         return await handleCreateSubAgent(deps, body.slug, body.contextContent);
+      }
+      case "install-skill": {
+        if (!body.slug || !body.wiring_choice) {
+          return json(400, {
+            ok: false,
+            error: "slug and wiring_choice are required for install-skill",
+          });
+        }
+        return await handleInstallSkill(deps, body.slug, body.wiring_choice);
       }
       case "delete": {
         if (!body.path)

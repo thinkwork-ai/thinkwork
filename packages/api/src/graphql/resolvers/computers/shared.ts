@@ -7,10 +7,8 @@ import {
   ne,
   computers,
   computerAssignments,
-  teamUsers,
   agents,
   users,
-  teams,
   computerToCamel,
   snakeToCamel,
   generateSlug,
@@ -146,21 +144,6 @@ export async function requireTenantUser(
   }
 }
 
-export async function requireTenantTeam(
-  tenantId: string,
-  teamId: string,
-): Promise<void> {
-  const [team] = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .where(and(eq(teams.id, teamId), eq(teams.tenant_id, tenantId)));
-  if (!team) {
-    throw new GraphQLError("Team not found in tenant", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-}
-
 export async function requireTenantAgent(
   tenantId: string,
   agentId: string,
@@ -260,33 +243,15 @@ export async function hasComputerAssignmentAccess(input: {
       ),
     )
     .limit(1);
-  if (direct) return true;
-
-  const [team] = await db
-    .select({ id: computerAssignments.id })
-    .from(computerAssignments)
-    .innerJoin(teamUsers, eq(teamUsers.team_id, computerAssignments.team_id))
-    .where(
-      and(
-        eq(computerAssignments.tenant_id, input.tenantId),
-        eq(computerAssignments.computer_id, input.computerId),
-        eq(computerAssignments.subject_type, "team"),
-        eq(teamUsers.tenant_id, input.tenantId),
-        eq(teamUsers.user_id, input.userId),
-      ),
-    )
-    .limit(1);
-  return Boolean(team);
+  return Boolean(direct);
 }
 
-export function accessSource(input: { direct: boolean; team: boolean }) {
-  if (input.direct && input.team) return "BOTH";
-  if (input.team) return "TEAM";
-  return "DIRECT";
+export function accessSource(input: { direct: boolean }) {
+  return input.direct ? "DIRECT" : "NONE";
 }
 
 export function parseAssignmentSubjectType(value: unknown) {
-  return parseEnum(value, ["user", "team"]);
+  return parseEnum(value, ["user"]);
 }
 
 function parseEnum(value: unknown, allowed: string[]): string | undefined {

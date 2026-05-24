@@ -40,10 +40,6 @@ import {
   messages,
   messageMentions,
   messageArtifacts,
-  // Teams
-  teams,
-  teamAgents,
-  teamUsers,
   // Routines
   routines,
   // Wakeup queue
@@ -163,9 +159,6 @@ export {
   messages,
   messageMentions,
   messageArtifacts,
-  teams,
-  teamAgents,
-  teamUsers,
   routines,
   agentWakeupRequests,
   agentWorkspaceEvents,
