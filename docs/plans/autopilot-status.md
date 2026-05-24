@@ -1412,7 +1412,8 @@ None.
 | U7 Install-skill backend action                 | `codex/pi-skill-catalog-u7-install`       | [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) | Merged | Squash merged as `400809ec`; remote and local branch removed. Added the workspace-files `install-skill` action, agent/Space install support, rollback, and self-seeding empty tenant catalogs from bundled repo skills before listing. |
 | U8 Add Skill dialog component                   | `codex/pi-skill-catalog-u8-dialog`        | [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) | Merged | Squash merged as `d49eccb4`; remote and local branch removed. Added the admin two-step Add Skill dialog, catalog/wiring parsing helpers, and install-skill client wrapper.                                                             |
 | U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | Merged | Squash merged as `3b51ec6e`; remote and local branch removed. Added the `skills/` folder context-menu entry and wired the dialog through agent/Space workspace targets.                                                                |
-| U10 Uninstall-skill backend action              | `codex/pi-skill-catalog-u10-uninstall`    | [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) | In CI  | Adds the symmetric workspace-files `uninstall-skill` action, catalog ref snippet stripping, installed-folder deletion, and agent/Space coverage.                                                                                       |
+| U10 Uninstall-skill backend action              | `codex/pi-skill-catalog-u10-uninstall`    | [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) | Merged | Squash merged as `c81861cd`; remote and local branch removed. Added the symmetric workspace-files `uninstall-skill` action, catalog ref snippet stripping, installed-folder deletion, and agent/Space coverage.                        |
+| U11 FolderTree Remove Skill context menu        | `codex/pi-skill-catalog-u11-remove-menu`  | Pending                                                      | Active | Adds the installed-skill folder context-menu affordance and routes folder-delete through `uninstall-skill` when `.catalog-ref.json` marks the folder as catalog-installed.                                                             |
 
 ## Verification Log
 
@@ -1481,6 +1482,12 @@ None.
 - `bash scripts/build-lambdas.sh workspace-files` - passed.
 - `pnpm dlx prettier@3.8.2 --check packages/api/src/lib/catalog-uninstall.ts packages/api/src/lib/catalog-uninstall.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts docs/plans/autopilot-status.md` - passed after formatting touched files.
 - `git diff --check` - passed.
+- U10 PR checks passed on [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/FolderTree.test.ts src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts src/lib/__tests__/workspace-files-api.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
+- `pnpm dlx prettier@3.8.2 --check apps/admin/src/lib/workspace-files-api.ts apps/admin/src/lib/agent-builder-api.ts apps/admin/src/lib/__tests__/workspace-files-api.test.ts apps/admin/src/components/agent-builder/FolderTree.tsx apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/FolderTree.test.ts apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - passed after formatting touched files.
+- `git diff --check` - passed.
 
 ## CI / PR
 
@@ -1505,6 +1512,8 @@ None.
 - Opened [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655).
 - Squash merged [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) as `3b51ec6e16cc753887d8b27fd682ff1240b75cf4`.
 - Opened [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656).
+- Squash merged [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) as `c81861cda4ecfe7b42a6a4da5dbb2a42bcf6d9e0`.
+- Started U11 in `.Codex/worktrees/pi-skill-catalog-u11-remove-menu` on branch `codex/pi-skill-catalog-u11-remove-menu`.
 
 ## Blockers
 

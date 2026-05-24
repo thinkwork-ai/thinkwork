@@ -111,9 +111,8 @@ describe("workspace editor target capabilities", () => {
     // calling handleDeletePath directly, so the AlertDialog gates every
     // context-menu delete.
     expect(editorSource).toMatch(/onDelete=\{\(path, isFolder\)/);
-    expect(editorSource).toMatch(
-      /setDeleteConfirmTarget\(\{ kind: "path", path, isFolder \}\)/,
-    );
+    expect(editorSource).toMatch(/setDeleteConfirmTarget/);
+    expect(editorSource).toMatch(/\{ kind: "path", path, isFolder \}/);
     expect(editorSource).toMatch(/onDeleteSyntheticGroup/);
     expect(editorSource).toMatch(/handleDeleteSyntheticGroup/);
     expect(editorSource).toMatch(/removeSyntheticRoutingRows/);
@@ -134,6 +133,26 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/onAddSkill=/);
     expect(editorSource).toMatch(/setAddSkillDialogOpen\(true\)/);
     expect(editorSource).toMatch(/onInstalled=\{refreshFilesInBackground\}/);
+  });
+
+  it("routes installed skill folder removal through uninstall-skill", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+    const apiSource = readFileSync(
+      new URL("../../../lib/agent-builder-api.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(/installedSkillSlugForPath/);
+    expect(editorSource).toMatch(/\.catalog-ref\.json/);
+    expect(editorSource).toMatch(/kind: "skill"/);
+    expect(editorSource).toMatch(/onRemoveSkill=/);
+    expect(editorSource).toMatch(/handleRemoveSkill/);
+    expect(editorSource).toMatch(/agentBuilderApi\.uninstallSkill/);
+    expect(apiSource).toMatch(/uninstallWorkspaceSkill/);
+    expect(apiSource).toMatch(/uninstallSkill/);
   });
 
   it("closes the context-menu delete dialog before starting deletion", () => {
