@@ -1403,7 +1403,7 @@ None.
 | Unit                                                     | Branch                                    | PR                                                           | State   | Notes                                                                            |
 | -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------- |
 | U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | Merged  | Squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; required CI passed. |
-| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | TBD                                                          | Active  | Wire agent editor writes and remove non-editor map rewrites.                     |
+| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) | PR open | Editor write integration implemented and monitoring CI.                          |
 | U3 Operator normalization and bootstrap polish           | TBD                                       | TBD                                                          | Pending | Add explicit repair/normalization path and bootstrap/rematerialize coverage.     |
 
 ## Progress Log
@@ -1417,6 +1417,7 @@ None.
 - 2026-05-23: U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) passed CLA, lint, test, typecheck, and verify; squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; remote/local branch and U1 worktree removed.
 - 2026-05-23: Created isolated U2 worktree `.Codex/worktrees/editor-agents-md-section-regen-u2` from `origin/main` on branch `codex/editor-agents-md-section-regen-u2`.
 - 2026-05-23: Began U2 editor integration by adding section-scoped AGENTS.md refresh to agent put/delete/move/rename/create/manual regenerate paths and retiring Customize/KB/eval/bootstrap background map rewrites.
+- 2026-05-23: Opened U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620).
 
 ## Verification Log
 
@@ -1443,7 +1444,7 @@ None.
 ## CI / PR
 
 - U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) merged after required checks passed.
-- U2 PR not opened yet; local implementation and verification in progress.
+- U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) opened; checks pending.
 
 ## Blockers
 
