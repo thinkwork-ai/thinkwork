@@ -1106,6 +1106,28 @@ function isProtectedOrchestrationWritePath(path: string): boolean {
   );
 }
 
+function isSpaceCapabilityWritePath(path: string): boolean {
+  return (
+    path === "skills" ||
+    path.startsWith("skills/") ||
+    path === "TOOLS.md" ||
+    path === "MCP.md"
+  );
+}
+
+function rejectSpaceCapabilityWrite(
+  path: string,
+): APIGatewayProxyResult | null {
+  if (!isSpaceCapabilityWritePath(path)) return null;
+  return json(403, {
+    ok: false,
+    code: "space_capability_file_rejected",
+    error:
+      `Spaces cannot contain capability files such as ${path}. ` +
+      "Put skills, TOOLS.md, and MCP.md under master/workspaces/ instead.",
+  });
+}
+
 async function handlePut(
   deps: HandlerDeps,
   path: string,
@@ -1121,6 +1143,11 @@ async function handlePut(
       ok: false,
       error: err instanceof Error ? err.message : "Invalid workspace path",
     });
+  }
+
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(cleanPath);
+    if (rejection) return rejection;
   }
 
   if (isBuiltinToolWorkspacePath(cleanPath)) {
@@ -1521,10 +1548,13 @@ async function handleInstallSkill(
   wiringChoice: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind !== "agent" && target.kind !== "space") {
+  if (target.kind === "space") {
+    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
+  }
+  if (target.kind !== "agent") {
     return json(400, {
       ok: false,
-      error: "install-skill requires an agent or space target",
+      error: "install-skill requires an agent target",
       code: "unsupported_target",
     });
   }
@@ -1637,10 +1667,13 @@ async function handleReinstallSkill(
   slug: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind !== "agent" && target.kind !== "space") {
+  if (target.kind === "space") {
+    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
+  }
+  if (target.kind !== "agent") {
     return json(400, {
       ok: false,
-      error: "reinstall-skill requires an agent or space target",
+      error: "reinstall-skill requires an agent target",
       code: "unsupported_target",
     });
   }
@@ -1816,6 +1849,11 @@ async function handleMove(
       error: "User context path is not editable from this surface.",
     });
   }
+  if (target.kind === "space") {
+    const desiredDest = joinFolderPath(cleanToFolder, pathBasename(cleanFrom));
+    const rejection = rejectSpaceCapabilityWrite(desiredDest);
+    if (rejection) return rejection;
+  }
   if (isBuiltinToolWorkspacePath(cleanFrom)) {
     return json(403, {
       ok: false,
@@ -1865,6 +1903,10 @@ async function handleSingleFileMove(
       ok: false,
       error: "Source and destination are identical",
     });
+  }
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(desiredDest);
+    if (rejection) return rejection;
   }
 
   const occupiedSiblings = await listImmediateChildren(
@@ -1965,6 +2007,10 @@ async function handleFolderMove(
       ok: false,
       error: "Source and destination are identical",
     });
+  }
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(desiredDest);
+    if (rejection) return rejection;
   }
 
   const occupied = await listImmediateChildren(
@@ -2208,6 +2254,10 @@ function validateRenamePaths(
       ok: false,
       error: "use orchestration writer",
     });
+  }
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(cleanTo);
+    if (rejection) return rejection;
   }
   return null;
 }

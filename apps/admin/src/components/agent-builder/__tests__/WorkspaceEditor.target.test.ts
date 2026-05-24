@@ -210,7 +210,7 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
   });
 
-  it("wires Add Skill through agent and Space workspace targets", () => {
+  it("wires Add Skill only through agent workspace targets", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),
       "utf8",
@@ -218,7 +218,9 @@ describe("workspace editor target capabilities", () => {
 
     expect(editorSource).toMatch(/AddSkillDialog/);
     expect(editorSource).toMatch(/"agentId" in stableTarget/);
-    expect(editorSource).toMatch(/"spaceId" in stableTarget/);
+    expect(editorSource).not.toMatch(
+      /"spaceId" in stableTarget \? stableTarget/,
+    );
     expect(editorSource).toMatch(/onAddSkill=/);
     expect(editorSource).toMatch(/setAddSkillDialogOpen\(true\)/);
     expect(editorSource).toMatch(/onInstalled=\{refreshFilesInBackground\}/);
