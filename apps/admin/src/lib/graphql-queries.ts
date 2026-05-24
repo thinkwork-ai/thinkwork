@@ -483,14 +483,6 @@ export const EnqueueComputerTaskMutation = graphql(`
   }
 `);
 
-// ---------------------------------------------------------------------------
-// Workspace orchestration reviews — admin GraphQL bindings retired in U5
-// of the workspace-reviews routing refactor. System-agent reviews now
-// surface in Inbox; paired-human reviews live on mobile. Mobile retains
-// its own copies of the agentWorkspaceReviews query and review mutations.
-// See docs/plans/2026-04-28-004-...
-// ---------------------------------------------------------------------------
-
 export const ModelCatalogQuery = graphql(`
   query ModelCatalog {
     modelCatalog {
