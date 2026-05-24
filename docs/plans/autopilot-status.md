@@ -1411,7 +1411,8 @@ None.
 | U6a Catalog editor root correction              | `codex/pi-skill-catalog-catalog-root-fix` | [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647) | Merged | Squash merged as `b6f6cd8f`; remote and local branch removed.                                                                                                                                                                          |
 | U7 Install-skill backend action                 | `codex/pi-skill-catalog-u7-install`       | [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) | Merged | Squash merged as `400809ec`; remote and local branch removed. Added the workspace-files `install-skill` action, agent/Space install support, rollback, and self-seeding empty tenant catalogs from bundled repo skills before listing. |
 | U8 Add Skill dialog component                   | `codex/pi-skill-catalog-u8-dialog`        | [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) | Merged | Squash merged as `d49eccb4`; remote and local branch removed. Added the admin two-step Add Skill dialog, catalog/wiring parsing helpers, and install-skill client wrapper.                                                             |
-| U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | In CI  | Adds the `skills/` folder context-menu entry and wires the dialog through agent/Space workspace targets.                                                                                                                               |
+| U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | Merged | Squash merged as `3b51ec6e`; remote and local branch removed. Added the `skills/` folder context-menu entry and wired the dialog through agent/Space workspace targets.                                                                |
+| U10 Uninstall-skill backend action              | `codex/pi-skill-catalog-u10-uninstall`    | pending                                                      | Active | Adding the symmetric workspace-files `uninstall-skill` action, catalog ref snippet stripping, installed-folder deletion, and agent/Space coverage.                                                                                     |
 
 ## Verification Log
 
@@ -1473,6 +1474,13 @@ None.
 - `pnpm --filter @thinkwork/admin test` - passed.
 - `pnpm dlx prettier@3.8.2 --check apps/admin/src/components/agent-builder/FolderTree.tsx apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/FolderTree.test.ts apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - passed.
 - `git diff --check` - passed.
+- U9 PR checks passed on [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/api test -- src/lib/catalog-uninstall.test.ts src/__tests__/workspace-files-handler.test.ts` - passed.
+- `pnpm --filter @thinkwork/api test` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `bash scripts/build-lambdas.sh workspace-files` - passed.
+- `pnpm dlx prettier@3.8.2 --check packages/api/src/lib/catalog-uninstall.ts packages/api/src/lib/catalog-uninstall.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts docs/plans/autopilot-status.md` - passed after formatting touched files.
+- `git diff --check` - passed.
 
 ## CI / PR
 
@@ -1495,6 +1503,7 @@ None.
 - Opened [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653).
 - Squash merged [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) as `d49eccb473f86599ec584c1921219fda0bf2209b`.
 - Opened [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655).
+- Squash merged [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) as `3b51ec6e16cc753887d8b27fd682ff1240b75cf4`.
 
 ## Blockers
 
