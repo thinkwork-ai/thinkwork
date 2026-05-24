@@ -1407,7 +1407,8 @@ None.
 | U3 Catalog seed action | `codex/pi-skill-catalog-u3-seed` | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | Merged | Squash merged as `180dc7ae`; remote and local branch removed. |
 | U4 WorkspaceEditor catalog mode + Skills route | `codex/pi-skill-catalog-u4-admin-mode` | [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) | Merged | Squash merged as `ccf12ae4`; remote and local branch removed. |
 | U5 Agent detail tab registration + Tools rename | `codex/pi-skill-catalog-u5-tabs` | [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) | Merged | Squash merged as `7c57131f`; remote and local branch removed. |
-| U6 WIRING.md parser module | `codex/pi-skill-catalog-u6-wiring-md` | [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) | PR open | Added dependency-free parser/renderer for H2 `context-md` wiring suggestions with warning coverage. |
+| U6 WIRING.md parser module | `codex/pi-skill-catalog-u6-wiring-md` | [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) | Merged | Squash merged as `42f2074b`; remote and local branch removed. |
+| U6a Catalog editor root correction | `codex/pi-skill-catalog-catalog-root-fix` | Pending | In progress | Removing the workspace-only synthetic `skills/` root from catalog mode so S3 catalog slugs render at tree root. |
 
 ## Verification Log
 
@@ -1443,6 +1444,11 @@ None.
 - `pnpm --filter @thinkwork/api typecheck` - passed.
 - `git diff --check` - passed.
 - `pnpm exec prettier --check packages/api/src/lib/wiring-md.ts packages/api/src/lib/wiring-md.test.ts docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+- U6 PR checks passed on [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed.
+- `git diff --check` - passed.
+- `pnpm exec prettier --check apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
 
 ## CI / PR
 
@@ -1457,6 +1463,7 @@ None.
 - Opened [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645).
 - Squash merged [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) as `7c57131f6132904c77dd1335e4e50e0fbaca7605`.
 - Opened [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646).
+- Squash merged [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) as `42f2074b9b7a7ae344f4ad960cbafe50a3a8ed9b`.
 
 ## Blockers
 

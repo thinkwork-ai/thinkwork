@@ -83,6 +83,14 @@ export function workspaceEditorActions(
   return ["new-file", "new-folder"];
 }
 
+export function workspaceEditorReservedRootFolders(
+  mode: WorkspaceEditorMode,
+): readonly string[] | undefined {
+  if (mode === "context") return ["memory"];
+  if (mode === "catalog") return [];
+  return undefined;
+}
+
 export interface WorkspaceEditorProps {
   target: Target;
   mode: WorkspaceEditorMode;
@@ -268,7 +276,7 @@ export function WorkspaceEditor({
   const tree = useMemo(
     () =>
       buildWorkspaceTree(files, routingRows, {
-        reservedRootFolders: mode === "context" ? ["memory"] : undefined,
+        reservedRootFolders: workspaceEditorReservedRootFolders(mode),
       }),
     [files, mode, routingRows],
   );
