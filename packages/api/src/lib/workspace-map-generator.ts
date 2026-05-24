@@ -136,12 +136,36 @@ export interface RoutingRowInsert {
   skills: string[];
 }
 
+interface AgentsMdRenderScope {
+  agentsMdPath: string;
+  rootLabel: string;
+  workspaceObjectPaths: string[];
+  contextByFolder: Map<string, string>;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function workspacePrefix(tenantSlug: string, agentSlug: string): string {
   return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+}
+
+function normalizeAgentsMdPath(path = "AGENTS.md"): string {
+  const trimmed = path.trim();
+  if (!trimmed || trimmed.startsWith("/") || trimmed.includes("\\")) {
+    throw new Error(`Invalid AGENTS.md path: ${path}`);
+  }
+  const segments = trimmed.split("/");
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") {
+      throw new Error(`Invalid AGENTS.md path: ${path}`);
+    }
+  }
+  if (segments[segments.length - 1] !== "AGENTS.md") {
+    throw new Error(`Regenerate map path must end with AGENTS.md: ${path}`);
+  }
+  return segments.join("/");
 }
 
 /**
@@ -433,6 +457,46 @@ function renderWorkspaceTree(
   return lines.join("\n");
 }
 
+function scopedAgentsMdRenderContext(
+  context: WorkspaceMapRenderContext,
+  agentsMdPathInput = "AGENTS.md",
+): AgentsMdRenderScope {
+  const agentsMdPath = normalizeAgentsMdPath(agentsMdPathInput);
+  const folderPath =
+    agentsMdPath === "AGENTS.md"
+      ? ""
+      : agentsMdPath.slice(0, -"/AGENTS.md".length);
+  const folderPrefix = folderPath ? `${folderPath}/` : "";
+  const rootLabel = folderPath
+    ? (folderPath.split("/").filter(Boolean).at(-1) ?? context.agentSlug)
+    : context.agentSlug;
+
+  const workspaceObjectPaths = folderPrefix
+    ? context.workspaceObjectPaths
+        .filter((path) => path.startsWith(folderPrefix))
+        .map((path) => path.slice(folderPrefix.length))
+        .filter(Boolean)
+    : context.workspaceObjectPaths;
+
+  const contextByFolder = new Map<string, string>();
+  for (const [folder, content] of context.contextByFolder.entries()) {
+    if (!folderPrefix) {
+      contextByFolder.set(folder, content);
+      continue;
+    }
+    if (!folder.startsWith(folderPrefix)) continue;
+    const scopedFolder = folder.slice(folderPrefix.length);
+    if (scopedFolder) contextByFolder.set(scopedFolder, content);
+  }
+
+  return {
+    agentsMdPath,
+    rootLabel,
+    workspaceObjectPaths,
+    contextByFolder,
+  };
+}
+
 export function replaceDerivedAgentsMdSections(
   markdown: string,
   sections: Record<DerivedSectionName, string>,
@@ -451,7 +515,7 @@ export function replaceDerivedAgentsMdSections(
   for (const sectionName of DERIVED_SECTION_ORDER) {
     if (findSectionBodyRange(rendered, sectionName)) continue;
     const suffix = rendered.endsWith("\n") ? "" : "\n";
-    rendered = `${rendered}${suffix}\n---\n\n## ${sectionName}${sections[sectionName]}`;
+    rendered = `${rendered}${suffix}---\n\n## ${sectionName}\n${sections[sectionName]}`;
   }
 
   return rendered;
@@ -480,7 +544,7 @@ function findSectionBodyRange(
   sectionName: string,
 ): { start: number; end: number } | null {
   const headingPattern = new RegExp(
-    `(^|\\n)## ${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(?:\\r?\\n|$)`,
+    `(^|\\n)## ${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ \\t]*(?:\\r?\\n|$)`,
     "g",
   );
   const match = headingPattern.exec(markdown);
@@ -1077,22 +1141,24 @@ export async function regenerateWorkspaceMap(
  */
 export async function regenerateAgentsMdDerivedSections(
   agentId: string,
+  agentsMdPathInput = "AGENTS.md",
 ): Promise<void> {
   const context = await loadWorkspaceMapRenderContext(agentId);
   if (!context) return;
+  const scope = scopedAgentsMdRenderContext(context, agentsMdPathInput);
+  const targetKey = `${context.prefix}${scope.agentsMdPath}`;
 
-  const existingAgentsMd = await readS3Text(
-    context.bucket,
-    `${context.prefix}AGENTS.md`,
-  );
+  const existingAgentsMd = await readS3Text(context.bucket, targetKey);
   const seedAgentsMd =
-    existingAgentsMd ?? `# ${context.agentName} — Workspace Map\n`;
+    existingAgentsMd && existingAgentsMd.trim() !== ""
+      ? existingAgentsMd
+      : `# ${scope.rootLabel} — Workspace Map\n`;
   const nextAgentsMd = replaceDerivedAgentsMdSections(
     seedAgentsMd,
     renderDerivedAgentsMdSections({
-      agentSlug: context.agentSlug,
-      workspaceObjectPaths: context.workspaceObjectPaths,
-      contextByFolder: context.contextByFolder,
+      agentSlug: scope.rootLabel,
+      workspaceObjectPaths: scope.workspaceObjectPaths,
+      contextByFolder: scope.contextByFolder,
       skills: context.skills,
       kbs: context.kbs,
       workflows: context.workflows,
@@ -1101,14 +1167,14 @@ export async function regenerateAgentsMdDerivedSections(
 
   if (existingAgentsMd === nextAgentsMd) {
     console.log(
-      `[workspace-map] Skipped AGENTS.md section refresh for ${context.agentSlug}: content unchanged`,
+      `[workspace-map] Skipped ${scope.agentsMdPath} section refresh for ${context.agentSlug}: content unchanged`,
     );
     return;
   }
 
-  await writeS3Text(context.bucket, `${context.prefix}AGENTS.md`, nextAgentsMd);
+  await writeS3Text(context.bucket, targetKey, nextAgentsMd);
   console.log(
-    `[workspace-map] Refreshed AGENTS.md derived sections for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s), ${context.kbs.length} KB(s), ${context.workflows.length} workflow(s)`,
+    `[workspace-map] Refreshed ${scope.agentsMdPath} derived sections for ${context.agentSlug}: ${scope.workspaceObjectPaths.length} object(s), ${context.skills.length} skill(s), ${context.kbs.length} KB(s), ${context.workflows.length} workflow(s)`,
   );
 
   try {
@@ -1506,10 +1572,7 @@ function renderSkillsSection(skills: SkillInfo[]): string {
 }
 
 function renderSkillsBody(skills: SkillInfo[]): string {
-  const lines: string[] = [];
-
-  lines.push("");
-  lines.push("");
+  const lines: string[] = [""];
   lines.push(
     "**IMPORTANT**: Tools like `create_sub_thread`, `search_users`, `schedule_followup`, `list_sub_threads` etc. are registered directly on you. Always call these tools directly — do NOT delegate to another agent when you already have the required tool.",
   );
@@ -1558,10 +1621,7 @@ function renderKnowledgeBasesSection(kbs: KBInfo[]): string {
 }
 
 function renderKnowledgeBasesBody(kbs: KBInfo[]): string {
-  const lines: string[] = [];
-
-  lines.push("");
-  lines.push("");
+  const lines: string[] = [""];
   if (kbs.length > 0) {
     lines.push("| KB | Description | Used In |");
     lines.push("|----|-------------|---------|");
@@ -1585,10 +1645,7 @@ function renderWorkflowsSection(workflowList: WorkflowInfo[]): string {
 }
 
 function renderWorkflowsBody(workflowList: WorkflowInfo[]): string {
-  const lines: string[] = [];
-
-  lines.push("");
-  lines.push("");
+  const lines: string[] = [""];
   if (workflowList.length > 0) {
     lines.push("| Workflow | Description | Schedule |");
     lines.push("|----------|-------------|----------|");

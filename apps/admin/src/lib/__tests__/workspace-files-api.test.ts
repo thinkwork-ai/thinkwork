@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   generateFolderStructure,
+  installWorkspaceSkill,
   moveWorkspaceFile,
   normalizeWorkspaceMap,
   regenerateWorkspaceMap,
   renameWorkspacePath,
+  uninstallWorkspaceSkill,
 } from "../workspace-files-api";
 
 // Mock @/lib/auth so we don't need a real Cognito token in unit tests.
@@ -178,5 +180,66 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
       spaceId: "space-eng",
       path: "memory/CONTEXT.md",
     });
+  });
+
+  it("posts nested AGENTS.md path for scoped map refresh", async () => {
+    mockOk({});
+
+    await regenerateWorkspaceMap("agent-abc", "earnest-falcon-947/AGENTS.md");
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "regenerate-map",
+      agentId: "agent-abc",
+      path: "earnest-falcon-947/AGENTS.md",
+    });
+  });
+
+  it("posts action=install-skill with the selected wiring choice", async () => {
+    mockOk({
+      installed_paths: ["skills/finance-audit-xls/SKILL.md"],
+      context_md_changed_path: "CONTEXT.md",
+      source_sha256: "a".repeat(64),
+    });
+
+    const result = await installWorkspaceSkill(
+      { agentId: "agent-abc" },
+      "finance-audit-xls",
+      "stage-3-gate",
+    );
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "install-skill",
+      agentId: "agent-abc",
+      slug: "finance-audit-xls",
+      wiring_choice: "stage-3-gate",
+    });
+    expect(result.source_sha256).toBe("a".repeat(64));
+  });
+
+  it("posts action=uninstall-skill with the selected slug", async () => {
+    mockOk({
+      deleted_paths: ["skills/finance-audit-xls/SKILL.md"],
+      context_md_strip: "removed",
+      context_md_changed_path: "CONTEXT.md",
+    });
+
+    const result = await uninstallWorkspaceSkill(
+      { spaceId: "space-abc" },
+      "finance-audit-xls",
+    );
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "uninstall-skill",
+      spaceId: "space-abc",
+      slug: "finance-audit-xls",
+    });
+    expect(result.context_md_strip).toBe("removed");
   });
 });

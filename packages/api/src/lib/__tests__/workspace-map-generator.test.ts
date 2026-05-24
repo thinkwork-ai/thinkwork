@@ -227,10 +227,10 @@ function resetState(): void {
   mockRegenerateManifestForPrefix.mockReset();
 }
 
-function lastWrittenAgentsMd(): string | null {
+function lastWrittenAgentsMd(path = "AGENTS.md"): string | null {
   const put = [...s3Calls.puts]
     .reverse()
-    .find((p) => p.key === `${PREFIX}AGENTS.md`);
+    .find((p) => p.key === `${PREFIX}${path}`);
   return put?.body ?? null;
 }
 
@@ -370,6 +370,72 @@ describe("regenerateAgentsMdDerivedSections", () => {
     );
     expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes a nested AGENTS.md from that folder down", async () => {
+    state.listObjectsResponses = [
+      "AGENTS.md",
+      "earnest-falcon-947/AGENTS.md",
+      "earnest-falcon-947/CONTEXT.md",
+      "earnest-falcon-947/skills/review/SKILL.md",
+      "earnest-falcon-947/reports/CONTEXT.md",
+      "earnest-falcon-947/reports/daily.md",
+      "jovial-narwhal-612/CONTEXT.md",
+    ];
+    state.s3GetResponses.set(
+      `${PREFIX}earnest-falcon-947/AGENTS.md`,
+      [
+        "# Nested custom map",
+        "",
+        "## Folder Structure",
+        "old nested tree",
+        "",
+        "---",
+        "",
+        "## Local Notes",
+        "Preserve this nested operator note.",
+      ].join("\n"),
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}earnest-falcon-947/reports/CONTEXT.md`,
+      "# Reports\n\nDaily reporting instructions.",
+    );
+
+    await regenerateAgentsMdDerivedSections(
+      "agent-1",
+      "earnest-falcon-947/AGENTS.md",
+    );
+
+    const written = lastWrittenAgentsMd("earnest-falcon-947/AGENTS.md");
+    expect(written).toContain("# Nested custom map");
+    expect(written).toContain("Preserve this nested operator note.");
+    expect(written).not.toContain("old nested tree");
+    expect(written).toContain("earnest-falcon-947/");
+    expect(written).toContain("reports/ ← Reports");
+    expect(written).toContain("skills/");
+    expect(written).not.toContain("jovial-narwhal-612");
+    expect(s3Calls.puts.map((p) => p.key)).toEqual([
+      `${PREFIX}earnest-falcon-947/AGENTS.md`,
+    ]);
+    expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("seeds a blank nested AGENTS.md before adding derived sections", async () => {
+    state.listObjectsResponses = [
+      "earnest-falcon-947/AGENTS.md",
+      "earnest-falcon-947/skills/review/SKILL.md",
+    ];
+    state.s3GetResponses.set(`${PREFIX}earnest-falcon-947/AGENTS.md`, "");
+
+    await regenerateAgentsMdDerivedSections(
+      "agent-1",
+      "earnest-falcon-947/AGENTS.md",
+    );
+
+    const written = lastWrittenAgentsMd("earnest-falcon-947/AGENTS.md");
+    expect(written).toContain("# earnest-falcon-947 — Workspace Map");
+    expect(written).toContain("## Folder Structure");
+    expect(written).toContain("skills/");
   });
 });
 
@@ -572,9 +638,9 @@ describe("replaceDerivedAgentsMdSections", () => {
       "## Skills & Tools\n\nNo skills assigned.\n## Token Management",
     );
     expect(rendered).toContain(
-      "## Knowledge Bases\nNo knowledge bases assigned.",
+      "## Knowledge Bases\n\nNo knowledge bases assigned.",
     );
-    expect(rendered).toContain("## Workflows\nNo workflows configured.");
+    expect(rendered).toContain("## Workflows\n\nNo workflows configured.");
     expect(rendered).toContain(
       "## What This Is\noperator prose\n---\n\n## Folder Structure",
     );
@@ -606,31 +672,68 @@ describe("replaceDerivedAgentsMdSections", () => {
         "",
         "## What This Is",
         "custom",
-        "",
         "---",
         "",
         "## Folder Structure",
+        "",
         "```text",
         "root/",
         "```",
-        "",
         "---",
         "",
         "## Skills & Tools",
-        "No skills assigned.",
         "",
+        "No skills assigned.",
         "---",
         "",
         "## Knowledge Bases",
-        "No knowledge bases assigned.",
         "",
+        "No knowledge bases assigned.",
         "---",
         "",
         "## Workflows",
+        "",
         "No workflows configured.",
         "",
       ].join("\n"),
     );
+  });
+
+  it("does not preserve old leading blank lines when refreshing derived sections", () => {
+    const existing = [
+      "# Map",
+      "",
+      "## Folder Structure",
+      "",
+      "",
+      "",
+      "```text",
+      "old tree",
+      "```",
+      "---",
+      "",
+      "## Skills & Tools",
+      "",
+      "",
+      "",
+      "No old skills.",
+      "",
+    ].join("\n");
+    const sections = {
+      "Folder Structure": "\n```text\nfresh tree\n```\n",
+      "Skills & Tools": "\nNo skills assigned.\n",
+      "Knowledge Bases": "\nNo knowledge bases assigned.\n",
+      Workflows: "\nNo workflows configured.\n",
+    };
+
+    const once = replaceDerivedAgentsMdSections(existing, sections);
+    const twice = replaceDerivedAgentsMdSections(once, sections);
+
+    expect(twice).toBe(once);
+    expect(once).toContain("## Folder Structure\n\n```text\nfresh tree\n```");
+    expect(once).toContain("## Skills & Tools\n\nNo skills assigned.");
+    expect(once).not.toContain("## Folder Structure\n\n\n");
+    expect(once).not.toContain("## Skills & Tools\n\n\n");
   });
 });
 

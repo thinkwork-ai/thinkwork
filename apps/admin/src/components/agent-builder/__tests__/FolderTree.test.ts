@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { buildWorkspaceTree, subAgentsNodePath } from "../FolderTree";
+import {
+  buildWorkspaceTree,
+  installedSkillSlugForNode,
+  isSkillInstallFolder,
+  subAgentsNodePath,
+} from "../FolderTree";
 
 describe("buildWorkspaceTree", () => {
   it("sorts folders before files and preserves nested paths", () => {
@@ -81,6 +86,55 @@ describe("buildWorkspaceTree", () => {
     expect(tree.map((node) => node.path)).toEqual(["memory", "skills"]);
   });
 
+  it("enables Add Skill only for real skills folders with install support", () => {
+    expect(isSkillInstallFolder({ name: "skills", isFolder: true }, true)).toBe(
+      true,
+    );
+    expect(
+      isSkillInstallFolder({ name: "skills", isFolder: false }, true),
+    ).toBe(false);
+    expect(isSkillInstallFolder({ name: "memory", isFolder: true }, true)).toBe(
+      false,
+    );
+    expect(
+      isSkillInstallFolder({ name: "skills", isFolder: true }, false),
+    ).toBe(false);
+    expect(
+      isSkillInstallFolder(
+        { name: "skills", isFolder: true, missing: true },
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      isSkillInstallFolder(
+        { name: "skills", isFolder: true, synthetic: true },
+        true,
+      ),
+    ).toBe(false);
+  });
+
+  it("detects only catalog-installed skill folders", () => {
+    const tree = buildWorkspaceTree([
+      "skills/finance-audit-xls/.catalog-ref.json",
+      "skills/finance-audit-xls/SKILL.md",
+      "skills/draft-tool/SKILL.md",
+      "skills/draft-tool/WIRING.md",
+    ]);
+    const skills = tree.find((node) => node.path === "skills");
+    const finance = skills?.children.find(
+      (node) => node.path === "skills/finance-audit-xls",
+    );
+    const draft = skills?.children.find(
+      (node) => node.path === "skills/draft-tool",
+    );
+
+    expect(finance ? installedSkillSlugForNode(finance) : null).toBe(
+      "finance-audit-xls",
+    );
+    expect(draft ? installedSkillSlugForNode(draft) : null).toBeNull();
+    expect(skills ? installedSkillSlugForNode(skills) : null).toBeNull();
+  });
+
   it("contains inline create and rename affordances", () => {
     const source = readFileSync(
       new URL("../FolderTree.tsx", import.meta.url),
@@ -90,9 +144,16 @@ describe("buildWorkspaceTree", () => {
     expect(source).toMatch(/onRename/);
     expect(source).toMatch(/Rename/);
     expect(source).toMatch(/Regenerate Map/);
-    expect(source).toMatch(/node\.path === "AGENTS\.md"/);
+    expect(source).toMatch(/node\.name === "AGENTS\.md"/);
     expect(source).toMatch(/Generate Folder Structure/);
     expect(source).toMatch(/node\.name === "CONTEXT\.md"/);
+    expect(source).toMatch(/Add Skill/);
+    expect(source).toMatch(/Remove Skill/);
+    expect(source).toMatch(/onAddSkill/);
+    expect(source).toMatch(/onRemoveSkill/);
+    expect(source).toMatch(/installedSkillSlugForNode/);
+    expect(source).toMatch(/onDeleteSyntheticGroup/);
+    expect(source).toMatch(/syntheticFolderPaths/);
     expect(source).toMatch(/InlineNameInput/);
     expect(source).toMatch(/PendingInlineFile/);
     expect(source).toMatch(/PendingInlineFolder/);

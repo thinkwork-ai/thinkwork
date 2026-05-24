@@ -553,6 +553,46 @@ describe("agent AGENTS.md derived section refresh", () => {
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledTimes(4);
   });
 
+  it("passes a nested AGENTS.md path through manual regenerate-map", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "regenerate-map",
+          agentId: AGENT_ID,
+          path: "earnest-falcon-947/AGENTS.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(
+      AGENT_ID,
+      "earnest-falcon-947/AGENTS.md",
+    );
+  });
+
+  it("rejects regenerate-map paths that are not AGENTS.md files", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "regenerate-map",
+          agentId: AGENT_ID,
+          path: "earnest-falcon-947/CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/AGENTS\.md/);
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+
   it("normalizes AGENTS.md only for agent targets", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminAgentTargetRows();
@@ -1391,6 +1431,146 @@ describe("agent install-skill action", () => {
           agentId: AGENT_ID,
           slug: "finance-audit-xls",
           wiring_choice: "stage-3-gate",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+  });
+});
+
+// ─── 4d. Catalog skill uninstall action ─────────────────────────────────────
+
+function mockCatalogUninstallS3(
+  targetPrefix = "tenants/acme/agents/marco/workspace/",
+): void {
+  s3Mock
+    .on(ListObjectsV2Command, {
+      Prefix: `${targetPrefix}skills/finance-audit-xls/`,
+    })
+    .resolves({
+      Contents: [
+        { Key: `${targetPrefix}skills/finance-audit-xls/.catalog-ref.json` },
+        { Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` },
+        { Key: `${targetPrefix}skills/finance-audit-xls/WIRING.md` },
+      ],
+    });
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}skills/finance-audit-xls/.catalog-ref.json`,
+    })
+    .resolves(
+      body(
+        JSON.stringify({
+          slug: "finance-audit-xls",
+          source_sha256: "a".repeat(64),
+          installed_at: "2026-05-24T16:00:00.000Z",
+          wiring_choice: "stage-3-gate",
+          snippet: "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |\n",
+        }),
+      ),
+    );
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}CONTEXT.md`,
+    })
+    .resolves(
+      body(`# Context
+
+| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |
+`),
+    );
+  s3Mock.on(PutObjectCommand).resolves({});
+  s3Mock.on(DeleteObjectCommand).resolves({});
+}
+
+describe("agent uninstall-skill action", () => {
+  it("removes a catalog skill from the agent workspace and refreshes agent state", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    mockCatalogUninstallS3();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "uninstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      context_md_strip: "removed",
+      context_md_changed_path: "CONTEXT.md",
+      deleted_paths: [
+        "skills/finance-audit-xls/.catalog-ref.json",
+        "skills/finance-audit-xls/SKILL.md",
+        "skills/finance-audit-xls/WIRING.md",
+      ],
+    });
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toEqual([
+      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+    ]);
+    expect(deriveMockImpl).toHaveBeenCalledWith(
+      { tenantId: TENANT_A },
+      AGENT_ID,
+    );
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
+  it("uninstalls from a Space source scope without refreshing agent state", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    mockCatalogUninstallS3("tenants/acme/spaces/engineering/source/");
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "uninstall-skill",
+          spaceId: SPACE_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.context_md_strip).toBe("removed");
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toEqual([
+      "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/.catalog-ref.json",
+      "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/WIRING.md",
+    ]);
+    expect(deriveMockImpl).not.toHaveBeenCalled();
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+
+  it("requires tenant admin before uninstalling a skill", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "uninstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
         }),
       ),
     );

@@ -111,11 +111,48 @@ describe("workspace editor target capabilities", () => {
     // calling handleDeletePath directly, so the AlertDialog gates every
     // context-menu delete.
     expect(editorSource).toMatch(/onDelete=\{\(path, isFolder\)/);
-    expect(editorSource).toMatch(
-      /setDeleteConfirmTarget\(\{ path, isFolder \}\)/,
-    );
+    expect(editorSource).toMatch(/setDeleteConfirmTarget/);
+    expect(editorSource).toMatch(/\{ kind: "path", path, isFolder \}/);
+    expect(editorSource).toMatch(/onDeleteSyntheticGroup/);
+    expect(editorSource).toMatch(/handleDeleteSyntheticGroup/);
+    expect(editorSource).toMatch(/removeSyntheticRoutingRows/);
+    expect(editorSource).toMatch(/replaceRoutingTable/);
     expect(editorSource).toMatch(/AlertDialogTitle/);
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
+  });
+
+  it("wires Add Skill through agent and Space workspace targets", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(/AddSkillDialog/);
+    expect(editorSource).toMatch(/"agentId" in stableTarget/);
+    expect(editorSource).toMatch(/"spaceId" in stableTarget/);
+    expect(editorSource).toMatch(/onAddSkill=/);
+    expect(editorSource).toMatch(/setAddSkillDialogOpen\(true\)/);
+    expect(editorSource).toMatch(/onInstalled=\{refreshFilesInBackground\}/);
+  });
+
+  it("routes installed skill folder removal through uninstall-skill", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+    const apiSource = readFileSync(
+      new URL("../../../lib/agent-builder-api.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(/installedSkillSlugForPath/);
+    expect(editorSource).toMatch(/\.catalog-ref\.json/);
+    expect(editorSource).toMatch(/kind: "skill"/);
+    expect(editorSource).toMatch(/onRemoveSkill=/);
+    expect(editorSource).toMatch(/handleRemoveSkill/);
+    expect(editorSource).toMatch(/agentBuilderApi\.uninstallSkill/);
+    expect(apiSource).toMatch(/uninstallWorkspaceSkill/);
+    expect(apiSource).toMatch(/uninstallSkill/);
   });
 
   it("closes the context-menu delete dialog before starting deletion", () => {
@@ -125,7 +162,7 @@ describe("workspace editor target capabilities", () => {
     );
 
     expect(editorSource).toMatch(
-      /setDeleteConfirmTarget\(null\);\s+void handleDeletePath\(path, isFolder\);/,
+      /setDeleteConfirmTarget\(null\);\s+if \(target\.kind === "synthetic-group"\)/,
     );
   });
 
@@ -198,6 +235,10 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/onNewFolder=\{startNewFolder\}/);
     expect(editorSource).toMatch(/handleRegenerateMap/);
     expect(editorSource).toMatch(/agentBuilderApi\.regenerateMap/);
+    expect(editorSource).toMatch(
+      /regenerateMap\(stableTarget\.agentId, path\)/,
+    );
+    expect(editorSource).toMatch(/path\.endsWith\("\/AGENTS\.md"\)/);
     expect(editorSource).toMatch(/onRegenerateMap=/);
     expect(editorSource).toMatch(/handleGenerateFolderStructure/);
     expect(editorSource).toMatch(/agentBuilderApi\.generateFolderStructure/);

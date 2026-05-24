@@ -154,6 +154,34 @@ function sortNodes(nodes: TreeNode[]) {
   return nodes;
 }
 
+export function isSkillInstallFolder(
+  node: Pick<TreeNode, "name" | "isFolder" | "synthetic" | "missing">,
+  addSkillAvailable: boolean,
+): boolean {
+  return (
+    addSkillAvailable &&
+    node.isFolder &&
+    node.name === "skills" &&
+    !node.synthetic &&
+    !node.missing
+  );
+}
+
+export function installedSkillSlugForNode(
+  node: Pick<
+    TreeNode,
+    "path" | "isFolder" | "children" | "synthetic" | "missing"
+  >,
+): string | null {
+  if (!node.isFolder || node.synthetic || node.missing) return null;
+  const match = /^skills\/([^/]+)$/.exec(node.path);
+  if (!match) return null;
+  const hasCatalogRef = node.children.some(
+    (child) => !child.isFolder && child.name === ".catalog-ref.json",
+  );
+  return hasCatalogRef ? match[1] : null;
+}
+
 export interface ClipboardItem {
   path: string;
   kind: "file" | "folder";
@@ -183,6 +211,13 @@ export interface FolderTreeProps {
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
+  onDeleteSyntheticGroup?: (
+    groupPath: string,
+    label: string,
+    folderPaths: string[],
+  ) => void;
+  onAddSkill?: (skillsFolderPath: string) => void;
+  onRemoveSkill?: (skillsFolderPath: string, slug: string) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
   onRegenerateMap?: (path: string) => void;
   onGenerateFolderStructure?: (path: string) => void;
@@ -451,6 +486,9 @@ function FolderTreeItem(
     onNewFile,
     onNewFolder,
     onDelete,
+    onDeleteSyntheticGroup,
+    onAddSkill,
+    onRemoveSkill,
     onRename,
     onRegenerateMap,
     onGenerateFolderStructure,
@@ -468,11 +506,21 @@ function FolderTreeItem(
   if (node.isFolder) {
     // Synthetic agents/ group is a virtual UI grouping, not a real folder —
     // its path is __synthetic__/sub-agents which can't host files. Treat
-    // creates from its context menu as workspace-root creates, and don't
-    // offer Delete / Cut / Paste on the grouping or on routed-but-empty
-    // entries (they have no real S3 prefix to act on).
+    // creates from its context menu as workspace-root creates. Deleting it
+    // deletes the real routed folders beneath it.
     const contextParent = node.synthetic ? "" : node.path;
     const canMutate = !node.synthetic && !node.missing;
+    const syntheticFolderPaths = node.synthetic
+      ? node.children
+          .filter((child) => child.isFolder && !child.missing)
+          .map((child) => child.path)
+      : [];
+    const canDeleteSyntheticGroup =
+      node.synthetic &&
+      syntheticFolderPaths.length > 0 &&
+      onDeleteSyntheticGroup;
+    const canAddSkill = isSkillInstallFolder(node, Boolean(onAddSkill));
+    const installedSkillSlug = installedSkillSlugForNode(node);
 
     const hasPendingNewItem =
       (inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder") &&
@@ -506,6 +554,9 @@ function FolderTreeItem(
                 onNewFile={onNewFile}
                 onNewFolder={onNewFolder}
                 onDelete={onDelete}
+                onDeleteSyntheticGroup={onDeleteSyntheticGroup}
+                onAddSkill={onAddSkill}
+                onRemoveSkill={onRemoveSkill}
                 onRename={onRename}
                 onRegenerateMap={onRegenerateMap}
                 onGenerateFolderStructure={onGenerateFolderStructure}
@@ -539,6 +590,25 @@ function FolderTreeItem(
           </FileTreeFolder>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          {canAddSkill ? (
+            <>
+              <ContextMenuItem onSelect={() => onAddSkill?.(node.path)}>
+                Add Skill
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          ) : null}
+          {installedSkillSlug && onRemoveSkill ? (
+            <>
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => onRemoveSkill(node.path, installedSkillSlug)}
+              >
+                Remove Skill
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          ) : null}
           <ContextMenuItem onSelect={() => onNewFile(contextParent)}>
             New File
           </ContextMenuItem>
@@ -581,6 +651,23 @@ function FolderTreeItem(
               </ContextMenuItem>
             </>
           ) : null}
+          {canDeleteSyntheticGroup ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() =>
+                  onDeleteSyntheticGroup?.(
+                    node.path,
+                    node.name,
+                    syntheticFolderPaths,
+                  )
+                }
+              >
+                Delete
+              </ContextMenuItem>
+            </>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
     );
@@ -591,7 +678,7 @@ function FolderTreeItem(
   // affordance for an inherited-template update.
   const updateAvailable = updateAvailableFor(node.path);
   const fileLabel = isRenaming ? <InlineNameInput {...props} /> : node.name;
-  const canRegenerateMap = node.path === "AGENTS.md" && onRegenerateMap;
+  const canRegenerateMap = node.name === "AGENTS.md" && onRegenerateMap;
   const canGenerateFolderStructure =
     node.name === "CONTEXT.md" && onGenerateFolderStructure;
 

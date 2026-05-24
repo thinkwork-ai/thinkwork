@@ -1400,16 +1400,20 @@ None.
 
 ## Unit Ledger
 
-| Unit                                            | Branch                                    | PR                                                           | State      | Notes                                                                                                                                                                                                                                                                         |
-| ----------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Catalog S3 prefix and storage contract       | `codex/pi-skill-catalog-u1-types`         | [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) | Merged     | Squash merged as `60280cad`; remote and local branch removed.                                                                                                                                                                                                                 |
-| U2 Catalog target get/list/put/delete           | `codex/pi-skill-catalog-u2-target`        | [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) | Merged     | Squash merged as `90e3617c`; remote and local branch removed.                                                                                                                                                                                                                 |
-| U3 Catalog seed action                          | `codex/pi-skill-catalog-u3-seed`          | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | Merged     | Squash merged as `180dc7ae`; remote and local branch removed.                                                                                                                                                                                                                 |
-| U4 WorkspaceEditor catalog mode + Skills route  | `codex/pi-skill-catalog-u4-admin-mode`    | [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) | Merged     | Squash merged as `ccf12ae4`; remote and local branch removed.                                                                                                                                                                                                                 |
-| U5 Agent detail tab registration + Tools rename | `codex/pi-skill-catalog-u5-tabs`          | [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) | Merged     | Squash merged as `7c57131f`; remote and local branch removed.                                                                                                                                                                                                                 |
-| U6 WIRING.md parser module                      | `codex/pi-skill-catalog-u6-wiring-md`     | [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) | Merged     | Squash merged as `42f2074b`; remote and local branch removed.                                                                                                                                                                                                                 |
-| U6a Catalog editor root correction              | `codex/pi-skill-catalog-catalog-root-fix` | [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647) | Merged     | Squash merged as `b6f6cd8f`; remote and local branch removed.                                                                                                                                                                                                                 |
-| U7 Install-skill backend action                 | `codex/pi-skill-catalog-u7-install`       | [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) | CI pending | Adding the workspace-files `install-skill` action to copy catalog skills into an agent or Space workspace, append the selected `WIRING.md` snippet to `CONTEXT.md`, refresh agent derived state, and self-seed empty tenant catalogs from bundled repo skills before listing. |
+| Unit                                            | Branch                                    | PR                                                           | State  | Notes                                                                                                                                                                                                                                  |
+| ----------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Catalog S3 prefix and storage contract       | `codex/pi-skill-catalog-u1-types`         | [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) | Merged | Squash merged as `60280cad`; remote and local branch removed.                                                                                                                                                                          |
+| U2 Catalog target get/list/put/delete           | `codex/pi-skill-catalog-u2-target`        | [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) | Merged | Squash merged as `90e3617c`; remote and local branch removed.                                                                                                                                                                          |
+| U3 Catalog seed action                          | `codex/pi-skill-catalog-u3-seed`          | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | Merged | Squash merged as `180dc7ae`; remote and local branch removed.                                                                                                                                                                          |
+| U4 WorkspaceEditor catalog mode + Skills route  | `codex/pi-skill-catalog-u4-admin-mode`    | [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) | Merged | Squash merged as `ccf12ae4`; remote and local branch removed.                                                                                                                                                                          |
+| U5 Agent detail tab registration + Tools rename | `codex/pi-skill-catalog-u5-tabs`          | [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) | Merged | Squash merged as `7c57131f`; remote and local branch removed.                                                                                                                                                                          |
+| U6 WIRING.md parser module                      | `codex/pi-skill-catalog-u6-wiring-md`     | [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) | Merged | Squash merged as `42f2074b`; remote and local branch removed.                                                                                                                                                                          |
+| U6a Catalog editor root correction              | `codex/pi-skill-catalog-catalog-root-fix` | [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647) | Merged | Squash merged as `b6f6cd8f`; remote and local branch removed.                                                                                                                                                                          |
+| U7 Install-skill backend action                 | `codex/pi-skill-catalog-u7-install`       | [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) | Merged | Squash merged as `400809ec`; remote and local branch removed. Added the workspace-files `install-skill` action, agent/Space install support, rollback, and self-seeding empty tenant catalogs from bundled repo skills before listing. |
+| U8 Add Skill dialog component                   | `codex/pi-skill-catalog-u8-dialog`        | [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) | Merged | Squash merged as `d49eccb4`; remote and local branch removed. Added the admin two-step Add Skill dialog, catalog/wiring parsing helpers, and install-skill client wrapper.                                                             |
+| U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | Merged | Squash merged as `3b51ec6e`; remote and local branch removed. Added the `skills/` folder context-menu entry and wired the dialog through agent/Space workspace targets.                                                                |
+| U10 Uninstall-skill backend action              | `codex/pi-skill-catalog-u10-uninstall`    | [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) | Merged | Squash merged as `c81861cd`; remote and local branch removed. Added the symmetric workspace-files `uninstall-skill` action, catalog ref snippet stripping, installed-folder deletion, and agent/Space coverage.                        |
+| U11 FolderTree Remove Skill context menu        | `codex/pi-skill-catalog-u11-remove-menu`  | [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657) | In CI  | Adds the installed-skill folder context-menu affordance and routes folder-delete through `uninstall-skill` when `.catalog-ref.json` marks the folder as catalog-installed.                                                             |
 
 ## Verification Log
 
@@ -1459,6 +1463,31 @@ None.
 - `pnpm exec prettier --check packages/api/src/lib/catalog-install.ts packages/api/src/lib/catalog-install.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
 - `pnpm dlx prettier@3.8.2 --check packages/api/src/lib/catalog-install.ts packages/api/src/lib/catalog-install.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts docs/plans/autopilot-status.md` - passed after formatting touched files.
 - Manual dev recovery: copied 19 non-built-in repo skills from `packages/skill-catalog` to `s3://thinkwork-dev-storage/tenants/sleek-squirrel-230/skill-catalog/`; skipped built-in `agent-email-send` and `web-search`; verified the tenant catalog now lists 19 top-level skill folders and `finance-audit-xls` includes `SKILL.md`, `README.md`, `LICENSE-NOTES.md`, and `WIRING.md`.
+- U7 PR checks passed on [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/AddSkillDialog.test.tsx src/lib/__tests__/workspace-files-api.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
+- `pnpm dlx prettier@3.8.2 --check apps/admin/src/components/agent-builder/AddSkillDialog.tsx apps/admin/src/components/agent-builder/AddSkillDialog.test.tsx apps/admin/src/lib/workspace-files-api.ts apps/admin/src/lib/agent-builder-api.ts apps/admin/src/lib/__tests__/workspace-files-api.test.ts docs/plans/autopilot-status.md` - passed.
+- `git diff --check` - passed.
+- U8 PR checks passed on [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/FolderTree.test.ts src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm dlx prettier@3.8.2 --check apps/admin/src/components/agent-builder/FolderTree.tsx apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/FolderTree.test.ts apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - passed.
+- `git diff --check` - passed.
+- U9 PR checks passed on [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/api test -- src/lib/catalog-uninstall.test.ts src/__tests__/workspace-files-handler.test.ts` - passed.
+- `pnpm --filter @thinkwork/api test` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `bash scripts/build-lambdas.sh workspace-files` - passed.
+- `pnpm dlx prettier@3.8.2 --check packages/api/src/lib/catalog-uninstall.ts packages/api/src/lib/catalog-uninstall.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts docs/plans/autopilot-status.md` - passed after formatting touched files.
+- `git diff --check` - passed.
+- U10 PR checks passed on [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/FolderTree.test.ts src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts src/lib/__tests__/workspace-files-api.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
+- `pnpm dlx prettier@3.8.2 --check apps/admin/src/lib/workspace-files-api.ts apps/admin/src/lib/agent-builder-api.ts apps/admin/src/lib/__tests__/workspace-files-api.test.ts apps/admin/src/components/agent-builder/FolderTree.tsx apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/FolderTree.test.ts apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - passed after formatting touched files.
+- `git diff --check` - passed.
 
 ## CI / PR
 
@@ -1477,6 +1506,46 @@ None.
 - Opened [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647).
 - Squash merged [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647) as `b6f6cd8ff313733b1a87cda150a008d41cbb0cf2`.
 - Opened [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649).
+- Squash merged [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) as `400809ec37f2e4687d858395bfd992b3f4b6dae3`.
+- Opened [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653).
+- Squash merged [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) as `d49eccb473f86599ec584c1921219fda0bf2209b`.
+- Opened [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655).
+- Squash merged [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) as `3b51ec6e16cc753887d8b27fd682ff1240b75cf4`.
+- Opened [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656).
+- Squash merged [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) as `c81861cda4ecfe7b42a6a4da5dbb2a42bcf6d9e0`.
+- Started U11 in `.Codex/worktrees/pi-skill-catalog-u11-remove-menu` on branch `codex/pi-skill-catalog-u11-remove-menu`.
+- Opened [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657).
+
+## Blockers
+
+None.
+
+# Editor-Driven AGENTS.md Regenerate Map Follow-Ups - 2026-05-24
+
+## Status
+
+- Branch: `codex/nested-agents-md-regenerate`
+- Prior merged unit: [#1630](https://github.com/thinkwork-ai/thinkwork/pull/1630) (`feat: add AGENTS.md regenerate map menu`) merged to `main` as `72bd084d`.
+- Current unit:
+  - Allow `Regenerate Map` on nested `AGENTS.md` files and scope generated folder trees to the selected folder downward.
+  - Allow deleting the synthetic `agents/` tree group by deleting the real routed folders beneath it and removing their root AGENTS.md routing rows.
+  - Make derived AGENTS.md section refreshes idempotent so `## Folder Structure` and `## Skills & Tools` do not accumulate blank lines on repeated writes or manual regeneration.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts src/__tests__/workspace-files-handler.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/FolderTree.test.ts src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts src/lib/__tests__/workspace-files-api.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing Vite sourcemap and large-chunk warnings.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm --filter @thinkwork/api test` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Opened [#1651](https://github.com/thinkwork-ai/thinkwork/pull/1651).
+- GitHub PR checks on [#1651](https://github.com/thinkwork-ai/thinkwork/pull/1651) passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged [#1651](https://github.com/thinkwork-ai/thinkwork/pull/1651) as `2efd0537f64c7d7cfc9afc7ed26d21c89f6c76bf`; remote branch removed by GitHub auto-merge.
 
 ## Blockers
 

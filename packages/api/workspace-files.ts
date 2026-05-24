@@ -22,8 +22,9 @@
  *   list → { ok: true, files: Array<{ path, source, sha256, overridden }> }
  *   put  → { ok: true }
  *   delete → { ok: true }
+ *   install-skill / uninstall-skill → { ok: true, ... }
  *   generate-folder-structure → { ok: true }
- *   regenerate-map → { ok: true }
+ *   regenerate-map → { ok: true } (optional path scopes refresh to that AGENTS.md)
  *   normalize-map → { ok: true }
  *   errors → { ok: false, error }
  *
@@ -94,6 +95,10 @@ import {
   CatalogInstallError,
   installCatalogSkill,
 } from "./src/lib/catalog-install.js";
+import {
+  CatalogUninstallError,
+  uninstallCatalogSkill,
+} from "./src/lib/catalog-uninstall.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -479,6 +484,7 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "install-skill",
+  "uninstall-skill",
   "catalog-seed",
   "generate-folder-structure",
   "regenerate-map",
@@ -1557,6 +1563,71 @@ async function handleInstallSkill(
   }
 }
 
+async function handleUninstallSkill(
+  deps: HandlerDeps,
+  slug: string,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "agent" && target.kind !== "space") {
+    return json(400, {
+      ok: false,
+      error: "uninstall-skill requires an agent or space target",
+      code: "unsupported_target",
+    });
+  }
+
+  let result;
+  try {
+    result = await uninstallCatalogSkill({
+      s3,
+      bucket: bucket(),
+      targetPrefix: target.prefix,
+      slug,
+    });
+  } catch (err) {
+    if (err instanceof CatalogUninstallError) {
+      return json(err.status, {
+        ok: false,
+        error: err.message,
+        code: err.code,
+      });
+    }
+    throw err;
+  }
+
+  if (target.kind !== "agent") {
+    return json(200, result);
+  }
+
+  await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+  try {
+    const deriveResult = await deriveAgentSkills({ tenantId }, target.agentId);
+    const summary =
+      `agent=${target.agentId} skill_paths=${deriveResult.agentsMdPathsScanned.length} ` +
+      `changed=${deriveResult.changed} added=${deriveResult.addedSlugs.join(",") || "-"} ` +
+      `removed=${deriveResult.removedSlugs.join(",") || "-"}`;
+    console.log(`[derive-agent-skills] uninstall-skill ${summary}`);
+    const refreshError = await refreshAgentAgentsMdSections(
+      target,
+      "uninstall-skill",
+    );
+    if (refreshError) return refreshError;
+    return json(200, {
+      ...result,
+      ...(deriveResult.warnings.length > 0
+        ? { deriveWarnings: deriveResult.warnings }
+        : {}),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[derive-agent-skills] uninstall-skill failed: ${message}`);
+    return json(500, {
+      ok: false,
+      error: "Skill uninstalled but agent_skills derive failed: " + message,
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // `move` action — atomic copy + delete, single-file in this unit
 // ---------------------------------------------------------------------------
@@ -2406,12 +2477,34 @@ async function handleUpdateIdentityField(
 
 async function handleRegenerateMap(
   deps: HandlerDeps,
+  path?: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
   if (target.kind !== "agent") {
     return json(400, { ok: false, error: "regenerate-map requires agentId" });
   }
-  await regenerateAgentsMdDerivedSections(target.agentId);
+  let agentsMdPath: string | undefined;
+  if (path !== undefined) {
+    try {
+      agentsMdPath = normalizeWorkspacePath(path);
+    } catch (err) {
+      return json(400, {
+        ok: false,
+        error: err instanceof Error ? err.message : "Invalid AGENTS.md path",
+      });
+    }
+    if (!agentsMdPath.endsWith("/AGENTS.md") && agentsMdPath !== "AGENTS.md") {
+      return json(400, {
+        ok: false,
+        error: "regenerate-map path must point to an AGENTS.md file",
+      });
+    }
+  }
+  if (agentsMdPath === undefined) {
+    await regenerateAgentsMdDerivedSections(target.agentId);
+  } else {
+    await regenerateAgentsMdDerivedSections(target.agentId, agentsMdPath);
+  }
   return json(200, { ok: true });
 }
 
@@ -2703,6 +2796,15 @@ export async function handler(
         }
         return await handleInstallSkill(deps, body.slug, body.wiring_choice);
       }
+      case "uninstall-skill": {
+        if (!body.slug) {
+          return json(400, {
+            ok: false,
+            error: "slug is required for uninstall-skill",
+          });
+        }
+        return await handleUninstallSkill(deps, body.slug);
+      }
       case "delete": {
         if (!body.path)
           return json(400, { ok: false, error: "path is required for delete" });
@@ -2741,7 +2843,13 @@ export async function handler(
         return await handleRename(deps, body.fromPath, body.toPath);
       }
       case "regenerate-map":
-        return await handleRegenerateMap(deps);
+        if (body.path !== undefined && typeof body.path !== "string") {
+          return json(400, {
+            ok: false,
+            error: "path must be a string for regenerate-map",
+          });
+        }
+        return await handleRegenerateMap(deps, body.path);
       case "generate-folder-structure": {
         if (!body.path) {
           return json(400, {
