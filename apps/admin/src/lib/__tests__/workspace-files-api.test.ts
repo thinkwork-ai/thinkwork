@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { moveWorkspaceFile } from "../workspace-files-api";
+import { moveWorkspaceFile, renameWorkspacePath } from "../workspace-files-api";
 
 // Mock @/lib/auth so we don't need a real Cognito token in unit tests.
 vi.mock("@/lib/auth", () => ({
@@ -27,7 +27,11 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
   }
 
   it("posts action=move with the target + fromPath + toFolder", async () => {
-    mockOk({ destPath: "memory/notes.md", movedCount: 1, detachedPinnedCount: 0 });
+    mockOk({
+      destPath: "memory/notes.md",
+      movedCount: 1,
+      detachedPinnedCount: 0,
+    });
 
     const result = await moveWorkspaceFile(
       { agentId: "agent-abc" },
@@ -55,11 +59,7 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
   it("supports empty toFolder for moving to the workspace root", async () => {
     mockOk({ destPath: "log.md", movedCount: 1, detachedPinnedCount: 0 });
 
-    await moveWorkspaceFile(
-      { spaceId: "space-eng" },
-      "events/log.md",
-      "",
-    );
+    await moveWorkspaceFile({ spaceId: "space-eng" }, "events/log.md", "");
 
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
       .calls[0];
@@ -73,11 +73,40 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
       ok: false,
       status: 400,
       statusText: "Bad Request",
-      json: async () => ({ ok: false, error: "Source and destination are identical" }),
+      json: async () => ({
+        ok: false,
+        error: "Source and destination are identical",
+      }),
     });
 
     await expect(
       moveWorkspaceFile({ agentId: "agent-abc" }, "notes.md", ""),
     ).rejects.toThrow(/Source and destination/);
+  });
+
+  it("posts action=rename with exact fromPath and toPath", async () => {
+    mockOk({ destPath: "ideas.md", movedCount: 1, detachedPinnedCount: 0 });
+
+    const result = await renameWorkspacePath(
+      { agentId: "agent-abc" },
+      "notes.md",
+      "ideas.md",
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({
+      action: "rename",
+      agentId: "agent-abc",
+      fromPath: "notes.md",
+      toPath: "ideas.md",
+    });
+    expect(result).toMatchObject({
+      destPath: "ideas.md",
+      movedCount: 1,
+      detachedPinnedCount: 0,
+    });
   });
 });

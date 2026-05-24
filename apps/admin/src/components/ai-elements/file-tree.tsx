@@ -168,6 +168,11 @@ export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
    */
   trailing?: ReactNode;
   /**
+   * Local extension: inline editor rendered in place of the label button
+   * content while a row is being renamed.
+   */
+  editingName?: ReactNode;
+  /**
    * Local extension: when true, substitute the folder icon with a spinning
    * loader to signal an in-flight delete or move targeting this node.
    * Other interactions on the rest of the tree remain responsive.
@@ -188,6 +193,7 @@ export const FileTreeFolder = ({
   className,
   children,
   trailing,
+  editingName,
   isMutating,
   isCut,
   ...props
@@ -211,10 +217,10 @@ export const FileTreeFolder = ({
     data: { kind: "folder" as const, path },
   });
 
-  const expandCallback = useCallback(() => togglePath(path), [
-    togglePath,
-    path,
-  ]);
+  const expandCallback = useCallback(
+    () => togglePath(path),
+    [togglePath, path],
+  );
   useAutoExpandOnHover({
     isOver: drop.isOver,
     expanded: isExpanded,
@@ -265,7 +271,8 @@ export const FileTreeFolder = ({
             className={cn(
               "flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
               isSelected && "bg-muted",
-              isCut && "border border-dashed border-muted-foreground/40 opacity-50",
+              isCut &&
+                "border border-dashed border-muted-foreground/40 opacity-50",
               drop.isOver && "ring-2 ring-blue-500",
               drag.isDragging && "opacity-50",
             )}
@@ -283,22 +290,37 @@ export const FileTreeFolder = ({
                 />
               </button>
             </CollapsibleTrigger>
-            <button
-              className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left"
-              onClick={handleSelect}
-              type="button"
-            >
-              <FileTreeIcon>
-                {isMutating ? (
-                  <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
-                ) : isExpanded ? (
-                  <FolderOpenIcon className="size-4 text-blue-500" />
-                ) : (
-                  <FolderIcon className="size-4 text-blue-500" />
-                )}
-              </FileTreeIcon>
-              <FileTreeName>{name}</FileTreeName>
-            </button>
+            {editingName ? (
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <FileTreeIcon>
+                  {isMutating ? (
+                    <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+                  ) : isExpanded ? (
+                    <FolderOpenIcon className="size-4 text-blue-500" />
+                  ) : (
+                    <FolderIcon className="size-4 text-blue-500" />
+                  )}
+                </FileTreeIcon>
+                {editingName}
+              </div>
+            ) : (
+              <button
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left"
+                onClick={handleSelect}
+                type="button"
+              >
+                <FileTreeIcon>
+                  {isMutating ? (
+                    <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+                  ) : isExpanded ? (
+                    <FolderOpenIcon className="size-4 text-blue-500" />
+                  ) : (
+                    <FolderIcon className="size-4 text-blue-500" />
+                  )}
+                </FileTreeIcon>
+                <FileTreeName>{name}</FileTreeName>
+              </button>
+            )}
             {trailing ? trailing : null}
           </div>
           <CollapsibleContent>
@@ -378,7 +400,7 @@ export const FileTreeFile = ({
   const resolvedIcon = isMutating ? (
     <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
   ) : (
-    icon ?? <FileIcon className="size-4 text-muted-foreground" />
+    (icon ?? <FileIcon className="size-4 text-muted-foreground" />)
   );
 
   const dragStyle = drag.transform
@@ -409,7 +431,8 @@ export const FileTreeFile = ({
           className={cn(
             "flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
             isSelected && "bg-muted",
-            isCut && "border border-dashed border-muted-foreground/40 opacity-50",
+            isCut &&
+              "border border-dashed border-muted-foreground/40 opacity-50",
             drag.isDragging && "opacity-50",
           )}
           onClick={handleClick}

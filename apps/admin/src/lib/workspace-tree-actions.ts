@@ -98,3 +98,55 @@ export function parentFolderOf(path: string): string {
   const idx = path.lastIndexOf("/");
   return idx === -1 ? "" : path.slice(0, idx);
 }
+
+export function basenameOf(path: string): string {
+  const normalized = normalizeFolderPath(path);
+  const idx = normalized.lastIndexOf("/");
+  return idx === -1 ? normalized : normalized.slice(idx + 1);
+}
+
+export function joinFolderPath(parentPath: string, basename: string): string {
+  const parent = normalizeFolderPath(parentPath);
+  const name = basename.trim();
+  return parent ? `${parent}/${name}` : name;
+}
+
+export function replacePathPrefix(
+  path: string,
+  fromPath: string,
+  toPath: string,
+): string {
+  const from = normalizeFolderPath(fromPath);
+  const to = normalizeFolderPath(toPath);
+  if (path === from) return to;
+  if (path.startsWith(`${from}/`)) {
+    return `${to}/${path.slice(from.length + 1)}`;
+  }
+  return path;
+}
+
+export interface InlineBasenameValidationResult {
+  valid: boolean;
+  basename: string;
+  error?: string;
+}
+
+export function validateInlineBasename(
+  value: string,
+): InlineBasenameValidationResult {
+  const basename = value.trim();
+  if (!basename) {
+    return { valid: false, basename, error: "Enter a name." };
+  }
+  if (basename === "." || basename === "..") {
+    return { valid: false, basename, error: "Choose a different name." };
+  }
+  if (basename.includes("/") || basename.includes("\\")) {
+    return {
+      valid: false,
+      basename,
+      error: "Use a name, not a path.",
+    };
+  }
+  return { valid: true, basename };
+}

@@ -88,4 +88,20 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/AlertDialogTitle/);
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
   });
+
+  it("uses inline tree editing for new files and rename", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(/inlineEdit/);
+    expect(editorSource).toMatch(/startNewFile/);
+    expect(editorSource).toMatch(/startRename/);
+    expect(editorSource).toMatch(/onRename=\{startRename\}/);
+    expect(editorSource).toMatch(/renamePath/);
+    expect(editorSource).toMatch(/replacePathPrefix/);
+    expect(editorSource).not.toMatch(/showNewFileDialog/);
+    expect(editorSource).not.toMatch(/<DialogTitle>New File<\/DialogTitle>/);
+  });
 });

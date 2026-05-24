@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildWorkspaceTree, subAgentsNodePath } from "../FolderTree";
 
@@ -81,5 +82,18 @@ describe("buildWorkspaceTree", () => {
     );
 
     expect(tree.map((node) => node.path)).toEqual(["memory", "skills"]);
+  });
+
+  it("contains inline rename and pending new-file row affordances", () => {
+    const source = readFileSync(
+      new URL("../FolderTree.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toMatch(/onRename/);
+    expect(source).toMatch(/Rename/);
+    expect(source).toMatch(/InlineNameInput/);
+    expect(source).toMatch(/PendingInlineFile/);
+    expect(source).toMatch(/onInlineEditCommit/);
   });
 });

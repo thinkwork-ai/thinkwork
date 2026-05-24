@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Loader2Icon } from "lucide-react";
 import {
   DndContext,
@@ -185,6 +185,11 @@ export interface FolderTreeProps {
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
+  onRename?: (path: string, kind: "file" | "folder") => void;
+  inlineEdit?: InlineEditState | null;
+  onInlineEditChange?: (value: string) => void;
+  onInlineEditCommit?: () => void;
+  onInlineEditCancel?: () => void;
   /**
    * Optional clipboard wiring. When provided, file + folder context
    * menus show a "Cut" item, and folder + root context menus show
@@ -204,6 +209,23 @@ export interface FolderTreeProps {
   onDropMove?: (sourcePath: string, toFolder: string) => void;
 }
 
+export type InlineEditState =
+  | {
+      mode: "rename";
+      path: string;
+      kind: "file" | "folder";
+      value: string;
+      error?: string;
+      committing?: boolean;
+    }
+  | {
+      mode: "new-file";
+      parentPath: string;
+      value: string;
+      error?: string;
+      committing?: boolean;
+    };
+
 const ROOT_DROPPABLE_ID = "__root__";
 
 export function FolderTree(props: FolderTreeProps) {
@@ -219,6 +241,7 @@ export function FolderTree(props: FolderTreeProps) {
     onNewFile,
     onNewFolder,
     onDropMove,
+    inlineEdit,
   } = props;
 
   // Collect the set of folder paths so the AI Elements onSelect callback
@@ -249,13 +272,22 @@ export function FolderTree(props: FolderTreeProps) {
     [onDropMove],
   );
 
-  if (nodes.length === 0) {
+  const rootPendingFile =
+    inlineEdit?.mode === "new-file" && inlineEdit.parentPath === "" ? (
+      <PendingInlineFile key="__pending-root-file" {...props} />
+    ) : null;
+
+  if (nodes.length === 0 && !rootPendingFile) {
     // Render the empty state inside a context-menu trigger too so the
     // operator can paste / create at the workspace root even when the
     // tree is currently empty. Wrap in DndContext so dropping onto the
     // root drop zone still works.
     return (
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <RootDropZone>
@@ -297,7 +329,11 @@ export function FolderTree(props: FolderTreeProps) {
   };
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <RootDropZone>
@@ -311,6 +347,7 @@ export function FolderTree(props: FolderTreeProps) {
               {nodes.map((node) => (
                 <FolderTreeItem key={node.path} node={node} {...props} />
               ))}
+              {rootPendingFile}
             </FileTree>
           </RootDropZone>
         </ContextMenuTrigger>
@@ -383,9 +420,7 @@ function RootContextMenu({
       {clipboardItem && onPaste ? (
         <>
           <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => onPaste("")}>
-            Paste
-          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => onPaste("")}>Paste</ContextMenuItem>
           {onClearClipboard ? (
             <ContextMenuItem onSelect={onClearClipboard}>
               Clear clipboard
@@ -397,27 +432,34 @@ function RootContextMenu({
   );
 }
 
-function FolderTreeItem({
-  node,
-  selectedPath,
-  expandedFolders,
-  mutatingPaths,
-  clipboardItem,
-  sourceFor,
-  updateAvailableFor,
-  onAcceptUpdate,
-  onNewFile,
-  onNewFolder,
-  onDelete,
-  onCut,
-  onPaste,
-  onClearClipboard,
-}: FolderTreeProps & {
-  node: TreeNode;
-}) {
+function FolderTreeItem(
+  props: FolderTreeProps & {
+    node: TreeNode;
+  },
+) {
+  const {
+    node,
+    selectedPath,
+    expandedFolders,
+    mutatingPaths,
+    clipboardItem,
+    sourceFor,
+    updateAvailableFor,
+    onAcceptUpdate,
+    onNewFile,
+    onNewFolder,
+    onDelete,
+    onRename,
+    onCut,
+    onPaste,
+    onClearClipboard,
+    inlineEdit,
+  } = props;
   const isMutating = mutatingPaths?.has(node.path) ?? false;
   const isCut = clipboardItem?.path === node.path;
   const clipboardActive = Boolean(clipboardItem);
+  const isRenaming =
+    inlineEdit?.mode === "rename" && inlineEdit.path === node.path;
 
   if (node.isFolder) {
     // Synthetic agents/ group is a virtual UI grouping, not a real folder —
@@ -428,12 +470,18 @@ function FolderTreeItem({
     const contextParent = node.synthetic ? "" : node.path;
     const canMutate = !node.synthetic && !node.missing;
 
+    const hasPendingNewFile =
+      inlineEdit?.mode === "new-file" && inlineEdit.parentPath === node.path;
+
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <FileTreeFolder
             path={node.path}
             name={renderFolderLabel(node)}
+            editingName={
+              isRenaming ? <InlineNameInput {...props} /> : undefined
+            }
             isMutating={isMutating}
             isCut={isCut}
           >
@@ -453,17 +501,23 @@ function FolderTreeItem({
                 onNewFile={onNewFile}
                 onNewFolder={onNewFolder}
                 onDelete={onDelete}
+                onRename={onRename}
                 onCut={onCut}
                 onPaste={onPaste}
                 onClearClipboard={onClearClipboard}
+                inlineEdit={props.inlineEdit}
+                onInlineEditChange={props.onInlineEditChange}
+                onInlineEditCommit={props.onInlineEditCommit}
+                onInlineEditCancel={props.onInlineEditCancel}
                 nodes={[]}
               />
             ))}
+            {hasPendingNewFile ? <PendingInlineFile {...props} /> : null}
             {node.synthetic && node.children.length === 0 ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">
                 Route specialist folders from AGENTS.md.
               </div>
-            ) : node.children.length === 0 ? (
+            ) : node.children.length === 0 && !hasPendingNewFile ? (
               <div className="px-2 py-1 text-xs italic text-muted-foreground">
                 Empty folder
               </div>
@@ -477,14 +531,19 @@ function FolderTreeItem({
           <ContextMenuItem onSelect={() => onNewFolder(contextParent)}>
             New Folder
           </ContextMenuItem>
-          {canMutate && onCut ? (
+          {canMutate && (onRename || onCut) ? (
             <>
               <ContextMenuSeparator />
-              <ContextMenuItem
-                onSelect={() => onCut(node.path, "folder")}
-              >
-                Cut
-              </ContextMenuItem>
+              {onRename ? (
+                <ContextMenuItem onSelect={() => onRename(node.path, "folder")}>
+                  Rename
+                </ContextMenuItem>
+              ) : null}
+              {onCut ? (
+                <ContextMenuItem onSelect={() => onCut(node.path, "folder")}>
+                  Cut
+                </ContextMenuItem>
+              ) : null}
             </>
           ) : null}
           {clipboardActive && onPaste && !node.synthetic ? (
@@ -517,43 +576,45 @@ function FolderTreeItem({
   // primitive renders the default file row unless we need a Review
   // affordance for an inherited-template update.
   const updateAvailable = updateAvailableFor(node.path);
+  const fileLabel = isRenaming ? <InlineNameInput {...props} /> : node.name;
 
-  const fileRow = updateAvailable ? (
-    <FileTreeFile
-      path={node.path}
-      name={node.name}
-      isMutating={isMutating}
-      isCut={isCut}
-    >
-      <span className="size-4 shrink-0" />
-      <FileGlyph isMutating={isMutating} />
-      <span className="min-w-0 flex-1 truncate">{node.name}</span>
-      <FileTreeActions>
-        <InheritanceIndicator
-          source={sourceFor(node.path)}
-          updateAvailable={updateAvailable}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-5 px-1.5 text-[10px] text-amber-500"
-          onClick={(event) => {
-            event.stopPropagation();
-            onAcceptUpdate(node.path);
-          }}
-        >
-          Review
-        </Button>
-      </FileTreeActions>
-    </FileTreeFile>
-  ) : (
-    <FileTreeFile
-      path={node.path}
-      name={node.name}
-      isMutating={isMutating}
-      isCut={isCut}
-    />
-  );
+  const fileRow =
+    updateAvailable && !isRenaming ? (
+      <FileTreeFile
+        path={node.path}
+        name={node.name}
+        isMutating={isMutating}
+        isCut={isCut}
+      >
+        <span className="size-4 shrink-0" />
+        <FileGlyph isMutating={isMutating} />
+        <span className="min-w-0 flex-1 truncate">{fileLabel}</span>
+        <FileTreeActions>
+          <InheritanceIndicator
+            source={sourceFor(node.path)}
+            updateAvailable={updateAvailable}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 px-1.5 text-[10px] text-amber-500"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAcceptUpdate(node.path);
+            }}
+          >
+            Review
+          </Button>
+        </FileTreeActions>
+      </FileTreeFile>
+    ) : (
+      <FileTreeFile
+        path={node.path}
+        name={fileLabel}
+        isMutating={isMutating}
+        isCut={isCut}
+      />
+    );
 
   return (
     <ContextMenu>
@@ -562,6 +623,11 @@ function FolderTreeItem({
         {onCut ? (
           <ContextMenuItem onSelect={() => onCut(node.path, "file")}>
             Cut
+          </ContextMenuItem>
+        ) : null}
+        {onRename ? (
+          <ContextMenuItem onSelect={() => onRename(node.path, "file")}>
+            Rename
           </ContextMenuItem>
         ) : null}
         {clipboardActive && onClearClipboard ? (
@@ -578,6 +644,78 @@ function FolderTreeItem({
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+function PendingInlineFile(props: FolderTreeProps) {
+  const parent =
+    props.inlineEdit?.mode === "new-file" ? props.inlineEdit.parentPath : "";
+  return (
+    <FileTreeFile
+      path={`__pending-new-file__/${parent || "root"}`}
+      name={<InlineNameInput {...props} />}
+      isMutating={props.inlineEdit?.committing}
+    />
+  );
+}
+
+function InlineNameInput({
+  inlineEdit,
+  onInlineEditChange,
+  onInlineEditCommit,
+  onInlineEditCancel,
+}: FolderTreeProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suppressBlurCommitRef = useRef(false);
+  const editKey =
+    inlineEdit?.mode === "rename"
+      ? inlineEdit.path
+      : inlineEdit?.mode === "new-file"
+        ? inlineEdit.parentPath
+        : "";
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [inlineEdit?.mode, editKey]);
+
+  if (!inlineEdit) return null;
+
+  return (
+    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <input
+        ref={inputRef}
+        className="h-6 min-w-0 rounded-sm border border-ring bg-background px-1.5 py-0 text-xs text-foreground outline-none"
+        value={inlineEdit.value}
+        disabled={inlineEdit.committing}
+        onChange={(event) => onInlineEditChange?.(event.target.value)}
+        onBlur={() => {
+          if (suppressBlurCommitRef.current) return;
+          onInlineEditCommit?.();
+        }}
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            suppressBlurCommitRef.current = false;
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            suppressBlurCommitRef.current = true;
+            onInlineEditCancel?.();
+          }
+        }}
+      />
+      {inlineEdit.error ? (
+        <span className="truncate text-[10px] text-destructive">
+          {inlineEdit.error}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

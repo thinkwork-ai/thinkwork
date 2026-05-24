@@ -41,8 +41,20 @@ import { cn } from "@/lib/utils";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { toast } from "sonner";
 import { FileEditorPane } from "./FileEditorPane";
-import { FolderTree, buildWorkspaceTree } from "./FolderTree";
-import { shouldEmitDetachToast } from "@/lib/workspace-tree-actions";
+import {
+  FolderTree,
+  buildWorkspaceTree,
+  type InlineEditState,
+} from "./FolderTree";
+import {
+  basenameOf,
+  joinFolderPath,
+  parentFolderOf,
+  pathIsWithinFolder,
+  replacePathPrefix,
+  shouldEmitDetachToast,
+  validateInlineBasename,
+} from "@/lib/workspace-tree-actions";
 import { parseRoutingTable, type RoutingRow } from "./routing-table";
 
 export interface ClipboardItem {
@@ -157,9 +169,7 @@ export function WorkspaceEditor({
   const [confirmingDeletePath, setConfirmingDeletePath] = useState<
     string | null
   >(null);
-  const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [newFilePath, setNewFilePath] = useState("");
-  const [creatingFile, setCreatingFile] = useState(false);
+  const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [newFolderPath, setNewFolderPath] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -244,6 +254,7 @@ export function WorkspaceEditor({
     setLoadingFiles(true);
     setLoadedFilesOnce(false);
     setRoutingRows([]);
+    setInlineEdit(null);
   }, [key]);
 
   useEffect(() => {
@@ -317,9 +328,10 @@ export function WorkspaceEditor({
 
   // ─── Clipboard handlers (cut / paste) ──────────────────────────────────
 
-  const folderPaths = useMemo(() => collectFolderPathsFromFiles(files), [
-    files,
-  ]);
+  const folderPaths = useMemo(
+    () => collectFolderPathsFromFiles(files),
+    [files],
+  );
   const isFolderPath = useCallback(
     (path: string) => folderPaths.has(path),
     [folderPaths],
@@ -399,9 +411,7 @@ export function WorkspaceEditor({
     //   - If a file is focused: paste at the workspace root (AE7).
     //   - If nothing focused: root.
     const toFolder =
-      focusedTreePath && isFolderPath(focusedTreePath)
-        ? focusedTreePath
-        : "";
+      focusedTreePath && isFolderPath(focusedTreePath) ? focusedTreePath : "";
     void handlePaste(toFolder);
   }, [clipboardItem, focusedTreePath, isFolderPath, handlePaste]);
 
@@ -429,23 +439,6 @@ export function WorkspaceEditor({
     { scopeRef: treeContainerRef },
   );
 
-  const handleCreateFile = async () => {
-    if (!newFilePath.trim()) return;
-    setCreatingFile(true);
-    try {
-      const path = newFilePath.trim();
-      await agentBuilderApi.putFile(stableTarget, path, "");
-      await fetchFiles();
-      await openWorkspaceFile(path);
-      setShowNewFileDialog(false);
-      setNewFilePath("");
-    } catch (err) {
-      console.error("Failed to create file:", err);
-    } finally {
-      setCreatingFile(false);
-    }
-  };
-
   const handleCreateFolder = async () => {
     const raw = newFolderPath.trim().replace(/^\/+|\/+$/g, "");
     if (!raw) return;
@@ -463,14 +456,137 @@ export function WorkspaceEditor({
     }
   };
 
-  const openNewFileDialog = (parentPath?: string) => {
-    setNewFilePath(parentPath ? `${parentPath.replace(/\/$/, "")}/` : "");
-    setShowNewFileDialog(true);
+  const startNewFile = (parentPath?: string) => {
+    const parent = parentPath?.replace(/\/$/, "") ?? "";
+    if (parent) {
+      setExpandedFolders((current) => new Set(current).add(parent));
+    }
+    setFocusedTreePath(parent || null);
+    setInlineEdit({ mode: "new-file", parentPath: parent, value: "" });
   };
 
   const openNewFolderDialog = (parentPath?: string) => {
     setNewFolderPath(parentPath ? `${parentPath.replace(/\/$/, "")}/` : "");
     setShowNewFolderDialog(true);
+  };
+
+  const startRename = (path: string, kind: "file" | "folder") => {
+    if (kind === "folder") {
+      setExpandedFolders((current) => new Set(current).add(path));
+    }
+    setFocusedTreePath(path);
+    setInlineEdit({
+      mode: "rename",
+      path,
+      kind,
+      value: basenameOf(path),
+    });
+  };
+
+  const setInlineEditValue = (value: string) => {
+    setInlineEdit((current) =>
+      current ? { ...current, value, error: undefined } : current,
+    );
+  };
+
+  const cancelInlineEdit = () => setInlineEdit(null);
+
+  const commitInlineEdit = async () => {
+    const current = inlineEdit;
+    if (!current || current.committing) return;
+    const raw = current.value.trim();
+    if (!raw) {
+      setInlineEdit(null);
+      return;
+    }
+    const validation = validateInlineBasename(raw);
+    if (!validation.valid) {
+      setInlineEdit({ ...current, error: validation.error });
+      return;
+    }
+
+    if (current.mode === "new-file") {
+      const path = joinFolderPath(current.parentPath, validation.basename);
+      if (files.includes(path) || folderPaths.has(path)) {
+        setInlineEdit({
+          ...current,
+          error: `A file or folder named ${validation.basename} already exists.`,
+        });
+        return;
+      }
+      setInlineEdit({ ...current, committing: true });
+      beginMutation(path);
+      try {
+        await agentBuilderApi.putFile(stableTarget, path, "");
+        await fetchFiles({ showLoading: false });
+        await openWorkspaceFile(path);
+        setInlineEdit(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to create file:", err);
+        toast.error(`Create file failed: ${message}`);
+        setInlineEdit({ ...current, error: message });
+      } finally {
+        endMutation(path);
+      }
+      return;
+    }
+
+    const toPath = joinFolderPath(
+      parentFolderOf(current.path),
+      validation.basename,
+    );
+    if (toPath === current.path) {
+      setInlineEdit(null);
+      return;
+    }
+    if (files.includes(toPath) || folderPaths.has(toPath)) {
+      setInlineEdit({
+        ...current,
+        error: `A file or folder named ${validation.basename} already exists.`,
+      });
+      return;
+    }
+
+    beginMutation(current.path);
+    setInlineEdit({ ...current, committing: true });
+    try {
+      const result = await agentBuilderApi.renamePath(
+        stableTarget,
+        current.path,
+        toPath,
+      );
+      await fetchFiles({ showLoading: false });
+      const activeOpenFile = openFileRef.current;
+      if (activeOpenFile) {
+        const nextOpen =
+          current.kind === "folder"
+            ? replacePathPrefix(activeOpenFile, current.path, result.destPath)
+            : activeOpenFile === current.path
+              ? result.destPath
+              : activeOpenFile;
+        if (nextOpen !== activeOpenFile) {
+          openFileRef.current = nextOpen;
+          setOpenFile(nextOpen);
+          setFocusedTreePath(nextOpen);
+        }
+      }
+      if (
+        clipboardItem &&
+        (clipboardItem.path === current.path ||
+          pathIsWithinFolder(clipboardItem.path, current.path))
+      ) {
+        setClipboardItem(null);
+      }
+      setInlineEdit(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to rename workspace path:", err);
+      toast.error(`Rename failed: ${message}`);
+      setInlineEdit({ ...current, error: message });
+    } finally {
+      endMutation(current.path);
+    }
   };
 
   const handleSave = async () => {
@@ -557,7 +673,7 @@ export function WorkspaceEditor({
       <DropdownMenuContent align="end" className="min-w-56">
         <DropdownMenuItem
           className="whitespace-nowrap"
-          onClick={() => openNewFileDialog()}
+          onClick={() => startNewFile()}
         >
           <FilePlus className="mr-2 h-4 w-4" />
           New File
@@ -609,11 +725,16 @@ export function WorkspaceEditor({
                 onSelect={openWorkspaceFile}
                 onToggle={toggleFolder}
                 onAcceptUpdate={() => {}}
-                onNewFile={openNewFileDialog}
+                onNewFile={startNewFile}
                 onNewFolder={openNewFolderDialog}
                 onDelete={(path, isFolder) =>
                   setDeleteConfirmTarget({ path, isFolder })
                 }
+                onRename={startRename}
+                inlineEdit={inlineEdit}
+                onInlineEditChange={setInlineEditValue}
+                onInlineEditCommit={commitInlineEdit}
+                onInlineEditCancel={cancelInlineEdit}
                 onCut={handleCut}
                 onPaste={handlePaste}
                 onClearClipboard={clearClipboard}
@@ -653,44 +774,6 @@ export function WorkspaceEditor({
           </div>
         </div>
       )}
-
-      <Dialog open={showNewFileDialog} onOpenChange={setShowNewFileDialog}>
-        <DialogContent style={{ maxWidth: 440 }}>
-          <DialogHeader>
-            <DialogTitle>New File</DialogTitle>
-            <DialogDescription>
-              Enter the file path relative to {surfaceRootLabel}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <Input
-              placeholder="e.g. docs/domain/products.md"
-              value={newFilePath}
-              onChange={(event) => setNewFilePath(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && handleCreateFile()}
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowNewFileDialog(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleCreateFile}
-                disabled={!newFilePath.trim() || creatingFile}
-              >
-                {creatingFile && (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                )}
-                Create
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showNewFolderDialog} onOpenChange={setShowNewFolderDialog}>
         <DialogContent style={{ maxWidth: 440 }}>
