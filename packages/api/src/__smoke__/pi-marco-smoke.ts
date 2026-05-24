@@ -48,6 +48,14 @@ interface PiResponseShape {
 		retained?: boolean;
 		error?: string;
 	};
+	// Plan §006 U4 — proxy-substrate pin. Always present as a boolean
+	// in the runtime's response. True when MCP configs were present
+	// (proxy registered); false otherwise. The smoke asserts the field
+	// SHAPE (typeof === "boolean") so it passes regardless of whether
+	// any scenario carries mcp_configs in PR-1. PR-2 (U5) will add a
+	// sibling `mcp_proxy_used` pin and the MCP-bearing scenarios that
+	// exercise it.
+	mcp_proxy_registered?: boolean;
 	error?: string;
 }
 
@@ -183,6 +191,26 @@ async function invokePi(
 		fail(
 			`[${scenario}] response.content does not match expected fingerprint`,
 			{ content, expected: expectedFingerprint.source, duration_ms: durationMs },
+		);
+	}
+
+	// Plan §006 U4 — MCP proxy substrate pin. The runtime always
+	// surfaces `mcp_proxy_registered` as a boolean on happy-path
+	// responses. A regression that drops the field (e.g., a
+	// response-builder rewrite that forgets to thread
+	// bundle.mcpProxyRegistered through) fails the smoke even
+	// before U5 wires the live proxy body.
+	//
+	// Gated on the prior happy-path assertions (runtime === "pi",
+	// totalTokens > 0, content non-empty) so a version-skew window
+	// where the AgentCore container hasn't promoted yet doesn't
+	// fire this check with confusing dual-failure output — the
+	// upstream "runtime not yet emitting" path is caught by the
+	// totalTokens or content checks first.
+	if (typeof response.mcp_proxy_registered !== "boolean") {
+		fail(
+			`[${scenario}] response.mcp_proxy_registered is ${typeof response.mcp_proxy_registered}, expected boolean — the MCP proxy substrate field is missing or wrong-shaped`,
+			{ full_response: response, duration_ms: durationMs },
 		);
 	}
 

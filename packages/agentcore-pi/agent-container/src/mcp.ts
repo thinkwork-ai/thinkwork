@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { McpToolRegistry } from "./mcp-registry.js";
 
 /**
  * Plan §005 U7 — MCP wiring with handle-shaped Authorization.
@@ -133,6 +134,24 @@ export interface ConnectMcpServerArgs {
   toolWhitelist?: string[];
   /** Optional transport hint. Defaults to streamable-http. */
   transport?: "streamable-http" | "sse";
+  /**
+   * Plan §006 U2/U4 — per-invocation registry the connect path populates
+   * with each whitelist-filtered tool's metadata. The MCP proxy AgentTool
+   * (U3) reads from this registry for its list/search modes; the proxy's
+   * `call` mode (U5) reads from it to validate before dispatching.
+   *
+   * **Security invariant:** registry population happens AFTER the per-server
+   * `toolWhitelist` filter. Tools the operator hid via the whitelist must
+   * not appear in the registry — otherwise the proxy's call mode would be
+   * able to address them. The production factory (`createConnectMcpServer`
+   * in `mcp-connect.ts`) honours this ordering; any alternative connect
+   * implementation must as well.
+   *
+   * Optional so existing tests that pass fakes don't need updating; the
+   * fake simply ignores the field and the new tests in U4 supply their
+   * own fakes that exercise the registry-population path explicitly.
+   */
+  registry?: McpToolRegistry;
 }
 
 /**
@@ -203,6 +222,14 @@ export interface BuildMcpToolsOptions {
    * structured logging here. The other servers continue regardless.
    */
   onConnectError?: ConnectMcpServerErrorFn;
+  /**
+   * Plan §006 U4 — per-invocation registry forwarded to each per-server
+   * `connectMcpServer` call so the production factory can populate it
+   * inside the same toolWhitelist-filter loop that builds the AgentTools.
+   * The proxy AgentTool reads from this registry for list/search/call.
+   * Omit to retain the legacy "AgentTools-only, no registry" behavior.
+   */
+  registry?: McpToolRegistry;
 }
 
 /**
@@ -240,7 +267,13 @@ function normaliseExtraHeaders(
 export async function buildMcpTools(
   options: BuildMcpToolsOptions,
 ): Promise<AgentTool<any>[]> {
-  const { mcpConfigs, handleStore, connectMcpServer, onConnectError } = options;
+  const {
+    mcpConfigs,
+    handleStore,
+    connectMcpServer,
+    onConnectError,
+    registry,
+  } = options;
 
   const tools: AgentTool<any>[] = [];
   for (const config of mcpConfigs) {
@@ -283,6 +316,7 @@ export async function buildMcpTools(
         serverName: config.serverName,
         toolWhitelist: config.toolWhitelist,
         transport: config.transport,
+        registry,
       });
       tools.push(...serverTools);
     } catch (err) {

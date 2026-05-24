@@ -13,6 +13,7 @@ import {
   postFinalizeCallback,
 } from "../src/server.js";
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
+import { McpToolRegistry } from "../src/mcp-registry.js";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 
 // ---------------------------------------------------------------------------
@@ -899,6 +900,8 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
       sessionStoreFactory: () => ({}) as never,
       cleanup: [],
       handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
     });
 
     expect(captured).toHaveLength(1);
@@ -946,6 +949,8 @@ describe("assembleTools — Pi built-in tools", () => {
       sessionStoreFactory: () => ({}) as never,
       cleanup,
       handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
     });
 
     expect(bundle.tools.map((tool) => tool.name)).toContain("execute_code");
@@ -985,6 +990,8 @@ describe("assembleTools — Pi built-in tools", () => {
       sessionStoreFactory: () => ({}) as never,
       cleanup: [],
       handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
     });
 
     expect(bundle.tools.map((tool) => tool.name)).toContain(
@@ -1033,9 +1040,220 @@ describe("assembleTools — Pi built-in tools", () => {
       sessionStoreFactory: () => ({}) as never,
       cleanup: [],
       handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
     });
 
     expect(bundle.tools.map((tool) => tool.name)).toContain("send_email");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan §006 U4 — mcp proxy registration + directTools validation.
+// ---------------------------------------------------------------------------
+
+describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
+  const baseIdentity = {
+    tenantId: "tenant-1",
+    userId: "user-1",
+    agentId: "agent-1",
+    threadId: "thread-1",
+    tenantSlug: "",
+    agentSlug: "",
+    traceId: "",
+  };
+
+  const baseEnv = {
+    awsRegion: "us-east-1",
+    agentCoreMemoryId: "",
+    hindsightEndpoint: "",
+    memoryEngine: "managed" as const,
+    memoryRetainFnName: "",
+    dbClusterArn: "",
+    dbSecretArn: "",
+    dbName: "thinkwork",
+    workspaceBucket: "",
+    workspaceDir: "/tmp/workspace",
+    gitSha: "test",
+  };
+
+  function popOneToolConnect(toolName: string): ConnectMcpServerFn {
+    return async (args) => {
+      args.registry?.register(args.serverName, {
+        tool: toolName,
+        description: `${toolName} description`,
+        inputSchema: { type: "object" },
+      });
+      return [];
+    };
+  }
+
+  it("registers the inert mcp proxy when MCP configs are present", async () => {
+    const registry = new McpToolRegistry();
+    const bundle = await assembleTools({
+      payload: {
+        mcp_configs: [
+          {
+            name: "slack",
+            url: "https://mcp.slack.example/mcp",
+            auth: { token: "FakeBearerForTestFixtureOnly_DoNotEcho" },
+          },
+        ],
+      },
+      identity: baseIdentity,
+      env: baseEnv,
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: popOneToolConnect("search"),
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: registry,
+    });
+    const toolNames = bundle.tools.map((tool) => tool.name);
+    expect(toolNames).toContain("mcp");
+    expect(bundle.mcpProxyRegistered).toBe(true);
+    expect(registry.size).toBe(1);
+    bundle.handleStore.clear();
+  });
+
+  it("does not register the proxy when there are zero validated MCP configs", async () => {
+    const registry = new McpToolRegistry();
+    const bundle = await assembleTools({
+      payload: {},
+      identity: baseIdentity,
+      env: baseEnv,
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: registry,
+    });
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("mcp");
+    expect(bundle.mcpProxyRegistered).toBe(false);
+    bundle.handleStore.clear();
+  });
+
+  it("passes validation when every directTools entry resolves in the live registry", async () => {
+    const registry = new McpToolRegistry();
+    const bundle = await assembleTools({
+      payload: {
+        mcp_configs: [
+          {
+            name: "slack",
+            url: "https://mcp.slack.example/mcp",
+            auth: { token: "FakeBearerForTestFixtureOnly" },
+          },
+        ],
+      },
+      identity: baseIdentity,
+      env: baseEnv,
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: popOneToolConnect("search"),
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: {
+        directTools: [{ server: "slack", tool: "search" }],
+      },
+      mcpRegistry: registry,
+    });
+    expect(bundle.mcpProxyRegistered).toBe(true);
+    bundle.handleStore.clear();
+  });
+
+  it("throws DirectToolsValidationError when a directTools entry references a missing tool", async () => {
+    const registry = new McpToolRegistry();
+    const { DirectToolsValidationError } = await import("../src/server.js");
+    await expect(
+      assembleTools({
+        payload: {
+          mcp_configs: [
+            {
+              name: "slack",
+              url: "https://mcp.slack.example/mcp",
+              auth: { token: "FakeBearerForTestFixtureOnly" },
+            },
+          ],
+        },
+        identity: baseIdentity,
+        env: baseEnv,
+        agentCoreClient: fakeAgentCoreClient() as never,
+        workspaceSkills: [],
+        connectMcpServer: popOneToolConnect("search"),
+        sessionStoreFactory: () => ({}) as never,
+        cleanup: [],
+        handleStore: new HandleStore(),
+        mcpJsonConfig: {
+          directTools: [{ server: "slack", tool: "saerch" }],
+        },
+        mcpRegistry: registry,
+      }),
+    ).rejects.toThrow(DirectToolsValidationError);
+  });
+
+  it("throws when a directTools entry references an unconfigured server", async () => {
+    const registry = new McpToolRegistry();
+    const { DirectToolsValidationError } = await import("../src/server.js");
+    await expect(
+      assembleTools({
+        payload: {
+          mcp_configs: [
+            {
+              name: "slack",
+              url: "https://mcp.slack.example/mcp",
+              auth: { token: "FakeBearerForTestFixtureOnly" },
+            },
+          ],
+        },
+        identity: baseIdentity,
+        env: baseEnv,
+        agentCoreClient: fakeAgentCoreClient() as never,
+        workspaceSkills: [],
+        connectMcpServer: popOneToolConnect("search"),
+        sessionStoreFactory: () => ({}) as never,
+        cleanup: [],
+        handleStore: new HandleStore(),
+        mcpJsonConfig: {
+          directTools: [{ server: "github", tool: "list_repos" }],
+        },
+        mcpRegistry: registry,
+      }),
+    ).rejects.toThrow(/directTools_validation_failed/);
+  });
+
+  it("the inert proxy tool's serialization contains no bearer fixtures", async () => {
+    const registry = new McpToolRegistry();
+    const bundle = await assembleTools({
+      payload: {
+        mcp_configs: [
+          {
+            name: "slack",
+            url: "https://mcp.slack.example/mcp",
+            auth: { token: "FakeBearerForTestFixtureOnly_DoNotEcho" },
+          },
+        ],
+      },
+      identity: baseIdentity,
+      env: baseEnv,
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: popOneToolConnect("search"),
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: registry,
+    });
+    const serialised = JSON.stringify(bundle.tools);
+    expect(serialised).not.toContain("FakeBearerForTestFixtureOnly");
+    expect(serialised).not.toContain("DoNotEcho");
+    bundle.handleStore.clear();
   });
 });
 
