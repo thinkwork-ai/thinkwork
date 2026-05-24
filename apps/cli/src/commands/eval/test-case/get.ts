@@ -25,7 +25,6 @@ export async function runEvalTestCaseGet(
     ["ID", tc.id],
     ["Name", tc.name],
     ["Category", tc.category],
-    ["Agent", tc.agentId ?? "—"],
     ["Source", tc.source],
     ["Enabled", tc.enabled ? "yes" : "no"],
     ["Evaluators", (tc.agentcoreEvaluatorIds ?? []).join(", ") || "—"],

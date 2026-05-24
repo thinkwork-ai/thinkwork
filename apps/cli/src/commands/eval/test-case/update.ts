@@ -10,7 +10,6 @@ interface UpdateOptions extends EvalCliOptions {
   category?: string;
   query?: string;
   systemPrompt?: string;
-  agent?: string;
   evaluator?: string[];
   tag?: string[];
   enabled?: boolean;
@@ -28,7 +27,6 @@ export async function runEvalTestCaseUpdate(
   if (opts.category !== undefined) input.category = opts.category;
   if (opts.query !== undefined) input.query = opts.query;
   if (opts.systemPrompt !== undefined) input.systemPrompt = opts.systemPrompt;
-  if (opts.agent !== undefined) input.agentId = opts.agent;
   if (opts.evaluator !== undefined)
     input.agentcoreEvaluatorIds = opts.evaluator;
   if (opts.tag !== undefined) input.tags = opts.tag;
