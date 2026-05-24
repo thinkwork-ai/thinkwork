@@ -532,8 +532,19 @@ export async function assembleTools(
     if (sendEmailTool) tools.push(sendEmailTool);
   }
 
-  // Memory (U6) — engine selector lives in env.
-  if (args.env.memoryEngine === "managed") {
+  // Memory (U6) — engine selector lives in env. Eval-mode invocations are
+  // user-less by construction, so user-scoped memory + hindsight tools are
+  // skipped entirely (matching `eval_tools_enabled: false` semantics in the
+  // direct AgentCore eval payload).
+  const evalMode = args.payload.eval_mode === true;
+  if (evalMode) {
+    logStructured({
+      level: "info",
+      event: "memory_skipped_eval_mode",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
+  } else if (args.env.memoryEngine === "managed") {
     if (args.env.agentCoreMemoryId) {
       tools.push(
         ...buildMemoryTools({

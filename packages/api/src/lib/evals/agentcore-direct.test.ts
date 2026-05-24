@@ -77,6 +77,21 @@ describe("direct AgentCore eval payload", () => {
     expect(payload.model).toBe("us.anthropic.claude-haiku-4-5");
     expect(payload.system_prompt).toBe("Case prompt");
   });
+
+  it("does not pass a user_id for eval invocations (evals are user-less; Pi accepts this when eval_mode=true)", () => {
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "hello",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig,
+    });
+
+    expect(payload.eval_mode).toBe(true);
+    expect(payload.user_id).toBeUndefined();
+  });
 });
 
 describe("direct AgentCore eval helpers", () => {
