@@ -1407,7 +1407,7 @@ None.
 | U3 Catalog seed action | `codex/pi-skill-catalog-u3-seed` | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | Merged | Squash merged as `180dc7ae`; remote and local branch removed. |
 | U4 WorkspaceEditor catalog mode + Skills route | `codex/pi-skill-catalog-u4-admin-mode` | [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) | Merged | Squash merged as `ccf12ae4`; remote and local branch removed. |
 | U5 Agent detail tab registration + Tools rename | `codex/pi-skill-catalog-u5-tabs` | [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) | Merged | Squash merged as `7c57131f`; remote and local branch removed. |
-| U6 WIRING.md parser module | `codex/pi-skill-catalog-u6-wiring-md` | Pending | In progress | Added dependency-free parser/renderer for H2 `context-md` wiring suggestions with warning coverage. |
+| U6 WIRING.md parser module | `codex/pi-skill-catalog-u6-wiring-md` | [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) | PR open | Added dependency-free parser/renderer for H2 `context-md` wiring suggestions with warning coverage. |
 
 ## Verification Log
 
@@ -1456,6 +1456,7 @@ None.
 - Squash merged [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) as `ccf12ae4d18c5cae46e36d35faad1157324437b6`.
 - Opened [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645).
 - Squash merged [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) as `7c57131f6132904c77dd1335e4e50e0fbaca7605`.
+- Opened [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646).
 
 ## Blockers
 
