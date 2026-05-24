@@ -1405,7 +1405,7 @@ None.
 | U1 Catalog S3 prefix and storage contract | `codex/pi-skill-catalog-u1-types` | [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) | Merged | Squash merged as `60280cad`; remote and local branch removed. |
 | U2 Catalog target get/list/put/delete | `codex/pi-skill-catalog-u2-target` | [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) | Merged | Squash merged as `90e3617c`; remote and local branch removed. |
 | U3 Catalog seed action | `codex/pi-skill-catalog-u3-seed` | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | Merged | Squash merged as `180dc7ae`; remote and local branch removed. |
-| U4 WorkspaceEditor catalog mode + Skills route | `codex/pi-skill-catalog-u4-admin-mode` | Pending | In progress | Added catalog target wiring, WorkspaceEditor catalog mode, Skills tab route, and focused admin tests. |
+| U4 WorkspaceEditor catalog mode + Skills route | `codex/pi-skill-catalog-u4-admin-mode` | [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) | PR open | Added catalog target wiring, WorkspaceEditor catalog mode, Skills tab route, and focused admin tests. |
 
 ## Verification Log
 
@@ -1440,6 +1440,7 @@ None.
 - Squash merged [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) as `90e3617c91b9b36ac67b77f4e999b726b22d40aa`.
 - Opened [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643).
 - Squash merged [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) as `180dc7aef9675e423959b94ceb9e7e66a8fce553`.
+- Opened [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644).
 
 ## Blockers
 
