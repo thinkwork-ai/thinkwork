@@ -133,7 +133,17 @@ export async function invokeAgentCoreForEval(input: {
   message: string;
   model: string | null | undefined;
   systemPrompt?: string | null;
-}): Promise<{ output: string; durationMs: number }> {
+}): Promise<{
+  output: string;
+  durationMs: number;
+  /**
+   * The composed system prompt the runtime ran against, captured from
+   * the runtime's response (Pi's `composed_system_prompt` field). Null
+   * when the runtime did not surface it (legacy Pi build, Strands
+   * responses that pre-date this contract).
+   */
+  composedSystemPrompt: string | null;
+}> {
   const runtimeConfig = await resolveAgentRuntimeConfig({
     tenantId: input.tenantId,
     agentId: input.agentId,
@@ -206,5 +216,15 @@ export async function invokeAgentCoreForEval(input: {
     throw new Error("AgentCore returned an empty eval response");
   }
 
-  return { output, durationMs: Date.now() - startedAt };
+  const rawComposedPrompt = invokeResult.composed_system_prompt;
+  const composedSystemPrompt =
+    typeof rawComposedPrompt === "string" && rawComposedPrompt.length > 0
+      ? rawComposedPrompt
+      : null;
+
+  return {
+    output,
+    durationMs: Date.now() - startedAt,
+    composedSystemPrompt,
+  };
 }

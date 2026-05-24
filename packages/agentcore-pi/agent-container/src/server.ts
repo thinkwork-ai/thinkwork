@@ -166,6 +166,14 @@ export interface InvocationResponse {
     hindsight_usage?: unknown[];
   };
   runtime: "pi";
+  /**
+   * The composed system prompt the agent loop ran against (workspace files
+   * + runtime tool policy + attachment preamble). Eval invocations capture
+   * this for the result-detail "View System Prompt" sheet so operators can
+   * audit exactly what the LLM saw, not just the per-case override stored
+   * on the test case. Present on every response — there is no opt-in.
+   */
+  composed_system_prompt: string;
   pi_usage?: Usage;
   /**
    * End-of-turn auto-retain dispatch status. Surfaces whether the
@@ -1721,6 +1729,7 @@ export async function handleInvocation(
 
   const responseBody: InvocationResponse = {
     runtime: "pi",
+    composed_system_prompt: systemPrompt,
     pi_usage: runResult.usage,
     pi_retain: retainOutcome.error
       ? { retained: retainOutcome.retained, error: retainOutcome.error }

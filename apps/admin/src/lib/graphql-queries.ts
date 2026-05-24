@@ -2886,6 +2886,7 @@ export const EvalRunResultsQuery = gql`
       agentSessionId
       input
       actualOutput
+      systemPrompt
       evaluatorResults
       assertions
       errorMessage

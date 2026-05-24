@@ -75,6 +75,12 @@ type EvalResult {
   input: String
   expected: String
   actualOutput: String
+  # Composed system prompt the agent loop ran against this case (workspace
+  # files + runtime tool policy + attachment preamble). Captured from the
+  # Pi runtime's response. Null on rows from runs that completed before
+  # this field shipped, or on Computer-eval rows where the runtime does
+  # not surface the composed prompt.
+  systemPrompt: String
   # Per-evaluator scores. JSON because the shape varies by evaluator
   # (Builtin.Helpfulness vs ToolSelectionAccuracy vs custom). Each entry:
   # { evaluatorId, source, value, label, explanation, tokenUsage }
