@@ -20,7 +20,7 @@ Target branch: `main`
 - Active worktree: `.Codex/worktrees/folder-agent-preflight`
 - Started: 2026-05-24
 - Latest merged PR: none for this run
-- Active PR: pending
+- Active PR: [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664)
 - CI: pending
 
 ### Active Unit Notes
@@ -32,9 +32,9 @@ Target branch: `main`
 
 ### Progress Log
 
-| Date       | Unit  | Branch                         | PR      | Status      | Verification | Notes                                                           |
-| ---------- | ----- | ------------------------------ | ------- | ----------- | ------------ | --------------------------------------------------------------- |
-| 2026-05-24 | U1/U2 | `codex/folder-agent-preflight` | Pending | In progress | Pending      | Added supersession callouts and pre-retirement consumer survey. |
+| Date       | Unit  | Branch                         | PR                                                           | Status     | Verification                                          | Notes                                                           |
+| ---------- | ----- | ------------------------------ | ------------------------------------------------------------ | ---------- | ----------------------------------------------------- | --------------------------------------------------------------- |
+| 2026-05-24 | U1/U2 | `codex/folder-agent-preflight` | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | CI pending | Prettier check and `git diff --check` passed locally. | Added supersession callouts and pre-retirement consumer survey. |
 
 ### CI Failures
 
