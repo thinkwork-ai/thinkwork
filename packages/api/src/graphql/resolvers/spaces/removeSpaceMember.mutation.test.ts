@@ -1,20 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authCalls, deletes, selectQueue, resetMocks } = vi.hoisted(() => {
-  const authCalls: unknown[] = [];
-  const deletes: unknown[] = [];
-  const selectQueue: unknown[][] = [];
-  return {
-    authCalls,
-    deletes,
-    selectQueue,
-    resetMocks: () => {
-      authCalls.length = 0;
-      deletes.length = 0;
-      selectQueue.length = 0;
-    },
-  };
-});
+const { authCalls, deletes, deleteResults, selectQueue, resetMocks } =
+  vi.hoisted(() => {
+    const authCalls: unknown[] = [];
+    const deletes: unknown[] = [];
+    const deleteResults: unknown[][] = [];
+    const selectQueue: unknown[][] = [];
+    return {
+      authCalls,
+      deletes,
+      deleteResults,
+      selectQueue,
+      resetMocks: () => {
+        authCalls.length = 0;
+        deletes.length = 0;
+        deleteResults.length = 0;
+        selectQueue.length = 0;
+      },
+    };
+  });
 
 vi.mock("../../utils.js", () => {
   const col = (name: string) => ({ name });
@@ -24,6 +28,7 @@ vi.mock("../../utils.js", () => {
       tenant_id: col("spaces.tenant_id"),
     },
     spaceMembers: {
+      id: col("space_members.id"),
       tenant_id: col("space_members.tenant_id"),
       space_id: col("space_members.space_id"),
       user_id: col("space_members.user_id"),
@@ -38,7 +43,9 @@ vi.mock("../../utils.js", () => {
       delete: () => ({
         where: (clause: unknown) => {
           deletes.push(clause);
-          return Promise.resolve();
+          return {
+            returning: () => Promise.resolve(deleteResults.shift() ?? []),
+          };
         },
       }),
     },
@@ -47,8 +54,12 @@ vi.mock("../../utils.js", () => {
   };
 });
 
+vi.mock("drizzle-orm", () => ({
+  ne: (left: unknown, right: unknown) => ({ ne: [left, right] }),
+}));
+
 vi.mock("../core/authz.js", () => ({
-  requireAdminOrServiceCaller: (...args: unknown[]) => {
+  requireTenantAdmin: (...args: unknown[]) => {
     authCalls.push(args);
     return Promise.resolve();
   },
@@ -62,6 +73,7 @@ describe("removeSpaceMember", () => {
   it("deletes a member-role row and returns true", async () => {
     selectQueue.push([{ tenant_id: "tenant-1" }]);
     selectQueue.push([{ role: "member" }]);
+    deleteResults.push([{ id: "member-1" }]);
 
     const { removeSpaceMember } = await import(
       "./removeSpaceMember.mutation.js"
@@ -78,7 +90,6 @@ describe("removeSpaceMember", () => {
     expect(authCalls[0]).toEqual([
       { auth: { authType: "cognito" } },
       "tenant-1",
-      "manage_space_members",
     ]);
   });
 
@@ -118,6 +129,25 @@ describe("removeSpaceMember", () => {
 
     expect(result).toBe(false);
     expect(deletes).toEqual([]);
+  });
+
+  it("returns false when role changed to owner between read and delete", async () => {
+    selectQueue.push([{ tenant_id: "tenant-1" }]);
+    selectQueue.push([{ role: "member" }]);
+    deleteResults.push([]);
+
+    const { removeSpaceMember } = await import(
+      "./removeSpaceMember.mutation.js"
+    );
+
+    const result = await removeSpaceMember(
+      null,
+      { spaceId: "space-1", userId: "user-2" },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(result).toBe(false);
+    expect(deletes).toHaveLength(1);
   });
 
   it("rejects when the Space is missing", async () => {

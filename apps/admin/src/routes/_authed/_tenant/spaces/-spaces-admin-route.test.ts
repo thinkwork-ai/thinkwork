@@ -269,7 +269,7 @@ describe("Spaces admin routes", () => {
       'createFileRoute(\n  "/_authed/_tenant/spaces/$spaceId_/members"',
     );
     expect(membersRouteSource).toContain("SpaceMembersPanel");
-    expect(membersRouteSource).toContain('space.accessMode !== "PRIVATE"');
+    expect(membersRouteSource).toContain('accessMode === "PRIVATE"');
     expect(detailChromeSource).toContain('space.accessMode === "PRIVATE"');
     expect(detailChromeSource).toContain('value="members"');
     expect(detailChromeSource).toMatch(/>\s*Members\s*<\/Link>/);

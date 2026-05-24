@@ -1,7 +1,8 @@
+import { ne } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, spaceMembers, spaces } from "../../utils.js";
-import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { requireTenantAdmin } from "../core/authz.js";
 
 export async function removeSpaceMember(
   _parent: unknown,
@@ -15,11 +16,7 @@ export async function removeSpaceMember(
 
   if (!space) throw new GraphQLError("Space not found");
 
-  await requireAdminOrServiceCaller(
-    ctx,
-    space.tenant_id,
-    "manage_space_members",
-  );
+  await requireTenantAdmin(ctx, space.tenant_id);
 
   const [existing] = await db
     .select({ role: spaceMembers.role })
@@ -40,15 +37,17 @@ export async function removeSpaceMember(
     });
   }
 
-  await db
+  const deleted = await db
     .delete(spaceMembers)
     .where(
       and(
         eq(spaceMembers.tenant_id, space.tenant_id),
         eq(spaceMembers.space_id, args.spaceId),
         eq(spaceMembers.user_id, args.userId),
+        ne(spaceMembers.role, "owner"),
       ),
-    );
+    )
+    .returning({ id: spaceMembers.id });
 
-  return true;
+  return deleted.length > 0;
 }

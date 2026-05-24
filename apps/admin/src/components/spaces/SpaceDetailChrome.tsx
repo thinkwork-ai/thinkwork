@@ -324,8 +324,6 @@ export function SpaceWorkspacePanel({ spaceId }: { spaceId: string }) {
   );
 }
 
-export { SpaceMembersPanel } from "@/components/spaces/SpaceMembersPanel";
-
 export function SpaceMemoryPanel({ space }: { space: Space }) {
   const { tenantId } = useTenant();
   const [spaceMemoryResult, reexecuteSpaceMemoryQuery] = useQuery({

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal, Trash2, UserPlus } from "lucide-react";
@@ -45,14 +45,15 @@ export function SpaceMembersPanel({
   tenantId,
 }: SpaceMembersPanelProps) {
   const [addOpen, setAddOpen] = useState(false);
+  const [removingUserIds, setRemovingUserIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [{ data, fetching, error }, reexecute] = useQuery({
     query: SpaceMembersQuery,
     variables: { id: spaceId },
     requestPolicy: "cache-and-network",
   });
-  const [{ fetching: removing }, removeMember] = useMutation(
-    RemoveSpaceMemberMutation,
-  );
+  const [, removeMember] = useMutation(RemoveSpaceMemberMutation);
 
   const space = data?.space;
   const rows: MemberRow[] = useMemo(
@@ -73,15 +74,33 @@ export function SpaceMembersPanel({
     [rows],
   );
 
-  async function handleRemove(userId: string) {
-    const result = await removeMember({ spaceId, userId });
-    if (result.error) {
-      toast.error(result.error.message);
-      return;
-    }
-    toast.success("Member removed.");
-    reexecute({ requestPolicy: "network-only" });
-  }
+  const handleRemove = useCallback(
+    async (userId: string) => {
+      setRemovingUserIds((current) => {
+        if (current.has(userId)) return current;
+        const next = new Set(current);
+        next.add(userId);
+        return next;
+      });
+      try {
+        const result = await removeMember({ spaceId, userId });
+        if (result.error) {
+          toast.error(result.error.message);
+          return;
+        }
+        toast.success("Member removed.");
+        reexecute({ requestPolicy: "network-only" });
+      } finally {
+        setRemovingUserIds((current) => {
+          if (!current.has(userId)) return current;
+          const next = new Set(current);
+          next.delete(userId);
+          return next;
+        });
+      }
+    },
+    [reexecute, removeMember, spaceId],
+  );
 
   const columns: ColumnDef<MemberRow>[] = useMemo(
     () => [
@@ -130,33 +149,37 @@ export function SpaceMembersPanel({
       {
         id: "actions",
         header: "",
-        cell: ({ row }) => (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Member actions for ${row.original.name}`}
-                disabled={removing}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => handleRemove(row.original.userId)}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-                Remove
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ),
+        cell: ({ row }) => {
+          const isRemoving = removingUserIds.has(row.original.userId);
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Member actions for ${row.original.name}`}
+                  disabled={isRemoving}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={isRemoving}
+                  onSelect={() => handleRemove(row.original.userId)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Remove
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        },
         size: 60,
       },
     ],
-    [removing],
+    [handleRemove, removingUserIds],
   );
 
   return (

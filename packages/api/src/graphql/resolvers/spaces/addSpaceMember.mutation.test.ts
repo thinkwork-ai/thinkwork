@@ -62,7 +62,7 @@ vi.mock("../../utils.js", () => {
 });
 
 vi.mock("../core/authz.js", () => ({
-  requireAdminOrServiceCaller: (...args: unknown[]) => {
+  requireTenantAdmin: (...args: unknown[]) => {
     authCalls.push(args);
     return Promise.resolve();
   },
@@ -98,7 +98,6 @@ describe("addSpaceMember", () => {
     expect(authCalls[0]).toEqual([
       { auth: { authType: "cognito" } },
       "tenant-1",
-      "manage_space_members",
     ]);
     expect(inserts[0]).toMatchObject({
       tenant_id: "tenant-1",

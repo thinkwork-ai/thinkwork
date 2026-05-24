@@ -47,15 +47,25 @@ export function AddSpaceMemberDialog({
 
   const options: ComboboxOption[] = useMemo(() => {
     const existing = new Set(existingUserIds);
+    type TenantMemberWithUser = NonNullable<
+      typeof membersResult.data
+    >["tenantMembers"][number] & { user: NonNullable<unknown> };
+    const isUserMember = (
+      member: NonNullable<typeof membersResult.data>["tenantMembers"][number],
+    ): member is TenantMemberWithUser =>
+      member.principalType.toUpperCase() === "USER" &&
+      member.user !== null &&
+      member.user !== undefined &&
+      !existing.has(member.user.id);
+
     return (membersResult.data?.tenantMembers ?? [])
-      .filter((member) => member.principalType.toUpperCase() === "USER")
-      .filter((member) => member.user && !existing.has(member.user.id))
+      .filter(isUserMember)
       .map((member) => ({
-        value: member.user!.id,
+        value: member.user.id,
         label:
-          member.user!.name && member.user!.email
-            ? `${member.user!.name} — ${member.user!.email}`
-            : (member.user!.name ?? member.user!.email ?? member.user!.id),
+          member.user.name && member.user.email
+            ? `${member.user.name} — ${member.user.email}`
+            : (member.user.name ?? member.user.email ?? member.user.id),
       }));
   }, [membersResult.data, existingUserIds]);
 
