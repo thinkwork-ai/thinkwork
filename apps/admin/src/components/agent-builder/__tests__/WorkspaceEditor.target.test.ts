@@ -75,12 +75,12 @@ describe("workspace editor target capabilities", () => {
   it("does not synthesize workspace skills folders in catalog mode", () => {
     expect(workspaceEditorReservedRootFolders("catalog")).toEqual([]);
     expect(
-      buildWorkspaceTree([], [], {
+      buildWorkspaceTree([], {
         reservedRootFolders: workspaceEditorReservedRootFolders("catalog"),
       }),
     ).toEqual([]);
     expect(
-      buildWorkspaceTree(["finance-audit-xls/SKILL.md"], [], {
+      buildWorkspaceTree(["finance-audit-xls/SKILL.md"], {
         reservedRootFolders: workspaceEditorReservedRootFolders("catalog"),
       }).map((node) => node.path),
     ).toEqual(["finance-audit-xls"]);
@@ -202,10 +202,10 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/onDelete=\{\(path, isFolder\)/);
     expect(editorSource).toMatch(/setDeleteConfirmTarget/);
     expect(editorSource).toMatch(/\{ kind: "path", path, isFolder \}/);
-    expect(editorSource).toMatch(/onDeleteSyntheticGroup/);
-    expect(editorSource).toMatch(/handleDeleteSyntheticGroup/);
-    expect(editorSource).toMatch(/removeSyntheticRoutingRows/);
-    expect(editorSource).toMatch(/replaceRoutingTable/);
+    expect(editorSource).not.toMatch(/onDeleteSyntheticGroup/);
+    expect(editorSource).not.toMatch(/handleDeleteSyntheticGroup/);
+    expect(editorSource).not.toMatch(/removeSyntheticRoutingRows/);
+    expect(editorSource).not.toMatch(/replaceRoutingTable/);
     expect(editorSource).toMatch(/AlertDialogTitle/);
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
   });
@@ -277,7 +277,7 @@ describe("workspace editor target capabilities", () => {
     );
 
     expect(editorSource).toMatch(
-      /setDeleteConfirmTarget\(null\);\s+if \(target\.kind === "synthetic-group"\)/,
+      /setDeleteConfirmTarget\(null\);\s+if \(target\.kind === "skill"\)/,
     );
   });
 

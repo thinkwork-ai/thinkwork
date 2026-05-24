@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildWorkspaceTree,
+  folderContextMenuTargets,
   installedSkillSlugForNode,
   isSkillInstallFolder,
-  subAgentsNodePath,
 } from "../FolderTree";
 
 describe("buildWorkspaceTree", () => {
@@ -33,105 +33,93 @@ describe("buildWorkspaceTree", () => {
     );
   });
 
-  it("groups routed top-level folders under the synthetic sub-agents node", () => {
-    const tree = buildWorkspaceTree(
-      [
-        "AGENTS.md",
-        "attachments/file.pdf",
-        "expenses/CONTEXT.md",
-        "recruiting/CONTEXT.md",
-      ],
-      [{ goTo: "expenses/" }, { goTo: "recruiting/" }],
-    );
-
-    expect(tree[0]).toMatchObject({
-      name: "agents",
-      path: subAgentsNodePath(),
-      synthetic: true,
-    });
-    expect(tree[0]?.children.map((node) => node.path)).toEqual([
-      "expenses",
-      "recruiting",
+  it("renders workspaces-parent subagents as a real top-level folder", () => {
+    const tree = buildWorkspaceTree([
+      "AGENTS.md",
+      "attachments/file.pdf",
+      "workspaces/sql/CONTEXT.md",
+      "workspaces/finance-analyst/CONTEXT.md",
     ]);
-    // skills/ also renders at root. attachments/ remains under root
-    // because it has files but isn't a routed sub-agent.
+
     expect(tree.map((node) => node.path)).toEqual([
-      subAgentsNodePath(),
       "attachments",
       "skills",
+      "workspaces",
       "AGENTS.md",
+    ]);
+    const workspaces = tree.find((node) => node.path === "workspaces");
+    expect(workspaces?.children.map((node) => node.path)).toEqual([
+      "workspaces/finance-analyst",
+      "workspaces/sql",
     ]);
   });
 
-  it("groups routed workspaces-parent folders without rendering a missing duplicate", () => {
-    const tree = buildWorkspaceTree(
-      ["AGENTS.md", "workspaces/support/CONTEXT.md"],
-      [{ goTo: "workspaces/support/" }],
-    );
+  it("targets the real workspaces folder for normal folder context-menu actions", () => {
+    const tree = buildWorkspaceTree(["AGENTS.md", "workspaces/sql/CONTEXT.md"]);
+    const workspaces = tree.find((node) => node.path === "workspaces");
 
-    expect(tree[0]).toMatchObject({
-      name: "agents",
-      path: subAgentsNodePath(),
-      synthetic: true,
+    expect(workspaces).toBeDefined();
+    expect(folderContextMenuTargets(workspaces!)).toEqual({
+      createParentPath: "workspaces",
+      pasteTargetPath: "workspaces",
+      renamePath: "workspaces",
+      cutPath: "workspaces",
+      deletePath: "workspaces",
     });
-    expect(tree[0]?.children).toHaveLength(1);
-    expect(tree[0]?.children[0]).toMatchObject({
-      name: "support",
-      path: "workspaces/support",
-    });
-    expect(tree[0]?.children[0]).not.toHaveProperty("missing");
+  });
+
+  it("renders legacy flat-storage subagents at their actual flat paths", () => {
+    const tree = buildWorkspaceTree([
+      "AGENTS.md",
+      "expenses/CONTEXT.md",
+      "recruiting/CONTEXT.md",
+    ]);
+
     expect(tree.map((node) => node.path)).toEqual([
-      subAgentsNodePath(),
+      "expenses",
+      "recruiting",
       "skills",
       "AGENTS.md",
     ]);
   });
 
-  it("renders routed folders with no files as missing sub-agent entries", () => {
-    const tree = buildWorkspaceTree(["AGENTS.md"], [{ goTo: "expenses/" }]);
-
-    expect(tree[0]?.children).toEqual([
-      {
-        name: "expenses",
-        path: "expenses",
-        isFolder: true,
-        children: [],
-        missing: true,
-      },
+  it("renders reserved root folders as normal tree folders", () => {
+    const tree = buildWorkspaceTree([
+      "memory/lessons.md",
+      "skills/foo/SKILL.md",
     ]);
-  });
-
-  it("does not group reserved routing targets", () => {
-    const tree = buildWorkspaceTree(
-      ["memory/lessons.md", "skills/foo/SKILL.md"],
-      [{ goTo: "memory/" }, { goTo: "skills/" }],
-    );
 
     expect(tree.map((node) => node.path)).toEqual(["memory", "skills"]);
   });
 
   it("enables Add Skill only for real skills folders with install support", () => {
-    expect(isSkillInstallFolder({ name: "skills", isFolder: true }, true)).toBe(
-      true,
-    );
-    expect(
-      isSkillInstallFolder({ name: "skills", isFolder: false }, true),
-    ).toBe(false);
-    expect(isSkillInstallFolder({ name: "memory", isFolder: true }, true)).toBe(
-      false,
-    );
-    expect(
-      isSkillInstallFolder({ name: "skills", isFolder: true }, false),
-    ).toBe(false);
     expect(
       isSkillInstallFolder(
-        { name: "skills", isFolder: true, missing: true },
+        { name: "skills", path: "skills", isFolder: true },
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      isSkillInstallFolder(
+        { name: "skills", path: "skills", isFolder: false },
         true,
       ),
     ).toBe(false);
     expect(
       isSkillInstallFolder(
-        { name: "skills", isFolder: true, synthetic: true },
+        { name: "memory", path: "memory", isFolder: true },
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      isSkillInstallFolder(
+        { name: "skills", path: "skills", isFolder: true },
+        false,
+      ),
+    ).toBe(false);
+    expect(
+      isSkillInstallFolder(
+        { name: "skills", path: "workspaces/sql/skills", isFolder: true },
         true,
       ),
     ).toBe(false);
@@ -183,8 +171,9 @@ describe("buildWorkspaceTree", () => {
     expect(source).toMatch(/stale/);
     expect(source).toMatch(/orphan/);
     expect(source).toMatch(/TooltipContent/);
-    expect(source).toMatch(/onDeleteSyntheticGroup/);
-    expect(source).toMatch(/syntheticFolderPaths/);
+    expect(source).not.toMatch(/onDeleteSyntheticGroup/);
+    expect(source).not.toMatch(/syntheticFolderPaths/);
+    expect(source).not.toMatch(/__synthetic__\/sub-agents/);
     expect(source).toMatch(/InlineNameInput/);
     expect(source).toMatch(/PendingInlineFile/);
     expect(source).toMatch(/PendingInlineFolder/);
