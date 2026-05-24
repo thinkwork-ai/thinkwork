@@ -545,6 +545,46 @@ describe("agent AGENTS.md derived section refresh", () => {
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledTimes(4);
   });
 
+  it("passes a nested AGENTS.md path through manual regenerate-map", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "regenerate-map",
+          agentId: AGENT_ID,
+          path: "earnest-falcon-947/AGENTS.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(
+      AGENT_ID,
+      "earnest-falcon-947/AGENTS.md",
+    );
+  });
+
+  it("rejects regenerate-map paths that are not AGENTS.md files", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "regenerate-map",
+          agentId: AGENT_ID,
+          path: "earnest-falcon-947/CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/AGENTS\.md/);
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+
   it("normalizes AGENTS.md only for agent targets", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminAgentTargetRows();

@@ -1482,6 +1482,35 @@ None.
 
 None.
 
+# Editor-Driven AGENTS.md Regenerate Map Follow-Ups - 2026-05-24
+
+## Status
+
+- Branch: `codex/nested-agents-md-regenerate`
+- Prior merged unit: [#1630](https://github.com/thinkwork-ai/thinkwork/pull/1630) (`feat: add AGENTS.md regenerate map menu`) merged to `main` as `72bd084d`.
+- Current unit:
+  - Allow `Regenerate Map` on nested `AGENTS.md` files and scope generated folder trees to the selected folder downward.
+  - Allow deleting the synthetic `agents/` tree group by deleting the real routed folders beneath it and removing their root AGENTS.md routing rows.
+  - Make derived AGENTS.md section refreshes idempotent so `## Folder Structure` and `## Skills & Tools` do not accumulate blank lines on repeated writes or manual regeneration.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts src/__tests__/workspace-files-handler.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/FolderTree.test.ts src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts src/lib/__tests__/workspace-files-api.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing Vite sourcemap and large-chunk warnings.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm --filter @thinkwork/api test` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Local implementation complete; PR not yet opened at the time of this entry.
+
+## Blockers
+
+None.
+
 # Editor-Driven AGENTS.md Section Regeneration - 2026-05-23
 
 ## Status

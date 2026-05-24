@@ -48,12 +48,25 @@ import {
   shouldEmitDetachToast,
   validateInlineBasename,
 } from "@/lib/workspace-tree-actions";
-import { parseRoutingTable, type RoutingRow } from "./routing-table";
+import {
+  parseRoutingTable,
+  replaceRoutingTable,
+  type RoutingRow,
+} from "./routing-table";
 
 export interface ClipboardItem {
   path: string;
   kind: "file" | "folder";
 }
+
+type DeleteConfirmTarget =
+  | { kind: "path"; path: string; isFolder: boolean }
+  | {
+      kind: "synthetic-group";
+      path: string;
+      label: string;
+      folderPaths: string[];
+    };
 
 export type WorkspaceEditorMode =
   | "agent"
@@ -170,10 +183,8 @@ export function WorkspaceEditor({
   // a descendant. Without scoping, Cmd+V would hijack paste globally.
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
-  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
-    path: string;
-    isFolder: boolean;
-  } | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] =
+    useState<DeleteConfirmTarget | null>(null);
   const [pendingFileSwitchPath, setPendingFileSwitchPath] = useState<
     string | null
   >(null);
@@ -456,7 +467,7 @@ export function WorkspaceEditor({
   const deleteFocused = useCallback(() => {
     if (!focusedTreePath) return;
     const isFolder = isFolderPath(focusedTreePath);
-    setDeleteConfirmTarget({ path: focusedTreePath, isFolder });
+    setDeleteConfirmTarget({ kind: "path", path: focusedTreePath, isFolder });
   }, [focusedTreePath, isFolderPath]);
 
   const startNewFile = (parentPath?: string) => {
@@ -698,15 +709,97 @@ export function WorkspaceEditor({
     }
   };
 
+  const handleDeleteSyntheticGroup = async (
+    groupPath: string,
+    folderPaths: string[],
+  ) => {
+    const uniqueFolders = [...new Set(folderPaths)];
+    const paths = files.filter((file) =>
+      uniqueFolders.some(
+        (folderPath) =>
+          file === folderPath || file.startsWith(`${folderPath}/`),
+      ),
+    );
+    if (paths.length === 0) return;
+
+    setConfirmingDeletePath(null);
+    beginMutation(groupPath);
+    try {
+      for (const filePath of paths) {
+        await agentBuilderApi.deleteFile(stableTarget, filePath);
+      }
+      setFiles((current) => current.filter((file) => !paths.includes(file)));
+      setFileSources((current) => {
+        const next = { ...current };
+        for (const file of paths) delete next[file];
+        return next;
+      });
+      if (openFile && paths.includes(openFile)) {
+        setOpenFile(null);
+        setContent("");
+        setEditValue("");
+      }
+      if (
+        clipboardItem &&
+        uniqueFolders.some(
+          (folderPath) =>
+            clipboardItem.path === folderPath ||
+            clipboardItem.path.startsWith(`${folderPath}/`),
+        )
+      ) {
+        setClipboardItem(null);
+      }
+      await removeSyntheticRoutingRows(uniqueFolders);
+      refreshFilesInBackground();
+    } catch (err) {
+      console.error("Failed to delete workspace group:", err);
+    } finally {
+      endMutation(groupPath);
+    }
+  };
+
+  const removeSyntheticRoutingRows = async (folderPaths: string[]) => {
+    if (!("agentId" in stableTarget)) return;
+    const foldersToRemove = new Set(
+      folderPaths.map(normalizeRoutingFolderPath).filter(Boolean),
+    );
+    if (foldersToRemove.size === 0) return;
+
+    const agentsMd =
+      openFileRef.current === "AGENTS.md"
+        ? editValue
+        : ((await agentBuilderApi.getFile(stableTarget, "AGENTS.md")).content ??
+          "");
+    const parsed = parseRoutingTable(agentsMd);
+    const nextRows = parsed.rows.filter((row) => {
+      const goTo = normalizeRoutingFolderPath(row.goTo);
+      return !goTo || !foldersToRemove.has(goTo);
+    });
+    if (nextRows.length === parsed.rows.length) return;
+
+    const nextAgentsMd = replaceRoutingTable(agentsMd, nextRows);
+    await agentBuilderApi.putFile(stableTarget, "AGENTS.md", nextAgentsMd);
+    setRoutingRows(nextRows);
+    if (openFileRef.current === "AGENTS.md") {
+      setContent(nextAgentsMd);
+      setEditValue(nextAgentsMd);
+    }
+  };
+
   const handleRegenerateMap = useCallback(
     async (path: string) => {
-      if (path !== "AGENTS.md" || !("agentId" in stableTarget)) return;
+      if (
+        (!path.endsWith("/AGENTS.md") && path !== "AGENTS.md") ||
+        !("agentId" in stableTarget)
+      ) {
+        return;
+      }
       beginMutation(path);
       try {
         if (openFileRef.current === path && editValue !== content) {
           await agentBuilderApi.putFile(stableTarget, path, editValue);
         }
-        await agentBuilderApi.regenerateMap(stableTarget.agentId);
+        await agentBuilderApi.regenerateMap(stableTarget.agentId, path);
         await fetchFiles({ showLoading: false });
         if (openFileRef.current === path) {
           await openWorkspaceFile(path);
@@ -865,7 +958,15 @@ export function WorkspaceEditor({
                 onNewFile={startNewFile}
                 onNewFolder={startNewFolder}
                 onDelete={(path, isFolder) =>
-                  setDeleteConfirmTarget({ path, isFolder })
+                  setDeleteConfirmTarget({ kind: "path", path, isFolder })
+                }
+                onDeleteSyntheticGroup={(path, label, folderPaths) =>
+                  setDeleteConfirmTarget({
+                    kind: "synthetic-group",
+                    path,
+                    label,
+                    folderPaths,
+                  })
                 }
                 onRename={startRename}
                 onRegenerateMap={
@@ -921,9 +1022,13 @@ export function WorkspaceEditor({
         onCancel={() => setDeleteConfirmTarget(null)}
         onConfirm={() => {
           if (!deleteConfirmTarget) return;
-          const { path, isFolder } = deleteConfirmTarget;
+          const target = deleteConfirmTarget;
           setDeleteConfirmTarget(null);
-          void handleDeletePath(path, isFolder);
+          if (target.kind === "synthetic-group") {
+            void handleDeleteSyntheticGroup(target.path, target.folderPaths);
+          } else {
+            void handleDeletePath(target.path, target.isFolder);
+          }
         }}
       />
       <PendingChangesDialog
@@ -947,7 +1052,7 @@ interface PendingChangesDialogProps {
 }
 
 interface DeleteConfirmDialogProps {
-  target: { path: string; isFolder: boolean } | null;
+  target: DeleteConfirmTarget | null;
   files: string[];
   deleting: boolean;
   onCancel: () => void;
@@ -969,6 +1074,14 @@ function collectFolderPathsFromFiles(files: string[]): Set<string> {
     }
   }
   return out;
+}
+
+function normalizeRoutingFolderPath(path: string): string {
+  return path
+    .trim()
+    .replace(/^`|`$/g, "")
+    .replace(/^\.\//, "")
+    .replace(/\/$/, "");
 }
 
 function PendingChangesDialog({
@@ -1024,11 +1137,21 @@ function DeleteConfirmDialog({
   onConfirm,
 }: DeleteConfirmDialogProps) {
   const open = target !== null;
-  const folderFileCount = target?.isFolder
-    ? files.filter(
-        (file) => file === target.path || file.startsWith(`${target.path}/`),
-      ).length
-    : 0;
+  const folderFileCount =
+    target?.kind === "path" && target.isFolder
+      ? files.filter(
+          (file) => file === target.path || file.startsWith(`${target.path}/`),
+        ).length
+      : 0;
+  const groupFileCount =
+    target?.kind === "synthetic-group"
+      ? files.filter((file) =>
+          target.folderPaths.some(
+            (folderPath) =>
+              file === folderPath || file.startsWith(`${folderPath}/`),
+          ),
+        ).length
+      : 0;
 
   return (
     <AlertDialog
@@ -1040,16 +1163,26 @@ function DeleteConfirmDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {target?.isFolder ? "Delete folder?" : "Delete file?"}
+            {target?.kind === "synthetic-group"
+              ? "Delete agents group?"
+              : target?.kind === "path" && target.isFolder
+                ? "Delete folder?"
+                : "Delete file?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {target?.isFolder ? (
+            {target?.kind === "synthetic-group" ? (
+              <>
+                Delete <code className="font-mono">{target.label}/</code> and
+                all {groupFileCount} file{groupFileCount === 1 ? "" : "s"} in
+                its routed folders. This cannot be undone.
+              </>
+            ) : target?.kind === "path" && target.isFolder ? (
               <>
                 Delete <code className="font-mono">{target.path}/</code> and all{" "}
                 {folderFileCount} file{folderFileCount === 1 ? "" : "s"} inside
                 it. This cannot be undone.
               </>
-            ) : target ? (
+            ) : target?.kind === "path" ? (
               <>
                 Delete <code className="font-mono">{target.path}</code>. This
                 cannot be undone.

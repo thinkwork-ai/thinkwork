@@ -112,8 +112,12 @@ describe("workspace editor target capabilities", () => {
     // context-menu delete.
     expect(editorSource).toMatch(/onDelete=\{\(path, isFolder\)/);
     expect(editorSource).toMatch(
-      /setDeleteConfirmTarget\(\{ path, isFolder \}\)/,
+      /setDeleteConfirmTarget\(\{ kind: "path", path, isFolder \}\)/,
     );
+    expect(editorSource).toMatch(/onDeleteSyntheticGroup/);
+    expect(editorSource).toMatch(/handleDeleteSyntheticGroup/);
+    expect(editorSource).toMatch(/removeSyntheticRoutingRows/);
+    expect(editorSource).toMatch(/replaceRoutingTable/);
     expect(editorSource).toMatch(/AlertDialogTitle/);
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
   });
@@ -125,7 +129,7 @@ describe("workspace editor target capabilities", () => {
     );
 
     expect(editorSource).toMatch(
-      /setDeleteConfirmTarget\(null\);\s+void handleDeletePath\(path, isFolder\);/,
+      /setDeleteConfirmTarget\(null\);\s+if \(target\.kind === "synthetic-group"\)/,
     );
   });
 
@@ -198,6 +202,10 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/onNewFolder=\{startNewFolder\}/);
     expect(editorSource).toMatch(/handleRegenerateMap/);
     expect(editorSource).toMatch(/agentBuilderApi\.regenerateMap/);
+    expect(editorSource).toMatch(
+      /regenerateMap\(stableTarget\.agentId, path\)/,
+    );
+    expect(editorSource).toMatch(/path\.endsWith\("\/AGENTS\.md"\)/);
     expect(editorSource).toMatch(/onRegenerateMap=/);
     expect(editorSource).toMatch(/handleGenerateFolderStructure/);
     expect(editorSource).toMatch(/agentBuilderApi\.generateFolderStructure/);

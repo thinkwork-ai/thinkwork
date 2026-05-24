@@ -183,6 +183,11 @@ export interface FolderTreeProps {
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
+  onDeleteSyntheticGroup?: (
+    groupPath: string,
+    label: string,
+    folderPaths: string[],
+  ) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
   onRegenerateMap?: (path: string) => void;
   onGenerateFolderStructure?: (path: string) => void;
@@ -451,6 +456,7 @@ function FolderTreeItem(
     onNewFile,
     onNewFolder,
     onDelete,
+    onDeleteSyntheticGroup,
     onRename,
     onRegenerateMap,
     onGenerateFolderStructure,
@@ -468,11 +474,19 @@ function FolderTreeItem(
   if (node.isFolder) {
     // Synthetic agents/ group is a virtual UI grouping, not a real folder —
     // its path is __synthetic__/sub-agents which can't host files. Treat
-    // creates from its context menu as workspace-root creates, and don't
-    // offer Delete / Cut / Paste on the grouping or on routed-but-empty
-    // entries (they have no real S3 prefix to act on).
+    // creates from its context menu as workspace-root creates. Deleting it
+    // deletes the real routed folders beneath it.
     const contextParent = node.synthetic ? "" : node.path;
     const canMutate = !node.synthetic && !node.missing;
+    const syntheticFolderPaths = node.synthetic
+      ? node.children
+          .filter((child) => child.isFolder && !child.missing)
+          .map((child) => child.path)
+      : [];
+    const canDeleteSyntheticGroup =
+      node.synthetic &&
+      syntheticFolderPaths.length > 0 &&
+      onDeleteSyntheticGroup;
 
     const hasPendingNewItem =
       (inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder") &&
@@ -506,6 +520,7 @@ function FolderTreeItem(
                 onNewFile={onNewFile}
                 onNewFolder={onNewFolder}
                 onDelete={onDelete}
+                onDeleteSyntheticGroup={onDeleteSyntheticGroup}
                 onRename={onRename}
                 onRegenerateMap={onRegenerateMap}
                 onGenerateFolderStructure={onGenerateFolderStructure}
@@ -581,6 +596,23 @@ function FolderTreeItem(
               </ContextMenuItem>
             </>
           ) : null}
+          {canDeleteSyntheticGroup ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() =>
+                  onDeleteSyntheticGroup?.(
+                    node.path,
+                    node.name,
+                    syntheticFolderPaths,
+                  )
+                }
+              >
+                Delete
+              </ContextMenuItem>
+            </>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
     );
@@ -591,7 +623,7 @@ function FolderTreeItem(
   // affordance for an inherited-template update.
   const updateAvailable = updateAvailableFor(node.path);
   const fileLabel = isRenaming ? <InlineNameInput {...props} /> : node.name;
-  const canRegenerateMap = node.path === "AGENTS.md" && onRegenerateMap;
+  const canRegenerateMap = node.name === "AGENTS.md" && onRegenerateMap;
   const canGenerateFolderStructure =
     node.name === "CONTEXT.md" && onGenerateFolderStructure;
 

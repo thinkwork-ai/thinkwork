@@ -23,7 +23,7 @@
  *   put  → { ok: true }
  *   delete → { ok: true }
  *   generate-folder-structure → { ok: true }
- *   regenerate-map → { ok: true }
+ *   regenerate-map → { ok: true } (optional path scopes refresh to that AGENTS.md)
  *   normalize-map → { ok: true }
  *   errors → { ok: false, error }
  *
@@ -2405,12 +2405,34 @@ async function handleUpdateIdentityField(
 
 async function handleRegenerateMap(
   deps: HandlerDeps,
+  path?: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
   if (target.kind !== "agent") {
     return json(400, { ok: false, error: "regenerate-map requires agentId" });
   }
-  await regenerateAgentsMdDerivedSections(target.agentId);
+  let agentsMdPath: string | undefined;
+  if (path !== undefined) {
+    try {
+      agentsMdPath = normalizeWorkspacePath(path);
+    } catch (err) {
+      return json(400, {
+        ok: false,
+        error: err instanceof Error ? err.message : "Invalid AGENTS.md path",
+      });
+    }
+    if (!agentsMdPath.endsWith("/AGENTS.md") && agentsMdPath !== "AGENTS.md") {
+      return json(400, {
+        ok: false,
+        error: "regenerate-map path must point to an AGENTS.md file",
+      });
+    }
+  }
+  if (agentsMdPath === undefined) {
+    await regenerateAgentsMdDerivedSections(target.agentId);
+  } else {
+    await regenerateAgentsMdDerivedSections(target.agentId, agentsMdPath);
+  }
   return json(200, { ok: true });
 }
 
@@ -2730,7 +2752,13 @@ export async function handler(
         return await handleRename(deps, body.fromPath, body.toPath);
       }
       case "regenerate-map":
-        return await handleRegenerateMap(deps);
+        if (body.path !== undefined && typeof body.path !== "string") {
+          return json(400, {
+            ok: false,
+            error: "path must be a string for regenerate-map",
+          });
+        }
+        return await handleRegenerateMap(deps, body.path);
       case "generate-folder-structure": {
         if (!body.path) {
           return json(400, {
