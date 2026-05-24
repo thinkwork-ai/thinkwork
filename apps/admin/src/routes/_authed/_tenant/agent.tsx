@@ -17,20 +17,26 @@ export const Route = createFileRoute("/_authed/_tenant/agent")({
   component: AgentLayout,
 });
 
-export type AgentTab = "files" | "tools" | "mcp-servers";
+export type AgentTab = "files" | "skills" | "tools" | "mcp-servers";
 
 export const AGENT_TABS: {
   value: AgentTab;
-  to: "/agent/files" | "/agent/tools" | "/agent/mcp-servers";
+  to:
+    | "/agent/files"
+    | "/agent/skills"
+    | "/agent/tools"
+    | "/agent/mcp-servers";
   label: string;
 }[] = [
   { value: "files", to: "/agent/files", label: "Workspace" },
-  { value: "tools", to: "/agent/tools", label: "Built-in Tools" },
+  { value: "skills", to: "/agent/skills", label: "Skills" },
+  { value: "tools", to: "/agent/tools", label: "Tools" },
   { value: "mcp-servers", to: "/agent/mcp-servers", label: "MCP Servers" },
 ];
 
 export function currentAgentTab(pathname: string): AgentTab {
   if (pathname.startsWith("/agent/mcp-servers")) return "mcp-servers";
+  if (pathname.startsWith("/agent/skills")) return "skills";
   if (pathname.startsWith("/agent/tools")) return "tools";
   return "files";
 }

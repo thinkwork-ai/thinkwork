@@ -430,7 +430,7 @@ function BuiltinToolsPage() {
   const tenantId = tenant?.id;
   useBreadcrumbs([
     { label: "Agent", href: "/agent" },
-    { label: "Built-in Tools" },
+    { label: "Tools" },
   ]);
 
   const [tools, setTools] = useState<BuiltinTool[]>([]);
