@@ -131,26 +131,25 @@ Live updates come via the `onEvalRunUpdated` AppSync subscription plus a 3s poll
 
 `thinkwork eval` mirrors the Studio feature-for-feature. Interactive mode prompts for missing values in a TTY; non-TTY mode fails fast on missing required flags.
 
+Every run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target); there is no `--agent`/`--agent-template` flag.
+
 ```bash
-# Fully interactive — prompts for template, scope, confirmation
+# Fully interactive — prompts for scope, confirmation
 thinkwork eval run --stage dev
 
 # Flag-driven — no prompts, returns runId immediately
 thinkwork eval run --stage dev \
-  --agent-template tpl-ops \
   --category red-team-prompt-injection red-team-tool-misuse
 
 # Block until terminal status, fail non-zero on fail/cancel/timeout
-thinkwork eval run --stage dev --agent-template tpl-ops --all \
-  --watch --timeout 900
+thinkwork eval run --stage dev --all --watch --timeout 900
 
 # Machine-readable output (stdout = JSON, everything else → stderr)
-thinkwork eval run --stage dev --agent-template tpl-ops --category red-team-prompt-injection --json \
+thinkwork eval run --stage dev --category red-team-prompt-injection --json \
   | jq .runId
 
 # Run a specific test case only
 thinkwork eval run --stage dev \
-  --agent-template tpl-ops \
   --test-case tc-red-team-agents-prompt-injection-01 \
   --watch
 ```
