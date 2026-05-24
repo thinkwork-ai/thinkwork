@@ -3,7 +3,7 @@
  * catalog verbs kept for clear CLI errors.
  *
  * - catalog / list / install / upgrade / delete: RETIRED — the old
- *   tenant_skills-backed GraphQL surface was replaced by the workspace
+ *   tenant-level skill catalog surface was replaced by the workspace
  *   Skills tab.
  * - push: existing REST plugin-upload flow (Cognito auth required).
  * - create / update: RETIRED — custom-skill authoring is `skill push`.

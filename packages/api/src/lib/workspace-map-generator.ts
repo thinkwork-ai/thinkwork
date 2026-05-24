@@ -41,6 +41,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { loadFile } from "@thinkwork/workspace-defaults";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
+import { parseSkillMdInternal } from "./skill-md-parser.js";
 import { spaceSourcePrefix } from "./spaces/template-migration.js";
 import { regenerateManifestForPrefix } from "./workspace-manifest.js";
 
@@ -69,6 +70,13 @@ export interface SkillInfo {
   /** Workspace slugs that use this skill (parsed from workspace CONTEXT.md files) */
   usedIn: string[];
 }
+
+type WorkspaceSkillMetadata = {
+  name: string;
+  description: string | null;
+  mcp_server: string | null;
+  triggers: string[] | null;
+};
 
 export interface KBInfo {
   id: string;
@@ -258,6 +266,53 @@ async function readS3TextIfExists(
     if (isS3NotFound(err)) return null;
     throw err;
   }
+}
+
+async function loadWorkspaceSkillMetadata(
+  bucket: string,
+  prefix: string,
+  workspaceObjectPaths: string[],
+): Promise<Map<string, WorkspaceSkillMetadata>> {
+  const entries = workspaceObjectPaths
+    .map((rel) => rel.match(/^skills\/([^/]+)\/SKILL\.md$/))
+    .filter((match): match is RegExpMatchArray => match !== null);
+
+  const metadata = new Map<string, WorkspaceSkillMetadata>();
+  await Promise.all(
+    entries.map(async (match) => {
+      const slug = match[1]!;
+      const key = `${prefix}skills/${slug}/SKILL.md`;
+      const text = await readS3Text(bucket, key);
+      if (!text) return;
+
+      const parsed = parseSkillMdInternal(text, key);
+      if (!parsed.valid) return;
+
+      const data = parsed.parsed.data as Record<string, unknown>;
+      const displayName =
+        typeof data.display_name === "string" && data.display_name
+          ? data.display_name
+          : typeof data.name === "string" && data.name
+            ? data.name
+            : slug;
+      const triggers = Array.isArray(data.triggers)
+        ? data.triggers.filter((value): value is string => {
+            return typeof value === "string" && value.length > 0;
+          })
+        : null;
+
+      metadata.set(slug, {
+        name: displayName,
+        description:
+          typeof data.description === "string" ? data.description : null,
+        mcp_server:
+          typeof data.mcp_server === "string" ? data.mcp_server : null,
+        triggers,
+      });
+    }),
+  );
+
+  return metadata;
 }
 
 function isS3NotFound(err: unknown): boolean {
@@ -799,33 +854,11 @@ async function loadWorkspaceMapRenderContext(
     if (contextContent) contextByFolder.set(folder, contextContent);
   }
 
-  const catalogLookup = new Map<
-    string,
-    {
-      name: string;
-      description: string | null;
-      mcp_server: string | null;
-      triggers: string[] | null;
-    }
-  >();
-  try {
-    const { skillCatalog } = await import("@thinkwork/database-pg/schema");
-    const catalogRows = await db
-      .select({
-        slug: skillCatalog.slug,
-        name: skillCatalog.display_name,
-        description: skillCatalog.description,
-        mcp_server: skillCatalog.mcp_server,
-        triggers: skillCatalog.triggers,
-      })
-      .from(skillCatalog)
-      .execute();
-    for (const row of catalogRows) {
-      catalogLookup.set(row.slug, row);
-    }
-  } catch (e) {
-    console.warn("[workspace-map] Could not load skill_catalog from DB:", e);
-  }
+  const catalogLookup = await loadWorkspaceSkillMetadata(
+    bucket,
+    prefix,
+    workspaceObjectPaths,
+  );
 
   const skillInfos: SkillInfo[] = skillRows.map((s) => {
     const config = (s.config as Record<string, unknown>) || {};
@@ -1047,34 +1080,13 @@ export async function regenerateWorkspaceMap(
     if (contextContent) contextByFolder.set(folder, contextContent);
   }
 
-  // 5. Build skill catalog with "Used In" mapping + PRD-31 metadata from DB
-  const catalogLookup = new Map<
-    string,
-    {
-      name: string;
-      description: string | null;
-      mcp_server: string | null;
-      triggers: string[] | null;
-    }
-  >();
-  try {
-    const { skillCatalog } = await import("@thinkwork/database-pg/schema");
-    const catalogRows = await db
-      .select({
-        slug: skillCatalog.slug,
-        name: skillCatalog.display_name,
-        description: skillCatalog.description,
-        mcp_server: skillCatalog.mcp_server,
-        triggers: skillCatalog.triggers,
-      })
-      .from(skillCatalog)
-      .execute();
-    for (const row of catalogRows) {
-      catalogLookup.set(row.slug, row);
-    }
-  } catch (e) {
-    console.warn("[workspace-map] Could not load skill_catalog from DB:", e);
-  }
+  // 5. Build skill catalog with "Used In" mapping. Rich metadata comes from
+  // workspace files/S3 catalog now; do not query the retired DB catalog table.
+  const catalogLookup = await loadWorkspaceSkillMetadata(
+    bucket,
+    prefix,
+    workspaceObjectPaths,
+  );
 
   const skillInfos: SkillInfo[] = skillRows.map((s) => {
     const config = (s.config as Record<string, unknown>) || {};

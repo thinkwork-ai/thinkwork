@@ -17,9 +17,9 @@
  *   Phase 2 (S3)     — copy the bundle from its staging prefix to the
  *     canonical tenant prefix. Content-addressed writes + an atomic-
  *     rename-style marker let us retry idempotently.
- *   Phase 3 (DB txn) — insert tenant_skills and tenant_mcp_servers
- *     (status='pending' for MCP), then UPDATE plugin_uploads
- *     status='installed'. COMMIT.
+ *   Phase 3 (DB txn) — insert tenant_mcp_servers (status='pending' for
+ *     MCP), then UPDATE plugin_uploads status='installed'. Skill files stay
+ *     in S3 until an operator copies them into an agent workspace.
  *
  * Any phase failure: UPDATE plugin_uploads status='failed' with the
  * error_message, return the audit row's id to the handler so the admin
@@ -64,7 +64,7 @@ export interface PluginUploadRecord {
 
 /**
  * Minimal DB surface the saga needs. The handler wires these to Drizzle
- * calls against `plugin_uploads`, `tenant_skills`, `tenant_mcp_servers`.
+ * calls against `plugin_uploads` and `tenant_mcp_servers`.
  * Tests wire in-memory maps.
  *
  * All three DB methods treat failures as saga-fatal — the caller
@@ -83,11 +83,10 @@ export interface PluginInstallerDb {
   }): Promise<{ uploadId: string }>;
 
   /**
-   * Phase 3. Single atomic step: insert every tenant_skills row and
-   * tenant_mcp_servers row (with status='pending'), then update the
-   * plugin_uploads row to status='installed'. The handler runs this
-   * inside a Drizzle transaction; the in-memory test fake can treat
-   * it as a single call.
+   * Phase 3. Single atomic step: insert every tenant_mcp_servers row
+   * (with status='pending'), then update the plugin_uploads row to
+   * status='installed'. The handler runs this inside a Drizzle transaction;
+   * the in-memory test fake can treat it as a single call.
    */
   completeInstall(input: {
     uploadId: string;
@@ -230,7 +229,7 @@ export async function runPluginInstallSaga(
   }
 
   // ------------------------------------------------------------------
-  // Phase 3 — insert tenant_skills + tenant_mcp_servers + mark installed.
+  // Phase 3 — insert tenant_mcp_servers + mark installed.
   // ------------------------------------------------------------------
   try {
     await db.completeInstall({

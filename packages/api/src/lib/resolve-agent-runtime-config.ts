@@ -43,7 +43,6 @@ import {
   agentCapabilities,
   agentSkills,
   tenants,
-  tenantSkills,
   users,
   agentKnowledgeBases,
   knowledgeBases,
@@ -397,16 +396,8 @@ export async function resolveAgentRuntimeConfig(
     .select({
       skill_id: agentSkills.skill_id,
       config: agentSkills.config,
-      source: tenantSkills.source,
     })
     .from(agentSkills)
-    .leftJoin(
-      tenantSkills,
-      and(
-        eq(tenantSkills.tenant_id, opts.tenantId),
-        eq(tenantSkills.skill_id, agentSkills.skill_id),
-      ),
-    )
     .where(eq(agentSkills.agent_id, opts.agentId));
 
   let skillsConfig: SkillConfig[] = await Promise.all(
@@ -414,7 +405,6 @@ export async function resolveAgentRuntimeConfig(
       async (s: {
         skill_id: string;
         config: unknown;
-        source: string | null;
       }): Promise<SkillConfig> => {
         const config = (s.config as Record<string, unknown>) || {};
         const envOverrides = await buildSkillEnvOverrides(

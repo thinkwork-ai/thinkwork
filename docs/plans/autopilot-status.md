@@ -1449,6 +1449,49 @@ Target branch: `main`
 
 None.
 
+# Pi Skill Catalog U16a - Retire Table Consumers - 2026-05-24
+
+## Status
+
+- Branch: `codex/pi-skill-catalog-u16a-retire-table-consumers`
+- Worktree: `.Codex/worktrees/pi-skill-catalog-u16a-retire-table-consumers`
+- Base: `origin/main`
+- Goal: Remove remaining runtime/API consumers of the retired skill catalog DB tables before the destructive table-drop migration.
+
+## Progress
+
+- Retired the old table-backed skill REST routes with explicit `410` responses while preserving MCP, built-in tool, credentials, and skill-run routes.
+- Removed tenant skill table joins from runtime config and wakeup dispatch; agent workspace skills now resolve directly from `agent_skills`.
+- Updated plugin install completion to keep plugin skill files in S3 without inserting tenant-level skill rows.
+- Changed tenant tool inventory to derive skills from enabled agent workspace skill assignments.
+- Replaced workspace-map DB catalog metadata enrichment with parsing of workspace `skills/<slug>/SKILL.md` files from S3.
+- Removed bootstrap's DB catalog sync call and converted the legacy sync script to a no-op compatibility entry point.
+- User clarified that skills are read directly from the S3 catalog; identified UI skill/plugin zip import discoverability as a follow-up gap after this cleanup.
+
+## Verification Log
+
+- `pnpm install --frozen-lockfile` - passed.
+- `pnpm --filter @thinkwork/api test -- src/__tests__/tenant-tool-inventory.test.ts src/lib/__tests__/resolve-agent-runtime-config.test.ts src/lib/__tests__/workspace-map-generator.test.ts src/__tests__/plugin-upload.test.ts src/__tests__/plugin-upload-list.test.ts src/__tests__/plugin-installer.test.ts src/__tests__/skills-start-handler.test.ts src/__tests__/skills-complete-handler.test.ts` - passed after updating the plugin-installer failure fixture.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/skill-catalog typecheck` - passed.
+- `pnpm --filter thinkwork-cli typecheck` - passed.
+- `pnpm --filter @thinkwork/api test` - passed (367 files, 3292 tests; 3 files/16 tests skipped).
+- `pnpm --filter @thinkwork/skill-catalog test` - passed.
+- `bash scripts/build-lambdas.sh skills` - passed.
+- `bash scripts/build-lambdas.sh plugin-upload` - passed.
+- `bash scripts/build-lambdas.sh wakeup-processor` - passed.
+- `pnpm dlx prettier@3.6.2 --check <touched TS/MD files>` - passed; shell script excluded because Prettier has no `.sh` parser.
+- `git diff --check` - passed.
+- Live-source grep for retired table identifiers in `packages/api/src`, `packages/skill-catalog`, `apps/cli/src/commands/skill.ts`, and `scripts/bootstrap-workspace.sh` - clean.
+
+## CI / PR
+
+- Pending.
+
+## Blockers
+
+None.
+
 # Pi Agent Skill Catalog and Workspace Install Autopilot - 2026-05-24
 
 ## Status

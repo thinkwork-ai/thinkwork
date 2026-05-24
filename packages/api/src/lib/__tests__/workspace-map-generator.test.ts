@@ -39,13 +39,6 @@ const {
       description: string | null;
       default_schedule: string | null;
     }>,
-    skillCatalog: [] as Array<{
-      slug: string;
-      name: string;
-      description: string | null;
-      mcp_server: string | null;
-      triggers: string[] | null;
-    }>,
     s3GetResponses: new Map<string, string | null | Error>(),
     listObjectsResponses: [] as string[],
   },
@@ -142,7 +135,6 @@ vi.mock("@thinkwork/database-pg", () => {
     if (name === "agent_skills") return state.skills;
     if (name === "agent_knowledge_bases") return state.knowledgeBases;
     if (name === "routines") return state.workflows;
-    if (name === "skill_catalog") return state.skillCatalog;
     return [];
   }
 
@@ -177,7 +169,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   knowledgeBases: tagTable("knowledge_bases"),
   routines: tagTable("routines"),
   tenantWorkflowCatalog: tagTable("tenant_workflow_catalog"),
-  skillCatalog: tagTable("skill_catalog"),
   spaces: tagTable("spaces"),
   tenants: tagTable("tenants"),
 }));
@@ -217,7 +208,6 @@ function resetState(): void {
   state.skills = [];
   state.knowledgeBases = [];
   state.workflows = [];
-  state.skillCatalog = [];
   state.s3GetResponses.clear();
   state.listObjectsResponses = [];
   s3Calls.puts.length = 0;
@@ -312,18 +302,10 @@ describe("regenerateAgentsMdDerivedSections", () => {
         enabled: true,
       },
     ];
-    state.skillCatalog = [
-      {
-        slug: "editor-review",
-        name: "Editor Review",
-        description: "Review edited workspace files",
-        mcp_server: null,
-        triggers: ["review edits"],
-      },
-    ];
     state.listObjectsResponses = [
       "AGENTS.md",
       "CONTEXT.md",
+      "skills/editor-review/SKILL.md",
       "alpha/CONTEXT.md",
       "alpha/notes.md",
     ];
@@ -354,6 +336,20 @@ describe("regenerateAgentsMdDerivedSections", () => {
     state.s3GetResponses.set(
       `${PREFIX}alpha/CONTEXT.md`,
       "# Alpha\n\n## Skills & Tools\n\n| Skill | When |\n| --- | --- |\n| Editor Review | When editing |\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}skills/editor-review/SKILL.md`,
+      [
+        "---",
+        "name: editor-review",
+        "display_name: Editor Review",
+        "description: Review edited workspace files",
+        "triggers:",
+        "  - review edits",
+        "---",
+        "",
+        "# Editor Review",
+      ].join("\n"),
     );
 
     await regenerateAgentsMdDerivedSections("agent-1");
@@ -839,15 +835,6 @@ describe("regenerateWorkspaceMap — built-in tool filter", () => {
       })),
       { skill_id: "sales-prep", config: null, enabled: true },
     ];
-    state.skillCatalog = [
-      {
-        slug: "sales-prep",
-        name: "Sales Prep",
-        description: "Prep notes",
-        mcp_server: null,
-        triggers: null,
-      },
-    ];
     await regenerateWorkspaceMap("agent-1", "computer-1");
     const md = lastWrittenAgentsMd() ?? "";
     expect(md).toContain("Sales Prep");
@@ -860,15 +847,6 @@ describe("regenerateWorkspaceMap — built-in tool filter", () => {
     state.skills = [
       { skill_id: "web-search", config: null, enabled: true },
       { skill_id: "sales-prep", config: null, enabled: true },
-    ];
-    state.skillCatalog = [
-      {
-        slug: "sales-prep",
-        name: "Sales Prep",
-        description: "Prep notes for upcoming meetings",
-        mcp_server: null,
-        triggers: null,
-      },
     ];
     await regenerateWorkspaceMap("agent-1", "computer-1");
     const md = lastWrittenAgentsMd() ?? "";

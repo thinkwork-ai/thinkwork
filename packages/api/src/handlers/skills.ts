@@ -3,15 +3,6 @@ import type {
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import {
-  S3Client,
-  GetObjectCommand,
-  PutObjectCommand,
-  DeleteObjectCommand,
-  ListObjectsV2Command,
-  CopyObjectCommand,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import {
   SecretsManagerClient,
   CreateSecretCommand,
   UpdateSecretCommand,
@@ -22,9 +13,7 @@ import { eq, and, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentSkills,
-  skillCatalog,
   skillRuns,
-  tenantSkills,
   tenantMcpServers,
   tenantMcpContextTools,
   tenantMcpAdminKeys,
@@ -34,9 +23,6 @@ import {
   connections,
   connectProviders,
   users,
-  agents,
-  agentTemplates,
-  tenants,
 } from "@thinkwork/database-pg/schema";
 import {
   createHash,
@@ -44,8 +30,6 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
-import { parseSkillMdInternal } from "../lib/skill-md-parser.js";
-import { regenerateManifest } from "../lib/workspace-manifest.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import {
@@ -59,8 +43,6 @@ import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
 import { emitAuditEvent } from "../lib/compliance/emit.js";
-import { deriveAgentSkills } from "../lib/derive-agent-skills.js";
-import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import {
   builtinToolSecretName,
   loadTenantBuiltinTools,
@@ -70,11 +52,8 @@ import {
 
 export { loadTenantBuiltinTools };
 
-const s3 = new S3Client({});
 const sm = new SecretsManagerClient({});
 const db = getDb();
-const BUCKET = process.env.WORKSPACE_BUCKET!;
-const CATALOG_PREFIX = "skills/catalog";
 const STAGE = process.env.STAGE || "dev";
 
 // ---------------------------------------------------------------------------
@@ -124,7 +103,7 @@ export async function handler(
 
     // GET /api/skills/catalog
     if (path === "/api/skills/catalog" && method === "GET") {
-      return getCatalogIndex();
+      return legacySkillRestGone();
     }
 
     // GET /api/skills/catalog/:slug/files (list) or /api/skills/catalog/:slug/files/* (get)
@@ -132,15 +111,13 @@ export async function handler(
       /^\/api\/skills\/catalog\/([^/]+)\/files(?:\/(.+))?$/,
     );
     if (catalogFilesMatch && method === "GET") {
-      const [, slug, filePath] = catalogFilesMatch;
-      if (filePath) return getCatalogFile(slug, filePath);
-      return listCatalogFiles(slug);
+      return legacySkillRestGone();
     }
 
     // GET /api/skills/catalog/:slug
     const catalogSlugMatch = path.match(/^\/api\/skills\/catalog\/([^/]+)$/);
     if (catalogSlugMatch && method === "GET") {
-      return getCatalogSkill(catalogSlugMatch[1]);
+      return legacySkillRestGone();
     }
 
     // --- Tenant routes ---
@@ -159,7 +136,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return getTenantSkills(tenantSlug);
+      return legacySkillRestGone();
     }
 
     // POST /api/skills/tenant/create — create a new custom skill from template
@@ -174,7 +151,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return createTenantSkill(tenantSlug, event);
+      return legacySkillRestGone();
     }
 
     // POST /api/skills/tenant/:slug/install
@@ -192,7 +169,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return installSkill(tenantSlug, installMatch[1]);
+      return legacySkillRestGone();
     }
 
     // POST /api/skills/tenant/:slug/upload — upload skill zip
@@ -208,7 +185,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return getUploadUrl(tenantSlug, uploadMatch[1]);
+      return legacySkillRestGone();
     }
 
     // GET /api/skills/tenant/:slug/files — list files in tenant skill
@@ -226,7 +203,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return listTenantSkillFiles(tenantSlug, tenantFileListMatch[1]);
+      return legacySkillRestGone();
     }
 
     // GET/PUT/POST/DELETE /api/skills/tenant/:slug/files/*
@@ -244,15 +221,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      const [, slug, filePath] = tenantFilesMatch;
-      if (method === "GET") return getTenantFile(tenantSlug, slug, filePath);
-      if (method === "PUT")
-        return saveTenantFile(tenantSlug, slug, filePath, event);
-      if (method === "POST")
-        return createTenantFile(tenantSlug, slug, filePath, event);
-      if (method === "DELETE")
-        return deleteTenantFile(tenantSlug, slug, filePath);
-      return error("Method not allowed", 405);
+      return legacySkillRestGone();
     }
 
     // GET /api/skills/tenant/:slug/upgradeable
@@ -270,7 +239,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return checkUpgradeable(tenantSlug, upgradeableMatch[1]);
+      return legacySkillRestGone();
     }
 
     // POST /api/skills/tenant/:slug/upgrade
@@ -288,8 +257,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      const force = event.queryStringParameters?.force === "true";
-      return upgradeSkill(tenantSlug, upgradeMatch[1], force);
+      return legacySkillRestGone();
     }
 
     // DELETE /api/skills/tenant/:slug
@@ -305,8 +273,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      const forceDelete = event.queryStringParameters?.force === "true";
-      return uninstallSkill(tenantSlug, tenantDeleteMatch[1], forceDelete);
+      return legacySkillRestGone();
     }
 
     // POST /api/skills/agent/:agentSlug/install/:skillSlug
@@ -324,11 +291,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return installSkillToAgent(
-        tenantSlug,
-        agentInstallMatch[1],
-        agentInstallMatch[2],
-      );
+      return legacySkillRestGone();
     }
 
     // POST /api/skills/template/:templateSlug/install/:skillSlug
@@ -346,11 +309,7 @@ export async function handler(
         });
         if (!_v.ok) return error(_v.reason, _v.status);
       }
-      return installSkillToTemplate(
-        tenantSlug,
-        templateInstallMatch[1],
-        templateInstallMatch[2],
-      );
+      return legacySkillRestGone();
     }
 
     // POST /api/skills/agent/:agentId/:skillId/credentials
@@ -425,7 +384,11 @@ export async function handler(
         if (!_v.ok) return error(_v.reason, _v.status);
         deleteVerdictUserId = _v.userId;
       }
-      return mcpDeleteServer(tenantSlug, mcpUpdateMatch[1], deleteVerdictUserId);
+      return mcpDeleteServer(
+        tenantSlug,
+        mcpUpdateMatch[1],
+        deleteVerdictUserId,
+      );
     }
 
     // GET /api/skills/mcp-servers/:id/key-status — whether a tenant API key
@@ -1044,815 +1007,15 @@ async function mcpOAuthCallback(
   return deepLinkRedirect("success");
 }
 
-// ---------------------------------------------------------------------------
-// Catalog routes
-// ---------------------------------------------------------------------------
-
-async function getCatalogIndex(): Promise<APIGatewayProxyStructuredResultV2> {
-  const rows = await db.select().from(skillCatalog).execute();
+function legacySkillRestGone(): APIGatewayProxyStructuredResultV2 {
   return json(
-    rows
-      .filter((r) => !isBuiltinToolSlug(r.slug))
-      .map((r) => ({
-        slug: r.slug,
-        name: r.display_name,
-        description: r.description,
-        category: r.category,
-        version: r.version,
-        author: r.author,
-        icon: r.icon,
-        tags: r.tags || [],
-        source: r.source,
-        is_default: r.is_default,
-        requires_env: r.requires_env || [],
-        oauth_provider: r.oauth_provider,
-        oauth_scopes: r.oauth_scopes || [],
-        mcp_server: r.mcp_server,
-        mcp_tools: r.mcp_tools || [],
-        dependencies: r.dependencies || [],
-        triggers: r.triggers || [],
-      })),
+    {
+      error: "LEGACY_SKILL_REST_RETIRED",
+      message:
+        "The legacy skill catalog REST API has been retired. Use the agent workspace Skills tab backed by the S3 skill catalog.",
+    },
+    410,
   );
-}
-
-async function getCatalogSkill(
-  slug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  // Plan 2026-04-24-009 §U3: SKILL.md frontmatter is the canonical
-  // metadata source — `skill.yaml` was retired. The admin SPA's
-  // CatalogSkill type expects fields like name, description, category,
-  // version, author, icon, tags, requires_env, oauth_provider,
-  // oauth_scopes, mcp_server, mcp_tools, dependencies, triggers,
-  // execution, is_default, scripts, permissions_model — every one of
-  // those lives on the parsed frontmatter dict, so we forward `data`
-  // verbatim with one back-compat shim: when the catalog uses
-  // `display_name` for the human label and the SPA wants a `name`
-  // fallback, surface display_name as name. The slug itself comes from
-  // the URL path; the `name` field on the response is the SPA-facing
-  // human label.
-  const mdKey = `${CATALOG_PREFIX}/${slug}/SKILL.md`;
-  const mdText = await getS3Text(mdKey);
-  if (!mdText) return notFound("Skill not found");
-  const result = parseSkillMdInternal(mdText, mdKey);
-  if (!result.valid) {
-    return error(
-      `Skill metadata could not be parsed: ${result.errors
-        .map((e) => e.message)
-        .join("; ")}`,
-      500,
-    );
-  }
-  const parsed: Record<string, unknown> = { ...result.parsed.data };
-  // Pre-U2 the SPA's `name` field carried the human label (skill.yaml
-  // `name: "Display Title"`). Post-U2 the frontmatter `name` is the
-  // canonical slug and the human label moved to `display_name`. Mirror
-  // the legacy contract by surfacing `display_name` as `name` for the
-  // SPA — but only when display_name is set; otherwise the slug-shaped
-  // `name` is still better than empty.
-  if (typeof parsed.display_name === "string" && parsed.display_name) {
-    parsed.name = parsed.display_name;
-  }
-  // Always echo the URL slug so the SPA can correlate the response
-  // with the skill_catalog.slug column even when the frontmatter omits
-  // a `slug:` key (post-U2 canonical shape uses `name:` for the slug).
-  if (typeof parsed.slug !== "string" || !parsed.slug) {
-    parsed.slug = slug;
-  }
-  return json(parsed);
-}
-
-async function listCatalogFiles(
-  slug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const prefix = `${CATALOG_PREFIX}/${slug}/`;
-  const files = await listS3Keys(prefix);
-  // Return paths relative to skill root
-  return json(files.map((f) => f.slice(prefix.length)));
-}
-
-async function getCatalogFile(
-  slug: string,
-  filePath: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const content = await getS3Text(`${CATALOG_PREFIX}/${slug}/${filePath}`);
-  if (content === null) return notFound("File not found");
-  return json({ path: filePath, content });
-}
-
-// ---------------------------------------------------------------------------
-// Tenant routes
-// ---------------------------------------------------------------------------
-
-function tenantSkillsPrefix(tenantSlug: string) {
-  return `tenants/${tenantSlug}/skills`;
-}
-
-async function getTenantSkills(
-  tenantSlug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const tenantId = await resolveTenantId(tenantSlug);
-  if (!tenantId) return error("Tenant not found", 404);
-
-  // Auto-provision built-in skills (PRD-31)
-  await ensureBuiltinSkills(tenantId);
-
-  // Read from DB
-  const rows = await db
-    .select({
-      skill_id: tenantSkills.skill_id,
-      source: tenantSkills.source,
-      version: tenantSkills.version,
-      catalog_version: tenantSkills.catalog_version,
-      enabled: tenantSkills.enabled,
-      installed_at: tenantSkills.installed_at,
-      // Join with catalog for metadata
-      name: skillCatalog.display_name,
-      description: skillCatalog.description,
-      category: skillCatalog.category,
-      icon: skillCatalog.icon,
-      is_default: skillCatalog.is_default,
-      oauth_provider: skillCatalog.oauth_provider,
-      mcp_server: skillCatalog.mcp_server,
-      triggers: skillCatalog.triggers,
-    })
-    .from(tenantSkills)
-    .leftJoin(skillCatalog, eq(tenantSkills.skill_id, skillCatalog.slug))
-    .where(
-      and(eq(tenantSkills.tenant_id, tenantId), eq(tenantSkills.enabled, true)),
-    )
-    .execute();
-
-  return json(
-    rows
-      .filter((r) => !isBuiltinToolSlug(r.skill_id))
-      .map((r) => ({
-        slug: r.skill_id,
-        name: r.name || r.skill_id,
-        description: r.description,
-        category: r.category,
-        version: r.version,
-        icon: r.icon,
-        source: r.source,
-        is_default: r.is_default,
-        catalogVersion: r.catalog_version,
-        oauthProvider: r.oauth_provider,
-        mcpServer: r.mcp_server,
-        triggers: r.triggers || [],
-        installedAt: r.installed_at?.toISOString(),
-      })),
-  );
-}
-
-async function installSkill(
-  tenantSlug: string,
-  slug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const tenantId = await resolveTenantId(tenantSlug);
-  if (!tenantId) return error("Tenant not found", 404);
-
-  // Verify skill exists in catalog. Plan §U3: read SKILL.md frontmatter
-  // (the post-U2 canonical metadata location) instead of the retired
-  // skill.yaml.
-  const mdKey = `${CATALOG_PREFIX}/${slug}/SKILL.md`;
-  const mdText = await getS3Text(mdKey);
-  if (!mdText) return notFound("Skill not found in catalog");
-
-  // List all catalog files for this skill
-  const catalogPrefix = `${CATALOG_PREFIX}/${slug}/`;
-  const files = await listS3Keys(catalogPrefix);
-
-  // Copy each file to tenant prefix (editable copy)
-  const tenantPrefix = `${tenantSkillsPrefix(tenantSlug)}/${slug}/`;
-  for (const key of files) {
-    const relativePath = key.slice(catalogPrefix.length);
-    await s3.send(
-      new CopyObjectCommand({
-        Bucket: BUCKET,
-        CopySource: `${BUCKET}/${key}`,
-        Key: `${tenantPrefix}${relativePath}`,
-      }),
-    );
-  }
-
-  // Get catalog version for tracking
-  const [catalogEntry] = await db
-    .select({ version: skillCatalog.version })
-    .from(skillCatalog)
-    .where(eq(skillCatalog.slug, slug))
-    .limit(1);
-  const catalogVersion = catalogEntry?.version;
-
-  const parsed = parseSkillMdInternal(mdText, mdKey);
-  const meta: Record<string, unknown> = parsed.valid ? parsed.parsed.data : {};
-  // `version:` may be a YAML int or string in frontmatter — coerce to a
-  // text value the DB column accepts. Falls back to "1.0.0" for skills
-  // that omit the field.
-  const metaVersion =
-    typeof meta.version === "string" || typeof meta.version === "number"
-      ? String(meta.version)
-      : "1.0.0";
-
-  // Upsert into tenant_skills DB (PRD-31)
-  await db
-    .insert(tenantSkills)
-    .values({
-      tenant_id: tenantId,
-      skill_id: slug,
-      source: "catalog",
-      version: metaVersion,
-      catalog_version: catalogVersion || metaVersion,
-      enabled: true,
-      updated_at: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [tenantSkills.tenant_id, tenantSkills.skill_id],
-      set: {
-        source: "catalog",
-        version: metaVersion,
-        catalog_version: catalogVersion || metaVersion,
-        enabled: true,
-        updated_at: new Date(),
-      },
-    });
-
-  // Also update S3 installed.json (backward compat during migration).
-  // Post-U2 frontmatter has `name: <slug>` and `display_name: "Title"`
-  // — the installed.json shape predates that split, so we surface the
-  // human label as `name` (when present) for legacy SPA consumers.
-  const installedRaw = await getS3Text(
-    `${tenantSkillsPrefix(tenantSlug)}/installed.json`,
-  );
-  const installed: Array<Record<string, unknown>> = installedRaw
-    ? JSON.parse(installedRaw)
-    : [];
-  const filtered = installed.filter((s) => s.slug !== slug);
-  const displayName =
-    typeof meta.display_name === "string" && meta.display_name
-      ? meta.display_name
-      : typeof meta.name === "string"
-        ? meta.name
-        : slug;
-  filtered.push({
-    slug,
-    name: displayName,
-    description: meta.description,
-    category: meta.category,
-    version: metaVersion,
-    icon: meta.icon,
-    installedAt: new Date().toISOString(),
-  });
-  await putS3Text(
-    `${tenantSkillsPrefix(tenantSlug)}/installed.json`,
-    JSON.stringify(filtered, null, 2),
-  );
-
-  // --- Dependency resolution ---
-  const [catalogEntry2] = await db
-    .select({ dependencies: skillCatalog.dependencies })
-    .from(skillCatalog)
-    .where(eq(skillCatalog.slug, slug))
-    .limit(1);
-
-  const deps = catalogEntry2?.dependencies || [];
-  const dependenciesInstalled: string[] = [];
-
-  if (deps.length > 0) {
-    const installing = new Set<string>([slug]);
-    await resolveDependencies(
-      tenantId,
-      tenantSlug,
-      deps,
-      installing,
-      dependenciesInstalled,
-    );
-  }
-
-  return json({ success: true, slug, dependenciesInstalled });
-}
-
-/** Recursively install missing dependencies with cycle detection */
-async function resolveDependencies(
-  tenantId: string,
-  tenantSlug: string,
-  deps: string[],
-  installing: Set<string>,
-  installed: string[],
-): Promise<void> {
-  for (const depSlug of deps) {
-    if (installing.has(depSlug)) {
-      throw new Error(`Circular dependency detected: ${depSlug}`);
-    }
-    installing.add(depSlug);
-
-    // Check if already installed and enabled
-    const [existing] = await db
-      .select({ enabled: tenantSkills.enabled })
-      .from(tenantSkills)
-      .where(
-        and(
-          eq(tenantSkills.tenant_id, tenantId),
-          eq(tenantSkills.skill_id, depSlug),
-          eq(tenantSkills.enabled, true),
-        ),
-      )
-      .limit(1);
-
-    if (!existing) {
-      // Auto-install the dependency. Plan §U3: SKILL.md frontmatter
-      // is the canonical metadata — `skill.yaml` was retired.
-      const depMdKey = `${CATALOG_PREFIX}/${depSlug}/SKILL.md`;
-      const depMdText = await getS3Text(depMdKey);
-      if (!depMdText) continue; // skip if not in catalog
-
-      const depCatalogPrefix = `${CATALOG_PREFIX}/${depSlug}/`;
-      const depFiles = await listS3Keys(depCatalogPrefix);
-      const depTenantPrefix = `${tenantSkillsPrefix(tenantSlug)}/${depSlug}/`;
-
-      for (const key of depFiles) {
-        const relativePath = key.slice(depCatalogPrefix.length);
-        await s3.send(
-          new CopyObjectCommand({
-            Bucket: BUCKET,
-            CopySource: `${BUCKET}/${key}`,
-            Key: `${depTenantPrefix}${relativePath}`,
-          }),
-        );
-      }
-
-      const depParsed = parseSkillMdInternal(depMdText, depMdKey);
-      const depMeta: Record<string, unknown> = depParsed.valid
-        ? depParsed.parsed.data
-        : {};
-      const depMetaVersion =
-        typeof depMeta.version === "string" ||
-        typeof depMeta.version === "number"
-          ? String(depMeta.version)
-          : "1.0.0";
-      const [depCatalogEntry] = await db
-        .select({ version: skillCatalog.version })
-        .from(skillCatalog)
-        .where(eq(skillCatalog.slug, depSlug))
-        .limit(1);
-
-      await db
-        .insert(tenantSkills)
-        .values({
-          tenant_id: tenantId,
-          skill_id: depSlug,
-          source: "catalog",
-          version: depMetaVersion,
-          catalog_version: depCatalogEntry?.version || depMetaVersion,
-          enabled: true,
-          updated_at: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [tenantSkills.tenant_id, tenantSkills.skill_id],
-          set: {
-            source: "catalog",
-            version: depMetaVersion,
-            catalog_version: depCatalogEntry?.version || depMetaVersion,
-            enabled: true,
-            updated_at: new Date(),
-          },
-        });
-
-      installed.push(depSlug);
-
-      // Recursively resolve transitive dependencies
-      const [depCatalog] = await db
-        .select({ dependencies: skillCatalog.dependencies })
-        .from(skillCatalog)
-        .where(eq(skillCatalog.slug, depSlug))
-        .limit(1);
-      const transitiveDeps = depCatalog?.dependencies || [];
-      if (transitiveDeps.length > 0) {
-        await resolveDependencies(
-          tenantId,
-          tenantSlug,
-          transitiveDeps,
-          installing,
-          installed,
-        );
-      }
-    }
-  }
-}
-
-async function getTenantFile(
-  tenantSlug: string,
-  slug: string,
-  filePath: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const content = await getS3Text(
-    `${tenantSkillsPrefix(tenantSlug)}/${slug}/${filePath}`,
-  );
-  if (content === null) return notFound("File not found");
-  return json({ path: filePath, content });
-}
-
-async function saveTenantFile(
-  tenantSlug: string,
-  slug: string,
-  filePath: string,
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const body = JSON.parse(event.body || "{}");
-  if (typeof body.content !== "string")
-    return error("content (string) is required");
-
-  await putS3Text(
-    `${tenantSkillsPrefix(tenantSlug)}/${slug}/${filePath}`,
-    body.content,
-  );
-  return json({ success: true, path: filePath });
-}
-
-// ---------------------------------------------------------------------------
-// PRD-31 Phase 3: Tenant-uploadable custom skills
-// ---------------------------------------------------------------------------
-
-// Plan 2026-04-24-009 §U3 + R6: tenant skill creation now writes SKILL.md
-// only — the parallel `skill.yaml` template was retired. Frontmatter on
-// SKILL.md carries the catalog-shape metadata (display_name, category,
-// execution, etc.) that previously duplicated into skill.yaml.
-const SKILL_MD_TEMPLATE = `---
-name: {{slug}}
-display_name: {{name}}
-description: >
-  {{description}}
-license: Proprietary
-metadata:
-  author: tenant
-  version: "1.0.0"
-category: custom
-version: "1.0.0"
-author: tenant
-icon: zap
-tags: []
-execution: context
-triggers: []
----
-
-# {{name}}
-
-## Overview
-
-Describe what this skill does and when to use it.
-
-## Instructions
-
-Add your skill instructions here. Keep this file under 200 lines.
-Move detailed reference material to the references/ folder.
-`;
-
-async function createTenantSkill(
-  tenantSlug: string,
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const tenantId = await resolveTenantId(tenantSlug);
-  if (!tenantId) return error("Tenant not found", 404);
-
-  const body = JSON.parse(event.body || "{}");
-  const { name, slug: rawSlug, description } = body;
-  if (!name) return error("name is required", 400);
-
-  // Generate slug from name if not provided
-  const slug =
-    rawSlug ||
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-  if (!slug) return error("Could not generate slug from name", 400);
-
-  // Check for collision with catalog skills
-  const [existing] = await db
-    .select({ slug: skillCatalog.slug })
-    .from(skillCatalog)
-    .where(eq(skillCatalog.slug, slug))
-    .limit(1);
-  if (existing)
-    return error(`Slug '${slug}' conflicts with a catalog skill`, 409);
-
-  // Check for collision with tenant skills
-  const [existingTenant] = await db
-    .select({ skill_id: tenantSkills.skill_id })
-    .from(tenantSkills)
-    .where(
-      and(
-        eq(tenantSkills.tenant_id, tenantId),
-        eq(tenantSkills.skill_id, slug),
-      ),
-    )
-    .limit(1);
-  if (existingTenant)
-    return error(`Skill '${slug}' already exists for this tenant`, 409);
-
-  const desc = description || `Custom skill: ${name}`;
-  const prefix = `${tenantSkillsPrefix(tenantSlug)}/${slug}`;
-
-  // Create SKILL.md from template — the canonical metadata file.
-  // Plan §U3 + R6 retired the parallel skill.yaml writer.
-  const mdContent = SKILL_MD_TEMPLATE.replace(/\{\{slug\}\}/g, slug)
-    .replace(/\{\{name\}\}/g, name)
-    .replace(/\{\{description\}\}/g, desc);
-  await putS3Text(`${prefix}/SKILL.md`, mdContent);
-
-  // Insert into tenant_skills
-  await db
-    .insert(tenantSkills)
-    .values({
-      tenant_id: tenantId,
-      skill_id: slug,
-      source: "tenant",
-      version: "1.0.0",
-      enabled: true,
-    })
-    .onConflictDoNothing();
-
-  return json({ success: true, slug, files: ["SKILL.md"] });
-}
-
-async function getUploadUrl(
-  tenantSlug: string,
-  slug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  // Generate a presigned URL for the tenant to upload a skill zip
-  const key = `${tenantSkillsPrefix(tenantSlug)}/${slug}/_upload.zip`;
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    ContentType: "application/zip",
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const url = await getSignedUrl(s3 as any, command as any, { expiresIn: 300 });
-  return json({ uploadUrl: url, key });
-}
-
-async function listTenantSkillFiles(
-  tenantSlug: string,
-  slug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const prefix = `${tenantSkillsPrefix(tenantSlug)}/${slug}/`;
-  const files = await listS3Keys(prefix);
-  // Return paths relative to skill root, filter out upload artifacts
-  return json(
-    files
-      .map((f) => f.slice(prefix.length))
-      .filter((f) => !f.startsWith("_upload") && f.length > 0),
-  );
-}
-
-async function createTenantFile(
-  tenantSlug: string,
-  slug: string,
-  filePath: string,
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const body = JSON.parse(event.body || "{}");
-  const content = typeof body.content === "string" ? body.content : "";
-
-  // Validate: Python scripts only
-  if (filePath.startsWith("scripts/") && !filePath.endsWith(".py")) {
-    return error("Only Python (.py) scripts are allowed", 400);
-  }
-
-  const key = `${tenantSkillsPrefix(tenantSlug)}/${slug}/${filePath}`;
-
-  // Check if file already exists
-  const existing = await getS3Text(key);
-  if (existing !== null) {
-    return error(`File '${filePath}' already exists. Use PUT to update.`, 409);
-  }
-
-  await putS3Text(key, content);
-  return json({ success: true, path: filePath, created: true });
-}
-
-async function deleteTenantFile(
-  tenantSlug: string,
-  slug: string,
-  filePath: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  // Plan §U3: the legacy "refuses to delete skill.yaml" gate is gone —
-  // skill.yaml was retired and the file no longer exists. SKILL.md
-  // itself stays guarded against deletion via the admin UI's own
-  // affordances (no Delete button rendered for the canonical metadata
-  // file); the API endpoint here doesn't enforce that — UI controls do.
-  const key = `${tenantSkillsPrefix(tenantSlug)}/${slug}/${filePath}`;
-  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
-  return json({ success: true, path: filePath, deleted: true });
-}
-
-async function uninstallSkill(
-  tenantSlug: string,
-  slug: string,
-  force = false,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const tenantId = await resolveTenantId(tenantSlug);
-
-  // Check for dependents before uninstalling
-  if (tenantId && !force) {
-    // Get all installed tenant skills
-    const installedRows = await db
-      .select({ skill_id: tenantSkills.skill_id })
-      .from(tenantSkills)
-      .where(
-        and(
-          eq(tenantSkills.tenant_id, tenantId),
-          eq(tenantSkills.enabled, true),
-        ),
-      );
-
-    // For each installed skill, check if it depends on the skill being uninstalled
-    const dependents: string[] = [];
-    for (const row of installedRows) {
-      if (row.skill_id === slug) continue;
-      const [catalogRow] = await db
-        .select({ dependencies: skillCatalog.dependencies })
-        .from(skillCatalog)
-        .where(eq(skillCatalog.slug, row.skill_id))
-        .limit(1);
-      const deps = catalogRow?.dependencies || [];
-      if (deps.includes(slug)) {
-        dependents.push(row.skill_id);
-      }
-    }
-
-    if (dependents.length > 0) {
-      return json({ hasDependents: true, dependents }, 409);
-    }
-  }
-
-  // Soft-disable in DB (PRD-31)
-  if (tenantId) {
-    await db
-      .update(tenantSkills)
-      .set({ enabled: false, updated_at: new Date() })
-      .where(
-        and(
-          eq(tenantSkills.tenant_id, tenantId),
-          eq(tenantSkills.skill_id, slug),
-        ),
-      );
-  }
-
-  // Delete all files under tenant skill prefix
-  const prefix = `${tenantSkillsPrefix(tenantSlug)}/${slug}/`;
-  const keys = await listS3Keys(prefix);
-  for (const key of keys) {
-    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
-  }
-
-  // Update installed.json (backward compat)
-  const installedRaw = await getS3Text(
-    `${tenantSkillsPrefix(tenantSlug)}/installed.json`,
-  );
-  if (installedRaw) {
-    const installed: Array<Record<string, unknown>> = JSON.parse(installedRaw);
-    const filtered = installed.filter((s) => s.slug !== slug);
-    await putS3Text(
-      `${tenantSkillsPrefix(tenantSlug)}/installed.json`,
-      JSON.stringify(filtered, null, 2),
-    );
-  }
-
-  return json({ success: true, slug });
-}
-
-// ---------------------------------------------------------------------------
-// Agent-level skill install
-// ---------------------------------------------------------------------------
-
-async function installSkillToAgent(
-  tenantSlug: string,
-  agentSlug: string,
-  skillSlug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  if (isBuiltinToolSlug(skillSlug)) {
-    return error(
-      skillSlug === "agent-email-send"
-        ? "Built-in tool 'agent-email-send' is injected as send_email through agent template configuration, not installed as a workspace skill."
-        : `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
-      400,
-    );
-  }
-
-  // Verify skill exists in catalog. Plan §U3: read SKILL.md frontmatter
-  // instead of the retired skill.yaml.
-  const mdText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/SKILL.md`);
-  if (!mdText) return notFound("Skill not found in catalog");
-
-  // List all catalog files for this skill
-  const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;
-  const files = await listS3Keys(catalogPrefix);
-
-  const [tenant] = await db
-    .select({ id: tenants.id })
-    .from(tenants)
-    .where(eq(tenants.slug, tenantSlug));
-  if (!tenant) return notFound("Tenant not found");
-
-  const [agent] = await db
-    .select({ id: agents.id })
-    .from(agents)
-    .where(and(eq(agents.tenant_id, tenant.id), eq(agents.slug, agentSlug)));
-  if (!agent) return notFound("Agent not found");
-
-  // Copy each file to the agent workspace prefix. Existing local skills are
-  // operator-authored state; require delete/reinstall instead of overwriting.
-  const agentPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${skillSlug}/`;
-  const existingSkillMd = await getS3Text(`${agentPrefix}SKILL.md`);
-  if (existingSkillMd !== null) {
-    return error("Skill already exists in this workspace", 409);
-  }
-
-  await copyCatalogSkillFiles(catalogPrefix, agentPrefix, files);
-
-  await regenerateManifest(BUCKET, tenantSlug, agentSlug);
-  await deriveAgentSkills({ tenantId: tenant.id }, agent.id);
-
-  return json({ success: true, slug: skillSlug });
-}
-
-async function installSkillToTemplate(
-  tenantSlug: string,
-  templateSlug: string,
-  skillSlug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  if (isBuiltinToolSlug(skillSlug)) {
-    return error(
-      skillSlug === "agent-email-send"
-        ? "Built-in tool 'agent-email-send' is injected as send_email through agent template configuration, not installed as a workspace skill."
-        : `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
-      400,
-    );
-  }
-
-  const mdText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/SKILL.md`);
-  if (!mdText) return notFound("Skill not found in catalog");
-
-  const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;
-  const files = await listS3Keys(catalogPrefix);
-
-  const [tenant] = await db
-    .select({ id: tenants.id })
-    .from(tenants)
-    .where(eq(tenants.slug, tenantSlug));
-  if (!tenant) return notFound("Tenant not found");
-
-  const [template] = await db
-    .select({ id: agentTemplates.id })
-    .from(agentTemplates)
-    .where(
-      and(
-        eq(agentTemplates.tenant_id, tenant.id),
-        eq(agentTemplates.slug, templateSlug),
-      ),
-    );
-  if (!template) return notFound("Template not found");
-
-  const templateAgentSlug = `_catalog/${templateSlug}`;
-  const templatePrefix = `tenants/${tenantSlug}/agents/${templateAgentSlug}/workspace/skills/${skillSlug}/`;
-  const existingSkillMd = await getS3Text(`${templatePrefix}SKILL.md`);
-  if (existingSkillMd !== null) {
-    return error("Skill already exists in this template workspace", 409);
-  }
-
-  await copyCatalogSkillFiles(catalogPrefix, templatePrefix, files);
-
-  await regenerateManifest(BUCKET, tenantSlug, templateAgentSlug);
-
-  return json({ success: true, slug: skillSlug });
-}
-
-async function copyCatalogSkillFiles(
-  catalogPrefix: string,
-  destinationPrefix: string,
-  files: string[],
-): Promise<void> {
-  const copiedKeys: string[] = [];
-  try {
-    for (const key of files) {
-      const relativePath = key.slice(catalogPrefix.length);
-      const destinationKey = `${destinationPrefix}${relativePath}`;
-      await s3.send(
-        new CopyObjectCommand({
-          Bucket: BUCKET,
-          CopySource: `${BUCKET}/${key}`,
-          Key: destinationKey,
-        }),
-      );
-      copiedKeys.push(destinationKey);
-    }
-  } catch (err) {
-    await Promise.allSettled(
-      copiedKeys.map((key) =>
-        s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })),
-      ),
-    );
-    throw err;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2161,62 +1324,64 @@ async function mcpDeleteServer(
   // tenantMcpServers delete still runs tenant-scoped — defense in
   // depth — but the gate keeps the cascade from committing on a
   // failed ownership check.
-  const result = await db.transaction(async (tx) => {
-    const [owned] = await tx
-      .select({ id: tenantMcpServers.id, url: tenantMcpServers.url })
-      .from(tenantMcpServers)
-      .where(
-        and(
-          eq(tenantMcpServers.id, serverId),
-          eq(tenantMcpServers.tenant_id, tenantId),
-        ),
-      )
-      .limit(1);
+  const result = await db
+    .transaction(async (tx) => {
+      const [owned] = await tx
+        .select({ id: tenantMcpServers.id, url: tenantMcpServers.url })
+        .from(tenantMcpServers)
+        .where(
+          and(
+            eq(tenantMcpServers.id, serverId),
+            eq(tenantMcpServers.tenant_id, tenantId),
+          ),
+        )
+        .limit(1);
 
-    if (!owned) {
-      // Throw to roll back the entire tx — important when the gate
-      // ever moves below side-effecting writes. Caught below; the
-      // handler returns 404.
-      throw new Error("MCP_SERVER_NOT_FOUND");
-    }
+      if (!owned) {
+        // Throw to roll back the entire tx — important when the gate
+        // ever moves below side-effecting writes. Caught below; the
+        // handler returns 404.
+        throw new Error("MCP_SERVER_NOT_FOUND");
+      }
 
-    await tx
-      .delete(agentMcpServers)
-      .where(eq(agentMcpServers.mcp_server_id, serverId));
+      await tx
+        .delete(agentMcpServers)
+        .where(eq(agentMcpServers.mcp_server_id, serverId));
 
-    const [deleted] = await tx
-      .delete(tenantMcpServers)
-      .where(
-        and(
-          eq(tenantMcpServers.id, serverId),
-          eq(tenantMcpServers.tenant_id, tenantId),
-        ),
-      )
-      .returning({ id: tenantMcpServers.id, url: tenantMcpServers.url });
+      const [deleted] = await tx
+        .delete(tenantMcpServers)
+        .where(
+          and(
+            eq(tenantMcpServers.id, serverId),
+            eq(tenantMcpServers.tenant_id, tenantId),
+          ),
+        )
+        .returning({ id: tenantMcpServers.id, url: tenantMcpServers.url });
 
-    await emitAuditEvent(tx, {
-      tenantId,
-      actorId: auditActor.actorId,
-      actorType: auditActor.actorType,
-      eventType: "mcp.removed",
-      source: "lambda",
-      payload: {
-        mcpId: deleted.id,
-        url: deleted.url,
-      },
-      resourceType: "mcp_server",
-      resourceId: deleted.id,
-      action: "delete",
-      outcome: "success",
+      await emitAuditEvent(tx, {
+        tenantId,
+        actorId: auditActor.actorId,
+        actorType: auditActor.actorType,
+        eventType: "mcp.removed",
+        source: "lambda",
+        payload: {
+          mcpId: deleted.id,
+          url: deleted.url,
+        },
+        resourceType: "mcp_server",
+        resourceId: deleted.id,
+        action: "delete",
+        outcome: "success",
+      });
+
+      return deleted;
+    })
+    .catch((err) => {
+      if (err instanceof Error && err.message === "MCP_SERVER_NOT_FOUND") {
+        return null;
+      }
+      throw err;
     });
-
-    return deleted;
-  }).catch((err) => {
-    if (err instanceof Error && err.message === "MCP_SERVER_NOT_FOUND") {
-      return null;
-    }
-    throw err;
-  });
 
   if (!result) return notFound("MCP server not found");
   return json({ ok: true, deleted: serverId });
@@ -2936,8 +2101,9 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } =
-        await import("@aws-sdk/client-secrets-manager");
+      const { SecretsManagerClient, DeleteSecretCommand } = await import(
+        "@aws-sdk/client-secrets-manager"
+      );
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -2965,8 +2131,9 @@ async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } =
-    await import("@thinkwork/database-pg/schema");
+  const { agents, userMcpTokens } = await import(
+    "@thinkwork/database-pg/schema"
+  );
 
   // Find all agents paired with this user
   const userAgents = await db
@@ -3314,236 +2481,6 @@ async function markBuiltinToolTested(
         eq(tenantBuiltinTools.tool_slug, slug),
       ),
     );
-}
-
-// ---------------------------------------------------------------------------
-// PRD-31: DB helpers
-// ---------------------------------------------------------------------------
-
-/** Ensure all is_default skills are provisioned for this tenant */
-async function ensureBuiltinSkills(tenantId: string): Promise<void> {
-  const defaults = await db
-    .select({ slug: skillCatalog.slug, version: skillCatalog.version })
-    .from(skillCatalog)
-    .where(eq(skillCatalog.is_default, true));
-
-  if (defaults.length === 0) return;
-
-  // Check which are already installed
-  const existing = await db
-    .select({ skill_id: tenantSkills.skill_id })
-    .from(tenantSkills)
-    .where(eq(tenantSkills.tenant_id, tenantId));
-
-  const existingSet = new Set(existing.map((r) => r.skill_id));
-
-  for (const skill of defaults) {
-    if (isBuiltinToolSlug(skill.slug)) continue;
-    if (existingSet.has(skill.slug)) continue;
-    await db
-      .insert(tenantSkills)
-      .values({
-        tenant_id: tenantId,
-        skill_id: skill.slug,
-        source: "builtin",
-        version: skill.version,
-        catalog_version: skill.version,
-        enabled: true,
-      })
-      .onConflictDoNothing();
-  }
-}
-
-/** Check if a skill has a newer version in the catalog */
-async function checkUpgradeable(
-  tenantSlug: string,
-  slug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const tenantId = await resolveTenantId(tenantSlug);
-  if (!tenantId) return error("Tenant not found", 404);
-
-  const [installed] = await db
-    .select({ catalog_version: tenantSkills.catalog_version })
-    .from(tenantSkills)
-    .where(
-      and(
-        eq(tenantSkills.tenant_id, tenantId),
-        eq(tenantSkills.skill_id, slug),
-      ),
-    )
-    .limit(1);
-
-  if (!installed) return notFound("Skill not installed");
-
-  const [catalog] = await db
-    .select({ version: skillCatalog.version })
-    .from(skillCatalog)
-    .where(eq(skillCatalog.slug, slug))
-    .limit(1);
-
-  if (!catalog) return notFound("Skill not in catalog");
-
-  return json({
-    upgradeable: installed.catalog_version !== catalog.version,
-    currentVersion: installed.catalog_version,
-    latestVersion: catalog.version,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Upgrade
-// ---------------------------------------------------------------------------
-
-async function upgradeSkill(
-  tenantSlug: string,
-  slug: string,
-  force: boolean,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const tenantId = await resolveTenantId(tenantSlug);
-  if (!tenantId) return error("Tenant not found", 404);
-
-  // Look up latest catalog version
-  const [catalog] = await db
-    .select({ version: skillCatalog.version })
-    .from(skillCatalog)
-    .where(eq(skillCatalog.slug, slug))
-    .limit(1);
-  if (!catalog) return notFound("Skill not in catalog");
-
-  // Look up tenant's installed version
-  const [installed] = await db
-    .select({
-      catalog_version: tenantSkills.catalog_version,
-      version: tenantSkills.version,
-    })
-    .from(tenantSkills)
-    .where(
-      and(
-        eq(tenantSkills.tenant_id, tenantId),
-        eq(tenantSkills.skill_id, slug),
-      ),
-    )
-    .limit(1);
-  if (!installed) return notFound("Skill not installed");
-
-  const currentVersion = installed.catalog_version || installed.version;
-  const latestVersion = catalog.version;
-
-  // Check for customizations unless force
-  if (!force) {
-    const catalogPrefix = `${CATALOG_PREFIX}/${slug}/`;
-    const tenantPrefix = `${tenantSkillsPrefix(tenantSlug)}/${slug}/`;
-
-    const catalogKeys = await listS3Keys(catalogPrefix);
-    const tenantKeys = await listS3Keys(tenantPrefix);
-
-    const catalogRelative = new Set(
-      catalogKeys.map((k) => k.slice(catalogPrefix.length)),
-    );
-    const tenantRelative = tenantKeys.map((k) => k.slice(tenantPrefix.length));
-
-    // Files that exist in tenant but not in catalog = customizations
-    const customizedFiles = tenantRelative.filter(
-      (f) => !f.startsWith("_upload") && !catalogRelative.has(f),
-    );
-
-    if (customizedFiles.length > 0) {
-      return json({
-        upgradeable: true,
-        hasCustomizations: true,
-        currentVersion,
-        latestVersion,
-        customizedFiles,
-      });
-    }
-  }
-
-  // Perform upgrade: re-copy catalog files to tenant prefix
-  const catalogPrefix = `${CATALOG_PREFIX}/${slug}/`;
-  const tenantPrefix = `${tenantSkillsPrefix(tenantSlug)}/${slug}/`;
-  const files = await listS3Keys(catalogPrefix);
-
-  for (const key of files) {
-    const relativePath = key.slice(catalogPrefix.length);
-    await s3.send(
-      new CopyObjectCommand({
-        Bucket: BUCKET,
-        CopySource: `${BUCKET}/${key}`,
-        Key: `${tenantPrefix}${relativePath}`,
-      }),
-    );
-  }
-
-  // Update DB versions
-  await db
-    .update(tenantSkills)
-    .set({
-      catalog_version: latestVersion,
-      version: latestVersion,
-      updated_at: new Date(),
-    })
-    .where(
-      and(
-        eq(tenantSkills.tenant_id, tenantId),
-        eq(tenantSkills.skill_id, slug),
-      ),
-    );
-
-  return json({
-    upgraded: true,
-    previousVersion: currentVersion,
-    newVersion: latestVersion,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// S3 helpers
-// ---------------------------------------------------------------------------
-
-async function getS3Text(key: string): Promise<string | null> {
-  try {
-    const res = await s3.send(
-      new GetObjectCommand({ Bucket: BUCKET, Key: key }),
-    );
-    return (await res.Body?.transformToString("utf-8")) ?? null;
-  } catch (err: any) {
-    if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
-      return null;
-    }
-    throw err;
-  }
-}
-
-async function putS3Text(key: string, content: string): Promise<void> {
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-      Body: content,
-      ContentType: key.endsWith(".json") ? "application/json" : "text/plain",
-    }),
-  );
-}
-
-async function listS3Keys(prefix: string): Promise<string[]> {
-  const keys: string[] = [];
-  let continuationToken: string | undefined;
-
-  do {
-    const res = await s3.send(
-      new ListObjectsV2Command({
-        Bucket: BUCKET,
-        Prefix: prefix,
-        ContinuationToken: continuationToken,
-      }),
-    );
-    for (const obj of res.Contents ?? []) {
-      if (obj.Key) keys.push(obj.Key);
-    }
-    continuationToken = res.NextContinuationToken;
-  } while (continuationToken);
-
-  return keys;
 }
 
 // ---------------------------------------------------------------------------
@@ -3914,8 +2851,9 @@ async function invokeAgentcoreRunSkill(payload: {
   if (!fnName)
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes

@@ -15,8 +15,7 @@ import { resolveCaller } from "../core/resolve-auth-user.js";
  * Returns the slug / id sets that the apps/spaces Customize page uses
  * to mark catalog rows as `connected`.
  *
- *   - **Skills:** `agent_skills.skill_id` is the same shape as
- *     `tenant_skills.skill_id`. Direct equality.
+ *   - **Skills:** `agent_skills.skill_id` is the workspace-backed skill slug.
  *   - **Workflows:** `routines.catalog_slug` is the canonical pointer to
  *     the catalog row (added by plan 010 U6-1). Active rows for the
  *     caller's primary agent appear in the connected list; inactive
@@ -84,7 +83,9 @@ export async function customizeBindings(
   const connectedWorkflowSlugs = Array.from(
     new Set(
       workflowRows
-        .filter((row): row is { catalog_slug: string } => row.catalog_slug !== null)
+        .filter(
+          (row): row is { catalog_slug: string } => row.catalog_slug !== null,
+        )
         .map((row) => row.catalog_slug),
     ),
   );

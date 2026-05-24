@@ -249,7 +249,7 @@ describe("runPluginInstallSaga — phase-3 failure", () => {
   it("marks the row failed with the phase-3 error, leaves S3 writes in place", async () => {
     const db = makeFakeDb();
     db.completeInstall = async () => {
-      throw new Error("FK constraint on tenant_skills");
+      throw new Error("MCP server insert failed");
     };
     const s3 = makeFakeS3();
 
@@ -275,7 +275,7 @@ describe("runPluginInstallSaga — phase-3 failure", () => {
     expect(s3.calls).toHaveLength(1);
     expect(db.rows.get(result.uploadId)?.status).toBe("failed");
     expect(db.rows.get(result.uploadId)?.errorMessage).toContain(
-      "FK constraint",
+      "MCP server insert failed",
     );
   });
 });

@@ -73,7 +73,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     principal_id: "tenantMembers.principal_id",
     role: "tenantMembers.role",
   },
-  tenantSkills: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -179,7 +178,9 @@ beforeEach(() => {
   // users (users.id == Cognito sub). Tests for the Google-federated path
   // override this with mockResolvedValueOnce so userId differs from sub.
   mockResolveCaller.mockImplementation(
-    async (auth: { principalId: string | null; tenantId: string | null } | null) => ({
+    async (
+      auth: { principalId: string | null; tenantId: string | null } | null,
+    ) => ({
       userId: auth?.principalId ?? null,
       tenantId: auth?.tenantId ?? null,
     }),

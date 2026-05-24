@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Bootstrap workspace default files and skill catalog for a Thinkwork stage.
 #
-# Uploads the canonical workspace templates from the repo to S3, syncs the
-# skill catalog to the database, and copies defaults to any existing templates
-# that are missing workspace files.
+# Uploads the canonical workspace templates and S3 skill catalog from the repo,
+# then copies defaults to any existing templates that are missing workspace
+# files.
 #
 # Usage:
 #   scripts/bootstrap-workspace.sh <stage> <bucket> <database-url>
@@ -59,15 +59,7 @@ done
 
 echo ""
 
-# ── 2. Sync skill catalog to database ────────────────────────────────────────
-
-echo "── Syncing skill catalog to database ──"
-export DATABASE_URL
-cd "$REPO_ROOT"
-pnpm -C packages/database-pg exec tsx "$REPO_ROOT/packages/skill-catalog/scripts/sync-catalog-db.ts"
-echo ""
-
-# ── 2b. Upload skill catalog files to S3 ────────────────────────────────────
+# ── 2. Upload skill catalog files to S3 ─────────────────────────────────────
 # Each skill directory (SKILL.md, scripts/, README.md, etc.) is uploaded to
 # skills/catalog/<slug>/ so the admin UI can display and edit them, and
 # AgentCore can download them at invoke time.
@@ -145,8 +137,7 @@ done
 # thinkwork-admin retired in PR #488; smoke-package-only post-U6) need
 # their S3 artifacts cleaned up so the container's install_skill_from_s3
 # can't accidentally resurrect them on a warm start, AND so the admin UI
-# stops listing them in catalog views. The sync-catalog-db.ts script also
-# deletes the matching builtin rows from skill_catalog.
+# stops listing them in catalog views.
 #
 # Also purges top-level non-skill prefixes that pre-date the
 # NON_SKILL_DIRS exclusion above (one-shot cleanup; idempotent).
