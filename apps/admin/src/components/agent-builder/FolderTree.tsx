@@ -41,11 +41,10 @@ const SUB_AGENTS_NODE_PATH = "__synthetic__/sub-agents";
 const RESERVED_ROUTING_FOLDERS = new Set(["memory", "skills"]);
 
 // Reserved root folders that should render in the tree even when empty.
-// Per docs/plans/2026-04-27-004 U2 / U8: skills/ should be visible to
-// operators as a place to add skills before any are installed; same goes
-// for memory/ as a place agents will write notes. Without this, an
-// agent with no installed skills shows no skills/ folder at all.
-const RESERVED_ROOT_FOLDERS = ["memory", "skills"] as const;
+// Keep skills/ visible as a stable place to add workspace skills. Do not
+// synthesize memory/ here: operators can delete that folder, and once its
+// backing objects are gone the tree should not recreate the row.
+const RESERVED_ROOT_FOLDERS = ["skills"] as const;
 
 export function buildWorkspaceTree(
   files: string[],
@@ -82,9 +81,8 @@ export function buildWorkspaceTree(
     }
   }
 
-  // Ensure reserved root folders (memory/, skills/) always appear in the
-  // tree even when no files exist under them yet. Operators need a stable
-  // surface to drop into for adding skills / writing memory notes.
+  // Ensure reserved root folders always appear in the tree even when no
+  // files exist under them yet.
   const reservedRootFolders =
     options.reservedRootFolders ?? RESERVED_ROOT_FOLDERS;
   for (const reserved of reservedRootFolders) {

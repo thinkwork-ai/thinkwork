@@ -10,12 +10,11 @@ describe("buildWorkspaceTree", () => {
       "expenses/escalation/GUARDRAILS.md",
     ]);
 
-    // Per docs/plans/2026-04-27-004 U2: reserved root folders memory/
-    // and skills/ render even when no files exist under them, so
-    // operators have a stable surface to add things to.
+    // skills/ renders even when empty, so operators have a stable surface
+    // to add skills. memory/ is not synthesized because it must be
+    // deletable once its backing files are gone.
     expect(tree.map((node) => [node.name, node.path, node.isFolder])).toEqual([
       ["expenses", "expenses", true],
-      ["memory", "memory", true],
       ["skills", "skills", true],
       ["AGENTS.md", "AGENTS.md", false],
     ]);
@@ -49,13 +48,11 @@ describe("buildWorkspaceTree", () => {
       "expenses",
       "recruiting",
     ]);
-    // Reserved root folders memory/ and skills/ also render at root
-    // (per U2/U8). attachments/ remains under root because it has
-    // files but isn't a routed sub-agent.
+    // skills/ also renders at root. attachments/ remains under root
+    // because it has files but isn't a routed sub-agent.
     expect(tree.map((node) => node.path)).toEqual([
       subAgentsNodePath(),
       "attachments",
-      "memory",
       "skills",
       "AGENTS.md",
     ]);
