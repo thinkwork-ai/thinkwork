@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   state,
   s3Calls,
+  dbTableReads,
   mockRegenerateManifest,
   mockRegenerateManifestForPrefix,
 } = vi.hoisted(() => ({
@@ -47,6 +48,7 @@ const {
     gets: [] as string[],
     lists: [] as string[],
   },
+  dbTableReads: [] as string[],
   mockRegenerateManifest: vi.fn(),
   mockRegenerateManifestForPrefix: vi.fn(),
 }));
@@ -129,6 +131,7 @@ function tagTable(name: string): Record<string, unknown> {
 vi.mock("@thinkwork/database-pg", () => {
   function makeQuery(table: { __name?: string }): unknown[] {
     const name = table.__name ?? "";
+    dbTableReads.push(name);
     if (name === "agents") return state.agent ? [state.agent] : [];
     if (name === "spaces") return state.space ? [state.space] : [];
     if (name === "tenants") return [{ slug: state.tenantSlug }];
@@ -193,6 +196,7 @@ import {
   regenerateAgentsMdDerivedSections,
   regenerateWorkspaceMap,
   replaceDerivedAgentsMdSections,
+  renderDerivedAgentsMdSections,
 } from "../workspace-map-generator.js";
 
 const PREFIX = "tenants/acme/agents/acme-daily-digest/workspace/";
@@ -213,6 +217,7 @@ function resetState(): void {
   s3Calls.puts.length = 0;
   s3Calls.gets.length = 0;
   s3Calls.lists.length = 0;
+  dbTableReads.length = 0;
   mockRegenerateManifest.mockReset();
   mockRegenerateManifestForPrefix.mockReset();
 }
@@ -231,13 +236,28 @@ function lastWritten(path: string): string | null {
   return put?.body ?? null;
 }
 
+function skillsSection(markdown: string): string {
+  return (
+    markdown.match(
+      /^## Skills & Tools\s*\n([\s\S]*?)(?=\n##\s|\n---|\n$)/m,
+    )?.[1] ?? ""
+  );
+}
+
 beforeEach(() => {
   resetState();
   process.env.WORKSPACE_BUCKET = "thinkwork-dev-workspace";
 });
 
-describe("regenerateWorkspaceMap — Workflows projection", () => {
-  it("projects active workflows with catalog default_schedule", async () => {
+describe("regenerateWorkspaceMap — two derived AGENTS.md sections", () => {
+  it("omits legacy Knowledge Bases and Workflows sections and their DB queries", async () => {
+    state.knowledgeBases = [
+      {
+        id: "kb-1",
+        name: "Sales KB",
+        description: "Sales documents",
+      },
+    ];
     state.workflows = [
       {
         catalog_slug: "daily-digest",
@@ -247,67 +267,39 @@ describe("regenerateWorkspaceMap — Workflows projection", () => {
         default_schedule: "cron(0 13 * * ? *)",
       },
     ];
-    await regenerateWorkspaceMap("agent-1", "computer-1");
-    const md = lastWrittenAgentsMd();
-    expect(md).toContain("## Workflows");
-    expect(md).toContain(
-      "| Daily Digest | Summarizes yesterday's activity | cron(0 13 * * ? *) |",
-    );
-  });
 
-  it("falls back to routines.schedule when catalog default_schedule is null", async () => {
-    state.workflows = [
-      {
-        catalog_slug: "daily-digest",
-        routine_schedule: "cron(0 9 * * MON *)",
-        display_name: "Daily Digest",
-        description: "Summary",
-        default_schedule: null,
-      },
-    ];
     await regenerateWorkspaceMap("agent-1", "computer-1");
-    expect(lastWrittenAgentsMd()).toContain("cron(0 9 * * MON *)");
-  });
 
-  it("renders 'on-demand' when both schedules are null", async () => {
-    state.workflows = [
-      {
-        catalog_slug: "ad-hoc-flow",
-        routine_schedule: null,
-        display_name: "Ad-hoc Flow",
-        description: null,
-        default_schedule: null,
-      },
-    ];
-    await regenerateWorkspaceMap("agent-1", "computer-1");
-    expect(lastWrittenAgentsMd()).toContain("| Ad-hoc Flow | — | on-demand |");
-  });
-
-  it("renders empty Workflows section with placeholder line when none active", async () => {
-    state.workflows = [];
-    await regenerateWorkspaceMap("agent-1", "computer-1");
-    expect(lastWrittenAgentsMd()).toContain("## Workflows");
-    expect(lastWrittenAgentsMd()).toContain("No workflows configured.");
-    expect(lastWrittenAgentsMd()).toContain("## Knowledge Bases");
-    expect(lastWrittenAgentsMd()).toContain("No knowledge bases assigned.");
+    const md = lastWrittenAgentsMd() ?? "";
+    expect(md).toContain("## Folder Structure");
+    expect(md).toContain("## Skills & Tools");
+    expect(md).not.toContain("## Knowledge Bases");
+    expect(md).not.toContain("## Workflows");
+    expect(dbTableReads).not.toContain("agent_knowledge_bases");
+    expect(dbTableReads).not.toContain("routines");
   });
 });
 
 describe("regenerateAgentsMdDerivedSections", () => {
+  it("renders exactly the supported derived section keys", () => {
+    expect(
+      Object.keys(
+        renderDerivedAgentsMdSections({
+          agentSlug: "acme-daily-digest",
+          workspaceObjectPaths: [],
+          skills: [],
+        }),
+      ),
+    ).toEqual(["Folder Structure", "Skills & Tools"]);
+  });
+
   it("preserves custom AGENTS.md prose while replacing derived sections only", async () => {
-    state.skills = [
-      {
-        skill_id: "editor-review",
-        config: {},
-        enabled: true,
-      },
-    ];
     state.listObjectsResponses = [
       "AGENTS.md",
       "CONTEXT.md",
-      "skills/editor-review/SKILL.md",
       "alpha/CONTEXT.md",
       "alpha/notes.md",
+      "skills/editor-review/SKILL.md",
     ];
     state.s3GetResponses.set(
       `${PREFIX}AGENTS.md`,
@@ -331,6 +323,16 @@ describe("regenerateAgentsMdDerivedSections", () => {
         "",
         "## Skills & Tools",
         "old skill section",
+        "",
+        "---",
+        "",
+        "## Knowledge Bases",
+        "old knowledge base section",
+        "",
+        "---",
+        "",
+        "## Workflows",
+        "old workflow section",
       ].join("\n"),
     );
     state.s3GetResponses.set(
@@ -341,14 +343,11 @@ describe("regenerateAgentsMdDerivedSections", () => {
       `${PREFIX}skills/editor-review/SKILL.md`,
       [
         "---",
-        "name: editor-review",
         "display_name: Editor Review",
         "description: Review edited workspace files",
-        "triggers:",
-        "  - review edits",
         "---",
         "",
-        "# Editor Review",
+        "Use this skill to review workspace edits.",
       ].join("\n"),
     );
 
@@ -360,12 +359,43 @@ describe("regenerateAgentsMdDerivedSections", () => {
     expect(written).toContain("## Custom Instructions");
     expect(written).not.toContain("old folder section");
     expect(written).not.toContain("old skill section");
+    expect(written).not.toContain("old knowledge base section");
+    expect(written).not.toContain("old workflow section");
+    expect(written).not.toContain("## Knowledge Bases");
+    expect(written).not.toContain("## Workflows");
     expect(written).toContain("alpha/ ← Alpha");
     expect(written).toContain(
-      "| Editor Review | Review edited workspace files | review edits |",
+      "| Editor Review | baseline | Review edited workspace files |",
     );
     expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not query legacy KB or workflow tables during section refresh", async () => {
+    state.knowledgeBases = [
+      {
+        id: "kb-1",
+        name: "Sales KB",
+        description: "Sales documents",
+      },
+    ];
+    state.workflows = [
+      {
+        catalog_slug: "daily-digest",
+        routine_schedule: null,
+        display_name: "Daily Digest",
+        description: "Summarizes yesterday's activity",
+        default_schedule: "cron(0 13 * * ? *)",
+      },
+    ];
+    state.s3GetResponses.set(`${PREFIX}AGENTS.md`, "# Acme Map\n");
+
+    await regenerateAgentsMdDerivedSections("agent-1");
+
+    expect(dbTableReads).not.toContain("agent_knowledge_bases");
+    expect(dbTableReads).not.toContain("routines");
+    expect(lastWrittenAgentsMd()).not.toContain("## Knowledge Bases");
+    expect(lastWrittenAgentsMd()).not.toContain("## Workflows");
   });
 
   it("refreshes a nested AGENTS.md from that folder down", async () => {
@@ -376,7 +406,9 @@ describe("regenerateAgentsMdDerivedSections", () => {
       "earnest-falcon-947/skills/review/SKILL.md",
       "earnest-falcon-947/reports/CONTEXT.md",
       "earnest-falcon-947/reports/daily.md",
+      "skills/sales-prep/SKILL.md",
       "jovial-narwhal-612/CONTEXT.md",
+      "jovial-narwhal-612/skills/other/SKILL.md",
     ];
     state.s3GetResponses.set(
       `${PREFIX}earnest-falcon-947/AGENTS.md`,
@@ -396,6 +428,18 @@ describe("regenerateAgentsMdDerivedSections", () => {
       `${PREFIX}earnest-falcon-947/reports/CONTEXT.md`,
       "# Reports\n\nDaily reporting instructions.",
     );
+    state.s3GetResponses.set(
+      `${PREFIX}earnest-falcon-947/skills/review/SKILL.md`,
+      "---\ndisplay_name: Local Review\ndescription: Review local files\n---\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}skills/sales-prep/SKILL.md`,
+      "---\ndisplay_name: Sales Prep\ndescription: Root skill\n---\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}jovial-narwhal-612/skills/other/SKILL.md`,
+      "---\ndisplay_name: Other Workspace\ndescription: Sibling skill\n---\n",
+    );
 
     await regenerateAgentsMdDerivedSections(
       "agent-1",
@@ -409,6 +453,11 @@ describe("regenerateAgentsMdDerivedSections", () => {
     expect(written).toContain("earnest-falcon-947/");
     expect(written).toContain("reports/ ← Reports");
     expect(written).toContain("skills/");
+    expect(written).toContain(
+      "| Local Review | baseline | Review local files |",
+    );
+    expect(skillsSection(written ?? "")).not.toContain("Sales Prep");
+    expect(skillsSection(written ?? "")).not.toContain("Other Workspace");
     expect(written).not.toContain("jovial-narwhal-612");
     expect(s3Calls.puts.map((p) => p.key)).toEqual([
       `${PREFIX}earnest-falcon-947/AGENTS.md`,
@@ -615,6 +664,18 @@ describe("replaceDerivedAgentsMdSections", () => {
       "## Skills & Tools",
       "old skills",
       "",
+      "---",
+      "",
+      "## Knowledge Bases",
+      "old KB catalog",
+      "",
+      "---",
+      "",
+      "## Workflows",
+      "old workflow catalog",
+      "",
+      "---",
+      "",
       "## Token Management",
       "hand-written token rules",
       "",
@@ -623,29 +684,24 @@ describe("replaceDerivedAgentsMdSections", () => {
     const rendered = replaceDerivedAgentsMdSections(existing, {
       "Folder Structure": "\n```text\nfresh tree\n```\n",
       "Skills & Tools": "\nNo skills assigned.\n",
-      "Knowledge Bases": "\nNo knowledge bases assigned.\n",
-      Workflows: "\nNo workflows configured.\n",
     });
 
     expect(rendered).toContain("## Folder Structure");
     expect(rendered).toContain("```text\nfresh tree\n```");
     expect(rendered).not.toContain("old tree");
     expect(rendered).toContain(
-      "## Skills & Tools\n\nNo skills assigned.\n## Token Management",
+      "## Skills & Tools\n\nNo skills assigned.\n---\n\n## Token Management",
     );
-    expect(rendered).toContain(
-      "## Knowledge Bases\n\nNo knowledge bases assigned.",
-    );
-    expect(rendered).toContain("## Workflows\n\nNo workflows configured.");
+    expect(rendered).not.toContain("## Knowledge Bases");
+    expect(rendered).not.toContain("## Workflows");
+    expect(rendered).not.toContain("old KB catalog");
+    expect(rendered).not.toContain("old workflow catalog");
     expect(rendered).toContain(
       "## What This Is\noperator prose\n---\n\n## Folder Structure",
     );
     expect(rendered).toContain(
       "## Quick Navigation\ncustom rows stay\n\n## Skills & Tools",
     );
-    expect(
-      rendered.endsWith("## Token Management\nhand-written token rules\n"),
-    ).toBe(false);
     expect(rendered).toContain(
       "## Token Management\nhand-written token rules\n",
     );
@@ -657,8 +713,6 @@ describe("replaceDerivedAgentsMdSections", () => {
       {
         "Folder Structure": "\n```text\nroot/\n```\n",
         "Skills & Tools": "\nNo skills assigned.\n",
-        "Knowledge Bases": "\nNo knowledge bases assigned.\n",
-        Workflows: "\nNo workflows configured.\n",
       },
     );
 
@@ -680,16 +734,6 @@ describe("replaceDerivedAgentsMdSections", () => {
         "## Skills & Tools",
         "",
         "No skills assigned.",
-        "---",
-        "",
-        "## Knowledge Bases",
-        "",
-        "No knowledge bases assigned.",
-        "---",
-        "",
-        "## Workflows",
-        "",
-        "No workflows configured.",
         "",
       ].join("\n"),
     );
@@ -718,8 +762,6 @@ describe("replaceDerivedAgentsMdSections", () => {
     const sections = {
       "Folder Structure": "\n```text\nfresh tree\n```\n",
       "Skills & Tools": "\nNo skills assigned.\n",
-      "Knowledge Bases": "\nNo knowledge bases assigned.\n",
-      Workflows: "\nNo workflows configured.\n",
     };
 
     const once = replaceDerivedAgentsMdSections(existing, sections);
@@ -750,6 +792,26 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
       `${PREFIX}earnest-falcon-947/CONTEXT.md`,
       "# Earnest Falcon\n\n## Skills & Tools\n\n| Skill | Description |\n| --- | --- |\n| Renewal Prep | Prep |\n",
     );
+    state.s3GetResponses.set(
+      `${PREFIX}skills/account-health-review/SKILL.md`,
+      [
+        "---",
+        "display_name: Account Health Review",
+        "description: >",
+        "  Review account health signals",
+        "  before renewal calls",
+        "---",
+      ].join("\n"),
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}earnest-falcon-947/skills/renewal-prep/SKILL.md`,
+      [
+        "---",
+        "display_name: Renewal Prep",
+        "description: Prepare renewal notes",
+        "---",
+      ].join("\n"),
+    );
 
     await regenerateWorkspaceMap("agent-1");
     const md = lastWrittenAgentsMd() ?? "";
@@ -763,6 +825,14 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
     expect(md).toContain("skills/ ← Workspace skills");
     expect(md).toContain("earnest-falcon-947/ ← Earnest Falcon");
     expect(md).toContain("renewal-prep/");
+    expect(md).toContain(
+      "| Account Health Review | baseline | Review account health signals before renewal calls |",
+    );
+    expect(md).toContain(
+      "| Renewal Prep | earnest-falcon-947/ | Prepare renewal notes |",
+    );
+    expect(md).not.toContain("## Knowledge Bases");
+    expect(md).not.toContain("## Workflows");
     expect(md).not.toContain(".gitkeep");
     expect(md).not.toContain(".DS_Store");
   });
@@ -773,6 +843,8 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
       "legacy-flat/CONTEXT.md",
       "workspaces/sql/CONTEXT.md",
       "workspaces/sql/skills/snowflake/SKILL.md",
+      "workspaces/sql/workspaces/warehouse-dbt/CONTEXT.md",
+      "workspaces/sql/workspaces/warehouse-dbt/skills/dbt-review/SKILL.md",
     ];
     state.s3GetResponses.set(
       `${PREFIX}legacy-flat/CONTEXT.md`,
@@ -782,6 +854,18 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
       `${PREFIX}workspaces/sql/CONTEXT.md`,
       "# SQL\n\n## What This Workspace Is\nWarehouse context.\n",
     );
+    state.s3GetResponses.set(
+      `${PREFIX}workspaces/sql/skills/snowflake/SKILL.md`,
+      "---\ndisplay_name: Snowflake\ndescription: Query Snowflake safely\n---\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}workspaces/sql/workspaces/warehouse-dbt/CONTEXT.md`,
+      "# Warehouse DBT\n\n## What This Workspace Is\nModel review context.\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}workspaces/sql/workspaces/warehouse-dbt/skills/dbt-review/SKILL.md`,
+      "---\ndisplay_name: DBT Review\ndescription: Review DBT models\n---\n",
+    );
 
     await regenerateWorkspaceMap("agent-1");
     const md = lastWrittenAgentsMd() ?? "";
@@ -790,6 +874,13 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
     expect(md).toContain("legacy-flat/ ← Legacy Flat");
     expect(md).toContain("workspaces/");
     expect(md).toContain("sql/ ← SQL");
+    expect(md).toContain("warehouse-dbt/ ← Warehouse DBT");
+    expect(md).toContain(
+      "| Snowflake | workspaces/sql/ | Query Snowflake safely |",
+    );
+    expect(md).toContain(
+      "| DBT Review | workspaces/sql/workspaces/warehouse-dbt/ | Review DBT models |",
+    );
     expect(context).toContain("| Legacy Flat | Legacy context. |");
     expect(context).toContain("| SQL | Warehouse context. |");
   });
@@ -827,39 +918,63 @@ describe("regenerateWorkspaceMap — built-in tool filter", () => {
     // Iterate the canonical list to defend against future expansions —
     // hardcoding subsets means new built-in slugs slip through silently.
     const { BUILTIN_TOOL_SLUGS } = await import("../builtin-tool-slugs.js");
-    state.skills = [
-      ...BUILTIN_TOOL_SLUGS.map((slug) => ({
-        skill_id: slug,
-        config: null,
-        enabled: true,
-      })),
-      { skill_id: "sales-prep", config: null, enabled: true },
+    state.listObjectsResponses = [
+      ...BUILTIN_TOOL_SLUGS.map((slug) => `skills/${slug}/SKILL.md`),
+      "skills/sales-prep/SKILL.md",
     ];
+    for (const slug of BUILTIN_TOOL_SLUGS) {
+      state.s3GetResponses.set(
+        `${PREFIX}skills/${slug}/SKILL.md`,
+        `---\ndisplay_name: ${slug}\ndescription: built in\n---\n`,
+      );
+    }
+    state.s3GetResponses.set(
+      `${PREFIX}skills/sales-prep/SKILL.md`,
+      "---\ndisplay_name: Sales Prep\ndescription: Prep notes\n---\n",
+    );
     await regenerateWorkspaceMap("agent-1", "computer-1");
     const md = lastWrittenAgentsMd() ?? "";
+    const section = skillsSection(md);
     expect(md).toContain("Sales Prep");
     for (const builtin of BUILTIN_TOOL_SLUGS) {
-      expect(md).not.toContain(builtin);
+      expect(section).not.toContain(builtin);
     }
   });
 
   it("excludes built-in tool slugs from the Skills table", async () => {
-    state.skills = [
-      { skill_id: "web-search", config: null, enabled: true },
-      { skill_id: "sales-prep", config: null, enabled: true },
+    state.listObjectsResponses = [
+      "skills/web-search/SKILL.md",
+      "skills/sales-prep/SKILL.md",
     ];
+    state.s3GetResponses.set(
+      `${PREFIX}skills/web-search/SKILL.md`,
+      "---\ndisplay_name: Web Search\ndescription: Search\n---\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}skills/sales-prep/SKILL.md`,
+      "---\ndisplay_name: Sales Prep\ndescription: Prep notes for upcoming meetings\n---\n",
+    );
     await regenerateWorkspaceMap("agent-1", "computer-1");
     const md = lastWrittenAgentsMd() ?? "";
+    const section = skillsSection(md);
     expect(md).toContain("Sales Prep");
-    expect(md).not.toContain("web-search");
-    expect(md).not.toContain("Web Search");
+    expect(section).not.toContain("web-search");
+    expect(section).not.toContain("Web Search");
   });
 
   it("renders 'No skills assigned.' when only built-in tools are present", async () => {
-    state.skills = [
-      { skill_id: "web-search", config: null, enabled: true },
-      { skill_id: "agent-email-send", config: null, enabled: true },
+    state.listObjectsResponses = [
+      "skills/web-search/SKILL.md",
+      "skills/agent-email-send/SKILL.md",
     ];
+    state.s3GetResponses.set(
+      `${PREFIX}skills/web-search/SKILL.md`,
+      "---\ndisplay_name: Web Search\ndescription: Search\n---\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}skills/agent-email-send/SKILL.md`,
+      "---\ndisplay_name: Email Send\ndescription: Send email\n---\n",
+    );
     await regenerateWorkspaceMap("agent-1", "computer-1");
     expect(lastWrittenAgentsMd()).toContain("No skills assigned.");
   });
