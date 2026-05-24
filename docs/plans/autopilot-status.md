@@ -6,6 +6,44 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Folder Is The Agent ThinkWork Alignment
+
+Plan: `docs/plans/2026-05-24-004-refactor-folder-is-the-agent-thinkwork-alignment-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: PR 1 - U1 supersession header edits + U2 pre-retirement consumer survey
+- Active branch: `codex/folder-agent-preflight`
+- Active worktree: `.Codex/worktrees/folder-agent-preflight`
+- Started: 2026-05-24
+- Latest merged PR: none for this run
+- Active PR: [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664)
+- CI: pending
+
+### Active Unit Notes
+
+- Created isolated worktree from `origin/main`.
+- Copied the referenced local alignment plan and canonical brainstorm into the worktree because they were not yet tracked on `origin/main`.
+- First unit follows the plan rollout sequence: PR 1 combines U1 and U2.
+- Consumer survey found live references outside the plan's initial scope, especially mobile Personalize/Profile and `packages/computer-runtime`; U24 must not delete legacy defaults until those consumers are updated, retired, or explicitly proven harmless.
+
+### Progress Log
+
+| Date       | Unit  | Branch                         | PR                                                           | Status     | Verification                                          | Notes                                                           |
+| ---------- | ----- | ------------------------------ | ------------------------------------------------------------ | ---------- | ----------------------------------------------------- | --------------------------------------------------------------- |
+| 2026-05-24 | U1/U2 | `codex/folder-agent-preflight` | [#1664](https://github.com/thinkwork-ai/thinkwork/pull/1664) | CI pending | Prettier check and `git diff --check` passed locally. | Added supersession callouts and pre-retirement consumer survey. |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
 ## Current Run: Space Detail Polish and Tenant-Scoped Space Email Addresses
 
 Plan: `/Users/ericodom/Projects/thinkwork/docs/plans/2026-05-23-002-feat-space-detail-polish-and-tenant-scoped-email-plan.md`
