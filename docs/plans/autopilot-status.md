@@ -1400,11 +1400,11 @@ None.
 
 ## Implementation Units
 
-| Unit                                                     | Branch                                    | PR                                                           | State  | Notes                                                                            |
-| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------- |
-| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | Merged | Squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; required CI passed. |
-| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) | Merged | Squash merged as `76a37a12e429c4b87c23f5b1f9109a8e2af98789`; required CI passed. |
-| U3 Operator normalization and bootstrap polish           | `codex/editor-agents-md-section-regen-u3` | TBD                                                          | Active | Add explicit repair/normalization path and bootstrap/rematerialize coverage.     |
+| Unit                                                     | Branch                                    | PR                                                           | State   | Notes                                                                            |
+| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------- |
+| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | Merged  | Squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; required CI passed. |
+| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) | Merged  | Squash merged as `76a37a12e429c4b87c23f5b1f9109a8e2af98789`; required CI passed. |
+| U3 Operator normalization and bootstrap polish           | `codex/editor-agents-md-section-regen-u3` | [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) | PR open | Operator normalization implemented and monitoring CI.                            |
 
 ## Progress Log
 
@@ -1421,6 +1421,7 @@ None.
 - 2026-05-23: U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) passed CLA, lint, test, typecheck, and verify; squash merged as `76a37a12e429c4b87c23f5b1f9109a8e2af98789`; remote branch deleted and U2 worktree removed.
 - 2026-05-23: Created isolated U3 worktree `.Codex/worktrees/editor-agents-md-section-regen-u3` from `origin/main` on branch `codex/editor-agents-md-section-regen-u3`.
 - 2026-05-23: Began U3 by adding explicit `normalize-map` repair wiring and rematerialize/bootstrap derived-section refresh coverage.
+- 2026-05-23: Opened U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624).
 
 ## Verification Log
 
@@ -1457,7 +1458,7 @@ None.
 
 - U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) merged after required checks passed.
 - U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) merged after required checks passed.
-- U3 PR not opened yet; local implementation and verification in progress.
+- U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) opened; checks pending.
 
 ## Blockers
 
