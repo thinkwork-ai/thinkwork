@@ -77,6 +77,38 @@ describe("direct AgentCore eval payload", () => {
     expect(payload.model).toBe("us.anthropic.claude-haiku-4-5");
     expect(payload.system_prompt).toBe("Case prompt");
   });
+
+  it("threads humanPairId as user_id so Pi-runtime evals pass identity validation", () => {
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "hello",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig: {
+        ...runtimeConfig,
+        humanPairId: "4dee701a-c17b-46fe-9f38-a333d4c3fad0",
+        runtimeType: "pi",
+      },
+    });
+
+    expect(payload.user_id).toBe("4dee701a-c17b-46fe-9f38-a333d4c3fad0");
+  });
+
+  it("leaves user_id undefined when the agent has no paired human", () => {
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "hello",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig,
+    });
+
+    expect(payload.user_id).toBeUndefined();
+  });
 });
 
 describe("direct AgentCore eval helpers", () => {

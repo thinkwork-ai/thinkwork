@@ -82,6 +82,11 @@ export function buildEvalAgentCorePayload(input: {
     tenant_id: input.tenantId,
     workspace_tenant_id: input.tenantId,
     assistant_id: input.agentId,
+    // Pi runtime's identity-snapshot validator requires a user_id on every
+    // invocation. Evals have no end user; thread the platform agent's paired
+    // human as the synthetic eval invoker. Strands ignores the field, so
+    // setting it unconditionally keeps both runtimes working.
+    user_id: runtimeConfig.humanPairId ?? undefined,
     thread_id: input.sessionId,
     trace_id: input.sessionId,
     message: input.message,
