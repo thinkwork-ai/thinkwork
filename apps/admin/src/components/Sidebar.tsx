@@ -219,16 +219,16 @@ export function AppSidebar() {
       badge: threadCount ? formatCount(threadCount) : undefined,
     },
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
-    ...extensionItemsFor("main"),
-  ];
-
-  const automationsItems: NavItem[] = [
     {
       to: "/automations/schedules",
       icon: CalendarClock,
       label: "Automations",
       badge: activeScheduledJobs,
     },
+    ...extensionItemsFor("main"),
+  ];
+
+  const automationsItems: NavItem[] = [
     {
       to: "/automations/routines",
       icon: Repeat,
