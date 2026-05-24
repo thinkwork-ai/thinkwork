@@ -90,7 +90,6 @@ export interface EvalTestCaseFormInitial {
   category?: string;
   query?: string;
   systemPrompt?: string | null;
-  agentId?: string | null;
   assertions?: string | Assertion[]; // JSON string from GraphQL or parsed array
   agentcoreEvaluatorIds?: string[];
   enabled?: boolean;
@@ -137,9 +136,6 @@ export function EvalTestCaseForm({
   const [category, setCategory] = useState(initial?.category ?? "smoke");
   const [query, setQuery] = useState(initial?.query ?? "");
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "");
-  const [agentId, setAgentId] = useState<string | null>(
-    initial?.agentId ?? null,
-  );
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
 
   // Evaluators — selected set
@@ -193,7 +189,6 @@ export function EvalTestCaseForm({
     if (initial.query !== undefined) setQuery(initial.query);
     if (initial.systemPrompt !== undefined)
       setSystemPrompt(initial.systemPrompt || "");
-    if (initial.agentId !== undefined) setAgentId(initial.agentId);
     if (initial.enabled !== undefined) setEnabled(initial.enabled);
     if (initial.agentcoreEvaluatorIds !== undefined)
       setEvaluatorIds(initial.agentcoreEvaluatorIds);
@@ -223,7 +218,6 @@ export function EvalTestCaseForm({
         category,
         query,
         systemPrompt: systemPrompt || null,
-        agentId: agentId || null,
         assertions: cleanedAssertions,
         agentcoreEvaluatorIds: evaluatorIds,
         enabled,
@@ -241,7 +235,6 @@ export function EvalTestCaseForm({
       setSubmitting(false);
     }
   }, [
-    agentId,
     assertions,
     category,
     createCase,

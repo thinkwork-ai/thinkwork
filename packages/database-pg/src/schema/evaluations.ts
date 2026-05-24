@@ -46,8 +46,6 @@ export const evalTestCases = pgTable(
     category: text("category").notNull(), // free-form grouping label (e.g. "tool-safety", "red-team")
     query: text("query").notNull(), // user-facing prompt sent to the agent
     system_prompt: text("system_prompt"), // optional override for the agent's system prompt
-    // Optional per-case Agent target. Null = use the run-level Agent.
-    agent_id: uuid("agent_id").references(() => agents.id),
     // assertions: deterministic checks evaluated by our custom code-based
     // AgentCore evaluator. Shape: [{ type: "contains" | "regex" | "equals" |
     // "json-path", value: string, ... }]
@@ -203,10 +201,6 @@ export const evalTestCasesRelations = relations(
     tenant: one(tenants, {
       fields: [evalTestCases.tenant_id],
       references: [tenants.id],
-    }),
-    agent: one(agents, {
-      fields: [evalTestCases.agent_id],
-      references: [agents.id],
     }),
     results: many(evalResults),
   }),

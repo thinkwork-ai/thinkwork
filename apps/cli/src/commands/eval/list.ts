@@ -10,7 +10,6 @@ import {
 } from "./helpers.js";
 
 interface ListOptions extends EvalCliOptions {
-  agent?: string;
   limit?: string;
   offset?: string;
 }
@@ -19,7 +18,6 @@ export async function runEvalList(opts: ListOptions): Promise<void> {
   const ctx = await resolveEvalContext(opts);
   const data = await gqlQuery(ctx.client, EvalRunsDoc, {
     tenantId: ctx.tenantId,
-    agentId: opts.agent ?? null,
     limit: Number.parseInt(opts.limit ?? "25", 10),
     offset: Number.parseInt(opts.offset ?? "0", 10),
   });
