@@ -37,6 +37,7 @@ import {
   routines,
   tenantWorkflowCatalog,
 } from "@thinkwork/database-pg/schema";
+import { loadFile } from "@thinkwork/workspace-defaults";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 
 const s3 = new S3Client({
@@ -1065,6 +1066,56 @@ export async function regenerateAgentsMdDerivedSections(
       `[workspace-map] Could not regenerate manifest after AGENTS.md section refresh`,
     );
   }
+}
+
+/**
+ * Repair AGENTS.md from the canonical workspace-defaults template, then render
+ * the same derived sections into it. This is intentionally stronger than the
+ * section refresh helper above: operator-triggered normalization replaces
+ * malformed custom prose with a known-good map skeleton.
+ */
+export async function normalizeAgentsMd(agentId: string): Promise<void> {
+  const context = await loadWorkspaceMapRenderContext(agentId);
+  if (!context) return;
+
+  const nextAgentsMd = replaceDerivedAgentsMdSections(
+    loadFile("AGENTS.md"),
+    renderDerivedAgentsMdSections({
+      agentSlug: context.agentSlug,
+      workspaceObjectPaths: context.workspaceObjectPaths,
+      contextByFolder: context.contextByFolder,
+      skills: context.skills,
+      kbs: context.kbs,
+      workflows: context.workflows,
+    }),
+  );
+  const existingAgentsMd = await readS3Text(
+    context.bucket,
+    `${context.prefix}AGENTS.md`,
+  );
+  if (existingAgentsMd === nextAgentsMd) {
+    console.log(
+      `[workspace-map] Skipped AGENTS.md normalization for ${context.agentSlug}: content unchanged`,
+    );
+    return;
+  }
+
+  await writeS3Text(context.bucket, `${context.prefix}AGENTS.md`, nextAgentsMd);
+  try {
+    const { regenerateManifest } = await import("./workspace-manifest.js");
+    await regenerateManifest(
+      context.bucket,
+      context.tenantSlug,
+      context.agentSlug,
+    );
+  } catch {
+    console.warn(
+      `[workspace-map] Could not regenerate manifest after AGENTS.md normalization`,
+    );
+  }
+  console.log(
+    `[workspace-map] Normalized AGENTS.md for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s), ${context.kbs.length} KB(s), ${context.workflows.length} workflow(s)`,
+  );
 }
 
 // ---------------------------------------------------------------------------

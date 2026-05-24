@@ -47,6 +47,7 @@ import {
   type SanitizationViolation,
   substitute,
 } from "./placeholder-substitution.js";
+import { regenerateAgentsMdDerivedSections } from "./workspace-map-generator.js";
 import {
   legacyDefaultsWorkspacePrefix,
   legacyTemplateWorkspacePrefix,
@@ -87,6 +88,12 @@ export interface BootstrapOptions {
    * Pass a `tx` so this runs inside the same transaction as agent creation.
    */
   tx?: DbOrTx;
+  /**
+   * Operator-controlled bootstrap/rematerialize carve-out: after copying
+   * template/defaults bytes, refresh derived AGENTS.md sections while
+   * preserving template-authored prose.
+   */
+  refreshAgentsMdSections?: boolean;
 }
 
 export class BootstrapError extends Error {
@@ -312,6 +319,9 @@ export async function bootstrapAgentWorkspace(
 
   if (written > 0) {
     await regenerateManifest(bkt, resolved.tenantSlug, resolved.agentSlug);
+    if (opts.refreshAgentsMdSections === true) {
+      await regenerateAgentsMdDerivedSections(resolved.agentId);
+    }
   }
 
   return {

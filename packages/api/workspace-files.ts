@@ -6,7 +6,7 @@
  * the bearer path is gone — every caller sends a Cognito ID token.
  *
  * Request shape (Unit 5):
- *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "update-identity-field",
+ *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "normalize-map" | "update-identity-field",
  *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
@@ -23,6 +23,7 @@
  *   put  → { ok: true }
  *   delete → { ok: true }
  *   regenerate-map → { ok: true }
+ *   normalize-map → { ok: true }
  *   errors → { ok: false, error }
  *
  * Auth model:
@@ -52,6 +53,7 @@ import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth
 import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
 import {
   appendRoutingRowIfMissing,
+  normalizeAgentsMd,
   regenerateAgentsMdDerivedSections,
 } from "./src/lib/workspace-map-generator.js";
 import { spaceSourcePrefix } from "./src/lib/spaces/template-migration.js";
@@ -433,6 +435,7 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "regenerate-map",
+  "normalize-map",
   "update-identity-field",
   "rematerialize",
 ]);
@@ -2234,6 +2237,17 @@ async function handleRegenerateMap(
   return json(200, { ok: true });
 }
 
+async function handleNormalizeMap(
+  deps: HandlerDeps,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "agent") {
+    return json(400, { ok: false, error: "normalize-map requires agentId" });
+  }
+  await normalizeAgentsMd(target.agentId);
+  return json(200, { ok: true });
+}
+
 /**
  * Re-copy the agent's template + defaults into its S3 prefix in
  * `overwrite` mode. Operator-triggered: used to refresh an agent after
@@ -2252,6 +2266,7 @@ async function handleRematerialize(
   }
   const result = await bootstrapAgentWorkspace(target.agentId, {
     mode: "overwrite",
+    refreshAgentsMdSections: true,
   });
   return json(200, { ok: true, ...result });
 }
@@ -2468,6 +2483,8 @@ export async function handler(
       }
       case "regenerate-map":
         return await handleRegenerateMap(deps);
+      case "normalize-map":
+        return await handleNormalizeMap(deps);
       case "rematerialize":
         return await handleRematerialize(deps);
       case "update-identity-field": {
