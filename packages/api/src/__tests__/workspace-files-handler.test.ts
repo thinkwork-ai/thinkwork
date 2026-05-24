@@ -189,6 +189,10 @@ const { generateContextFolderStructureMock } = vi.hoisted(() => ({
   generateContextFolderStructureMock: vi.fn(),
 }));
 
+const { seedTenantSkillCatalogMock } = vi.hoisted(() => ({
+  seedTenantSkillCatalogMock: vi.fn(),
+}));
+
 vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../lib/workspace-map-generator.js")>();
@@ -199,6 +203,10 @@ vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
     regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
   };
 });
+
+vi.mock("../lib/catalog-seed.js", () => ({
+  seedTenantSkillCatalog: seedTenantSkillCatalogMock,
+}));
 
 // ─── Mock emitAuditEvent (U5) so the workspace-files-handler tests
 // don't need a working compliance.audit_outbox connection. The
@@ -383,6 +391,12 @@ beforeEach(() => {
   normalizeAgentsMdMock.mockResolvedValue(undefined);
   generateContextFolderStructureMock.mockReset();
   generateContextFolderStructureMock.mockResolvedValue(undefined);
+  seedTenantSkillCatalogMock.mockReset();
+  seedTenantSkillCatalogMock.mockResolvedValue({
+    ok: true,
+    imported_slugs: ["finance-audit-xls"],
+    skipped_slugs: ["web-search"],
+  });
 });
 
 afterEach(() => {
@@ -1100,6 +1114,27 @@ describe("tenant skill catalog target", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body.code).toBe("builtin_tool_slug");
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
+  it("runs catalog-seed through the catalog target and tenant admin gate", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+
+    const res = await parse(
+      await handler(event({ action: "catalog-seed", catalog: true })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      imported_slugs: ["finance-audit-xls"],
+      skipped_slugs: ["web-search"],
+    });
+    expect(seedTenantSkillCatalogMock).toHaveBeenCalledWith({
+      s3: expect.any(S3Client),
+      bucket: "test-bucket",
+      tenantSlug: "acme",
+    });
   });
 });
 

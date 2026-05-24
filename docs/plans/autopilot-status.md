@@ -1403,7 +1403,8 @@ None.
 | Unit | Branch | PR | State | Notes |
 | --- | --- | --- | --- | --- |
 | U1 Catalog S3 prefix and storage contract | `codex/pi-skill-catalog-u1-types` | [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) | Merged | Squash merged as `60280cad`; remote and local branch removed. |
-| U2 Catalog target get/list/put/delete | `codex/pi-skill-catalog-u2-target` | [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) | PR open | Added `{ catalog: true }` target, admin gating, S3 prefix routing, and built-in slug write protection. |
+| U2 Catalog target get/list/put/delete | `codex/pi-skill-catalog-u2-target` | [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) | Merged | Squash merged as `90e3617c`; remote and local branch removed. |
+| U3 Catalog seed action | `codex/pi-skill-catalog-u3-seed` | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | PR open | Added idempotent `catalog-seed` action and bundled skill-catalog assets for the workspace-files Lambda. |
 
 ## Verification Log
 
@@ -1417,12 +1418,21 @@ None.
 - `pnpm --filter @thinkwork/api typecheck` - passed.
 - `git diff --check` - passed.
 - `pnpm exec prettier --check packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+- U2 PR checks passed on [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/api test -- src/lib/catalog-seed.test.ts` - passed.
+- `pnpm --filter @thinkwork/api test -- src/__tests__/workspace-files-handler.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `bash scripts/build-lambdas.sh workspace-files` - passed; `workspace-files.zip` contains bundled `skill-catalog/*/SKILL.md` assets.
+- `git diff --check` - passed.
+- `pnpm exec prettier --check packages/api/src/lib/catalog-seed.ts packages/api/src/lib/catalog-seed.test.ts packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts scripts/build-lambdas.sh docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
 
 ## CI / PR
 
 - Opened [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639).
 - Squash merged [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) as `60280cadf1a04229402e0d395a3ddc629615e875`.
 - Opened [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641).
+- Squash merged [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) as `90e3617c91b9b36ac67b77f4e999b726b22d40aa`.
+- Opened [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643).
 
 ## Blockers
 

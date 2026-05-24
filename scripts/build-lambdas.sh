@@ -83,6 +83,16 @@ build_handler() {
     --banner:js="import{createRequire}from'module';const require=createRequire(import.meta.url);" \
     2>/dev/null
 
+  copy_skill_catalog_assets() {
+    rm -rf "$out_dir/skill-catalog"
+    mkdir -p "$out_dir/skill-catalog"
+    for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*; do
+      [ -d "$skill_dir" ] || continue
+      [ -f "$skill_dir/SKILL.md" ] || continue
+      cp -R "$skill_dir" "$out_dir/skill-catalog/"
+    done
+  }
+
   # For graphql-http: include assets loaded at runtime via readFileSync.
   if [ "$name" = "graphql-http" ]; then
     mkdir -p "$out_dir/packages/database-pg/graphql/types"
@@ -91,13 +101,14 @@ build_handler() {
 
     # Runbook-capable Agent Skills resolve from the skill catalog at runtime.
     # Place those skill directories at /var/task/skill-catalog in the zip.
-    rm -rf "$out_dir/skill-catalog"
-    mkdir -p "$out_dir/skill-catalog"
-    for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*; do
-      [ -d "$skill_dir" ] || continue
-      [ -f "$skill_dir/SKILL.md" ] || continue
-      cp -R "$skill_dir" "$out_dir/skill-catalog/"
-    done
+    copy_skill_catalog_assets
+  fi
+
+  # workspace-files seeds the tenant-scoped S3 skill catalog from the
+  # same bundled source tree. Keep the asset shape identical to
+  # graphql-http so runtime lookup remains /var/task/skill-catalog.
+  if [ "$name" = "workspace-files" ]; then
+    copy_skill_catalog_assets
   fi
 
   # Build a byte-identical zip when contents are byte-identical so

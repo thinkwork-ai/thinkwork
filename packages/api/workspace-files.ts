@@ -6,7 +6,7 @@
  * the bearer path is gone — every caller sends a Cognito ID token.
  *
  * Request shape (Unit 5):
- *   { action: "get" | "list" | "put" | "delete" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
+ *   { action: "get" | "list" | "put" | "delete" | "catalog-seed" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
  *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true, catalog?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
@@ -88,6 +88,7 @@ import {
   enqueueComputerTask,
   type ComputerTaskType,
 } from "./src/lib/computers/tasks.js";
+import { seedTenantSkillCatalog } from "./src/lib/catalog-seed.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -472,6 +473,7 @@ const WRITE_ACTIONS = new Set([
   "move",
   "rename",
   "create-sub-agent",
+  "catalog-seed",
   "generate-folder-structure",
   "regenerate-map",
   "normalize-map",
@@ -1450,6 +1452,25 @@ async function handleDelete(
   } else {
   }
   return json(200, { ok: true });
+}
+
+async function handleCatalogSeed(
+  deps: HandlerDeps,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "catalog") {
+    return json(400, {
+      ok: false,
+      error: "catalog-seed requires catalog: true",
+    });
+  }
+
+  const result = await seedTenantSkillCatalog({
+    s3,
+    bucket: bucket(),
+    tenantSlug: target.tenantSlug,
+  });
+  return json(200, result);
 }
 
 // ---------------------------------------------------------------------------
@@ -2537,7 +2558,7 @@ export async function handler(
 
   if (
     target.kind === "catalog" &&
-    !["get", "list", "put", "delete"].includes(action)
+    !["get", "list", "put", "delete", "catalog-seed"].includes(action)
   ) {
     return json(400, {
       ok: false,
@@ -2582,6 +2603,8 @@ export async function handler(
           return json(400, { ok: false, error: "path is required for delete" });
         return await handleDelete(deps, body.path);
       }
+      case "catalog-seed":
+        return await handleCatalogSeed(deps);
       case "move": {
         if (typeof body.fromPath !== "string" || body.fromPath === "") {
           return json(400, {
