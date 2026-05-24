@@ -1389,6 +1389,36 @@ Target branch: `main`
 
 None.
 
+# Pi Agent Skill Catalog and Workspace Install Autopilot - 2026-05-24
+
+## Status
+
+- Plan: `docs/plans/2026-05-24-003-feat-pi-skill-catalog-and-workspace-install-plan.md`
+- Target branch: `main`
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per implementation unit unless a later unit proves tightly coupled.
+- Started: `2026-05-24T15:24:00Z`
+
+## Unit Ledger
+
+| Unit | Branch | PR | State | Notes |
+| --- | --- | --- | --- | --- |
+| U1 Catalog S3 prefix and storage contract | `codex/pi-skill-catalog-u1-types` | [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) | PR open | Created catalog contract types and guard tests. |
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/types/catalog-skill.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `git diff --check` - passed.
+- `pnpm exec prettier --check packages/api/src/types/catalog-skill.ts packages/api/src/types/catalog-skill.test.ts docs/plans/autopilot-status.md` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+
+## CI / PR
+
+- Opened [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639).
+
+## Blockers
+
+None.
+
 # Editor-Driven AGENTS.md Section Regeneration - 2026-05-23
 
 ## Status
