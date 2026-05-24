@@ -4,13 +4,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Hoisted state — drizzle table tag + db query dispatch + S3 spy
 // ---------------------------------------------------------------------------
 
-const { state, s3Calls, mockRegenerateManifest } = vi.hoisted(() => ({
+const {
+  state,
+  s3Calls,
+  mockRegenerateManifest,
+  mockRegenerateManifestForPrefix,
+} = vi.hoisted(() => ({
   state: {
     agent: {
       name: "Acme Daily Digest",
       slug: "acme-daily-digest",
       tenant_id: "tenant-1",
     } as { name: string; slug: string; tenant_id: string } | null,
+    space: null as {
+      name: string;
+      slug: string;
+      tenant_id: string;
+    } | null,
     tenantSlug: "acme",
     skills: [] as Array<{
       skill_id: string;
@@ -45,6 +55,7 @@ const { state, s3Calls, mockRegenerateManifest } = vi.hoisted(() => ({
     lists: [] as string[],
   },
   mockRegenerateManifest: vi.fn(),
+  mockRegenerateManifestForPrefix: vi.fn(),
 }));
 
 vi.mock("@aws-sdk/client-s3", () => ({
@@ -126,6 +137,7 @@ vi.mock("@thinkwork/database-pg", () => {
   function makeQuery(table: { __name?: string }): unknown[] {
     const name = table.__name ?? "";
     if (name === "agents") return state.agent ? [state.agent] : [];
+    if (name === "spaces") return state.space ? [state.space] : [];
     if (name === "tenants") return [{ slug: state.tenantSlug }];
     if (name === "agent_skills") return state.skills;
     if (name === "agent_knowledge_bases") return state.knowledgeBases;
@@ -166,11 +178,13 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   routines: tagTable("routines"),
   tenantWorkflowCatalog: tagTable("tenant_workflow_catalog"),
   skillCatalog: tagTable("skill_catalog"),
+  spaces: tagTable("spaces"),
   tenants: tagTable("tenants"),
 }));
 
 vi.mock("../workspace-manifest.js", () => ({
   regenerateManifest: mockRegenerateManifest,
+  regenerateManifestForPrefix: mockRegenerateManifestForPrefix,
 }));
 
 // drizzle-orm helpers — test cares about table dispatch only, not predicates.
@@ -183,6 +197,7 @@ vi.mock("drizzle-orm", () => ({
 
 import {
   generateContextFolderStructure,
+  generateContextFolderStructureForSpace,
   normalizeAgentsMd,
   regenerateAgentsMdDerivedSections,
   regenerateWorkspaceMap,
@@ -197,6 +212,7 @@ function resetState(): void {
     slug: "acme-daily-digest",
     tenant_id: "tenant-1",
   };
+  state.space = null;
   state.tenantSlug = "acme";
   state.skills = [];
   state.knowledgeBases = [];
@@ -208,6 +224,7 @@ function resetState(): void {
   s3Calls.gets.length = 0;
   s3Calls.lists.length = 0;
   mockRegenerateManifest.mockReset();
+  mockRegenerateManifestForPrefix.mockReset();
 }
 
 function lastWrittenAgentsMd(): string | null {
@@ -760,5 +777,133 @@ describe("regenerateWorkspaceMap — idempotent write", () => {
     await regenerateWorkspaceMap("agent-1", "computer-1");
     expect(s3Calls.puts.length).toBe(2);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("generateContextFolderStructureForSpace", () => {
+  const SPACE_PREFIX = "tenants/acme/spaces/sales/source/";
+
+  function lastWrittenSpace(path: string): string | null {
+    const put = [...s3Calls.puts]
+      .reverse()
+      .find((p) => p.key === `${SPACE_PREFIX}${path}`);
+    return put?.body ?? null;
+  }
+
+  beforeEach(() => {
+    state.agent = null;
+    state.space = { name: "Sales", slug: "sales", tenant_id: "tenant-1" };
+  });
+
+  it("renders the root Space subtree under the space slug", async () => {
+    state.listObjectsResponses = [
+      "CONTEXT.md",
+      "memory/CONTEXT.md",
+      "memory/lessons.md",
+      "playbooks/intro.md",
+    ];
+    state.s3GetResponses.set(
+      `${SPACE_PREFIX}CONTEXT.md`,
+      "# Sales — Context\n",
+    );
+    state.s3GetResponses.set(
+      `${SPACE_PREFIX}memory/CONTEXT.md`,
+      "# Memory\n",
+    );
+
+    await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
+
+    const written = lastWrittenSpace("CONTEXT.md") ?? "";
+    expect(written).toContain("sales/");
+    expect(written).toContain("CONTEXT.md ← You are here");
+    expect(written).toContain("memory/");
+    expect(written).toContain("playbooks/");
+    expect(written).not.toContain("# Acme Daily Digest");
+  });
+
+  it("scopes nested CONTEXT.md to its parent subtree", async () => {
+    state.listObjectsResponses = [
+      "CONTEXT.md",
+      "memory/CONTEXT.md",
+      "memory/lessons.md",
+      "memory/playbooks/intro.md",
+      "playbooks/elsewhere.md",
+    ];
+    state.s3GetResponses.set(
+      `${SPACE_PREFIX}memory/CONTEXT.md`,
+      "# Memory\n\n## Notes\n\nKeep this.\n",
+    );
+
+    await generateContextFolderStructureForSpace(
+      "space-1",
+      "memory/CONTEXT.md",
+    );
+
+    const written = lastWrittenSpace("memory/CONTEXT.md") ?? "";
+    expect(written).toContain("Keep this.");
+    expect(written).toContain("memory/");
+    expect(written).toContain("CONTEXT.md ← You are here");
+    expect(written).toContain("lessons.md");
+    expect(written).toContain("playbooks/");
+    expect(written).not.toContain("elsewhere.md");
+  });
+
+  it("seeds a blank Space CONTEXT.md with the Space name and folder structure", async () => {
+    state.listObjectsResponses = ["CONTEXT.md", "playbooks/intro.md"];
+    state.s3GetResponses.set(`${SPACE_PREFIX}CONTEXT.md`, "");
+
+    await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
+
+    const written = lastWrittenSpace("CONTEXT.md") ?? "";
+    expect(written).toContain("# Sales — Context");
+    expect(written).toContain("## Folder Structure");
+    expect(written).toContain("sales/");
+    expect(written).toContain("CONTEXT.md ← You are here");
+    expect(written).toContain("playbooks/");
+  });
+
+  it("regenerates the Space prefix manifest and not the agent one", async () => {
+    state.listObjectsResponses = ["CONTEXT.md"];
+    state.s3GetResponses.set(
+      `${SPACE_PREFIX}CONTEXT.md`,
+      "# Sales — Context\n",
+    );
+
+    await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
+
+    expect(mockRegenerateManifestForPrefix).toHaveBeenCalledTimes(1);
+    expect(mockRegenerateManifestForPrefix.mock.calls[0]?.[1]).toBe(
+      SPACE_PREFIX,
+    );
+    expect(mockRegenerateManifest).not.toHaveBeenCalled();
+  });
+
+  it("does not call any AGENTS.md derived-section refresh on Spaces", async () => {
+    state.listObjectsResponses = ["CONTEXT.md"];
+    state.s3GetResponses.set(
+      `${SPACE_PREFIX}CONTEXT.md`,
+      "# Sales — Context\n",
+    );
+
+    await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
+
+    expect(
+      s3Calls.puts.some((p) => p.key.endsWith("AGENTS.md")),
+    ).toBe(false);
+  });
+
+  it("rejects non-CONTEXT.md paths", async () => {
+    await expect(
+      generateContextFolderStructureForSpace("space-1", "memory/notes.md"),
+    ).rejects.toThrow("CONTEXT.md path");
+  });
+
+  it("no-ops when the Space slug or tenant slug cannot be resolved", async () => {
+    state.space = null;
+
+    await generateContextFolderStructureForSpace("space-1", "CONTEXT.md");
+
+    expect(s3Calls.puts).toEqual([]);
+    expect(mockRegenerateManifestForPrefix).not.toHaveBeenCalled();
   });
 });

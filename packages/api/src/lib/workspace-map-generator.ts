@@ -35,10 +35,14 @@ import {
   agentKnowledgeBases,
   knowledgeBases,
   routines,
+  spaces,
+  tenants,
   tenantWorkflowCatalog,
 } from "@thinkwork/database-pg/schema";
 import { loadFile } from "@thinkwork/workspace-defaults";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
+import { spaceSourcePrefix } from "./spaces/template-migration.js";
+import { regenerateManifestForPrefix } from "./workspace-manifest.js";
 
 const s3 = new S3Client({
   region:
@@ -1186,37 +1190,23 @@ export async function generateContextFolderStructure(
   const context = await loadWorkspaceMapRenderContext(agentId);
   if (!context) return;
 
-  const existingContextMd = await readS3TextIfExists(
-    context.bucket,
-    `${context.prefix}${contextPath}`,
-  );
-  const seedContextMd =
-    existingContextMd && existingContextMd.trim()
-      ? existingContextMd
-      : seedContextMarkdown(context.agentName, contextPath);
-  const nextContextMd = replaceMarkdownSection(
-    seedContextMd,
-    "Folder Structure",
-    renderScopedContextFolderStructureBody({
-      agentSlug: context.agentSlug,
-      contextPath,
-      workspaceObjectPaths: context.workspaceObjectPaths,
-      contextByFolder: context.contextByFolder,
-    }),
-  );
+  const changed = await renderAndWriteContextFolderStructure({
+    bucket: context.bucket,
+    prefix: context.prefix,
+    rootSlug: context.agentSlug,
+    rootDisplayName: context.agentName,
+    contextPath,
+    workspaceObjectPaths: context.workspaceObjectPaths,
+    contextByFolder: context.contextByFolder,
+  });
 
-  if (existingContextMd === nextContextMd) {
+  if (!changed) {
     console.log(
       `[workspace-map] Skipped CONTEXT.md folder structure refresh for ${contextPath}: content unchanged`,
     );
     return;
   }
 
-  await writeS3Text(
-    context.bucket,
-    `${context.prefix}${contextPath}`,
-    nextContextMd,
-  );
   await regenerateAgentsMdDerivedSections(agentId);
   const { regenerateManifest } = await import("./workspace-manifest.js");
   await regenerateManifest(
@@ -1227,6 +1217,153 @@ export async function generateContextFolderStructure(
   console.log(
     `[workspace-map] Refreshed CONTEXT.md folder structure for ${context.agentSlug}/${contextPath}`,
   );
+}
+
+/**
+ * Refresh the `## Folder Structure` section of a Space's CONTEXT.md.
+ *
+ * Mirrors the agent-target generator but uses the Space's S3 prefix and skips
+ * the AGENTS.md derived-section refresh (Spaces don't have AGENTS.md).
+ */
+export async function generateContextFolderStructureForSpace(
+  spaceId: string,
+  contextPath: string,
+): Promise<void> {
+  if (!isContextMdPath(contextPath)) {
+    throw new Error("generate-folder-structure requires a CONTEXT.md path");
+  }
+
+  const context = await loadSpaceFolderStructureContext(spaceId);
+  if (!context) return;
+
+  const changed = await renderAndWriteContextFolderStructure({
+    bucket: context.bucket,
+    prefix: context.prefix,
+    rootSlug: context.spaceSlug,
+    rootDisplayName: context.spaceName,
+    contextPath,
+    workspaceObjectPaths: context.workspaceObjectPaths,
+    contextByFolder: context.contextByFolder,
+  });
+
+  if (!changed) {
+    console.log(
+      `[workspace-map] Skipped Space CONTEXT.md folder structure refresh for ${contextPath}: content unchanged`,
+    );
+    return;
+  }
+
+  await regenerateManifestForPrefix(context.bucket, context.prefix);
+  console.log(
+    `[workspace-map] Refreshed CONTEXT.md folder structure for space ${context.spaceSlug}/${contextPath}`,
+  );
+}
+
+interface FolderStructureRenderArgs {
+  bucket: string;
+  prefix: string;
+  rootSlug: string;
+  rootDisplayName: string;
+  contextPath: string;
+  workspaceObjectPaths: string[];
+  contextByFolder: Map<string, string>;
+}
+
+/**
+ * Read the target CONTEXT.md, replace its `## Folder Structure` body with the
+ * scoped tree render, and write it back. Returns true when the file changed.
+ */
+async function renderAndWriteContextFolderStructure(
+  args: FolderStructureRenderArgs,
+): Promise<boolean> {
+  const existingContextMd = await readS3TextIfExists(
+    args.bucket,
+    `${args.prefix}${args.contextPath}`,
+  );
+  const seedContextMd =
+    existingContextMd && existingContextMd.trim()
+      ? existingContextMd
+      : seedContextMarkdown(args.rootDisplayName, args.contextPath);
+  const nextContextMd = replaceMarkdownSection(
+    seedContextMd,
+    "Folder Structure",
+    renderScopedContextFolderStructureBody({
+      rootSlug: args.rootSlug,
+      contextPath: args.contextPath,
+      workspaceObjectPaths: args.workspaceObjectPaths,
+      contextByFolder: args.contextByFolder,
+    }),
+  );
+
+  if (existingContextMd === nextContextMd) return false;
+
+  await writeS3Text(
+    args.bucket,
+    `${args.prefix}${args.contextPath}`,
+    nextContextMd,
+  );
+  return true;
+}
+
+interface SpaceFolderStructureContext {
+  bucket: string;
+  prefix: string;
+  tenantSlug: string;
+  spaceSlug: string;
+  spaceName: string;
+  workspaceObjectPaths: string[];
+  contextByFolder: Map<string, string>;
+}
+
+async function loadSpaceFolderStructureContext(
+  spaceId: string,
+): Promise<SpaceFolderStructureContext | null> {
+  const db = getDb();
+  const [space] = await db
+    .select({
+      name: spaces.name,
+      slug: spaces.slug,
+      tenant_id: spaces.tenant_id,
+    })
+    .from(spaces)
+    .where(eq(spaces.id, spaceId));
+  if (!space || !space.slug) {
+    console.warn(`[workspace-map] Space not found or no slug: ${spaceId}`);
+    return null;
+  }
+
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, space.tenant_id));
+  const tenantSlug = tenant?.slug || "";
+  const bucket = getBucket();
+  if (!tenantSlug || !bucket) {
+    console.warn(
+      `[workspace-map] Missing tenant slug or bucket for space ${spaceId}`,
+    );
+    return null;
+  }
+
+  const prefix = spaceSourcePrefix(tenantSlug, space.slug);
+  const workspaceObjectPaths = await listWorkspaceObjectPaths(bucket, prefix);
+  const contextByFolder = new Map<string, string>();
+  for (const rel of workspaceObjectPaths) {
+    if (!rel.endsWith("/CONTEXT.md")) continue;
+    const folder = rel.slice(0, -"CONTEXT.md".length);
+    const contextContent = await readS3Text(bucket, `${prefix}${rel}`);
+    if (contextContent) contextByFolder.set(folder, contextContent);
+  }
+
+  return {
+    bucket,
+    prefix,
+    tenantSlug,
+    spaceSlug: space.slug,
+    spaceName: space.name,
+    workspaceObjectPaths,
+    contextByFolder,
+  };
 }
 
 function isContextMdPath(path: string): boolean {
@@ -1247,16 +1384,16 @@ function humanizeFolderName(value: string): string {
     .join(" ");
 }
 
-function seedContextMarkdown(agentName: string, contextPath: string): string {
+function seedContextMarkdown(rootName: string, contextPath: string): string {
   const folder = parentFolder(contextPath);
   const title = folder
     ? humanizeFolderName(folder.split("/").at(-1) ?? folder)
-    : `${agentName} — Context`;
+    : `${rootName} — Context`;
   return `# ${title}\n`;
 }
 
 function renderScopedContextFolderStructureBody(args: {
-  agentSlug: string;
+  rootSlug: string;
   contextPath: string;
   workspaceObjectPaths: string[];
   contextByFolder: Map<string, string>;
@@ -1264,7 +1401,7 @@ function renderScopedContextFolderStructureBody(args: {
   const folder = parentFolder(args.contextPath);
   const rootLabel = folder
     ? (folder.split("/").at(-1) ?? folder)
-    : args.agentSlug;
+    : args.rootSlug;
   const scopedObjectPaths = scopeWorkspaceObjectPaths(
     args.workspaceObjectPaths,
     folder,
