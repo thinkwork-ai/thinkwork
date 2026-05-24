@@ -15,7 +15,7 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python ag
 - `packages/agentcore-strands/agent-container` — **Python** Strands runtime (Bedrock models, MCP tools, Docker image)
 - `packages/agentcore` — tenant-router + auth-agent (separate AgentCore image)
 - `packages/skill-catalog` — script-based skills loaded by the Strands runtime
-- `packages/system-workspace` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
+- `packages/workspace-defaults` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
 - `terraform/modules/{foundation,data,app,thinkwork}` — three-tier Terraform Registry modules (`thinkwork-ai/thinkwork/aws`)
 - `docs/` — Astro Starlight docs site; also holds `plans/`, `brainstorms/`, `solutions/` — prior-session institutional knowledge worth grepping before starting non-trivial work. Compliance module reference: `docs/src/content/docs/compliance/` (rendered at `/compliance/` in the Starlight site)
 
