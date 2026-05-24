@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   moveWorkspaceFile,
   normalizeWorkspaceMap,
+  regenerateWorkspaceMap,
   renameWorkspacePath,
 } from "../workspace-files-api";
 
@@ -124,6 +125,20 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
       .calls[0];
     expect(JSON.parse(init.body as string)).toEqual({
       action: "normalize-map",
+      agentId: "agent-abc",
+    });
+  });
+
+  it("posts action=regenerate-map for explicit AGENTS.md section refresh", async () => {
+    mockOk({});
+
+    await regenerateWorkspaceMap("agent-abc");
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "regenerate-map",
       agentId: "agent-abc",
     });
   });
