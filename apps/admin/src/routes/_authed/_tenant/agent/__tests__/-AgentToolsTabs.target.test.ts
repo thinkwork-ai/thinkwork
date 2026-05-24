@@ -22,10 +22,18 @@ describe("agent detail tools tabs", () => {
 
   it("moves built-in tools and MCP servers into agent tabs", () => {
     expect(layoutSource).toContain('to: "/agent/tools"');
-    expect(layoutSource).toContain("Built-in Tools");
+    expect(layoutSource).toContain('label: "Tools"');
+    expect(layoutSource).not.toContain("Built-in Tools");
     expect(layoutSource).toContain('to: "/agent/mcp-servers"');
     expect(layoutSource).toContain("MCP Servers");
     expect(layoutSource).not.toContain("/capabilities");
+  });
+
+  it("registers the tenant skill catalog tab", () => {
+    expect(layoutSource).toContain('"skills"');
+    expect(layoutSource).toContain('to: "/agent/skills"');
+    expect(layoutSource).toContain('label: "Skills"');
+    expect(layoutSource).toContain('pathname.startsWith("/agent/skills")');
   });
 
   it("renames files to workspace and removes config from the tab strip", () => {
