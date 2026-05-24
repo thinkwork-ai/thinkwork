@@ -1,3 +1,4 @@
+import { asc, sql } from "drizzle-orm";
 import {
   and,
   db,
@@ -44,6 +45,16 @@ export const spaceTypeResolvers = {
           eq(spaceMembers.tenant_id, tenantId),
           eq(spaceMembers.space_id, spaceId),
         ),
+      )
+      .orderBy(
+        sql`CASE ${spaceMembers.role}
+              WHEN 'owner' THEN 0
+              WHEN 'admin' THEN 1
+              WHEN 'member' THEN 2
+              WHEN 'viewer' THEN 3
+              ELSE 4
+            END`,
+        asc(spaceMembers.created_at),
       );
     return rows.map((row) => toGraphqlSpaceChild(row));
   },

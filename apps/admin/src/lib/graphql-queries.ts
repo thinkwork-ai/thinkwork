@@ -222,6 +222,52 @@ export const SetSpaceKnowledgeBasesMutation = graphql(`
   }
 `);
 
+export const SpaceMembersQuery = graphql(`
+  query SpaceMembers($id: ID!) {
+    space(id: $id) {
+      id
+      accessMode
+      members {
+        id
+        userId
+        role
+        notificationPreference
+        createdAt
+        user {
+          id
+          name
+          email
+          image
+        }
+      }
+    }
+  }
+`);
+
+export const AddSpaceMemberMutation = graphql(`
+  mutation AddSpaceMember($spaceId: ID!, $userId: ID!) {
+    addSpaceMember(spaceId: $spaceId, userId: $userId) {
+      id
+      userId
+      role
+      notificationPreference
+      createdAt
+      user {
+        id
+        name
+        email
+        image
+      }
+    }
+  }
+`);
+
+export const RemoveSpaceMemberMutation = graphql(`
+  mutation RemoveSpaceMember($spaceId: ID!, $userId: ID!) {
+    removeSpaceMember(spaceId: $spaceId, userId: $userId)
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Computers
 // ---------------------------------------------------------------------------

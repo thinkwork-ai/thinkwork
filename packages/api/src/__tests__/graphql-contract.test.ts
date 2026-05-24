@@ -206,6 +206,40 @@ describe("GraphQL Schema Contract", () => {
         ["enabled", "Boolean!"],
       ]);
     });
+
+    it("exposes addSpaceMember and removeSpaceMember mutations", () => {
+      const mutation = schema.getMutationType() as any;
+
+      expect(mutation.getFields().addSpaceMember.type.toString()).toBe(
+        "SpaceMember!",
+      );
+      expect(
+        mutation
+          .getFields()
+          .addSpaceMember.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([
+        ["spaceId", "ID!"],
+        ["userId", "ID!"],
+      ]);
+
+      expect(mutation.getFields().removeSpaceMember.type.toString()).toBe(
+        "Boolean!",
+      );
+      expect(
+        mutation
+          .getFields()
+          .removeSpaceMember.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([
+        ["spaceId", "ID!"],
+        ["userId", "ID!"],
+      ]);
+    });
   });
 
   describe("Agents contract", () => {
