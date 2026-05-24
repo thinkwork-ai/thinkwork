@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderWorkspaceTuple } from "./compose-tuple.js";
+import type { SpaceMembershipRepository } from "./space-membership-check.js";
 import type {
   ResolvedWorkspaceRenderTuple,
   WorkspaceObjectMetadata,
@@ -17,6 +18,7 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceSlug: "board-pack",
   spaceName: "Board Pack",
   spaceKind: "custom",
+  spaceAccessMode: "public",
   spacePrompt: "Prepare board reporting work.",
   spaceToolPolicy: { blockedTools: ["send_email"] },
   spaceMcpPolicy: { allowedServers: ["github"], blockedServers: ["prod-db"] },
@@ -41,6 +43,14 @@ class FakeRepository implements WorkspaceTupleRepository {
 
   async resolve(): Promise<ResolvedWorkspaceRenderTuple | null> {
     return this.tuple;
+  }
+}
+
+class FakeMembershipRepository implements SpaceMembershipRepository {
+  constructor(private readonly memberUserIds: string[] = []) {}
+
+  async isSpaceMember(input: { userId: string }): Promise<boolean> {
+    return this.memberUserIds.includes(input.userId);
   }
 }
 
@@ -89,8 +99,32 @@ function seedObjects(
 ): Map<string, { content: string; lastModified: Date }> {
   const base: Record<string, { content: string; lastModified?: string }> = {
     "tenants/acme/agents/finance-agent/workspace/AGENTS.md": {
-      content:
-        "# AGENTS.md\n\nRoot routing.\n\n<!-- RENDERED:ACTIVE_SPACE -->\n\nold",
+      content: `# AGENTS.md
+
+Root routing.
+
+## Folder Structure
+
+\`\`\`text
+finance-agent/
+├── workspaces/
+│   ├── sql/
+│   ├── finance-analyst/
+│   └── legal/
+└── memory/
+\`\`\`
+
+## Routing
+
+| Task | Go to | Read | Skills |
+| ---- | ----- | ---- | ------ |
+| Query warehouse | workspaces/sql/ | CONTEXT.md | snowflake |
+| Build board pack | workspaces/finance-analyst/ | CONTEXT.md | sheets |
+| Legal review | workspaces/legal/ | CONTEXT.md | contracts |
+
+<!-- RENDERED:ACTIVE_SPACE -->
+
+old`,
       lastModified: "2026-05-22T09:00:00.000Z",
     },
     "tenants/acme/agents/finance-agent/workspace/TOOLS.md": {
@@ -130,7 +164,7 @@ function seedObjects(
         "---\nadds: [warehouse]\nrestricts:\n  - send_email\n---\n# Space Tools\n",
       lastModified: "2026-05-22T09:05:00.000Z",
     },
-    "tenants/acme/spaces/board-pack/source/reports/board.md": {
+    "tenants/acme/spaces/board-pack/source/knowledge/board.md": {
       content: "# Report\n",
       lastModified: "2026-05-22T09:06:00.000Z",
     },
@@ -169,15 +203,19 @@ describe("renderWorkspaceTuple", () => {
     expect(result.writtenFiles).toContain("AGENTS.md");
     expect(result.writtenFiles).toContain("SPACE.md");
     expect(result.writtenFiles).toContain("space/SPACE.md");
-    expect(result.writtenFiles).toContain("space/reports/board.md");
-    expect(result.writtenFiles).toContain("spaces/board-pack/reports/board.md");
+    expect(result.writtenFiles).toContain("space/knowledge/board.md");
+    expect(result.writtenFiles).toContain(
+      "spaces/board-pack/knowledge/board.md",
+    );
+    expect(result.writtenFiles).not.toContain("space/TOOLS.md");
+    expect(result.writtenFiles).not.toContain("spaces/board-pack/TOOLS.md");
     expect(result.writtenFiles).not.toContain("SPACE_CONTEXT.md");
     expect(result.writtenFiles).not.toContain("effective-policy.json");
     expect(result.writtenFiles).not.toContain("spaces/old/SPACE.md");
     expect(result.effectivePolicy).toMatchObject({
-      blockedTools: ["send_email"],
-      mcpAllowedServers: ["github"],
-      mcpBlockedServers: ["prod-db"],
+      blockedTools: [],
+      mcpAllowedServers: null,
+      mcpBlockedServers: [],
     });
 
     const renderedAgents = store.puts.find((put) =>
@@ -193,9 +231,9 @@ describe("renderWorkspaceTuple", () => {
     const renderedTools = store.puts.find((put) =>
       put.key.endsWith("/TOOLS.md"),
     )?.content;
-    expect(renderedTools).toContain("- browser");
-    expect(renderedTools).toContain("- warehouse");
-    expect(renderedTools).toContain("- send_email");
+    expect(renderedTools).toContain("adds: [browser]");
+    expect(renderedTools).not.toContain("warehouse");
+    expect(renderedTools).not.toContain("send_email");
   });
 
   it("returns a cache hit without writes when the marker is newer than source files", async () => {
@@ -218,9 +256,145 @@ describe("renderWorkspaceTuple", () => {
     );
 
     expect(result.cacheStatus).toBe("hit");
-    expect(result.effectivePolicy.blockedTools).toEqual(["send_email"]);
+    expect(result.effectivePolicy.blockedTools).toEqual([]);
     expect(result.writtenFiles).toEqual([]);
     expect(store.puts).toEqual([]);
+  });
+
+  it("filters rendered workspace mentions from SPACE.md allowlists", async () => {
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/spaces/board-pack/source/SPACE.md": {
+          content: `# Board Pack
+
+## Mentionable Workspaces
+
+\`\`\`
+sql
+finance analyst
+missing-workspace
+\`\`\`
+`,
+          lastModified: "2026-05-22T09:04:00.000Z",
+        },
+      }),
+    );
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    const renderedAgents = store.puts.find((put) =>
+      put.key.endsWith("/AGENTS.md"),
+    )?.content;
+    expect(renderedAgents).toContain("workspaces/sql/");
+    expect(renderedAgents).toContain("workspaces/finance-analyst/");
+    expect(renderedAgents).not.toContain("workspaces/legal/");
+    expect(renderedAgents).not.toContain("missing-workspace");
+  });
+
+  it("removes all routing rows when SPACE.md declares an empty mentionable block", async () => {
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/spaces/board-pack/source/SPACE.md": {
+          content: `# Board Pack
+
+## Mentionable Workspaces
+
+\`\`\`
+\`\`\`
+`,
+          lastModified: "2026-05-22T09:04:00.000Z",
+        },
+      }),
+    );
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+      },
+    );
+
+    const renderedAgents = store.puts.find((put) =>
+      put.key.endsWith("/AGENTS.md"),
+    )?.content;
+    expect(renderedAgents).toContain("| Task | Go to | Read | Skills |");
+    expect(renderedAgents).not.toContain("workspaces/sql/");
+    expect(renderedAgents).not.toContain("workspaces/finance-analyst/");
+    expect(renderedAgents).not.toContain("workspaces/legal/");
+  });
+
+  it("blocks private Spaces before reading source files for non-members", async () => {
+    const store = new FakeStore(seedObjects());
+
+    await expect(
+      renderWorkspaceTuple(
+        { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+        {
+          bucket: "workspace",
+          repository: new FakeRepository({
+            ...TUPLE,
+            spaceAccessMode: "private",
+            userId: "user-2",
+          }),
+          objectStore: store,
+          spaceMembershipRepository: new FakeMembershipRepository(["user-1"]),
+        },
+      ),
+    ).rejects.toMatchObject({ code: "SpaceAccessDenied" });
+    expect(store.puts).toEqual([]);
+  });
+
+  it("allows private Spaces for members and service identities", async () => {
+    const memberStore = new FakeStore(seedObjects());
+    await expect(
+      renderWorkspaceTuple(
+        { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+        {
+          bucket: "workspace",
+          repository: new FakeRepository({
+            ...TUPLE,
+            spaceAccessMode: "private",
+            userId: "user-1",
+          }),
+          objectStore: memberStore,
+          spaceMembershipRepository: new FakeMembershipRepository(["user-1"]),
+        },
+      ),
+    ).resolves.toMatchObject({ cacheStatus: "miss" });
+
+    const serviceStore = new FakeStore(seedObjects());
+    await expect(
+      renderWorkspaceTuple(
+        {
+          tenantId: "tenant-1",
+          agentId: "agent-1",
+          spaceId: "space-1",
+          invokingServiceIdentity: "service-user-1",
+        },
+        {
+          bucket: "workspace",
+          repository: new FakeRepository({
+            ...TUPLE,
+            spaceAccessMode: "private",
+            userId: null,
+          }),
+          objectStore: serviceStore,
+          spaceMembershipRepository: new FakeMembershipRepository([
+            "service-user-1",
+          ]),
+        },
+      ),
+    ).resolves.toMatchObject({ cacheStatus: "miss" });
   });
 
   it("fails clearly when the Space source prefix has no renderable files", async () => {

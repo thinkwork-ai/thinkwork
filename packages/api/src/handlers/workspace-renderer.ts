@@ -10,6 +10,7 @@ export interface WorkspaceRendererEvent {
   agentId?: string;
   spaceId?: string;
   userId?: string | null;
+  invokingServiceIdentity?: string | null;
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
   bucket?: string;
@@ -54,6 +55,8 @@ function statusForError(error: WorkspaceRenderError): number {
     case "AgentBaselineNotFound":
     case "SpaceSourcesNotFound":
       return 404;
+    case "SpaceAccessDenied":
+      return 403;
   }
 }
 
@@ -74,6 +77,7 @@ export function createWorkspaceRendererHandler(
           agentId: event.agentId,
           spaceId: event.spaceId,
           userId: event.userId,
+          invokingServiceIdentity: event.invokingServiceIdentity,
           agentBlockedTools: event.agentBlockedTools,
           agentAllowedTools: event.agentAllowedTools,
         },

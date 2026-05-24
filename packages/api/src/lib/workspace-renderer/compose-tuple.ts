@@ -4,7 +4,6 @@ import {
   shouldRenderWorkspaceSourcePath,
 } from "../workspace-renderer.js";
 import { composeAgentsMd } from "./agents-md-composer.js";
-import { mergePolicyFile } from "./tool-policy-merger.js";
 import {
   agentWorkspacePrefix,
   renderedWorkspacePrefix,
@@ -14,6 +13,11 @@ import {
 import { composeWorkspacePolicy } from "./effective-policy-composer.js";
 import { DrizzleWorkspaceTupleRepository } from "./repository.js";
 import { S3WorkspaceRendererObjectStore } from "./s3-store.js";
+import {
+  assertSpaceAccessAllowed,
+  type SpaceMembershipRepository,
+} from "./space-membership-check.js";
+import { parseMentionableWorkspaces } from "./space-md-parser.js";
 import type {
   RenderedWorkspaceTuple,
   ResolvedWorkspaceRenderTuple,
@@ -33,6 +37,7 @@ export interface RenderWorkspaceTupleDeps {
   now?: () => Date;
   objectStore?: WorkspaceRendererObjectStore;
   repository?: WorkspaceTupleRepository;
+  spaceMembershipRepository?: SpaceMembershipRepository;
 }
 
 interface SourceObject extends WorkspaceObjectMetadata {
@@ -121,6 +126,10 @@ function shouldRenderAgentBaselinePath(relPath: string): boolean {
   );
 }
 
+function shouldRenderSpaceSourcePath(relPath: string): boolean {
+  return relPath === "SPACE.md" || relPath.startsWith("knowledge/");
+}
+
 export async function renderWorkspaceTuple(
   input: WorkspaceRenderTupleInput,
   deps: RenderWorkspaceTupleDeps = {},
@@ -141,6 +150,17 @@ export async function renderWorkspaceTuple(
       "Tenant, agent, Space, or user context could not be resolved.",
     );
   }
+  await assertSpaceAccessAllowed(
+    {
+      tenantId: tuple.tenantId,
+      spaceId: tuple.spaceId,
+      spaceSlug: tuple.spaceSlug,
+      accessMode: tuple.spaceAccessMode,
+      invokingUserId: tuple.userId,
+      invokingServiceIdentity: input.invokingServiceIdentity,
+    },
+    deps.spaceMembershipRepository,
+  );
 
   const objectStore =
     deps.objectStore ?? new S3WorkspaceRendererObjectStore(s3);
@@ -159,7 +179,12 @@ export async function renderWorkspaceTuple(
       agentPrefix,
       shouldRenderAgentBaselinePath,
     ),
-    listRenderableSource(objectStore, bucket, spacePrefix),
+    listRenderableSource(
+      objectStore,
+      bucket,
+      spacePrefix,
+      shouldRenderSpaceSourcePath,
+    ),
     userPrefix
       ? listRenderableSource(objectStore, bucket, userPrefix)
       : Promise.resolve({ prefix: "", objects: [] }),
@@ -184,8 +209,6 @@ export async function renderWorkspaceTuple(
   const effectivePolicy = composeWorkspacePolicy({
     agentBlockedTools: input.agentBlockedTools,
     agentAllowedTools: input.agentAllowedTools,
-    spaceToolPolicy: tuple.spaceToolPolicy,
-    spaceMcpPolicy: tuple.spaceMcpPolicy,
   });
   const marker = await objectStore.getText({ bucket, key: markerKey });
   if (
@@ -225,30 +248,14 @@ export async function renderWorkspaceTuple(
     rendered.set(`spaces/${tuple.spaceSlug}/${relPath}`, content);
   }
 
-  const spaceMd =
-    spaceFiles.get("SPACE.md") ??
-    spaceFiles.get("AGENTS.md") ??
-    renderDefaultSpaceMd(tuple);
+  const spaceMd = spaceFiles.get("SPACE.md") ?? renderDefaultSpaceMd(tuple);
   rendered.set("SPACE.md", spaceMd);
-
-  const mergedTools = mergePolicyFile({
-    baseline: agentFiles.get("TOOLS.md"),
-    space: spaceFiles.get("TOOLS.md"),
-    spaceSlug: tuple.spaceSlug,
-  });
-  if (mergedTools) rendered.set("TOOLS.md", mergedTools);
-
-  const mergedMcp = mergePolicyFile({
-    baseline: agentFiles.get("MCP.md"),
-    space: spaceFiles.get("MCP.md"),
-    spaceSlug: tuple.spaceSlug,
-  });
-  if (mergedMcp) rendered.set("MCP.md", mergedMcp);
 
   rendered.set(
     "AGENTS.md",
     composeAgentsMd({
       baseline: agentFiles.get("AGENTS.md") ?? "",
+      mentionableWorkspaces: parseMentionableWorkspaces(spaceMd),
       spaceSlug: tuple.spaceSlug,
       spaceName: tuple.spaceName,
       isDefaultSpace: isDefaultSpace(tuple),
