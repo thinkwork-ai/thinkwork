@@ -7,6 +7,7 @@ import {
 import { useQuery } from "urql";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { TenantAgentHeaderControls } from "@/components/tenant-agent/TenantAgentHeaderControls";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
@@ -16,15 +17,14 @@ export const Route = createFileRoute("/_authed/_tenant/agent")({
   component: AgentLayout,
 });
 
-export type AgentTab = "files" | "config" | "tools" | "mcp-servers";
+export type AgentTab = "files" | "tools" | "mcp-servers";
 
 export const AGENT_TABS: {
   value: AgentTab;
-  to: "/agent/files" | "/agent/config" | "/agent/tools" | "/agent/mcp-servers";
+  to: "/agent/files" | "/agent/tools" | "/agent/mcp-servers";
   label: string;
 }[] = [
-  { value: "files", to: "/agent/files", label: "Files" },
-  { value: "config", to: "/agent/config", label: "Config" },
+  { value: "files", to: "/agent/files", label: "Workspace" },
   { value: "tools", to: "/agent/tools", label: "Built-in Tools" },
   { value: "mcp-servers", to: "/agent/mcp-servers", label: "MCP Servers" },
 ];
@@ -32,7 +32,6 @@ export const AGENT_TABS: {
 export function currentAgentTab(pathname: string): AgentTab {
   if (pathname.startsWith("/agent/mcp-servers")) return "mcp-servers";
   if (pathname.startsWith("/agent/tools")) return "tools";
-  if (pathname.startsWith("/agent/config")) return "config";
   return "files";
 }
 
@@ -42,7 +41,7 @@ function AgentLayout() {
   const currentTab = currentAgentTab(pathname);
   useBreadcrumbs([{ label: "Agent" }]);
 
-  const [result] = useQuery({
+  const [result, reexecute] = useQuery({
     query: TenantAgentQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId,
@@ -56,11 +55,18 @@ function AgentLayout() {
   return (
     <PageLayout
       header={
-        <div className="grid grid-cols-3 items-center gap-4">
-          <div className="min-w-0">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <div className="flex min-w-0 items-center gap-3">
             <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-foreground">
               Agent
             </h1>
+            {agent ? (
+              <TenantAgentHeaderControls
+                tenantId={tenantId}
+                agent={agent}
+                onSaved={() => reexecute({ requestPolicy: "network-only" })}
+              />
+            ) : null}
           </div>
           <div className="flex justify-center">
             <Tabs value={currentTab}>

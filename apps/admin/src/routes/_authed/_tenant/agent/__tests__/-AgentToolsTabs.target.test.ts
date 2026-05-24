@@ -8,9 +8,13 @@ function readSource(path: string) {
 describe("agent detail tools tabs", () => {
   const layoutSource = readSource("../../agent.tsx");
   const indexSource = readSource("../index.tsx");
+  const configSource = readSource("../config.tsx");
   const builtinToolsSource = readSource("../tools.tsx");
   const mcpServersSource = readSource("../mcp-servers.tsx");
   const sidebarSource = readSource("../../../../../components/Sidebar.tsx");
+  const headerControlsSource = readSource(
+    "../../../../../components/tenant-agent/TenantAgentHeaderControls.tsx",
+  );
 
   it("keeps agent defaulting to files", () => {
     expect(indexSource).toContain('to: "/agent/files"');
@@ -22,6 +26,24 @@ describe("agent detail tools tabs", () => {
     expect(layoutSource).toContain('to: "/agent/mcp-servers"');
     expect(layoutSource).toContain("MCP Servers");
     expect(layoutSource).not.toContain("/capabilities");
+  });
+
+  it("renames files to workspace and removes config from the tab strip", () => {
+    expect(layoutSource).toContain('label: "Workspace"');
+    expect(layoutSource).not.toContain('label: "Files"');
+    expect(layoutSource).not.toContain('label: "Config"');
+    expect(layoutSource).not.toContain('to: "/agent/config"');
+    expect(configSource).toContain('to: "/agent/files"');
+    expect(configSource).toContain("replace: true");
+  });
+
+  it("renders model and runtime selectors in the agent header", () => {
+    expect(layoutSource).toContain("TenantAgentHeaderControls");
+    expect(headerControlsSource).toContain("BadgeSelectorSelect");
+    expect(headerControlsSource).toContain("ModelCatalogQuery");
+    expect(headerControlsSource).toContain("UpdateTenantAgentMutation");
+    expect(headerControlsSource).toContain('label: "Pi"');
+    expect(headerControlsSource).toContain('label: "Strands"');
   });
 
   it("mounts the tool tabs under agent routes", () => {
