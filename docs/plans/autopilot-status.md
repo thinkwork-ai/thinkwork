@@ -1413,7 +1413,7 @@ None.
 | U8 Add Skill dialog component                   | `codex/pi-skill-catalog-u8-dialog`        | [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) | Merged | Squash merged as `d49eccb4`; remote and local branch removed. Added the admin two-step Add Skill dialog, catalog/wiring parsing helpers, and install-skill client wrapper.                                                             |
 | U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | Merged | Squash merged as `3b51ec6e`; remote and local branch removed. Added the `skills/` folder context-menu entry and wired the dialog through agent/Space workspace targets.                                                                |
 | U10 Uninstall-skill backend action              | `codex/pi-skill-catalog-u10-uninstall`    | [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) | Merged | Squash merged as `c81861cd`; remote and local branch removed. Added the symmetric workspace-files `uninstall-skill` action, catalog ref snippet stripping, installed-folder deletion, and agent/Space coverage.                        |
-| U11 FolderTree Remove Skill context menu        | `codex/pi-skill-catalog-u11-remove-menu`  | Pending                                                      | Active | Adds the installed-skill folder context-menu affordance and routes folder-delete through `uninstall-skill` when `.catalog-ref.json` marks the folder as catalog-installed.                                                             |
+| U11 FolderTree Remove Skill context menu        | `codex/pi-skill-catalog-u11-remove-menu`  | [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657) | In CI  | Adds the installed-skill folder context-menu affordance and routes folder-delete through `uninstall-skill` when `.catalog-ref.json` marks the folder as catalog-installed.                                                             |
 
 ## Verification Log
 
@@ -1514,6 +1514,7 @@ None.
 - Opened [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656).
 - Squash merged [#1656](https://github.com/thinkwork-ai/thinkwork/pull/1656) as `c81861cda4ecfe7b42a6a4da5dbb2a42bcf6d9e0`.
 - Started U11 in `.Codex/worktrees/pi-skill-catalog-u11-remove-menu` on branch `codex/pi-skill-catalog-u11-remove-menu`.
+- Opened [#1657](https://github.com/thinkwork-ai/thinkwork/pull/1657).
 
 ## Blockers
 
