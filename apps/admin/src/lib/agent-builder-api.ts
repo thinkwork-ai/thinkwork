@@ -9,10 +9,12 @@ import {
   putWorkspaceFile,
   regenerateWorkspaceMap,
   renameWorkspacePath,
+  uninstallWorkspaceSkill,
   type ComposeSource,
   type InstallSkillResult,
   type MoveResult,
   type Target,
+  type UninstallSkillResult,
   type WorkspaceFileMeta,
 } from "@/lib/workspace-files-api";
 import { getIdToken } from "@/lib/auth";
@@ -33,6 +35,13 @@ export async function installSkill(
   wiringChoice: string,
 ): Promise<InstallSkillResult> {
   return installWorkspaceSkill(target, slug, wiringChoice);
+}
+
+export async function uninstallSkill(
+  target: Target,
+  slug: string,
+): Promise<UninstallSkillResult> {
+  return uninstallWorkspaceSkill(target, slug);
 }
 
 const API_URL = import.meta.env.VITE_API_URL || "";
@@ -287,6 +296,7 @@ export const agentBuilderApi = {
   getFile: getWorkspaceFile,
   putFile: putWorkspaceFile,
   deleteFile: deleteWorkspaceFile,
+  uninstallSkill,
   moveFile: moveWorkspaceFile,
   renamePath: renameWorkspacePath,
   regenerateMap: regenerateWorkspaceMap,

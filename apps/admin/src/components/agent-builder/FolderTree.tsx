@@ -167,6 +167,21 @@ export function isSkillInstallFolder(
   );
 }
 
+export function installedSkillSlugForNode(
+  node: Pick<
+    TreeNode,
+    "path" | "isFolder" | "children" | "synthetic" | "missing"
+  >,
+): string | null {
+  if (!node.isFolder || node.synthetic || node.missing) return null;
+  const match = /^skills\/([^/]+)$/.exec(node.path);
+  if (!match) return null;
+  const hasCatalogRef = node.children.some(
+    (child) => !child.isFolder && child.name === ".catalog-ref.json",
+  );
+  return hasCatalogRef ? match[1] : null;
+}
+
 export interface ClipboardItem {
   path: string;
   kind: "file" | "folder";
@@ -202,6 +217,7 @@ export interface FolderTreeProps {
     folderPaths: string[],
   ) => void;
   onAddSkill?: (skillsFolderPath: string) => void;
+  onRemoveSkill?: (skillsFolderPath: string, slug: string) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
   onRegenerateMap?: (path: string) => void;
   onGenerateFolderStructure?: (path: string) => void;
@@ -472,6 +488,7 @@ function FolderTreeItem(
     onDelete,
     onDeleteSyntheticGroup,
     onAddSkill,
+    onRemoveSkill,
     onRename,
     onRegenerateMap,
     onGenerateFolderStructure,
@@ -503,6 +520,7 @@ function FolderTreeItem(
       syntheticFolderPaths.length > 0 &&
       onDeleteSyntheticGroup;
     const canAddSkill = isSkillInstallFolder(node, Boolean(onAddSkill));
+    const installedSkillSlug = installedSkillSlugForNode(node);
 
     const hasPendingNewItem =
       (inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder") &&
@@ -538,6 +556,7 @@ function FolderTreeItem(
                 onDelete={onDelete}
                 onDeleteSyntheticGroup={onDeleteSyntheticGroup}
                 onAddSkill={onAddSkill}
+                onRemoveSkill={onRemoveSkill}
                 onRename={onRename}
                 onRegenerateMap={onRegenerateMap}
                 onGenerateFolderStructure={onGenerateFolderStructure}
@@ -575,6 +594,17 @@ function FolderTreeItem(
             <>
               <ContextMenuItem onSelect={() => onAddSkill?.(node.path)}>
                 Add Skill
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          ) : null}
+          {installedSkillSlug && onRemoveSkill ? (
+            <>
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => onRemoveSkill(node.path, installedSkillSlug)}
+              >
+                Remove Skill
               </ContextMenuItem>
               <ContextMenuSeparator />
             </>

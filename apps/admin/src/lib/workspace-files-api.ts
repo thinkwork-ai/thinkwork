@@ -138,6 +138,18 @@ export interface InstallSkillResult {
   deriveWarnings?: string[];
 }
 
+export interface UninstallSkillResult {
+  ok: true;
+  deleted_paths: string[];
+  context_md_strip:
+    | "removed"
+    | "snippet_not_found"
+    | "context_md_missing"
+    | "catalog_ref_missing";
+  context_md_changed_path?: "CONTEXT.md";
+  deriveWarnings?: string[];
+}
+
 export async function installWorkspaceSkill(
   target: Target,
   slug: string,
@@ -149,6 +161,17 @@ export async function installWorkspaceSkill(
     slug,
     wiring_choice: wiringChoice,
   })) as InstallSkillResult;
+}
+
+export async function uninstallWorkspaceSkill(
+  target: Target,
+  slug: string,
+): Promise<UninstallSkillResult> {
+  return (await request({
+    action: "uninstall-skill",
+    ...target,
+    slug,
+  })) as UninstallSkillResult;
 }
 
 export async function regenerateWorkspaceMap(
