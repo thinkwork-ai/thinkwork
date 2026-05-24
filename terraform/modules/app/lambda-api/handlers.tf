@@ -351,7 +351,6 @@ resource "aws_lambda_function" "handler" {
     "slack-oauth-install",
     "slack-dispatch",
     "github-app",
-    "github-repos",
     "memory",
     "memory-retain",
     "wiki-compile",
@@ -374,7 +373,6 @@ resource "aws_lambda_function" "handler" {
     # to ssmmessages. Plan:
     # docs/plans/2026-05-13-004-feat-computer-terminal-ecs-exec-plan.md.
     "computer-terminal-start",
-    "code-factory",
     "eval-runner",
     "eval-worker",
     "eval-runs-reconciler",

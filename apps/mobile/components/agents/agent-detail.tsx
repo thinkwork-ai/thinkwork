@@ -195,14 +195,12 @@ export function AgentDetailContent({
   const gateways = agentsData?.agents ?? undefined;
   const [{ data: teamsData }] = useTeams(tenantId);
   const teams = teamsData?.teams ?? undefined;
-  // TODO: revoke, terminate, restart, start, deleteLocal, addCodeFactoryRepo, removeCodeFactoryRepo not yet available via GraphQL
+  // TODO: revoke, terminate, restart, start, deleteLocal not yet available via GraphQL
   const revokeGateway = async (_args: any) => {};
   const terminateAgent = async (_args: any) => {};
   const restartAgent = async (_args: any) => {};
   const startAgent = async (_args: any) => {};
   const deleteLocalAgent = async (_args: any) => {};
-  const addCodeFactoryRepo = async (_args: any) => {};
-  const removeCodeFactoryRepo = async (_args: any) => {};
   const [, executeUpdateAgent] = useUpdateAgent();
   const updateAgent = async (args: any) => { await executeUpdateAgent(args); };
   const [terminating, setTerminating] = useState(false);
@@ -212,11 +210,6 @@ export function AgentDetailContent({
   const [showStartModal, setShowStartModal] = useState(false);
   const [showTerminateModal, setShowTerminateModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  const [showAddRepoModal, setShowAddRepoModal] = useState(false);
-  const [repoUrl, setRepoUrl] = useState("");
-  const [repoToken, setRepoToken] = useState("");
-  const [repoError, setRepoError] = useState<string | null>(null);
-  const [repoSaving, setRepoSaving] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [copiedUrl, setCopiedUrl] = useState(false);
   const { colorScheme } = useColorScheme();
@@ -227,12 +220,8 @@ export function AgentDetailContent({
   const agentDetail = agentDetailData?.agent ?? undefined;
   // TODO: listRuntimeModels action not yet available via GraphQL
   const [modelCatalog, setModelCatalog] = useState<any[] | null>(null);
-  // TODO: agentBudgets, githubApp, codeFactoryRepos, agentSkills, getToken, teamReleases, getMyTeamRole not yet available via GraphQL
+  // TODO: agentBudgets, githubApp, agentSkills, getToken, teamReleases, getMyTeamRole not yet available via GraphQL
   const budgetStatus: any = undefined;
-  const githubConnections: any[] | undefined = undefined;
-  const startGitHubInstall = async (_args: any) => ({} as any);
-  const disconnectGitHubRepo = async (_args: any) => {};
-  const codeFactoryRepos: any[] | undefined = undefined;
   const agentSkillsQuery: any[] | undefined = undefined;
   const installedSkillCount = agentSkillsQuery?.length ?? 0;
   const skillsLoading = agentSkillsQuery === undefined;
@@ -277,8 +266,6 @@ export function AgentDetailContent({
   };
 
   const gwAny = gateway as any;
-  const isCodeFactory = gwAny.runtimeProfile === "code_factory";
-  const repoBindings = (codeFactoryRepos || []) as Array<{ id: string; repoFullName: string; status: "connected" | "needs_reauth" | "revoked" }>;
   const selectedModelId = (agentDetail as any)?.model ?? gwAny.model;
   const selectedCatalogModel = Array.isArray(modelCatalog)
     ? modelCatalog.find((m: any) => m.id === selectedModelId)
@@ -539,71 +526,6 @@ export function AgentDetailContent({
         />
       </Pressable>
 
-      {gwAny.runtimeProfile === "code_factory" && (
-        <View className="border-b border-neutral-200 dark:border-neutral-800 py-3">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-3">
-              <Text className="text-base text-neutral-900 dark:text-neutral-100">GitHub Repositories</Text>
-              <Text className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                Connect via GitHub App (recommended). Personal Access Token remains available as fallback.
-              </Text>
-            </View>
-            <Button
-              onPress={async () => {
-                try {
-                  const result = await startGitHubInstall({
-                    agentId: id as string,
-                    postInstallRedirectUri: ExpoLinking.createURL(`/agents/${id}`),
-                  });
-                  if (result?.installUrl) {
-                    await Linking.openURL(result.installUrl);
-                  }
-                } catch (e) {
-                  Alert.alert("GitHub App", e?.message || "Failed to start GitHub App install");
-                }
-              }}
-              size="sm"
-            >
-              <Text className="text-white font-medium">Connect GitHub App</Text>
-            </Button>
-          </View>
-
-          {!githubConnections || githubConnections.length === 0 ? (
-            <View className="mt-3 rounded-md border border-dashed border-neutral-300 dark:border-neutral-700 px-3 py-2">
-              <Text className="text-sm text-neutral-500 dark:text-neutral-400">
-                No connected repositories yet. Install the app and approve repo access to continue.
-              </Text>
-            </View>
-          ) : (
-            <View className="mt-3 gap-2">
-              {githubConnections.map((repo) => (
-                <View key={String(repo.id)} className="rounded-md border border-neutral-200 dark:border-neutral-800 px-3 py-2 flex-row items-center justify-between">
-                  <View className="flex-1 pr-3">
-                    <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{repo.repoFullName}</Text>
-                    <Text className="text-xs text-neutral-500 dark:text-neutral-400">
-                      {repo.authMethod === "github_app" ? "GitHub App" : "PAT fallback"} · {repo.status}
-                    </Text>
-                  </View>
-                  {repo.status === "connected" ? (
-                    <Pressable
-                      onPress={async () => {
-                        try {
-                          await disconnectGitHubRepo({ repoId: repo.id });
-                        } catch (e) {
-                          Alert.alert("GitHub App", e?.message || "Failed to disconnect repo");
-                        }
-                      }}
-                    >
-                      <Text className="text-xs text-red-500">Disconnect</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
-
       {/* Skills — full row tappable */}
       {gateway.baseUrl && (
         <Pressable onPress={() => router.push(`/agents/${id}/skills`)}>
@@ -648,128 +570,6 @@ export function AgentDetailContent({
 
       </View>
 
-
-
-      {isCodeFactory && (
-        <View className="mx-4 mt-4 rounded-lg border border-neutral-200 dark:border-neutral-800 px-4 py-3">
-          <SectionHeader
-            title="Code Repos"
-            right={
-              <Button size="sm" onPress={() => {
-                setRepoError(null);
-                setRepoUrl("");
-                setRepoToken("");
-                setShowAddRepoModal(true);
-              }}>
-                Add Code Repo
-              </Button>
-            }
-          />
-          <Text className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">
-            GitHub App OAuth is coming in v2. Personal Access Token (PAT) is a temporary bootstrap for v1.
-          </Text>
-          {repoBindings.length === 0 ? (
-            <Text className="text-sm text-neutral-500 dark:text-neutral-400">No code repos connected yet.</Text>
-          ) : (
-            <View className="gap-2 pb-1">
-              {repoBindings.map((repo) => (
-                <View key={String(repo.id)} className="flex-row items-center justify-between rounded-md border border-neutral-200 dark:border-neutral-700 px-3 py-2">
-                  <View className="flex-row items-center gap-2 min-w-0 flex-1">
-                    <Github size={15} color="#a3a3a3" />
-                    <Text className="text-sm text-neutral-900 dark:text-neutral-100" numberOfLines={1}>{repo.repoFullName}</Text>
-                  </View>
-                  <View className="flex-row items-center gap-2 ml-3">
-                    <Badge variant={repo.status === "connected" ? "success" : "outline"}>
-                      {repo.status === "connected" ? "Connected" : repo.status === "needs_reauth" ? "Needs Re-auth" : "Revoked"}
-                    </Badge>
-                    {repo.status !== "revoked" && canEdit ? (
-                      <Pressable onPress={async () => {
-                        try {
-                          await removeCodeFactoryRepo({ repoId: repo.id });
-                        } catch (e) {
-                          Alert.alert("Error", e?.message || "Failed to revoke repo");
-                        }
-                      }}>
-                        <X size={16} color="#ef4444" />
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
-
-      <Modal visible={showAddRepoModal} transparent animationType="fade" onRequestClose={() => !repoSaving && setShowAddRepoModal(false)}>
-        <View className="flex-1 justify-center items-center bg-black/60 px-6">
-          <View className="w-full max-w-md rounded-xl p-6 border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <Text className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Add Code Repo</Text>
-            <Text className="text-sm text-neutral-500 dark:text-neutral-400 mb-4">Connect a GitHub repository for this Code Factory agent.</Text>
-            <Input
-              label="GitHub repo URL"
-              placeholder="https://github.com/owner/repo"
-              value={repoUrl}
-              onChangeText={setRepoUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <View className="mt-3">
-              <Text className="text-sm text-neutral-500 dark:text-neutral-400 mb-1">Auth method</Text>
-              <View className="rounded-md border border-neutral-200 dark:border-neutral-700 px-3 py-2">
-                <Text className="text-sm text-neutral-900 dark:text-neutral-100">Personal Access Token (v1)</Text>
-              </View>
-            </View>
-            <View className="mt-3">
-              <Input
-                label="Personal Access Token"
-                placeholder="github_pat_..."
-                value={repoToken}
-                onChangeText={setRepoToken}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-            {repoError ? (
-              <View className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 mt-3">
-                <Text className="text-sm text-destructive">{repoError}</Text>
-              </View>
-            ) : null}
-            <View className="flex-row gap-2 mt-5">
-              <Button variant="outline" className="flex-1" disabled={repoSaving} onPress={() => setShowAddRepoModal(false)}>Cancel</Button>
-              <Button className="flex-1" disabled={repoSaving} onPress={async () => {
-                const normalized = normalizeGitHubRepoInput(repoUrl);
-                if (!normalized) {
-                  setRepoError("Enter a valid GitHub repository URL (owner/repo)");
-                  return;
-                }
-                if (!repoToken.trim()) {
-                  setRepoError("Personal Access Token is required");
-                  return;
-                }
-                setRepoSaving(true);
-                setRepoError(null);
-                try {
-                  await addCodeFactoryRepo({
-                    agentId: id as string,
-                    repoUrl: normalized,
-                    authMethod: "pat",
-                    token: repoToken.trim(),
-                  });
-                  setShowAddRepoModal(false);
-                  setRepoUrl("");
-                  setRepoToken("");
-                } catch (e) {
-                  setRepoError(e?.message || "Failed to add code repo");
-                } finally {
-                  setRepoSaving(false);
-                }
-              }}>{repoSaving ? "Saving…" : "Add Repo"}</Button>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
 
       {/* Agent Info Modal */}

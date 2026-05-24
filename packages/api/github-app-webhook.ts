@@ -97,28 +97,16 @@ function hasWorkspaceChanges(changedFiles: string[]): boolean {
 }
 
 /**
- * Look up the tenant slug from the GitHub repo name via the database.
- * Maps code_factory_repos.github_repo → tenants.slug.
+ * Look up the tenant slug from the GitHub repo name.
+ *
+ * The previous implementation read `code_factory_repos.github_repo → tenants.slug`.
+ * code_factory was removed 2026-05-24 (P1 cleanup) and there is currently no other
+ * GitHub repo → tenant mapping in the system. Workspace sync via this webhook is
+ * effectively dormant until a replacement mapping is wired (re-introduction would
+ * be part of a future AutoResearch / GitHub-workspace feature).
  */
-async function lookupTenantSlug(githubOwner: string, githubRepo: string): Promise<string | null> {
-	try {
-		const { getDb } = await import("@thinkwork/database-pg");
-		const { codeFactoryRepos, tenants } = await import("@thinkwork/database-pg/schema");
-		const { eq, and } = await import("drizzle-orm");
-		const db = getDb();
-
-		const [repo] = await db
-			.select({ tenantSlug: tenants.slug })
-			.from(codeFactoryRepos)
-			.innerJoin(tenants, eq(tenants.id, codeFactoryRepos.tenant_id))
-			.where(and(eq(codeFactoryRepos.github_owner, githubOwner), eq(codeFactoryRepos.github_repo, githubRepo)))
-			.limit(1);
-
-		return repo?.tenantSlug || null;
-	} catch (err) {
-		console.warn("Failed to look up tenant slug from DB:", err);
-		return null;
-	}
+async function lookupTenantSlug(_githubOwner: string, _githubRepo: string): Promise<string | null> {
+	return null;
 }
 
 async function handlePushEvent(payload: PushPayload): Promise<{ synced: boolean; filesSynced: number }> {

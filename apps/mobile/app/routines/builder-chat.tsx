@@ -72,10 +72,7 @@ export default function BuilderChatScreen() {
   const tenantSlug = tenant?.slug ?? "";
   const tenantRepo = tenantSlug ? `thinkwork-ai/tenant-${tenantSlug}` : "";
 
-  // -- Code factory (no assistant needed) --
-  // TODO: Migrate api.codeFactoryChat.createSession to GraphQL
-  // TODO: Migrate api.codeFactoryChat.sendMessage to GraphQL
-  // TODO: Migrate api.codeFactoryChat.listMessages to GraphQL
+  // TODO: chat session creation + send/list message GraphQL operations not yet available.
 
   const [building, setBuilding] = useState(false);
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(null);
