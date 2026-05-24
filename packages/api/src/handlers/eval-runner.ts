@@ -15,7 +15,7 @@ import {
   type SQSClientConfig,
 } from "@aws-sdk/client-sqs";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
-import { ensureEvalAgentForTarget } from "../lib/evals/eval-agent-provisioning.js";
+import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const DEFAULT_QUEUE_URL = process.env.EVAL_FANOUT_QUEUE_URL || "";
@@ -191,15 +191,13 @@ export async function handler(event: EvalRunnerEvent): Promise<{
     }
 
     if (!run.computer_id && !run.agent_id) {
-      const target = await ensureEvalAgentForTarget({
-        tenantId: run.tenant_id,
-      });
+      const platformAgent = await resolveTenantPlatformAgent(run.tenant_id);
       const [updatedRun] = await db
         .update(evalRuns)
-        .set({ agent_id: target.agentId })
+        .set({ agent_id: platformAgent.id })
         .where(eq(evalRuns.id, runId))
         .returning();
-      run = updatedRun ?? { ...run, agent_id: target.agentId };
+      run = updatedRun ?? { ...run, agent_id: platformAgent.id };
     }
 
     await db

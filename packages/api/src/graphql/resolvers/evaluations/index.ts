@@ -22,10 +22,7 @@ import {
   type AgentCoreSpanRecord,
 } from "../../../lib/agentcore-spans.js";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
-import {
-  ensureEvalAgentForTarget,
-  resolveEvalAgentId,
-} from "../../../lib/evals/eval-agent-provisioning.js";
+import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -641,12 +638,9 @@ async function resolveEvalModelId(inputModel: string | null | undefined) {
 
 async function resolveRunTarget(args: {
   tenantId: string;
-  input: StartEvalRunInput;
-}): Promise<{
-  agentId: string;
-}> {
-  const agentId = await resolveEvalAgentId(args.tenantId, args.input.agentId);
-  return { agentId };
+}): Promise<{ agentId: string }> {
+  const platformAgent = await resolveTenantPlatformAgent(args.tenantId);
+  return { agentId: platformAgent.id };
 }
 
 const startEvalRun = async (
@@ -660,7 +654,7 @@ const startEvalRun = async (
     );
   }
 
-  const target = await resolveRunTarget(args);
+  const target = await resolveRunTarget({ tenantId: args.tenantId });
   const model = await resolveEvalModelId(args.input.model);
 
   const [run] = await db

@@ -26,7 +26,6 @@ import {
   AgentCoreEvalInvocationTimeoutError,
   invokeAgentCoreForEval,
 } from "../lib/evals/agentcore-direct.js";
-import { ensureEvalAgentForTarget } from "../lib/evals/eval-agent-provisioning.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
@@ -690,12 +689,7 @@ async function executeCase(
   let costUsd = 0;
 
   try {
-    let targetAgentId = tc.agent_id ?? run.agent_id;
-    if (!targetAgentId) {
-      targetAgentId = (
-        await ensureEvalAgentForTarget({ tenantId: run.tenant_id })
-      ).agentId;
-    }
+    const targetAgentId = tc.agent_id ?? run.agent_id;
     if (!targetAgentId) {
       throw new Error("Eval run has no AgentCore agent target");
     }
