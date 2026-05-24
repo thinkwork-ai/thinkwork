@@ -8,8 +8,8 @@
  * - PDF-ready HTML (full document with print styles).
  */
 
-import DOMPurify from "isomorphic-dompurify";
 import { marked } from "marked";
+import sanitizeHtml from "sanitize-html";
 import { renderForEmail } from "./channel-rendering/index.js";
 
 // ---------------------------------------------------------------------------
@@ -142,36 +142,51 @@ export function renderSmsDelivery(
 // PDF-ready HTML
 // ---------------------------------------------------------------------------
 
-/** Sanitizer config for the PDF rendering path — same trust posture as email
- * but allows the `style` attribute through (the PDF document shell ships its
- * own `<style>` block which DOMPurify should NOT strip when applied to the
- * full document; we only sanitize the inner content fragment here). */
-const PDF_SANITIZE_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
-  USE_PROFILES: { html: true },
-  FORBID_TAGS: [
-    "svg",
-    "math",
-    "style",
-    "script",
-    "iframe",
-    "object",
-    "embed",
-    "form",
-    "input",
-    "button",
-    "link",
-    "meta",
+/** Sanitizer config for the PDF rendering path. Same trust posture as the
+ * email path; the surrounding `renderPdfHtml()` wraps the sanitized fragment
+ * in a `<!DOCTYPE html>` + `<style>` document for Puppeteer / wkhtmltopdf. */
+const PDF_SANITIZE_CONFIG: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "a",
+    "strong",
+    "em",
+    "code",
+    "pre",
+    "br",
+    "del",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "hr",
+    "img",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
   ],
-  FORBID_ATTR: [
-    "onerror",
-    "onload",
-    "onclick",
-    "onmouseover",
-    "onmouseout",
-    "onfocus",
-    "onblur",
-  ],
-  ALLOWED_URI_REGEXP: /^https?:/i,
+  allowedAttributes: {
+    a: ["href", "title"],
+    img: ["src", "alt", "title"],
+    th: ["align"],
+    td: ["align"],
+    ol: ["start"],
+  },
+  allowedSchemesByTag: {
+    a: ["http", "https"],
+    img: ["http", "https"],
+  },
+  allowedSchemesAppliedToAttributes: ["href", "src"],
+  disallowedTagsMode: "discard",
 };
 
 /** Convert markdown to sanitized semantic HTML for the PDF document body. The
@@ -180,7 +195,7 @@ const PDF_SANITIZE_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
 function renderMarkdownForPdf(markdown: string): string {
   if (!markdown) return "";
   const rawHtml = marked.parse(markdown, { async: false }) as string;
-  return DOMPurify.sanitize(rawHtml, PDF_SANITIZE_CONFIG);
+  return sanitizeHtml(rawHtml, PDF_SANITIZE_CONFIG);
 }
 
 /**
