@@ -80,7 +80,7 @@ build_handler() {
   npx esbuild "$entry" \
     "${!flags_ref}" \
     --outfile="$out_dir/index.mjs" \
-    --banner:js="import{createRequire}from'module';const require=createRequire(import.meta.url);" \
+    --banner:js="import{createRequire}from'module';import{fileURLToPath}from'url';import{dirname}from'path';const require=createRequire(import.meta.url);const __filename=fileURLToPath(import.meta.url);const __dirname=dirname(__filename);" \
     2>/dev/null
 
   copy_skill_catalog_assets() {
