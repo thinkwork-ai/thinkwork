@@ -40,6 +40,7 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
@@ -407,6 +408,7 @@ const WRITE_ACTIONS = new Set([
   "put",
   "delete",
   "move",
+  "rename",
   "create-sub-agent",
   "regenerate-map",
   "update-identity-field",
@@ -1443,8 +1445,7 @@ async function handleMove(
   let cleanToFolder: string;
   try {
     cleanFrom = normalizeWorkspacePath(fromPath);
-    cleanToFolder =
-      toFolder === "" ? "" : normalizeWorkspacePath(toFolder);
+    cleanToFolder = toFolder === "" ? "" : normalizeWorkspacePath(toFolder);
   } catch (err) {
     return json(400, {
       ok: false,
@@ -1530,10 +1531,7 @@ async function handleSingleFileMove(
       error: "Destination is not editable from this surface.",
     });
   }
-  if (
-    target.kind === "agent" &&
-    isProtectedOrchestrationWritePath(finalDest)
-  ) {
+  if (target.kind === "agent" && isProtectedOrchestrationWritePath(finalDest)) {
     return json(403, {
       ok: false,
       error: "use orchestration writer",
@@ -1761,6 +1759,311 @@ async function handleFolderMove(
   return json(200, payload);
 }
 
+async function handleRename(
+  deps: HandlerDeps,
+  fromPath: string,
+  toPath: string,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+
+  if (target.kind === "computer") {
+    return json(400, {
+      ok: false,
+      error: "rename not supported for computer targets",
+    });
+  }
+
+  let cleanFrom: string;
+  let cleanTo: string;
+  try {
+    cleanFrom = normalizeWorkspacePath(fromPath);
+    cleanTo = normalizeWorkspacePath(toPath);
+  } catch (err) {
+    return json(400, {
+      ok: false,
+      error: err instanceof Error ? err.message : "Invalid workspace path",
+    });
+  }
+
+  if (cleanFrom === cleanTo) {
+    return json(400, {
+      ok: false,
+      error: "Source and destination are identical",
+    });
+  }
+
+  const renameDeps: MoveHandlerDeps = {
+    ...deps,
+    target: target as WritableMoveTarget,
+  };
+  const validationError = validateRenamePaths(renameDeps, cleanFrom, cleanTo);
+  if (validationError) return validationError;
+
+  const folderListing = await listAllObjectsUnfiltered(
+    renameDeps.target.key(cleanFrom) + "/",
+  );
+  if (folderListing.length > 0) {
+    const sourcePrefix = renameDeps.target.key(cleanFrom) + "/";
+    const destPrefix = renameDeps.target.key(cleanTo) + "/";
+    if (destPrefix.startsWith(sourcePrefix)) {
+      return json(400, {
+        ok: false,
+        error: "Cannot rename a folder into itself or a subfolder of itself",
+      });
+    }
+  }
+
+  if (await workspacePathExists(renameDeps.target, cleanTo)) {
+    return json(409, {
+      ok: false,
+      error: `Destination already exists: ${cleanTo}`,
+    });
+  }
+
+  if (folderListing.length > 0) {
+    return await handleFolderRename(
+      renameDeps,
+      cleanFrom,
+      cleanTo,
+      folderListing,
+    );
+  }
+  return await handleSingleFileRename(renameDeps, cleanFrom, cleanTo);
+}
+
+function validateRenamePaths(
+  deps: MoveHandlerDeps,
+  cleanFrom: string,
+  cleanTo: string,
+): APIGatewayProxyResult | null {
+  const { target } = deps;
+  if (target.kind === "user" && !isVisibleUserContextPath(cleanFrom)) {
+    return json(403, {
+      ok: false,
+      error: "User context path is not editable from this surface.",
+    });
+  }
+  if (target.kind === "user" && !isVisibleUserContextPath(cleanTo)) {
+    return json(403, {
+      ok: false,
+      error: "Destination is not editable from this surface.",
+    });
+  }
+  if (
+    isBuiltinToolWorkspacePath(cleanFrom) ||
+    isBuiltinToolWorkspacePath(cleanTo)
+  ) {
+    return json(403, {
+      ok: false,
+      error:
+        "Built-in tools are configured through the Built-in Tools API, not workspace skill files.",
+    });
+  }
+  if (target.kind === "agent" && isProtectedOrchestrationWritePath(cleanTo)) {
+    return json(403, {
+      ok: false,
+      error: "use orchestration writer",
+    });
+  }
+  return null;
+}
+
+async function workspacePathExists(
+  target: WritableMoveTarget,
+  cleanPath: string,
+): Promise<boolean> {
+  try {
+    await s3.send(
+      new HeadObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(cleanPath),
+      }),
+    );
+    return true;
+  } catch (err) {
+    if (!isNoSuchKey(err)) throw err;
+  }
+  const folderListing = await listAllObjectsUnfiltered(
+    target.key(cleanPath) + "/",
+  );
+  return folderListing.length > 0;
+}
+
+async function handleSingleFileRename(
+  deps: MoveHandlerDeps,
+  cleanFrom: string,
+  cleanTo: string,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  const sourceKey = target.key(cleanFrom);
+  const destKey = target.key(cleanTo);
+
+  try {
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: bucket(),
+        CopySource: s3CopySource(sourceKey),
+        Key: destKey,
+      }),
+    );
+  } catch (err) {
+    if (isNoSuchKey(err)) {
+      return json(404, { ok: false, error: "Source file not found" });
+    }
+    throw err;
+  }
+
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: sourceKey }));
+
+  const detachedPinnedCount =
+    target.kind === "agent" && isPinnedWorkspacePath(cleanFrom) ? 1 : 0;
+  const finalized = await finalizeRenameSideEffects(deps, {
+    cleanFrom,
+    cleanTo,
+    movedCount: 1,
+    detachedPinnedCount,
+    touchesAgentsMd:
+      pathBasename(cleanFrom) === "AGENTS.md" ||
+      pathBasename(cleanTo) === "AGENTS.md",
+    touchesSkillMd: isSkillMarkerPath(cleanFrom) || isSkillMarkerPath(cleanTo),
+  });
+  if (finalized) return finalized;
+
+  return json(200, {
+    ok: true,
+    destPath: cleanTo,
+    movedCount: 1,
+    detachedPinnedCount,
+  } satisfies MoveSuccessPayload);
+}
+
+async function handleFolderRename(
+  deps: MoveHandlerDeps,
+  cleanFrom: string,
+  cleanTo: string,
+  folderListing: string[],
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  const sourcePrefix = target.key(cleanFrom) + "/";
+  const destPrefix = target.key(cleanTo) + "/";
+
+  if (destPrefix.startsWith(sourcePrefix)) {
+    return json(400, {
+      ok: false,
+      error: "Cannot rename a folder into itself or a subfolder of itself",
+    });
+  }
+
+  let detachedPinnedCount = 0;
+  let touchesAgentsMd = false;
+  let touchesSkillMd = false;
+
+  for (const rel of folderListing) {
+    const sourceKey = sourcePrefix + rel;
+    const destKey = destPrefix + rel;
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: bucket(),
+        CopySource: s3CopySource(sourceKey),
+        Key: destKey,
+      }),
+    );
+    const sourceRelPath = cleanFrom + "/" + rel;
+    const destRelPath = cleanTo + "/" + rel;
+    if (target.kind === "agent" && isPinnedWorkspacePath(sourceRelPath)) {
+      detachedPinnedCount++;
+    }
+    if (
+      pathBasename(sourceRelPath) === "AGENTS.md" ||
+      pathBasename(destRelPath) === "AGENTS.md"
+    ) {
+      touchesAgentsMd = true;
+    }
+    if (isSkillMarkerPath(sourceRelPath) || isSkillMarkerPath(destRelPath)) {
+      touchesSkillMd = true;
+    }
+  }
+
+  const deleteFailures: string[] = [];
+  for (const rel of folderListing) {
+    const sourceKey = sourcePrefix + rel;
+    try {
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: bucket(), Key: sourceKey }),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      deleteFailures.push(`${rel}: ${message}`);
+    }
+  }
+
+  if (deleteFailures.length > 0) {
+    return json(500, {
+      ok: false,
+      error:
+        `Rename partially completed: ${deleteFailures.length} source object(s) could not be deleted. ` +
+        `Refresh and clean up the source folder.`,
+      partiallyDeleted: true,
+      destPath: cleanTo,
+      movedCount: folderListing.length,
+      detachedPinnedCount,
+    });
+  }
+
+  const finalized = await finalizeRenameSideEffects(deps, {
+    cleanFrom,
+    cleanTo,
+    movedCount: folderListing.length,
+    detachedPinnedCount,
+    touchesAgentsMd,
+    touchesSkillMd,
+  });
+  if (finalized) return finalized;
+
+  return json(200, {
+    ok: true,
+    destPath: cleanTo,
+    movedCount: folderListing.length,
+    detachedPinnedCount,
+  } satisfies MoveSuccessPayload);
+}
+
+async function finalizeRenameSideEffects(
+  deps: MoveHandlerDeps,
+  input: {
+    cleanFrom: string;
+    cleanTo: string;
+    movedCount: number;
+    detachedPinnedCount: number;
+    touchesAgentsMd: boolean;
+    touchesSkillMd: boolean;
+  },
+): Promise<APIGatewayProxyResult | null> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "agent") return null;
+
+  await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+
+  if (!input.touchesAgentsMd && !input.touchesSkillMd) return null;
+  try {
+    const result = await deriveAgentSkills({ tenantId }, target.agentId);
+    const summary =
+      `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
+      `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
+      `removed=${result.removedSlugs.join(",") || "-"}`;
+    console.log(`[derive-agent-skills] rename ${summary}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[derive-agent-skills] rename derive failed: ${message}`);
+    return json(500, {
+      ok: false,
+      error: "Rename succeeded but agent_skills derive failed: " + message,
+    });
+  }
+
+  return null;
+}
+
 // Line-surgery anchors for IDENTITY.md personality fields. Only these 4
 // lines are editable via `update-identity-field`; the Name line is
 // reserved for `update_agent_name` (which goes through the updateAgent
@@ -1942,6 +2245,8 @@ interface RequestBody {
    * Empty string `""` means the workspace root.
    */
   toFolder?: string;
+  /** For `rename`: exact destination file or folder path. */
+  toPath?: string;
   // Legacy shape — rejected loudly so buggy clients surface.
   tenantSlug?: string;
   instanceId?: string;
@@ -2094,10 +2399,25 @@ export async function handler(
         if (typeof body.toFolder !== "string") {
           return json(400, {
             ok: false,
-            error: "toFolder is required for move (use \"\" for the root)",
+            error: 'toFolder is required for move (use "" for the root)',
           });
         }
         return await handleMove(deps, body.fromPath, body.toFolder);
+      }
+      case "rename": {
+        if (typeof body.fromPath !== "string" || body.fromPath === "") {
+          return json(400, {
+            ok: false,
+            error: "fromPath is required for rename",
+          });
+        }
+        if (typeof body.toPath !== "string" || body.toPath === "") {
+          return json(400, {
+            ok: false,
+            error: "toPath is required for rename",
+          });
+        }
+        return await handleRename(deps, body.fromPath, body.toPath);
       }
       case "regenerate-map":
         return await handleRegenerateMap(deps);
@@ -2146,7 +2466,9 @@ function normalizeHeaders(
 function isNoSuchKey(err: unknown): boolean {
   if (err instanceof NoSuchKey) return true;
   const name = (err as { name?: string } | null)?.name;
-  return name === "NoSuchKey";
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  return name === "NoSuchKey" || name === "NotFound" || status === 404;
 }
 
 async function listPrefix(prefix: string): Promise<string[]> {

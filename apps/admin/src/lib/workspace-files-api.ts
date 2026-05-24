@@ -154,3 +154,22 @@ export async function moveWorkspaceFile(
     toFolder,
   })) as MoveResult;
 }
+
+/**
+ * Rename a file or folder to an exact destination path within the same
+ * workspace. Unlike move, rename does not collision-auto-suffix: the user
+ * typed the desired name, so the server returns an error when it already
+ * exists.
+ */
+export async function renameWorkspacePath(
+  target: Target,
+  fromPath: string,
+  toPath: string,
+): Promise<MoveResult> {
+  return (await request({
+    action: "rename",
+    ...target,
+    fromPath,
+    toPath,
+  })) as MoveResult;
+}

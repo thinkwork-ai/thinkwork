@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  basenameOf,
   filesForFolderDelete,
+  joinFolderPath,
   normalizeFolderPath,
   parentFolderOf,
   pathIsWithinFolder,
+  replacePathPrefix,
   shouldEmitDetachToast,
   topLevelFolders,
+  validateInlineBasename,
   validateSubAgentSlug,
 } from "../workspace-tree-actions";
 
@@ -89,6 +93,40 @@ describe("workspace tree actions", () => {
     expect(parentFolderOf("notes.md")).toBe("");
     expect(parentFolderOf("memory/notes.md")).toBe("memory");
     expect(parentFolderOf("a/b/c.md")).toBe("a/b");
+  });
+
+  it("derives basenames and joins inline names to parent folders", () => {
+    expect(basenameOf("notes.md")).toBe("notes.md");
+    expect(basenameOf("memory/notes.md")).toBe("notes.md");
+    expect(joinFolderPath("", "notes.md")).toBe("notes.md");
+    expect(joinFolderPath("memory/", "notes.md")).toBe("memory/notes.md");
+  });
+
+  it("replaces renamed path prefixes on segment boundaries", () => {
+    expect(replacePathPrefix("notes.md", "notes.md", "ideas.md")).toBe(
+      "ideas.md",
+    );
+    expect(replacePathPrefix("folder/a.md", "folder", "renamed")).toBe(
+      "renamed/a.md",
+    );
+    expect(replacePathPrefix("folderish/a.md", "folder", "renamed")).toBe(
+      "folderish/a.md",
+    );
+  });
+
+  it("validates inline basenames", () => {
+    expect(validateInlineBasename("notes.md")).toEqual({
+      valid: true,
+      basename: "notes.md",
+    });
+    expect(validateInlineBasename("").error).toBe("Enter a name.");
+    expect(validateInlineBasename(".").error).toBe("Choose a different name.");
+    expect(validateInlineBasename("nested/path.md").error).toBe(
+      "Use a name, not a path.",
+    );
+    expect(validateInlineBasename("nested\\path.md").error).toBe(
+      "Use a name, not a path.",
+    );
   });
 
   it("validates sub-agent slugs before create", () => {

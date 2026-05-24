@@ -5,6 +5,7 @@ import {
   listWorkspaceFiles,
   moveWorkspaceFile,
   putWorkspaceFile,
+  renameWorkspacePath,
   type ComposeSource,
   type MoveResult,
   type Target,
@@ -275,6 +276,7 @@ export const agentBuilderApi = {
   putFile: putWorkspaceFile,
   deleteFile: deleteWorkspaceFile,
   moveFile: moveWorkspaceFile,
+  renamePath: renameWorkspacePath,
   createSubAgent,
   importBundle,
 };

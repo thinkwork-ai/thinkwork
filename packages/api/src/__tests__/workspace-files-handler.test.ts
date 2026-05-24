@@ -1488,8 +1488,7 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix:
-          "tenants/acme/agents/marco/workspace/skills/old-slug/SKILL.md/",
+        Prefix: "tenants/acme/agents/marco/workspace/skills/old-slug/SKILL.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
@@ -2054,6 +2053,239 @@ describe("agent DELETE", () => {
     expect(calls[0].args[0].input.Key).toBe(
       "tenants/acme/agents/marco/workspace/IDENTITY.md",
     );
+  });
+});
+
+describe("agent RENAME", () => {
+  function adminAgentRows() {
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+  }
+
+  function destinationMissing() {
+    s3Mock.on(HeadObjectCommand).rejects({
+      name: "NotFound",
+      $metadata: { httpStatusCode: 404 },
+    } as never);
+  }
+
+  it("renames a single file to the exact destination path", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    destinationMissing();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/ideas.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+          toPath: "ideas.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      destPath: "ideas.md",
+      movedCount: 1,
+    });
+    expect(s3Mock.commandCalls(CopyObjectCommand)[0].args[0].input.Key).toBe(
+      "tenants/acme/agents/marco/workspace/ideas.md",
+    );
+    expect(s3Mock.commandCalls(DeleteObjectCommand)[0].args[0].input.Key).toBe(
+      "tenants/acme/agents/marco/workspace/notes.md",
+    );
+  });
+
+  it("rejects an exact rename when the destination already exists", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(HeadObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/ideas.md",
+      })
+      .resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          agentId: AGENT_ID,
+          fromPath: "notes.md",
+          toPath: "ideas.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error).toMatch(/already exists/i);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
+  });
+
+  it("renames a folder by rewriting every child object", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    destinationMissing();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/events/a.md" },
+          { Key: "tenants/acme/agents/marco/workspace/events/nested/b.md" },
+        ],
+      });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          agentId: AGENT_ID,
+          fromPath: "events",
+          toPath: "archive",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      destPath: "archive",
+      movedCount: 2,
+    });
+    expect(
+      s3Mock
+        .commandCalls(CopyObjectCommand)
+        .map((call) => call.args[0].input.Key)
+        .sort(),
+    ).toEqual([
+      "tenants/acme/agents/marco/workspace/archive/a.md",
+      "tenants/acme/agents/marco/workspace/archive/nested/b.md",
+    ]);
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key)
+        .sort(),
+    ).toEqual([
+      "tenants/acme/agents/marco/workspace/events/a.md",
+      "tenants/acme/agents/marco/workspace/events/nested/b.md",
+    ]);
+  });
+
+  it("rejects renaming a folder into one of its descendants", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    destinationMissing();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/events/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/agents/marco/workspace/events/nested/a.md" },
+        ],
+      });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          agentId: AGENT_ID,
+          fromPath: "events",
+          toPath: "events/nested",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/subfolder/i);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
+  });
+
+  it("triggers deriveAgentSkills when renaming AGENTS.md", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    adminAgentRows();
+    destinationMissing();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/ROUTES.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/AGENTS.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          agentId: AGENT_ID,
+          fromPath: "AGENTS.md",
+          toPath: "ROUTES.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects rename with computerId target", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          computerId: COMPUTER_ID,
+          fromPath: "notes.md",
+          toPath: "ideas.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/computer/i);
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
   });
 });
 
