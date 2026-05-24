@@ -1406,7 +1406,7 @@ None.
 | U2 Catalog target get/list/put/delete | `codex/pi-skill-catalog-u2-target` | [#1641](https://github.com/thinkwork-ai/thinkwork/pull/1641) | Merged | Squash merged as `90e3617c`; remote and local branch removed. |
 | U3 Catalog seed action | `codex/pi-skill-catalog-u3-seed` | [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) | Merged | Squash merged as `180dc7ae`; remote and local branch removed. |
 | U4 WorkspaceEditor catalog mode + Skills route | `codex/pi-skill-catalog-u4-admin-mode` | [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) | Merged | Squash merged as `ccf12ae4`; remote and local branch removed. |
-| U5 Agent detail tab registration + Tools rename | `codex/pi-skill-catalog-u5-tabs` | Pending | In progress | Registering the Skills tab in the Agent tab strip and renaming Built-in Tools to Tools. |
+| U5 Agent detail tab registration + Tools rename | `codex/pi-skill-catalog-u5-tabs` | [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) | PR open | Registered the Skills tab in the Agent tab strip and renamed Built-in Tools to Tools. |
 
 ## Verification Log
 
@@ -1448,6 +1448,7 @@ None.
 - Squash merged [#1643](https://github.com/thinkwork-ai/thinkwork/pull/1643) as `180dc7aef9675e423959b94ceb9e7e66a8fce553`.
 - Opened [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644).
 - Squash merged [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) as `ccf12ae4d18c5cae46e36d35faad1157324437b6`.
+- Opened [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645).
 
 ## Blockers
 
