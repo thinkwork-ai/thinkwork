@@ -2832,13 +2832,8 @@ export const EvalSummaryQuery = gql`
 `;
 
 export const EvalRunsQuery = gql`
-  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int, $agentId: ID) {
-    evalRuns(
-      tenantId: $tenantId
-      limit: $limit
-      offset: $offset
-      agentId: $agentId
-    ) {
+  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {
+    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {
       items {
         id
         status
@@ -2937,7 +2932,6 @@ export const EvalTestCasesQuery = gql`
       category
       query
       systemPrompt
-      agentId
       assertions
       agentcoreEvaluatorIds
       tags
@@ -2957,7 +2951,6 @@ export const EvalTestCaseQuery = gql`
       category
       query
       systemPrompt
-      agentId
       assertions
       agentcoreEvaluatorIds
       tags
@@ -2991,7 +2984,6 @@ export const CreateEvalTestCaseMutation = gql`
       category
       query
       systemPrompt
-      agentId
       assertions
       agentcoreEvaluatorIds
       enabled
@@ -3008,7 +3000,6 @@ export const UpdateEvalTestCaseMutation = gql`
       category
       query
       systemPrompt
-      agentId
       assertions
       agentcoreEvaluatorIds
       enabled

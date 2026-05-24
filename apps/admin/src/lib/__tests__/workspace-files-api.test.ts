@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { moveWorkspaceFile, renameWorkspacePath } from "../workspace-files-api";
+import {
+  moveWorkspaceFile,
+  normalizeWorkspaceMap,
+  renameWorkspacePath,
+} from "../workspace-files-api";
 
 // Mock @/lib/auth so we don't need a real Cognito token in unit tests.
 vi.mock("@/lib/auth", () => ({
@@ -107,6 +111,20 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
       destPath: "ideas.md",
       movedCount: 1,
       detachedPinnedCount: 0,
+    });
+  });
+
+  it("posts action=normalize-map for explicit AGENTS.md repair", async () => {
+    mockOk({});
+
+    await normalizeWorkspaceMap("agent-abc");
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "normalize-map",
+      agentId: "agent-abc",
     });
   });
 });

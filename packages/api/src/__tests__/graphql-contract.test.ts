@@ -256,21 +256,28 @@ describe("GraphQL Schema Contract", () => {
       expect(createInput.getFields().primaryAgentId.type.toString()).toBe("ID");
     });
 
-    it("uses agentId for eval targets instead of agentTemplateId", () => {
+    it("resolves eval targets through the tenant platform agent, not a per-input agentId", () => {
       const evalRun = schema.getType("EvalRun") as any;
       const evalTestCase = schema.getType("EvalTestCase") as any;
       const startInput = schema.getType("StartEvalRunInput") as any;
       const createInput = schema.getType("CreateEvalTestCaseInput") as any;
       const updateInput = schema.getType("UpdateEvalTestCaseInput") as any;
 
+      // Legacy agentTemplateId never returns.
       expect(evalRun.getFields().agentTemplateId).toBeUndefined();
       expect(evalTestCase.getFields().agentTemplateId).toBeUndefined();
       expect(startInput.getFields().agentTemplateId).toBeUndefined();
       expect(createInput.getFields().agentTemplateId).toBeUndefined();
       expect(updateInput.getFields().agentTemplateId).toBeUndefined();
-      expect(evalTestCase.getFields().agentId.type.toString()).toBe("ID");
-      expect(createInput.getFields().agentId.type.toString()).toBe("ID");
-      expect(updateInput.getFields().agentId.type.toString()).toBe("ID");
+
+      // Per-input agentId retired by the one-platform-agent refactor.
+      expect(evalTestCase.getFields().agentId).toBeUndefined();
+      expect(startInput.getFields().agentId).toBeUndefined();
+      expect(createInput.getFields().agentId).toBeUndefined();
+      expect(updateInput.getFields().agentId).toBeUndefined();
+
+      // EvalRun.agentId persists as the resolved platform-agent FK for display.
+      expect(evalRun.getFields().agentId.type.toString()).toBe("ID");
     });
   });
 

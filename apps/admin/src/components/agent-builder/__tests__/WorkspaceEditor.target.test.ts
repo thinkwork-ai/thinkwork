@@ -89,6 +89,17 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
   });
 
+  it("closes the context-menu delete dialog before starting deletion", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(
+      /setDeleteConfirmTarget\(null\);\s+void handleDeletePath\(path, isFolder\);/,
+    );
+  });
+
   it("uses inline tree editing for new files, new folders, and rename", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),

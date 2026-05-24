@@ -6,7 +6,7 @@
  * the bearer path is gone — every caller sends a Cognito ID token.
  *
  * Request shape (Unit 5):
- *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "update-identity-field",
+ *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "normalize-map" | "update-identity-field",
  *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
@@ -23,6 +23,7 @@
  *   put  → { ok: true }
  *   delete → { ok: true }
  *   regenerate-map → { ok: true }
+ *   normalize-map → { ok: true }
  *   errors → { ok: false, error }
  *
  * Auth model:
@@ -50,7 +51,11 @@ import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { authenticate, type AuthResult } from "./src/lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
 import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
-import { appendRoutingRowIfMissing } from "./src/lib/workspace-map-generator.js";
+import {
+  appendRoutingRowIfMissing,
+  normalizeAgentsMd,
+  regenerateAgentsMdDerivedSections,
+} from "./src/lib/workspace-map-generator.js";
 import { spaceSourcePrefix } from "./src/lib/spaces/template-migration.js";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
 import {
@@ -132,6 +137,25 @@ const s3 = new S3Client({
 
 function bucket(): string {
   return process.env.WORKSPACE_BUCKET || "";
+}
+
+async function refreshAgentAgentsMdSections(
+  target: AgentTarget,
+  operation: string,
+): Promise<APIGatewayProxyResult | null> {
+  try {
+    await regenerateAgentsMdDerivedSections(target.agentId);
+    return null;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[workspace-files] ${operation} AGENTS.md section refresh failed: ${message}`,
+    );
+    return json(500, {
+      ok: false,
+      error: `${operation} succeeded but AGENTS.md section refresh failed: ${message}`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -411,6 +435,7 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "regenerate-map",
+  "normalize-map",
   "update-identity-field",
   "rematerialize",
 ]);
@@ -1094,11 +1119,18 @@ async function handlePut(
         }
 
         if (result.warnings.length > 0) {
+          const refreshError = await refreshAgentAgentsMdSections(
+            target,
+            "PUT",
+          );
+          if (refreshError) return refreshError;
           return json(200, {
             ok: true,
             deriveWarnings: result.warnings,
           });
         }
+        const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
+        if (refreshError) return refreshError;
         return json(200, { ok: true });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1111,6 +1143,8 @@ async function handlePut(
       }
     }
 
+    const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
+    if (refreshError) return refreshError;
     return json(200, { ok: true });
   }
 
@@ -1274,6 +1308,11 @@ async function handleCreateSubAgent(
   try {
     const result = await deriveAgentSkills({ tenantId }, target.agentId);
     if (result.warnings.length > 0) {
+      const refreshError = await refreshAgentAgentsMdSections(
+        target,
+        "create-sub-agent",
+      );
+      if (refreshError) return refreshError;
       return json(200, {
         ok: true,
         deriveWarnings: result.warnings,
@@ -1288,6 +1327,11 @@ async function handleCreateSubAgent(
     });
   }
 
+  const refreshError = await refreshAgentAgentsMdSections(
+    target,
+    "create-sub-agent",
+  );
+  if (refreshError) return refreshError;
   return json(200, { ok: true });
 }
 
@@ -1328,6 +1372,8 @@ async function handleDelete(
         });
       }
     }
+    const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
+    if (refreshError) return refreshError;
   } else {
   }
   return json(200, { ok: true });
@@ -1585,6 +1631,8 @@ async function handleSingleFileMove(
         });
       }
     }
+    const refreshError = await refreshAgentAgentsMdSections(target, "move");
+    if (refreshError) return refreshError;
   }
 
   const payload: MoveSuccessPayload = {
@@ -1748,6 +1796,8 @@ async function handleFolderMove(
         });
       }
     }
+    const refreshError = await refreshAgentAgentsMdSections(target, "move");
+    if (refreshError) return refreshError;
   }
 
   const payload: MoveSuccessPayload = {
@@ -2044,7 +2094,9 @@ async function finalizeRenameSideEffects(
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-  if (!input.touchesAgentsMd && !input.touchesSkillMd) return null;
+  if (!input.touchesAgentsMd && !input.touchesSkillMd) {
+    return await refreshAgentAgentsMdSections(target, "rename");
+  }
   try {
     const result = await deriveAgentSkills({ tenantId }, target.agentId);
     const summary =
@@ -2061,7 +2113,7 @@ async function finalizeRenameSideEffects(
     });
   }
 
-  return null;
+  return await refreshAgentAgentsMdSections(target, "rename");
 }
 
 // Line-surgery anchors for IDENTITY.md personality fields. Only these 4
@@ -2181,9 +2233,18 @@ async function handleRegenerateMap(
   if (target.kind !== "agent") {
     return json(400, { ok: false, error: "regenerate-map requires agentId" });
   }
-  const { regenerateWorkspaceMap } =
-    await import("./src/lib/workspace-map-generator.js");
-  await regenerateWorkspaceMap(target.agentId);
+  await regenerateAgentsMdDerivedSections(target.agentId);
+  return json(200, { ok: true });
+}
+
+async function handleNormalizeMap(
+  deps: HandlerDeps,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "agent") {
+    return json(400, { ok: false, error: "normalize-map requires agentId" });
+  }
+  await normalizeAgentsMd(target.agentId);
   return json(200, { ok: true });
 }
 
@@ -2205,6 +2266,7 @@ async function handleRematerialize(
   }
   const result = await bootstrapAgentWorkspace(target.agentId, {
     mode: "overwrite",
+    refreshAgentsMdSections: true,
   });
   return json(200, { ok: true, ...result });
 }
@@ -2421,6 +2483,8 @@ export async function handler(
       }
       case "regenerate-map":
         return await handleRegenerateMap(deps);
+      case "normalize-map":
+        return await handleNormalizeMap(deps);
       case "rematerialize":
         return await handleRematerialize(deps);
       case "update-identity-field": {

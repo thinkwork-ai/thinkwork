@@ -1,78 +1,37 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const { mockRegenerateWorkspaceMap } = vi.hoisted(() => ({
-  mockRegenerateWorkspaceMap: vi.fn(),
-}));
-
-vi.mock("../../../lib/workspace-map-generator.js", () => ({
-  regenerateWorkspaceMap: mockRegenerateWorkspaceMap,
-}));
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 describe("renderWorkspaceAfterCustomize", () => {
-  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    mockRegenerateWorkspaceMap.mockReset();
-    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-  });
-
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
+    vi.restoreAllMocks();
   });
 
-  it("invokes the renderer with (agentId, computerId) on the happy path", async () => {
-    mockRegenerateWorkspaceMap.mockResolvedValue(undefined);
-    await renderWorkspaceAfterCustomize(
-      "enableWorkflow",
-      "agent-primary",
-      "computer-1",
-    );
-    expect(mockRegenerateWorkspaceMap).toHaveBeenCalledTimes(1);
-    expect(mockRegenerateWorkspaceMap).toHaveBeenCalledWith(
-      "agent-primary",
-      "computer-1",
-    );
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-  });
+  it("is a no-op after Customize binding writes", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
 
-  it("skips silently when agentId is null (no primary agent → no workspace)", async () => {
-    await renderWorkspaceAfterCustomize(
-      "disableSkill",
-      null,
-      "computer-1",
-    );
-    expect(mockRegenerateWorkspaceMap).not.toHaveBeenCalled();
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-  });
-
-  it("logs but does not throw when the renderer rejects (binding write already committed)", async () => {
-    const boom = new Error("S3 throttled");
-    mockRegenerateWorkspaceMap.mockRejectedValue(boom);
     await expect(
       renderWorkspaceAfterCustomize(
-        "enableSkill",
+        "enableWorkflow",
         "agent-primary",
         "computer-1",
       ),
     ).resolves.toBeUndefined();
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-    expect(consoleErrorSpy.mock.calls[0]?.[0]).toMatch(
-      /\[enableSkill\] regenerateWorkspaceMap failed/i,
-    );
-    expect(consoleErrorSpy.mock.calls[0]?.[1]).toBe(boom);
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
-  it("logs include the resolver name so CloudWatch filters per-mutation work", async () => {
-    mockRegenerateWorkspaceMap.mockRejectedValue(new Error("disk full"));
-    await renderWorkspaceAfterCustomize(
-      "disableWorkflow",
-      "agent-primary",
-      "computer-1",
-    );
-    expect(consoleErrorSpy.mock.calls[0]?.[0]).toMatch(
-      /\[disableWorkflow\]/,
-    );
+  it("skips silently when agentId is null", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    await expect(
+      renderWorkspaceAfterCustomize("disableSkill", null, "computer-1"),
+    ).resolves.toBeUndefined();
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });

@@ -158,6 +158,14 @@ vi.mock("../lib/workspace-manifest.js", () => ({
   regenerateManifest: vi.fn().mockResolvedValue(undefined),
 }));
 
+const { bootstrapAgentWorkspaceMock } = vi.hoisted(() => ({
+  bootstrapAgentWorkspaceMock: vi.fn(),
+}));
+
+vi.mock("../lib/workspace-bootstrap.js", () => ({
+  bootstrapAgentWorkspace: bootstrapAgentWorkspaceMock,
+}));
+
 // ─── Mock deriveAgentSkills (U11) so handler tests don't need full composer
 // playback. Targeted derive-vs-no-derive tests below override the impl.
 
@@ -168,6 +176,24 @@ const { deriveMockImpl } = vi.hoisted(() => ({
 vi.mock("../lib/derive-agent-skills.js", () => ({
   deriveAgentSkills: deriveMockImpl,
 }));
+
+const { refreshAgentsMdSectionsMock } = vi.hoisted(() => ({
+  refreshAgentsMdSectionsMock: vi.fn(),
+}));
+
+const { normalizeAgentsMdMock } = vi.hoisted(() => ({
+  normalizeAgentsMdMock: vi.fn(),
+}));
+
+vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/workspace-map-generator.js")>();
+  return {
+    ...actual,
+    normalizeAgentsMd: normalizeAgentsMdMock,
+    regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
+  };
+});
 
 // ─── Mock emitAuditEvent (U5) so the workspace-files-handler tests
 // don't need a working compliance.audit_outbox connection. The
@@ -279,6 +305,20 @@ function tenantRow(id = TENANT_A, slug = "acme", name = "Acme") {
   return { id, slug, name };
 }
 
+function queueAdminAgentTargetRows(): void {
+  pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+  pushDbRows([agentRow()]);
+  pushDbRows([tenantRow()]);
+  pushDbRows([{ role: "admin" }]);
+}
+
+function queueAdminTemplateTargetRows(): void {
+  pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+  pushDbRows([templateRowTenantA()]);
+  pushDbRows([tenantRow()]);
+  pushDbRows([{ role: "admin" }]);
+}
+
 function computerRow(overrides: Record<string, unknown> = {}) {
   return { id: COMPUTER_ID, tenant_id: TENANT_A, ...overrides };
 }
@@ -311,6 +351,13 @@ beforeEach(() => {
   authMockImpl.mockReset();
   enqueueComputerTaskMock.mockReset();
   enqueueComputerTaskMock.mockResolvedValue({ id: "computer-task-1" });
+  bootstrapAgentWorkspaceMock.mockReset();
+  bootstrapAgentWorkspaceMock.mockResolvedValue({
+    agentId: AGENT_ID,
+    written: 1,
+    skipped: 0,
+    total: 1,
+  });
   deriveMockImpl.mockReset();
   deriveMockImpl.mockResolvedValue({
     changed: false,
@@ -319,12 +366,196 @@ beforeEach(() => {
     agentsMdPathsScanned: [],
     warnings: [],
   });
+  refreshAgentsMdSectionsMock.mockReset();
+  refreshAgentsMdSectionsMock.mockResolvedValue(undefined);
+  normalizeAgentsMdMock.mockReset();
+  normalizeAgentsMdMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
   // Soft assertion: some tests may leave extra rows queued intentionally
   // (e.g. 401 short-circuits before any DB call). Suppress unless we
   // set STRICT.
+});
+
+describe("agent AGENTS.md derived section refresh", () => {
+  it("refreshes derived sections after an agent file put", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "memory/note.md",
+          content: "hello",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
+  it("does not refresh AGENTS.md sections for template writes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminTemplateTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          templateId: TEMPLATE_ID,
+          path: "memory/note.md",
+          content: "hello",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces section-refresh failures after the primary write lands", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    refreshAgentsMdSectionsMock.mockRejectedValueOnce(new Error("S3 slow"));
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "memory/note.md",
+          content: "hello",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body.error).toMatch(/AGENTS\.md section refresh failed/);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(1);
+  });
+
+  it("refreshes derived sections after delete, move, create-sub-agent, and manual regenerate", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const deleteRes = await parse(
+      await handler(
+        event({ action: "delete", agentId: AGENT_ID, path: "memory/note.md" }),
+      ),
+    );
+    expect(deleteRes.statusCode).toBe(200);
+
+    queueAdminAgentTargetRows();
+    s3Mock.resetHistory();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/memory/note.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const moveRes = await parse(
+      await handler(
+        event({
+          action: "move",
+          agentId: AGENT_ID,
+          fromPath: "memory/note.md",
+          toFolder: "archive",
+        }),
+      ),
+    );
+    expect(moveRes.statusCode).toBe(200);
+
+    queueAdminAgentTargetRows();
+    s3Mock.resetHistory();
+    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .rejects(noSuchKey());
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const createRes = await parse(
+      await handler(
+        event({
+          action: "create-sub-agent",
+          agentId: AGENT_ID,
+          slug: "research",
+          contextContent: "# Research\n",
+        }),
+      ),
+    );
+    expect(createRes.statusCode).toBe(200);
+
+    queueAdminAgentTargetRows();
+    const regenRes = await parse(
+      await handler(event({ action: "regenerate-map", agentId: AGENT_ID })),
+    );
+    expect(regenRes.statusCode).toBe(200);
+
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("normalizes AGENTS.md only for agent targets", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const agentRes = await parse(
+      await handler(event({ action: "normalize-map", agentId: AGENT_ID })),
+    );
+
+    expect(agentRes.statusCode).toBe(200);
+    expect(normalizeAgentsMdMock).toHaveBeenCalledTimes(1);
+    expect(normalizeAgentsMdMock).toHaveBeenCalledWith(AGENT_ID);
+
+    queueAdminTemplateTargetRows();
+    const templateRes = await parse(
+      await handler(
+        event({ action: "normalize-map", templateId: TEMPLATE_ID }),
+      ),
+    );
+
+    expect(templateRes.statusCode).toBe(400);
+    expect(templateRes.body.error).toMatch(/requires agentId/);
+    expect(normalizeAgentsMdMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rematerialize refreshes AGENTS.md sections after overwriting template/default files", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(event({ action: "rematerialize", agentId: AGENT_ID })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      agentId: AGENT_ID,
+      written: 1,
+      skipped: 0,
+      total: 1,
+    });
+    expect(bootstrapAgentWorkspaceMock).toHaveBeenCalledWith(AGENT_ID, {
+      mode: "overwrite",
+      refreshAgentsMdSections: true,
+    });
+  });
 });
 
 // ─── 1. Auth boundary ────────────────────────────────────────────────────────
