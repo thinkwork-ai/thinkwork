@@ -18,19 +18,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import {
   agentBuilderApi,
   type ComposeSource,
@@ -170,9 +162,6 @@ export function WorkspaceEditor({
     string | null
   >(null);
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
-  const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
-  const [newFolderPath, setNewFolderPath] = useState("");
-  const [creatingFolder, setCreatingFolder] = useState(false);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
     path: string;
     isFolder: boolean;
@@ -426,36 +415,6 @@ export function WorkspaceEditor({
     setDeleteConfirmTarget({ path: focusedTreePath, isFolder });
   }, [focusedTreePath, isFolderPath]);
 
-  useKeyboardShortcuts(
-    useMemo(
-      () => [
-        { key: "x", mod: true, handler: cutFocused },
-        { key: "v", mod: true, handler: pasteIntoSelectedScope },
-        { key: "Backspace", handler: deleteFocused },
-        { key: "Delete", handler: deleteFocused },
-      ],
-      [cutFocused, pasteIntoSelectedScope, deleteFocused],
-    ),
-    { scopeRef: treeContainerRef },
-  );
-
-  const handleCreateFolder = async () => {
-    const raw = newFolderPath.trim().replace(/^\/+|\/+$/g, "");
-    if (!raw) return;
-    if (raw.includes("..") || raw.includes("\\")) return;
-    setCreatingFolder(true);
-    try {
-      await agentBuilderApi.putFile(stableTarget, `${raw}/.gitkeep`, "");
-      await fetchFiles();
-      setShowNewFolderDialog(false);
-      setNewFolderPath("");
-    } catch (err) {
-      console.error("Failed to create folder:", err);
-    } finally {
-      setCreatingFolder(false);
-    }
-  };
-
   const startNewFile = (parentPath?: string) => {
     const parent = parentPath?.replace(/\/$/, "") ?? "";
     if (parent) {
@@ -465,12 +424,16 @@ export function WorkspaceEditor({
     setInlineEdit({ mode: "new-file", parentPath: parent, value: "" });
   };
 
-  const openNewFolderDialog = (parentPath?: string) => {
-    setNewFolderPath(parentPath ? `${parentPath.replace(/\/$/, "")}/` : "");
-    setShowNewFolderDialog(true);
+  const startNewFolder = (parentPath?: string) => {
+    const parent = parentPath?.replace(/\/$/, "") ?? "";
+    if (parent) {
+      setExpandedFolders((current) => new Set(current).add(parent));
+    }
+    setFocusedTreePath(parent || null);
+    setInlineEdit({ mode: "new-folder", parentPath: parent, value: "" });
   };
 
-  const startRename = (path: string, kind: "file" | "folder") => {
+  const startRename = useCallback((path: string, kind: "file" | "folder") => {
     if (kind === "folder") {
       setExpandedFolders((current) => new Set(current).add(path));
     }
@@ -481,7 +444,30 @@ export function WorkspaceEditor({
       kind,
       value: basenameOf(path),
     });
-  };
+  }, []);
+
+  const startRenameFocused = useCallback(() => {
+    if (!focusedTreePath || inlineEdit) return;
+    const pathExists =
+      files.includes(focusedTreePath) || folderPaths.has(focusedTreePath);
+    if (!pathExists) return;
+    const kind = folderPaths.has(focusedTreePath) ? "folder" : "file";
+    startRename(focusedTreePath, kind);
+  }, [files, focusedTreePath, folderPaths, inlineEdit, startRename]);
+
+  useKeyboardShortcuts(
+    useMemo(
+      () => [
+        { key: "x", mod: true, handler: cutFocused },
+        { key: "v", mod: true, handler: pasteIntoSelectedScope },
+        { key: "Backspace", handler: deleteFocused },
+        { key: "Delete", handler: deleteFocused },
+        { key: "F2", handler: startRenameFocused },
+      ],
+      [cutFocused, pasteIntoSelectedScope, deleteFocused, startRenameFocused],
+    ),
+    { scopeRef: treeContainerRef },
+  );
 
   const setInlineEditValue = (value: string) => {
     setInlineEdit((current) =>
@@ -505,7 +491,7 @@ export function WorkspaceEditor({
       return;
     }
 
-    if (current.mode === "new-file") {
+    if (current.mode === "new-file" || current.mode === "new-folder") {
       const path = joinFolderPath(current.parentPath, validation.basename);
       if (files.includes(path) || folderPaths.has(path)) {
         setInlineEdit({
@@ -517,14 +503,25 @@ export function WorkspaceEditor({
       setInlineEdit({ ...current, committing: true });
       beginMutation(path);
       try {
-        await agentBuilderApi.putFile(stableTarget, path, "");
+        if (current.mode === "new-folder") {
+          await agentBuilderApi.putFile(stableTarget, `${path}/.gitkeep`, "");
+        } else {
+          await agentBuilderApi.putFile(stableTarget, path, "");
+        }
         await fetchFiles({ showLoading: false });
-        await openWorkspaceFile(path);
+        if (current.mode === "new-file") {
+          await openWorkspaceFile(path);
+        } else {
+          setExpandedFolders((folders) => new Set(folders).add(path));
+          setFocusedTreePath(path);
+        }
         setInlineEdit(null);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error("Failed to create file:", err);
-        toast.error(`Create file failed: ${message}`);
+        console.error("Failed to create workspace path:", err);
+        toast.error(
+          `${current.mode === "new-folder" ? "Create folder" : "Create file"} failed: ${message}`,
+        );
         setInlineEdit({ ...current, error: message });
       } finally {
         endMutation(path);
@@ -680,7 +677,7 @@ export function WorkspaceEditor({
         </DropdownMenuItem>
         <DropdownMenuItem
           className="whitespace-nowrap"
-          onClick={() => openNewFolderDialog()}
+          onClick={() => startNewFolder()}
         >
           <FolderPlus className="mr-2 h-4 w-4" />
           New Folder
@@ -688,9 +685,6 @@ export function WorkspaceEditor({
       </DropdownMenuContent>
     </DropdownMenu>
   );
-  const surfaceRootLabel =
-    mode === "context" ? "context root" : "workspace root";
-
   return (
     <>
       {loadingFiles && !loadedFilesOnce ? (
@@ -726,7 +720,7 @@ export function WorkspaceEditor({
                 onToggle={toggleFolder}
                 onAcceptUpdate={() => {}}
                 onNewFile={startNewFile}
-                onNewFolder={openNewFolderDialog}
+                onNewFolder={startNewFolder}
                 onDelete={(path, isFolder) =>
                   setDeleteConfirmTarget({ path, isFolder })
                 }
@@ -774,46 +768,6 @@ export function WorkspaceEditor({
           </div>
         </div>
       )}
-
-      <Dialog open={showNewFolderDialog} onOpenChange={setShowNewFolderDialog}>
-        <DialogContent style={{ maxWidth: 440 }}>
-          <DialogHeader>
-            <DialogTitle>New Folder</DialogTitle>
-            <DialogDescription>
-              Enter the folder path relative to {surfaceRootLabel}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <Input
-              placeholder="e.g. docs/notes"
-              value={newFolderPath}
-              onChange={(event) => setNewFolderPath(event.target.value)}
-              onKeyDown={(event) =>
-                event.key === "Enter" && handleCreateFolder()
-              }
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowNewFolderDialog(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleCreateFolder}
-                disabled={!newFolderPath.trim() || creatingFolder}
-              >
-                {creatingFolder && (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                )}
-                Create
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <DeleteConfirmDialog
         target={deleteConfirmTarget}

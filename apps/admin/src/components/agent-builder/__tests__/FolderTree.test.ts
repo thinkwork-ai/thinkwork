@@ -84,7 +84,7 @@ describe("buildWorkspaceTree", () => {
     expect(tree.map((node) => node.path)).toEqual(["memory", "skills"]);
   });
 
-  it("contains inline rename and pending new-file row affordances", () => {
+  it("contains inline create and rename affordances", () => {
     const source = readFileSync(
       new URL("../FolderTree.tsx", import.meta.url),
       "utf8",
@@ -94,6 +94,10 @@ describe("buildWorkspaceTree", () => {
     expect(source).toMatch(/Rename/);
     expect(source).toMatch(/InlineNameInput/);
     expect(source).toMatch(/PendingInlineFile/);
+    expect(source).toMatch(/PendingInlineFolder/);
+    expect(source).toMatch(/new-folder/);
     expect(source).toMatch(/onInlineEditCommit/);
+    expect(source).toMatch(/input\.select\(\)/);
+    expect(source).toMatch(/setSelectionRange/);
   });
 });
