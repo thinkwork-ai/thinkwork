@@ -8,24 +8,41 @@ export interface PiInvocationPayload {
   instance_id?: unknown;
 }
 
-// Order mirrors `_build_system_prompt` in
-// packages/agentcore-strands/agent-container/container-sources/server.py:159.
-// Materialize-at-write-time (docs/plans/2026-04-27-003) means PLATFORM /
-// CAPABILITIES / GUARDRAILS / MEMORY_GUIDE now live in the agent's S3 prefix
-// alongside the user files, so a single in-order read covers both groups.
-const SYSTEM_FILES = [
-  "PLATFORM.md",
-  "CAPABILITIES.md",
+// System-prompt composition order. LLM attention is strongest at the start
+// and end; middle positions get less weight. The order below is deliberate:
+//
+//   1. AGENTS.md — Layer-1 routing map. The model needs to know the
+//      territory (who-I-am-as-router, subagent table) before anything else.
+//   2. GUARDRAILS.md — safety floor; must apply everywhere.
+//   3. SOUL.md / IDENTITY.md — personality and surface identity.
+//   4. USER.md — who I'm talking to right now (materialized per-user at
+//      assignment time by user-md-writer.ts).
+//   5. CONTEXT.md — current per-thread / per-space context.
+//   6. PLATFORM.md — platform-level rules (tool response, escalation,
+//      date, Slack). Less hot; lives toward the back where the model still
+//      re-reads but doesn't anchor on it.
+//   7. MEMORY_GUIDE.md — how to use memory tools.
+//   8. TOOLS.md — static tool-usage policy (the dynamic tool-availability
+//      block sits at the very top, right after the date line).
+//
+// CAPABILITIES.md was dropped from this loader on 2026-05-24 — its content
+// was duplicate-platform-rules + conditional tool guidance better handled
+// by PLATFORM.md and the dynamic runtime tool policy block. The file may
+// still exist in agent workspaces and the workspace-defaults package; the
+// runtime simply no longer reads it.
+//
+// Strands' `_build_system_prompt` in
+// packages/agentcore-strands/agent-container/container-sources/server.py
+// mirrors this order — keep them in sync when editing.
+const PROMPT_FILES = [
+  "AGENTS.md",
   "GUARDRAILS.md",
-  "MEMORY_GUIDE.md",
-] as const;
-
-const WORKSPACE_FILES = [
   "SOUL.md",
   "IDENTITY.md",
   "USER.md",
-  "AGENTS.md",
   "CONTEXT.md",
+  "PLATFORM.md",
+  "MEMORY_GUIDE.md",
   "TOOLS.md",
 ] as const;
 
@@ -142,9 +159,8 @@ export async function composeSystemPrompt(
   const parts: string[] = [`Current date: ${formatDate(now)}`];
   parts.push(buildRuntimeToolPolicy(args.availableToolNames));
 
-  const filenames = [...SYSTEM_FILES, ...WORKSPACE_FILES];
   let filesLoaded = 0;
-  for (const filename of filenames) {
+  for (const filename of PROMPT_FILES) {
     const content = await reader(path.join(args.workspaceDir, filename));
     if (content) {
       parts.push(content);

@@ -36,20 +36,61 @@ describe("composeSystemPrompt", () => {
     expect(prompt).not.toContain("Be precise.");
   });
 
-  it("orders system files before user files", async () => {
+  it("places the routing map and safety floor before user context, and platform/memory reference after", async () => {
+    // Order contract (see PROMPT_FILES in src/runtime/system-prompt.ts):
+    //   AGENTS → GUARDRAILS → SOUL → IDENTITY → USER → CONTEXT
+    //          → PLATFORM → MEMORY_GUIDE → TOOLS
+    // The model anchors on the start + end positions; map + safety go up
+    // front, user context next, reference material toward the back.
     const prompt = await composeSystemPrompt({
       payload: {},
       workspaceDir: "/tmp/workspace",
       now,
       fileReader: readerFor({
-        "PLATFORM.md": "PLATFORM_BLOCK",
+        "AGENTS.md": "AGENTS_BLOCK",
+        "GUARDRAILS.md": "GUARDRAILS_BLOCK",
         "USER.md": "USER_BLOCK",
+        "PLATFORM.md": "PLATFORM_BLOCK",
+        "MEMORY_GUIDE.md": "MEMORY_BLOCK",
+        "TOOLS.md": "TOOLS_BLOCK",
       }),
     });
 
-    expect(prompt.indexOf("PLATFORM_BLOCK")).toBeLessThan(
-      prompt.indexOf("USER_BLOCK"),
-    );
+    const positions = {
+      AGENTS: prompt.indexOf("AGENTS_BLOCK"),
+      GUARDRAILS: prompt.indexOf("GUARDRAILS_BLOCK"),
+      USER: prompt.indexOf("USER_BLOCK"),
+      PLATFORM: prompt.indexOf("PLATFORM_BLOCK"),
+      MEMORY: prompt.indexOf("MEMORY_BLOCK"),
+      TOOLS: prompt.indexOf("TOOLS_BLOCK"),
+    };
+
+    // Map first, safety second
+    expect(positions.AGENTS).toBeLessThan(positions.GUARDRAILS);
+    // Safety floor before user-specific context
+    expect(positions.GUARDRAILS).toBeLessThan(positions.USER);
+    // User context before platform/reference material
+    expect(positions.USER).toBeLessThan(positions.PLATFORM);
+    // Platform before memory guide
+    expect(positions.PLATFORM).toBeLessThan(positions.MEMORY);
+    // Tools last
+    expect(positions.MEMORY).toBeLessThan(positions.TOOLS);
+  });
+
+  it("does not load CAPABILITIES.md even when present on disk", async () => {
+    // CAPABILITIES.md retired from the loader on 2026-05-24 — see PROMPT_FILES.
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/tmp/workspace",
+      now,
+      fileReader: readerFor({
+        "CAPABILITIES.md": "CAPABILITIES_BLOCK",
+        "PLATFORM.md": "PLATFORM_BLOCK",
+      }),
+    });
+
+    expect(prompt).not.toContain("CAPABILITIES_BLOCK");
+    expect(prompt).toContain("PLATFORM_BLOCK");
   });
 
   it("prefixes the prompt with the current date", async () => {
