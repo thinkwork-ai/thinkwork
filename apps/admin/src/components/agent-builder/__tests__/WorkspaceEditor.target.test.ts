@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  catalogShaBySlug,
+  collectInstalledSkillRefPaths,
+  computeSkillDriftByPath,
+  parseCatalogRefSourceSha,
   workspaceEditorActions,
   workspaceEditorCapabilities,
   workspaceEditorReservedRootFolders,
@@ -85,6 +89,91 @@ describe("workspace editor target capabilities", () => {
   it("keeps workspace and context reserved folder behavior", () => {
     expect(workspaceEditorReservedRootFolders("agent")).toBeUndefined();
     expect(workspaceEditorReservedRootFolders("context")).toEqual(["memory"]);
+  });
+
+  it("collects installed skill catalog refs from workspace file paths", () => {
+    expect(
+      collectInstalledSkillRefPaths([
+        "skills/finance-audit-xls/.catalog-ref.json",
+        "skills/finance-audit-xls/SKILL.md",
+        "skills/draft-tool/SKILL.md",
+        "memory/profile.md",
+      ]),
+    ).toEqual([
+      {
+        folderPath: "skills/finance-audit-xls",
+        slug: "finance-audit-xls",
+        refPath: "skills/finance-audit-xls/.catalog-ref.json",
+      },
+    ]);
+  });
+
+  it("parses catalog ref source hashes defensively", () => {
+    expect(
+      parseCatalogRefSourceSha(JSON.stringify({ source_sha256: "abc123" })),
+    ).toBe("abc123");
+    expect(parseCatalogRefSourceSha(JSON.stringify({}))).toBeNull();
+    expect(parseCatalogRefSourceSha("{not-json")).toBeNull();
+    expect(parseCatalogRefSourceSha(null)).toBeNull();
+  });
+
+  it("indexes catalog skill hashes by top-level slug", () => {
+    expect(
+      catalogShaBySlug([
+        { path: "finance-audit-xls/SKILL.md", sha256: "finance-sha" },
+        { path: "finance-audit-xls/WIRING.md", sha256: "ignored-later-sha" },
+        { path: "calendar/SKILL.md", sha256: "calendar-sha" },
+      ]),
+    ).toEqual(
+      new Map([
+        ["finance-audit-xls", "finance-sha"],
+        ["calendar", "calendar-sha"],
+      ]),
+    );
+  });
+
+  it("marks installed skills stale only when catalog hashes differ", () => {
+    expect(
+      computeSkillDriftByPath(
+        [
+          {
+            folderPath: "skills/current",
+            slug: "current",
+            sourceSha256: "same",
+          },
+          {
+            folderPath: "skills/old",
+            slug: "old",
+            sourceSha256: "old-sha",
+          },
+          {
+            folderPath: "skills/manual",
+            slug: "manual",
+            sourceSha256: null,
+          },
+        ],
+        new Map([
+          ["current", "same"],
+          ["old", "new-sha"],
+          ["manual", "manual-sha"],
+        ]),
+      ),
+    ).toEqual({ "skills/old": "stale" });
+  });
+
+  it("marks installed skills orphaned when their catalog slug disappears", () => {
+    expect(
+      computeSkillDriftByPath(
+        [
+          {
+            folderPath: "skills/missing",
+            slug: "missing",
+            sourceSha256: "old-sha",
+          },
+        ],
+        new Map(),
+      ),
+    ).toEqual({ "skills/missing": "orphan" });
   });
 
   it("has no toolbar entry points to gutted flows", () => {

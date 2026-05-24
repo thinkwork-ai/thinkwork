@@ -152,6 +152,11 @@ describe("buildWorkspaceTree", () => {
     expect(source).toMatch(/onAddSkill/);
     expect(source).toMatch(/onRemoveSkill/);
     expect(source).toMatch(/installedSkillSlugForNode/);
+    expect(source).toMatch(/skillDriftByPath/);
+    expect(source).toMatch(/SkillDriftStatus/);
+    expect(source).toMatch(/stale/);
+    expect(source).toMatch(/orphan/);
+    expect(source).toMatch(/TooltipContent/);
     expect(source).toMatch(/onDeleteSyntheticGroup/);
     expect(source).toMatch(/syntheticFolderPaths/);
     expect(source).toMatch(/InlineNameInput/);

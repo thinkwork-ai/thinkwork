@@ -44,6 +44,12 @@ export async function uninstallSkill(
   return uninstallWorkspaceSkill(target, slug);
 }
 
+export async function listCatalogFiles(): Promise<{
+  files: WorkspaceFileMeta[];
+}> {
+  return listWorkspaceFiles({ catalog: true });
+}
+
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 export type ImportBundleInput =
@@ -297,6 +303,7 @@ export const agentBuilderApi = {
   putFile: putWorkspaceFile,
   deleteFile: deleteWorkspaceFile,
   uninstallSkill,
+  listCatalogFiles,
   moveFile: moveWorkspaceFile,
   renamePath: renameWorkspacePath,
   regenerateMap: regenerateWorkspaceMap,
