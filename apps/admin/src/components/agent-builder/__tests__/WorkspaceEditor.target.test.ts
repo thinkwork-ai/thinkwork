@@ -20,6 +20,9 @@ describe("workspace editor target capabilities", () => {
     expect(workspaceEditorCapabilities("context")).toEqual({
       canReviewTemplateUpdates: false,
     });
+    expect(workspaceEditorCapabilities("catalog")).toEqual({
+      canReviewTemplateUpdates: false,
+    });
     expect(workspaceEditorCapabilities("defaults")).toEqual({
       canReviewTemplateUpdates: false,
     });
@@ -31,6 +34,7 @@ describe("workspace editor target capabilities", () => {
       "template",
       "computer",
       "context",
+      "catalog",
       "defaults",
     ] as const) {
       expect(workspaceEditorActions(mode)).toEqual(["new-file", "new-folder"]);
@@ -56,6 +60,10 @@ describe("workspace editor target capabilities", () => {
     expect(workspaceEditorTargetKey({ spaceId: "space-eng" })).toBe(
       "space:space-eng",
     );
+  });
+
+  it("keys the tenant catalog target distinctly", () => {
+    expect(workspaceEditorTargetKey({ catalog: true })).toBe("catalog");
   });
 
   it("has no toolbar entry points to gutted flows", () => {

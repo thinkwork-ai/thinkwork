@@ -60,6 +60,7 @@ export type WorkspaceEditorMode =
   | "template"
   | "computer"
   | "context"
+  | "catalog"
   | "defaults";
 
 export type WorkspaceEditorAction = "new-file" | "new-folder";
@@ -98,6 +99,7 @@ export function workspaceEditorTargetKey(target: Target): string {
   if ("spaceId" in target) return `space:${target.spaceId}`;
   if ("computerId" in target) return `computer:${target.computerId}`;
   if ("userId" in target) return `user:${target.userId}`;
+  if ("catalog" in target) return "catalog";
   return "defaults";
 }
 
@@ -270,6 +272,12 @@ export function WorkspaceEditor({
       }),
     [files, mode, routingRows],
   );
+  const emptyStateLabel =
+    mode === "context"
+      ? "context"
+      : mode === "catalog"
+        ? "catalog skill"
+        : "workspace";
 
   const openWorkspaceFile = useCallback(
     async (filePath: string) => {
@@ -876,7 +884,7 @@ export function WorkspaceEditor({
               <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
                 <Folder className="h-12 w-12 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">
-                  No {mode === "context" ? "context" : "workspace"} files yet.
+                  No {emptyStateLabel} files yet.
                 </p>
               </div>
             ) : (
