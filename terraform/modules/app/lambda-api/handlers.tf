@@ -314,8 +314,6 @@ resource "aws_lambda_function" "handler" {
     "stripe-subscription",
     "auth-me",
     "extension-proxy",
-    "teams",
-    "team-members",
     "tenants",
     "users",
     "invites",
@@ -830,11 +828,6 @@ locals {
     # Messages
     "ANY /api/messages/{proxy+}" = "messages"
     "ANY /api/messages"          = "messages"
-
-    # Teams
-    "ANY /api/teams/{proxy+}"        = "teams"
-    "ANY /api/teams"                 = "teams"
-    "ANY /api/team-members/{proxy+}" = "team-members"
 
     # Tenants
     "ANY /api/tenants/{proxy+}" = "tenants"
