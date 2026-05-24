@@ -1309,6 +1309,7 @@ export type EvalResult = {
   runId: Scalars['ID']['output'];
   score?: Maybe<Scalars['Float']['output']>;
   status: Scalars['String']['output'];
+  systemPrompt?: Maybe<Scalars['String']['output']>;
   testCaseId?: Maybe<Scalars['ID']['output']>;
   testCaseName?: Maybe<Scalars['String']['output']>;
 };

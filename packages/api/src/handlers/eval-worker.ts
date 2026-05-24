@@ -82,6 +82,7 @@ interface CaseOutcome {
   assertionResults: AssertionResult[];
   evaluatorResults: EvaluatorResult[];
   actualOutput: string;
+  systemPrompt: string | null;
   durationMs: number;
   errorMessage: string | null;
   costUsd: number;
@@ -683,6 +684,7 @@ async function executeCase(
 ): Promise<CaseOutcome> {
   const sessionId = uniqueSessionId(run.id, tc.id, message.index ?? 0);
   let actualOutput = "";
+  let systemPrompt: string | null = null;
   let durationMs = 0;
   let errorMessage: string | null = null;
   const assertionResults: AssertionResult[] = [];
@@ -710,6 +712,7 @@ async function executeCase(
     });
     actualOutput = inv.output;
     durationMs = inv.durationMs;
+    systemPrompt = inv.composedSystemPrompt;
 
     const assertions = (tc.assertions ?? []) as Assertion[];
     for (const assertion of assertions) {
@@ -785,6 +788,7 @@ async function executeCase(
     assertionResults,
     evaluatorResults,
     actualOutput,
+    systemPrompt,
     durationMs,
     errorMessage,
     costUsd,
@@ -938,6 +942,7 @@ async function handleMessage(message: EvalWorkerMessage): Promise<void> {
       input: tc.query,
       expected: null,
       actual_output: outcome.actualOutput,
+      system_prompt: outcome.systemPrompt,
       evaluator_results: outcome.evaluatorResults,
       assertions: outcome.assertionResults,
       error_message: outcome.errorMessage,

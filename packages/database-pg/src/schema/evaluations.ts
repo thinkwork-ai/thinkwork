@@ -163,6 +163,12 @@ export const evalResults = pgTable(
     // also the key for querying CloudWatch spans in the runner
     agent_session_id: text("agent_session_id"),
     input: text("input"), // the rendered prompt sent to the agent
+    // system_prompt: the composed system prompt the agent ran against
+    // (workspace files + tool policy + attachment preamble). Captured from
+    // Pi's `composed_system_prompt` response field so the result-detail UI
+    // can show operators exactly what the LLM saw. Null on rows from runs
+    // that completed before the Pi response shape carried this field.
+    system_prompt: text("system_prompt"),
     expected: text("expected"), // optional expected-answer text (informational)
     actual_output: text("actual_output"), // agent's final response
     // evaluator_results: array of per-evaluator scores. Shape:
