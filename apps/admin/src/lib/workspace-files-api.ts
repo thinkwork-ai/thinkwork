@@ -150,6 +150,14 @@ export interface UninstallSkillResult {
   deriveWarnings?: string[];
 }
 
+export interface ReinstallSkillResult {
+  ok: true;
+  reinstalled_paths: string[];
+  source_sha256: string;
+  noop?: true;
+  deriveWarnings?: string[];
+}
+
 export async function installWorkspaceSkill(
   target: Target,
   slug: string,
@@ -172,6 +180,17 @@ export async function uninstallWorkspaceSkill(
     ...target,
     slug,
   })) as UninstallSkillResult;
+}
+
+export async function reinstallWorkspaceSkill(
+  target: Target,
+  slug: string,
+): Promise<ReinstallSkillResult> {
+  return (await request({
+    action: "reinstall-skill",
+    ...target,
+    slug,
+  })) as ReinstallSkillResult;
 }
 
 export async function regenerateWorkspaceMap(

@@ -903,6 +903,31 @@ export function WorkspaceEditor({
     }
   };
 
+  const handleReinstallSkill = async (path: string, slug: string) => {
+    if (!skillLifecycleTarget) return;
+
+    beginMutation(path);
+    try {
+      const result = await agentBuilderApi.reinstallSkill(
+        skillLifecycleTarget,
+        slug,
+      );
+      await fetchFiles({ showLoading: false });
+      if (openFile && (openFile === path || openFile.startsWith(`${path}/`))) {
+        void openWorkspaceFile(openFile);
+      }
+      toast.success(
+        result.noop ? "Skill is already up to date." : "Skill reinstalled.",
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to reinstall skill:", err);
+      toast.error(`Reinstall skill failed: ${message}`);
+    } finally {
+      endMutation(path);
+    }
+  };
+
   const handleDeleteSyntheticGroup = async (
     groupPath: string,
     folderPaths: string[],
@@ -1187,6 +1212,14 @@ export function WorkspaceEditor({
                     ? (path, slug) => {
                         setFocusedTreePath(path);
                         setDeleteConfirmTarget({ kind: "skill", path, slug });
+                      }
+                    : undefined
+                }
+                onReinstallSkill={
+                  skillLifecycleTarget
+                    ? (path, slug) => {
+                        setFocusedTreePath(path);
+                        void handleReinstallSkill(path, slug);
                       }
                     : undefined
                 }

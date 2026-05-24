@@ -1598,6 +1598,201 @@ describe("agent uninstall-skill action", () => {
   });
 });
 
+// ─── 4e. Catalog skill reinstall action ─────────────────────────────────────
+
+function mockCatalogReinstallS3(
+  targetPrefix = "tenants/acme/agents/marco/workspace/",
+): void {
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}skills/finance-audit-xls/.catalog-ref.json`,
+    })
+    .resolves(
+      body(
+        JSON.stringify({
+          slug: "finance-audit-xls",
+          source_sha256: "a".repeat(64),
+          installed_at: "2026-05-24T16:00:00.000Z",
+          wiring_choice: "stage-3-gate",
+          snippet: "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |\n",
+        }),
+      ),
+    );
+  s3Mock
+    .on(ListObjectsV2Command, {
+      Prefix: "tenants/acme/skill-catalog/finance-audit-xls/",
+    })
+    .resolves({
+      Contents: [
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
+      ],
+    });
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+    })
+    .resolves(body("# Finance Audit v2\n"));
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
+    })
+    .resolves(body("## Wiring\n"));
+  s3Mock
+    .on(ListObjectsV2Command, {
+      Prefix: `${targetPrefix}skills/finance-audit-xls/`,
+    })
+    .resolves({
+      Contents: [
+        { Key: `${targetPrefix}skills/finance-audit-xls/.catalog-ref.json` },
+        { Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` },
+        { Key: `${targetPrefix}skills/finance-audit-xls/old.txt` },
+      ],
+    });
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md`,
+    })
+    .resolves(body("# Locally edited\n"));
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}skills/finance-audit-xls/old.txt`,
+    })
+    .resolves(body("old extra file\n"));
+  s3Mock.on(DeleteObjectCommand).resolves({});
+  s3Mock.on(CopyObjectCommand).resolves({});
+  s3Mock.on(PutObjectCommand).resolves({});
+}
+
+describe("agent reinstall-skill action", () => {
+  it("refreshes a stale catalog skill in the agent workspace and refreshes agent state", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    mockCatalogReinstallS3();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      reinstalled_paths: [
+        "skills/finance-audit-xls/.catalog-ref.json",
+        "skills/finance-audit-xls/SKILL.md",
+        "skills/finance-audit-xls/WIRING.md",
+      ],
+      source_sha256: computeCatalogSkillSha([
+        { relativePath: "SKILL.md", content: "# Finance Audit v2\n" },
+        { relativePath: "WIRING.md", content: "## Wiring\n" },
+      ]),
+    });
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toEqual([
+      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/old.txt",
+    ]);
+    expect(
+      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
+    ).toEqual([
+      expect.objectContaining({
+        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+      }),
+      expect.objectContaining({
+        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+      }),
+    ]);
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .some((call) => String(call.args[0].input.Key).endsWith("CONTEXT.md")),
+    ).toBe(false);
+    expect(deriveMockImpl).toHaveBeenCalledWith(
+      { tenantId: TENANT_A },
+      AGENT_ID,
+    );
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
+  it("reinstalls into a Space source scope without refreshing agent state", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    mockCatalogReinstallS3("tenants/acme/spaces/engineering/source/");
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
+          spaceId: SPACE_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.reinstalled_paths).toContain(
+      "skills/finance-audit-xls/SKILL.md",
+    );
+    expect(deriveMockImpl).not.toHaveBeenCalled();
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces reinstall worker errors with typed codes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    mockCatalogReinstallS3();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/finance-audit-xls/",
+      })
+      .resolves({ Contents: [] });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body.code).toBe("catalog_skill_not_found");
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("requires tenant admin before reinstalling a skill", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+  });
+});
+
 // ─── 5. Agent GET / LIST via composer ────────────────────────────────────────
 
 describe("agent GET / LIST", () => {
