@@ -87,11 +87,7 @@ describe("workspace pinned path helpers", () => {
       filename: "GUARDRAILS.md",
       folderPath: "expenses",
     });
-    expect(parseWorkspacePinPath("expenses/escalation/PLATFORM.md")).toEqual({
-      path: "expenses/escalation/PLATFORM.md",
-      filename: "PLATFORM.md",
-      folderPath: "expenses/escalation",
-    });
+    expect(parseWorkspacePinPath("expenses/escalation/PLATFORM.md")).toBeNull();
   });
 
   it("rejects non-pinned and unsafe workspace paths", () => {
@@ -114,19 +110,6 @@ describe("initializePinnedVersions", () => {
     s3Mock
       .on(GetObjectCommand, { Key: templateKey("GUARDRAILS.md") })
       .resolves(body(guardrails));
-    // PLATFORM and CAPABILITIES fall through to defaults.
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("PLATFORM.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("CAPABILITIES.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("PLATFORM.md") })
-      .resolves(body("# Platform default"));
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("CAPABILITIES.md") })
-      .resolves(body("# Capabilities default"));
     // Version store is empty — every HEAD 404s, every PUT succeeds.
     s3Mock.on(HeadObjectCommand).rejects(notFoundHead());
     s3Mock.on(PutObjectCommand).resolves({});
@@ -136,35 +119,18 @@ describe("initializePinnedVersions", () => {
       templateSlug: TEMPLATE,
     });
 
-    expect(Object.keys(pins).sort()).toEqual([
-      "CAPABILITIES.md",
-      "GUARDRAILS.md",
-      "PLATFORM.md",
-    ]);
+    expect(Object.keys(pins).sort()).toEqual(["GUARDRAILS.md"]);
     expect(pins["GUARDRAILS.md"]).toBe(`sha256:${sha256(guardrails)}`);
-    expect(pins["PLATFORM.md"]).toBe(`sha256:${sha256("# Platform default")}`);
   });
 
   it("falls back to defaults when template has no override for the pinned file", async () => {
     s3Mock
       .on(GetObjectCommand, { Key: templateKey("GUARDRAILS.md") })
       .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("PLATFORM.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("CAPABILITIES.md") })
-      .rejects(noSuchKey());
     const defaultGuardrails = "# Default guardrails";
     s3Mock
       .on(GetObjectCommand, { Key: defaultsKey("GUARDRAILS.md") })
       .resolves(body(defaultGuardrails));
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("PLATFORM.md") })
-      .resolves(body("# Platform"));
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("CAPABILITIES.md") })
-      .resolves(body("# Capabilities"));
     s3Mock.on(HeadObjectCommand).rejects(notFoundHead());
     s3Mock.on(PutObjectCommand).resolves({});
 
@@ -182,18 +148,6 @@ describe("initializePinnedVersions", () => {
     s3Mock
       .on(GetObjectCommand, { Key: templateKey("GUARDRAILS.md") })
       .resolves(body(content));
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("PLATFORM.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("CAPABILITIES.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("PLATFORM.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("CAPABILITIES.md") })
-      .rejects(noSuchKey());
     s3Mock.on(HeadObjectCommand).rejects(notFoundHead());
     s3Mock.on(PutObjectCommand).resolves({});
 
@@ -217,18 +171,6 @@ describe("initializePinnedVersions", () => {
     s3Mock
       .on(GetObjectCommand, { Key: templateKey("GUARDRAILS.md") })
       .resolves(body(content));
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("PLATFORM.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: templateKey("CAPABILITIES.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("PLATFORM.md") })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, { Key: defaultsKey("CAPABILITIES.md") })
-      .rejects(noSuchKey());
     // Every HEAD succeeds — version already stored — so no PUTs happen.
     s3Mock.on(HeadObjectCommand).resolves({});
     s3Mock

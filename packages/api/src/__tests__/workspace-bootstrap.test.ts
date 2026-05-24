@@ -320,7 +320,7 @@ describe("bootstrapAgentWorkspace", () => {
     stubSources({
       templateFiles: {
         "AGENTS.md": "should-skip-because-existing",
-        "IDENTITY.md": "should-write",
+        "CONTEXT.md": "should-write",
       },
     });
     stubAgentExists("AGENTS.md"); // already there — preserve-existing skips
@@ -335,8 +335,45 @@ describe("bootstrapAgentWorkspace", () => {
     const writtenKeys = puts
       .map((c) => c.args[0].input.Key)
       .filter((k) => typeof k === "string" && k.startsWith(AGENT_PREFIX));
-    expect(writtenKeys).toContain(AGENT_PREFIX + "IDENTITY.md");
+    expect(writtenKeys).toContain(AGENT_PREFIX + "CONTEXT.md");
     expect(writtenKeys).not.toContain(AGENT_PREFIX + "AGENTS.md");
+  });
+
+  it("does not seed retired root contract files for fresh agent prefixes", async () => {
+    queueAgentResolution();
+    stubSources({
+      defaultsFiles: {
+        "AGENTS.md": "new consolidated map",
+        "CONTEXT.md": "root scope",
+        "GUARDRAILS.md": "safety",
+        "USER.md": "user context",
+        "SOUL.md": "retired personality",
+        "IDENTITY.md": "retired identity",
+        "PLATFORM.md": "retired platform",
+        "CAPABILITIES.md": "retired capabilities",
+      },
+    });
+
+    const result = await bootstrapAgentWorkspace(AGENT_ID);
+
+    expect(result.written).toBe(4);
+    expect(result.total).toBe(4);
+    const puts = s3Mock.commandCalls(PutObjectCommand);
+    const writtenKeys = puts
+      .map((c) => c.args[0].input.Key)
+      .filter((k) => typeof k === "string" && k.startsWith(AGENT_PREFIX));
+    expect(writtenKeys).toEqual(
+      expect.arrayContaining([
+        AGENT_PREFIX + "AGENTS.md",
+        AGENT_PREFIX + "CONTEXT.md",
+        AGENT_PREFIX + "GUARDRAILS.md",
+        AGENT_PREFIX + "USER.md",
+      ]),
+    );
+    expect(writtenKeys).not.toContain(AGENT_PREFIX + "SOUL.md");
+    expect(writtenKeys).not.toContain(AGENT_PREFIX + "IDENTITY.md");
+    expect(writtenKeys).not.toContain(AGENT_PREFIX + "PLATFORM.md");
+    expect(writtenKeys).not.toContain(AGENT_PREFIX + "CAPABILITIES.md");
   });
 
   it("overwrite mode replaces existing files at the agent prefix", async () => {

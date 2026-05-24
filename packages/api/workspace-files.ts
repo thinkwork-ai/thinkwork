@@ -1039,8 +1039,6 @@ function isSkillMarkerPath(path: string): boolean {
 const GOVERNANCE_FILE_BASENAMES: ReadonlySet<string> = new Set([
   "AGENTS.md",
   "GUARDRAILS.md",
-  "CAPABILITIES.md",
-  "PLATFORM.md",
   "MEMORY_GUIDE.md",
   "USER.md",
 ]);
@@ -2070,8 +2068,7 @@ async function handleFolderMove(
   // can retry without partial data loss.
   //
   // Pinned-file accounting note: `isPinnedWorkspacePath` only matches
-  // the three root-level PINNED_FILES (GUARDRAILS.md, PLATFORM.md,
-  // CAPABILITIES.md). Folder moves therefore always report
+  // root-level PINNED_FILES (currently GUARDRAILS.md). Folder moves therefore always report
   // `detachedPinnedCount: 0` in practice — those root files cannot be
   // inside any subfolder being moved. The field stays in the response
   // for shape parity with single-file moves; a richer

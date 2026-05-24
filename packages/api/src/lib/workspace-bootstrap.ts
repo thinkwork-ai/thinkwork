@@ -219,6 +219,13 @@ function contentTypeFor(path: string): string {
   return "text/plain";
 }
 
+const RETIRED_ROOT_DEFAULT_FILES = new Set([
+  "SOUL.md",
+  "IDENTITY.md",
+  "PLATFORM.md",
+  "CAPABILITIES.md",
+]);
+
 async function agentPathExists(bkt: string, key: string): Promise<boolean> {
   try {
     await s3.send(new HeadObjectCommand({ Bucket: bkt, Key: key }));
@@ -277,8 +284,14 @@ export async function bootstrapAgentWorkspace(
   ]);
 
   const sourceByPath = new Map<string, string>();
-  for (const [rel, key] of defaultsKeys) sourceByPath.set(rel, key);
-  for (const [rel, key] of templateKeys) sourceByPath.set(rel, key); // template overrides defaults
+  for (const [rel, key] of defaultsKeys) {
+    if (RETIRED_ROOT_DEFAULT_FILES.has(rel)) continue;
+    sourceByPath.set(rel, key);
+  }
+  for (const [rel, key] of templateKeys) {
+    if (RETIRED_ROOT_DEFAULT_FILES.has(rel)) continue;
+    sourceByPath.set(rel, key); // template overrides defaults
+  }
 
   const placeholderValues: PlaceholderValues = {
     AGENT_NAME: resolved.agentName,
