@@ -1417,7 +1417,7 @@ None.
 | U12 Catalog skill sha in list response          | `codex/pi-skill-catalog-u12-catalog-sha`             | [#1660](https://github.com/thinkwork-ai/thinkwork/pull/1660) | Merged | Squash merged as `3a6232e5`; remote and local branch removed. Added deterministic per-skill catalog folder hashes to catalog `list` responses for drift comparison.                                                                                                                      |
 | U13 Drift badge in workspace Skills tree        | `codex/pi-skill-catalog-u13-drift-badge`             | [#1661](https://github.com/thinkwork-ai/thinkwork/pull/1661) | Merged | Squash merged as `b7da89ef`; remote and local branch removed. Shows stale/orphan badges for installed skill folders when `.catalog-ref.json` no longer matches the current tenant catalog hash.                                                                                          |
 | U14 Reinstall-skill refresh action              | `codex/pi-skill-catalog-u14-reinstall`               | [#1662](https://github.com/thinkwork-ai/thinkwork/pull/1662) | Merged | Squash merged as `88333433`; remote and local branch removed. Adds files-only reinstall refresh for stale installed skills, preserving CONTEXT.md and updating `.catalog-ref.json.source_sha256`.                                                                                        |
-| U15 Retire customize skill GraphQL surface      | `codex/pi-skill-catalog-u15-retire-customize-skills` | Pending                                                      | Active | Removes the deprecated `skillCatalog`, `installSkill`, `uninstallSkill`, and `enableSkill` GraphQL fields/resolvers. Fresh survey found the old CLI skill verbs still used those fields, so this unit retires those CLI verbs with admin Skills-tab guidance while keeping `skill push`. |
+| U15 Retire customize skill GraphQL surface      | `codex/pi-skill-catalog-u15-retire-customize-skills` | [#1663](https://github.com/thinkwork-ai/thinkwork/pull/1663) | In CI  | Removes the deprecated `skillCatalog`, `installSkill`, `uninstallSkill`, and `enableSkill` GraphQL fields/resolvers. Fresh survey found the old CLI skill verbs still used those fields, so this unit retires those CLI verbs with admin Skills-tab guidance while keeping `skill push`. |
 
 ## Verification Log
 
@@ -1573,6 +1573,7 @@ None.
 - Opened [#1662](https://github.com/thinkwork-ai/thinkwork/pull/1662).
 - Squash merged [#1662](https://github.com/thinkwork-ai/thinkwork/pull/1662) as `883334339ce06b741f64038340444ec17556f7d7`; remote branch was deleted and the local branch/worktree were removed.
 - Started U15 in `.Codex/worktrees/pi-skill-catalog-u15-retire-customize-skills` on branch `codex/pi-skill-catalog-u15-retire-customize-skills`.
+- Opened [#1663](https://github.com/thinkwork-ai/thinkwork/pull/1663).
 
 ## Blockers
 
