@@ -33,7 +33,13 @@ export async function regenerateManifest(
   tenantSlug: string,
   instanceId: string,
 ): Promise<void> {
-  const prefix = workspacePrefix(tenantSlug, instanceId);
+  await regenerateManifestForPrefix(bucket, workspacePrefix(tenantSlug, instanceId));
+}
+
+export async function regenerateManifestForPrefix(
+  bucket: string,
+  prefix: string,
+): Promise<void> {
   const files: { path: string; etag: string; size: number; last_modified: string }[] = [];
   let continuationToken: string | undefined;
 

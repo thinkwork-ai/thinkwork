@@ -1837,6 +1837,7 @@ export type Mutation = {
   acceptAgentWorkspaceReview: AgentWorkspaceRun;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
+  addSpaceMember: SpaceMember;
   addTenantMember: TenantMember;
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
@@ -1960,6 +1961,7 @@ export type Mutation = {
   rejectTenantEntityFact: TenantEntitySection;
   releaseThread: Thread;
   removeInboxItemLink: Scalars['Boolean']['output'];
+  removeSpaceMember: Scalars['Boolean']['output'];
   /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
   removeTenantMember: Scalars['Boolean']['output'];
   removeThreadDependency: Scalars['Boolean']['output'];
@@ -2065,6 +2067,12 @@ export type MutationAddInboxItemCommentArgs = {
 
 export type MutationAddInboxItemLinkArgs = {
   input: AddInboxItemLinkInput;
+};
+
+
+export type MutationAddSpaceMemberArgs = {
+  spaceId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -2574,6 +2582,12 @@ export type MutationReleaseThreadArgs = {
 
 export type MutationRemoveInboxItemLinkArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationRemoveSpaceMemberArgs = {
+  spaceId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 

@@ -112,8 +112,8 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/workspace"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/memory"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/automations"');
-    expect(detailChromeSource).toContain("Files");
-    expect(detailChromeSource).not.toContain(">Workspace<");
+    expect(detailChromeSource).toMatch(/>\s*Workspace\s*<\/Link>/);
+    expect(detailChromeSource).not.toMatch(/>\s*Files\s*<\/Link>/);
     expect(detailRouteSource).toContain('to="/spaces/$spaceId/configuration"');
     expect(workspaceRouteSource).toContain("SpaceWorkspacePanel");
     expect(detailChromeSource).toContain("target={{ spaceId }}");
@@ -127,7 +127,6 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain('to="/spaces/$spaceId/tools"');
     expect(detailChromeSource).not.toContain('value="threads"');
     expect(detailChromeSource).not.toContain('value="checklist"');
-    expect(detailChromeSource).not.toContain('value="members"');
     expect(detailChromeSource).not.toContain('value="integrations"');
     expect(detailChromeSource).not.toContain("Context Config");
     expect(detailChromeSource).not.toContain("Connected Data Config");
@@ -259,6 +258,23 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).not.toContain("renderDiagnostics");
     expect(queriesSource).not.toContain("checklistTemplates");
     expect(queriesSource).not.toContain("integrations");
-    expect(queriesSource).not.toContain("members");
+  });
+
+  it("registers the Members route and gates the tab to private Spaces", () => {
+    const membersRouteSource = readSource("./$spaceId_.members.tsx");
+    expect(routeTreeSource).toContain(
+      "AuthedTenantSpacesSpaceIdMembersRouteImport",
+    );
+    expect(membersRouteSource).toContain(
+      'createFileRoute(\n  "/_authed/_tenant/spaces/$spaceId_/members"',
+    );
+    expect(membersRouteSource).toContain("SpaceMembersPanel");
+    expect(membersRouteSource).toContain('accessMode === "PRIVATE"');
+    expect(detailChromeSource).toContain('space.accessMode === "PRIVATE"');
+    expect(detailChromeSource).toContain('value="members"');
+    expect(detailChromeSource).toMatch(/>\s*Members\s*<\/Link>/);
+    expect(queriesSource).toContain("SpaceMembers");
+    expect(queriesSource).toContain("AddSpaceMember");
+    expect(queriesSource).toContain("RemoveSpaceMember");
   });
 });

@@ -253,6 +253,8 @@ extend type Mutation {
     input: SetSpaceKnowledgeBasesInput!
   ): [SpaceKnowledgeBase!]!
   setSpaceTools(input: SetSpaceToolsInput!): Space!
+  addSpaceMember(spaceId: ID!, userId: ID!): SpaceMember!
+  removeSpaceMember(spaceId: ID!, userId: ID!): Boolean!
   startCustomerOnboarding(
     input: StartCustomerOnboardingInput!
   ): StartCustomerOnboardingPayload!

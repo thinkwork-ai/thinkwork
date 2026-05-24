@@ -186,10 +186,10 @@ export async function regenerateWorkspaceMap(
 }
 
 export async function generateFolderStructure(
-  agentId: string,
+  target: Target,
   path: string,
 ): Promise<void> {
-  await request({ action: "generate-folder-structure", agentId, path });
+  await request({ action: "generate-folder-structure", ...target, path });
 }
 
 export async function normalizeWorkspaceMap(agentId: string): Promise<void> {

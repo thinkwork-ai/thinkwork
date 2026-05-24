@@ -244,6 +244,9 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/agentBuilderApi\.generateFolderStructure/);
     expect(editorSource).toMatch(/onGenerateFolderStructure=/);
     expect(editorSource).toMatch(
+      /"agentId" in stableTarget \|\| "spaceId" in stableTarget/,
+    );
+    expect(editorSource).toMatch(
       /if \(isOpenTarget\) setLoadingContent\(true\)/,
     );
     expect(editorSource).toMatch(/renamePath/);

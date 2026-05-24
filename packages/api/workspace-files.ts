@@ -56,6 +56,7 @@ import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
 import {
   appendRoutingRowIfMissing,
   generateContextFolderStructure,
+  generateContextFolderStructureForSpace,
   normalizeAgentsMd,
   regenerateAgentsMdDerivedSections,
 } from "./src/lib/workspace-map-generator.js";
@@ -2512,13 +2513,13 @@ async function handleGenerateFolderStructure(
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
-  if (target.kind !== "agent") {
+  if (target.kind !== "agent" && target.kind !== "space") {
     return json(400, {
       ok: false,
-      error: "generate-folder-structure requires agentId",
+      error: "generate-folder-structure requires agentId or spaceId",
     });
   }
-  if (deps.auth.authType === "apikey") {
+  if (target.kind === "agent" && deps.auth.authType === "apikey") {
     if (!deps.auth.agentId || deps.auth.agentId !== target.agentId) {
       return json(403, {
         ok: false,
@@ -2526,6 +2527,12 @@ async function handleGenerateFolderStructure(
           "Service-auth callers must present x-agent-id matching the target agent",
       });
     }
+  }
+  if (target.kind === "space" && deps.auth.authType === "apikey") {
+    return json(403, {
+      ok: false,
+      error: "generate-folder-structure on a Space requires admin authentication",
+    });
   }
 
   let cleanPath: string;
@@ -2544,7 +2551,11 @@ async function handleGenerateFolderStructure(
     });
   }
 
-  await generateContextFolderStructure(target.agentId, cleanPath);
+  if (target.kind === "agent") {
+    await generateContextFolderStructure(target.agentId, cleanPath);
+  } else {
+    await generateContextFolderStructureForSpace(target.spaceId, cleanPath);
+  }
   return json(200, { ok: true });
 }
 
