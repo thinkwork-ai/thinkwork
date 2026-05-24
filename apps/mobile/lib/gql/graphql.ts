@@ -1215,11 +1215,6 @@ export type DisableWorkflowInput = {
   slug: Scalars['String']['input'];
 };
 
-export type EnableSkillInput = {
-  computerId: Scalars['ID']['input'];
-  skillId: Scalars['String']['input'];
-};
-
 export type EnableWorkflowInput = {
   computerId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
@@ -1436,17 +1431,6 @@ export type InboxItemStatusEvent = {
   tenantId: Scalars['ID']['output'];
   title?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type InstallSkillInput = {
-  skillId: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  /**
-   * Optional version pin. When omitted, the resolver reads the current
-   * version from `skill_catalog`. Re-installing an already-installed
-   * skill is an idempotent upsert (used by `skill upgrade` too).
-   */
-  version?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type InviteMemberInput = {
@@ -1925,18 +1909,10 @@ export type Mutation = {
   disableSkill: Scalars['Boolean']['output'];
   disableWorkflow: Scalars['Boolean']['output'];
   editTenantEntityFact: TenantEntitySection;
-  enableSkill: AgentSkill;
   enableWorkflow: WorkflowBinding;
   enqueueComputerTask: ComputerTask;
   escalateThread: Thread;
   importN8nRoutine: Routine;
-  /**
-   * Install a catalog skill into a tenant (upsert into `tenant_skills`).
-   * Idempotent: re-running with the same slug bumps the row's
-   * `version` + `updated_at`. Used by both `skill install` and `skill
-   * upgrade` on the CLI.
-   */
-  installSkill: TenantSkill;
   inviteMember: TenantMember;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
@@ -2010,12 +1986,6 @@ export type Mutation = {
    */
   testWebhook: WebhookDelivery;
   triggerRoutineRun: RoutineExecution;
-  /**
-   * Uninstall a skill from a tenant (delete the `tenant_skills` row).
-   * Returns true when a row was deleted, false when no matching install
-   * existed (idempotent no-op).
-   */
-  uninstallSkill: Scalars['Boolean']['output'];
   uninstallSlackWorkspace: SlackWorkspace;
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
@@ -2386,11 +2356,6 @@ export type MutationEditTenantEntityFactArgs = {
 };
 
 
-export type MutationEnableSkillArgs = {
-  input: EnableSkillInput;
-};
-
-
 export type MutationEnableWorkflowArgs = {
   input: EnableWorkflowInput;
 };
@@ -2408,11 +2373,6 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationImportN8nRoutineArgs = {
   input: ImportN8nRoutineInput;
-};
-
-
-export type MutationInstallSkillArgs = {
-  input: InstallSkillInput;
 };
 
 
@@ -2774,12 +2734,6 @@ export type MutationTestWebhookArgs = {
 export type MutationTriggerRoutineRunArgs = {
   input?: InputMaybe<Scalars['AWSJSON']['input']>;
   routineId: Scalars['ID']['input'];
-};
-
-
-export type MutationUninstallSkillArgs = {
-  skillId: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -3423,7 +3377,6 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
-  skillCatalog: Array<SkillCatalogItem>;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
@@ -4712,19 +4665,6 @@ export type SetUserComputerAssignmentsInput = {
   userId: Scalars['ID']['input'];
 };
 
-export type SkillCatalogItem = {
-  __typename?: 'SkillCatalogItem';
-  category?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  displayName: Scalars['String']['output'];
-  enabled: Scalars['Boolean']['output'];
-  icon?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  skillId: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-};
-
 export type SkillRun = {
   __typename?: 'SkillRun';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -5250,25 +5190,6 @@ export type TenantSettings = {
   maxAgents?: Maybe<Scalars['Int']['output']>;
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-/**
- * Tenant-scoped skill installation row (mirrors the `tenant_skills`
- * table). Distinct from `SkillCatalogItem` which is the
- * display-projection used by the Customize UI — this type carries the
- * version + source metadata operators need from the CLI.
- */
-export type TenantSkill = {
-  __typename?: 'TenantSkill';
-  catalogVersion?: Maybe<Scalars['String']['output']>;
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  installedAt: Scalars['AWSDateTime']['output'];
-  skillId: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  version?: Maybe<Scalars['String']['output']>;
 };
 
 export type TenantToolInventory = {

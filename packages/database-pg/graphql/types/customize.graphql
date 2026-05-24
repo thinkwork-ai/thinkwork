@@ -1,5 +1,4 @@
-# Customize page surface — read-only catalog + bindings for Skills and
-# Workflows.
+# Customize page surface — read-only catalog + bindings for Workflows.
 
 type WorkflowCatalogItem {
   id: ID!
@@ -11,22 +10,6 @@ type WorkflowCatalogItem {
   icon: String
   defaultSchedule: String
   status: String!
-  enabled: Boolean!
-}
-
-type SkillCatalogItem {
-  # Stable per-tenant id (tenant_skills.id).
-  id: ID!
-  tenantId: ID!
-  # tenant_skills.skill_id — same shape as agent_skills.skill_id.
-  skillId: String!
-  # Display fields are taken from the global skill_catalog row when one
-  # exists; otherwise the resolver falls back to humanizing skill_id.
-  displayName: String!
-  description: String
-  category: String
-  icon: String
-  source: String!
   enabled: Boolean!
 }
 
@@ -53,40 +36,6 @@ type WorkflowBinding {
   updatedAt: AWSDateTime!
 }
 
-"""
-Tenant-scoped skill installation row (mirrors the `tenant_skills`
-table). Distinct from `SkillCatalogItem` which is the
-display-projection used by the Customize UI — this type carries the
-version + source metadata operators need from the CLI.
-"""
-type TenantSkill {
-  id: ID!
-  tenantId: ID!
-  skillId: String!
-  source: String!
-  version: String
-  catalogVersion: String
-  enabled: Boolean!
-  installedAt: AWSDateTime!
-  updatedAt: AWSDateTime!
-}
-
-input InstallSkillInput {
-  tenantId: ID!
-  skillId: String!
-  """
-  Optional version pin. When omitted, the resolver reads the current
-  version from `skill_catalog`. Re-installing an already-installed
-  skill is an idempotent upsert (used by `skill upgrade` too).
-  """
-  version: String
-}
-
-input EnableSkillInput {
-  computerId: ID!
-  skillId: String!
-}
-
 input DisableSkillInput {
   computerId: ID!
   skillId: String!
@@ -103,27 +52,12 @@ input DisableWorkflowInput {
 }
 
 extend type Query {
-  skillCatalog: [SkillCatalogItem!]!
   workflowCatalog: [WorkflowCatalogItem!]!
   customizeBindings: CustomizeBindings
 }
 
 extend type Mutation {
-  enableSkill(input: EnableSkillInput!): AgentSkill!
   disableSkill(input: DisableSkillInput!): Boolean!
   enableWorkflow(input: EnableWorkflowInput!): WorkflowBinding!
   disableWorkflow(input: DisableWorkflowInput!): Boolean!
-  """
-  Install a catalog skill into a tenant (upsert into `tenant_skills`).
-  Idempotent: re-running with the same slug bumps the row's
-  `version` + `updated_at`. Used by both `skill install` and `skill
-  upgrade` on the CLI.
-  """
-  installSkill(input: InstallSkillInput!): TenantSkill!
-  """
-  Uninstall a skill from a tenant (delete the `tenant_skills` row).
-  Returns true when a row was deleted, false when no matching install
-  existed (idempotent no-op).
-  """
-  uninstallSkill(tenantId: ID!, skillId: String!): Boolean!
 }
