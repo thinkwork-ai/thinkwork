@@ -189,6 +189,10 @@ const { generateContextFolderStructureMock } = vi.hoisted(() => ({
   generateContextFolderStructureMock: vi.fn(),
 }));
 
+const { generateContextFolderStructureForSpaceMock } = vi.hoisted(() => ({
+  generateContextFolderStructureForSpaceMock: vi.fn(),
+}));
+
 const { seedTenantSkillCatalogMock } = vi.hoisted(() => ({
   seedTenantSkillCatalogMock: vi.fn(),
 }));
@@ -199,6 +203,8 @@ vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
   return {
     ...actual,
     generateContextFolderStructure: generateContextFolderStructureMock,
+    generateContextFolderStructureForSpace:
+      generateContextFolderStructureForSpaceMock,
     normalizeAgentsMd: normalizeAgentsMdMock,
     regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
   };
@@ -332,6 +338,13 @@ function queueAdminTemplateTargetRows(): void {
   pushDbRows([{ role: "admin" }]);
 }
 
+function queueAdminSpaceTargetRows(): void {
+  pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+  pushDbRows([spaceRowTenantA()]);
+  pushDbRows([tenantRow()]);
+  pushDbRows([{ role: "admin" }]);
+}
+
 function queueAdminCatalogTargetRows(): void {
   pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
   pushDbRows([tenantRow()]);
@@ -391,6 +404,8 @@ beforeEach(() => {
   normalizeAgentsMdMock.mockResolvedValue(undefined);
   generateContextFolderStructureMock.mockReset();
   generateContextFolderStructureMock.mockResolvedValue(undefined);
+  generateContextFolderStructureForSpaceMock.mockReset();
+  generateContextFolderStructureForSpaceMock.mockResolvedValue(undefined);
   seedTenantSkillCatalogMock.mockReset();
   seedTenantSkillCatalogMock.mockResolvedValue({
     ok: true,
@@ -608,8 +623,50 @@ describe("agent AGENTS.md derived section refresh", () => {
       ),
     );
     expect(templateRes.statusCode).toBe(400);
-    expect(templateRes.body.error).toMatch(/requires agentId/);
+    expect(templateRes.body.error).toMatch(/requires agentId or spaceId/);
     expect(generateContextFolderStructureMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("generates folder structure for Space CONTEXT.md targets", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          spaceId: SPACE_ID,
+          path: "CONTEXT.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(generateContextFolderStructureForSpaceMock).toHaveBeenCalledTimes(1);
+    expect(generateContextFolderStructureForSpaceMock).toHaveBeenCalledWith(
+      SPACE_ID,
+      "CONTEXT.md",
+    );
+    expect(generateContextFolderStructureMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-CONTEXT.md paths on Space targets", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "generate-folder-structure",
+          spaceId: SPACE_ID,
+          path: "memory/notes.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/CONTEXT\.md/);
+    expect(generateContextFolderStructureForSpaceMock).not.toHaveBeenCalled();
   });
 
   it("rejects unsafe generate-folder-structure paths before invoking the generator", async () => {
