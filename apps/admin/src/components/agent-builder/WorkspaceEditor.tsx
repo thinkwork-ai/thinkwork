@@ -777,11 +777,11 @@ export function WorkspaceEditor({
           mutatingPaths.has(deleteConfirmTarget.path)
         }
         onCancel={() => setDeleteConfirmTarget(null)}
-        onConfirm={async () => {
+        onConfirm={() => {
           if (!deleteConfirmTarget) return;
           const { path, isFolder } = deleteConfirmTarget;
-          await handleDeletePath(path, isFolder);
           setDeleteConfirmTarget(null);
+          void handleDeletePath(path, isFolder);
         }}
       />
     </>
