@@ -1,14 +1,12 @@
 """Tests for router_parser.py — ROUTER.md parsing and profile resolution."""
-import os
-import tempfile
 import pytest
-from router_parser import parse_router, resolve_profile, expand_file_list, ContextProfile
+from router_parser import parse_router, resolve_profile, expand_file_list
 
 
 SAMPLE_ROUTER = """# Workspace Router
 
 ## default
-- load: SOUL.md, IDENTITY.md, USER.md
+- load: AGENTS.md, CONTEXT.md, GUARDRAILS.md, USER.md
 - skills: all
 
 ## chat
@@ -21,7 +19,7 @@ SAMPLE_ROUTER = """# Workspace Router
 
 ## heartbeat
 - load: docs/procedures/
-- skip: IDENTITY.md, USER.md
+- skip: USER.md
 - skills: ticket-management
 
 ## process:onboarding:step-1
@@ -37,8 +35,9 @@ def workspace(tmp_path):
     ws.mkdir()
 
     # Root files
-    (ws / "SOUL.md").write_text("You are a helpful agent.")
-    (ws / "IDENTITY.md").write_text("Name: Nova")
+    (ws / "AGENTS.md").write_text("You are a helpful agent.")
+    (ws / "CONTEXT.md").write_text("Current workspace context.")
+    (ws / "GUARDRAILS.md").write_text("Stay safe.")
     (ws / "USER.md").write_text("User: Eric")
     (ws / "ROUTER.md").write_text(SAMPLE_ROUTER)
 
@@ -75,7 +74,7 @@ class TestParseRouter:
     def test_default_profile(self, router_path):
         profiles = parse_router(router_path)
         default = profiles["default"]
-        assert default.load == ["SOUL.md", "IDENTITY.md", "USER.md"]
+        assert default.load == ["AGENTS.md", "CONTEXT.md", "GUARDRAILS.md", "USER.md"]
         assert default.skip == []
 
     def test_email_profile(self, router_path):
@@ -86,7 +85,7 @@ class TestParseRouter:
     def test_heartbeat_has_skip(self, router_path):
         profiles = parse_router(router_path)
         hb = profiles["heartbeat"]
-        assert hb.skip == ["IDENTITY.md", "USER.md"]
+        assert hb.skip == ["USER.md"]
 
     def test_ignores_legacy_skills_directives(self, router_path):
         profiles = parse_router(router_path)
@@ -100,9 +99,10 @@ class TestParseRouter:
 class TestResolveProfile:
     def test_channel_match_chat(self, router_path):
         profile = resolve_profile(router_path, channel="chat")
-        # default (SOUL, IDENTITY, USER) + chat (tone, preferences)
-        assert "SOUL.md" in profile.load
-        assert "IDENTITY.md" in profile.load
+        # default canonical files + chat (tone, preferences)
+        assert "AGENTS.md" in profile.load
+        assert "CONTEXT.md" in profile.load
+        assert "GUARDRAILS.md" in profile.load
         assert "USER.md" in profile.load
         assert "docs/tone.md" in profile.load
         assert "memory/preferences.md" in profile.load
@@ -110,15 +110,15 @@ class TestResolveProfile:
     def test_channel_match_email(self, router_path):
         profile = resolve_profile(router_path, channel="email")
         # default + email additions
-        assert "SOUL.md" in profile.load
-        assert "IDENTITY.md" in profile.load
+        assert "AGENTS.md" in profile.load
+        assert "CONTEXT.md" in profile.load
         assert "docs/procedures/email-triage.md" in profile.load
         assert "templates/email/" in profile.load
 
     def test_heartbeat_skip(self, router_path):
         profile = resolve_profile(router_path, channel="heartbeat")
-        assert "SOUL.md" in profile.load
-        assert "IDENTITY.md" not in profile.load
+        assert "AGENTS.md" in profile.load
+        assert "CONTEXT.md" in profile.load
         assert "USER.md" not in profile.load
         assert "docs/procedures/" in profile.load
 
@@ -126,17 +126,17 @@ class TestResolveProfile:
         profile = resolve_profile(router_path, channel="chat",
                                   context_profile="process:onboarding:step-1")
         # Process step takes priority over channel
-        assert "SOUL.md" in profile.load
+        assert "AGENTS.md" in profile.load
         assert "docs/tone.md" in profile.load
         assert "templates/email/welcome.md" in profile.load
 
     def test_unknown_channel_falls_to_default(self, router_path):
         profile = resolve_profile(router_path, channel="unknown_channel")
-        assert profile.load == ["SOUL.md", "IDENTITY.md", "USER.md"]
+        assert profile.load == ["AGENTS.md", "CONTEXT.md", "GUARDRAILS.md", "USER.md"]
 
     def test_no_channel_falls_to_default(self, router_path):
         profile = resolve_profile(router_path, channel="")
-        assert profile.load == ["SOUL.md", "IDENTITY.md", "USER.md"]
+        assert profile.load == ["AGENTS.md", "CONTEXT.md", "GUARDRAILS.md", "USER.md"]
 
     def test_no_router_returns_none(self, tmp_path):
         profile = resolve_profile(str(tmp_path / "nonexistent.md"), channel="chat")
@@ -151,8 +151,8 @@ class TestResolveProfile:
 
 class TestExpandFileList:
     def test_single_file(self, workspace):
-        result = expand_file_list(str(workspace), ["SOUL.md"])
-        assert result == ["SOUL.md"]
+        result = expand_file_list(str(workspace), ["AGENTS.md"])
+        assert result == ["AGENTS.md"]
 
     def test_directory_expansion(self, workspace):
         result = expand_file_list(str(workspace), ["templates/email/"])
@@ -160,15 +160,15 @@ class TestExpandFileList:
         assert "templates/email/welcome.md" in result
 
     def test_mixed_files_and_dirs(self, workspace):
-        result = expand_file_list(str(workspace), ["SOUL.md", "docs/procedures/"])
-        assert "SOUL.md" in result
+        result = expand_file_list(str(workspace), ["AGENTS.md", "docs/procedures/"])
+        assert "AGENTS.md" in result
         assert "docs/procedures/email-triage.md" in result
         assert "docs/procedures/escalation.md" in result
 
     def test_missing_file_skipped(self, workspace):
-        result = expand_file_list(str(workspace), ["SOUL.md", "nonexistent.md"])
-        assert result == ["SOUL.md"]
+        result = expand_file_list(str(workspace), ["AGENTS.md", "nonexistent.md"])
+        assert result == ["AGENTS.md"]
 
     def test_deduplication(self, workspace):
-        result = expand_file_list(str(workspace), ["SOUL.md", "SOUL.md"])
-        assert result.count("SOUL.md") == 1
+        result = expand_file_list(str(workspace), ["AGENTS.md", "AGENTS.md"])
+        assert result.count("AGENTS.md") == 1
