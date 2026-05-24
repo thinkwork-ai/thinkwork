@@ -1397,14 +1397,15 @@ None.
 - Implementation plan: `docs/plans/2026-05-23-007-feat-editor-driven-agents-md-section-regen-plan.md`
 - Target branch: `main`
 - Autopilot started: 2026-05-23
+- Autopilot completed: 2026-05-23
 
 ## Implementation Units
 
-| Unit                                                     | Branch                                    | PR                                                           | State   | Notes                                                                            |
-| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------- |
-| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | Merged  | Squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; required CI passed. |
-| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) | Merged  | Squash merged as `76a37a12e429c4b87c23f5b1f9109a8e2af98789`; required CI passed. |
-| U3 Operator normalization and bootstrap polish           | `codex/editor-agents-md-section-regen-u3` | [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) | PR open | Operator normalization implemented and monitoring CI.                            |
+| Unit                                                     | Branch                                    | PR                                                           | State  | Notes                                                                            |
+| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------- |
+| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | Merged | Squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; required CI passed. |
+| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) | Merged | Squash merged as `76a37a12e429c4b87c23f5b1f9109a8e2af98789`; required CI passed. |
+| U3 Operator normalization and bootstrap polish           | `codex/editor-agents-md-section-regen-u3` | [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) | Merged | Squash merged as `8397c4c5b10ebef73875e3958a71fef8600ee9e3`; required CI passed. |
 
 ## Progress Log
 
@@ -1422,6 +1423,8 @@ None.
 - 2026-05-23: Created isolated U3 worktree `.Codex/worktrees/editor-agents-md-section-regen-u3` from `origin/main` on branch `codex/editor-agents-md-section-regen-u3`.
 - 2026-05-23: Began U3 by adding explicit `normalize-map` repair wiring and rematerialize/bootstrap derived-section refresh coverage.
 - 2026-05-23: Opened U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624).
+- 2026-05-23: U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) passed CLA, lint, test, typecheck, and verify; squash merged as `8397c4c5b10ebef73875e3958a71fef8600ee9e3`; remote branch deleted and U3 worktree removed.
+- 2026-05-23: All implementation units from the editor-driven AGENTS.md section-regeneration plan are merged into `main`; no manual deployment or production mutation was run.
 
 ## Verification Log
 
@@ -1458,7 +1461,7 @@ None.
 
 - U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) merged after required checks passed.
 - U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) merged after required checks passed.
-- U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) opened; checks pending.
+- U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) merged after required checks passed.
 
 ## Blockers
 
