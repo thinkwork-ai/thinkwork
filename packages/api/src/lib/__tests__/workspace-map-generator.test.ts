@@ -4,11 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Hoisted state — drizzle table tag + db query dispatch + S3 spy
 // ---------------------------------------------------------------------------
 
-const {
-  state,
-  s3Calls,
-  mockRegenerateManifest,
-} = vi.hoisted(() => ({
+const { state, s3Calls, mockRegenerateManifest } = vi.hoisted(() => ({
   state: {
     agent: {
       name: "Acme Daily Digest",
@@ -53,7 +49,10 @@ const {
 
 vi.mock("@aws-sdk/client-s3", () => ({
   S3Client: class {
-    async send(cmd: { input?: { Bucket?: string; Key?: string; Body?: string; Prefix?: string }; constructor: { name: string } }) {
+    async send(cmd: {
+      input?: { Bucket?: string; Key?: string; Body?: string; Prefix?: string };
+      constructor: { name: string };
+    }) {
       const name = cmd.constructor.name;
       const key = cmd.input?.Key ?? "";
       if (name === "PutObjectCommand") {
@@ -76,8 +75,8 @@ vi.mock("@aws-sdk/client-s3", () => ({
         const prefix = cmd.input?.Prefix ?? "";
         s3Calls.lists.push(prefix);
         return {
-          Contents: state.listObjectsResponses.map((slug) => ({
-            Key: `${prefix}${slug}/CONTEXT.md`,
+          Contents: state.listObjectsResponses.map((path) => ({
+            Key: path.startsWith(prefix) ? path : `${prefix}${path}`,
           })),
           IsTruncated: false,
         };
@@ -179,7 +178,10 @@ vi.mock("drizzle-orm", () => ({
   isNotNull: () => ({}),
 }));
 
-import { regenerateWorkspaceMap } from "../workspace-map-generator.js";
+import {
+  regenerateWorkspaceMap,
+  replaceDerivedAgentsMdSections,
+} from "../workspace-map-generator.js";
 
 const PREFIX = "tenants/acme/agents/acme-daily-digest/workspace/";
 
@@ -266,6 +268,144 @@ describe("regenerateWorkspaceMap — Workflows projection", () => {
     await regenerateWorkspaceMap("agent-1", "computer-1");
     expect(lastWrittenAgentsMd()).toContain("## Workflows");
     expect(lastWrittenAgentsMd()).toContain("No workflows configured.");
+    expect(lastWrittenAgentsMd()).toContain("## Knowledge Bases");
+    expect(lastWrittenAgentsMd()).toContain("No knowledge bases assigned.");
+  });
+});
+
+describe("replaceDerivedAgentsMdSections", () => {
+  it("replaces only derived section bodies and preserves hand-authored regions byte-identical", () => {
+    const existing = [
+      "# Acme Map",
+      "",
+      "## What This Is",
+      "operator prose",
+      "---",
+      "",
+      "## Folder Structure",
+      "",
+      "old tree",
+      "---",
+      "",
+      "## Quick Navigation",
+      "custom rows stay",
+      "",
+      "## Skills & Tools",
+      "old skills",
+      "",
+      "## Token Management",
+      "hand-written token rules",
+      "",
+    ].join("\n");
+
+    const rendered = replaceDerivedAgentsMdSections(existing, {
+      "Folder Structure": "\n```text\nfresh tree\n```\n",
+      "Skills & Tools": "\nNo skills assigned.\n",
+      "Knowledge Bases": "\nNo knowledge bases assigned.\n",
+      Workflows: "\nNo workflows configured.\n",
+    });
+
+    expect(rendered).toContain("## Folder Structure");
+    expect(rendered).toContain("```text\nfresh tree\n```");
+    expect(rendered).not.toContain("old tree");
+    expect(rendered).toContain(
+      "## Skills & Tools\n\nNo skills assigned.\n## Token Management",
+    );
+    expect(rendered).toContain(
+      "## Knowledge Bases\nNo knowledge bases assigned.",
+    );
+    expect(rendered).toContain("## Workflows\nNo workflows configured.");
+    expect(rendered).toContain(
+      "## What This Is\noperator prose\n---\n\n## Folder Structure",
+    );
+    expect(rendered).toContain(
+      "## Quick Navigation\ncustom rows stay\n\n## Skills & Tools",
+    );
+    expect(
+      rendered.endsWith("## Token Management\nhand-written token rules\n"),
+    ).toBe(false);
+    expect(rendered).toContain(
+      "## Token Management\nhand-written token rules\n",
+    );
+  });
+
+  it("appends absent derived sections in canonical order behind dividers", () => {
+    const rendered = replaceDerivedAgentsMdSections(
+      "# Map\n\n## What This Is\ncustom",
+      {
+        "Folder Structure": "\n```text\nroot/\n```\n",
+        "Skills & Tools": "\nNo skills assigned.\n",
+        "Knowledge Bases": "\nNo knowledge bases assigned.\n",
+        Workflows: "\nNo workflows configured.\n",
+      },
+    );
+
+    expect(rendered).toBe(
+      [
+        "# Map",
+        "",
+        "## What This Is",
+        "custom",
+        "",
+        "---",
+        "",
+        "## Folder Structure",
+        "```text",
+        "root/",
+        "```",
+        "",
+        "---",
+        "",
+        "## Skills & Tools",
+        "No skills assigned.",
+        "",
+        "---",
+        "",
+        "## Knowledge Bases",
+        "No knowledge bases assigned.",
+        "",
+        "---",
+        "",
+        "## Workflows",
+        "No workflows configured.",
+        "",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("regenerateWorkspaceMap — recursive folder tree", () => {
+  it("renders full S3 workspace depth with annotations and hidden-file filtering", async () => {
+    state.listObjectsResponses = [
+      "AGENTS.md",
+      "CONTEXT.md",
+      "events/",
+      "memory/.gitkeep",
+      "review/run-1.md",
+      "skills/account-health-review/SKILL.md",
+      "earnest-falcon-947/CONTEXT.md",
+      "earnest-falcon-947/.DS_Store",
+      "earnest-falcon-947/skills/renewal-prep/SKILL.md",
+    ];
+    state.s3GetResponses.set(
+      `${PREFIX}earnest-falcon-947/CONTEXT.md`,
+      "# Earnest Falcon\n\n## Skills & Tools\n\n| Skill | Description |\n| --- | --- |\n| Renewal Prep | Prep |\n",
+    );
+
+    await regenerateWorkspaceMap("agent-1");
+    const md = lastWrittenAgentsMd() ?? "";
+
+    expect(md).toContain("acme-daily-digest/\n");
+    expect(md).toContain("AGENTS.md ← You are here (always loaded)");
+    expect(md).toContain("CONTEXT.md ← Task router");
+    expect(md).toContain("events/ ← Event log");
+    expect(md).toContain("memory/ ← Long-lived agent memory");
+    expect(md).toContain("review/ ← Human review artifacts");
+    expect(md).toContain("skills/ ← Workspace skills");
+    expect(md).toContain("earnest-falcon-947/ ← Earnest Falcon");
+    expect(md).toContain("renewal-prep/");
+    expect(md).not.toContain(".gitkeep");
+    expect(md).not.toContain(".DS_Store");
   });
 });
 
@@ -346,9 +486,8 @@ describe("regenerateWorkspaceMap — idempotent write", () => {
     expect(s3Calls.puts.length).toBe(2); // AGENTS.md + CONTEXT.md
     const firstAgentsMd = lastWrittenAgentsMd()!;
     const firstContextMd =
-      [...s3Calls.puts]
-        .reverse()
-        .find((p) => p.key === `${PREFIX}CONTEXT.md`)?.body ?? "";
+      [...s3Calls.puts].reverse().find((p) => p.key === `${PREFIX}CONTEXT.md`)
+        ?.body ?? "";
 
     // Configure S3 to return the same body the renderer just wrote.
     state.s3GetResponses.set(`${PREFIX}AGENTS.md`, firstAgentsMd);

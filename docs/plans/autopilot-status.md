@@ -1389,6 +1389,52 @@ Target branch: `main`
 
 None.
 
+# Editor-Driven AGENTS.md Section Regeneration - 2026-05-23
+
+## Status
+
+- Origin requirements: `docs/brainstorms/2026-05-23-editor-driven-agents-md-section-regen-requirements.md`
+- Implementation plan: `docs/plans/2026-05-23-007-feat-editor-driven-agents-md-section-regen-plan.md`
+- Target branch: `main`
+- Autopilot started: 2026-05-23
+
+## Implementation Units
+
+| Unit                                                     | Branch                                    | PR  | State       | Notes                                                                                                           |
+| -------------------------------------------------------- | ----------------------------------------- | --- | ----------- | --------------------------------------------------------------------------------------------------------------- |
+| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | TBD | In progress | Implemented section-scoped derived renderer, recursive S3 tree, and focused tests; local verification underway. |
+| U2 Editor integration and background rewriter retirement | TBD                                       | TBD | Pending     | Wire agent editor writes and remove non-editor map rewrites.                                                    |
+| U3 Operator normalization and bootstrap polish           | TBD                                       | TBD | Pending     | Add explicit repair/normalization path and bootstrap/rematerialize coverage.                                    |
+
+## Progress Log
+
+- 2026-05-23: Read AGENTS.md, the origin requirements, current map/workspace-files code, and relevant prior solution docs on S3 folder sentinels, manifest regeneration, copied workspace skills, and built-in tool filtering.
+- 2026-05-23: Created isolated worktree `.Codex/worktrees/editor-agents-md-section-regen-u1` from `origin/main` on branch `codex/editor-agents-md-section-regen-u1`.
+- 2026-05-23: Created the implementation plan and began U1.
+- 2026-05-23: Began modifying `packages/api/src/lib/workspace-map-generator.ts` to expose the section-preserving helper and recursive workspace tree renderer.
+- 2026-05-23: Implemented U1 core renderer changes and tests in `packages/api/src/lib/__tests__/workspace-map-generator.test.ts`.
+
+## Verification Log
+
+- `pnpm install` - passed in U1 worktree; required because the fresh worktree had no `node_modules`.
+- `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts` - passed, 12 tests.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api test` - passed, 3185 tests, 16 skipped.
+- `git diff --check` - passed.
+- `pnpm exec prettier --write docs/plans/autopilot-status.md docs/plans/2026-05-23-007-feat-editor-driven-agents-md-section-regen-plan.md packages/api/src/lib/workspace-map-generator.ts packages/api/src/lib/__tests__/workspace-map-generator.test.ts` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+- `pnpm dlx prettier@3.8.2 --write docs/plans/autopilot-status.md docs/plans/2026-05-23-007-feat-editor-driven-agents-md-section-regen-plan.md packages/api/src/lib/workspace-map-generator.ts packages/api/src/lib/__tests__/workspace-map-generator.test.ts` - passed.
+- Post-format `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts` - passed, 12 tests.
+- Post-format `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api lint` - no-op; package has no lint script.
+
+## CI / PR
+
+- Pending.
+
+## Blockers
+
+None.
+
 # Spaces Contextual Workrooms + Template Removal Autopilot - 2026-05-20
 
 ## Status
