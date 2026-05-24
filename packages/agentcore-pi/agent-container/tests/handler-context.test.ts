@@ -67,6 +67,23 @@ describe("snapshotIdentity", () => {
       snapshotIdentity({}),
     ).toThrow(/tenant_id.*user_id.*assistant_id.*thread_id/);
   });
+
+  it("treats user_id as optional when eval_mode is true", () => {
+    const out = snapshotIdentity({
+      tenant_id: "tenant-1",
+      assistant_id: "agent-1",
+      thread_id: "thread-1",
+      eval_mode: true,
+    });
+    expect(out.userId).toBe("");
+    expect(out.tenantId).toBe("tenant-1");
+  });
+
+  it("still requires tenant_id, assistant_id, thread_id even in eval_mode", () => {
+    expect(() =>
+      snapshotIdentity({ eval_mode: true, user_id: "" }),
+    ).toThrow(/tenant_id.*assistant_id.*thread_id/);
+  });
 });
 
 describe("snapshotSecrets", () => {
