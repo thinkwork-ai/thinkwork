@@ -5,6 +5,11 @@ export const BUILTIN_TOOL_SLUGS = [
   "query_crm_opportunity_context",
   "query_support_case_context",
   "query_catalog_context",
+  // Plan §006 U3 — runtime-injected MCP proxy tool. Registering the slug
+  // here prevents an operator-written `skills/mcp/SKILL.md` from being
+  // derived as a user-content skill that would silently be shadowed by
+  // the runtime's injected `mcp` AgentTool.
+  "mcp",
 ] as const;
 
 const BUILTIN_TOOL_SLUG_SET = new Set<string>(BUILTIN_TOOL_SLUGS);
