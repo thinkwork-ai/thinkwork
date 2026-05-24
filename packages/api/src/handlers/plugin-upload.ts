@@ -62,7 +62,6 @@ import {
   pluginUploads,
   tenantMcpServers,
   tenantMembers,
-  tenantSkills,
 } from "@thinkwork/database-pg/schema";
 
 import { authenticate } from "../lib/cognito-auth.js";
@@ -489,20 +488,9 @@ function makeDbImpl(): PluginInstallerDb {
 
     async completeInstall(input) {
       await db.transaction(async (tx) => {
-        if (input.skills.length > 0) {
-          await tx
-            .insert(tenantSkills)
-            .values(
-              input.skills.map((s) => ({
-                tenant_id: input.tenantId,
-                skill_id: s.slug,
-                source: "tenant" as const,
-                version: s.version ?? undefined,
-                enabled: true,
-              })),
-            )
-            .onConflictDoNothing();
-        }
+        // Plugin skills are installed by writing the validated SKILL.md files
+        // into the tenant's S3 plugin bundle prefix. Runtime skill activation
+        // is workspace-copy based, so there is no tenant-level skill row.
         if (input.mcpServers.length > 0) {
           await tx
             .insert(tenantMcpServers)

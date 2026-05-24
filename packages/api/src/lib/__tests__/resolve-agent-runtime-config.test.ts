@@ -100,10 +100,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     skill_id: "agentSkills.skill_id",
   },
   tenants: { id: "tenants.id" },
-  tenantSkills: {
-    tenant_id: "tenantSkills.tenant_id",
-    skill_id: "tenantSkills.skill_id",
-  },
   tenantContextProviderSettings: {
     tenant_id: "tenantContextProviderSettings.tenant_id",
     provider_id: "tenantContextProviderSettings.provider_id",

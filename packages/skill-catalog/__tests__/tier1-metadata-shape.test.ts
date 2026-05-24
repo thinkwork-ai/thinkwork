@@ -1,13 +1,10 @@
 /**
  * Plan 2026-04-24-009 §U3 — `tier1_metadata` JSONB shape preservation.
  *
- * `sync-catalog-db.ts` writes the parsed SKILL.md frontmatter into the
- * `skill_catalog.tier1_metadata` JSONB column. Downstream readers
- * (`setAgentSkills.mutation.ts::parseTier1Metadata`,
- * `extractDefaultEnabledOps`, the template-sync resolvers) depend on
- * specific keys living on that blob. Flipping the producer's source
- * from `skill.yaml` (retired) to SKILL.md frontmatter must not change
- * the downstream-visible shape.
+ * The S3 catalog exposes parsed SKILL.md frontmatter to downstream
+ * readers. They depend on specific keys living on that metadata blob.
+ * Flipping the producer's source from `skill.yaml` (retired) to SKILL.md
+ * frontmatter must not change the downstream-visible shape.
  *
  * This test exercises the producer path on a real catalog fixture and
  * asserts the keys consumers care about land where they expect.
@@ -24,11 +21,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const catalogRoot = resolve(__dirname, "..");
 
 /**
- * Mirror the producer logic in `scripts/sync-catalog-db.ts`: parse a
- * SKILL.md, return the JSONB blob that would land in
- * `skill_catalog.tier1_metadata`. The function under test is only the
- * shape-preserving part; the DB upsert is end-to-end exercised on
- * deploy by the catalog sync step.
+ * Mirror the producer logic: parse a SKILL.md and return the metadata blob.
+ * The function under test is only the shape-preserving part.
  */
 function tier1MetadataFor(slug: string): Record<string, unknown> {
   const path = join(catalogRoot, slug, "SKILL.md");
@@ -76,7 +70,9 @@ describe("tier1_metadata JSONB shape (U3 producer flip)", () => {
     // Sanity: the keys parseTier1Metadata's downstream readers expect
     // (permissions_model, scripts) are at the top level of the blob,
     // not nested under metadata.* or anywhere else.
-    expect(Object.keys(meta)).toEqual(expect.arrayContaining(["execution", "scripts"]));
+    expect(Object.keys(meta)).toEqual(
+      expect.arrayContaining(["execution", "scripts"]),
+    );
   });
 
   it("a script-shape skill with default_enabled scripts surfaces real booleans (not 'true' strings)", () => {
@@ -113,11 +109,10 @@ describe("tier1_metadata JSONB shape (U3 producer flip)", () => {
   });
 
   it("catalog frontmatter is JSON-stringifiable for the JSONB write path", () => {
-    // sync-catalog-db.ts does `JSON.stringify(parsed)` before handing
-    // the blob to drizzle's RDS Data API path. Anything that doesn't
-    // round-trip cleanly (functions, circular refs, BigInts) would
-    // break the upsert. Smoke-test against the largest-shaped skill
-    // we have on hand.
+    // Metadata is JSON-serialized when catalog entries move through APIs.
+    // Anything that doesn't round-trip cleanly (functions, circular refs,
+    // BigInts) would break that path. Smoke-test against the largest-shaped
+    // skill we have on hand.
     const meta = tier1MetadataFor("sales-prep");
     const json = JSON.stringify(meta);
     const round = JSON.parse(json) as Record<string, unknown>;

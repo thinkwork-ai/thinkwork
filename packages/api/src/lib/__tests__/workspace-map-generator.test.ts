@@ -40,13 +40,6 @@ const {
       description: string | null;
       default_schedule: string | null;
     }>,
-    skillCatalog: [] as Array<{
-      slug: string;
-      name: string;
-      description: string | null;
-      mcp_server: string | null;
-      triggers: string[] | null;
-    }>,
     s3GetResponses: new Map<string, string | null | Error>(),
     listObjectsResponses: [] as string[],
   },
@@ -145,7 +138,6 @@ vi.mock("@thinkwork/database-pg", () => {
     if (name === "agent_skills") return state.skills;
     if (name === "agent_knowledge_bases") return state.knowledgeBases;
     if (name === "routines") return state.workflows;
-    if (name === "skill_catalog") return state.skillCatalog;
     return [];
   }
 
@@ -180,7 +172,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   knowledgeBases: tagTable("knowledge_bases"),
   routines: tagTable("routines"),
   tenantWorkflowCatalog: tagTable("tenant_workflow_catalog"),
-  skillCatalog: tagTable("skill_catalog"),
   spaces: tagTable("spaces"),
   tenants: tagTable("tenants"),
 }));
@@ -221,7 +212,6 @@ function resetState(): void {
   state.skills = [];
   state.knowledgeBases = [];
   state.workflows = [];
-  state.skillCatalog = [];
   state.s3GetResponses.clear();
   state.listObjectsResponses = [];
   s3Calls.puts.length = 0;

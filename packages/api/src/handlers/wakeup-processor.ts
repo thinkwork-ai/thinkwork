@@ -22,7 +22,6 @@ import {
   agents,
   agentTemplates,
   agentSkills,
-  tenantSkills,
   agentKnowledgeBases,
   knowledgeBases,
   guardrails,
@@ -120,8 +119,9 @@ async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -419,16 +419,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     .select({
       skill_id: agentSkills.skill_id,
       config: agentSkills.config,
-      source: tenantSkills.source,
     })
     .from(agentSkills)
-    .leftJoin(
-      tenantSkills,
-      and(
-        eq(tenantSkills.tenant_id, wakeup.tenant_id),
-        eq(tenantSkills.skill_id, agentSkills.skill_id),
-      ),
-    )
     .where(eq(agentSkills.agent_id, wakeup.agent_id));
 
   let skillsConfig = await Promise.all(
@@ -816,12 +808,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
       if ((childCount?.count || 0) === 0) {
         try {
-          const { parseProcessTemplate } =
-            await import("../lib/orchestration/process-parser.js");
-          const { materializeProcess } =
-            await import("../lib/orchestration/process-materializer.js");
-          const { S3Client, GetObjectCommand } =
-            await import("@aws-sdk/client-s3");
+          const { parseProcessTemplate } = await import(
+            "../lib/orchestration/process-parser.js"
+          );
+          const { materializeProcess } = await import(
+            "../lib/orchestration/process-materializer.js"
+          );
+          const { S3Client, GetObjectCommand } = await import(
+            "@aws-sdk/client-s3"
+          );
 
           const s3 = new S3Client({});
           const skillCfg = skillRows.find(
@@ -1930,8 +1925,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

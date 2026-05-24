@@ -3,8 +3,8 @@
 Canonical source of truth for ThinkWork's skill catalog. Every directory
 here is one skill — a `SKILL.md` (frontmatter metadata + prose body),
 optional `scripts/`, `prompts/`, or `references/`. The deploy's
-`bootstrap-workspaces` step syncs all of them into the `skill_catalog`
-database table and uploads the file contents to S3.
+`bootstrap-workspaces` step uploads the file contents to the S3 skill
+catalog.
 
 Plan 2026-04-24-009 §U2 retired the parallel `skill.yaml` manifest;
 SKILL.md frontmatter is the single canonical source for both the
