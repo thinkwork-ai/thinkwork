@@ -197,6 +197,17 @@ export function createConnectMcpServer(
     return listing.tools
       .filter((tool) => !allowlist || allowlist.has(tool.name))
       .map((tool): AgentTool<any> => {
+        // Plan §006 U4 — populate the per-invocation registry from the
+        // SAME post-whitelist-filter loop that builds AgentTools. The
+        // proxy AgentTool reads this registry for list/search/call;
+        // populating AFTER the filter preserves the operator's
+        // toolWhitelist contract (tools the operator hid cannot be
+        // addressed via `mcp.call_tool({ server, tool })`).
+        args.registry?.register(args.serverName, {
+          tool: tool.name,
+          description: tool.description ?? "",
+          inputSchema: tool.inputSchema,
+        });
         const name = exposedToolName(args.serverName, tool.name);
         return {
           name,

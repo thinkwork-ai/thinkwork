@@ -48,6 +48,14 @@ interface PiResponseShape {
 		retained?: boolean;
 		error?: string;
 	};
+	// Plan §006 U4 — proxy-substrate pin. Always present as a boolean
+	// in the runtime's response. True when MCP configs were present
+	// (proxy registered); false otherwise. The smoke asserts the field
+	// SHAPE (typeof === "boolean") so it passes regardless of whether
+	// any scenario carries mcp_configs in PR-1. PR-2 (U5) will add a
+	// sibling `mcp_proxy_used` pin and the MCP-bearing scenarios that
+	// exercise it.
+	mcp_proxy_registered?: boolean;
 	error?: string;
 }
 
@@ -161,6 +169,18 @@ async function invokePi(
 		fail(`[${scenario}] response.runtime is "${response.runtime}", expected "pi"`, {
 			full_response: response,
 		});
+	}
+
+	// Plan §006 U4 — MCP proxy substrate pin. The runtime always
+	// surfaces `mcp_proxy_registered` as a boolean on the response.
+	// A regression that drops the field (e.g., a response-builder
+	// rewrite that forgets to thread bundle.mcpProxyRegistered through)
+	// fails the smoke even before U5 wires the live proxy body.
+	if (typeof response.mcp_proxy_registered !== "boolean") {
+		fail(
+			`[${scenario}] response.mcp_proxy_registered is ${typeof response.mcp_proxy_registered}, expected boolean — the MCP proxy substrate field is missing or wrong-shaped`,
+			{ full_response: response, duration_ms: durationMs },
+		);
 	}
 
 	const totalTokens = response.response?.usage?.totalTokens ?? 0;

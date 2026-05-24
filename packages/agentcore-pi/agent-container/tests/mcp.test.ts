@@ -609,3 +609,73 @@ describe("buildMcpTools — fail-closed validation", () => {
     expect((errors[0]!.err as Error).message).toMatch(/CR, LF, or NUL/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plan §006 U4 — registry-population path.
+// ---------------------------------------------------------------------------
+
+describe("buildMcpTools — McpToolRegistry population (Plan §006 U4)", () => {
+  it("forwards the registry into each per-server connect call", async () => {
+    const { McpToolRegistry } = await import("../src/mcp-registry.js");
+    const registry = new McpToolRegistry();
+    const seen: Array<{ server: string; hasRegistry: boolean }> = [];
+    const connect: ConnectMcpServerFn = async (args) => {
+      seen.push({ server: args.serverName, hasRegistry: Boolean(args.registry) });
+      // Simulate the production factory: a fake "tools/list" plus
+      // registry population (matches the contract in mcp-connect.ts).
+      args.registry?.register(args.serverName, {
+        tool: "search",
+        description: "search desc",
+        inputSchema: { type: "object" },
+      });
+      return [];
+    };
+
+    await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "slack",
+          url: "https://mcp.slack.example/mcp",
+          bearer: BEARER_FIXTURES.slack,
+        },
+        {
+          serverName: "github",
+          url: "https://mcp.github.example/mcp",
+          bearer: BEARER_FIXTURES.githubPat,
+        },
+      ],
+      handleStore: new HandleStore(),
+      connectMcpServer: connect,
+      registry,
+    });
+
+    expect(seen).toEqual([
+      { server: "slack", hasRegistry: true },
+      { server: "github", hasRegistry: true },
+    ]);
+    expect(registry.size).toBe(2);
+    expect(registry.get("slack", "search")?.description).toBe("search desc");
+    expect(registry.get("github", "search")?.description).toBe("search desc");
+  });
+
+  it("does not blow up when no registry is supplied (backward compat)", async () => {
+    const captured: any = {};
+    const connect: ConnectMcpServerFn = async (args) => {
+      captured.registry = args.registry;
+      return [];
+    };
+    await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "slack",
+          url: "https://mcp.slack.example/mcp",
+          bearer: BEARER_FIXTURES.slack,
+        },
+      ],
+      handleStore: new HandleStore(),
+      connectMcpServer: connect,
+      // registry intentionally omitted
+    });
+    expect(captured.registry).toBeUndefined();
+  });
+});
