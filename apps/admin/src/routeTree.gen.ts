@@ -26,7 +26,6 @@ import { Route as AuthedTenantBillingRouteImport } from "./routes/_authed/_tenan
 import { Route as AuthedTenantAnalyticsRouteImport } from "./routes/_authed/_tenant/analytics";
 import { Route as AuthedTenantAgentRouteImport } from "./routes/_authed/_tenant/agent";
 import { Route as AuthedTenantComplianceRouteRouteImport } from "./routes/_authed/_tenant/compliance/route";
-import { Route as AuthedTenantWorkspaceReviewsIndexRouteImport } from "./routes/_authed/_tenant/workspace-reviews/index";
 import { Route as AuthedTenantWikiIndexRouteImport } from "./routes/_authed/_tenant/wiki/index";
 import { Route as AuthedTenantWebhooksIndexRouteImport } from "./routes/_authed/_tenant/webhooks/index";
 import { Route as AuthedTenantUsersIndexRouteImport } from "./routes/_authed/_tenant/users/index";
@@ -176,12 +175,6 @@ const AuthedTenantComplianceRouteRoute =
   AuthedTenantComplianceRouteRouteImport.update({
     id: "/compliance",
     path: "/compliance",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
-const AuthedTenantWorkspaceReviewsIndexRoute =
-  AuthedTenantWorkspaceReviewsIndexRouteImport.update({
-    id: "/workspace-reviews/",
-    path: "/workspace-reviews/",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
 const AuthedTenantWikiIndexRoute = AuthedTenantWikiIndexRouteImport.update({
@@ -633,7 +626,6 @@ export interface FileRoutesByFullPath {
   "/users/": typeof AuthedTenantUsersIndexRoute;
   "/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
   "/wiki/": typeof AuthedTenantWikiIndexRoute;
-  "/workspace-reviews/": typeof AuthedTenantWorkspaceReviewsIndexRoute;
   "/automations/credentials/$credentialId": typeof AuthedTenantAutomationsCredentialsCredentialIdRoute;
   "/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   "/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
@@ -713,7 +705,6 @@ export interface FileRoutesByTo {
   "/users": typeof AuthedTenantUsersIndexRoute;
   "/webhooks": typeof AuthedTenantWebhooksIndexRoute;
   "/wiki": typeof AuthedTenantWikiIndexRoute;
-  "/workspace-reviews": typeof AuthedTenantWorkspaceReviewsIndexRoute;
   "/automations/credentials/$credentialId": typeof AuthedTenantAutomationsCredentialsCredentialIdRoute;
   "/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   "/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
@@ -800,7 +791,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/users/": typeof AuthedTenantUsersIndexRoute;
   "/_authed/_tenant/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
   "/_authed/_tenant/wiki/": typeof AuthedTenantWikiIndexRoute;
-  "/_authed/_tenant/workspace-reviews/": typeof AuthedTenantWorkspaceReviewsIndexRoute;
   "/_authed/_tenant/automations/credentials/$credentialId": typeof AuthedTenantAutomationsCredentialsCredentialIdRoute;
   "/_authed/_tenant/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   "/_authed/_tenant/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
@@ -886,7 +876,6 @@ export interface FileRouteTypes {
     | "/users/"
     | "/webhooks/"
     | "/wiki/"
-    | "/workspace-reviews/"
     | "/automations/credentials/$credentialId"
     | "/automations/routines/$routineId"
     | "/automations/routines/new"
@@ -966,7 +955,6 @@ export interface FileRouteTypes {
     | "/users"
     | "/webhooks"
     | "/wiki"
-    | "/workspace-reviews"
     | "/automations/credentials/$credentialId"
     | "/automations/routines/$routineId"
     | "/automations/routines/new"
@@ -1052,7 +1040,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/users/"
     | "/_authed/_tenant/webhooks/"
     | "/_authed/_tenant/wiki/"
-    | "/_authed/_tenant/workspace-reviews/"
     | "/_authed/_tenant/automations/credentials/$credentialId"
     | "/_authed/_tenant/automations/routines/$routineId"
     | "/_authed/_tenant/automations/routines/new"
@@ -1205,13 +1192,6 @@ declare module "@tanstack/react-router" {
       path: "/compliance";
       fullPath: "/compliance";
       preLoaderRoute: typeof AuthedTenantComplianceRouteRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
-    "/_authed/_tenant/workspace-reviews/": {
-      id: "/_authed/_tenant/workspace-reviews/";
-      path: "/workspace-reviews";
-      fullPath: "/workspace-reviews/";
-      preLoaderRoute: typeof AuthedTenantWorkspaceReviewsIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/wiki/": {
@@ -1816,7 +1796,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantUsersIndexRoute: typeof AuthedTenantUsersIndexRoute;
   AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute;
   AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute;
-  AuthedTenantWorkspaceReviewsIndexRoute: typeof AuthedTenantWorkspaceReviewsIndexRoute;
   AuthedTenantAutomationsCredentialsCredentialIdRoute: typeof AuthedTenantAutomationsCredentialsCredentialIdRoute;
   AuthedTenantAutomationsRoutinesRoutineIdRoute: typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   AuthedTenantAutomationsRoutinesNewRoute: typeof AuthedTenantAutomationsRoutinesNewRoute;
@@ -1879,8 +1858,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantUsersIndexRoute: AuthedTenantUsersIndexRoute,
   AuthedTenantWebhooksIndexRoute: AuthedTenantWebhooksIndexRoute,
   AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,
-  AuthedTenantWorkspaceReviewsIndexRoute:
-    AuthedTenantWorkspaceReviewsIndexRoute,
   AuthedTenantAutomationsCredentialsCredentialIdRoute:
     AuthedTenantAutomationsCredentialsCredentialIdRoute,
   AuthedTenantAutomationsRoutinesRoutineIdRoute:
