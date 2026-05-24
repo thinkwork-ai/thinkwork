@@ -1408,7 +1408,7 @@ None.
 | U4 WorkspaceEditor catalog mode + Skills route | `codex/pi-skill-catalog-u4-admin-mode` | [#1644](https://github.com/thinkwork-ai/thinkwork/pull/1644) | Merged | Squash merged as `ccf12ae4`; remote and local branch removed. |
 | U5 Agent detail tab registration + Tools rename | `codex/pi-skill-catalog-u5-tabs` | [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) | Merged | Squash merged as `7c57131f`; remote and local branch removed. |
 | U6 WIRING.md parser module | `codex/pi-skill-catalog-u6-wiring-md` | [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) | Merged | Squash merged as `42f2074b`; remote and local branch removed. |
-| U6a Catalog editor root correction | `codex/pi-skill-catalog-catalog-root-fix` | Pending | In progress | Removing the workspace-only synthetic `skills/` root from catalog mode so S3 catalog slugs render at tree root. |
+| U6a Catalog editor root correction | `codex/pi-skill-catalog-catalog-root-fix` | [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647) | PR open | Removing the workspace-only synthetic `skills/` root from catalog mode so S3 catalog slugs render at tree root. |
 
 ## Verification Log
 
@@ -1464,6 +1464,7 @@ None.
 - Squash merged [#1645](https://github.com/thinkwork-ai/thinkwork/pull/1645) as `7c57131f6132904c77dd1335e4e50e0fbaca7605`.
 - Opened [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646).
 - Squash merged [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) as `42f2074b9b7a7ae344f4ad960cbafe50a3a8ed9b`.
+- Opened [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647).
 
 ## Blockers
 
