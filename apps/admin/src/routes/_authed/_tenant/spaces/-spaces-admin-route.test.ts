@@ -258,6 +258,23 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).not.toContain("renderDiagnostics");
     expect(queriesSource).not.toContain("checklistTemplates");
     expect(queriesSource).not.toContain("integrations");
-    expect(queriesSource).not.toContain("members");
+  });
+
+  it("registers the Members route and gates the tab to private Spaces", () => {
+    const membersRouteSource = readSource("./$spaceId_.members.tsx");
+    expect(routeTreeSource).toContain(
+      "AuthedTenantSpacesSpaceIdMembersRouteImport",
+    );
+    expect(membersRouteSource).toContain(
+      'createFileRoute(\n  "/_authed/_tenant/spaces/$spaceId_/members"',
+    );
+    expect(membersRouteSource).toContain("SpaceMembersPanel");
+    expect(membersRouteSource).toContain('space.accessMode !== "PRIVATE"');
+    expect(detailChromeSource).toContain('space.accessMode === "PRIVATE"');
+    expect(detailChromeSource).toContain('value="members"');
+    expect(detailChromeSource).toMatch(/>\s*Members\s*<\/Link>/);
+    expect(queriesSource).toContain("SpaceMembers");
+    expect(queriesSource).toContain("AddSpaceMember");
+    expect(queriesSource).toContain("RemoveSpaceMember");
   });
 });

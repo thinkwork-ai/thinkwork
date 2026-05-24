@@ -80,6 +80,7 @@ import { Route as AuthedTenantAutomationsRoutinesIndexRouteImport } from "./rout
 import { Route as AuthedTenantAutomationsCredentialsIndexRouteImport } from "./routes/_authed/_tenant/automations/credentials/index";
 import { Route as AuthedTenantSpacesSpaceIdWorkspaceRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.workspace";
 import { Route as AuthedTenantSpacesSpaceIdMemoryRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.memory";
+import { Route as AuthedTenantSpacesSpaceIdMembersRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.members";
 import { Route as AuthedTenantSpacesSpaceIdConfigurationRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.configuration";
 import { Route as AuthedTenantSpacesSpaceIdAutomationsRouteImport } from "./routes/_authed/_tenant/spaces/$spaceId_.automations";
 import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from "./routes/_authed/_tenant/knowledge/knowledge-bases/$kbId";
@@ -490,6 +491,12 @@ const AuthedTenantSpacesSpaceIdMemoryRoute =
     path: "/spaces/$spaceId/memory",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
+const AuthedTenantSpacesSpaceIdMembersRoute =
+  AuthedTenantSpacesSpaceIdMembersRouteImport.update({
+    id: "/spaces/$spaceId_/members",
+    path: "/spaces/$spaceId/members",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
 const AuthedTenantSpacesSpaceIdConfigurationRoute =
   AuthedTenantSpacesSpaceIdConfigurationRouteImport.update({
     id: "/spaces/$spaceId_/configuration",
@@ -644,6 +651,7 @@ export interface FileRoutesByFullPath {
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
   "/spaces/$spaceId/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   "/spaces/$spaceId/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  "/spaces/$spaceId/members": typeof AuthedTenantSpacesSpaceIdMembersRoute;
   "/spaces/$spaceId/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -724,6 +732,7 @@ export interface FileRoutesByTo {
   "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
   "/spaces/$spaceId/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   "/spaces/$spaceId/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  "/spaces/$spaceId/members": typeof AuthedTenantSpacesSpaceIdMembersRoute;
   "/spaces/$spaceId/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   "/spaces/$spaceId/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/automations/credentials": typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -811,6 +820,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
   "/_authed/_tenant/spaces/$spaceId_/automations": typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   "/_authed/_tenant/spaces/$spaceId_/configuration": typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  "/_authed/_tenant/spaces/$spaceId_/members": typeof AuthedTenantSpacesSpaceIdMembersRoute;
   "/_authed/_tenant/spaces/$spaceId_/memory": typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   "/_authed/_tenant/spaces/$spaceId_/workspace": typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   "/_authed/_tenant/automations/credentials/": typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -897,6 +907,7 @@ export interface FileRouteTypes {
     | "/knowledge/knowledge-bases/$kbId"
     | "/spaces/$spaceId/automations"
     | "/spaces/$spaceId/configuration"
+    | "/spaces/$spaceId/members"
     | "/spaces/$spaceId/memory"
     | "/spaces/$spaceId/workspace"
     | "/automations/credentials/"
@@ -977,6 +988,7 @@ export interface FileRouteTypes {
     | "/knowledge/knowledge-bases/$kbId"
     | "/spaces/$spaceId/automations"
     | "/spaces/$spaceId/configuration"
+    | "/spaces/$spaceId/members"
     | "/spaces/$spaceId/memory"
     | "/spaces/$spaceId/workspace"
     | "/automations/credentials"
@@ -1063,6 +1075,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/knowledge/knowledge-bases/$kbId"
     | "/_authed/_tenant/spaces/$spaceId_/automations"
     | "/_authed/_tenant/spaces/$spaceId_/configuration"
+    | "/_authed/_tenant/spaces/$spaceId_/members"
     | "/_authed/_tenant/spaces/$spaceId_/memory"
     | "/_authed/_tenant/spaces/$spaceId_/workspace"
     | "/_authed/_tenant/automations/credentials/"
@@ -1584,6 +1597,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantSpacesSpaceIdMemoryRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
+    "/_authed/_tenant/spaces/$spaceId_/members": {
+      id: "/_authed/_tenant/spaces/$spaceId_/members";
+      path: "/spaces/$spaceId/members";
+      fullPath: "/spaces/$spaceId/members";
+      preLoaderRoute: typeof AuthedTenantSpacesSpaceIdMembersRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
     "/_authed/_tenant/spaces/$spaceId_/configuration": {
       id: "/_authed/_tenant/spaces/$spaceId_/configuration";
       path: "/spaces/$spaceId/configuration";
@@ -1826,6 +1846,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute;
   AuthedTenantSpacesSpaceIdAutomationsRoute: typeof AuthedTenantSpacesSpaceIdAutomationsRoute;
   AuthedTenantSpacesSpaceIdConfigurationRoute: typeof AuthedTenantSpacesSpaceIdConfigurationRoute;
+  AuthedTenantSpacesSpaceIdMembersRoute: typeof AuthedTenantSpacesSpaceIdMembersRoute;
   AuthedTenantSpacesSpaceIdMemoryRoute: typeof AuthedTenantSpacesSpaceIdMemoryRoute;
   AuthedTenantSpacesSpaceIdWorkspaceRoute: typeof AuthedTenantSpacesSpaceIdWorkspaceRoute;
   AuthedTenantAutomationsCredentialsIndexRoute: typeof AuthedTenantAutomationsCredentialsIndexRoute;
@@ -1896,6 +1917,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
     AuthedTenantSpacesSpaceIdAutomationsRoute,
   AuthedTenantSpacesSpaceIdConfigurationRoute:
     AuthedTenantSpacesSpaceIdConfigurationRoute,
+  AuthedTenantSpacesSpaceIdMembersRoute: AuthedTenantSpacesSpaceIdMembersRoute,
   AuthedTenantSpacesSpaceIdMemoryRoute: AuthedTenantSpacesSpaceIdMemoryRoute,
   AuthedTenantSpacesSpaceIdWorkspaceRoute:
     AuthedTenantSpacesSpaceIdWorkspaceRoute,

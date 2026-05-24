@@ -47,7 +47,12 @@ import {
 } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 
-type SpaceDetailTab = "configuration" | "workspace" | "memory" | "automations";
+type SpaceDetailTab =
+  | "configuration"
+  | "workspace"
+  | "memory"
+  | "automations"
+  | "members";
 type Space = NonNullable<SpaceAdminDetailQueryResult["space"]>;
 type SpaceAccessMode = "PUBLIC" | "PRIVATE";
 type SpaceDraft = {
@@ -197,6 +202,13 @@ export function SpaceDetailChrome({
                     Automations
                   </Link>
                 </TabsTrigger>
+                {space.accessMode === "PRIVATE" ? (
+                  <TabsTrigger value="members" asChild className="px-4">
+                    <Link to="/spaces/$spaceId/members" params={{ spaceId }}>
+                      Members
+                    </Link>
+                  </TabsTrigger>
+                ) : null}
               </TabsList>
             </Tabs>
           </div>
@@ -311,6 +323,8 @@ export function SpaceWorkspacePanel({ spaceId }: { spaceId: string }) {
     />
   );
 }
+
+export { SpaceMembersPanel } from "@/components/spaces/SpaceMembersPanel";
 
 export function SpaceMemoryPanel({ space }: { space: Space }) {
   const { tenantId } = useTenant();
