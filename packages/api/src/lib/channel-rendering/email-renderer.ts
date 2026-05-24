@@ -1,7 +1,8 @@
 /**
  * Email channel renderer: agent markdown → email-safe HTML + plaintext fallback.
  *
- * - Primary defense: DOMPurify with explicit allowlist + URI scheme pin.
+ * - Primary defense: sanitize-html with explicit tag/attribute allowlist + URI
+ *   scheme pin. Pure-JS, no DOM/jsdom dependency (safe for Lambda bundles).
  * - Defense in depth: marked Renderer overrides reject non-http(s) URIs at parse
  *   time so visible text survives stripping.
  *
@@ -9,8 +10,8 @@
  * every style string is hardcoded.
  */
 
-import DOMPurify from "isomorphic-dompurify";
 import { Marked, type Tokens } from "marked";
+import sanitizeHtml from "sanitize-html";
 
 const SAFE_URI_REGEXP = /^https?:/i;
 
@@ -79,7 +80,7 @@ function buildMarked(): Marked {
       link({ href, title, tokens }: Tokens.Link) {
         const text = this.parser.parseInline(tokens);
         if (!SAFE_URI_REGEXP.test(href)) {
-          // Strip href, keep visible text. DOMPurify will also catch this.
+          // Strip href, keep visible text. sanitize-html will also catch this.
           return text;
         }
         const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
@@ -135,32 +136,64 @@ function buildMarked(): Marked {
 
 const markedInstance = buildMarked();
 
-const SANITIZE_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
-  USE_PROFILES: { html: true },
-  FORBID_TAGS: [
-    "svg",
-    "math",
-    "style",
-    "script",
-    "iframe",
-    "object",
-    "embed",
-    "form",
-    "input",
-    "button",
-    "link",
-    "meta",
+/**
+ * sanitize-html config — explicit tag + attribute allowlist + scheme pin.
+ *
+ * - allowedTags: every element our renderer emits. Anything else (script,
+ *   style, iframe, object, embed, svg, math, form, input, link, meta) is
+ *   stripped because it is not in the list.
+ * - allowedAttributes: per-tag attribute allowlist. on* event handlers are
+ *   not listed, so they are stripped. style is allowed because every style
+ *   value the renderer emits is a hardcoded string (no token-value
+ *   interpolation).
+ * - allowedSchemesByTag: `<a href>` and `<img src>` accept only http/https,
+ *   closing javascript:, data:, blob:, vbscript:, file:, etc.
+ */
+const SANITIZE_CONFIG: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "a",
+    "strong",
+    "em",
+    "code",
+    "pre",
+    "br",
+    "del",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "hr",
+    "img",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "div",
+    "span",
   ],
-  FORBID_ATTR: [
-    "onerror",
-    "onload",
-    "onclick",
-    "onmouseover",
-    "onmouseout",
-    "onfocus",
-    "onblur",
-  ],
-  ALLOWED_URI_REGEXP: /^https?:/i,
+  allowedAttributes: {
+    "*": ["style"],
+    a: ["href", "title"],
+    img: ["src", "alt", "title"],
+    th: ["align"],
+    td: ["align"],
+    ol: ["start"],
+  },
+  allowedSchemesByTag: {
+    a: ["http", "https"],
+    img: ["http", "https"],
+  },
+  allowedSchemesAppliedToAttributes: ["href", "src"],
+  disallowedTagsMode: "discard",
 };
 
 export interface EmailRenderResult {
@@ -182,7 +215,7 @@ export function renderForEmail(markdown: string): EmailRenderResult {
   }
 
   const rawHtml = markedInstance.parse(markdown, { async: false }) as string;
-  const sanitized = DOMPurify.sanitize(rawHtml, SANITIZE_CONFIG);
+  const sanitized = sanitizeHtml(rawHtml, SANITIZE_CONFIG);
 
   return { html: sanitized, text: markdown };
 }
