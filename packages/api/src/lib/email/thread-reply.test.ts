@@ -1,0 +1,261 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockSesSend, insertedTokens, queueRows, resetMocks } = vi.hoisted(
+  () => {
+    process.env.EMAIL_HMAC_SECRET = "test-hmac";
+    const rows: unknown[][] = [];
+    const inserts: unknown[] = [];
+    return {
+      mockSesSend: vi.fn(),
+      insertedTokens: inserts,
+      queueRows: rows,
+      resetMocks: () => {
+        rows.length = 0;
+        inserts.length = 0;
+      },
+    };
+  },
+);
+
+vi.mock("drizzle-orm", () => ({
+  and: (...conditions: unknown[]) => ({ type: "and", conditions }),
+  desc: (column: unknown) => ({ type: "desc", column }),
+  eq: (left: unknown, right: unknown) => ({ type: "eq", left, right }),
+}));
+
+vi.mock("@aws-sdk/client-ses", () => ({
+  SESClient: class {
+    send = mockSesSend;
+  },
+  SendRawEmailCommand: class {
+    constructor(public input: unknown) {}
+  },
+}));
+
+vi.mock("@thinkwork/database-pg", () => ({
+  getDb: () => ({
+    insert: () => ({
+      values: (value: unknown) => {
+        insertedTokens.push(value);
+        return Promise.resolve();
+      },
+    }),
+    select: () => ({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => ({ limit: () => Promise.resolve(queueRows.shift() ?? []) }),
+        }),
+        where: () => ({
+          orderBy: () => ({
+            limit: () => Promise.resolve(queueRows.shift() ?? []),
+          }),
+          limit: () => Promise.resolve(queueRows.shift() ?? []),
+        }),
+      }),
+    }),
+  }),
+}));
+
+vi.mock("@thinkwork/database-pg/schema", () => ({
+  emailReplyTokens: {},
+  messages: {
+    thread_id: "messages.thread_id",
+    role: "messages.role",
+    metadata: "messages.metadata",
+    created_at: "messages.created_at",
+  },
+  spaces: {
+    id: "spaces.id",
+    slug: "spaces.slug",
+    tenant_id: "spaces.tenant_id",
+  },
+  tenants: {
+    id: "tenants.id",
+    slug: "tenants.slug",
+  },
+  threads: {
+    id: "threads.id",
+    space_id: "threads.space_id",
+    metadata: "threads.metadata",
+  },
+}));
+
+import { sendThreadReplyEmail } from "./thread-reply.js";
+
+const TENANT_ID = "00000000-0000-4000-8000-000000000001";
+const THREAD_ID = "00000000-0000-4000-8000-000000000002";
+const AGENT_ID = "00000000-0000-4000-8000-000000000003";
+
+describe("sendThreadReplyEmail", () => {
+  beforeEach(() => {
+    mockSesSend.mockReset();
+    mockSesSend.mockResolvedValue({ MessageId: "ses-out-123" });
+    resetMocks();
+  });
+
+  it("emails the response back when the thread started from email", async () => {
+    queueRows.push(
+      // threads
+      [
+        {
+          id: THREAD_ID,
+          space_id: "space-1",
+          metadata: {
+            emailColdContact: { senderEmail: "eric@thinkwork.ai" },
+          },
+        },
+      ],
+      // latest user message
+      [
+        {
+          metadata: {
+            source: "email_cold_contact",
+            senderEmail: "eric@thinkwork.ai",
+            subject: "Hello",
+            originalMessageId: "<orig-1@thinkwork.ai>",
+          },
+        },
+      ],
+      // space + tenant join
+      [{ spaceSlug: "default", tenantSlug: "sleek-squirrel-230" }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "Here is your answer.",
+    });
+
+    expect(result).toEqual({ sent: true, sesMessageId: "ses-out-123" });
+    expect(mockSesSend).toHaveBeenCalledOnce();
+    const command = mockSesSend.mock.calls[0][0];
+    expect(command.input.Source).toBe("default@sleek-squirrel-230.thinkwork.ai");
+    expect(command.input.Destinations).toEqual(["eric@thinkwork.ai"]);
+
+    const rawMessage = Buffer.from(command.input.RawMessage.Data).toString(
+      "utf8",
+    );
+    expect(rawMessage).toContain(
+      "From: default@sleek-squirrel-230.thinkwork.ai",
+    );
+    expect(rawMessage).toContain("To: eric@thinkwork.ai");
+    expect(rawMessage).toContain(
+      "Reply-To: default@sleek-squirrel-230.thinkwork.ai",
+    );
+    expect(rawMessage).toContain("Subject: Re: Hello");
+    expect(rawMessage).toContain("In-Reply-To: <orig-1@thinkwork.ai>");
+    expect(rawMessage).toContain("References: <orig-1@thinkwork.ai>");
+    expect(rawMessage).toContain("X-Thinkwork-Reply-Token: ");
+    expect(rawMessage).toContain("Here is your answer.");
+
+    expect(insertedTokens).toHaveLength(1);
+    expect(insertedTokens[0]).toMatchObject({
+      tenant_id: TENANT_ID,
+      agent_id: AGENT_ID,
+      context_id: THREAD_ID,
+      context_type: "thread",
+      recipient_email: "eric@thinkwork.ai",
+      ses_message_id: "ses-out-123",
+    });
+  });
+
+  it("skips when the thread has no emailColdContact metadata", async () => {
+    queueRows.push(
+      [{ id: THREAD_ID, space_id: "space-1", metadata: {} }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "Here is your answer.",
+    });
+
+    expect(result).toEqual({ sent: false, reason: "not_email_thread" });
+    expect(mockSesSend).not.toHaveBeenCalled();
+    expect(insertedTokens).toHaveLength(0);
+  });
+
+  it("skips when the latest user message came from chat, not email", async () => {
+    queueRows.push(
+      [
+        {
+          id: THREAD_ID,
+          space_id: "space-1",
+          metadata: {
+            emailColdContact: { senderEmail: "eric@thinkwork.ai" },
+          },
+        },
+      ],
+      [{ metadata: { source: "chat" } }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "Here is your answer.",
+    });
+
+    expect(result).toEqual({
+      sent: false,
+      reason: "last_user_message_not_email",
+    });
+    expect(mockSesSend).not.toHaveBeenCalled();
+    expect(insertedTokens).toHaveLength(0);
+  });
+
+  it("emails the reply continuation when the latest user message is email_reply", async () => {
+    queueRows.push(
+      [
+        {
+          id: THREAD_ID,
+          space_id: "space-1",
+          metadata: {
+            emailColdContact: { senderEmail: "eric@thinkwork.ai" },
+          },
+        },
+      ],
+      [
+        {
+          metadata: {
+            source: "email_reply",
+            senderEmail: "eric@thinkwork.ai",
+            subject: "Re: Hello",
+            originalMessageId: "<orig-2@thinkwork.ai>",
+          },
+        },
+      ],
+      [{ spaceSlug: "default", tenantSlug: "sleek-squirrel-230" }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "Sure, more details here.",
+    });
+
+    expect(result).toEqual({ sent: true, sesMessageId: "ses-out-123" });
+    const rawMessage = Buffer.from(
+      mockSesSend.mock.calls[0][0].input.RawMessage.Data,
+    ).toString("utf8");
+    // Already prefixed Re: — shouldn't double-prefix.
+    expect(rawMessage).toContain("Subject: Re: Hello");
+    expect(rawMessage).not.toContain("Subject: Re: Re: Hello");
+    expect(rawMessage).toContain("In-Reply-To: <orig-2@thinkwork.ai>");
+  });
+
+  it("skips when the body is empty", async () => {
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "   ",
+    });
+
+    expect(result).toEqual({ sent: false, reason: "empty_body" });
+    expect(mockSesSend).not.toHaveBeenCalled();
+  });
+});
