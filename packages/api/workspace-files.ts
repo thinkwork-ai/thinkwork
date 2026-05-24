@@ -7,10 +7,10 @@
  *
  * Request shape (Unit 5):
  *   { action: "get" | "list" | "put" | "delete" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
- *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true,
+ *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true, catalog?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
- *   Exactly one of agentId / templateId / spaceId / computerId / userId / defaults:true
+ *   Exactly one of agentId / templateId / spaceId / computerId / userId / defaults:true / catalog:true
  *   identifies the target surface. Tenant identity is derived from the
  *   caller's JWT via `resolveCallerFromAuth` — the handler NEVER trusts a
  *   tenantSlug body field. Requests that still include one are rejected
@@ -67,7 +67,10 @@ import {
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
 import { bootstrapAgentWorkspace } from "./src/lib/workspace-bootstrap.js";
 import { deriveAgentSkills } from "./src/lib/derive-agent-skills.js";
-import { isBuiltinToolWorkspacePath } from "./src/lib/builtin-tool-slugs.js";
+import {
+  isBuiltinToolSlug,
+  isBuiltinToolWorkspacePath,
+} from "./src/lib/builtin-tool-slugs.js";
 import {
   agents,
   agentTemplates,
@@ -208,6 +211,15 @@ function userContextPrefix(userId: string, tenantId: string): string {
   return `tenants/${tenantId}/users/${userId}/`;
 }
 
+function catalogKey(tenantSlug: string, path: string): string {
+  const clean = path.replace(/^\/+/, "");
+  return `tenants/${tenantSlug}/skill-catalog/${clean}`;
+}
+
+function catalogPrefix(tenantSlug: string): string {
+  return `tenants/${tenantSlug}/skill-catalog/`;
+}
+
 // ---------------------------------------------------------------------------
 // Target resolution
 // ---------------------------------------------------------------------------
@@ -259,13 +271,21 @@ interface UserContextTarget {
   key: (path: string) => string;
 }
 
+interface CatalogTarget {
+  kind: "catalog";
+  tenantSlug: string;
+  prefix: string;
+  key: (path: string) => string;
+}
+
 type Target =
   | AgentTarget
   | TemplateTarget
   | SpaceTarget
   | DefaultsTarget
   | ComputerTarget
-  | UserContextTarget;
+  | UserContextTarget
+  | CatalogTarget;
 
 async function resolveAgentTarget(
   tenantId: string,
@@ -426,6 +446,22 @@ async function resolveUserContextTarget(
   };
 }
 
+async function resolveCatalogTarget(
+  tenantId: string,
+): Promise<CatalogTarget | null> {
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  if (!tenant?.slug) return null;
+  return {
+    kind: "catalog",
+    tenantSlug: tenant.slug,
+    prefix: catalogPrefix(tenant.slug),
+    key: (path) => catalogKey(tenant.slug, path),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Authz — REST analogue of requireTenantAdmin (mirrors plugin-upload.ts)
 // ---------------------------------------------------------------------------
@@ -534,6 +570,7 @@ async function handleList(
       p !== "manifest.json" &&
       p !== "_defaults_version" &&
       (target.kind !== "user" || isVisibleUserContextPath(p)) &&
+      (target.kind !== "catalog" || isAllowedCatalogPath(p)) &&
       !isBuiltinToolWorkspacePath(p),
   );
 
@@ -689,6 +726,19 @@ function isVisibleUserContextPath(path: string): boolean {
   if (clean.startsWith("memory/.") || clean.includes("/.")) return false;
   if (clean.startsWith("memory/reports/")) return false;
   return true;
+}
+
+function catalogPathSlug(path: string): string {
+  return path.replace(/^\/+/, "").split("/")[0] ?? "";
+}
+
+function isBuiltinToolCatalogPath(path: string): boolean {
+  const slug = catalogPathSlug(path);
+  return Boolean(slug && isBuiltinToolSlug(slug));
+}
+
+function isAllowedCatalogPath(path: string): boolean {
+  return !isBuiltinToolCatalogPath(path);
 }
 
 const COMPUTER_WORKSPACE_TASK_TIMEOUT_MS = 12_000;
@@ -994,6 +1044,26 @@ async function handlePut(
       ok: false,
       error: "use orchestration writer",
     });
+  }
+
+  if (target.kind === "catalog" && isBuiltinToolCatalogPath(cleanPath)) {
+    return json(400, {
+      ok: false,
+      error: `Catalog skill slug '${catalogPathSlug(cleanPath)}' conflicts with a built-in tool slug.`,
+      code: "builtin_tool_slug",
+    });
+  }
+
+  if (target.kind === "catalog") {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(cleanPath),
+        Body: content,
+        ContentType: "text/plain; charset=utf-8",
+      }),
+    );
+    return json(200, { ok: true });
   }
 
   // Resolve audit actor once per request. apikey path → system,
@@ -2327,6 +2397,7 @@ interface RequestBody {
   computerId?: string;
   userId?: string;
   defaults?: boolean;
+  catalog?: boolean;
   path?: string;
   content?: string;
   acceptTemplateUpdate?: boolean;
@@ -2390,7 +2461,7 @@ export async function handler(
     return json(400, {
       ok: false,
       error:
-        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, spaceId, computerId, userId, or defaults: true. Tenant is derived from the caller's token.",
+        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, spaceId, computerId, userId, defaults: true, or catalog: true. Tenant is derived from the caller's token.",
     });
   }
 
@@ -2410,12 +2481,13 @@ export async function handler(
     (body.spaceId ? 1 : 0) +
     (body.computerId ? 1 : 0) +
     (body.userId ? 1 : 0) +
-    (body.defaults ? 1 : 0);
+    (body.defaults ? 1 : 0) +
+    (body.catalog ? 1 : 0);
   if (targetCount !== 1) {
     return json(400, {
       ok: false,
       error:
-        "Exactly one of agentId, templateId, spaceId, computerId, userId, defaults is required",
+        "Exactly one of agentId, templateId, spaceId, computerId, userId, defaults, catalog is required",
     });
   }
 
@@ -2432,6 +2504,8 @@ export async function handler(
     target = await resolveUserContextTarget(tenantId, body.userId);
   } else if (body.defaults) {
     target = await resolveDefaultsTarget(tenantId);
+  } else if (body.catalog) {
+    target = await resolveCatalogTarget(tenantId);
   }
   if (!target) {
     // 404 rather than 403 so the response doesn't leak whether a row
@@ -2446,7 +2520,10 @@ export async function handler(
   //
   // Use the resolved users.id, NOT auth.principalId. tenantMembers.principal_id
   // holds users.id, and Google-federated users have users.id ≠ Cognito sub.
-  if (WRITE_ACTIONS.has(action) && auth.authType !== "apikey") {
+  if (
+    (WRITE_ACTIONS.has(action) || target.kind === "catalog") &&
+    auth.authType !== "apikey"
+  ) {
     const isAdmin = await callerIsTenantAdmin(tenantId, userId);
     if (!isAdmin) {
       return json(403, {
@@ -2457,6 +2534,16 @@ export async function handler(
   }
 
   const deps: HandlerDeps = { auth, tenantId, target };
+
+  if (
+    target.kind === "catalog" &&
+    !["get", "list", "put", "delete"].includes(action)
+  ) {
+    return json(400, {
+      ok: false,
+      error: `Action ${action} is not supported for the skill catalog target`,
+    });
+  }
 
   try {
     switch (action) {

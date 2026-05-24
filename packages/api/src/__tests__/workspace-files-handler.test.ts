@@ -324,6 +324,12 @@ function queueAdminTemplateTargetRows(): void {
   pushDbRows([{ role: "admin" }]);
 }
 
+function queueAdminCatalogTargetRows(): void {
+  pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+  pushDbRows([tenantRow()]);
+  pushDbRows([{ role: "admin" }]);
+}
+
 function computerRow(overrides: Record<string, unknown> = {}) {
   return { id: COMPUTER_ID, tenant_id: TENANT_A, ...overrides };
 }
@@ -910,6 +916,190 @@ describe("cross-tenant isolation", () => {
     expect(res.body.error).toMatch(/Target not found/);
     // No S3 reads should have happened.
     expect(s3Mock.calls().length).toBe(0);
+  });
+});
+
+// ─── 4b. Tenant skill catalog target ────────────────────────────────────────
+
+describe("tenant skill catalog target", () => {
+  it("lists and reads files from the tenant skill-catalog prefix", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
+        { Key: "tenants/acme/skill-catalog/web-search/SKILL.md" },
+      ],
+    });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+      })
+      .resolves(body("# Finance Audit XLS\n"));
+
+    const listRes = await parse(
+      await handler(event({ action: "list", catalog: true })),
+    );
+
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.body.files).toEqual([
+      {
+        path: "finance-audit-xls/SKILL.md",
+        source: "catalog",
+        sha256: "",
+        overridden: false,
+      },
+      {
+        path: "finance-audit-xls/WIRING.md",
+        source: "catalog",
+        sha256: "",
+        overridden: false,
+      },
+    ]);
+
+    queueAdminCatalogTargetRows();
+    const getRes = await parse(
+      await handler(
+        event({
+          action: "get",
+          catalog: true,
+          path: "finance-audit-xls/SKILL.md",
+        }),
+      ),
+    );
+
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.body).toMatchObject({
+      ok: true,
+      source: "catalog",
+      content: "# Finance Audit XLS\n",
+    });
+  });
+
+  it("returns an empty list for an empty tenant catalog", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+
+    const res = await parse(
+      await handler(event({ action: "list", catalog: true })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.files).toEqual([]);
+  });
+
+  it("writes and deletes catalog files under the tenant skill-catalog prefix", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const putRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          catalog: true,
+          path: "finance-audit-xls/SKILL.md",
+          content: "# Finance Audit XLS\n",
+        }),
+      ),
+    );
+
+    expect(putRes.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "test-bucket",
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+      Body: "# Finance Audit XLS\n",
+    });
+
+    queueAdminCatalogTargetRows();
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    const deleteRes = await parse(
+      await handler(
+        event({
+          action: "delete",
+          catalog: true,
+          path: "finance-audit-xls/SKILL.md",
+        }),
+      ),
+    );
+
+    expect(deleteRes.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(DeleteObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "test-bucket",
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+    });
+  });
+
+  it("requires tenant admin for catalog reads and writes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const listRes = await parse(
+      await handler(event({ action: "list", catalog: true })),
+    );
+
+    expect(listRes.statusCode).toBe(403);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const putRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          catalog: true,
+          path: "finance-audit-xls/SKILL.md",
+          content: "# no\n",
+        }),
+      ),
+    );
+
+    expect(putRes.statusCode).toBe(403);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
+  it("returns 404 when the caller tenant cannot resolve a catalog prefix", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([]);
+
+    const res = await parse(
+      await handler(event({ action: "list", catalog: true })),
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body.error).toMatch(/Target not found/);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+  });
+
+  it("rejects catalog writes to built-in tool slugs", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          catalog: true,
+          path: "web-search/SKILL.md",
+          content: "# Web Search\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe("builtin_tool_slug");
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 });
 
