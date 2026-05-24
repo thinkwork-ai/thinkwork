@@ -444,9 +444,6 @@ build_handler "webhook-task-event" \
 build_handler "github-app" \
   "$REPO_ROOT/packages/api/src/handlers/github-app.ts"
 
-build_handler "github-repos" \
-  "$REPO_ROOT/packages/api/src/handlers/github-repos.ts"
-
 build_handler "github-app-webhook" \
   "$REPO_ROOT/packages/api/github-app-webhook.ts"
 
@@ -500,9 +497,6 @@ build_handler "artifact-deliver" \
 
 build_handler "recipe-refresh" \
   "$REPO_ROOT/packages/api/src/handlers/recipe-refresh.ts"
-
-build_handler "code-factory" \
-  "$REPO_ROOT/packages/api/src/handlers/code-factory.ts"
 
 build_handler "bootstrap-workspaces" \
   "$REPO_ROOT/packages/api/src/handlers/bootstrap-workspaces.ts"

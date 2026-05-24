@@ -311,7 +311,7 @@ function BuildProgressRow({ content, isLatest }: { content: string; isLatest: bo
 }
 
 function BuildProgressSection({ threadId }: { threadId: string }) {
-  // TODO: Migrate api.codeFactoryChat.listMessages to GraphQL
+  // TODO: chat session list-messages GraphQL operation not yet available.
   const messages = undefined as any[] | undefined; // Stub
 
   const progressMessages = (messages ?? []).filter((m: any) => m.role === "assistant");

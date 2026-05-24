@@ -80,9 +80,7 @@ export function CreateHostedAgentModal({ visible, onClose, runtimeProfile: initi
             <View className="flex-row items-center gap-3">
               <Server size={20} color={colors.mutedForeground} />
               <Muted className="text-sm leading-5 flex-1">
-                {runtimeProfile === "code_factory"
-                  ? "Create a Code Factory agent with autonomous multi-agent coding workflow controls."
-                  : runtimeProfile === "chat"
+                {runtimeProfile === "chat"
                   ? "Create a chat agent powered by AgentCore Runtime with Firecracker isolation. Ready instantly."
                   : runtimeProfile === "code"
                   ? "Create a code agent with GitHub CLI, D2, Claude Code, and development tools. Ready instantly."
@@ -126,7 +124,7 @@ export function CreateHostedAgentModal({ visible, onClose, runtimeProfile: initi
 
             <Input
               label="Agent Name"
-              placeholder={runtimeProfile === "code_factory" ? "e.g. Platform Code Factory" : "e.g. Operations, Research, Support"}
+              placeholder="e.g. Operations, Research, Support"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -150,7 +148,7 @@ export function CreateHostedAgentModal({ visible, onClose, runtimeProfile: initi
             )}
 
             <Button onPress={handleCreate} loading={loading} size="lg" disabled={success || !name.trim()}>
-              {success ? "Provisioning..." : runtimeProfile === "code_factory" ? "Create Code Factory" : runtimeProfile === "chat" ? "Create Chat Agent" : runtimeProfile === "code" ? "Create Code Agent" : "Create Agent"}
+              {success ? "Provisioning..." : runtimeProfile === "chat" ? "Create Chat Agent" : runtimeProfile === "code" ? "Create Code Agent" : "Create Agent"}
             </Button>
           </View>
         </ScrollView>
