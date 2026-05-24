@@ -22,10 +22,7 @@ import {
   type AgentCoreSpanRecord,
 } from "../../../lib/agentcore-spans.js";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
-import {
-  ensureEvalAgentForTarget,
-  resolveEvalAgentId,
-} from "../../../lib/evals/eval-agent-provisioning.js";
+import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -237,7 +234,6 @@ function testCaseToGraphql(row: Record<string, unknown>) {
     category: row.category,
     query: row.query,
     systemPrompt: row.system_prompt,
-    agentId: row.agent_id ?? null,
     assertions: JSON.stringify(row.assertions ?? []),
     agentcoreEvaluatorIds: row.agentcore_evaluator_ids ?? [],
     tags: row.tags ?? [],
@@ -280,7 +276,6 @@ const evalRunsQuery = async (
   _p: any,
   args: {
     tenantId: string;
-    agentId?: string | null;
     limit?: number | null;
     offset?: number | null;
   },
@@ -288,9 +283,7 @@ const evalRunsQuery = async (
 ) => {
   const limit = Math.min(args.limit ?? 25, 100);
   const offset = args.offset ?? 0;
-  const conditions = [eq(evalRuns.tenant_id, args.tenantId)];
-  if (args.agentId) conditions.push(eq(evalRuns.agent_id, args.agentId));
-  const where = and(...conditions);
+  const where = eq(evalRuns.tenant_id, args.tenantId);
 
   const [{ totalCount }] = await db
     .select({ totalCount: sql<number>`COUNT(*)::int` })
@@ -609,7 +602,6 @@ const evalTestCaseHistory = async (
 
 interface StartEvalRunInput {
   computerId?: string | null;
-  agentId?: string | null;
   model?: string | null;
   categories?: string[] | null;
   testCaseIds?: string[] | null;
@@ -641,12 +633,9 @@ async function resolveEvalModelId(inputModel: string | null | undefined) {
 
 async function resolveRunTarget(args: {
   tenantId: string;
-  input: StartEvalRunInput;
-}): Promise<{
-  agentId: string;
-}> {
-  const agentId = await resolveEvalAgentId(args.tenantId, args.input.agentId);
-  return { agentId };
+}): Promise<{ agentId: string }> {
+  const platformAgent = await resolveTenantPlatformAgent(args.tenantId);
+  return { agentId: platformAgent.id };
 }
 
 const startEvalRun = async (
@@ -660,22 +649,46 @@ const startEvalRun = async (
     );
   }
 
-  const target = await resolveRunTarget(args);
   const model = await resolveEvalModelId(args.input.model);
 
+  // Insert a pending row up front so the failure path (e.g. tenant has no
+  // platform agent yet) still surfaces in the runs list with a recoverable
+  // error_message. Plan R6 mandates the failed-row trail.
   const [run] = await db
     .insert(evalRuns)
     .values({
       tenant_id: args.tenantId,
-      agent_id: target.agentId,
+      agent_id: null,
       computer_id: null,
       status: "pending",
       model,
       categories: args.input.categories ?? [],
     })
     .returning();
-
   const runId = (run as { id: string }).id;
+
+  let targetAgentId: string;
+  try {
+    const target = await resolveRunTarget({ tenantId: args.tenantId });
+    targetAgentId = target.agentId;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await db
+      .update(evalRuns)
+      .set({
+        status: "failed",
+        completed_at: new Date(),
+        error_message: message,
+      })
+      .where(eq(evalRuns.id, runId));
+    throw err;
+  }
+
+  const [withAgent] = await db
+    .update(evalRuns)
+    .set({ agent_id: targetAgentId })
+    .where(eq(evalRuns.id, runId))
+    .returning();
 
   try {
     await invokeEvalRunner(runId, args.input.testCaseIds ?? null);
@@ -692,7 +705,10 @@ const startEvalRun = async (
     throw err;
   }
 
-  return runToGraphql(run as unknown as Record<string, unknown>, null);
+  return runToGraphql(
+    (withAgent ?? run) as unknown as Record<string, unknown>,
+    null,
+  );
 };
 
 async function invokeEvalRunner(
@@ -755,7 +771,6 @@ interface CreateTestCaseInput {
   category: string;
   query: string;
   systemPrompt?: string | null;
-  agentId?: string | null;
   assertions?: Array<{
     type: string;
     value?: string | null;
@@ -779,7 +794,6 @@ const createEvalTestCase = async (
       category: args.input.category,
       query: args.input.query,
       system_prompt: args.input.systemPrompt ?? null,
-      agent_id: args.input.agentId ?? null,
       assertions: args.input.assertions ?? [],
       agentcore_evaluator_ids: args.input.agentcoreEvaluatorIds ?? [],
       tags: args.input.tags ?? [],
@@ -802,7 +816,6 @@ const updateEvalTestCase = async (
   if (args.input.query !== undefined) update.query = args.input.query;
   if (args.input.systemPrompt !== undefined)
     update.system_prompt = args.input.systemPrompt;
-  if (args.input.agentId !== undefined) update.agent_id = args.input.agentId;
   if (args.input.assertions !== undefined)
     update.assertions = args.input.assertions;
   if (args.input.agentcoreEvaluatorIds !== undefined)

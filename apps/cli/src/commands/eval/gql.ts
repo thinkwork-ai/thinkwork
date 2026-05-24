@@ -1,13 +1,8 @@
 import { graphql } from "../../gql/index.js";
 
 export const EvalRunsDoc = graphql(`
-  query CliEvalRuns($tenantId: ID!, $agentId: ID, $limit: Int, $offset: Int) {
-    evalRuns(
-      tenantId: $tenantId
-      agentId: $agentId
-      limit: $limit
-      offset: $offset
-    ) {
+  query CliEvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {
+    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {
       totalCount
       items {
         id
@@ -84,7 +79,6 @@ export const EvalTestCasesDoc = graphql(`
       category
       query
       systemPrompt
-      agentId
       agentcoreEvaluatorIds
       tags
       enabled
@@ -104,7 +98,6 @@ export const EvalTestCaseDoc = graphql(`
       category
       query
       systemPrompt
-      agentId
       assertions
       agentcoreEvaluatorIds
       tags

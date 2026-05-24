@@ -34,7 +34,7 @@ eval-runner (concurrency=5 per run):
   5. Notify AppSync so subscribed UI tabs live-update
 ```
 
-The eval test agent is a generic AgentCore runtime; the **agent template** you pick in the Run dialog determines which workspace, tools, and default model the runtime loads. Different templates expose different tool surfaces — that matters for tests like "the agent should refuse to web-search" where the template must actually lack the `web_search` tool.
+Every run executes against the tenant's [platform agent](/applications/admin/evaluations/#agent-target) — the single `agents` row with `is_platform_default = true`. The workspace, tools, and baseline model that AgentCore loads come from that agent's configuration. Tests that turn on tool-surface assumptions (for example, "the agent should refuse to web-search") depend on what's enabled on the platform agent.
 
 ## Authoring test cases
 
@@ -45,8 +45,7 @@ Test cases live in the **Studio** (`/evaluations/studio`). Every test case has:
 | `name`                  | Human-readable identifier, unique per tenant for seeded rows                                              |
 | `category`              | Free-form label used to group and filter runs (`red-team-prompt-injection`, `red-team-tool-misuse`, etc.) |
 | `query`                 | The prompt the agent under test will receive                                                              |
-| `systemPrompt`          | Optional override of the template's system prompt                                                         |
-| `agentTemplateId`       | Optional per-test pin — overrides the run-level template                                                  |
+| `systemPrompt`          | Optional per-case override of the platform agent's baseline system prompt                                 |
 | `assertions`            | Array of assertion objects (see below)                                                                    |
 | `agentcoreEvaluatorIds` | Array of Builtin.\* evaluator IDs to score the session spans                                              |
 | `tags`                  | Free-form tags for filtering                                                                              |
@@ -120,10 +119,9 @@ Manual trigger:
 ### From the UI
 
 1. Open `/evaluations`, click **Run Evaluation**.
-2. Pick an **Agent template** (required). The eval test agent loads this template's workspace, tools, and default model.
-3. Optional: override **Model**. Blank = template default.
-4. Pick a **scope**: All Categories, a subset (multi-select), or specific test cases.
-5. Click **Start Evaluation**. The run appears in Recent Runs with `status=pending` and transitions to `running → completed` as the Lambda works through the pack.
+2. Optional: override **Model**. Blank = platform agent's default (Kimi K2.5).
+3. Pick a **scope**: All Categories, a subset (multi-select), or specific test cases.
+4. Click **Start Evaluation**. The run appears in Recent Runs with `status=pending` and transitions to `running → completed` as the Lambda works through the pack. The run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target).
 
 Live updates come via the `onEvalRunUpdated` AppSync subscription plus a 3s poll fallback — the dashboard and Run Results page stay in sync without a manual refresh.
 
@@ -131,26 +129,25 @@ Live updates come via the `onEvalRunUpdated` AppSync subscription plus a 3s poll
 
 `thinkwork eval` mirrors the Studio feature-for-feature. Interactive mode prompts for missing values in a TTY; non-TTY mode fails fast on missing required flags.
 
+Every run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target); there is no `--agent`/`--agent-template` flag.
+
 ```bash
-# Fully interactive — prompts for template, scope, confirmation
+# Fully interactive — prompts for scope, confirmation
 thinkwork eval run --stage dev
 
 # Flag-driven — no prompts, returns runId immediately
 thinkwork eval run --stage dev \
-  --agent-template tpl-ops \
   --category red-team-prompt-injection red-team-tool-misuse
 
 # Block until terminal status, fail non-zero on fail/cancel/timeout
-thinkwork eval run --stage dev --agent-template tpl-ops --all \
-  --watch --timeout 900
+thinkwork eval run --stage dev --all --watch --timeout 900
 
 # Machine-readable output (stdout = JSON, everything else → stderr)
-thinkwork eval run --stage dev --agent-template tpl-ops --category red-team-prompt-injection --json \
+thinkwork eval run --stage dev --category red-team-prompt-injection --json \
   | jq .runId
 
 # Run a specific test case only
 thinkwork eval run --stage dev \
-  --agent-template tpl-ops \
   --test-case tc-red-team-agents-prompt-injection-01 \
   --watch
 ```
