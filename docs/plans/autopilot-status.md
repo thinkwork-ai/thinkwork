@@ -1402,7 +1402,7 @@ None.
 
 | Unit | Branch | PR | State | Notes |
 | --- | --- | --- | --- | --- |
-| U1 Catalog S3 prefix and storage contract | `codex/pi-skill-catalog-u1-types` | Pending | Locally verified | Created catalog contract types and guard tests. |
+| U1 Catalog S3 prefix and storage contract | `codex/pi-skill-catalog-u1-types` | [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639) | PR open | Created catalog contract types and guard tests. |
 
 ## Verification Log
 
@@ -1413,7 +1413,7 @@ None.
 
 ## CI / PR
 
-- Pending U1 PR.
+- Opened [#1639](https://github.com/thinkwork-ai/thinkwork/pull/1639).
 
 ## Blockers
 
