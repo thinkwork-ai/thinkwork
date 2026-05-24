@@ -1,7 +1,7 @@
 ---
 title: "refactor: Evaluations run against tenant platform agent"
 type: refactor
-status: active
+status: completed
 date: 2026-05-23
 origin: docs/brainstorms/2026-05-22-one-platform-agent-spaces-runtime-requirements.md
 ---
