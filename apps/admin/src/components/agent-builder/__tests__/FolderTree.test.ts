@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { buildWorkspaceTree, subAgentsNodePath } from "../FolderTree";
+import {
+  buildWorkspaceTree,
+  isSkillInstallFolder,
+  subAgentsNodePath,
+} from "../FolderTree";
 
 describe("buildWorkspaceTree", () => {
   it("sorts folders before files and preserves nested paths", () => {
@@ -81,6 +85,33 @@ describe("buildWorkspaceTree", () => {
     expect(tree.map((node) => node.path)).toEqual(["memory", "skills"]);
   });
 
+  it("enables Add Skill only for real skills folders with install support", () => {
+    expect(isSkillInstallFolder({ name: "skills", isFolder: true }, true)).toBe(
+      true,
+    );
+    expect(
+      isSkillInstallFolder({ name: "skills", isFolder: false }, true),
+    ).toBe(false);
+    expect(isSkillInstallFolder({ name: "memory", isFolder: true }, true)).toBe(
+      false,
+    );
+    expect(
+      isSkillInstallFolder({ name: "skills", isFolder: true }, false),
+    ).toBe(false);
+    expect(
+      isSkillInstallFolder(
+        { name: "skills", isFolder: true, missing: true },
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      isSkillInstallFolder(
+        { name: "skills", isFolder: true, synthetic: true },
+        true,
+      ),
+    ).toBe(false);
+  });
+
   it("contains inline create and rename affordances", () => {
     const source = readFileSync(
       new URL("../FolderTree.tsx", import.meta.url),
@@ -93,6 +124,8 @@ describe("buildWorkspaceTree", () => {
     expect(source).toMatch(/node\.name === "AGENTS\.md"/);
     expect(source).toMatch(/Generate Folder Structure/);
     expect(source).toMatch(/node\.name === "CONTEXT\.md"/);
+    expect(source).toMatch(/Add Skill/);
+    expect(source).toMatch(/onAddSkill/);
     expect(source).toMatch(/onDeleteSyntheticGroup/);
     expect(source).toMatch(/syntheticFolderPaths/);
     expect(source).toMatch(/InlineNameInput/);

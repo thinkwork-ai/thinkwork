@@ -1410,7 +1410,8 @@ None.
 | U6 WIRING.md parser module                      | `codex/pi-skill-catalog-u6-wiring-md`     | [#1646](https://github.com/thinkwork-ai/thinkwork/pull/1646) | Merged | Squash merged as `42f2074b`; remote and local branch removed.                                                                                                                                                                          |
 | U6a Catalog editor root correction              | `codex/pi-skill-catalog-catalog-root-fix` | [#1647](https://github.com/thinkwork-ai/thinkwork/pull/1647) | Merged | Squash merged as `b6f6cd8f`; remote and local branch removed.                                                                                                                                                                          |
 | U7 Install-skill backend action                 | `codex/pi-skill-catalog-u7-install`       | [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) | Merged | Squash merged as `400809ec`; remote and local branch removed. Added the workspace-files `install-skill` action, agent/Space install support, rollback, and self-seeding empty tenant catalogs from bundled repo skills before listing. |
-| U8 Add Skill dialog component                   | `codex/pi-skill-catalog-u8-dialog`        | [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) | In CI  | Adds the admin two-step Add Skill dialog, catalog/wiring parsing helpers, and install-skill client wrapper.                                                                                                                            |
+| U8 Add Skill dialog component                   | `codex/pi-skill-catalog-u8-dialog`        | [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) | Merged | Squash merged as `d49eccb4`; remote and local branch removed. Added the admin two-step Add Skill dialog, catalog/wiring parsing helpers, and install-skill client wrapper.                                                             |
+| U9 FolderTree Add Skill context menu            | `codex/pi-skill-catalog-u9-folder-menu`   | [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655) | In CI  | Adds the `skills/` folder context-menu entry and wires the dialog through agent/Space workspace targets.                                                                                                                               |
 
 ## Verification Log
 
@@ -1466,6 +1467,12 @@ None.
 - `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
 - `pnpm dlx prettier@3.8.2 --check apps/admin/src/components/agent-builder/AddSkillDialog.tsx apps/admin/src/components/agent-builder/AddSkillDialog.test.tsx apps/admin/src/lib/workspace-files-api.ts apps/admin/src/lib/agent-builder-api.ts apps/admin/src/lib/__tests__/workspace-files-api.test.ts docs/plans/autopilot-status.md` - passed.
 - `git diff --check` - passed.
+- U8 PR checks passed on [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653): `cla`, `lint`, `test`, `typecheck`, `verify`.
+- `pnpm --filter @thinkwork/admin test -- src/components/agent-builder/__tests__/FolderTree.test.ts src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed with existing sourcemap/chunk-size warnings.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm dlx prettier@3.8.2 --check apps/admin/src/components/agent-builder/FolderTree.tsx apps/admin/src/components/agent-builder/WorkspaceEditor.tsx apps/admin/src/components/agent-builder/__tests__/FolderTree.test.ts apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.target.test.ts docs/plans/autopilot-status.md` - passed.
+- `git diff --check` - passed.
 
 ## CI / PR
 
@@ -1486,6 +1493,8 @@ None.
 - Opened [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649).
 - Squash merged [#1649](https://github.com/thinkwork-ai/thinkwork/pull/1649) as `400809ec37f2e4687d858395bfd992b3f4b6dae3`.
 - Opened [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653).
+- Squash merged [#1653](https://github.com/thinkwork-ai/thinkwork/pull/1653) as `d49eccb473f86599ec584c1921219fda0bf2209b`.
+- Opened [#1655](https://github.com/thinkwork-ai/thinkwork/pull/1655).
 
 ## Blockers
 
