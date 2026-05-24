@@ -28,18 +28,10 @@ _TURN_MEMORY_CONTEXT: dict[str, str] | None = None
 def set_turn_memory_context(
     *,
     user_id: str = "",
-    active_space_id: str = "",
-    active_space_slug: str = "",
-    active_space_is_default: bool = False,
 ) -> None:
     """Snapshot memory routing context at tool-registration time."""
     global _TURN_MEMORY_CONTEXT
-    _TURN_MEMORY_CONTEXT = {
-        "user_id": user_id or "",
-        "active_space_id": active_space_id or "",
-        "active_space_slug": active_space_slug or "",
-        "active_space_is_default": "true" if active_space_is_default else "false",
-    }
+    _TURN_MEMORY_CONTEXT = {"user_id": user_id or ""}
 
 
 def _snapshot_value(name: str) -> str:
@@ -78,50 +70,16 @@ def _get_user_actor_id() -> str:
     )
 
 
-def _active_space_context() -> tuple[str, str, bool]:
-    if _TURN_MEMORY_CONTEXT is not None:
-        space_id = _snapshot_value("active_space_id")
-        space_slug = _snapshot_value("active_space_slug")
-        default_value = _snapshot_value("active_space_is_default")
-    else:
-        space_id = os.environ.get("ACTIVE_SPACE_ID", "")
-        space_slug = os.environ.get("ACTIVE_SPACE_SLUG", "")
-        default_value = os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "")
-    is_default = default_value.lower() in ("1", "true", "yes") or space_slug == "default"
-    return space_id, space_slug, is_default
-
-
 def _hindsight_recall_bank_ids(user_id: str) -> list[str]:
-    space_id, _space_slug, is_default_space = _active_space_context()
-    bank_ids: list[str] = []
-    if user_id:
-        bank_ids.append(f"user_{user_id}")
-    if space_id and not is_default_space:
-        bank_ids.append(f"space_{space_id}")
-    return bank_ids
+    return [f"user_{user_id}"] if user_id else []
 
 
 def _resolve_hindsight_write_bank_id(scope_arg: str = "") -> tuple[str | None, str | None]:
     user_id = _get_user_actor_id()
-    space_id, _space_slug, is_default_space = _active_space_context()
-    scope = (scope_arg or "space").strip().lower()
-
-    if scope == "user":
-        if user_id:
-            return f"user_{user_id}", None
-        return None, "scope=user requested but no invoking user is present"
-
-    if is_default_space:
-        if user_id:
-            return f"user_{user_id}", None
-        return None, "default Space memory requires an invoking user"
-
-    if space_id:
-        return f"space_{space_id}", None
-
     if user_id:
         return f"user_{user_id}", None
-    return None, "no user or active Space memory bank is available"
+    scope = (scope_arg or "user").strip().lower()
+    return None, f"scope={scope} requested but no invoking user is present"
 
 
 def _get_tenant_id() -> str:
@@ -342,7 +300,7 @@ def _search_wiki_for_recall(
 
 
 @tool
-def remember(fact: str, category: str = "general", scope: str = "space") -> str:
+def remember(fact: str, category: str = "general", scope: str = "user") -> str:
     """Store an important fact about the user or conversation to long-term memory.
 
     Use this when the user shares preferences, important context, or asks you to
@@ -351,8 +309,8 @@ def remember(fact: str, category: str = "general", scope: str = "space") -> str:
     Args:
         fact: The fact or preference to remember. Be specific and concise.
         category: Optional category hint (e.g., "preference", "context", "instruction").
-        scope: "space" (default) writes to the active Space bank when the
-            Space is non-default; "user" writes to the invoking user's bank.
+        scope: Deprecated compatibility argument. Memory always writes to
+            the invoking user's bank; Space-scoped banks are not provisioned.
 
     Returns:
         Confirmation that the fact was stored.

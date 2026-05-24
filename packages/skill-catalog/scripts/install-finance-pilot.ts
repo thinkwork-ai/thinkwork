@@ -12,7 +12,7 @@
  *
  * The skills land in the target's agent OR template workspace under
  * `skills/<slug>/SKILL.md` (+ README, LICENSE-NOTES). The skills
- * catalog's `deriveAgentSkills` picks up the SKILL.md on PUT, so the
+ * runtime reads the SKILL.md from the workspace tree at invocation time, so the
  * agent gets the new capability without any GraphQL mutation.
  *
  * Usage — Cognito JWT auth (interactive operator):

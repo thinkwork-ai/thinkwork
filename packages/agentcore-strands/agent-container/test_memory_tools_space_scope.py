@@ -39,7 +39,7 @@ def _install_boto3(monkeypatch, client):
     )
 
 
-def test_non_default_space_remember_defaults_to_space_hindsight_bank(monkeypatch):
+def test_non_default_space_remember_defaults_to_user_hindsight_bank(monkeypatch):
     memory_tools = _load_memory_tools(monkeypatch)
     client = _FakeAgentCoreClient()
     hindsight_calls = []
@@ -53,21 +53,16 @@ def test_non_default_space_remember_defaults_to_space_hindsight_bank(monkeypatch
             retain=lambda **kwargs: hindsight_calls.append(kwargs),
         ),
     )
-    memory_tools.set_turn_memory_context(
-        user_id="user-1",
-        active_space_id="space-finance",
-        active_space_slug="finance",
-        active_space_is_default=False,
-    )
+    memory_tools.set_turn_memory_context(user_id="user-1")
 
     result = memory_tools.remember("snowflake creds rotated", "general")
 
     assert result.startswith("Remembered:")
-    assert client.batch_create_calls == []
-    assert client.create_event_calls == []
+    assert client.batch_create_calls[0]["records"][0]["namespaces"] == ["user_user-1"]
+    assert client.create_event_calls[0]["actorId"] == "user-1"
     assert hindsight_calls == [
         {
-            "bank_id": "space_space-finance",
+            "bank_id": "user_user-1",
             "content": "[general] snowflake creds rotated",
             "context": "explicit_memory",
         }
@@ -88,12 +83,7 @@ def test_non_default_space_remember_scope_user_writes_user_bank(monkeypatch):
             retain=lambda **kwargs: hindsight_calls.append(kwargs),
         ),
     )
-    memory_tools.set_turn_memory_context(
-        user_id="user-1",
-        active_space_id="space-finance",
-        active_space_slug="finance",
-        active_space_is_default=False,
-    )
+    memory_tools.set_turn_memory_context(user_id="user-1")
 
     result = memory_tools.remember(
         "prefers concise summaries", "preference", scope="user"
@@ -119,12 +109,7 @@ def test_default_space_remember_routes_to_user_bank_even_with_space_scope(monkey
             retain=lambda **kwargs: hindsight_calls.append(kwargs),
         ),
     )
-    memory_tools.set_turn_memory_context(
-        user_id="user-1",
-        active_space_id="space-default",
-        active_space_slug="default",
-        active_space_is_default=True,
-    )
+    memory_tools.set_turn_memory_context(user_id="user-1")
 
     memory_tools.remember("default-space note", "general", scope="space")
 
@@ -132,7 +117,7 @@ def test_default_space_remember_routes_to_user_bank_even_with_space_scope(monkey
     assert hindsight_calls[0]["bank_id"] == "user_user-1"
 
 
-def test_non_user_turn_scope_user_is_noop(monkeypatch, caplog):
+def test_non_user_turn_is_noop_even_with_active_space_env(monkeypatch, caplog):
     memory_tools = _load_memory_tools(monkeypatch)
     _install_boto3(monkeypatch, _FakeAgentCoreClient())
     monkeypatch.setitem(
@@ -143,12 +128,10 @@ def test_non_user_turn_scope_user_is_noop(monkeypatch, caplog):
             retain=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no retain")),
         ),
     )
-    memory_tools.set_turn_memory_context(
-        user_id="",
-        active_space_id="space-finance",
-        active_space_slug="finance",
-        active_space_is_default=False,
-    )
+    monkeypatch.setenv("ACTIVE_SPACE_ID", "space-finance")
+    monkeypatch.setenv("ACTIVE_SPACE_SLUG", "finance")
+    monkeypatch.setenv("ACTIVE_SPACE_IS_DEFAULT", "false")
+    memory_tools.set_turn_memory_context(user_id="")
 
     result = memory_tools.remember("private user preference", scope="user")
 
@@ -156,7 +139,7 @@ def test_non_user_turn_scope_user_is_noop(monkeypatch, caplog):
     assert "no invoking user" in caplog.text
 
 
-def test_recall_fans_out_to_user_and_non_default_space_hindsight(monkeypatch):
+def test_recall_uses_user_hindsight_bank_only_for_non_default_space(monkeypatch):
     memory_tools = _load_memory_tools(monkeypatch)
     client = _FakeAgentCoreClient()
     client.memory_records = [{"content": {"text": "managed fact"}, "score": 0.9}]
@@ -174,21 +157,16 @@ def test_recall_fans_out_to_user_and_non_default_space_hindsight(monkeypatch):
             ),
         ),
     )
-    memory_tools.set_turn_memory_context(
-        user_id="user-1",
-        active_space_id="space-finance",
-        active_space_slug="finance",
-        active_space_is_default=False,
-    )
+    monkeypatch.setenv("ACTIVE_SPACE_ID", "space-finance")
+    monkeypatch.setenv("ACTIVE_SPACE_SLUG", "finance")
+    monkeypatch.setenv("ACTIVE_SPACE_IS_DEFAULT", "false")
+    memory_tools.set_turn_memory_context(user_id="user-1")
 
     result = memory_tools.recall("rotation")
 
     assert "fact from user_user-1" in result
-    assert "fact from space_space-finance" in result
-    assert [call["bank_id"] for call in hindsight_calls] == [
-        "user_user-1",
-        "space_space-finance",
-    ]
+    assert "fact from space_space-finance" not in result
+    assert [call["bank_id"] for call in hindsight_calls] == ["user_user-1"]
 
 
 def test_recall_omits_space_bank_for_default_space(monkeypatch):
@@ -207,24 +185,20 @@ def test_recall_omits_space_bank_for_default_space(monkeypatch):
             ),
         ),
     )
-    memory_tools.set_turn_memory_context(
-        user_id="user-1",
-        active_space_id="space-default",
-        active_space_slug="default",
-        active_space_is_default=True,
-    )
+    memory_tools.set_turn_memory_context(user_id="user-1")
 
     memory_tools.recall("anything")
 
     assert [call["bank_id"] for call in hindsight_calls] == ["user_user-1"]
 
 
-def test_non_user_space_turn_recalls_space_bank_only(monkeypatch):
+def test_non_user_space_turn_does_not_recall_space_bank(monkeypatch):
     memory_tools = _load_memory_tools(monkeypatch)
     hindsight_calls = []
     _install_boto3(monkeypatch, _FakeAgentCoreClient())
     monkeypatch.delenv("AGENTCORE_MEMORY_ID", raising=False)
     monkeypatch.setenv("USER_ID", "stale-user-from-prior-turn")
+    monkeypatch.setenv("ACTIVE_SPACE_ID", "space-finance")
     monkeypatch.setitem(
         sys.modules,
         "hs_urllib_client",
@@ -235,14 +209,9 @@ def test_non_user_space_turn_recalls_space_bank_only(monkeypatch):
             ),
         ),
     )
-    memory_tools.set_turn_memory_context(
-        user_id="",
-        active_space_id="space-finance",
-        active_space_slug="finance",
-        active_space_is_default=False,
-    )
+    memory_tools.set_turn_memory_context(user_id="")
 
     result = memory_tools.recall("nightly job")
 
-    assert "space fact" in result
-    assert [call["bank_id"] for call in hindsight_calls] == ["space_space-finance"]
+    assert result == "Memory system not configured — unable to search."
+    assert hindsight_calls == []

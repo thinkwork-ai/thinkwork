@@ -8,7 +8,6 @@
  * of the document.
  *
  * Used by:
- *   - `derive-agent-skills.ts` (U11) to recompute `agent_skills` on save
  *   - admin builder routing-row editor (U18) for structured editing
  *   - folder-bundle-importer (U15) to enumerate sub-agents from imports
  *
