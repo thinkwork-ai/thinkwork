@@ -46,6 +46,12 @@ describe("agent detail tools tabs", () => {
     expect(headerControlsSource).toContain('label: "Strands"');
   });
 
+  it("orders runtime before model in the agent header controls", () => {
+    expect(headerControlsSource.indexOf("value={agent.runtime}")).toBeLessThan(
+      headerControlsSource.indexOf("value={currentModel}"),
+    );
+  });
+
   it("mounts the tool tabs under agent routes", () => {
     expect(builtinToolsSource).toContain(
       '"/_authed/_tenant/agent/tools"',
