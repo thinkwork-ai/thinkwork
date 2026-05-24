@@ -102,17 +102,22 @@ export interface BuildMcpProxyToolOptions {
   /** Inert-first ship discriminator. U3 only handles "inert"; U5 wires "live". */
   mode: McpProxyMode;
   /** Per-invocation registry. Required when mode is "live"; ignored when inert. */
-  registry?: McpToolRegistry | null;
+  registry?: McpToolRegistry;
   /** Per-invocation MCP client factory. Required when mode is "live"; ignored when inert. */
-  connectMcpServer?: ConnectMcpServerFn | null;
+  connectMcpServer?: ConnectMcpServerFn;
 }
 
 class McpProxyInertError extends Error {
   constructor() {
+    // Operator-facing recovery path: in PR-1 the per-MCP-tool surface
+    // (`mcp_<server>_<tool>`) is still registered alongside this proxy,
+    // so any MCP tool the agent wants is reachable by its individual
+    // slug. The live proxy body arrives in a follow-up PR (Plan §006 U5).
     super(
-      "MCP proxy is registered but not yet wired (Plan §006 U3). " +
-        "Use directTools (mcp.json) for first-class MCP tools in PR-1; " +
-        "the live proxy body lands in U5.",
+      "MCP proxy is registered but not yet wired in this runtime version. " +
+        "Each configured MCP tool is still exposed as a first-class tool " +
+        "named `mcp_<server>_<tool>` — call those directly. " +
+        "Do not retry this proxy tool.",
     );
     this.name = "McpProxyInertError";
   }
@@ -145,13 +150,23 @@ export function buildMcpProxyTool(
     parameters: McpProxyParamsSchema,
     executionMode: "sequential",
     execute: async (_toolCallId, _params) => {
-      if (mode === "inert") {
-        throw new McpProxyInertError();
+      switch (mode) {
+        case "inert":
+          throw new McpProxyInertError();
+        case "live":
+          // U5 replaces this branch with the live list/search/call
+          // dispatcher. The body will narrow `_params` to McpProxyParams
+          // (the Static type of McpProxyParamsSchema) and dispatch by
+          // discriminator.
+          throw new McpProxyModeUnsupportedError(mode);
+        default: {
+          // Exhaustiveness guard: when McpProxyMode grows a new variant,
+          // the compiler flags this `never` assignment so the new mode
+          // cannot silently fall through to a generic throw.
+          const exhaustive: never = mode;
+          throw new McpProxyModeUnsupportedError(exhaustive);
+        }
       }
-      // U5 replaces this branch with the live list/search/call dispatcher.
-      // The body will narrow `_params` to McpProxyParams (the Static type
-      // of McpProxyParamsSchema) and dispatch by discriminator.
-      throw new McpProxyModeUnsupportedError(mode);
     },
   };
 }

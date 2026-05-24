@@ -54,13 +54,13 @@ describe("buildMcpProxyTool — inert mode", () => {
     expect(() => JSON.stringify(tool.parameters)).not.toThrow();
   });
 
-  it("execute() throws McpProxyInertError mentioning Plan §006 U3", async () => {
+  it("execute() throws McpProxyInertError with an operator-readable recovery hint", async () => {
     const tool = buildMcpProxyTool({ mode: "inert" });
     await expect(tool.execute("call-1", {} as never)).rejects.toThrow(
       McpProxyInertError,
     );
     await expect(tool.execute("call-1", {} as never)).rejects.toThrow(
-      /Plan §006 U3/,
+      /not yet wired/,
     );
   });
 
@@ -79,10 +79,10 @@ describe("buildMcpProxyTool — inert mode", () => {
     ).rejects.toThrow(McpProxyInertError);
   });
 
-  it("inert throw mentions directTools as the v0 escape hatch", async () => {
+  it("inert throw names the per-tool surface as the v0 recovery path", async () => {
     const tool = buildMcpProxyTool({ mode: "inert" });
     await expect(tool.execute("call-1", {} as never)).rejects.toThrow(
-      /directTools/,
+      /mcp_<server>_<tool>/,
     );
   });
 });

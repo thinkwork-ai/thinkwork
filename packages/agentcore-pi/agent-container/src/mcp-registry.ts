@@ -34,10 +34,14 @@ export interface RegistryEntry {
   inputSchema: unknown;
 }
 
-export type ToolMetadataInput = Pick<
-  RegistryEntry,
-  "tool" | "description" | "inputSchema"
-> & { description?: string };
+export interface ToolMetadataInput {
+  /** Tool name as the MCP server exposes it. */
+  tool: string;
+  /** Human description from the MCP `tools/list` response; defaults to empty string when omitted. */
+  description?: string;
+  /** Raw input-schema object from the MCP `tools/list` response. */
+  inputSchema: unknown;
+}
 
 export interface SearchOptions {
   /** When true, include `inputSchema` in returned entries; otherwise omit. */

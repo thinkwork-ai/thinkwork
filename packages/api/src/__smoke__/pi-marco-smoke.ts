@@ -171,18 +171,6 @@ async function invokePi(
 		});
 	}
 
-	// Plan §006 U4 — MCP proxy substrate pin. The runtime always
-	// surfaces `mcp_proxy_registered` as a boolean on the response.
-	// A regression that drops the field (e.g., a response-builder
-	// rewrite that forgets to thread bundle.mcpProxyRegistered through)
-	// fails the smoke even before U5 wires the live proxy body.
-	if (typeof response.mcp_proxy_registered !== "boolean") {
-		fail(
-			`[${scenario}] response.mcp_proxy_registered is ${typeof response.mcp_proxy_registered}, expected boolean — the MCP proxy substrate field is missing or wrong-shaped`,
-			{ full_response: response, duration_ms: durationMs },
-		);
-	}
-
 	const totalTokens = response.response?.usage?.totalTokens ?? 0;
 	if (totalTokens === 0) {
 		fail(
@@ -203,6 +191,26 @@ async function invokePi(
 		fail(
 			`[${scenario}] response.content does not match expected fingerprint`,
 			{ content, expected: expectedFingerprint.source, duration_ms: durationMs },
+		);
+	}
+
+	// Plan §006 U4 — MCP proxy substrate pin. The runtime always
+	// surfaces `mcp_proxy_registered` as a boolean on happy-path
+	// responses. A regression that drops the field (e.g., a
+	// response-builder rewrite that forgets to thread
+	// bundle.mcpProxyRegistered through) fails the smoke even
+	// before U5 wires the live proxy body.
+	//
+	// Gated on the prior happy-path assertions (runtime === "pi",
+	// totalTokens > 0, content non-empty) so a version-skew window
+	// where the AgentCore container hasn't promoted yet doesn't
+	// fire this check with confusing dual-failure output — the
+	// upstream "runtime not yet emitting" path is caught by the
+	// totalTokens or content checks first.
+	if (typeof response.mcp_proxy_registered !== "boolean") {
+		fail(
+			`[${scenario}] response.mcp_proxy_registered is ${typeof response.mcp_proxy_registered}, expected boolean — the MCP proxy substrate field is missing or wrong-shaped`,
+			{ full_response: response, duration_ms: durationMs },
 		);
 	}
 
