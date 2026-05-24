@@ -113,15 +113,21 @@ export class AwsCliWorkspaceObjectStore implements WorkspaceObjectStore {
       const args = [
         "s3api",
         "list-objects-v2",
+        "--no-paginate",
         "--bucket",
         this.bucket,
         "--prefix",
         prefix,
+        "--query",
+        "{Contents: Contents[].{Key: Key}, NextContinuationToken: NextContinuationToken}",
         "--output",
         "json",
       ];
       if (token) args.push("--continuation-token", token);
-      const raw = execFileSync("aws", args, { encoding: "utf8" });
+      const raw = execFileSync("aws", args, {
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+      });
       const parsed = JSON.parse(raw || "{}") as {
         Contents?: Array<{ Key?: string }>;
         NextContinuationToken?: string;

@@ -21,12 +21,12 @@ describe("composeSystemPrompt", () => {
 
   it("inlines workspace files into the prompt and ignores payload.system_prompt", async () => {
     const prompt = await composeSystemPrompt({
-      payload: { system_prompt: "Be precise." },
+      payload: { system_prompt: "Be precise.", user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
       now,
       fileReader: readerFor({
+        "AGENTS.md": "I am Marco.",
         "USER.md": "## USER\n- Name: Eric Odom",
-        "IDENTITY.md": "I am Marco.",
       }),
     });
 
@@ -36,66 +36,79 @@ describe("composeSystemPrompt", () => {
     expect(prompt).not.toContain("Be precise.");
   });
 
-  it("places the routing map and safety floor before user context, and platform/memory reference after", async () => {
+  it("loads the canonical five prompt files in pinned order", async () => {
     // Order contract (see PROMPT_FILES in src/runtime/system-prompt.ts):
-    //   AGENTS → GUARDRAILS → SOUL → IDENTITY → USER → CONTEXT
-    //          → PLATFORM → MEMORY_GUIDE → TOOLS
-    // The model anchors on the start + end positions; map + safety go up
-    // front, user context next, reference material toward the back.
+    //   AGENTS → CONTEXT → GUARDRAILS → SPACE → USER
     const prompt = await composeSystemPrompt({
-      payload: {},
+      payload: { user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
       now,
       fileReader: readerFor({
         "AGENTS.md": "AGENTS_BLOCK",
+        "CONTEXT.md": "CONTEXT_BLOCK",
         "GUARDRAILS.md": "GUARDRAILS_BLOCK",
+        "SPACE.md": "SPACE_BLOCK",
         "USER.md": "USER_BLOCK",
+      }),
+    });
+
+    const positions = {
+      AGENTS: prompt.indexOf("AGENTS_BLOCK"),
+      CONTEXT: prompt.indexOf("CONTEXT_BLOCK"),
+      GUARDRAILS: prompt.indexOf("GUARDRAILS_BLOCK"),
+      SPACE: prompt.indexOf("SPACE_BLOCK"),
+      USER: prompt.indexOf("USER_BLOCK"),
+    };
+
+    expect(positions.AGENTS).toBeLessThan(positions.CONTEXT);
+    expect(positions.CONTEXT).toBeLessThan(positions.GUARDRAILS);
+    expect(positions.GUARDRAILS).toBeLessThan(positions.SPACE);
+    expect(positions.SPACE).toBeLessThan(positions.USER);
+  });
+
+  it("does not load retired legacy prompt files even when present on disk", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: { user_id: "user-1" },
+      workspaceDir: "/tmp/workspace",
+      now,
+      fileReader: readerFor({
+        "AGENTS.md": "AGENTS_BLOCK",
+        "SOUL.md": "SOUL_BLOCK",
+        "IDENTITY.md": "IDENTITY_BLOCK",
+        "CAPABILITIES.md": "CAPABILITIES_BLOCK",
         "PLATFORM.md": "PLATFORM_BLOCK",
         "MEMORY_GUIDE.md": "MEMORY_BLOCK",
         "TOOLS.md": "TOOLS_BLOCK",
       }),
     });
 
-    const positions = {
-      AGENTS: prompt.indexOf("AGENTS_BLOCK"),
-      GUARDRAILS: prompt.indexOf("GUARDRAILS_BLOCK"),
-      USER: prompt.indexOf("USER_BLOCK"),
-      PLATFORM: prompt.indexOf("PLATFORM_BLOCK"),
-      MEMORY: prompt.indexOf("MEMORY_BLOCK"),
-      TOOLS: prompt.indexOf("TOOLS_BLOCK"),
-    };
-
-    // Map first, safety second
-    expect(positions.AGENTS).toBeLessThan(positions.GUARDRAILS);
-    // Safety floor before user-specific context
-    expect(positions.GUARDRAILS).toBeLessThan(positions.USER);
-    // User context before platform/reference material
-    expect(positions.USER).toBeLessThan(positions.PLATFORM);
-    // Platform before memory guide
-    expect(positions.PLATFORM).toBeLessThan(positions.MEMORY);
-    // Tools last
-    expect(positions.MEMORY).toBeLessThan(positions.TOOLS);
+    expect(prompt).toContain("AGENTS_BLOCK");
+    expect(prompt).not.toContain("SOUL_BLOCK");
+    expect(prompt).not.toContain("IDENTITY_BLOCK");
+    expect(prompt).not.toContain("CAPABILITIES_BLOCK");
+    expect(prompt).not.toContain("PLATFORM_BLOCK");
+    expect(prompt).not.toContain("MEMORY_BLOCK");
+    expect(prompt).not.toContain("TOOLS_BLOCK");
   });
 
-  it("does not load CAPABILITIES.md even when present on disk", async () => {
-    // CAPABILITIES.md retired from the loader on 2026-05-24 — see PROMPT_FILES.
+  it("omits USER.md when there is no invoking user", async () => {
     const prompt = await composeSystemPrompt({
-      payload: {},
+      payload: { eval_mode: true },
       workspaceDir: "/tmp/workspace",
       now,
       fileReader: readerFor({
-        "CAPABILITIES.md": "CAPABILITIES_BLOCK",
-        "PLATFORM.md": "PLATFORM_BLOCK",
+        "AGENTS.md": "AGENTS_BLOCK",
+        "USER.md": "USER_BLOCK",
       }),
     });
 
-    expect(prompt).not.toContain("CAPABILITIES_BLOCK");
-    expect(prompt).toContain("PLATFORM_BLOCK");
+    expect(prompt).toContain("AGENTS_BLOCK");
+    expect(prompt).not.toContain("USER_BLOCK");
   });
 
   it("prefixes the prompt with the current date", async () => {
     const prompt = await composeSystemPrompt({
-      payload: {},
+      payload: { user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
       now,
       fileReader: readerFor({ "USER.md": "X" }),
@@ -106,7 +119,7 @@ describe("composeSystemPrompt", () => {
 
   it("injects a runtime tool policy when execute_code is unavailable", async () => {
     const prompt = await composeSystemPrompt({
-      payload: {},
+      payload: { user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
       availableToolNames: ["send_email"],
       now,
@@ -116,12 +129,12 @@ describe("composeSystemPrompt", () => {
     expect(prompt).toContain("## Runtime Tool Policy");
     expect(prompt).toContain("The `execute_code` tool is not available");
     expect(prompt).toContain("Do not run code, simulate code execution");
-    expect(prompt).toContain("Do not treat vague phrases like \"send me\"");
+    expect(prompt).toContain('Do not treat vague phrases like "send me"');
   });
 
   it("instructs the agent to use execute_code when it is available", async () => {
     const prompt = await composeSystemPrompt({
-      payload: {},
+      payload: { user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
       availableToolNames: ["execute_code", "send_email"],
       now,
@@ -137,7 +150,7 @@ describe("composeSystemPrompt", () => {
 
   it("appends workspace skills block when provided", async () => {
     const prompt = await composeSystemPrompt({
-      payload: {},
+      payload: { user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
       workspaceSkillsBlock: "Workspace skills are available.",
       now,

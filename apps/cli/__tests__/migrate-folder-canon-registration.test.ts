@@ -58,9 +58,14 @@ describe("migrate-folder-canon command registration", () => {
       "tenants/acme/agents/b/workspace/AGENTS.md",
     ]);
     expect(execFileSyncMock).toHaveBeenCalledTimes(2);
+    expect(execFileSyncMock.mock.calls[0]?.[1]).toContain("--no-paginate");
+    expect(execFileSyncMock.mock.calls[0]?.[1]).toContain("--query");
     expect(execFileSyncMock.mock.calls[1]?.[1]).toContain(
       "--continuation-token",
     );
     expect(execFileSyncMock.mock.calls[1]?.[1]).toContain("page-2");
+    expect(execFileSyncMock.mock.calls[0]?.[2]).toMatchObject({
+      maxBuffer: 16 * 1024 * 1024,
+    });
   });
 });
