@@ -1400,11 +1400,11 @@ None.
 
 ## Implementation Units
 
-| Unit                                                     | Branch                                    | PR                                                           | State   | Notes                                                                                             |
-| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------- |
-| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | PR open | Implemented section-scoped derived renderer, recursive S3 tree, and focused tests; monitoring CI. |
-| U2 Editor integration and background rewriter retirement | TBD                                       | TBD                                                          | Pending | Wire agent editor writes and remove non-editor map rewrites.                                      |
-| U3 Operator normalization and bootstrap polish           | TBD                                       | TBD                                                          | Pending | Add explicit repair/normalization path and bootstrap/rematerialize coverage.                      |
+| Unit                                                     | Branch                                    | PR                                                           | State   | Notes                                                                            |
+| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------- |
+| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | Merged  | Squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; required CI passed. |
+| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) | PR open | Editor write integration implemented and monitoring CI.                          |
+| U3 Operator normalization and bootstrap polish           | TBD                                       | TBD                                                          | Pending | Add explicit repair/normalization path and bootstrap/rematerialize coverage.     |
 
 ## Progress Log
 
@@ -1414,6 +1414,10 @@ None.
 - 2026-05-23: Began modifying `packages/api/src/lib/workspace-map-generator.ts` to expose the section-preserving helper and recursive workspace tree renderer.
 - 2026-05-23: Implemented U1 core renderer changes and tests in `packages/api/src/lib/__tests__/workspace-map-generator.test.ts`.
 - 2026-05-23: Opened U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617).
+- 2026-05-23: U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) passed CLA, lint, test, typecheck, and verify; squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; remote/local branch and U1 worktree removed.
+- 2026-05-23: Created isolated U2 worktree `.Codex/worktrees/editor-agents-md-section-regen-u2` from `origin/main` on branch `codex/editor-agents-md-section-regen-u2`.
+- 2026-05-23: Began U2 editor integration by adding section-scoped AGENTS.md refresh to agent put/delete/move/rename/create/manual regenerate paths and retiring Customize/KB/eval/bootstrap background map rewrites.
+- 2026-05-23: Opened U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620).
 
 ## Verification Log
 
@@ -1427,10 +1431,20 @@ None.
 - Post-format `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts` - passed, 12 tests.
 - Post-format `pnpm --filter @thinkwork/api typecheck` - passed.
 - `pnpm --filter @thinkwork/api lint` - no-op; package has no lint script.
+- U2 `pnpm install` - passed in U2 worktree.
+- U2 focused `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts` - passed, 13 tests.
+- U2 focused `pnpm --filter @thinkwork/api test -- src/__tests__/workspace-files-handler.test.ts` - passed, 95 tests.
+- U2 focused `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/customize/render-workspace-after-customize.test.ts` - passed, 2 tests.
+- U2 `pnpm --filter @thinkwork/api typecheck` - passed.
+- U2 `pnpm --filter @thinkwork/api test` - passed, 3188 tests, 16 skipped.
+- U2 touched-file Prettier via `pnpm dlx prettier@3.8.2 --write --ignore-unknown ...` - passed.
+- U2 post-format focused API tests for workspace-map generator, workspace-files handler, and Customize no-op - passed, 110 tests.
+- U2 `git diff --check` - passed.
 
 ## CI / PR
 
-- U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) opened; checks pending.
+- U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) merged after required checks passed.
+- U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) opened; checks pending.
 
 ## Blockers
 

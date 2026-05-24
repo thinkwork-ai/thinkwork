@@ -96,16 +96,6 @@ export async function ensureEvalAgentForTarget(input: {
 
   await bootstrapAgentWorkspace(agent.id, { mode: "preserve-existing" });
 
-  try {
-    const { regenerateWorkspaceMap } =
-      await import("../workspace-map-generator.js");
-    regenerateWorkspaceMap(agent.id).catch((err: unknown) => {
-      console.error("[eval-agent] Failed to regenerate workspace map:", err);
-    });
-  } catch (err) {
-    console.warn("[eval-agent] workspace-map-generator not available:", err);
-  }
-
   return { agentId: agent.id };
 }
 

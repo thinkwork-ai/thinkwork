@@ -67,20 +67,6 @@ cd "$REPO_ROOT"
 pnpm -C packages/database-pg exec tsx "$REPO_ROOT/packages/skill-catalog/scripts/sync-catalog-db.ts"
 echo ""
 
-# ── 2a. Regenerate workspace maps for every agent ───────────────────────────
-# When the catalog adds or retires slugs (e.g. the composition primitives
-# deleted in the pure-skill-spec cleanup), existing agents' AGENTS.md files
-# still list the old set until someone re-saves their skills. This step
-# forces a regen pass so every agent's S3 workspace picks up the new
-# canonical skill list on the same deploy that ships the catalog change.
-#
-# Per-agent failure is caught + logged inside the script; a single bad
-# workspace cannot wedge the deploy.
-
-echo "── Regenerating agent workspace maps ──"
-pnpm -C packages/api exec tsx "$REPO_ROOT/packages/api/scripts/regen-all-workspace-maps.ts" || true
-echo ""
-
 # ── 2b. Upload skill catalog files to S3 ────────────────────────────────────
 # Each skill directory (SKILL.md, scripts/, README.md, etc.) is uploaded to
 # skills/catalog/<slug>/ so the admin UI can display and edit them, and

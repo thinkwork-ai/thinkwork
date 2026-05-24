@@ -88,6 +88,20 @@ interface WorkspaceSummary {
   skills: string[];
 }
 
+interface WorkspaceMapRenderContext {
+  agentName: string;
+  agentSlug: string;
+  tenantSlug: string;
+  bucket: string;
+  prefix: string;
+  skills: SkillInfo[];
+  kbs: KBInfo[];
+  workflows: WorkflowInfo[];
+  workspaceObjectPaths: string[];
+  contextByFolder: Map<string, string>;
+  workspaces: WorkspaceSummary[];
+}
+
 export type DerivedSectionName =
   | "Folder Structure"
   | "Skills & Tools"
@@ -490,6 +504,222 @@ function parseWorkspaceContext(
   return { slug, name, purpose, model, skills };
 }
 
+async function loadWorkspaceMapRenderContext(
+  agentId: string,
+): Promise<WorkspaceMapRenderContext | null> {
+  const db = getDb();
+
+  const [agent] = await db
+    .select({
+      name: agents.name,
+      slug: agents.slug,
+      tenant_id: agents.tenant_id,
+    })
+    .from(agents)
+    .where(eq(agents.id, agentId));
+
+  if (!agent || !agent.slug) {
+    console.warn(`[workspace-map] Agent not found or no slug: ${agentId}`);
+    return null;
+  }
+
+  const { tenants } = await import("@thinkwork/database-pg/schema");
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, agent.tenant_id));
+  const tenantSlug = tenant?.slug || "";
+  const bucket = getBucket();
+  if (!tenantSlug || !bucket) {
+    console.warn(`[workspace-map] Missing tenant slug or bucket`);
+    return null;
+  }
+
+  const agentSlug = agent.slug;
+  const prefix = workspacePrefix(tenantSlug, agentSlug);
+
+  const skillRowsRaw = await db
+    .select({
+      skill_id: agentSkills.skill_id,
+      config: agentSkills.config,
+      enabled: agentSkills.enabled,
+    })
+    .from(agentSkills)
+    .where(
+      and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)),
+    )
+    .orderBy(asc(agentSkills.skill_id));
+  const skillRows = skillRowsRaw.filter((s) => !isBuiltinToolSlug(s.skill_id));
+
+  const kbRows = await db
+    .select({
+      id: knowledgeBases.id,
+      name: knowledgeBases.name,
+      description: knowledgeBases.description,
+    })
+    .from(agentKnowledgeBases)
+    .innerJoin(
+      knowledgeBases,
+      eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
+    )
+    .where(
+      and(
+        eq(agentKnowledgeBases.agent_id, agentId),
+        eq(agentKnowledgeBases.enabled, true),
+      ),
+    )
+    .orderBy(asc(knowledgeBases.id));
+
+  const workflowRowsRaw = await db
+    .select({
+      catalog_slug: routines.catalog_slug,
+      routine_schedule: routines.schedule,
+      display_name: tenantWorkflowCatalog.display_name,
+      description: tenantWorkflowCatalog.description,
+      default_schedule: tenantWorkflowCatalog.default_schedule,
+    })
+    .from(routines)
+    .innerJoin(
+      tenantWorkflowCatalog,
+      and(
+        eq(tenantWorkflowCatalog.tenant_id, routines.tenant_id),
+        eq(tenantWorkflowCatalog.slug, routines.catalog_slug),
+      ),
+    )
+    .where(
+      and(
+        eq(routines.agent_id, agentId),
+        eq(routines.status, "active"),
+        isNotNull(routines.catalog_slug),
+      ),
+    )
+    .orderBy(asc(routines.catalog_slug));
+  const workflowRows = workflowRowsRaw
+    .filter(
+      (r): r is typeof r & { catalog_slug: string } => r.catalog_slug !== null,
+    )
+    .map((r) => ({
+      catalog_slug: r.catalog_slug,
+      display_name: r.display_name,
+      description: r.description,
+      schedule: r.default_schedule ?? r.routine_schedule ?? null,
+    }));
+
+  const workspaceObjectPaths = await listWorkspaceObjectPaths(bucket, prefix);
+  const workspaceSlugs = workspaceObjectPaths
+    .map((rel) => rel.match(/^([^/.][^/]*)\/CONTEXT\.md$/)?.[1])
+    .filter((slug): slug is string => Boolean(slug));
+  const contextByFolder = new Map<string, string>();
+  const workspaces: WorkspaceSummary[] = [];
+
+  for (const ws of workspaceSlugs) {
+    const contextContent = await readS3Text(
+      bucket,
+      `${prefix}${ws}/CONTEXT.md`,
+    );
+    if (contextContent) {
+      contextByFolder.set(`${ws}/`, contextContent);
+      workspaces.push(parseWorkspaceContext(contextContent, ws));
+    }
+  }
+
+  for (const rel of workspaceObjectPaths) {
+    if (!rel.endsWith("/CONTEXT.md") || /^([^/]+)\/CONTEXT\.md$/.test(rel)) {
+      continue;
+    }
+    const folder = rel.slice(0, -"CONTEXT.md".length);
+    const contextContent = await readS3Text(bucket, `${prefix}${rel}`);
+    if (contextContent) contextByFolder.set(folder, contextContent);
+  }
+
+  const catalogLookup = new Map<
+    string,
+    {
+      name: string;
+      description: string | null;
+      mcp_server: string | null;
+      triggers: string[] | null;
+    }
+  >();
+  try {
+    const { skillCatalog } = await import("@thinkwork/database-pg/schema");
+    const catalogRows = await db
+      .select({
+        slug: skillCatalog.slug,
+        name: skillCatalog.display_name,
+        description: skillCatalog.description,
+        mcp_server: skillCatalog.mcp_server,
+        triggers: skillCatalog.triggers,
+      })
+      .from(skillCatalog)
+      .execute();
+    for (const row of catalogRows) {
+      catalogLookup.set(row.slug, row);
+    }
+  } catch (e) {
+    console.warn("[workspace-map] Could not load skill_catalog from DB:", e);
+  }
+
+  const skillInfos: SkillInfo[] = skillRows.map((s) => {
+    const config = (s.config as Record<string, unknown>) || {};
+    const usedIn: string[] = [];
+    for (const ws of workspaces) {
+      if (
+        ws.skills.some(
+          (sk) =>
+            sk.toLowerCase() === s.skill_id.toLowerCase() ||
+            sk.toLowerCase().replace(/\s+/g, "-") === s.skill_id.toLowerCase(),
+        )
+      ) {
+        usedIn.push(ws.slug);
+      }
+    }
+    const catalog = catalogLookup.get(s.skill_id);
+    return {
+      skillId: s.skill_id,
+      name:
+        catalog?.name ||
+        s.skill_id
+          .split("-")
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" "),
+      description: catalog?.description || "",
+      mcpServer:
+        catalog?.mcp_server || (config.mcpServer as string) || undefined,
+      triggers: catalog?.triggers || undefined,
+      usedIn,
+    };
+  });
+
+  const kbInfos: KBInfo[] = kbRows.map((kb) => ({
+    id: kb.id,
+    name: kb.name || "Unnamed KB",
+    description: kb.description || "",
+    usedIn: [],
+  }));
+
+  const workflowInfos: WorkflowInfo[] = workflowRows.map((w) => ({
+    catalogSlug: w.catalog_slug,
+    name: w.display_name,
+    description: w.description ?? "",
+    schedule: w.schedule,
+  }));
+
+  return {
+    agentName: agent.name,
+    agentSlug,
+    tenantSlug,
+    bucket,
+    prefix,
+    skills: skillInfos,
+    kbs: kbInfos,
+    workflows: workflowInfos,
+    workspaceObjectPaths,
+    contextByFolder,
+    workspaces,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main generator
 // ---------------------------------------------------------------------------
@@ -779,6 +1009,60 @@ export async function regenerateWorkspaceMap(
     // If import fails (different bundle), it will be regenerated on next workspace write
     console.warn(
       `[workspace-map] Could not regenerate manifest inline, will sync on next write`,
+    );
+  }
+}
+
+/**
+ * Refresh only the derived AGENTS.md sections while preserving operator-owned
+ * prose such as routing notes and custom instructions.
+ */
+export async function regenerateAgentsMdDerivedSections(
+  agentId: string,
+): Promise<void> {
+  const context = await loadWorkspaceMapRenderContext(agentId);
+  if (!context) return;
+
+  const existingAgentsMd = await readS3Text(
+    context.bucket,
+    `${context.prefix}AGENTS.md`,
+  );
+  const seedAgentsMd =
+    existingAgentsMd ?? `# ${context.agentName} — Workspace Map\n`;
+  const nextAgentsMd = replaceDerivedAgentsMdSections(
+    seedAgentsMd,
+    renderDerivedAgentsMdSections({
+      agentSlug: context.agentSlug,
+      workspaceObjectPaths: context.workspaceObjectPaths,
+      contextByFolder: context.contextByFolder,
+      skills: context.skills,
+      kbs: context.kbs,
+      workflows: context.workflows,
+    }),
+  );
+
+  if (existingAgentsMd === nextAgentsMd) {
+    console.log(
+      `[workspace-map] Skipped AGENTS.md section refresh for ${context.agentSlug}: content unchanged`,
+    );
+    return;
+  }
+
+  await writeS3Text(context.bucket, `${context.prefix}AGENTS.md`, nextAgentsMd);
+  console.log(
+    `[workspace-map] Refreshed AGENTS.md derived sections for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s), ${context.kbs.length} KB(s), ${context.workflows.length} workflow(s)`,
+  );
+
+  try {
+    const { regenerateManifest } = await import("./workspace-manifest.js");
+    await regenerateManifest(
+      context.bucket,
+      context.tenantSlug,
+      context.agentSlug,
+    );
+  } catch {
+    console.warn(
+      `[workspace-map] Could not regenerate manifest after AGENTS.md section refresh`,
     );
   }
 }
