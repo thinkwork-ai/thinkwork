@@ -184,7 +184,7 @@ export function SpaceDetailChrome({
                 </TabsTrigger>
                 <TabsTrigger value="workspace" asChild className="px-4">
                   <Link to="/spaces/$spaceId/workspace" params={{ spaceId }}>
-                    Files
+                    Workspace
                   </Link>
                 </TabsTrigger>
                 <TabsTrigger value="memory" asChild className="px-4">

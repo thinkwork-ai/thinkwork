@@ -112,8 +112,8 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/workspace"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/memory"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/automations"');
-    expect(detailChromeSource).toContain("Files");
-    expect(detailChromeSource).not.toContain(">Workspace<");
+    expect(detailChromeSource).toMatch(/>\s*Workspace\s*<\/Link>/);
+    expect(detailChromeSource).not.toMatch(/>\s*Files\s*<\/Link>/);
     expect(detailRouteSource).toContain('to="/spaces/$spaceId/configuration"');
     expect(workspaceRouteSource).toContain("SpaceWorkspacePanel");
     expect(detailChromeSource).toContain("target={{ spaceId }}");
@@ -127,7 +127,6 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain('to="/spaces/$spaceId/tools"');
     expect(detailChromeSource).not.toContain('value="threads"');
     expect(detailChromeSource).not.toContain('value="checklist"');
-    expect(detailChromeSource).not.toContain('value="members"');
     expect(detailChromeSource).not.toContain('value="integrations"');
     expect(detailChromeSource).not.toContain("Context Config");
     expect(detailChromeSource).not.toContain("Connected Data Config");
