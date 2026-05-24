@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   workspaceEditorActions,
   workspaceEditorCapabilities,
+  workspaceEditorReservedRootFolders,
   workspaceEditorTargetKey,
 } from "../WorkspaceEditor";
+import { buildWorkspaceTree } from "../FolderTree";
 
 describe("workspace editor target capabilities", () => {
   it("does not expose retired template inheritance review capabilities", () => {
@@ -64,6 +66,25 @@ describe("workspace editor target capabilities", () => {
 
   it("keys the tenant catalog target distinctly", () => {
     expect(workspaceEditorTargetKey({ catalog: true })).toBe("catalog");
+  });
+
+  it("does not synthesize workspace skills folders in catalog mode", () => {
+    expect(workspaceEditorReservedRootFolders("catalog")).toEqual([]);
+    expect(
+      buildWorkspaceTree([], [], {
+        reservedRootFolders: workspaceEditorReservedRootFolders("catalog"),
+      }),
+    ).toEqual([]);
+    expect(
+      buildWorkspaceTree(["finance-audit-xls/SKILL.md"], [], {
+        reservedRootFolders: workspaceEditorReservedRootFolders("catalog"),
+      }).map((node) => node.path),
+    ).toEqual(["finance-audit-xls"]);
+  });
+
+  it("keeps workspace and context reserved folder behavior", () => {
+    expect(workspaceEditorReservedRootFolders("agent")).toBeUndefined();
+    expect(workspaceEditorReservedRootFolders("context")).toEqual(["memory"]);
   });
 
   it("has no toolbar entry points to gutted flows", () => {
