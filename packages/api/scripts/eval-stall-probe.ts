@@ -462,8 +462,7 @@ async function probeOne(params: {
         runtimeArn: params.runtimeArn,
         sessionId,
         tenantId: params.tenantId,
-        assistantId:
-          params.testCase.agent_id ?? params.run?.agent_id ?? "eval-test-agent",
+        assistantId: params.run?.agent_id ?? "eval-test-agent",
         prompt: params.testCase.query,
         systemPrompt: params.testCase.system_prompt,
         timeoutMs: params.args.invokeTimeoutMs,

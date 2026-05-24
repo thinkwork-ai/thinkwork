@@ -28,9 +28,9 @@ const mocks = vi.hoisted(() => ({
   insertIntoComputerEvents: vi.fn(),
   insertIntoAgentWakeupRequests: vi.fn(),
   insertIntoEvalRuns: vi.fn(),
+  updateEvalRuns: vi.fn(),
   updateAgents: vi.fn(),
-  resolveEvalAgentId: vi.fn(),
-  ensureEvalAgentForTarget: vi.fn(),
+  resolveTenantPlatformAgent: vi.fn(),
   lambdaSend: vi.fn(),
 }));
 
@@ -42,9 +42,8 @@ vi.mock("../lib/thread-helpers.js", () => ({
   ensureThreadForWork: mocks.ensureThreadForWork,
 }));
 
-vi.mock("../lib/evals/eval-agent-provisioning.js", () => ({
-  resolveEvalAgentId: mocks.resolveEvalAgentId,
-  ensureEvalAgentForTarget: mocks.ensureEvalAgentForTarget,
+vi.mock("../lib/agents/tenant-platform-agent.js", () => ({
+  resolveTenantPlatformAgent: mocks.resolveTenantPlatformAgent,
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => {
@@ -135,6 +134,7 @@ vi.mock("../lib/db.js", () => {
       set: (values: Record<string, unknown>) => ({
         where: (_cond: unknown) => {
           if (t === "agents") return mocks.updateAgents({ values });
+          if (t === "evalRuns") return mocks.updateEvalRuns({ values });
           return Promise.resolve([]);
         },
       }),
@@ -154,6 +154,7 @@ import { handler } from "./scheduled-jobs.js";
 const TENANT_ID = "11111111-2222-3333-4444-555555555555";
 const USER_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 const AGENT_ID = "c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c";
+const PLATFORM_AGENT_ID = "f0f0f0f0-aaaa-bbbb-cccc-111111111111";
 const COMPUTER_ID = "1715d78f-bf71-40b3-b923-0c7fd5162031";
 const TRIGGER_ID = "7ae07953-970b-4b4e-a848-272e1385e8ac";
 
@@ -206,10 +207,12 @@ beforeEach(() => {
   ]);
   mocks.selectFromAgents.mockResolvedValue([]);
   mocks.selectFromAgentTemplates.mockResolvedValue([]);
-  mocks.resolveEvalAgentId.mockResolvedValue("eval-agent-1");
-  mocks.ensureEvalAgentForTarget.mockResolvedValue({
-    agentId: "eval-agent-1",
+  mocks.resolveTenantPlatformAgent.mockResolvedValue({
+    id: PLATFORM_AGENT_ID,
+    tenant_id: TENANT_ID,
+    is_platform_default: true,
   });
+  mocks.updateEvalRuns.mockResolvedValue([]);
   mocks.insertIntoMessages.mockResolvedValue([{ id: "msg-1" }]);
   mocks.insertIntoComputerTasks.mockResolvedValue([{ id: "task-1" }]);
   mocks.insertIntoComputerEvents.mockResolvedValue([{ id: "evt-1" }]);
@@ -306,7 +309,7 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Pi)",
     expect(mocks.insertIntoAgentWakeupRequests).not.toHaveBeenCalled();
   });
 
-  it("manual-fires eval schedules against the default AgentCore eval agent", async () => {
+  it("manual-fires eval schedules against the tenant platform agent", async () => {
     mocks.selectFromScheduledJobs.mockResolvedValue(
       schedRow({
         trigger_type: "eval_scheduled",
@@ -320,15 +323,11 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Pi)",
     const response = await handler(fireEvent());
 
     expect(response.statusCode).toBe(201);
-    expect(mocks.resolveEvalAgentId).toHaveBeenCalledWith(TENANT_ID, undefined);
-    expect(mocks.ensureEvalAgentForTarget).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      agentId: "eval-agent-1",
-    });
+    expect(mocks.resolveTenantPlatformAgent).toHaveBeenCalledWith(TENANT_ID);
     expect(mocks.insertIntoEvalRuns).toHaveBeenCalledWith({
       values: expect.objectContaining({
         tenant_id: TENANT_ID,
-        agent_id: "eval-agent-1",
+        agent_id: PLATFORM_AGENT_ID,
         computer_id: null,
         scheduled_job_id: TRIGGER_ID,
         status: "pending",
@@ -338,5 +337,55 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Pi)",
     });
     expect(mocks.lambdaSend).toHaveBeenCalledTimes(1);
     expect(mocks.insertIntoComputerTasks).not.toHaveBeenCalled();
+  });
+
+  it("ignores deprecated cfg.agentId on eval schedules and logs a warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.selectFromScheduledJobs.mockResolvedValue(
+      schedRow({
+        trigger_type: "eval_scheduled",
+        agent_id: null,
+        computer_id: null,
+        config: {
+          agentId: "legacy-eval-agent-id",
+          categories: ["red-team-safety-scope"],
+        },
+      }),
+    );
+
+    const response = await handler(fireEvent());
+
+    expect(response.statusCode).toBe(201);
+    expect(mocks.resolveTenantPlatformAgent).toHaveBeenCalledWith(TENANT_ID);
+    expect(mocks.insertIntoEvalRuns).toHaveBeenCalledWith({
+      values: expect.objectContaining({
+        agent_id: PLATFORM_AGENT_ID,
+      }),
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("cfg.agentId is deprecated"),
+      expect.objectContaining({ ignoredAgentId: "legacy-eval-agent-id" }),
+    );
+    warn.mockRestore();
+  });
+
+  it("returns 409 when the tenant has no platform agent (migration not run)", async () => {
+    mocks.selectFromScheduledJobs.mockResolvedValue(
+      schedRow({
+        trigger_type: "eval_scheduled",
+        agent_id: null,
+        computer_id: null,
+        config: { categories: ["red-team-safety-scope"] },
+      }),
+    );
+    mocks.resolveTenantPlatformAgent.mockRejectedValueOnce(
+      new Error(`Platform agent not found for tenant: ${TENANT_ID}`),
+    );
+
+    const response = await handler(fireEvent());
+
+    expect(response.statusCode).toBe(409);
+    expect(mocks.insertIntoEvalRuns).not.toHaveBeenCalled();
+    expect(mocks.lambdaSend).not.toHaveBeenCalled();
   });
 });

@@ -89,7 +89,18 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
   });
 
-  it("uses inline tree editing for new files and rename", () => {
+  it("closes the context-menu delete dialog before starting deletion", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(
+      /setDeleteConfirmTarget\(null\);\s+void handleDeletePath\(path, isFolder\);/,
+    );
+  });
+
+  it("uses inline tree editing for new files, new folders, and rename", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),
       "utf8",
@@ -97,11 +108,19 @@ describe("workspace editor target capabilities", () => {
 
     expect(editorSource).toMatch(/inlineEdit/);
     expect(editorSource).toMatch(/startNewFile/);
+    expect(editorSource).toMatch(/startNewFolder/);
     expect(editorSource).toMatch(/startRename/);
     expect(editorSource).toMatch(/onRename=\{startRename\}/);
+    expect(editorSource).toMatch(/onNewFolder=\{startNewFolder\}/);
     expect(editorSource).toMatch(/renamePath/);
     expect(editorSource).toMatch(/replacePathPrefix/);
+    expect(editorSource).toMatch(/mode: "new-folder"/);
+    expect(editorSource).toMatch(/\$\{path\}\/\.gitkeep/);
+    expect(editorSource).toMatch(/key: "F2"/);
     expect(editorSource).not.toMatch(/showNewFileDialog/);
+    expect(editorSource).not.toMatch(/showNewFolderDialog/);
+    expect(editorSource).not.toMatch(/openNewFolderDialog/);
     expect(editorSource).not.toMatch(/<DialogTitle>New File<\/DialogTitle>/);
+    expect(editorSource).not.toMatch(/<DialogTitle>New Folder<\/DialogTitle>/);
   });
 });

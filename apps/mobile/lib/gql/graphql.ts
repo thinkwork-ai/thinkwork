@@ -1006,7 +1006,6 @@ export type CreateComputerInput = {
 };
 
 export type CreateEvalTestCaseInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
   category: Scalars['String']['input'];
@@ -1374,7 +1373,6 @@ export type EvalSummary = {
 
 export type EvalTestCase = {
   __typename?: 'EvalTestCase';
-  agentId?: Maybe<Scalars['ID']['output']>;
   agentcoreEvaluatorIds: Array<Scalars['String']['output']>;
   assertions: Scalars['AWSJSON']['output'];
   category: Scalars['String']['output'];
@@ -3831,7 +3829,6 @@ export type QueryEvalRunResultsArgs = {
 
 
 export type QueryEvalRunsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
@@ -5124,7 +5121,6 @@ export type StartCustomerOnboardingPayload = {
 };
 
 export type StartEvalRunInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
   computerId?: InputMaybe<Scalars['ID']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
@@ -5806,7 +5802,6 @@ export type UpdateComputerInput = {
 };
 
 export type UpdateEvalTestCaseInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
   category?: InputMaybe<Scalars['String']['input']>;

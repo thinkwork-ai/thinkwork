@@ -3,19 +3,14 @@
  *
  * One-time migration script that:
  * 1. Converts DB-based sub-agents to workspace folders in S3
- * 2. Generates AGENTS.md + CONTEXT.md for all agents with skills
  *
  * Run via: Lambda invoke, or `npx tsx packages/api/src/handlers/bootstrap-workspaces.ts`
  */
 
-import { eq, and, isNotNull, sql } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, agentSkills } from "@thinkwork/database-pg/schema";
-import {
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-import { regenerateWorkspaceMap } from "../lib/workspace-map-generator.js";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION || "us-east-1",
@@ -29,7 +24,10 @@ const db = getDb();
 // ---------------------------------------------------------------------------
 
 function slugify(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
 }
 
 function generateContextMd(opts: {
@@ -122,7 +120,9 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
     return 0;
   }
 
-  console.log(`[bootstrap] Found ${subAgentRows.length} DB sub-agent(s) to migrate`);
+  console.log(
+    `[bootstrap] Found ${subAgentRows.length} DB sub-agent(s) to migrate`,
+  );
 
   let migrated = 0;
 
@@ -137,7 +137,9 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
       .where(eq(agents.id, sub.parent_agent_id!));
 
     if (!parent?.slug) {
-      console.warn(`[bootstrap] Parent agent not found for sub-agent ${sub.name} (${sub.id})`);
+      console.warn(
+        `[bootstrap] Parent agent not found for sub-agent ${sub.name} (${sub.id})`,
+      );
       continue;
     }
 
@@ -150,7 +152,9 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
     const tenantSlug = tenant?.slug || "";
 
     if (!tenantSlug) {
-      console.warn(`[bootstrap] No tenant slug for parent agent ${parent.slug}`);
+      console.warn(
+        `[bootstrap] No tenant slug for parent agent ${parent.slug}`,
+      );
       continue;
     }
 
@@ -158,11 +162,15 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
     const skillRows = await db
       .select({ skill_id: agentSkills.skill_id, config: agentSkills.config })
       .from(agentSkills)
-      .where(and(eq(agentSkills.agent_id, sub.id), eq(agentSkills.enabled, true)));
+      .where(
+        and(eq(agentSkills.agent_id, sub.id), eq(agentSkills.enabled, true)),
+      );
 
     const skills = skillRows.map((s) => ({
       skillId: s.skill_id,
-      mcpServer: ((s.config as Record<string, unknown>)?.mcpServer as string) || undefined,
+      mcpServer:
+        ((s.config as Record<string, unknown>)?.mcpServer as string) ||
+        undefined,
     }));
 
     // Generate workspace folder
@@ -175,7 +183,12 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
     });
 
     // Write CONTEXT.md to parent's workspace
-    await writeWorkspaceFile(tenantSlug, parent.slug, `${wsSlug}/CONTEXT.md`, contextMd);
+    await writeWorkspaceFile(
+      tenantSlug,
+      parent.slug,
+      `${wsSlug}/CONTEXT.md`,
+      contextMd,
+    );
 
     console.log(
       `[bootstrap] Migrated sub-agent "${sub.name}" → ${parent.slug}/${wsSlug}/CONTEXT.md (${skills.length} skills)`,
@@ -186,56 +199,14 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
   return migrated;
 }
 
-async function bootstrapAllAgentMaps(): Promise<number> {
-  // Find all agents that have skills assigned (these need AGENTS.md)
-  const agentRows = await db
-    .select({
-      id: agents.id,
-      name: agents.name,
-      slug: agents.slug,
-    })
-    .from(agents)
-    .where(
-      // Only parent agents (not sub-agents themselves) and only those with a slug
-      and(
-        sql`${agents.parent_agent_id} IS NULL`,
-        isNotNull(agents.slug),
-      ),
-    );
-
-  console.log(`[bootstrap] Found ${agentRows.length} parent agent(s) to bootstrap`);
-
-  let bootstrapped = 0;
-
-  for (const agent of agentRows) {
-    // Check if this agent has any skills
-    const [skillCount] = await db
-      .select({ count: sql<number>`COUNT(*)::int` })
-      .from(agentSkills)
-      .where(eq(agentSkills.agent_id, agent.id));
-
-    if ((skillCount?.count || 0) === 0) {
-      console.log(`[bootstrap] Skipping ${agent.slug} — no skills assigned`);
-      continue;
-    }
-
-    try {
-      await regenerateWorkspaceMap(agent.id);
-      console.log(`[bootstrap] Generated AGENTS.md + CONTEXT.md for ${agent.slug}`);
-      bootstrapped++;
-    } catch (err) {
-      console.error(`[bootstrap] Failed to generate map for ${agent.slug}:`, err);
-    }
-  }
-
-  return bootstrapped;
-}
-
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
-export async function handler(): Promise<{ migrated: number; bootstrapped: number }> {
+export async function handler(): Promise<{
+  migrated: number;
+  bootstrapped: number;
+}> {
   if (!BUCKET) {
     throw new Error("WORKSPACE_BUCKET environment variable is required");
   }
@@ -246,16 +217,22 @@ export async function handler(): Promise<{ migrated: number; bootstrapped: numbe
   // Step 1: Convert DB sub-agents to workspace folders
   const migrated = await migrateSubAgentsToWorkspaces();
 
-  // Step 2: Generate AGENTS.md + CONTEXT.md for all agents
-  const bootstrapped = await bootstrapAllAgentMaps();
+  // AGENTS.md rewrites are intentionally editor-driven now. Keep the
+  // response shape stable for old callers, but do not sweep every agent here.
+  const bootstrapped = 0;
 
-  console.log(`[bootstrap] Migration complete: ${migrated} sub-agent(s) migrated, ${bootstrapped} agent(s) bootstrapped`);
+  console.log(
+    `[bootstrap] Migration complete: ${migrated} sub-agent(s) migrated, ${bootstrapped} agent(s) bootstrapped`,
+  );
 
   return { migrated, bootstrapped };
 }
 
 // Allow direct execution: npx tsx packages/api/src/handlers/bootstrap-workspaces.ts
-if (process.argv[1]?.endsWith("bootstrap-workspaces.ts") || process.argv[1]?.endsWith("bootstrap-workspaces.js")) {
+if (
+  process.argv[1]?.endsWith("bootstrap-workspaces.ts") ||
+  process.argv[1]?.endsWith("bootstrap-workspaces.js")
+) {
   handler()
     .then((result) => {
       console.log("[bootstrap] Done:", result);

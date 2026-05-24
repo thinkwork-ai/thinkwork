@@ -1389,6 +1389,84 @@ Target branch: `main`
 
 None.
 
+# Editor-Driven AGENTS.md Section Regeneration - 2026-05-23
+
+## Status
+
+- Origin requirements: `docs/brainstorms/2026-05-23-editor-driven-agents-md-section-regen-requirements.md`
+- Implementation plan: `docs/plans/2026-05-23-007-feat-editor-driven-agents-md-section-regen-plan.md`
+- Target branch: `main`
+- Autopilot started: 2026-05-23
+- Autopilot completed: 2026-05-23
+
+## Implementation Units
+
+| Unit                                                     | Branch                                    | PR                                                           | State  | Notes                                                                            |
+| -------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------- |
+| U1 Section rewriter and recursive renderer core          | `codex/editor-agents-md-section-regen-u1` | [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) | Merged | Squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; required CI passed. |
+| U2 Editor integration and background rewriter retirement | `codex/editor-agents-md-section-regen-u2` | [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) | Merged | Squash merged as `76a37a12e429c4b87c23f5b1f9109a8e2af98789`; required CI passed. |
+| U3 Operator normalization and bootstrap polish           | `codex/editor-agents-md-section-regen-u3` | [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) | Merged | Squash merged as `8397c4c5b10ebef73875e3958a71fef8600ee9e3`; required CI passed. |
+
+## Progress Log
+
+- 2026-05-23: Read AGENTS.md, the origin requirements, current map/workspace-files code, and relevant prior solution docs on S3 folder sentinels, manifest regeneration, copied workspace skills, and built-in tool filtering.
+- 2026-05-23: Created isolated worktree `.Codex/worktrees/editor-agents-md-section-regen-u1` from `origin/main` on branch `codex/editor-agents-md-section-regen-u1`.
+- 2026-05-23: Created the implementation plan and began U1.
+- 2026-05-23: Began modifying `packages/api/src/lib/workspace-map-generator.ts` to expose the section-preserving helper and recursive workspace tree renderer.
+- 2026-05-23: Implemented U1 core renderer changes and tests in `packages/api/src/lib/__tests__/workspace-map-generator.test.ts`.
+- 2026-05-23: Opened U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617).
+- 2026-05-23: U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) passed CLA, lint, test, typecheck, and verify; squash merged as `c3b1249e537cdc5cd5401b34cf4f164b1041445a`; remote/local branch and U1 worktree removed.
+- 2026-05-23: Created isolated U2 worktree `.Codex/worktrees/editor-agents-md-section-regen-u2` from `origin/main` on branch `codex/editor-agents-md-section-regen-u2`.
+- 2026-05-23: Began U2 editor integration by adding section-scoped AGENTS.md refresh to agent put/delete/move/rename/create/manual regenerate paths and retiring Customize/KB/eval/bootstrap background map rewrites.
+- 2026-05-23: Opened U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620).
+- 2026-05-23: U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) passed CLA, lint, test, typecheck, and verify; squash merged as `76a37a12e429c4b87c23f5b1f9109a8e2af98789`; remote branch deleted and U2 worktree removed.
+- 2026-05-23: Created isolated U3 worktree `.Codex/worktrees/editor-agents-md-section-regen-u3` from `origin/main` on branch `codex/editor-agents-md-section-regen-u3`.
+- 2026-05-23: Began U3 by adding explicit `normalize-map` repair wiring and rematerialize/bootstrap derived-section refresh coverage.
+- 2026-05-23: Opened U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624).
+- 2026-05-23: U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) passed CLA, lint, test, typecheck, and verify; squash merged as `8397c4c5b10ebef73875e3958a71fef8600ee9e3`; remote branch deleted and U3 worktree removed.
+- 2026-05-23: All implementation units from the editor-driven AGENTS.md section-regeneration plan are merged into `main`; no manual deployment or production mutation was run.
+
+## Verification Log
+
+- `pnpm install` - passed in U1 worktree; required because the fresh worktree had no `node_modules`.
+- `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts` - passed, 12 tests.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api test` - passed, 3185 tests, 16 skipped.
+- `git diff --check` - passed.
+- `pnpm exec prettier --write docs/plans/autopilot-status.md docs/plans/2026-05-23-007-feat-editor-driven-agents-md-section-regen-plan.md packages/api/src/lib/workspace-map-generator.ts packages/api/src/lib/__tests__/workspace-map-generator.test.ts` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+- `pnpm dlx prettier@3.8.2 --write docs/plans/autopilot-status.md docs/plans/2026-05-23-007-feat-editor-driven-agents-md-section-regen-plan.md packages/api/src/lib/workspace-map-generator.ts packages/api/src/lib/__tests__/workspace-map-generator.test.ts` - passed.
+- Post-format `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts` - passed, 12 tests.
+- Post-format `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api lint` - no-op; package has no lint script.
+- U2 `pnpm install` - passed in U2 worktree.
+- U2 focused `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts` - passed, 13 tests.
+- U2 focused `pnpm --filter @thinkwork/api test -- src/__tests__/workspace-files-handler.test.ts` - passed, 95 tests.
+- U2 focused `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/customize/render-workspace-after-customize.test.ts` - passed, 2 tests.
+- U2 `pnpm --filter @thinkwork/api typecheck` - passed.
+- U2 `pnpm --filter @thinkwork/api test` - passed, 3188 tests, 16 skipped.
+- U2 touched-file Prettier via `pnpm dlx prettier@3.8.2 --write --ignore-unknown ...` - passed.
+- U2 post-format focused API tests for workspace-map generator, workspace-files handler, and Customize no-op - passed, 110 tests.
+- U2 `git diff --check` - passed.
+- U3 `pnpm install` - passed in U3 worktree.
+- U3 focused `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts src/__tests__/workspace-bootstrap.test.ts src/__tests__/workspace-files-handler.test.ts` - passed, 123 tests.
+- U3 focused `pnpm --filter @thinkwork/admin test -- src/lib/__tests__/workspace-files-api.test.ts` - passed, 5 tests.
+- U3 `pnpm --filter @thinkwork/api typecheck` - passed.
+- U3 `pnpm --filter @thinkwork/api test` - passed, 3192 tests, 16 skipped.
+- U3 `pnpm --filter @thinkwork/admin build` - passed with existing Vite sourcemap/chunk-size warnings.
+- U3 touched-file Prettier via `pnpm dlx prettier@3.8.2 --write ...` - passed.
+- U3 `git diff --check` - passed.
+- U3 post-format focused API/admin tests and API typecheck - passed.
+
+## CI / PR
+
+- U1 PR [#1617](https://github.com/thinkwork-ai/thinkwork/pull/1617) merged after required checks passed.
+- U2 PR [#1620](https://github.com/thinkwork-ai/thinkwork/pull/1620) merged after required checks passed.
+- U3 PR [#1624](https://github.com/thinkwork-ai/thinkwork/pull/1624) merged after required checks passed.
+
+## Blockers
+
+None.
+
 # Spaces Contextual Workrooms + Template Removal Autopilot - 2026-05-20
 
 ## Status

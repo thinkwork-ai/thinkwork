@@ -70,7 +70,8 @@ const REPOINT_TARGETS: RepointTarget[] = [
   { table: "thread_turns", column: "agent_id" },
   { table: "thread_turn_events", column: "agent_id" },
   { table: "retry_queue", column: "agent_id" },
-  { table: "eval_test_cases", column: "agent_id" },
+  // eval_test_cases.agent_id was dropped by drizzle/0128_drop_eval_test_cases_agent_id.sql
+  // (one-platform-agent eval refactor) and is no longer a valid repoint target.
   { table: "eval_runs", column: "agent_id" },
   { table: "webhooks", column: "agent_id" },
   { table: "agent_knowledge_bases", column: "agent_id" },

@@ -736,16 +736,15 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           );
         }
         if (cfg.agentId) {
-          const [agent] = await db
-            .select({ id: agents.id })
-            .from(agents)
-            .where(
-              and(eq(agents.id, cfg.agentId), eq(agents.tenant_id, tenantId)),
-            )
-            .limit(1);
-          if (!agent) throw new Error("Scheduled eval Agent not found");
-          targetAgentId = agent.id;
+          console.warn(
+            "[job-trigger] eval cfg.agentId is deprecated and ignored; eval-runner will resolve the tenant platform agent",
+            { tenantId, schedJobId: triggerId, ignoredAgentId: cfg.agentId },
+          );
         }
+        // targetAgentId stays null on purpose. eval-runner Lambda's lazy
+        // resolveTenantPlatformAgent fallback sets it before SQS fan-out;
+        // PlatformAgentNotFoundError there marks the run failed via the
+        // dispatcher's outer try/catch.
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await db.insert(evalRuns).values({

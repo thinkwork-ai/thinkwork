@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Loader2Icon } from "lucide-react";
+import { FolderIcon, Loader2Icon } from "lucide-react";
 import {
   DndContext,
   KeyboardSensor,
@@ -219,7 +219,7 @@ export type InlineEditState =
       committing?: boolean;
     }
   | {
-      mode: "new-file";
+      mode: "new-file" | "new-folder";
       parentPath: string;
       value: string;
       error?: string;
@@ -272,12 +272,14 @@ export function FolderTree(props: FolderTreeProps) {
     [onDropMove],
   );
 
-  const rootPendingFile =
+  const rootPendingItem =
     inlineEdit?.mode === "new-file" && inlineEdit.parentPath === "" ? (
       <PendingInlineFile key="__pending-root-file" {...props} />
+    ) : inlineEdit?.mode === "new-folder" && inlineEdit.parentPath === "" ? (
+      <PendingInlineFolder key="__pending-root-folder" {...props} />
     ) : null;
 
-  if (nodes.length === 0 && !rootPendingFile) {
+  if (nodes.length === 0 && !rootPendingItem) {
     // Render the empty state inside a context-menu trigger too so the
     // operator can paste / create at the workspace root even when the
     // tree is currently empty. Wrap in DndContext so dropping onto the
@@ -347,7 +349,7 @@ export function FolderTree(props: FolderTreeProps) {
               {nodes.map((node) => (
                 <FolderTreeItem key={node.path} node={node} {...props} />
               ))}
-              {rootPendingFile}
+              {rootPendingItem}
             </FileTree>
           </RootDropZone>
         </ContextMenuTrigger>
@@ -470,8 +472,9 @@ function FolderTreeItem(
     const contextParent = node.synthetic ? "" : node.path;
     const canMutate = !node.synthetic && !node.missing;
 
-    const hasPendingNewFile =
-      inlineEdit?.mode === "new-file" && inlineEdit.parentPath === node.path;
+    const hasPendingNewItem =
+      (inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder") &&
+      inlineEdit.parentPath === node.path;
 
     return (
       <ContextMenu>
@@ -512,12 +515,19 @@ function FolderTreeItem(
                 nodes={[]}
               />
             ))}
-            {hasPendingNewFile ? <PendingInlineFile {...props} /> : null}
+            {inlineEdit?.mode === "new-folder" &&
+            inlineEdit.parentPath === node.path ? (
+              <PendingInlineFolder {...props} />
+            ) : null}
+            {inlineEdit?.mode === "new-file" &&
+            inlineEdit.parentPath === node.path ? (
+              <PendingInlineFile {...props} />
+            ) : null}
             {node.synthetic && node.children.length === 0 ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">
                 Route specialist folders from AGENTS.md.
               </div>
-            ) : node.children.length === 0 && !hasPendingNewFile ? (
+            ) : node.children.length === 0 && !hasPendingNewItem ? (
               <div className="px-2 py-1 text-xs italic text-muted-foreground">
                 Empty folder
               </div>
@@ -659,6 +669,19 @@ function PendingInlineFile(props: FolderTreeProps) {
   );
 }
 
+function PendingInlineFolder(props: FolderTreeProps) {
+  const parent =
+    props.inlineEdit?.mode === "new-folder" ? props.inlineEdit.parentPath : "";
+  return (
+    <FileTreeFile
+      path={`__pending-new-folder__/${parent || "root"}`}
+      name={<InlineNameInput {...props} />}
+      icon={<FolderIcon className="size-4 text-blue-500" />}
+      isMutating={props.inlineEdit?.committing}
+    />
+  );
+}
+
 function InlineNameInput({
   inlineEdit,
   onInlineEditChange,
@@ -670,7 +693,7 @@ function InlineNameInput({
   const editKey =
     inlineEdit?.mode === "rename"
       ? inlineEdit.path
-      : inlineEdit?.mode === "new-file"
+      : inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder"
         ? inlineEdit.parentPath
         : "";
 
@@ -678,7 +701,11 @@ function InlineNameInput({
     const input = inputRef.current;
     if (!input) return;
     input.focus();
-    input.select();
+    if (inlineEdit?.mode === "rename") {
+      input.select();
+    } else {
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
   }, [inlineEdit?.mode, editKey]);
 
   if (!inlineEdit) return null;
