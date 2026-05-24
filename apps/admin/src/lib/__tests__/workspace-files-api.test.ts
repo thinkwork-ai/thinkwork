@@ -144,10 +144,13 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
     });
   });
 
-  it("posts action=generate-folder-structure with the selected CONTEXT.md path", async () => {
+  it("posts action=generate-folder-structure for an agent target", async () => {
     mockOk({});
 
-    await generateFolderStructure("agent-abc", "community/CONTEXT.md");
+    await generateFolderStructure(
+      { agentId: "agent-abc" },
+      "community/CONTEXT.md",
+    );
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
@@ -156,6 +159,24 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
       action: "generate-folder-structure",
       agentId: "agent-abc",
       path: "community/CONTEXT.md",
+    });
+  });
+
+  it("posts action=generate-folder-structure for a Space target", async () => {
+    mockOk({});
+
+    await generateFolderStructure(
+      { spaceId: "space-eng" },
+      "memory/CONTEXT.md",
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "generate-folder-structure",
+      spaceId: "space-eng",
+      path: "memory/CONTEXT.md",
     });
   });
 });

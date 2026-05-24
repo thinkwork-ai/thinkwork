@@ -733,7 +733,8 @@ export function WorkspaceEditor({
 
   const handleGenerateFolderStructure = useCallback(
     async (path: string) => {
-      if (!path.endsWith("CONTEXT.md") || !("agentId" in stableTarget)) return;
+      if (!path.endsWith("CONTEXT.md")) return;
+      if (!("agentId" in stableTarget) && !("spaceId" in stableTarget)) return;
       beginMutation(path);
       const isOpenTarget = openFileRef.current === path;
       if (isOpenTarget) setLoadingContent(true);
@@ -743,10 +744,7 @@ export function WorkspaceEditor({
           setContent(editValue);
           setEditValue(editValue);
         }
-        await agentBuilderApi.generateFolderStructure(
-          stableTarget.agentId,
-          path,
-        );
+        await agentBuilderApi.generateFolderStructure(stableTarget, path);
         await fetchFiles({ showLoading: false });
         if (openFileRef.current === path) {
           await openWorkspaceFile(path);
@@ -872,7 +870,7 @@ export function WorkspaceEditor({
                   "agentId" in stableTarget ? handleRegenerateMap : undefined
                 }
                 onGenerateFolderStructure={
-                  "agentId" in stableTarget
+                  "agentId" in stableTarget || "spaceId" in stableTarget
                     ? handleGenerateFolderStructure
                     : undefined
                 }
