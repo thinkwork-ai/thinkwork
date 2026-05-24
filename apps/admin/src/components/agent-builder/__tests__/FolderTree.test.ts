@@ -92,6 +92,8 @@ describe("buildWorkspaceTree", () => {
 
     expect(source).toMatch(/onRename/);
     expect(source).toMatch(/Rename/);
+    expect(source).toMatch(/Regenerate Map/);
+    expect(source).toMatch(/node\.path === "AGENTS\.md"/);
     expect(source).toMatch(/InlineNameInput/);
     expect(source).toMatch(/PendingInlineFile/);
     expect(source).toMatch(/PendingInlineFolder/);

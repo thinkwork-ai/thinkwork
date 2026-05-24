@@ -112,6 +112,9 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/startRename/);
     expect(editorSource).toMatch(/onRename=\{startRename\}/);
     expect(editorSource).toMatch(/onNewFolder=\{startNewFolder\}/);
+    expect(editorSource).toMatch(/handleRegenerateMap/);
+    expect(editorSource).toMatch(/agentBuilderApi\.regenerateMap/);
+    expect(editorSource).toMatch(/onRegenerateMap=/);
     expect(editorSource).toMatch(/renamePath/);
     expect(editorSource).toMatch(/replacePathPrefix/);
     expect(editorSource).toMatch(/mode: "new-folder"/);

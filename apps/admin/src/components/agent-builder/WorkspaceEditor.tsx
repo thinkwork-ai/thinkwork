@@ -641,6 +641,39 @@ export function WorkspaceEditor({
     }
   };
 
+  const handleRegenerateMap = useCallback(
+    async (path: string) => {
+      if (path !== "AGENTS.md" || !("agentId" in stableTarget)) return;
+      beginMutation(path);
+      try {
+        if (openFileRef.current === path && editValue !== content) {
+          await agentBuilderApi.putFile(stableTarget, path, editValue);
+        }
+        await agentBuilderApi.regenerateMap(stableTarget.agentId);
+        await fetchFiles({ showLoading: false });
+        if (openFileRef.current === path) {
+          await openWorkspaceFile(path);
+        }
+        toast.success("Regenerated AGENTS.md map.");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to regenerate AGENTS.md map:", err);
+        toast.error(`Regenerate map failed: ${message}`);
+      } finally {
+        endMutation(path);
+      }
+    },
+    [
+      beginMutation,
+      content,
+      editValue,
+      endMutation,
+      fetchFiles,
+      openWorkspaceFile,
+      stableTarget,
+    ],
+  );
+
   const handleConfirmDelete = (path: string) => {
     setConfirmingDeletePath(path);
   };
@@ -725,6 +758,9 @@ export function WorkspaceEditor({
                   setDeleteConfirmTarget({ path, isFolder })
                 }
                 onRename={startRename}
+                onRegenerateMap={
+                  "agentId" in stableTarget ? handleRegenerateMap : undefined
+                }
                 inlineEdit={inlineEdit}
                 onInlineEditChange={setInlineEditValue}
                 onInlineEditCommit={commitInlineEdit}

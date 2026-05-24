@@ -186,6 +186,7 @@ export interface FolderTreeProps {
   onNewFolder: (parentPath: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
+  onRegenerateMap?: (path: string) => void;
   inlineEdit?: InlineEditState | null;
   onInlineEditChange?: (value: string) => void;
   onInlineEditCommit?: () => void;
@@ -452,6 +453,7 @@ function FolderTreeItem(
     onNewFolder,
     onDelete,
     onRename,
+    onRegenerateMap,
     onCut,
     onPaste,
     onClearClipboard,
@@ -505,6 +507,7 @@ function FolderTreeItem(
                 onNewFolder={onNewFolder}
                 onDelete={onDelete}
                 onRename={onRename}
+                onRegenerateMap={onRegenerateMap}
                 onCut={onCut}
                 onPaste={onPaste}
                 onClearClipboard={onClearClipboard}
@@ -587,6 +590,7 @@ function FolderTreeItem(
   // affordance for an inherited-template update.
   const updateAvailable = updateAvailableFor(node.path);
   const fileLabel = isRenaming ? <InlineNameInput {...props} /> : node.name;
+  const canRegenerateMap = node.path === "AGENTS.md" && onRegenerateMap;
 
   const fileRow =
     updateAvailable && !isRenaming ? (
@@ -630,6 +634,14 @@ function FolderTreeItem(
     <ContextMenu>
       <ContextMenuTrigger asChild>{fileRow}</ContextMenuTrigger>
       <ContextMenuContent>
+        {canRegenerateMap ? (
+          <>
+            <ContextMenuItem onSelect={() => canRegenerateMap(node.path)}>
+              Regenerate Map
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        ) : null}
         {onCut ? (
           <ContextMenuItem onSelect={() => onCut(node.path, "file")}>
             Cut
