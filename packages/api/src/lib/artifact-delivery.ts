@@ -2,35 +2,38 @@
  * Artifact delivery utilities.
  *
  * Renders markdown artifacts to various delivery formats:
- * - HTML email (via SES)
- * - SMS summary (plain text truncation)
- * - PDF-ready HTML (full document with print styles)
+ * - HTML email (via SES) — uses the channel-rendering renderer for
+ *   email-safe inline-styled HTML and a raw-markdown plaintext fallback.
+ * - SMS summary (plain text truncation).
+ * - PDF-ready HTML (full document with print styles).
  */
 
-import { markdownToHtml, wrapEmailHtml } from "./markdown-render.js";
+import DOMPurify from "isomorphic-dompurify";
+import { marked } from "marked";
+import { renderForEmail } from "./channel-rendering/index.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface ArtifactPayload {
-	id: string;
-	title: string;
-	type: string;
-	status: string;
-	content: string;
-	summary?: string | null;
-	metadata?: Record<string, unknown> | null;
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  content: string;
+  summary?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface EmailDeliveryResult {
-	subject: string;
-	htmlBody: string;
-	textBody: string;
+  subject: string;
+  htmlBody: string;
+  textBody: string;
 }
 
 export interface SmsDeliveryResult {
-	body: string;
+  body: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,16 +41,16 @@ export interface SmsDeliveryResult {
 // ---------------------------------------------------------------------------
 
 const TYPE_LABELS: Record<string, string> = {
-	data_view: "Data View",
-	note: "Note",
-	report: "Report",
-	plan: "Plan",
-	draft: "Draft",
-	digest: "Digest",
+  data_view: "Data View",
+  note: "Note",
+  report: "Report",
+  plan: "Plan",
+  draft: "Draft",
+  digest: "Digest",
 };
 
 function typeLabel(type: string): string {
-	return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -57,41 +60,44 @@ function typeLabel(type: string): string {
 /**
  * Render an artifact as an HTML email.
  *
- * Returns subject, HTML body (wrapped in email template), and plain text
- * fallback for multipart/alternative.
+ * Returns subject, HTML body (wrapped in email document shell), and plain
+ * text fallback for multipart/alternative.
  */
-export function renderEmailDelivery(artifact: ArtifactPayload): EmailDeliveryResult {
-	const label = typeLabel(artifact.type);
-	const subject = `${label}: ${artifact.title}`;
+export function renderEmailDelivery(
+  artifact: ArtifactPayload,
+): EmailDeliveryResult {
+  const label = typeLabel(artifact.type);
+  const subject = `${label}: ${artifact.title}`;
 
-	// Header badge
-	const headerHtml = `
+  // Header badge — hardcoded inline styles; no token-value interpolation
+  // into style= attributes (R12 of the channel-rendering plan).
+  const headerHtml = `
 <div style="margin-bottom:16px">
-  <span style="display:inline-block;background:#e5e7eb;color:#374151;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px">${label}</span>
+  <span style="display:inline-block;background:#e5e7eb;color:#374151;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px">${escapeHtml(label)}</span>
   ${artifact.status === "draft" ? '<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:6px">DRAFT</span>' : ""}
 </div>
 <h1 style="font-size:20px;font-weight:600;margin:0 0 16px;color:#1a1a1a">${escapeHtml(artifact.title)}</h1>
 `;
 
-	const contentHtml = markdownToHtml(artifact.content);
+  const contentHtml = renderForEmail(artifact.content).html;
 
-	const htmlBody = wrapEmailHtml(headerHtml + contentHtml, {
-		title: artifact.title,
-		preheader: artifact.summary ?? artifact.title,
-	});
+  const htmlBody = wrapEmailDocument(headerHtml + contentHtml, {
+    title: artifact.title,
+    preheader: artifact.summary ?? artifact.title,
+  });
 
-	// Plain text fallback: summary or first 500 chars of content
-	const textBody = [
-		`${label}: ${artifact.title}`,
-		artifact.status === "draft" ? "[DRAFT]" : "",
-		"",
-		artifact.content.slice(0, 2000),
-		artifact.content.length > 2000 ? "\n[Content truncated]" : "",
-	]
-		.filter(Boolean)
-		.join("\n");
+  // Plain text fallback: label + title + truncated raw markdown content.
+  const textBody = [
+    `${label}: ${artifact.title}`,
+    artifact.status === "draft" ? "[DRAFT]" : "",
+    "",
+    artifact.content.slice(0, 2000),
+    artifact.content.length > 2000 ? "\n[Content truncated]" : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-	return { subject, htmlBody, textBody };
+  return { subject, htmlBody, textBody };
 }
 
 // ---------------------------------------------------------------------------
@@ -108,43 +114,84 @@ const SMS_MAX_LENGTH = 160;
  * the content to fit within SMS limits.
  */
 export function renderSmsDelivery(
-	artifact: ArtifactPayload,
-	maxLength = SMS_MAX_LENGTH,
+  artifact: ArtifactPayload,
+  maxLength = SMS_MAX_LENGTH,
 ): SmsDeliveryResult {
-	const prefix = `${typeLabel(artifact.type)}: `;
-	const available = maxLength - prefix.length;
+  const prefix = `${typeLabel(artifact.type)}: `;
+  const available = maxLength - prefix.length;
 
-	if (artifact.summary && artifact.summary.length <= available) {
-		return { body: prefix + artifact.summary };
-	}
+  if (artifact.summary && artifact.summary.length <= available) {
+    return { body: prefix + artifact.summary };
+  }
 
-	const source = artifact.summary ?? artifact.content;
-	// Strip markdown formatting for SMS
-	const plain = source
-		.replace(/[#*_`~\[\]()>]/g, "")
-		.replace(/\n+/g, " ")
-		.trim();
+  const source = artifact.summary ?? artifact.content;
+  // Strip markdown formatting for SMS
+  const plain = source
+    .replace(/[#*_`~\[\]()>]/g, "")
+    .replace(/\n+/g, " ")
+    .trim();
 
-	if (plain.length <= available) {
-		return { body: prefix + plain };
-	}
+  if (plain.length <= available) {
+    return { body: prefix + plain };
+  }
 
-	return { body: prefix + plain.slice(0, available - 1) + "\u2026" };
+  return { body: prefix + plain.slice(0, available - 1) + "…" };
 }
 
 // ---------------------------------------------------------------------------
 // PDF-ready HTML
 // ---------------------------------------------------------------------------
 
+/** Sanitizer config for the PDF rendering path — same trust posture as email
+ * but allows the `style` attribute through (the PDF document shell ships its
+ * own `<style>` block which DOMPurify should NOT strip when applied to the
+ * full document; we only sanitize the inner content fragment here). */
+const PDF_SANITIZE_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: [
+    "svg",
+    "math",
+    "style",
+    "script",
+    "iframe",
+    "object",
+    "embed",
+    "form",
+    "input",
+    "button",
+    "link",
+    "meta",
+  ],
+  FORBID_ATTR: [
+    "onerror",
+    "onload",
+    "onclick",
+    "onmouseover",
+    "onmouseout",
+    "onfocus",
+    "onblur",
+  ],
+  ALLOWED_URI_REGEXP: /^https?:/i,
+};
+
+/** Convert markdown to sanitized semantic HTML for the PDF document body. The
+ * PDF's `<style>` block handles all styling — output here is plain semantic
+ * HTML (no inline styles, no document shell). */
+function renderMarkdownForPdf(markdown: string): string {
+  if (!markdown) return "";
+  const rawHtml = marked.parse(markdown, { async: false }) as string;
+  return DOMPurify.sanitize(rawHtml, PDF_SANITIZE_CONFIG);
+}
+
 /**
  * Render an artifact as a full HTML document suitable for PDF generation
  * (via Puppeteer, wkhtmltopdf, or similar).
  */
 export function renderPdfHtml(artifact: ArtifactPayload): string {
-	const label = typeLabel(artifact.type);
-	const contentHtml = markdownToHtml(artifact.content);
+  const label = typeLabel(artifact.type);
+  const contentHtml = renderMarkdownForPdf(artifact.content);
 
-	return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -207,7 +254,7 @@ export function renderPdfHtml(artifact: ArtifactPayload): string {
 </head>
 <body>
 <h1>${escapeHtml(artifact.title)}</h1>
-<span class="type-badge">${label}</span>${artifact.status === "draft" ? '<span class="draft-badge">DRAFT</span>' : ""}
+<span class="type-badge">${escapeHtml(label)}</span>${artifact.status === "draft" ? '<span class="draft-badge">DRAFT</span>' : ""}
 ${contentHtml}
 </body>
 </html>`;
@@ -217,10 +264,49 @@ ${contentHtml}
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Wrap a sanitized HTML fragment in an email-safe document shell. Hardcoded
+ * inline styles preserve the artifact-email visual contract (white card,
+ * 600px centered container, preheader).
+ */
+function wrapEmailDocument(
+  body: string,
+  options?: { title?: string; preheader?: string },
+): string {
+  const title = options?.title ? escapeHtml(options.title) : "Thinkwork";
+  const preheader = options?.preheader
+    ? `<span style="display:none;max-height:0;overflow:hidden">${escapeHtml(options.preheader)}</span>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.6;color:#1a1a1a">
+${preheader}
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+<tr><td align="center" style="padding:24px 16px">
+<table width="100%" style="max-width:600px" cellpadding="0" cellspacing="0" role="presentation">
+<tr><td style="background:#ffffff;border-radius:8px;padding:32px;border:1px solid #e5e5e5">
+${body}
+</td></tr>
+<tr><td style="padding:16px;text-align:center;font-size:12px;color:#a3a3a3">
+Sent by <a href="https://thinkwork.ai" style="color:#a3a3a3">Thinkwork</a>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
 function escapeHtml(str: string): string {
-	return str
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
