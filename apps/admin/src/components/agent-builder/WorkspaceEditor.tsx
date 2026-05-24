@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker } from "@tanstack/react-router";
 import {
   FilePlus,
   Folder,
@@ -158,19 +159,31 @@ export function WorkspaceEditor({
   // and fires only when the active element is this ref's tree element or
   // a descendant. Without scoping, Cmd+V would hijack paste globally.
   const treeContainerRef = useRef<HTMLDivElement>(null);
-  const [confirmingDeletePath, setConfirmingDeletePath] = useState<
-    string | null
-  >(null);
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
     path: string;
     isFolder: boolean;
   } | null>(null);
+  const [pendingFileSwitchPath, setPendingFileSwitchPath] = useState<
+    string | null
+  >(null);
   const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
   const loadRequestId = useRef(0);
   const fileListRequestId = useRef(0);
   const openFileRef = useRef<string | null>(null);
   const lastHandledInitialFolder = useRef<string | undefined>(undefined);
+
+  const hasPendingChanges =
+    openFile !== null && editValue !== content && !loadingContent;
+  const shouldBlockNavigation = useCallback(
+    () => hasPendingChanges,
+    [hasPendingChanges],
+  );
+  const navigationBlocker = useBlocker({
+    shouldBlockFn: shouldBlockNavigation,
+    enableBeforeUnload: hasPendingChanges,
+    withResolver: true,
+  });
 
   useEffect(() => {
     openFileRef.current = openFile;
@@ -290,6 +303,21 @@ export function WorkspaceEditor({
     [stableTarget],
   );
 
+  const requestOpenWorkspaceFile = useCallback(
+    (filePath: string) => {
+      if (openFileRef.current === filePath) {
+        setFocusedTreePath(filePath);
+        return;
+      }
+      if (hasPendingChanges) {
+        setPendingFileSwitchPath(filePath);
+        return;
+      }
+      void openWorkspaceFile(filePath);
+    },
+    [hasPendingChanges, openWorkspaceFile],
+  );
+
   useEffect(() => {
     if (
       !initialFolder ||
@@ -301,9 +329,9 @@ export function WorkspaceEditor({
     const contextPath = `${initialFolder}/CONTEXT.md`;
     if (files.includes(contextPath)) {
       lastHandledInitialFolder.current = initialFolder;
-      openWorkspaceFile(contextPath);
+      requestOpenWorkspaceFile(contextPath);
     }
-  }, [initialFolder, files, openWorkspaceFile]);
+  }, [initialFolder, files, requestOpenWorkspaceFile]);
 
   const toggleFolder = (path: string) => {
     setFocusedTreePath(path);
@@ -624,18 +652,12 @@ export function WorkspaceEditor({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [content, editValue, handleSave, loadingContent, saving]);
 
-  const handleDelete = async () => {
-    if (!openFile) return;
-    await handleDeletePath(openFile, false);
-  };
-
   const handleDeletePath = async (path: string, isFolder: boolean) => {
     const paths = isFolder
       ? files.filter((file) => file === path || file.startsWith(`${path}/`))
       : [path];
     if (paths.length === 0) return;
 
-    setConfirmingDeletePath(null);
     beginMutation(path);
     try {
       for (const filePath of paths) {
@@ -734,19 +756,31 @@ export function WorkspaceEditor({
     ],
   );
 
-  const handleConfirmDelete = (path: string) => {
-    setConfirmingDeletePath(path);
-  };
-
-  const handleCancelDeleteConfirm = (path: string) => {
-    setConfirmingDeletePath((current) => (current === path ? null : current));
-  };
-
   const sourceFor = useCallback(
     (path: string) => fileSources[path],
     [fileSources],
   );
   const updateAvailableFor = useCallback((_path: string) => false, []);
+
+  const discardPendingChanges = () => {
+    setEditValue(content);
+    if (pendingFileSwitchPath) {
+      const nextPath = pendingFileSwitchPath;
+      setPendingFileSwitchPath(null);
+      void openWorkspaceFile(nextPath);
+      return;
+    }
+    if (navigationBlocker.status === "blocked") {
+      navigationBlocker.proceed();
+    }
+  };
+
+  const keepEditing = () => {
+    setPendingFileSwitchPath(null);
+    if (navigationBlocker.status === "blocked") {
+      navigationBlocker.reset();
+    }
+  };
 
   const addMenu = (
     <DropdownMenu>
@@ -809,7 +843,7 @@ export function WorkspaceEditor({
                 clipboardItem={clipboardItem}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
-                onSelect={openWorkspaceFile}
+                onSelect={requestOpenWorkspaceFile}
                 onToggle={toggleFolder}
                 onAcceptUpdate={() => {}}
                 onNewFile={startNewFile}
@@ -852,18 +886,9 @@ export function WorkspaceEditor({
                 value={editValue}
                 loading={loadingContent}
                 saving={saving}
-                deleting={openFile !== null && mutatingPaths.has(openFile)}
-                confirmingDelete={confirmingDeletePath === openFile}
                 onChange={setEditValue}
                 onSave={handleSave}
                 onDiscard={() => setEditValue(content)}
-                onDelete={handleDelete}
-                onConfirmDelete={() =>
-                  openFile && handleConfirmDelete(openFile)
-                }
-                onCancelDeleteConfirm={() =>
-                  openFile && handleCancelDeleteConfirm(openFile)
-                }
               />
             )}
           </div>
@@ -885,8 +910,24 @@ export function WorkspaceEditor({
           void handleDeletePath(path, isFolder);
         }}
       />
+      <PendingChangesDialog
+        open={
+          pendingFileSwitchPath !== null ||
+          navigationBlocker.status === "blocked"
+        }
+        filePath={openFile}
+        onCancel={keepEditing}
+        onDiscard={discardPendingChanges}
+      />
     </>
   );
+}
+
+interface PendingChangesDialogProps {
+  open: boolean;
+  filePath: string | null;
+  onCancel: () => void;
+  onDiscard: () => void;
 }
 
 interface DeleteConfirmDialogProps {
@@ -912,6 +953,51 @@ function collectFolderPathsFromFiles(files: string[]): Set<string> {
     }
   }
   return out;
+}
+
+function PendingChangesDialog({
+  open,
+  filePath,
+  onCancel,
+  onDiscard,
+}: PendingChangesDialogProps) {
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onCancel();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {filePath ? (
+              <>
+                You have unsaved changes in{" "}
+                <code className="font-mono">{filePath}</code>. Discard them and
+                continue?
+              </>
+            ) : (
+              "You have unsaved changes. Discard them and continue?"
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep editing</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={(event) => {
+              event.preventDefault();
+              onDiscard();
+            }}
+          >
+            Discard changes
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 function DeleteConfirmDialog({

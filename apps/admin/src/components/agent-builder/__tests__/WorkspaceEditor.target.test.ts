@@ -114,6 +114,47 @@ describe("workspace editor target capabilities", () => {
     );
   });
 
+  it("keeps save and discard hidden until the open file is dirty", () => {
+    const paneSource = readFileSync(
+      new URL("../FileEditorPane.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(paneSource).toMatch(/const hasPendingChanges = value !== content/);
+    expect(paneSource).toMatch(/!loading && hasPendingChanges/);
+    expect(paneSource).toMatch(/Save/);
+    expect(paneSource).toMatch(/Discard/);
+  });
+
+  it("does not expose a header delete button in the file editor", () => {
+    const paneSource = readFileSync(
+      new URL("../FileEditorPane.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(paneSource).not.toMatch(/Trash2/);
+    expect(paneSource).not.toMatch(/onConfirmDelete/);
+    expect(paneSource).not.toMatch(/onCancelDeleteConfirm/);
+    expect(paneSource).not.toMatch(/aria-label=.*Delete file/);
+  });
+
+  it("guards file switches and route navigation when the editor is dirty", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(/useBlocker/);
+    expect(editorSource).toMatch(/hasPendingChanges/);
+    expect(editorSource).toMatch(/requestOpenWorkspaceFile/);
+    expect(editorSource).toMatch(/setPendingFileSwitchPath\(filePath\)/);
+    expect(editorSource).toMatch(/navigationBlocker\.status === "blocked"/);
+    expect(editorSource).toMatch(/PendingChangesDialog/);
+    expect(editorSource).toMatch(/Discard unsaved changes\?/);
+    expect(editorSource).toMatch(/navigationBlocker\.proceed\(\)/);
+    expect(editorSource).toMatch(/navigationBlocker\.reset\(\)/);
+  });
+
   it("uses inline tree editing for new files, new folders, and rename", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),
