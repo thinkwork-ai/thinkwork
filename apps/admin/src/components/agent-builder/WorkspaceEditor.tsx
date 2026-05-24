@@ -303,10 +303,7 @@ export function WorkspaceEditor({
     void fetchFiles({ showLoading: false });
   }, [fetchFiles]);
 
-  const skillInstallTarget =
-    "agentId" in stableTarget || "spaceId" in stableTarget
-      ? stableTarget
-      : null;
+  const skillInstallTarget = "agentId" in stableTarget ? stableTarget : null;
   const skillLifecycleTarget = skillInstallTarget;
   const installedSkillRefPaths = useMemo(
     () => collectInstalledSkillRefPaths(files),

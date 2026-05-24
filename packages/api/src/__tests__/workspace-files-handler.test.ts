@@ -1386,10 +1386,9 @@ describe("agent install-skill action", () => {
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("installs into a Space source scope without refreshing agent state", async () => {
+  it("rejects Space skill installs because capabilities belong in agent workspaces", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
-    mockCatalogInstallS3("tenants/acme/spaces/engineering/source/");
 
     const res = await parse(
       await handler(
@@ -1402,30 +1401,11 @@ describe("agent install-skill action", () => {
       ),
     );
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body.installed_paths).toContain(
-      "skills/finance-audit-xls/SKILL.md",
-    );
-    expect(
-      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
-    ).toEqual([
-      expect.objectContaining({
-        Key: "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/SKILL.md",
-      }),
-      expect.objectContaining({
-        Key: "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/WIRING.md",
-      }),
-    ]);
-    const contextPut = s3Mock
-      .commandCalls(PutObjectCommand)
-      .find(
-        (call) =>
-          call.args[0].input.Key ===
-          "tenants/acme/spaces/engineering/source/CONTEXT.md",
-      );
-    expect(String(contextPut?.args[0].input.Body)).toContain(
-      "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |",
-    );
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
@@ -1710,10 +1690,9 @@ describe("agent reinstall-skill action", () => {
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
-  it("reinstalls into a Space source scope without refreshing agent state", async () => {
+  it("rejects Space skill reinstalls because capabilities belong in agent workspaces", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
-    mockCatalogReinstallS3("tenants/acme/spaces/engineering/source/");
 
     const res = await parse(
       await handler(
@@ -1725,10 +1704,11 @@ describe("agent reinstall-skill action", () => {
       ),
     );
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body.reinstalled_paths).toContain(
-      "skills/finance-audit-xls/SKILL.md",
-    );
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
@@ -2355,6 +2335,62 @@ describe("pinned-file write guard", () => {
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
+  it.each(["skills/finance-audit-xls/SKILL.md", "TOOLS.md", "MCP.md"])(
+    "PUT to Space capability path %s returns typed 403",
+    async (path) => {
+      authMockImpl.mockResolvedValue(authOk());
+      queueAdminSpaceTargetRows();
+
+      const res = await parse(
+        await handler(
+          event({
+            action: "put",
+            spaceId: SPACE_ID,
+            path,
+            content: "nope",
+          }),
+        ),
+      );
+
+      expect(res.statusCode).toBe(403);
+      expect(res.body.code).toBe("space_capability_file_rejected");
+      expect(res.body.error).toMatch(/master\/workspaces/);
+      expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    },
+  );
+
+  it("allows Space knowledge and SPACE.md writes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const knowledgeRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "knowledge/cap-table.md",
+          content: "# Cap table\n",
+        }),
+      ),
+    );
+    expect(knowledgeRes.statusCode).toBe(200);
+
+    queueAdminSpaceTargetRows();
+    const spaceMdRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "SPACE.md",
+          content: "# Engineering\n",
+        }),
+      ),
+    );
+    expect(spaceMdRes.statusCode).toBe(200);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(2);
+  });
+
   it.each([
     "work/inbox/foo.md",
     "review/run_123.needs-human.md",
@@ -2432,6 +2468,54 @@ describe("pinned-file write guard", () => {
 });
 
 // ─── 7. DELETE ───────────────────────────────────────────────────────────────
+
+describe("Space capability-file write guard", () => {
+  it("rejects moving a file into the Space skills folder before S3 mutation", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          spaceId: SPACE_ID,
+          fromPath: "knowledge/notes.md",
+          toFolder: "skills/finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("rejects renaming a Space file to TOOLS.md before S3 mutation", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          spaceId: SPACE_ID,
+          fromPath: "knowledge/tools-notes.md",
+          toPath: "TOOLS.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+});
 
 describe("agent MOVE (Unit 1: single-file)", () => {
   function adminAgentRows() {
