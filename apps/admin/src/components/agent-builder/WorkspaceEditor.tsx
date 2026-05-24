@@ -29,6 +29,7 @@ import {
   type ComposeSource,
   type MoveResult,
   type Target,
+  type WorkspaceFileMeta,
 } from "@/lib/agent-builder-api";
 import { cn } from "@/lib/utils";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -38,6 +39,7 @@ import {
   FolderTree,
   buildWorkspaceTree,
   type InlineEditState,
+  type SkillDriftStatus,
 } from "./FolderTree";
 import { AddSkillDialog } from "./AddSkillDialog";
 import {
@@ -69,6 +71,12 @@ type DeleteConfirmTarget =
       label: string;
       folderPaths: string[];
     };
+
+export interface InstalledSkillRefForDrift {
+  folderPath: string;
+  slug: string;
+  sourceSha256: string | null;
+}
 
 export type WorkspaceEditorMode =
   | "agent"
@@ -124,6 +132,67 @@ export function workspaceEditorTargetKey(target: Target): string {
   if ("userId" in target) return `user:${target.userId}`;
   if ("catalog" in target) return "catalog";
   return "defaults";
+}
+
+export function collectInstalledSkillRefPaths(files: string[]): Array<{
+  folderPath: string;
+  slug: string;
+  refPath: string;
+}> {
+  return files
+    .filter((path) => /^skills\/[^/]+\/\.catalog-ref\.json$/.test(path))
+    .map((refPath) => {
+      const slug = refPath.split("/")[1] ?? "";
+      return {
+        folderPath: `skills/${slug}`,
+        slug,
+        refPath,
+      };
+    })
+    .filter((ref) => ref.slug.length > 0);
+}
+
+export function parseCatalogRefSourceSha(
+  content: string | null,
+): string | null {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content) as { source_sha256?: unknown };
+    return typeof parsed.source_sha256 === "string"
+      ? parsed.source_sha256
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function catalogShaBySlug(
+  files: Pick<WorkspaceFileMeta, "path" | "sha256">[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const file of files) {
+    const [slug] = file.path.split("/");
+    if (!slug || !file.sha256 || out.has(slug)) continue;
+    out.set(slug, file.sha256);
+  }
+  return out;
+}
+
+export function computeSkillDriftByPath(
+  installedRefs: InstalledSkillRefForDrift[],
+  catalogHashes: Map<string, string>,
+): Record<string, SkillDriftStatus> {
+  const out: Record<string, SkillDriftStatus> = {};
+  for (const ref of installedRefs) {
+    if (!ref.sourceSha256) continue;
+    const catalogSha = catalogHashes.get(ref.slug);
+    if (!catalogSha) {
+      out[ref.folderPath] = "orphan";
+    } else if (catalogSha !== ref.sourceSha256) {
+      out[ref.folderPath] = "stale";
+    }
+  }
+  return out;
 }
 
 export function WorkspaceEditor({
@@ -188,6 +257,9 @@ export function WorkspaceEditor({
   const [deleteConfirmTarget, setDeleteConfirmTarget] =
     useState<DeleteConfirmTarget | null>(null);
   const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false);
+  const [skillDriftByPath, setSkillDriftByPath] = useState<
+    Record<string, SkillDriftStatus>
+  >({});
   const [pendingFileSwitchPath, setPendingFileSwitchPath] = useState<
     string | null
   >(null);
@@ -248,6 +320,52 @@ export function WorkspaceEditor({
       ? stableTarget
       : null;
   const skillLifecycleTarget = skillInstallTarget;
+  const installedSkillRefPaths = useMemo(
+    () => collectInstalledSkillRefPaths(files),
+    [files],
+  );
+
+  useEffect(() => {
+    if (!skillLifecycleTarget || installedSkillRefPaths.length === 0) {
+      setSkillDriftByPath({});
+      return;
+    }
+
+    let cancelled = false;
+    async function refreshSkillDrift() {
+      try {
+        const [catalog, refResults] = await Promise.all([
+          agentBuilderApi.listCatalogFiles(),
+          Promise.all(
+            installedSkillRefPaths.map(async (ref) => {
+              const data = await agentBuilderApi.getFile(
+                stableTarget,
+                ref.refPath,
+              );
+              return {
+                folderPath: ref.folderPath,
+                slug: ref.slug,
+                sourceSha256: parseCatalogRefSourceSha(data.content),
+              };
+            }),
+          ),
+        ]);
+        if (cancelled) return;
+        setSkillDriftByPath(
+          computeSkillDriftByPath(refResults, catalogShaBySlug(catalog.files)),
+        );
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Failed to compute skill drift:", err);
+        setSkillDriftByPath({});
+      }
+    }
+
+    void refreshSkillDrift();
+    return () => {
+      cancelled = true;
+    };
+  }, [installedSkillRefPaths, skillLifecycleTarget, stableTarget]);
 
   useEffect(() => {
     if (!files.includes("AGENTS.md")) {
@@ -287,6 +405,7 @@ export function WorkspaceEditor({
     setLoadedFilesOnce(false);
     setRoutingRows([]);
     setInlineEdit(null);
+    setSkillDriftByPath({});
   }, [key]);
 
   useEffect(() => {
@@ -306,6 +425,7 @@ export function WorkspaceEditor({
       : mode === "catalog"
         ? "catalog skill"
         : "workspace";
+  const skillDriftCount = Object.keys(skillDriftByPath).length;
 
   const openWorkspaceFile = useCallback(
     async (filePath: string) => {
@@ -1007,7 +1127,14 @@ export function WorkspaceEditor({
         >
           <div className="flex w-64 shrink-0 flex-col border-r">
             <div className="flex h-9 items-center justify-between border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
-              <span>{files.length} files</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <span>{files.length} files</span>
+                {skillDriftCount > 0 ? (
+                  <span className="shrink-0 rounded border border-amber-400/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-600 dark:text-amber-400">
+                    {skillDriftCount} stale
+                  </span>
+                ) : null}
+              </div>
               <div className="flex items-center gap-1.5">{addMenu}</div>
             </div>
             <div
@@ -1021,6 +1148,7 @@ export function WorkspaceEditor({
                 expandedFolders={expandedFolders}
                 mutatingPaths={mutatingPaths}
                 clipboardItem={clipboardItem}
+                skillDriftByPath={skillDriftByPath}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
                 onSelect={requestOpenWorkspaceFile}

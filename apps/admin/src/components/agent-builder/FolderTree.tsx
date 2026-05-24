@@ -19,6 +19,11 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   FileTree,
   FileTreeActions,
   FileTreeFile,
@@ -187,6 +192,8 @@ export interface ClipboardItem {
   kind: "file" | "folder";
 }
 
+export type SkillDriftStatus = "stale" | "orphan";
+
 export interface FolderTreeProps {
   nodes: TreeNode[];
   selectedPath: string | null;
@@ -197,6 +204,7 @@ export interface FolderTreeProps {
    * global — other tree interactions stay responsive.
    */
   mutatingPaths?: Set<string>;
+  skillDriftByPath?: Record<string, SkillDriftStatus>;
   /**
    * Single item currently cut. The matching node renders with a dashed
    * border + reduced opacity, and folder/root context menus offer
@@ -479,6 +487,7 @@ function FolderTreeItem(
     selectedPath,
     expandedFolders,
     mutatingPaths,
+    skillDriftByPath,
     clipboardItem,
     sourceFor,
     updateAvailableFor,
@@ -531,7 +540,7 @@ function FolderTreeItem(
         <ContextMenuTrigger asChild>
           <FileTreeFolder
             path={node.path}
-            name={renderFolderLabel(node)}
+            name={renderFolderLabel(node, skillDriftByPath?.[node.path])}
             editingName={
               isRenaming ? <InlineNameInput {...props} /> : undefined
             }
@@ -545,6 +554,7 @@ function FolderTreeItem(
                 selectedPath={selectedPath}
                 expandedFolders={expandedFolders}
                 mutatingPaths={mutatingPaths}
+                skillDriftByPath={skillDriftByPath}
                 clipboardItem={clipboardItem}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
@@ -857,7 +867,7 @@ function InlineNameInput({
   );
 }
 
-function renderFolderLabel(node: TreeNode) {
+function renderFolderLabel(node: TreeNode, drift?: SkillDriftStatus) {
   if (node.missing) {
     return (
       <>
@@ -866,7 +876,27 @@ function renderFolderLabel(node: TreeNode) {
       </>
     );
   }
-  return node.name;
+  if (!drift) return node.name;
+
+  const label = drift === "orphan" ? "orphan" : "stale";
+  const tooltip =
+    drift === "orphan"
+      ? "Catalog skill no longer exists. Use Remove Skill to clean up this installation."
+      : "Catalog has updated since this skill was installed. Right-click to refresh when reinstall is available.";
+
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{node.name}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="shrink-0 rounded border border-amber-400/40 bg-amber-500/10 px-1 py-0 text-[10px] font-medium leading-4 text-amber-600 dark:text-amber-400">
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </span>
+  );
 }
 
 function FileGlyph({ isMutating = false }: { isMutating?: boolean }) {
