@@ -216,6 +216,7 @@ export const MessageInputFooter = forwardRef<
                 disabled={disabled}
                 className="flex-row items-center gap-1.5 rounded-lg px-2.5 py-1.5 active:opacity-70"
                 style={{
+                  minHeight: 32,
                   opacity: disabled ? 0.35 : 1,
                   backgroundColor: isDark
                     ? "rgba(255,255,255,0.06)"
