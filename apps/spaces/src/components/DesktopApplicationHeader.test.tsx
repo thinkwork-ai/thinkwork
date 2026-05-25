@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const pageHeaderMock = vi.hoisted(() => ({
   actions: null as unknown,
 }));
+const sidebarMock = vi.hoisted(() => ({
+  open: true,
+}));
 
 vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeader: () => ({ actions: pageHeaderMock.actions }),
@@ -57,6 +60,7 @@ vi.mock("@thinkwork/ui", () => ({
     children: React.ReactNode;
     asChild?: boolean;
   }) => (asChild ? <>{children}</> : <button type="button">{children}</button>),
+  useSidebar: () => ({ open: sidebarMock.open }),
 }));
 
 import { DesktopApplicationHeader } from "./DesktopApplicationHeader";
@@ -64,6 +68,7 @@ import { DesktopApplicationHeader } from "./DesktopApplicationHeader";
 afterEach(() => {
   cleanup();
   pageHeaderMock.actions = null;
+  sidebarMock.open = true;
 });
 
 describe("DesktopApplicationHeader", () => {
@@ -82,7 +87,7 @@ describe("DesktopApplicationHeader", () => {
     expect(screen.queryByText("ThinkWork Spaces")).toBeNull();
   });
 
-  it("keeps only native controls when the route hides the top bar", () => {
+  it("keeps the content header empty when the route hides the top bar and the sidebar is open", () => {
     pageHeaderMock.actions = {
       title: "New thread",
       hideTopBar: true,
@@ -91,8 +96,17 @@ describe("DesktopApplicationHeader", () => {
 
     render(<DesktopApplicationHeader />);
 
-    expect(screen.getByText("Toggle Sidebar")).toBeTruthy();
+    expect(screen.queryByText("Toggle Sidebar")).toBeNull();
     expect(screen.queryByText("New thread")).toBeNull();
     expect(screen.queryByText("Hidden action")).toBeNull();
+  });
+
+  it("moves chrome controls onto the content header when the sidebar is fully collapsed", () => {
+    sidebarMock.open = false;
+
+    const { container } = render(<DesktopApplicationHeader />);
+
+    expect(container.firstElementChild?.className).toContain("pl-20");
+    expect(screen.getByText("Toggle Sidebar")).toBeTruthy();
   });
 });

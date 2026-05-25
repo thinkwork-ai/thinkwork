@@ -20,6 +20,7 @@ import {
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
+import { DesktopNavigationControls } from "@/components/DesktopApplicationHeader";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 
@@ -33,8 +34,14 @@ export function SpacesSidebar() {
   const nextTheme = theme === "dark" ? "light" : "dark";
 
   return (
-    <Sidebar collapsible="icon">
-      {isDesktop ? null : (
+    <Sidebar collapsible={isDesktop ? "offcanvas" : "icon"}>
+      {isDesktop ? (
+        <SidebarHeader className="desktop-app-header h-[var(--desktop-app-header-height)] shrink-0 justify-center bg-sidebar px-4 py-0 pl-20">
+          <div className="flex min-w-0 items-center gap-1 text-sidebar-foreground">
+            <DesktopNavigationControls />
+          </div>
+        </SidebarHeader>
+      ) : (
         <SidebarHeader className="pb-3">
           <div className="flex items-center gap-2 px-1">
             <Link
@@ -69,9 +76,7 @@ export function SpacesSidebar() {
         </SidebarHeader>
       )}
 
-      <SidebarContent
-        className={`min-h-0 ${isDesktop ? "pt-[var(--desktop-app-header-height)]" : ""}`}
-      >
+      <SidebarContent className="min-h-0">
         <ChatSidebar
           settingsOpen={settingsOpen}
           onSettingsOpenChange={setSettingsOpen}

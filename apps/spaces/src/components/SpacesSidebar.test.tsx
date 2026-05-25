@@ -18,6 +18,9 @@ vi.mock("@/context/AuthContext", () => ({
 vi.mock("@/components/shell/ChatSidebar", () => ({
   ChatSidebar: () => <nav data-testid="chat-sidebar" />,
 }));
+vi.mock("@/components/update-banner", () => ({
+  DesktopUpdateBadge: () => <button type="button">Update</button>,
+}));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
@@ -39,6 +42,14 @@ vi.mock("@thinkwork/ui", () => ({
   AvatarFallback: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),
+  Button: ({
+    children,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  ),
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -55,8 +66,16 @@ vi.mock("@thinkwork/ui", () => ({
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
-  Sidebar: ({ children }: { children: React.ReactNode }) => (
-    <aside>{children}</aside>
+  Sidebar: ({
+    children,
+    collapsible,
+  }: {
+    children: React.ReactNode;
+    collapsible?: string;
+  }) => (
+    <aside data-testid="spaces-sidebar" data-collapsible={collapsible}>
+      {children}
+    </aside>
   ),
   SidebarContent: ({
     children,
@@ -73,7 +92,7 @@ vi.mock("@thinkwork/ui", () => ({
     <footer>{children}</footer>
   ),
   SidebarHeader: ({ children }: { children: React.ReactNode }) => (
-    <header data-testid="sidebar-brand">{children}</header>
+    <header data-testid="sidebar-header">{children}</header>
   ),
   SidebarTrigger: () => <button type="button">Toggle Sidebar</button>,
   useSidebar: () => ({ state: "expanded", setOpen: vi.fn() }),
@@ -91,7 +110,7 @@ describe("SpacesSidebar", () => {
   it("keeps the brand area in the web shell", () => {
     render(<SpacesSidebar />);
 
-    expect(screen.getByTestId("sidebar-brand")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-header")).toBeTruthy();
     expect(screen.getByText("ThinkWork")).toBeTruthy();
     expect(screen.getByText("Spaces")).toBeTruthy();
   });
@@ -101,11 +120,13 @@ describe("SpacesSidebar", () => {
 
     render(<SpacesSidebar />);
 
-    expect(screen.queryByTestId("sidebar-brand")).toBeNull();
+    expect(screen.getByTestId("sidebar-header")).toBeTruthy();
     expect(screen.queryByAltText("ThinkWork")).toBeNull();
-    expect(screen.getByTestId("sidebar-content").className).toContain(
-      "pt-[var(--desktop-app-header-height)]",
+    expect(screen.queryByText("ThinkWork")).toBeNull();
+    expect(screen.getByTestId("spaces-sidebar").dataset.collapsible).toBe(
+      "offcanvas",
     );
+    expect(screen.getByTestId("sidebar-content").className).not.toContain("pt-");
     expect(screen.getByTestId("chat-sidebar")).toBeTruthy();
   });
 });
