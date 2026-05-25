@@ -244,6 +244,14 @@ function skillsSection(markdown: string): string {
   );
 }
 
+function folderStructureSection(markdown: string): string {
+  return (
+    markdown.match(
+      /^## Folder Structure\s*\n([\s\S]*?)(?=\n##\s|\n---|\n$)/m,
+    )?.[1] ?? ""
+  );
+}
+
 beforeEach(() => {
   resetState();
   process.env.WORKSPACE_BUCKET = "thinkwork-dev-workspace";
@@ -452,7 +460,7 @@ describe("regenerateAgentsMdDerivedSections", () => {
     expect(written).not.toContain("old nested tree");
     expect(written).toContain("earnest-falcon-947/");
     expect(written).toContain("reports/ ← Reports");
-    expect(written).toContain("skills/");
+    expect(folderStructureSection(written ?? "")).not.toContain("skills/");
     expect(written).toContain(
       "| Local Review | baseline | Review local files |",
     );
@@ -471,6 +479,10 @@ describe("regenerateAgentsMdDerivedSections", () => {
       "earnest-falcon-947/skills/review/SKILL.md",
     ];
     state.s3GetResponses.set(`${PREFIX}earnest-falcon-947/AGENTS.md`, "");
+    state.s3GetResponses.set(
+      `${PREFIX}earnest-falcon-947/skills/review/SKILL.md`,
+      "---\ndisplay_name: Local Review\ndescription: Review local files\n---\n",
+    );
 
     await regenerateAgentsMdDerivedSections(
       "agent-1",
@@ -480,7 +492,10 @@ describe("regenerateAgentsMdDerivedSections", () => {
     const written = lastWrittenAgentsMd("earnest-falcon-947/AGENTS.md");
     expect(written).toContain("# earnest-falcon-947 — Workspace Map");
     expect(written).toContain("## Folder Structure");
-    expect(written).toContain("skills/");
+    expect(folderStructureSection(written ?? "")).not.toContain("skills/");
+    expect(written).toContain(
+      "| Local Review | baseline | Review local files |",
+    );
   });
 });
 
@@ -570,7 +585,8 @@ describe("generateContextFolderStructure", () => {
     expect(written).toContain("## Folder Structure");
     expect(written).toContain("earnest-falcon-947/");
     expect(written).toContain("CONTEXT.md ← You are here");
-    expect(written).toContain("renewal-prep/");
+    expect(written).not.toContain("skills/");
+    expect(written).not.toContain("renewal-prep/");
   });
 
   it("renders root CONTEXT.md from the full workspace subtree", async () => {
@@ -822,9 +838,9 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
     expect(md).toContain("events/ ← Event log");
     expect(md).toContain("memory/ ← Long-lived agent memory");
     expect(md).toContain("review/ ← Human review artifacts");
-    expect(md).toContain("skills/ ← Workspace skills");
     expect(md).toContain("earnest-falcon-947/ ← Earnest Falcon");
-    expect(md).toContain("renewal-prep/");
+    expect(folderStructureSection(md)).not.toContain("skills/");
+    expect(folderStructureSection(md)).not.toContain("renewal-prep/");
     expect(md).toContain(
       "| Account Health Review | baseline | Review account health signals before renewal calls |",
     );

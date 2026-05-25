@@ -4,6 +4,7 @@ import { parseAgentsMd } from "../src/lib/agents-md-parser.js";
 import {
   planWorkspaceBlueprintRepair,
   renderRootAgentsMd,
+  renderSubAgentContextMd,
   repairWorkspaceBlueprint,
   type WorkspaceBlueprintObjectStore,
   type WorkspaceObject,
@@ -191,6 +192,21 @@ describe("generated workspace map", () => {
         skills: ["account-health-review", "renewal-prep"],
       },
     ]);
+    expect(markdown).not.toContain("skills/ - root-level skills");
+  });
+
+  it("keeps skills out of generated Folder Structure prose", () => {
+    const markdown = renderSubAgentContextMd({
+      slug: "earnest-falcon-947",
+      displayName: "Cruz",
+      skillSlugs: ["account-health-review"],
+    });
+
+    expect(markdown).toContain("## Folder Structure");
+    expect(markdown).not.toContain("skills/ - local skills");
+    expect(markdown).toContain(
+      "| account-health-review | skills/account-health-review/SKILL.md |",
+    );
   });
 });
 

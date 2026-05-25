@@ -86,7 +86,6 @@ const ROOT_ANNOTATIONS = new Map<string, string>([
   ["AGENTS.md", "You are here (always loaded)"],
   ["CONTEXT.md", "Task router"],
   ["memory/", "Long-lived agent memory"],
-  ["skills/", "Workspace skills"],
   ["review/", "Human review artifacts"],
   ["events/", "Event log"],
 ]);
@@ -316,6 +315,7 @@ function visiblePathForTree(
 ): { segments: string[]; folderOnly: boolean } | null {
   const rawSegments = path.split("/").filter(Boolean);
   if (rawSegments.length === 0) return null;
+  if (rawSegments.includes("skills")) return null;
 
   if (path.endsWith("/")) {
     return rawSegments.some(isHiddenPathSegment)
