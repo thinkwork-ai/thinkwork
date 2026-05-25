@@ -20,7 +20,9 @@ export interface AutoUpdaterLike {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
   allowPrerelease?: boolean;
+  forceDevUpdateConfig?: boolean;
   channel?: string | null;
+  updateConfigPath?: string | null;
   on(event: string, listener: (...args: unknown[]) => void): this;
   checkForUpdates(): Promise<unknown>;
   downloadUpdate(): Promise<unknown>;
@@ -50,6 +52,7 @@ export class DesktopUpdatesController {
   private readonly now: () => Date;
   private readonly checkOnStart: boolean;
   private readonly updatesEnabled: boolean;
+  private readonly updateConfigPath: string | null;
   private readonly onStateChange: (state: UpdateState) => void;
   private readonly telemetry: UpdateTelemetry;
   private readonly logger: Pick<typeof console, "warn">;
@@ -61,7 +64,9 @@ export class DesktopUpdatesController {
     this.autoUpdater = options.autoUpdater;
     this.now = options.now ?? (() => new Date());
     this.checkOnStart = options.checkOnStart ?? true;
-    this.updatesEnabled = options.updatesEnabled ?? shouldEnableUpdates(this.app);
+    this.updateConfigPath = resolveUpdateConfigPath();
+    this.updatesEnabled =
+      options.updatesEnabled ?? shouldEnableUpdates(this.app);
     this.onStateChange = options.onStateChange ?? (() => {});
     this.logger = options.logger ?? console;
     const channel =
@@ -88,6 +93,10 @@ export class DesktopUpdatesController {
     this.autoUpdater.autoDownload = false;
     this.autoUpdater.autoInstallOnAppQuit = true;
     this.autoUpdater.allowPrerelease = this.state.channel !== "latest";
+    if (!this.app.isPackaged && this.updateConfigPath) {
+      this.autoUpdater.forceDevUpdateConfig = true;
+      this.autoUpdater.updateConfigPath = this.updateConfigPath;
+    }
     this.autoUpdater.channel = this.state.channel;
     this.registerUpdaterEvents();
 
@@ -230,7 +239,11 @@ export function resolveUpdateChannel(version: string): string {
 export function shouldEnableUpdates(app: UpdatesAppLike): boolean {
   if (app.isPackaged) return true;
 
-  return candidateUpdateConfigPaths().some((path) => existsSync(path));
+  return !!resolveUpdateConfigPath();
+}
+
+function resolveUpdateConfigPath(): string | null {
+  return candidateUpdateConfigPaths().find((path) => existsSync(path)) ?? null;
 }
 
 function candidateUpdateConfigPaths(): string[] {
