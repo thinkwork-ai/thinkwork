@@ -3196,6 +3196,7 @@ export type Query = {
   threadLabels: Array<ThreadLabel>;
   threadLinkedTasks: Array<LinkedTask>;
   threadMentionTargets: Array<ThreadMentionTarget>;
+  threadProgressMarkdown?: Maybe<ThreadProgressMarkdown>;
   threadTraces: Array<TraceEvent>;
   threadTurn?: Maybe<ThreadTurn>;
   threadTurnEvents: Array<ThreadTurnEvent>;
@@ -3828,6 +3829,12 @@ export type QueryThreadLinkedTasksArgs = {
 
 
 export type QueryThreadMentionTargetsArgs = {
+  threadId: Scalars['ID']['input'];
+};
+
+
+export type QueryThreadProgressMarkdownArgs = {
+  tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
 };
 
@@ -5179,6 +5186,15 @@ export enum ThreadParticipantType {
   Agent = 'AGENT',
   User = 'USER'
 }
+
+export type ThreadProgressMarkdown = {
+  __typename?: 'ThreadProgressMarkdown';
+  content: Scalars['String']['output'];
+  key: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  tenantSlug: Scalars['String']['output'];
+  threadId: Scalars['ID']['output'];
+};
 
 export enum ThreadStatus {
   Backlog = 'BACKLOG',

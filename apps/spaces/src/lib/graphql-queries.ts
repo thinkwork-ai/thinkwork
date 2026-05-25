@@ -278,6 +278,16 @@ export const ThreadLinkedTasksQuery = gql`
   }
 `;
 
+export const ThreadProgressMarkdownQuery = gql`
+  query ThreadProgressMarkdown($tenantId: ID!, $threadId: ID!) {
+    threadProgressMarkdown(tenantId: $tenantId, threadId: $threadId) {
+      threadId
+      key
+      content
+    }
+  }
+`;
+
 export const UpdateLinkedTaskMutation = gql`
   mutation UpdateLinkedTask($input: UpdateLinkedTaskInput!) {
     updateLinkedTask(input: $input) {

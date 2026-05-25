@@ -173,6 +173,7 @@ This Space coordinates customer onboarding from a ThinkWork-native checklist. A 
 - Treat DocuSign, Dun & Bradstreet, credit review, tax exemption forms, and P21 setup as manual checklist steps until external integrations are enabled.
 - When required intake is missing, ask the human in the Thread using the Human Question skill pattern from \`docs/customer-onboarding-intake.md\`; keep the missing-information checklist row open until the answer is captured.
 - When a human gives a task update in chat, map it back to the matching Progress item. "Done" means completed; "sent", "started", or "submitted" means in progress unless the reply says it is waiting on someone; "waiting on", "blocked", or "on hold" means blocked; "not applicable" means not applicable.
+- For credit review, phrases like "credit approved", "credit check complete", or "limit set at $10k" complete the credit-check Progress item and should be recorded as credit approval notes. Do not answer with generic CRM/tool guidance.
 - Every Progress item needs an owner signal. Prefer an assigned Space member; otherwise use the role owner: Sales, Finance, Accounting, or Operations.
 - Do not mark onboarding complete automatically. Required checklist items must be complete and a human must confirm completion.
 
@@ -280,6 +281,7 @@ The Spaces Info Panel shows the canonical Progress list.
 - Not applicable: a human confirmed the task does not apply to this customer.
 
 Use Progress, not generic CRM or lead status, when someone asks "what is the status?" inside this Space.
+For credit review, a human reply such as "credit check approved for $10k" or "credit limit set at $10k" means the credit-check task is completed and the approval/limit should be kept in the Thread state.
 
 ## Owners
 

@@ -1684,6 +1684,36 @@ Target branch: `main`
 
 None.
 
+# Customer Onboarding Progress Follow-Up - 2026-05-25
+
+## Status
+
+- Branch: `codex/customer-onboarding-credit-evidence`
+- Started: `2026-05-25T20:50:00Z`
+- Scope:
+  - Treat natural credit approval replies such as `Credit check and limit set at $10k` as Customer Onboarding workflow evidence.
+  - Read thread `PROGRESS.md` from S3 for the Spaces Info Panel and prefer it over stale linked-task rows.
+  - Tighten the Info Panel task presentation into a compact progress list.
+  - Update live dev Customer Onboarding source docs in S3 with the credit approval rule.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/thread-progress/storage.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/__tests__/graphql-contract.test.ts` - passed.
+- `pnpm --filter @thinkwork/spaces test -- src/components/workbench/SpacesThreadDetailRoute.test.tsx` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `pnpm --filter thinkwork-cli typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces build` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Pending.
+
+## Blockers
+
+None.
+
 # Customer Onboarding Progress Workflow Refresh - 2026-05-25
 
 ## Status
