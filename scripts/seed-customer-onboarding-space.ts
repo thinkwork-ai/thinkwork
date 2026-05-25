@@ -1,9 +1,10 @@
 import pg from "pg";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import {
   CUSTOMER_ONBOARDING_CHECKLIST_ITEMS,
   CUSTOMER_ONBOARDING_CHECKLIST_KEY,
-  CUSTOMER_ONBOARDING_COORDINATOR_INSTRUCTIONS,
+  CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES,
   CUSTOMER_ONBOARDING_SPACE_PROMPT,
   CUSTOMER_ONBOARDING_SPACE_SLUG,
   buildCustomerOnboardingChecklistConfig,
@@ -16,14 +17,16 @@ const { Pool } = pg;
 
 interface SeedOptions {
   tenantId: string;
-  coordinatorAgentId: string | null;
-  coordinatorAgentSlug: string;
+  spaceId: string | null;
   ownerUserId: string | null;
   memberUserIds: string[];
   roleAssigneesJson: string | null;
   lastMileProjectId: string | null;
   lastMileWebhookConfigRef: string | null;
   writebackPolicy: "disabled" | "status_only" | "status_and_comments";
+  includeLastMileIntegration: boolean;
+  writeSpaceFiles: boolean;
+  workspaceBucket: string | null;
   dryRun: boolean;
 }
 
@@ -31,9 +34,11 @@ interface SeedSummary {
   tenantId: string;
   spaceId: string | null;
   checklistTemplateId: string | null;
-  coordinatorAgentId: string | null;
   memberCount: number;
   checklistItemCount: number;
+  spaceFileCount: number;
+  spaceFilesWritten: boolean;
+  includeLastMileIntegration: boolean;
   writebackPolicy: string;
   dryRun: boolean;
 }
@@ -57,9 +62,11 @@ async function main() {
       tenantId: options.tenantId,
       spaceId: null,
       checklistTemplateId: null,
-      coordinatorAgentId: options.coordinatorAgentId,
       memberCount: configuredMemberUserIds.length,
       checklistItemCount: CUSTOMER_ONBOARDING_CHECKLIST_ITEMS.length,
+      spaceFileCount: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.length,
+      spaceFilesWritten: false,
+      includeLastMileIntegration: options.includeLastMileIntegration,
       writebackPolicy: options.writebackPolicy,
       dryRun: true,
     });
@@ -76,11 +83,17 @@ async function main() {
             config: checklistConfig,
             items: CUSTOMER_ONBOARDING_CHECKLIST_ITEMS,
           },
-          integration: {
-            provider: "lastmile_tasks",
-            writebackPolicy: options.writebackPolicy,
-            config: integrationConfig,
-          },
+          spaceFiles: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.map((file) => ({
+            path: file.path,
+            bytes: Buffer.byteLength(file.content, "utf8"),
+          })),
+          integration: options.includeLastMileIntegration
+            ? {
+                provider: "lastmile_tasks",
+                writebackPolicy: options.writebackPolicy,
+                config: integrationConfig,
+              }
+            : null,
         },
         null,
         2,
@@ -102,9 +115,6 @@ async function main() {
       throw new Error(`tenant not found: ${options.tenantId}`);
     }
 
-    const coordinatorAgentId =
-      options.coordinatorAgentId ??
-      (await resolveCoordinatorAgentId(client, options));
     const memberUserIds =
       configuredMemberUserIds.length > 0
         ? configuredMemberUserIds
@@ -118,23 +128,29 @@ async function main() {
       checklistConfig,
     );
     await upsertChecklistItems(client, options, spaceId, checklistTemplateId);
-    await upsertIntegration(client, options, spaceId, integrationConfig);
+    if (options.includeLastMileIntegration) {
+      await upsertIntegration(client, options, spaceId, integrationConfig);
+    }
     await upsertMembers(client, options, spaceId, memberUserIds);
-    await upsertCoordinatorAssignment(
-      client,
-      options,
-      spaceId,
-      coordinatorAgentId,
-    );
+    const tenantSlug = await resolveTenantSlug(client, options.tenantId);
 
     await client.query("COMMIT");
+    if (options.writeSpaceFiles) {
+      await writeSpaceSourceFiles({
+        bucket: options.workspaceBucket ?? env("WORKSPACE_BUCKET", process.env),
+        tenantSlug,
+        spaceSlug: CUSTOMER_ONBOARDING_SPACE_SLUG,
+      });
+    }
     printSummary({
       tenantId: options.tenantId,
       spaceId,
       checklistTemplateId,
-      coordinatorAgentId,
       memberCount: memberUserIds.length,
       checklistItemCount: CUSTOMER_ONBOARDING_CHECKLIST_ITEMS.length,
+      spaceFileCount: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.length,
+      spaceFilesWritten: options.writeSpaceFiles,
+      includeLastMileIntegration: options.includeLastMileIntegration,
       writebackPolicy: options.writebackPolicy,
       dryRun: false,
     });
@@ -150,9 +166,14 @@ async function main() {
 function parseArgs(args: string[], envVars: NodeJS.ProcessEnv): SeedOptions {
   const values = new Map<string, string[]>();
   const flags = new Set<string>();
+  const booleanFlags = new Set([
+    "--dry-run",
+    "--include-lastmile-integration",
+    "--write-space-files",
+  ]);
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--dry-run") {
+    if (booleanFlags.has(arg)) {
       flags.add(arg);
       continue;
     }
@@ -168,7 +189,7 @@ function parseArgs(args: string[], envVars: NodeJS.ProcessEnv): SeedOptions {
   const writebackPolicy =
     first(values, "--writeback-policy") ??
     envVars.LASTMILE_WRITEBACK_POLICY ??
-    "status_only";
+    "disabled";
   if (
     writebackPolicy !== "disabled" &&
     writebackPolicy !== "status_only" &&
@@ -181,16 +202,9 @@ function parseArgs(args: string[], envVars: NodeJS.ProcessEnv): SeedOptions {
 
   return {
     tenantId: first(values, "--tenant-id") ?? env("TENANT_ID", envVars),
-    coordinatorAgentId:
-      first(values, "--coordinator-agent-id") ??
-      envVars.COORDINATOR_AGENT_ID ??
-      null,
-    coordinatorAgentSlug:
-      first(values, "--coordinator-agent-slug") ??
-      envVars.COORDINATOR_AGENT_SLUG ??
-      "coordinator",
     ownerUserId:
       first(values, "--owner-user-id") ?? envVars.OWNER_USER_ID ?? null,
+    spaceId: first(values, "--space-id") ?? envVars.SPACE_ID ?? null,
     memberUserIds: [
       ...many(values, "--member-user-id"),
       ...csv(envVars.MEMBER_USER_IDS),
@@ -208,31 +222,15 @@ function parseArgs(args: string[], envVars: NodeJS.ProcessEnv): SeedOptions {
       envVars.LASTMILE_WEBHOOK_CONFIG_REF ??
       null,
     writebackPolicy,
+    includeLastMileIntegration:
+      flags.has("--include-lastmile-integration") ||
+      envVars.INCLUDE_LASTMILE_INTEGRATION === "true",
+    writeSpaceFiles:
+      flags.has("--write-space-files") || envVars.WRITE_SPACE_FILES === "true",
+    workspaceBucket:
+      first(values, "--workspace-bucket") ?? envVars.WORKSPACE_BUCKET ?? null,
     dryRun: flags.has("--dry-run"),
   };
-}
-
-async function resolveCoordinatorAgentId(
-  client: pg.PoolClient,
-  options: SeedOptions,
-) {
-  const result = await client.query<{ id: string }>(
-    `
-      SELECT id
-      FROM agents
-      WHERE tenant_id = $1 AND slug = $2
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `,
-    [options.tenantId, options.coordinatorAgentSlug],
-  );
-  const id = result.rows[0]?.id;
-  if (!id) {
-    throw new Error(
-      `coordinator agent not found; pass --coordinator-agent-id or create agent slug ${options.coordinatorAgentSlug}`,
-    );
-  }
-  return id;
 }
 
 async function listTenantUserIds(client: pg.PoolClient, tenantId: string) {
@@ -248,6 +246,37 @@ async function upsertSpace(
   options: SeedOptions,
   config: Record<string, unknown>,
 ) {
+  if (options.spaceId) {
+    const result = await client.query<{ id: string }>(
+      `
+        UPDATE spaces
+        SET
+          slug = $3,
+          name = 'Customer Onboarding',
+          description = $4,
+          prompt = $5,
+          status = 'active',
+          kind = 'customer_onboarding',
+          template_key = 'customer_onboarding',
+          config = $6::jsonb,
+          updated_at = now()
+        WHERE tenant_id = $1 AND id = $2
+        RETURNING id
+      `,
+      [
+        options.tenantId,
+        options.spaceId,
+        CUSTOMER_ONBOARDING_SPACE_SLUG,
+        "Customer onboarding cases, native checklist coordination, and ThinkWork Thread collaboration.",
+        CUSTOMER_ONBOARDING_SPACE_PROMPT,
+        JSON.stringify(config),
+      ],
+    );
+    const id = result.rows[0]?.id;
+    if (!id) throw new Error(`space not found: ${options.spaceId}`);
+    return id;
+  }
+
   const result = await client.query<{ id: string }>(
     `
       INSERT INTO spaces (
@@ -269,7 +298,7 @@ async function upsertSpace(
     [
       options.tenantId,
       CUSTOMER_ONBOARDING_SPACE_SLUG,
-      "Closed-won customer onboarding cases, checklist coordination, and LastMile task links.",
+      "Customer onboarding cases, native checklist coordination, and ThinkWork Thread collaboration.",
       CUSTOMER_ONBOARDING_SPACE_PROMPT,
       JSON.stringify(config),
     ],
@@ -301,7 +330,7 @@ async function upsertChecklistTemplate(
       options.tenantId,
       spaceId,
       CUSTOMER_ONBOARDING_CHECKLIST_KEY,
-      "Required onboarding tasks created in LastMile Tasks when a closed-won opportunity starts a Thread.",
+      "Required ThinkWork checklist items created when a customer onboarding Thread starts.",
       JSON.stringify(config),
     ],
   );
@@ -342,7 +371,7 @@ async function upsertChecklistItems(
         item.roleKey,
         item.required,
         item.sortOrder,
-        JSON.stringify(item.externalTaskTemplate),
+        JSON.stringify(item.checklistTemplate),
       ],
     );
   }
@@ -407,38 +436,36 @@ async function upsertMembers(
   }
 }
 
-async function upsertCoordinatorAssignment(
-  client: pg.PoolClient,
-  options: SeedOptions,
-  spaceId: string,
-  coordinatorAgentId: string,
-) {
-  await client.query(
-    `
-      INSERT INTO space_agent_assignments (
-        tenant_id, space_id, agent_id, local_role, local_instructions,
-        auto_subscribe, allowed_capabilities, allowed_tools, status
-      )
-      VALUES ($1, $2, $3, 'coordinator', $4, true, $5::jsonb, $6::jsonb, 'active')
-      ON CONFLICT (tenant_id, space_id, agent_id)
-      DO UPDATE SET
-        local_role = EXCLUDED.local_role,
-        local_instructions = EXCLUDED.local_instructions,
-        auto_subscribe = EXCLUDED.auto_subscribe,
-        allowed_capabilities = EXCLUDED.allowed_capabilities,
-        allowed_tools = EXCLUDED.allowed_tools,
-        status = 'active',
-        updated_at = now()
-    `,
-    [
-      options.tenantId,
-      spaceId,
-      coordinatorAgentId,
-      CUSTOMER_ONBOARDING_COORDINATOR_INSTRUCTIONS,
-      JSON.stringify(["customer_onboarding", "linked_tasks", "thread_summary"]),
-      JSON.stringify(["thread.read", "thread.message", "linked_tasks.read"]),
-    ],
+async function resolveTenantSlug(client: pg.PoolClient, tenantId: string) {
+  const result = await client.query<{ slug: string }>(
+    "SELECT slug FROM tenants WHERE id = $1",
+    [tenantId],
   );
+  const slug = result.rows[0]?.slug;
+  if (!slug) throw new Error(`tenant slug not found: ${tenantId}`);
+  return slug;
+}
+
+async function writeSpaceSourceFiles(input: {
+  bucket: string;
+  tenantSlug: string;
+  spaceSlug: string;
+}) {
+  const s3 = new S3Client({
+    region:
+      process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+  });
+  const prefix = `tenants/${input.tenantSlug}/spaces/${input.spaceSlug}/source/`;
+  for (const file of CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES) {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: input.bucket,
+        Key: `${prefix}${file.path}`,
+        Body: file.content,
+        ContentType: "text/plain; charset=utf-8",
+      }),
+    );
+  }
 }
 
 function printSummary(summary: SeedSummary) {
