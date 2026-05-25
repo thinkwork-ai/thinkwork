@@ -144,19 +144,6 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "computer_runtime_manager" {
-  # No count guard: module.computer_runtime is unconditional (see
-  # terraform/modules/thinkwork/main.tf), so the policy ARN is always
-  # populated. A `count = var.X != "" ? 1 : 0` guard fails terraform
-  # plan with "Invalid count argument" because var.X resolves from
-  # aws_iam_policy.manager.arn — a computed attribute only known at
-  # apply time, not at plan time. If a future caller wants to make
-  # this attachment conditional, gate it on a known-at-plan-time
-  # boolean variable rather than the ARN string.
-  role       = aws_iam_role.lambda.name
-  policy_arn = var.computer_runtime_manager_policy_arn
-}
-
 resource "aws_iam_role_policy" "lambda_rds" {
   name = "rds-data-api"
   role = aws_iam_role.lambda.id
