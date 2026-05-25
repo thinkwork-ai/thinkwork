@@ -20,8 +20,8 @@ Target branch: `main`
 - Active worktree: `.Codex/worktrees/customer-onboarding-u1`
 - Started: 2026-05-25
 - Latest merged PR: none for this run
-- Active PR: none
-- CI: not started; local verification passed
+- Active PR: [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695)
+- CI: pending; local verification passed
 
 ### Active Unit Notes
 
@@ -32,9 +32,9 @@ Target branch: `main`
 
 ### Progress Log
 
-| Date       | Unit | Branch                                     | PR   | Status      | Verification | Notes                                            |
-| ---------- | ---- | ------------------------------------------ | ---- | ----------- | ------------ | ------------------------------------------------ |
-| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed` | none | In progress | Local passed | Native seed/config/runbook refresh ready for PR. |
+| Date       | Unit | Branch                                     | PR                                                           | Status      | Verification             | Notes                                                 |
+| ---------- | ---- | ------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------------------ | ----------------------------------------------------- |
+| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed` | [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) | In progress | Local passed; CI pending | Native seed/config/runbook refresh pushed for review. |
 
 ### CI Failures
 
