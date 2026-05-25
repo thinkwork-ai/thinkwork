@@ -20,8 +20,8 @@ Target branch: `main`
 - Active worktree: `.Codex/worktrees/customer-onboarding-u6`
 - Started: 2026-05-25
 - Latest merged PR: [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700)
-- Active PR: none
-- CI: not started for U6; local verification passed
+- Active PR: [#1701](https://github.com/thinkwork-ai/thinkwork/pull/1701)
+- CI: pending for U6; local verification passed
 
 ### Active Unit Notes
 
@@ -50,6 +50,7 @@ Target branch: `main`
 - U6 scope is final schema/codegen drift detection and focused verification after the native linked-task GraphQL changes.
 - U6 generated schema/codegen for `terraform/schema.graphql`, `apps/cli`, `apps/admin`, and `apps/mobile`; Spaces has no codegen script and uses raw gql literals.
 - U6 local verification passed: GraphQL contract test, focused Spaces query/dialog/panel/thread tests, mobile test suite, API/CLI/Spaces typecheck, repo-wide typecheck, repo lint, and `git diff --check`.
+- Opened U6 PR [#1701](https://github.com/thinkwork-ai/thinkwork/pull/1701); CI pending.
 
 ### Progress Log
 
@@ -60,7 +61,7 @@ Target branch: `main`
 | 2026-05-25 | U3   | `codex/u3-native-onboarding-workflow`               | [#1697](https://github.com/thinkwork-ai/thinkwork/pull/1697) | Merged      | CI passed    | Native onboarding workflow pivot merged.            |
 | 2026-05-25 | U4   | `codex/u4-customer-onboarding-spaces-ui`            | [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699) | Merged      | CI passed    | Spaces app UX wiring merged.                        |
 | 2026-05-25 | U5   | `codex/u5-customer-onboarding-space-refresh`        | [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700) | Merged      | CI passed    | Existing demo Space refresh hardening merged.       |
-| 2026-05-25 | U6   | `codex/u6-customer-onboarding-codegen-verification` | none                                                         | In progress | Local passed | Schema/codegen verification ready for PR.           |
+| 2026-05-25 | U6   | `codex/u6-customer-onboarding-codegen-verification` | [#1701](https://github.com/thinkwork-ai/thinkwork/pull/1701) | In progress | Local passed | Schema/codegen verification pushed for CI.          |
 
 ### CI Failures
 
