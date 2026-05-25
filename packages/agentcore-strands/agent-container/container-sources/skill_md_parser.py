@@ -2,9 +2,9 @@
 
 Plan 2026-04-24-009 §U1 — replaces the hand-rolled `_parse_skill_yaml`
 in `skill_runner.py` (which still exists for U1 to ship inert; U3
-deletes it). This module is the future home of every skill-catalog
-read in the Python runtime: catalog discovery, dispatcher index,
-template-skill registration, and any future loader.
+deletes it). This module is the shared parser for tenant/workspace
+SKILL.md reads in the Python runtime: workspace discovery, dispatcher
+index, template-skill registration, and any future loader.
 
 Shape contract (matches `packages/api/src/lib/skill-md-parser.ts`):
 

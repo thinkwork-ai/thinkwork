@@ -16,7 +16,6 @@ const s3 = new S3Client({
 });
 
 const MAX_SEED_FILE_BYTES = 256 * 1024;
-const CATALOG_SKILL_PREFIX = "skills/catalog";
 
 export const PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG =
   "thinkwork-computer-default";

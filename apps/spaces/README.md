@@ -47,13 +47,13 @@ The default prompt is `Build a simple CRM pipeline dashboard from the available 
 
 ## Runbook Smoke
 
-Runbooks add Confirmation and Queue UI for published repeatable work. The runbook smoke defaults to a deterministic repo dry-run:
+Runbooks add Confirmation and Queue UI for published repeatable work. The runbook smoke defaults to an informational dry-run that reports the expected prompts and runbook slugs without validating tenant S3 catalog contents:
 
 ```bash
 node scripts/smoke/spaces-runbook-smoke.mjs
 ```
 
-To exercise a deployed app, database, GraphQL API, and runbook lifecycle:
+To exercise a deployed app, database, GraphQL API, tenant S3 catalog, and runbook lifecycle:
 
 ```bash
 SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/spaces-runbook-smoke.mjs

@@ -7,8 +7,8 @@ authoritative `SKILL.md` content using the standard precedence:
             ``{folder_path}/skills/{slug}/SKILL.md``
     2.  Local skill at any ancestor folder, walking upward:
             ``{parent}/skills/{slug}/SKILL.md`` … ``skills/{slug}/SKILL.md``
-    3.  Platform skill in ``packages/skill-catalog`` — supplied to the
-        runtime as a ``platform_catalog_manifest`` mapping ``slug ->
+    3.  Platform skill supplied to the runtime as a
+        ``platform_catalog_manifest`` mapping ``slug ->
         ResolvedSkill``-shaped dict (the lookup table the dispatcher
         already builds at boot).
 

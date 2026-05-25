@@ -12,12 +12,10 @@ Pinned scenarios (cross-checked with the TS test suite at
   - Edge — `execution: composition` → rejected (U6 audit tripwire).
   - Edge — file with no frontmatter → empty data + frontmatter_present=False.
   - Edge — scripts list with mixed scalar types → coerced consistently.
-  - Integration — every existing skill-catalog SKILL.md parses without raising.
 """
 
 from __future__ import annotations
 
-import glob
 import os
 import tempfile
 import textwrap
@@ -333,67 +331,6 @@ class ParseSkillMdScalarCoercionTests(unittest.TestCase):
         )
         self.assertEqual(parsed.data["scripts"][0]["name"], "do_thing")
         self.assertEqual(parsed.data["scripts"][0]["path"], "scripts/x.py")
-
-
-class SkillCatalogIntegrationTests(unittest.TestCase):
-    """U1 verification — every existing SKILL.md in packages/skill-catalog
-    must parse without raising. The 2 frontmatter-less files
-    (`customer-onboarding/SKILL.md`, `sandbox-pilot/SKILL.md`) should
-    round-trip with `frontmatter_present=False` + empty data so callers
-    can `if not parsed.data: continue`.
-    """
-
-    @staticmethod
-    def _catalog_dir() -> str:
-        # Tests live at packages/agentcore-strands/agent-container/, so
-        # the catalog is two levels up + packages/skill-catalog.
-        here = os.path.dirname(os.path.abspath(__file__))
-        return os.path.normpath(
-            os.path.join(here, "..", "..", "skill-catalog")
-        )
-
-    def test_every_existing_skill_md_parses(self) -> None:
-        catalog = self._catalog_dir()
-        if not os.path.isdir(catalog):
-            self.skipTest(f"skill-catalog not found at {catalog}")
-        skill_md_files = sorted(
-            glob.glob(os.path.join(catalog, "*", "SKILL.md"))
-        )
-        self.assertGreater(
-            len(skill_md_files),
-            0,
-            "expected at least one SKILL.md under skill-catalog/",
-        )
-
-        bare_files: list[str] = []
-        framed_files: list[str] = []
-        for path in skill_md_files:
-            parsed = parse_skill_md_file(path)
-            self.assertIsNotNone(parsed, f"parse returned None for {path}")
-            assert parsed is not None  # narrow
-            if parsed.frontmatter_present:
-                framed_files.append(os.path.basename(os.path.dirname(path)))
-            else:
-                bare_files.append(os.path.basename(os.path.dirname(path)))
-
-        # Post plan 2026-04-24-009 §U2 every catalog SKILL.md carries
-        # frontmatter — `customer-onboarding` and `sandbox-pilot` were
-        # the only bare-body holdouts before U2 and got merged
-        # frontmatter as part of that unit. The expected bare-list is
-        # now empty; if a new bare-body SKILL.md appears, the test
-        # surfaces it with the actual list so the catalog stays clean.
-        self.assertEqual(
-            sorted(bare_files),
-            [],
-            f"frontmatter-less SKILL.md set drifted: {bare_files!r}",
-        )
-        # Sanity — every framed file has a non-empty data dict.
-        for slug in framed_files:
-            parsed = parse_skill_md_file(
-                os.path.join(self._catalog_dir(), slug, "SKILL.md")
-            )
-            assert parsed is not None
-            self.assertTrue(parsed.data, f"{slug}: framed but data is empty")
 
 
 if __name__ == "__main__":

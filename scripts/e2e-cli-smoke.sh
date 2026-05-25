@@ -107,10 +107,6 @@ step "webhook list" "$CLI webhook list --stage $STAGE --tenant $TENANT --json | 
 
 step "routine list" "$CLI routine list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
 
-step "skill catalog" "$CLI skill catalog --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
-
-step "skill list" "$CLI skill list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
-
 # Phase 4+5 read-only smoke
 step "recipe list" "$CLI recipe list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
 

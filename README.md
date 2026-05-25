@@ -91,7 +91,7 @@ thinkwork doctor -s dev            # 2. Check prerequisites (AWS, Terraform, Bed
 thinkwork init -s dev              # 3. Scaffold terraform.tfvars + modules
 thinkwork plan -s dev              # 4. Review the Terraform plan
 thinkwork deploy -s dev            # 5. Provision the stack
-thinkwork bootstrap -s dev         # 6. Seed workspace files + skill catalog
+thinkwork bootstrap -s dev         # 6. Seed workspace files
 thinkwork login --stage dev        # 7. Sign in to the Cognito pool (OAuth)
 thinkwork me                       # 8. Confirm identity + tenant
 ```

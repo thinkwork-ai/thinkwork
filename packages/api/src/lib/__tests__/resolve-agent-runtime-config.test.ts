@@ -707,6 +707,9 @@ describe("resolveAgentRuntimeConfig", () => {
       (s) => s.skillId === "agent-thread-management",
     );
     expect(threadMgmt?.envOverrides?.CURRENT_USER_EMAIL).toBe("rep@acme.test");
+    expect(threadMgmt?.s3Key).toBe(
+      "tenants/acme/skill-catalog/agent-thread-management",
+    );
   });
 
   it("injects tenant built-in tools when template Web Search is enabled", async () => {
@@ -728,6 +731,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     const webSearch = cfg.skillsConfig.find((s) => s.skillId === "web-search");
     expect(webSearch).toBeDefined();
+    expect(webSearch?.s3Key).toBe("tenants/acme/skill-catalog/web-search");
     expect(webSearch?.envOverrides).toEqual({ SERPER_API_KEY: "abc" });
   });
 

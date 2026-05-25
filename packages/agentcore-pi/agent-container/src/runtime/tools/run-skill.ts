@@ -7,8 +7,8 @@ import { Type } from "typebox";
 /**
  * Plan §005 U5 — Pi ToolDef wrapping the Python skill-bridge subprocess.
  *
- * The Pi agent loop runs in Node. Python script-skills from
- * `packages/skill-catalog/` execute via subprocess against
+ * The Pi agent loop runs in Node. Python script-skills from the materialized
+ * workspace execute via subprocess against
  * `skill-bridge/run_skill.py`, which imports the named script + calls
  * the named function with **kwargs.
  *
@@ -84,7 +84,7 @@ export interface RunSkillScript {
 }
 
 export interface RunSkillManifestEntry {
-  /** Skill slug (matches the directory name under `packages/skill-catalog/`). */
+  /** Skill slug (matches the directory name under the workspace `skills/` folder). */
   skillId: string;
   /** Display name for the agent's tool description. */
   displayName?: string;
@@ -423,9 +423,7 @@ export function buildRunSkillTool(
       };
 
       const skillEnv = envOverrides[skillId];
-      const env = skillEnv
-        ? { ...process.env, ...skillEnv }
-        : process.env;
+      const env = skillEnv ? { ...process.env, ...skillEnv } : process.env;
 
       const result = await runBridge(envelope, {
         pythonBin,
@@ -435,8 +433,7 @@ export function buildRunSkillTool(
         signal,
       });
 
-      const text =
-        typeof result === "string" ? result : JSON.stringify(result);
+      const text = typeof result === "string" ? result : JSON.stringify(result);
 
       return {
         content: [{ type: "text", text }],

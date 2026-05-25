@@ -19,11 +19,13 @@ This runbook is intentionally short. The pilot is a focused demo, not a multi-te
    - `#1241` U9-remainder admin upload + download endpoint
 
 2. **The Strands AgentCore image is current.** The U3 + U4 changes ship in the Python container; the runtime endpoint flushes via the 15-min reconciler post-merge. Confirm with:
+
    ```bash
    aws lambda get-function \
      --function-name thinkwork-<stage>-agentcore \
      --query Configuration.ImageUri
    ```
+
    The SHA suffix should match the latest `main` commit's container image. See `feedback_watch_post_merge_deploy_run` for the gate behavior.
 
 3. **The prospect tenant exists with a Computer template assigned.** Provision via the standard tenant setup; this runbook does not cover tenant provisioning.
@@ -36,19 +38,13 @@ This runbook is intentionally short. The pilot is a focused demo, not a multi-te
 
 Get your Cognito ID token (the value used by the admin web app for `Authorization: Bearer ...`). The simplest path: log into the admin SPA at `https://admin-<stage>.thinkwork.ai`, open the browser devtools network tab, find any `/api/...` request, and copy the `Authorization` header value (minus the `Bearer ` prefix).
 
-Then run the installer against the prospect's agent:
+Open the admin Agent page, switch to **Skills**, and confirm these tenant catalog folders exist:
 
-```bash
-pnpm tsx packages/skill-catalog/scripts/install-finance-pilot.ts \
-  --api-url=https://<api-id>.execute-api.us-east-1.amazonaws.com \
-  --token=<paste-id-token> \
-  --agent-id=<prospect-agent-uuid>
-```
+- `finance-3-statement-model`
+- `finance-audit-xls`
+- `finance-statement-analysis`
 
-(Replace `--agent-id` with `--template-id` if you want every Computer
-under a template to inherit the skills.)
-
-Expected output: three `✓` lines per skill (SKILL.md, README.md, and either `LICENSE-NOTES.md` or no extra). The installer is **idempotent** — re-run safely if a network blip drops a file.
+For each skill, use the Skills tree `Add Skill` action on the prospect agent or template. Installation is idempotent: it copies the catalog folder into the target workspace under `skills/<slug>/` and records `.catalog-ref.json` so later reinstall/refresh can detect catalog drift.
 
 ---
 
@@ -59,6 +55,7 @@ Expected output: three `✓` lines per skill (SKILL.md, README.md, and either `L
 2. **Drop a sample workbook into the composer.** Drag `~/Desktop/docs/Financial Sample.xlsx` (or any of the prospect's own financial statements) onto the in-thread `FollowUpComposer`. A chip appears with the filename + size.
 
 3. **Type the analysis prompt and submit:**
+
    > "what stands out in this statement?"
 
 4. **Watch the agent's response.** The reply should cite specific values from the workbook (margins, period comparisons, anomalies). Confirm the model is reading the actual file rather than answering generically.
@@ -93,15 +90,15 @@ If they diverge, the Strands container hasn't picked up the U3/U4 changes yet. W
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `installer ✗ skills/.../SKILL.md: 401 Unauthorized` | Token expired (Cognito IDs live ~1 hour) | Re-fetch the bearer token and re-run |
-| `installer ✗ skills/.../SKILL.md: 403 Forbidden` | Token belongs to a tenant other than the prospect | Sign in to the prospect tenant first |
-| Upload chip stays in "uploading…" state | `WORKSPACE_BUCKET` env not set on the API Lambdas | Check Terraform apply succeeded |
-| `415 macro_enabled` on upload | The workbook contains `xl/vbaProject.bin` | Save the workbook as a plain `.xlsx` without macros |
-| `415 magic_byte_mismatch` on upload | File extension doesn't match content (e.g., `.xlsx` is actually a renamed `.exe`) | Use the actual file the prospect provided |
-| Agent response doesn't cite file values | Strands container hasn't picked up U3 | Confirm runtime image SHA per the pre-pilot gate |
-| Compliance log shows `attachment.received` but no `skill.activated` | The Skill meta-tool cutover hasn't landed yet (U4 is inert until the cutover PR) | Expected for now — `skill.activated` will start firing once the cutover ships |
+| Symptom                                                                      | Likely cause                                                                        | Fix                                                                                                                  |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `installer ✗ skills/.../SKILL.md: 401 Unauthorized`                          | Token expired (Cognito IDs live ~1 hour)                                            | Re-fetch the bearer token and re-run                                                                                 |
+| `installer ✗ skills/.../SKILL.md: 403 Forbidden`                             | Token belongs to a tenant other than the prospect                                   | Sign in to the prospect tenant first                                                                                 |
+| Upload chip stays in "uploading…" state                                      | `WORKSPACE_BUCKET` env not set on the API Lambdas                                   | Check Terraform apply succeeded                                                                                      |
+| `415 macro_enabled` on upload                                                | The workbook contains `xl/vbaProject.bin`                                           | Save the workbook as a plain `.xlsx` without macros                                                                  |
+| `415 magic_byte_mismatch` on upload                                          | File extension doesn't match content (e.g., `.xlsx` is actually a renamed `.exe`)   | Use the actual file the prospect provided                                                                            |
+| Agent response doesn't cite file values                                      | Strands container hasn't picked up U3                                               | Confirm runtime image SHA per the pre-pilot gate                                                                     |
+| Compliance log shows `attachment.received` but no `skill.activated`          | The Skill meta-tool cutover hasn't landed yet (U4 is inert until the cutover PR)    | Expected for now — `skill.activated` will start firing once the cutover ships                                        |
 | Drift gate fails post-merge with `MISSING audit_outbox_event_type_prefix_v2` | The `0088_compliance_event_types_finance_pilot.sql` migration wasn't applied to dev | Apply manually: `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0088_compliance_event_types_finance_pilot.sql` |
 
 ---

@@ -36,7 +36,7 @@ jobs:
       runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
       computer_runtime: ${{ steps.filter.outputs.computer_runtime }}
       terraform: ${{ steps.filter.outputs.terraform }}
-      skills: ${{ steps.filter.outputs.skills }}
+      workspace_defaults: ${{ steps.filter.outputs.workspace_defaults }}
       admin: ${{ steps.filter.outputs.admin }}
       spaces: ${{ steps.filter.outputs.spaces }}
       docs: ${{ steps.filter.outputs.docs }}
@@ -71,8 +71,7 @@ jobs:
               - '.github/workflows/deploy.yml'
             terraform:
               - 'terraform/**'
-            skills:
-              - 'packages/skill-catalog/**'
+            workspace_defaults:
               - 'packages/workspace-defaults/files/**'
             admin:
               - 'apps/admin/**'
@@ -1050,22 +1049,22 @@ jobs:
       - name: Build & deploy
         run: bash scripts/build-docs.sh ${{ env.STAGE }}
 
-  # ── Bootstrap workspace + skills ─────────────────────────────────
-  # Originally gated on migration-drift-check so skill-catalog seeding
-  # never ran against an unmigrated schema. With the drift gate
-  # temporarily disabled (see the migration-drift-check job above),
-  # bootstrap now runs whenever terraform-apply succeeds; restore the
-  # drift-check dependency when the gate is re-enabled.
+  # ── Bootstrap workspace defaults ─────────────────────────────────
+  # Originally gated on migration-drift-check so workspace default seeding
+  # never ran against an unmigrated schema. With the drift gate temporarily
+  # disabled (see the migration-drift-check job above), bootstrap now runs
+  # whenever terraform-apply succeeds; restore the drift-check dependency
+  # when the gate is re-enabled.
   bootstrap:
     name: Bootstrap
     needs: [detect-changes, terraform-apply]
     # Allow terraform-apply == skipped: workspace S3 bucket exists from
-    # prior applies; this job only syncs skill-catalog content into it.
+    # prior applies; this job only syncs workspace-default content into it.
     if: >-
       always()
       && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
       && (
-        needs.detect-changes.outputs.skills == 'true' ||
+        needs.detect-changes.outputs.workspace_defaults == 'true' ||
         github.event_name == 'workflow_dispatch'
       )
     runs-on: ubuntu-latest

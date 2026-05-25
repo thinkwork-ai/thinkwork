@@ -88,6 +88,18 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+
+function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
+  return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
+}
+
+function tenantCatalogSkillFileS3Key(
+  tenantSlug: string,
+  skillId: string,
+  relativePath: string,
+): string {
+  return `${tenantCatalogSkillS3Key(tenantSlug, skillId)}/${relativePath}`;
+}
 // Stage namespace for the sandbox Secrets Manager paths.
 const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 const BATCH_SIZE = 10;
@@ -118,9 +130,8 @@ async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -441,12 +452,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // Default skills: always available for all agents (parity with chat-agent-invoke).
   // web-search is NOT in this list — it's opt-in via tenant_builtin_tools below.
   const defaultSkills = [
-    {
-      skillId: "agent-thread-management",
-      s3Key: "skills/catalog/agent-thread-management",
-    },
-    { skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
-    { skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
+    { skillId: "agent-thread-management" },
+    { skillId: "artifacts" },
+    { skillId: "workspace-memory" },
   ];
   for (const ds of defaultSkills) {
     if (!skillsConfig.some((s) => s.skillId === ds.skillId)) {
@@ -458,6 +466,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       };
       skillsConfig.push({
         ...ds,
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, ds.skillId),
         secretRef: undefined,
         envOverrides: env,
         mcpServer: undefined,
@@ -488,7 +497,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
       skillsConfig.push({
         skillId: bt.toolSlug,
-        s3Key: `skills/catalog/${bt.toolSlug}`,
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, bt.toolSlug),
         secretRef: undefined,
         envOverrides: bt.envOverrides,
         mcpServer: undefined,
@@ -749,7 +758,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     if (!hasThreadSkill) {
       skillsConfig.push({
         skillId: "agent-thread-management",
-        s3Key: "skills/catalog/agent-thread-management",
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, "agent-thread-management"),
         secretRef: undefined,
         mcpServer: undefined,
         envOverrides: {
@@ -774,15 +783,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -792,11 +798,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           const s3Paths = Array.from(
             new Set(
               [
-                `tenants/${tenantSlug}/skills/${skill.skillId}/PROCESS.md`,
                 skill.s3Key
                   ? `${skill.s3Key.replace(/\/$/, "")}/PROCESS.md`
                   : "",
-                `skills/catalog/${skill.skillId}/PROCESS.md`,
+                tenantCatalogSkillFileS3Key(
+                  tenantSlug,
+                  skill.skillId,
+                  "PROCESS.md",
+                ),
               ].filter(Boolean),
             ),
           );
@@ -1894,9 +1903,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

@@ -193,10 +193,6 @@ const { generateContextFolderStructureForSpaceMock } = vi.hoisted(() => ({
   generateContextFolderStructureForSpaceMock: vi.fn(),
 }));
 
-const { seedTenantSkillCatalogMock } = vi.hoisted(() => ({
-  seedTenantSkillCatalogMock: vi.fn(),
-}));
-
 vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../lib/workspace-map-generator.js")>();
@@ -209,10 +205,6 @@ vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
     regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
   };
 });
-
-vi.mock("../lib/catalog-seed.js", () => ({
-  seedTenantSkillCatalog: seedTenantSkillCatalogMock,
-}));
 
 // ─── Mock emitAuditEvent (U5) so the workspace-files-handler tests
 // don't need a working compliance.audit_outbox connection. The
@@ -406,12 +398,6 @@ beforeEach(() => {
   generateContextFolderStructureMock.mockResolvedValue(undefined);
   generateContextFolderStructureForSpaceMock.mockReset();
   generateContextFolderStructureForSpaceMock.mockResolvedValue(undefined);
-  seedTenantSkillCatalogMock.mockReset();
-  seedTenantSkillCatalogMock.mockResolvedValue({
-    ok: true,
-    imported_slugs: ["finance-audit-xls"],
-    skipped_slugs: ["web-search"],
-  });
 });
 
 afterEach(() => {
@@ -1096,44 +1082,19 @@ describe("tenant skill catalog target", () => {
     });
   });
 
-  it("bootstraps an empty tenant catalog from the bundled skill catalog before listing", async () => {
+  it("returns an empty list for an empty tenant skill catalog without seeding", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminCatalogTargetRows();
-    s3Mock
-      .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/skill-catalog/",
-      })
-      .resolvesOnce({ Contents: [] })
-      .resolvesOnce({
-        Contents: [
-          { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
-          { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
-        ],
-      });
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
-      })
-      .resolves(body("# Finance Audit XLS\n"))
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
-      })
-      .resolves(body("## Wiring\n"));
+    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
 
     const res = await parse(
       await handler(event({ action: "list", catalog: true })),
     );
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.files.map((file: { path: string }) => file.path)).toEqual([
-      "finance-audit-xls/SKILL.md",
-      "finance-audit-xls/WIRING.md",
-    ]);
-    expect(seedTenantSkillCatalogMock).toHaveBeenCalledWith({
-      s3: expect.any(S3Client),
-      bucket: "test-bucket",
-      tenantSlug: "acme",
-    });
+    expect(res.body.files).toEqual([]);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
   });
 
   it("writes and deletes catalog files under the tenant skill-catalog prefix", async () => {
@@ -1248,7 +1209,7 @@ describe("tenant skill catalog target", () => {
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("runs catalog-seed through the catalog target and tenant admin gate", async () => {
+  it("rejects retired catalog-seed after tenant catalogs are S3-owned", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminCatalogTargetRows();
 
@@ -1256,17 +1217,8 @@ describe("tenant skill catalog target", () => {
       await handler(event({ action: "catalog-seed", catalog: true })),
     );
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual({
-      ok: true,
-      imported_slugs: ["finance-audit-xls"],
-      skipped_slugs: ["web-search"],
-    });
-    expect(seedTenantSkillCatalogMock).toHaveBeenCalledWith({
-      s3: expect.any(S3Client),
-      bucket: "test-bucket",
-      tenantSlug: "acme",
-    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain("not supported");
   });
 });
 

@@ -7,91 +7,120 @@
 
 import { describe, it, expect } from "vitest";
 import { parseProcessTemplate } from "../lib/orchestration/process-parser.js";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 
 // ── Helper: load the real example template ───────────────────────────────────
 
-import { existsSync } from "fs";
+const EXAMPLE_TEMPLATE = `# Customer Onboarding Process
 
-const PROCESS_PATH = resolve(process.cwd(), "packages/skill-catalog/customer-onboarding/PROCESS.md");
-const EXAMPLE_TEMPLATE = existsSync(PROCESS_PATH)
-	? readFileSync(PROCESS_PATH, "utf-8")
-	: null;
+## Config
+- trigger_channel: onboarding
+- max_concurrent_steps: 3
+
+## Steps
+
+### step-1: Send Welcome Email
+- assignee: {{current_agent}}
+- instructions: |
+    Draft and send a personalized welcome email.
+    Mark this thread DONE when the message is sent.
+
+### step-2: Create CRM Record
+- instructions: |
+    Create the customer record.
+
+### step-3: Collect Intake Form
+- depends_on: [step-1]
+- gate: human
+- gate_poll_interval: 24h
+- instructions: |
+    Ask the customer to complete the intake form.
+
+### step-4: Reconcile Intake
+- depends_on: [step-3]
+- instructions: |
+    Reconcile the completed intake.
+
+### step-5: Schedule Kickoff Call
+- depends_on: [step-2, step-3]
+- instructions: |
+    Schedule the kickoff call.
+`;
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("parseProcessTemplate", () => {
-	describe.skipIf(!EXAMPLE_TEMPLATE)("valid templates", () => {
-		it("parses the customer-onboarding example template", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
+  describe("valid templates", () => {
+    it("parses the customer-onboarding example template", () => {
+      const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
-			expect(result.title).toBe("Customer Onboarding Process");
-			expect(result.config.triggerChannel).toBe("onboarding");
-			expect(result.config.maxConcurrentSteps).toBe(3);
-			expect(result.steps).toHaveLength(5);
-		});
+      expect(result.title).toBe("Customer Onboarding Process");
+      expect(result.config.triggerChannel).toBe("onboarding");
+      expect(result.config.maxConcurrentSteps).toBe(3);
+      expect(result.steps).toHaveLength(5);
+    });
 
-		it("extracts step IDs and titles", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
+    it("extracts step IDs and titles", () => {
+      const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
-			expect(result.steps[0].id).toBe("step-1");
-			expect(result.steps[0].title).toBe("Send Welcome Email");
-			expect(result.steps[4].id).toBe("step-5");
-			expect(result.steps[4].title).toBe("Schedule Kickoff Call");
-		});
+      expect(result.steps[0].id).toBe("step-1");
+      expect(result.steps[0].title).toBe("Send Welcome Email");
+      expect(result.steps[4].id).toBe("step-5");
+      expect(result.steps[4].title).toBe("Schedule Kickoff Call");
+    });
 
-		it("parses step dependencies", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
+    it("parses step dependencies", () => {
+      const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
-			expect(result.steps[0].dependsOn).toEqual([]);
-			expect(result.steps[1].dependsOn).toEqual([]);
-			expect(result.steps[2].dependsOn).toEqual(["step-1"]);
-			expect(result.steps[3].dependsOn).toEqual(["step-3"]);
-			expect(result.steps[4].dependsOn).toEqual(["step-2", "step-3"]);
-		});
+      expect(result.steps[0].dependsOn).toEqual([]);
+      expect(result.steps[1].dependsOn).toEqual([]);
+      expect(result.steps[2].dependsOn).toEqual(["step-1"]);
+      expect(result.steps[3].dependsOn).toEqual(["step-3"]);
+      expect(result.steps[4].dependsOn).toEqual(["step-2", "step-3"]);
+    });
 
-		it("parses gate types", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
+    it("parses gate types", () => {
+      const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
-			expect(result.steps[0].gate).toBe("none");
-			expect(result.steps[2].gate).toBe("human");
-			expect(result.steps[2].gatePollInterval).toBe("24h");
-		});
+      expect(result.steps[0].gate).toBe("none");
+      expect(result.steps[2].gate).toBe("human");
+      expect(result.steps[2].gatePollInterval).toBe("24h");
+    });
 
-		it("parses assignee template variables", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
+    it("parses assignee template variables", () => {
+      const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
-			expect(result.steps[0].assignee).toBe("{{current_agent}}");
-		});
+      expect(result.steps[0].assignee).toBe("{{current_agent}}");
+    });
 
-		it("parses multi-line instructions", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
+    it("parses multi-line instructions", () => {
+      const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
-			expect(result.steps[0].instructions).toContain("Draft and send a personalized welcome email");
-			expect(result.steps[0].instructions).toContain("Mark this thread DONE");
-		});
+      expect(result.steps[0].instructions).toContain(
+        "Draft and send a personalized welcome email",
+      );
+      expect(result.steps[0].instructions).toContain("Mark this thread DONE");
+    });
 
-		it("dedents instructions consistently", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
+    it("dedents instructions consistently", () => {
+      const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
-			// Instructions should not have leading whitespace from the markdown indentation
-			const firstLine = result.steps[0].instructions.split("\n")[0];
-			expect(firstLine).not.toMatch(/^\s/);
-		});
-	});
+      // Instructions should not have leading whitespace from the markdown indentation
+      const firstLine = result.steps[0].instructions.split("\n")[0];
+      expect(firstLine).not.toMatch(/^\s/);
+    });
+  });
 
-	describe("minimal templates", () => {
-		it("handles empty Steps section", () => {
-			const md = "# My Process\n\n## Config\n\n## Steps\n";
-			const result = parseProcessTemplate(md);
+  describe("minimal templates", () => {
+    it("handles empty Steps section", () => {
+      const md = "# My Process\n\n## Config\n\n## Steps\n";
+      const result = parseProcessTemplate(md);
 
-			expect(result.title).toBe("My Process");
-			expect(result.steps).toEqual([]);
-		});
+      expect(result.title).toBe("My Process");
+      expect(result.steps).toEqual([]);
+    });
 
-		it("handles missing Config section", () => {
-			const md = `# My Process
+    it("handles missing Config section", () => {
+      const md = `# My Process
 
 ## Steps
 
@@ -100,22 +129,22 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     Do the thing.
 `;
-			const result = parseProcessTemplate(md);
+      const result = parseProcessTemplate(md);
 
-			expect(result.config).toEqual({});
-			expect(result.steps).toHaveLength(1);
-		});
+      expect(result.config).toEqual({});
+      expect(result.steps).toHaveLength(1);
+    });
 
-		it("handles missing Steps section", () => {
-			const md = "# My Process\n\n## Config\n- trigger_channel: test\n";
-			const result = parseProcessTemplate(md);
+    it("handles missing Steps section", () => {
+      const md = "# My Process\n\n## Config\n- trigger_channel: test\n";
+      const result = parseProcessTemplate(md);
 
-			expect(result.config.triggerChannel).toBe("test");
-			expect(result.steps).toEqual([]);
-		});
+      expect(result.config.triggerChannel).toBe("test");
+      expect(result.steps).toEqual([]);
+    });
 
-		it("defaults missing optional fields", () => {
-			const md = `# Test
+    it("defaults missing optional fields", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -123,26 +152,27 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     Just do it.
 `;
-			const result = parseProcessTemplate(md);
-			const step = result.steps[0];
+      const result = parseProcessTemplate(md);
+      const step = result.steps[0];
 
-			expect(step.assignee).toBe("{{current_agent}}");
-			expect(step.gate).toBe("none");
-			expect(step.dependsOn).toEqual([]);
-			expect(step.gatePollInterval).toBeUndefined();
-		});
+      expect(step.assignee).toBe("{{current_agent}}");
+      expect(step.gate).toBe("none");
+      expect(step.dependsOn).toEqual([]);
+      expect(step.gatePollInterval).toBeUndefined();
+    });
 
-		it("handles title without H1", () => {
-			const md = "## Steps\n\n### step-1: Thing\n- instructions: |\n    Do it.\n";
-			const result = parseProcessTemplate(md);
+    it("handles title without H1", () => {
+      const md =
+        "## Steps\n\n### step-1: Thing\n- instructions: |\n    Do it.\n";
+      const result = parseProcessTemplate(md);
 
-			expect(result.title).toBe("Untitled Process");
-		});
-	});
+      expect(result.title).toBe("Untitled Process");
+    });
+  });
 
-	describe("validation errors", () => {
-		it("throws on duplicate step IDs", () => {
-			const md = `# Test
+  describe("validation errors", () => {
+    it("throws on duplicate step IDs", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -154,11 +184,13 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     Do second.
 `;
-			expect(() => parseProcessTemplate(md)).toThrow('Duplicate step ID: "step-1"');
-		});
+      expect(() => parseProcessTemplate(md)).toThrow(
+        'Duplicate step ID: "step-1"',
+      );
+    });
 
-		it("throws on dependency referencing non-existent step", () => {
-			const md = `# Test
+    it("throws on dependency referencing non-existent step", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -167,13 +199,13 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     Do it.
 `;
-			expect(() => parseProcessTemplate(md)).toThrow(
-				'Step "step-1" depends on "step-99" which does not exist',
-			);
-		});
+      expect(() => parseProcessTemplate(md)).toThrow(
+        'Step "step-1" depends on "step-99" which does not exist',
+      );
+    });
 
-		it("throws on circular dependency (direct)", () => {
-			const md = `# Test
+    it("throws on circular dependency (direct)", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -187,11 +219,13 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     B.
 `;
-			expect(() => parseProcessTemplate(md)).toThrow("Circular dependency detected");
-		});
+      expect(() => parseProcessTemplate(md)).toThrow(
+        "Circular dependency detected",
+      );
+    });
 
-		it("throws on circular dependency (indirect)", () => {
-			const md = `# Test
+    it("throws on circular dependency (indirect)", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -210,13 +244,15 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     C.
 `;
-			expect(() => parseProcessTemplate(md)).toThrow("Circular dependency detected");
-		});
-	});
+      expect(() => parseProcessTemplate(md)).toThrow(
+        "Circular dependency detected",
+      );
+    });
+  });
 
-	describe("edge cases", () => {
-		it("preserves template variables in assignee", () => {
-			const md = `# Test
+  describe("edge cases", () => {
+    it("preserves template variables in assignee", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -225,12 +261,12 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     Do it.
 `;
-			const result = parseProcessTemplate(md);
-			expect(result.steps[0].assignee).toBe("sales-agent");
-		});
+      const result = parseProcessTemplate(md);
+      expect(result.steps[0].assignee).toBe("sales-agent");
+    });
 
-		it("handles step with no instructions", () => {
-			const md = `# Test
+    it("handles step with no instructions", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -238,12 +274,12 @@ describe("parseProcessTemplate", () => {
 - assignee: {{current_agent}}
 - priority: high
 `;
-			const result = parseProcessTemplate(md);
-			expect(result.steps[0].instructions).toBe("");
-		});
+      const result = parseProcessTemplate(md);
+      expect(result.steps[0].instructions).toBe("");
+    });
 
-		it("stops parsing at next H2 after Steps", () => {
-			const md = `# Test
+    it("stops parsing at next H2 after Steps", () => {
+      const md = `# Test
 
 ## Steps
 
@@ -257,9 +293,9 @@ describe("parseProcessTemplate", () => {
 - instructions: |
     This is not a step.
 `;
-			const result = parseProcessTemplate(md);
-			expect(result.steps).toHaveLength(1);
-			expect(result.steps[0].id).toBe("step-1");
-		});
-	});
+      const result = parseProcessTemplate(md);
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0].id).toBe("step-1");
+    });
+  });
 });

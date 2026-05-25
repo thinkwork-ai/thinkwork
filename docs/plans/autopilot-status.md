@@ -1560,7 +1560,8 @@ None.
 | U14 Reinstall-skill refresh action              | `codex/pi-skill-catalog-u14-reinstall`               | [#1662](https://github.com/thinkwork-ai/thinkwork/pull/1662) | Merged | Squash merged as `88333433`; remote and local branch removed. Adds files-only reinstall refresh for stale installed skills, preserving CONTEXT.md and updating `.catalog-ref.json.source_sha256`.                                           |
 | U15 Retire customize skill GraphQL surface      | `codex/pi-skill-catalog-u15-retire-customize-skills` | [#1663](https://github.com/thinkwork-ai/thinkwork/pull/1663) | Merged | Squash merged as `d72a5883`; remote and local branch removed. Removed the deprecated `skillCatalog`, `installSkill`, `uninstallSkill`, and `enableSkill` GraphQL fields/resolvers, retiring old CLI skill verbs while keeping `skill push`. |
 | U16a Retire table consumers                     | `codex/pi-skill-catalog-u16a-retire-table-consumers` | [#1672](https://github.com/thinkwork-ai/thinkwork/pull/1672) | Merged | Squash merged as `ad451739`; remote and local branch removed. Removed remaining live consumers of `skill_catalog`/`tenant_skills`; main deploy `26374704891` passed before starting destructive U16.                                        |
-| U16 Drop retired DB tables                      | `codex/pi-skill-catalog-u16-drop-tables`             | [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676) | In CI  | Removes the retired Drizzle schema exports and adds a hand-rolled `0131_drop_skill_catalog_and_tenant_skills.sql` migration. User authorized dev apply; scoped drift now reports both retired tables dropped.                               |
+| U16 Drop retired DB tables                      | `codex/pi-skill-catalog-u16-drop-tables`             | [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676) | Merged | Squash merged as `92bcb825`; remote and local branch/worktree removed. Removed retired Drizzle schema exports and added hand-rolled drop migration; user authorized dev apply and scoped drift reports both retired tables dropped.         |
+| U17 Delete repo skill-catalog package           | `codex/pi-skill-catalog-u17-delete-package`          | Pending                                                      | Active | Deletes `packages/skill-catalog`, retires local catalog-seed/bundle/bootstrap paths, and keeps the tenant S3 skill catalog as source of truth. Both active dev tenants have 19 S3 catalog skill folders.                                    |
 
 ## Verification Log
 
@@ -1686,6 +1687,10 @@ None.
 - Started U16 in `.Codex/worktrees/pi-skill-catalog-u16-drop-tables` on branch `codex/pi-skill-catalog-u16-drop-tables`.
 - U16 local verification: `pnpm install --frozen-lockfile`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/database-pg test`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; scoped `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0131_drop_skill_catalog_and_tenant_skills.sql`; touched-file Prettier; `git diff --check`; live-source retired identifier grep.
 - U16 dev apply was authorized by the user and completed with `DROP TABLE` for `public.tenant_skills` and `public.skill_catalog`; scoped `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0131_drop_skill_catalog_and_tenant_skills.sql` reports both objects `DROPPED`.
+- U16 PR checks passed on [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676): `Migration Drift Precheck (dev)`, `cla`, `lint`, `test`, `typecheck`, and `verify`.
+- U17 preflight found active dev tenants `academic-bobcat-897` and `sleek-squirrel-230`; `sleek-squirrel-230` already had 19 S3 catalog skill folders, and `academic-bobcat-897` was seeded with the same 19 non-built-in skill folders before deleting the repo package source.
+- Started U17 in `.Codex/worktrees/pi-skill-catalog-u17-delete-package` on branch `codex/pi-skill-catalog-u17-delete-package`.
+- U17 local verification passed: `pnpm install --frozen-lockfile`; focused `@thinkwork/api` workspace-files/process-parser/runtime-config/catalog install/reinstall tests; `@thinkwork/api` typecheck; Strands run-skill/skill parser/resolver pytest suite; `pnpm test:release`; `bash scripts/build-lambdas.sh workspace-files`; `bash scripts/build-lambdas.sh graphql-http`; `bash scripts/build-lambdas.sh wakeup-processor`; focused `thinkwork-cli`/admin-ops/computer-runtime/agentcore-pi typechecks; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; full `@thinkwork/api` test suite; touched-file Prettier; Ruff on modified Python files; `git diff --check`; live-source retired repo-catalog reference grep.
 
 ## CI / PR
 
@@ -1731,6 +1736,7 @@ None.
 - Opened [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676).
 - [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676) CI failed `Migration Drift Precheck (dev)` because `public.tenant_skills` and `public.skill_catalog` are still present in dev. The PR intentionally has not manually applied the destructive drop migration.
 - User authorized running the destructive dev migration; applied it and verified the scoped drift reporter reports both drop markers as `DROPPED`.
+- Squash merged [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676) as `92bcb825c9c2b24d00c62905a0fb6d2d2156b8c5`; remote branch was deleted and the local branch/worktree were removed.
 
 ## Blockers
 

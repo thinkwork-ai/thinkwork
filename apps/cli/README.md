@@ -38,7 +38,7 @@ thinkwork plan -s dev
 # 5. Deploy (~5 min)
 thinkwork deploy -s dev
 
-# 6. Seed workspace files + skill catalog
+# 6. Seed workspace files
 thinkwork bootstrap -s dev
 
 # 7. Show what was deployed
@@ -66,36 +66,36 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 
 ### Setup
 
-| Command | Description |
-|---------|-------------|
-| `thinkwork login` | Configure AWS credentials (access keys or `--sso`) |
-| `thinkwork login --stage <s>` | Sign in to a deployed stack via Cognito (OAuth; Google supported). Caches tokens in `~/.thinkwork/config.json` |
-| `thinkwork login --stage <s> --api-key <secret>` | Non-interactive CI path; stores the api_auth_secret as the session |
-| `thinkwork logout [--stage <s> \| --all]` | Forget stored sessions |
-| `thinkwork me [--stage <s>]` | Print who you're signed in as on a stage (verifies via a live `me` query) |
-| `thinkwork init -s <stage>` | Initialize a new environment — generates terraform.tfvars, scaffolds Terraform modules, runs `terraform init` |
-| `thinkwork doctor -s <stage>` | Check prerequisites (AWS CLI, Terraform, credentials, Bedrock access) |
+| Command                                          | Description                                                                                                    |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `thinkwork login`                                | Configure AWS credentials (access keys or `--sso`)                                                             |
+| `thinkwork login --stage <s>`                    | Sign in to a deployed stack via Cognito (OAuth; Google supported). Caches tokens in `~/.thinkwork/config.json` |
+| `thinkwork login --stage <s> --api-key <secret>` | Non-interactive CI path; stores the api_auth_secret as the session                                             |
+| `thinkwork logout [--stage <s> \| --all]`        | Forget stored sessions                                                                                         |
+| `thinkwork me [--stage <s>]`                     | Print who you're signed in as on a stage (verifies via a live `me` query)                                      |
+| `thinkwork init -s <stage>`                      | Initialize a new environment — generates terraform.tfvars, scaffolds Terraform modules, runs `terraform init`  |
+| `thinkwork doctor -s <stage>`                    | Check prerequisites (AWS CLI, Terraform, credentials, Bedrock access)                                          |
 
 ### Deploy
 
-| Command | Description |
-|---------|-------------|
-| `thinkwork plan -s <stage>` | Preview infrastructure changes |
-| `thinkwork deploy -s <stage>` | Deploy infrastructure (terraform apply) |
-| `thinkwork bootstrap -s <stage>` | Seed workspace defaults, skill catalog, and per-tenant files |
-| `thinkwork destroy -s <stage>` | Tear down infrastructure |
+| Command                          | Description                                            |
+| -------------------------------- | ------------------------------------------------------ |
+| `thinkwork plan -s <stage>`      | Preview infrastructure changes                         |
+| `thinkwork deploy -s <stage>`    | Deploy infrastructure (terraform apply)                |
+| `thinkwork bootstrap -s <stage>` | Seed workspace defaults and per-tenant workspace files |
+| `thinkwork destroy -s <stage>`   | Tear down infrastructure                               |
 
 ### Manage
 
-| Command | Description |
-|---------|-------------|
-| `thinkwork status` | Discover all deployed environments in AWS (clickable URLs) |
-| `thinkwork status -s <stage>` | Detailed view for one environment |
-| `thinkwork outputs -s <stage>` | Show deployment outputs (API URL, Cognito IDs, etc.) |
-| `thinkwork config list` | List all initialized environments |
-| `thinkwork config list -s <stage>` | Show full config for an environment (secrets masked) |
-| `thinkwork config get <key> -s <stage>` | Read a configuration value |
-| `thinkwork config set <key> <value> -s <stage>` | Update a configuration value |
+| Command                                         | Description                                                |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| `thinkwork status`                              | Discover all deployed environments in AWS (clickable URLs) |
+| `thinkwork status -s <stage>`                   | Detailed view for one environment                          |
+| `thinkwork outputs -s <stage>`                  | Show deployment outputs (API URL, Cognito IDs, etc.)       |
+| `thinkwork config list`                         | List all initialized environments                          |
+| `thinkwork config list -s <stage>`              | Show full config for an environment (secrets masked)       |
+| `thinkwork config get <key> -s <stage>`         | Read a configuration value                                 |
+| `thinkwork config set <key> <value> -s <stage>` | Update a configuration value                               |
 
 ### Wiki (Compounding Memory)
 
@@ -103,11 +103,11 @@ Admin-only. Operator controls for the wiki compile pipeline — kick a compile,
 rebuild from scratch, or inspect recent compile jobs without leaving the
 terminal.
 
-| Command | Description |
-|---------|-------------|
-| `thinkwork wiki compile` | Enqueue a compile for one agent (`--agent`) or every tenant agent (`--all`). `--model <id>` spikes a non-default Bedrock model for one run. `--watch` follows the job (single-agent only). |
-| `thinkwork wiki rebuild --agent <id>` | Destructive: archive the agent's active pages, clear the compile cursor, and enqueue a fresh compile. Confirm unless `--yes`. `--all` is intentionally rejected. |
-| `thinkwork wiki status` | Show recent compile jobs for a tenant. `--agent <id>` restricts to one scope. `--watch` polls until the latest job reaches a terminal state. |
+| Command                               | Description                                                                                                                                                                                |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `thinkwork wiki compile`              | Enqueue a compile for one agent (`--agent`) or every tenant agent (`--all`). `--model <id>` spikes a non-default Bedrock model for one run. `--watch` follows the job (single-agent only). |
+| `thinkwork wiki rebuild --agent <id>` | Destructive: archive the agent's active pages, clear the compile cursor, and enqueue a fresh compile. Confirm unless `--yes`. `--all` is intentionally rejected.                           |
+| `thinkwork wiki status`               | Show recent compile jobs for a tenant. `--agent <id>` restricts to one scope. `--watch` polls until the latest job reaches a terminal state.                                               |
 
 Requires admin credentials (api-key session, or an admin-promoted tenant
 membership). Cognito end-user sessions see a clear "admin access required"
@@ -142,14 +142,14 @@ Any flag accepted by a command is also inferrable from env vars:
 All 25 originally-scaffolded commands across Phases 1–5 are now live.
 `thinkwork <cmd> --help` is authoritative for flags + examples.
 
-| Phase | Domain | Commands |
-|-------|--------|----------|
-| 0 | Foundation | `login` (chains AWS profile + Cognito API session), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
-| 1 | Work & approvals | `thread`, `message`, `label`, `inbox` |
-| 2 | Agents & workspace | `member`, `team`, `kb`, `template`, `tenant`, `agent` |
-| 3 | Automation & integrations | `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `skill` (`connector` retired) |
-| 4 | Memory & artifacts | `memory`, `recipe`, `artifact` |
-| 5 | Observability & spend | `cost`, `budget`, `performance`, `trace`, `dashboard` |
+| Phase | Domain                    | Commands                                                                                                              |
+| ----- | ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| 0     | Foundation                | `login` (chains AWS profile + Cognito API session), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
+| 1     | Work & approvals          | `thread`, `message`, `label`, `inbox`                                                                                 |
+| 2     | Agents & workspace        | `member`, `team`, `kb`, `template`, `tenant`, `agent`                                                                 |
+| 3     | Automation & integrations | `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `skill` (`connector` retired)                                |
+| 4     | Memory & artifacts        | `memory`, `recipe`, `artifact`                                                                                        |
+| 5     | Observability & spend     | `cost`, `budget`, `performance`, `trace`, `dashboard`                                                                 |
 
 `skill create` and `skill update` were retired in favor of
 `thinkwork skill push <folder>` — that's the real custom-skill authoring
