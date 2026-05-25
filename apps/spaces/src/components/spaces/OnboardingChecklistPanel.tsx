@@ -1,6 +1,6 @@
 import {
   AlertCircle,
-  Archive,
+  CheckCheck,
   CheckCircle2,
   CircleDashed,
   ExternalLink,
@@ -19,6 +19,11 @@ import {
   Badge,
   Button,
   Progress,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Separator,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
@@ -35,9 +40,11 @@ interface OnboardingChecklistPanelProps {
   sourceContext?: OnboardingSourceContext | null;
   isLoading?: boolean;
   error?: string | null;
-  archivedAt?: string | null;
-  isArchiving?: boolean;
-  onArchive?: () => Promise<void> | void;
+  completedAt?: string | null;
+  isCompleting?: boolean;
+  updatingTaskId?: string | null;
+  onUpdateTask?: (taskId: string, status: string) => Promise<void> | void;
+  onCompleteThread?: () => Promise<void> | void;
 }
 
 export function OnboardingChecklistPanel({
@@ -45,11 +52,13 @@ export function OnboardingChecklistPanel({
   sourceContext,
   isLoading = false,
   error,
-  archivedAt,
-  isArchiving = false,
-  onArchive,
+  completedAt,
+  isCompleting = false,
+  updatingTaskId,
+  onUpdateTask,
+  onCompleteThread,
 }: OnboardingChecklistPanelProps) {
-  const requiredTasks = tasks.filter((task) => task.required !== false);
+  const requiredTasks = tasks.filter(isRequiredAndApplicable);
   const completedRequired = requiredTasks.filter(isTaskComplete).length;
   const requiredTotal = requiredTasks.length;
   const progress =
@@ -58,11 +67,8 @@ export function OnboardingChecklistPanel({
       : 0;
   const allRequiredComplete =
     requiredTotal > 0 && completedRequired === requiredTotal;
-  const hasSyncProblems = tasks.some(
-    (task) =>
-      normalize(task.syncStatus) === "error" ||
-      normalize(task.status) === "blocked" ||
-      task.blocked,
+  const hasBlockers = requiredTasks.some(
+    (task) => normalize(task.status) === "blocked" || task.blocked,
   );
 
   return (
@@ -102,19 +108,24 @@ export function OnboardingChecklistPanel({
         ) : (
           <div className="space-y-2">
             {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} />
+              <TaskRow
+                key={task.id}
+                task={task}
+                isUpdating={updatingTaskId === task.id}
+                onUpdateTask={onUpdateTask}
+              />
             ))}
           </div>
         )}
       </div>
 
       <div className="shrink-0 border-t p-4">
-        <ArchiveRecommendation
+        <CompletionAction
           allRequiredComplete={allRequiredComplete}
-          hasSyncProblems={hasSyncProblems}
-          archivedAt={archivedAt}
-          isArchiving={isArchiving}
-          onArchive={onArchive}
+          hasBlockers={hasBlockers}
+          completedAt={completedAt}
+          isCompleting={isCompleting}
+          onCompleteThread={onCompleteThread}
         />
       </div>
     </aside>
@@ -126,9 +137,26 @@ function SourceContext({ context }: { context: OnboardingSourceContext }) {
     ["Customer", context.companyName ?? context.customerName],
     ["Opportunity", context.opportunityId],
     ["Sales", context.salesRep],
+    ["Primary", formatPerson(context.primaryContact)],
+    ["AP", formatPerson(context.accountsPayableContact)],
+    ["Billing", context.billingAddress],
+    [
+      "Shipping",
+      context.billingSameAsShipping
+        ? "Same as billing"
+        : context.shippingAddress,
+    ],
     ["Plan", context.productPlan],
     ["Value", context.dealValue],
     ["Close", context.closeDate],
+    ["Tax", booleanLabel(context.taxExempt, context.taxExemptionType)],
+    [
+      "Credit",
+      booleanLabel(context.creditTermsRequested, context.requestedTerms),
+    ],
+    ["DocuSign", formatPerson(context.docusignRecipient)],
+    ["D&B", context.dunAndBradstreetId],
+    ["P21", context.p21CustomerId],
   ].filter(([, value]) => value);
 
   return (
@@ -162,16 +190,32 @@ function SourceContext({ context }: { context: OnboardingSourceContext }) {
           Missing: {context.missingFields.join(", ")}
         </div>
       ) : null}
+      {context.accountSetupBlockers ? (
+        <div className="mt-3 rounded-md border border-destructive/30 px-3 py-2 text-xs text-destructive">
+          {context.accountSetupBlockers}
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function TaskRow({ task }: { task: LinkedTaskSummary }) {
+function TaskRow({
+  task,
+  isUpdating,
+  onUpdateTask,
+}: {
+  task: LinkedTaskSummary;
+  isUpdating: boolean;
+  onUpdateTask?: (taskId: string, status: string) => Promise<void> | void;
+}) {
   const status = normalize(task.status);
   const syncStatus = normalize(task.syncStatus);
   const isComplete = isTaskComplete(task);
+  const isNative = isNativeTask(task);
   const isBlocked =
-    task.blocked || status === "blocked" || syncStatus === "error";
+    task.blocked ||
+    status === "blocked" ||
+    (!isNative && syncStatus === "error");
   const Icon = isComplete
     ? CheckCircle2
     : isBlocked
@@ -210,19 +254,30 @@ function TaskRow({ task }: { task: LinkedTaskSummary }) {
             </Badge>
           </div>
           <div className="mt-2 flex min-w-0 items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span className="truncate">{syncLabel(task.syncStatus)}</span>
+            <span className="truncate">
+              {isNative ? "ThinkWork checklist" : syncLabel(task.syncStatus)}
+            </span>
             <span className="shrink-0">
               {formatSpaceDate(task.lastSyncedAt ?? task.updatedAt)}
             </span>
           </div>
-          {task.externalTaskUrl ? (
+          {isNative ? (
+            <StatusSelect
+              value={task.status}
+              disabled={!onUpdateTask || isUpdating}
+              isUpdating={isUpdating}
+              onChange={(nextStatus) =>
+                void onUpdateTask?.(task.id, nextStatus)
+              }
+            />
+          ) : task.externalTaskUrl ? (
             <a
               href={task.externalTaskUrl}
               target="_blank"
               rel="noreferrer"
               className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary"
             >
-              LastMile
+              External task
               <ExternalLink className="size-3" />
             </a>
           ) : null}
@@ -232,26 +287,66 @@ function TaskRow({ task }: { task: LinkedTaskSummary }) {
   );
 }
 
-function ArchiveRecommendation({
+function StatusSelect({
+  value,
+  disabled,
+  isUpdating,
+  onChange,
+}: {
+  value?: string | null;
+  disabled: boolean;
+  isUpdating: boolean;
+  onChange: (status: string) => void;
+}) {
+  return (
+    <div className="mt-3">
+      <Select
+        value={statusValue(value)}
+        onValueChange={onChange}
+        disabled={disabled}
+      >
+        <SelectTrigger className="h-8 text-xs" aria-label="Checklist status">
+          {isUpdating ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-3 animate-spin" />
+              Updating
+            </span>
+          ) : (
+            <SelectValue />
+          )}
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="TODO">Todo</SelectItem>
+          <SelectItem value="IN_PROGRESS">In progress</SelectItem>
+          <SelectItem value="BLOCKED">Blocked</SelectItem>
+          <SelectItem value="COMPLETED">Completed</SelectItem>
+          <SelectItem value="NOT_APPLICABLE">Not applicable</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function CompletionAction({
   allRequiredComplete,
-  hasSyncProblems,
-  archivedAt,
-  isArchiving,
-  onArchive,
+  hasBlockers,
+  completedAt,
+  isCompleting,
+  onCompleteThread,
 }: {
   allRequiredComplete: boolean;
-  hasSyncProblems: boolean;
-  archivedAt?: string | null;
-  isArchiving: boolean;
-  onArchive?: () => Promise<void> | void;
+  hasBlockers: boolean;
+  completedAt?: string | null;
+  isCompleting: boolean;
+  onCompleteThread?: () => Promise<void> | void;
 }) {
-  const canArchive = allRequiredComplete && !hasSyncProblems && !archivedAt;
-  const label = archivedAt
-    ? `Archived ${formatSpaceDate(archivedAt)}`
+  const canComplete = allRequiredComplete && !hasBlockers && !completedAt;
+  const label = completedAt
+    ? `Completed ${formatSpaceDate(completedAt)}`
     : allRequiredComplete
-      ? hasSyncProblems
-        ? "Review blockers before archiving"
-        : "Ready for archive review"
+      ? hasBlockers
+        ? "Review blockers before completing"
+        : "Ready to complete"
       : "Waiting on required tasks";
 
   return (
@@ -263,28 +358,28 @@ function ArchiveRecommendation({
             type="button"
             size="sm"
             className="w-full"
-            disabled={!canArchive || !onArchive || isArchiving}
+            disabled={!canComplete || !onCompleteThread || isCompleting}
           >
-            {isArchiving ? (
+            {isCompleting ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Archive className="size-4" />
+              <CheckCheck className="size-4" />
             )}
-            Archive
+            Complete Thread
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive this Thread?</AlertDialogTitle>
+            <AlertDialogTitle>Complete this Thread?</AlertDialogTitle>
             <AlertDialogDescription>
-              The checklist is complete. The Thread will leave active onboarding
-              views but remain searchable.
+              The required onboarding checklist is complete. The Thread status
+              will move to Done.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void onArchive?.()}>
-              Archive
+            <AlertDialogAction onClick={() => void onCompleteThread?.()}>
+              Complete Thread
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -316,6 +411,22 @@ function isTaskComplete(task: LinkedTaskSummary) {
   return normalize(task.status) === "completed";
 }
 
+function isRequiredAndApplicable(task: LinkedTaskSummary) {
+  return task.required !== false && normalize(task.status) !== "not_applicable";
+}
+
+function isNativeTask(task: LinkedTaskSummary) {
+  const provider = normalize(task.provider);
+  if (provider) return provider === "thinkwork";
+  return !task.externalTaskId && !task.externalTaskUrl;
+}
+
+function statusValue(value?: string | null) {
+  const normalized = normalize(value);
+  if (!normalized) return "TODO";
+  return normalized.toUpperCase();
+}
+
 function syncLabel(value?: string | null) {
   const normalized = normalize(value);
   if (!normalized) return "Not synced";
@@ -330,4 +441,20 @@ function normalize(value?: string | null) {
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+function formatPerson(
+  person?: {
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null,
+) {
+  if (!person) return null;
+  return [person.name, person.email, person.phone].filter(Boolean).join(" · ");
+}
+
+function booleanLabel(value?: boolean | null, detail?: string | null) {
+  if (value === null || value === undefined) return null;
+  return detail ? `${value ? "Yes" : "No"} · ${detail}` : value ? "Yes" : "No";
 }

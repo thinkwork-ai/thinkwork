@@ -2,11 +2,13 @@ import {
   Link,
   Outlet,
   createFileRoute,
+  useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { MessageCirclePlus } from "lucide-react";
 import { Button } from "@thinkwork/ui";
+import { StartOnboardingDialog } from "@/components/spaces/StartOnboardingDialog";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { SpaceQuery, SpaceThreadsQuery } from "@/lib/graphql-queries";
@@ -25,6 +27,8 @@ interface SpaceResult {
     name?: string | null;
     description?: string | null;
     prompt?: string | null;
+    kind?: string | null;
+    templateKey?: string | null;
   } | null;
 }
 
@@ -56,6 +60,7 @@ function SpaceWorkroomPage() {
 function SpaceWorkroomHome() {
   const { spaceId } = Route.useParams();
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [{ data: spaceData, fetching: spaceFetching, error: spaceError }] =
     useQuery<SpaceResult>({
       query: SpaceQuery,
@@ -81,6 +86,9 @@ function SpaceWorkroomHome() {
   usePageHeaderActions({ title: spaceName });
 
   const threads = threadsData?.threadsPaged?.items ?? [];
+  const isCustomerOnboardingSpace = shouldShowCustomerOnboardingStart(
+    spaceData?.space,
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 p-4 md:p-8">
@@ -101,12 +109,25 @@ function SpaceWorkroomHome() {
               </p>
             ) : null}
           </div>
-          <Button asChild>
-            <Link to="/new" search={{ spaceId }}>
-              <MessageCirclePlus className="size-4" />
-              <span>New chat</span>
-            </Link>
-          </Button>
+          {isCustomerOnboardingSpace && tenantId ? (
+            <StartOnboardingDialog
+              tenantId={tenantId}
+              spaceId={spaceId}
+              onStarted={(threadId) => {
+                void navigate({
+                  to: "/spaces/$spaceId/threads/$threadId",
+                  params: { spaceId, threadId },
+                });
+              }}
+            />
+          ) : (
+            <Button asChild>
+              <Link to="/new" search={{ spaceId }}>
+                <MessageCirclePlus className="size-4" />
+                <span>New chat</span>
+              </Link>
+            </Button>
+          )}
         </div>
       </section>
 
@@ -153,4 +174,23 @@ function SpaceWorkroomHome() {
       </section>
     </main>
   );
+}
+
+export function shouldShowCustomerOnboardingStart(
+  space?: {
+    kind?: string | null;
+    templateKey?: string | null;
+  } | null,
+) {
+  return (
+    normalizeSpaceValue(space?.kind) === "customer_onboarding" ||
+    normalizeSpaceValue(space?.templateKey) === "customer_onboarding"
+  );
+}
+
+function normalizeSpaceValue(value?: string | null) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
 }
