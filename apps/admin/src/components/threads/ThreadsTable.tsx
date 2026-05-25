@@ -18,7 +18,7 @@
 
 import { useMemo } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Lock, Hash } from "lucide-react";
+import { Lock } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { StatusIcon } from "@/components/threads/StatusIcon";
@@ -158,19 +158,18 @@ export function ThreadsTable({
       },
       {
         id: "space",
-        header: "Space",
+        header: () => <div className="text-center">Space</div>,
         size: 180,
         cell: ({ row }) => {
           const space = row.original.space;
           return (
-            <div className="flex h-10 min-w-0 items-center px-2">
+            <div className="flex h-10 min-w-0 items-center justify-center px-2">
               {space ? (
                 <Badge
                   variant="outline"
-                  className="max-w-full gap-1 px-1.5 text-xs font-normal text-muted-foreground"
+                  className="max-w-full px-1.5 text-xs font-normal text-muted-foreground"
                   title={`Space: ${space.name}`}
                 >
-                  <Hash className="h-3 w-3 shrink-0" />
                   <span className="truncate">{space.name}</span>
                 </Badge>
               ) : (
@@ -182,12 +181,12 @@ export function ThreadsTable({
       },
       {
         id: "runtime",
-        header: "Runtime",
+        header: () => <div className="text-center">Runtime</div>,
         size: 110,
         cell: ({ row }) => {
           const runtimeType = row.original.lastRuntimeType;
           return (
-            <div className="flex h-10 items-center px-2">
+            <div className="flex h-10 items-center justify-center px-2">
               {runtimeType ? (
                 <Badge
                   variant="secondary"
@@ -205,12 +204,12 @@ export function ThreadsTable({
       },
       {
         id: "model",
-        header: "Model",
+        header: () => <div className="text-center">Model</div>,
         size: 190,
         cell: ({ row }) => {
           const model = row.original.lastModel;
           return (
-            <div className="flex h-10 items-center px-2">
+            <div className="flex h-10 items-center justify-center px-2">
               {model ? (
                 <Badge
                   variant="outline"
@@ -228,13 +227,13 @@ export function ThreadsTable({
       },
       {
         id: "user",
-        header: "User",
+        header: () => <div className="text-center">User</div>,
         size: 120,
         cell: ({ row }) => {
           const label = threadUserLabel(row.original);
           return (
             <div
-              className="h-10 whitespace-nowrap px-2 text-sm leading-10 text-muted-foreground"
+              className="h-10 whitespace-nowrap px-2 text-center text-sm leading-10 text-muted-foreground"
               title={label}
             >
               {row.original.userId || row.original.user ? label : "—"}
@@ -244,10 +243,10 @@ export function ThreadsTable({
       },
       {
         id: "lastActivity",
-        header: "Last Activity",
+        header: () => <div className="text-center">Last Activity</div>,
         size: 105,
         cell: ({ row }) => (
-          <div className="h-10 truncate px-2 text-right text-sm leading-10 text-muted-foreground">
+          <div className="h-10 truncate px-2 text-center text-sm leading-10 text-muted-foreground">
             {formatThreadActivityTime(
               row.original.lastActivityAt,
               row.original.updatedAt,

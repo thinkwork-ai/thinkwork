@@ -37,6 +37,7 @@ import {
   OnThreadTurnUpdatedSubscription,
   ThreadTracesQuery,
   ThreadSystemPromptQuery,
+  ThreadProgressQuery,
 } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -44,9 +45,11 @@ import { downloadThreadAttachment } from "@/lib/thread-attachments-api";
 import {
   ChevronDown,
   ChevronRight,
+  AlertCircle,
+  CheckCircle2,
+  Circle,
   ExternalLink,
   FileText,
-  Hash,
   Lock,
   MoreHorizontal,
   SlidersHorizontal,
@@ -326,6 +329,12 @@ function ThreadDetailPage() {
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const [threadProgressResult, reexecuteThreadProgress] = useQuery({
+    query: ThreadProgressQuery,
+    variables: { tenantId: tenantId!, threadId },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
 
   const [, updateThread] = useMutation(UpdateThreadMutation);
   const [, deleteThread] = useMutation(DeleteThreadMutation);
@@ -339,8 +348,9 @@ function ThreadDetailPage() {
   useEffect(() => {
     if (threadSub.data?.onThreadUpdated?.threadId === threadId) {
       reexecuteThread({ requestPolicy: "network-only" });
+      reexecuteThreadProgress({ requestPolicy: "network-only" });
     }
-  }, [threadSub.data, threadId, reexecuteThread]);
+  }, [threadSub.data, threadId, reexecuteThread, reexecuteThreadProgress]);
 
   const [turnSub] = useSubscription({
     query: OnThreadTurnUpdatedSubscription,
@@ -350,8 +360,9 @@ function ThreadDetailPage() {
   useEffect(() => {
     if (turnSub.data?.onThreadTurnUpdated) {
       reexecuteThread({ requestPolicy: "network-only" });
+      reexecuteThreadProgress({ requestPolicy: "network-only" });
     }
-  }, [turnSub.data, reexecuteThread]);
+  }, [turnSub.data, reexecuteThread, reexecuteThreadProgress]);
 
   const thread = threadResult.data?.thread;
   const isComputerOwnedThread = Boolean(thread?.computerId);
@@ -360,6 +371,8 @@ function ThreadDetailPage() {
   const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
   const threadSystemPrompt =
     threadPromptResult.data?.threadTurns?.[0]?.systemPrompt ?? null;
+  const threadProgressMarkdown =
+    threadProgressResult.data?.threadProgress?.markdown ?? null;
 
   // ---- Derived data ----
   const agentMap = useMemo(() => {
@@ -420,16 +433,19 @@ function ThreadDetailPage() {
   useEffect(() => {
     if (thread) {
       openPanel(
-        <ThreadProperties
-          thread={thread}
-          systemPrompt={threadSystemPrompt}
-          loading={threadResult.fetching && !thread.lifecycleStatus}
-        />,
+        <div className="space-y-3">
+          <ThreadProperties
+            thread={thread}
+            systemPrompt={threadSystemPrompt}
+            loading={threadResult.fetching && !thread.lifecycleStatus}
+          />
+          <ThreadProgressPanel markdown={threadProgressMarkdown} />
+        </div>,
       );
     }
     return () => closePanel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread, threadSystemPrompt]);
+  }, [thread, threadSystemPrompt, threadProgressMarkdown]);
 
   // ---- Loading & Error states ----
   if (threadResult.fetching && !thread) return <PageSkeleton />;
@@ -588,6 +604,8 @@ function ThreadDetailPage() {
             />
           </div>
 
+          <ThreadProgressPanel markdown={threadProgressMarkdown} card />
+
           {/* Attachments */}
           {hasAttachments && (
             <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
@@ -683,6 +701,7 @@ function ThreadDetailPage() {
                 inline
                 loading={threadResult.fetching && !thread.lifecycleStatus}
               />
+              <ThreadProgressPanel markdown={threadProgressMarkdown} />
             </div>
           </ScrollArea>
         </SheetContent>
@@ -802,10 +821,9 @@ function ThreadProperties({
         {thread.spaceId || thread.space ? (
           <Badge
             variant="outline"
-            className="max-w-40 gap-1 px-1.5 text-xs font-normal text-muted-foreground"
+            className="max-w-40 px-1.5 text-xs font-normal text-muted-foreground"
             title={`Space: ${spaceDisplayName(thread)}`}
           >
-            <Hash className="h-3 w-3 shrink-0" />
             <span className="truncate">{spaceDisplayName(thread)}</span>
           </Badge>
         ) : (
@@ -908,6 +926,276 @@ function PropRow({
       <span>{children}</span>
     </div>
   );
+}
+
+type ParsedProgressTaskStatus =
+  | "completed"
+  | "in_progress"
+  | "blocked"
+  | "cancelled"
+  | "not_applicable"
+  | "todo";
+
+interface ParsedProgressTask {
+  title: string;
+  status: ParsedProgressTaskStatus;
+  statusLabel: string;
+  owner?: string | null;
+}
+
+interface ParsedThreadProgress {
+  completed: number;
+  total: number;
+  percent: number;
+  status?: string | null;
+  updated?: string | null;
+  tasks: ParsedProgressTask[];
+}
+
+function ThreadProgressPanel({
+  markdown,
+  card = false,
+}: {
+  markdown?: string | null;
+  card?: boolean;
+}) {
+  const progress = useMemo(
+    () => parseThreadProgressMarkdown(markdown),
+    [markdown],
+  );
+  if (!progress) return null;
+
+  const content = (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">
+            {progress.total
+              ? `${progress.completed}/${progress.total} required complete`
+              : "No task list"}
+          </p>
+          {progress.status ? (
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              {progress.status}
+            </p>
+          ) : null}
+        </div>
+        <Badge variant="secondary" className="shrink-0 text-xs font-normal">
+          {progress.percent}%
+        </Badge>
+      </div>
+
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-muted-foreground/70"
+          style={{ width: `${progress.percent}%` }}
+        />
+      </div>
+
+      {progress.tasks.length > 0 ? (
+        <div className="space-y-2">
+          {progress.tasks.map((task, index) => (
+            <ThreadProgressTaskRow key={`${task.title}-${index}`} task={task} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          PROGRESS.md does not include task rows yet.
+        </p>
+      )}
+
+      {progress.updated ? (
+        <p className="text-[10px] text-muted-foreground">
+          Updated {formatProgressUpdatedAt(progress.updated)}
+        </p>
+      ) : null}
+    </div>
+  );
+
+  if (card) {
+    return (
+      <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-3">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Progress
+        </h3>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
+        Progress
+      </h3>
+      {content}
+    </div>
+  );
+}
+
+function ThreadProgressTaskRow({ task }: { task: ParsedProgressTask }) {
+  const Icon =
+    task.status === "completed"
+      ? CheckCircle2
+      : task.status === "blocked"
+        ? AlertCircle
+        : Circle;
+  return (
+    <div className="flex items-start gap-2 text-sm">
+      <Icon
+        className={cn(
+          "mt-0.5 h-3.5 w-3.5 shrink-0",
+          task.status === "completed"
+            ? "text-muted-foreground"
+            : task.status === "blocked"
+              ? "text-destructive"
+              : "text-muted-foreground/80",
+        )}
+      />
+      <div className="min-w-0">
+        <p className="line-clamp-2 text-muted-foreground">{task.title}</p>
+        {task.owner ? (
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
+            {task.owner} · {task.statusLabel}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function parseThreadProgressMarkdown(
+  markdown?: string | null,
+): ParsedThreadProgress | null {
+  if (!markdown?.trim()) return null;
+
+  const lines = markdown.split(/\r?\n/);
+  const status = readProgressField(lines, "Status");
+  const updated = readProgressField(lines, "Updated");
+  const tasks = parseProgressTable(lines);
+  if (tasks.length === 0) {
+    tasks.push(...parseProgressTaskList(lines));
+  }
+
+  const activeTasks = tasks.filter((task) => task.status !== "not_applicable");
+  const completed = activeTasks.filter(
+    (task) => task.status === "completed",
+  ).length;
+  const total = activeTasks.length;
+  const percent =
+    readProgressPercent(lines) ?? percentFromCounts(completed, total);
+
+  return {
+    completed,
+    total,
+    percent,
+    status,
+    updated,
+    tasks,
+  };
+}
+
+function parseProgressTable(lines: string[]): ParsedProgressTask[] {
+  const headerIndex = lines.findIndex((line) =>
+    /^\|\s*Task\s*\|\s*Status\s*\|/i.test(line),
+  );
+  if (headerIndex === -1) return [];
+
+  const tasks: ParsedProgressTask[] = [];
+  for (const line of lines.slice(headerIndex + 2)) {
+    if (!line.trim().startsWith("|")) break;
+    const cells = splitMarkdownTableRow(line);
+    if (cells.length < 2) continue;
+    tasks.push({
+      title: cells[0] || "Untitled task",
+      status: normalizeProgressTaskStatus(cells[1]),
+      statusLabel: cells[1] || "Todo",
+      owner: cells[2] && cells[2] !== "Unassigned" ? cells[2] : null,
+    });
+  }
+  return tasks;
+}
+
+function parseProgressTaskList(lines: string[]): ParsedProgressTask[] {
+  return lines.flatMap((line) => {
+    const match = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/);
+    if (!match) return [];
+    const completed = match[1].toLowerCase() === "x";
+    return [
+      {
+        title: match[2].trim(),
+        status: completed ? "completed" : "todo",
+        statusLabel: completed ? "Completed" : "Todo",
+        owner: null,
+      } satisfies ParsedProgressTask,
+    ];
+  });
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const cells: string[] = [];
+  let current = "";
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const char = trimmed[i];
+    if (char === "\\" && trimmed[i + 1] === "|") {
+      current += "|";
+      i += 1;
+      continue;
+    }
+    if (char === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function readProgressField(lines: string[], field: string): string | null {
+  const prefix = `${field}:`;
+  const line = lines.find((candidate) =>
+    candidate.toLowerCase().startsWith(prefix.toLowerCase()),
+  );
+  return line ? line.slice(prefix.length).trim() || null : null;
+}
+
+function readProgressPercent(lines: string[]): number | null {
+  const line = lines.find((candidate) =>
+    /^\s*-\s*Overall:\s*\d+%/i.test(candidate),
+  );
+  const match = line?.match(/(\d+)%/);
+  if (!match) return null;
+  return Math.max(0, Math.min(100, Number(match[1])));
+}
+
+function percentFromCounts(completed: number, total: number): number {
+  if (total === 0) return 0;
+  return Math.round((completed / total) * 100);
+}
+
+function normalizeProgressTaskStatus(value: string): ParsedProgressTaskStatus {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (normalized === "completed" || normalized === "done") return "completed";
+  if (normalized === "blocked") return "blocked";
+  if (normalized === "cancelled" || normalized === "canceled")
+    return "cancelled";
+  if (normalized === "not_applicable" || normalized === "n/a")
+    return "not_applicable";
+  if (normalized === "in_progress" || normalized === "running")
+    return "in_progress";
+  return "todo";
+}
+
+function formatProgressUpdatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return relativeTime(date);
 }
 
 // ---------------------------------------------------------------------------
