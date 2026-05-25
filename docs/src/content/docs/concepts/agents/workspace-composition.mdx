@@ -1,0 +1,136 @@
+---
+title: Workspace Composition
+description: How ThinkWork resolves agent folders, Space files, templates, defaults, managed user context, pinned guardrails, memory notes, and skills.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Workspace composition is the read-time process that turns a tenant platform agent, a Space, a target folder, and reusable defaults into the file tree the runtime sees for a turn.
+
+ThinkWork does not fork a complete copy of every file for every agent. It resolves files from the most specific layer that applies, then renders placeholders and file classes. That keeps defaults reusable while still allowing a Space or specialist folder to carry local context.
+
+<Aside type="note">
+  Older docs called this workspace overlay. The current model is broader: it
+  includes Space context, managed user context, and folder specialists under
+  `workspaces/<slug>/`.
+</Aside>
+
+## The layers
+
+Composition starts with the target being invoked and walks outward:
+
+| Layer                     | What it contributes                                                           |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| Target folder             | `workspaces/<slug>/CONTEXT.md`, local `AGENTS.md`, local memory, local skills |
+| Root agent workspace      | Tenant platform-agent identity, routing, guardrails, tools, memory notes      |
+| Active Space workspace    | Project, customer, channel, workflow, membership, and Space-local policy      |
+| Template or import source | Reusable starting files for supported authoring and migration flows           |
+| Defaults                  | Canonical baseline files from `@thinkwork/workspace-defaults`                 |
+| Managed user context      | `USER.md` rendered from requester and profile data                            |
+
+The runtime receives the composed result. Operators can edit the visible files, but some files are generated or pinned by the platform.
+
+## Canonical files
+
+The current default workspace file set is:
+
+| Path                                       | Class         | Notes                                                           |
+| ------------------------------------------ | ------------- | --------------------------------------------------------------- |
+| `AGENTS.md`                                | live          | Identity, routing, generated folder map, specialist ownership   |
+| `CONTEXT.md`                               | live          | Root scope and responsibilities                                 |
+| `GUARDRAILS.md`                            | pinned        | Guardrail baseline; template/default changes require acceptance |
+| `USER.md`                                  | managed       | Rewritten from requester profile data                           |
+| `SPACE.md`                                 | rendered      | Active Space context for the turn                               |
+| `MEMORY_GUIDE.md`                          | live          | Memory tool and workspace-note instructions                     |
+| `ROUTER.md`                                | live          | Legacy channel-profile loading guidance                         |
+| `TOOLS.md`                                 | live          | Tool-surface guidance                                           |
+| `mcp.json`                                 | live/config   | MCP server configuration metadata                               |
+| `memory/lessons.md`                        | live/writable | Editable workspace note                                         |
+| `memory/preferences.md`                    | live/writable | Editable workspace note                                         |
+| `memory/contacts.md`                       | live/writable | Editable workspace note                                         |
+| `skills/<slug>/SKILL.md`                   | capability    | Installed skill package                                         |
+| `workspaces/<slug>/CONTEXT.md`             | specialist    | Folder-specialist context                                       |
+| `workspaces/<slug>/workspaces/<child>/...` | specialist    | Nested folder-specialist context                                |
+
+Retired legacy files (`SOUL.md`, `IDENTITY.md`, `PLATFORM.md`, and `CAPABILITIES.md`) should not be authored for new work. Their content belongs in `AGENTS.md`, `CONTEXT.md`, `GUARDRAILS.md`, `TOOLS.md`, or skill files depending on what the content controls.
+
+## File classes
+
+### Live files
+
+Most files are live. The highest matching layer wins, and edits are visible on the next turn. Examples: `AGENTS.md`, `CONTEXT.md`, `MEMORY_GUIDE.md`, `TOOLS.md`, `mcp.json`, `memory/*.md`, and skill files.
+
+### Pinned files
+
+`GUARDRAILS.md` is pinned. A template or defaults-side guardrail change should not silently alter every downstream runtime. Operators review and accept guardrail updates before the pin advances.
+
+### Managed files
+
+`USER.md` is managed by the server. It is rendered from the requester/user profile and rewritten by platform code when user context changes. Operators should edit the user/profile source of truth, not hand-edit `USER.md`.
+
+### Rendered files
+
+`SPACE.md` is replaced with the active Space context for the turn. Space-specific procedures should live on the Space workspace so they do not leak into unrelated Spaces.
+
+## Folder lookup
+
+For a target such as `workspaces/expenses/`, the runtime composes the baseline files, then narrows context to the target folder. A local file in the target folder can specialize behavior without copying the entire root:
+
+```text
+AGENTS.md
+CONTEXT.md
+GUARDRAILS.md
+SPACE.md
+USER.md
+workspaces/expenses/CONTEXT.md
+workspaces/expenses/memory/lessons.md
+workspaces/expenses/skills/finance-audit-xls/SKILL.md
+```
+
+If `workspaces/expenses/GUARDRAILS.md` exists, it narrows the root guardrails for that folder. If it does not, the target inherits the root guardrails.
+
+## S3 layout
+
+Every tenant's agent workspace state lives under:
+
+```text
+tenants/{tenantSlug}/agents/
+├── _catalog/
+│   ├── defaults/workspace/
+│   │   ├── AGENTS.md
+│   │   ├── CONTEXT.md
+│   │   ├── GUARDRAILS.md
+│   │   └── ...
+│   └── {templateSlug}/
+│       ├── workspace/
+│       └── workspace-versions/
+└── {agentSlug}/
+    └── workspace/
+        ├── AGENTS.md
+        ├── CONTEXT.md
+        ├── memory/
+        ├── skills/
+        └── workspaces/
+            └── expenses/
+                └── CONTEXT.md
+```
+
+Space files are stored in the Space workspace and rendered into the active turn as Space context. The runtime should treat Space context as current workroom context, not as a replacement for the tenant agent's root folder.
+
+## Editing rules
+
+- Edit root files for tenant-wide behavior.
+- Edit Space files for project, team, customer, channel, or workflow context.
+- Edit `workspaces/<slug>/` for durable specialist behavior.
+- Install capabilities under `skills/<slug>/`.
+- Write workspace notes only under `memory/`.
+- Keep secrets out of markdown; use credential and MCP configuration surfaces.
+- Use the accepted guardrail update flow for pinned `GUARDRAILS.md` changes.
+
+## Related pages
+
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folders as the behavior boundary.
+- [Inheritance Rules](/concepts/agents/inheritance-rules/) - path-specific lookup.
+- [Agents](/concepts/agents/) - tenant platform-agent overview.
+- [Spaces](/concepts/spaces/) - Space workrooms.
+- [Skills](/concepts/agents/skills/) - capability folders.

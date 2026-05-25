@@ -1,0 +1,157 @@
+---
+title: Folder Is the Agent
+description: How ThinkWork turns folders, markdown, memory notes, and skills into inspectable agent behavior.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+ThinkWork treats an agent as more than a database row or a running container. The row is the control-plane identity. The runtime is the execution substrate. The **folder** is where behavior lives.
+
+That is the "Folder Is the Agent" idea: if instructions, routing, tools, memory notes, and working artifacts are organized as files, the folder itself becomes an editable, inspectable agent boundary. Moving behavior is moving files. Reviewing behavior is reading files. Specializing behavior is adding a folder with narrower context.
+
+<Aside type="note">
+  This page describes ThinkWork's adaptation of the folder-agent idea. The cited
+  papers and essays are conceptual lineage, not ThinkWork API contracts.
+</Aside>
+
+## Why folders
+
+Agent frameworks often model specialization in code: classes, tool registries, orchestration graphs, and message-passing rules. That is useful for dynamic, concurrent systems. It is heavy when the main thing you need is clear context boundaries.
+
+Folders give ThinkWork a simpler control surface:
+
+| Need                          | Folder-native answer                                      |
+| ----------------------------- | --------------------------------------------------------- |
+| Change a specialist's job     | Edit `workspaces/<slug>/CONTEXT.md`                       |
+| Add a specialist              | Add `workspaces/<slug>/` and a routing row in `AGENTS.md` |
+| See what the model will read  | Open the folder and its inherited files                   |
+| Keep context focused          | Load only the folder, Space, memory, and skills in scope  |
+| Hand work to another operator | Share the folder tree and thread                          |
+| Audit behavior                | Inspect files, turns, tool calls, and workspace events    |
+
+The result is not "no architecture." The folder tree is the architecture.
+
+## The root agent folder
+
+The tenant platform agent has a root workspace. These files form the baseline:
+
+| Path                                    | Role                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------- |
+| `AGENTS.md`                             | Identity, routing map, specialist ownership, generated file map      |
+| `CONTEXT.md`                            | General responsibilities and operating context                       |
+| `GUARDRAILS.md`                         | Safety and policy baseline; pinned for explicit review               |
+| `USER.md`                               | Server-managed requester profile rendered from the user/profile rows |
+| `SPACE.md`                              | Rendered active Space context                                        |
+| `MEMORY_GUIDE.md`                       | How the runtime should use memory tools and workspace notes          |
+| `TOOLS.md`                              | Tool-surface guidance                                                |
+| `mcp.json`                              | MCP server configuration metadata                                    |
+| `memory/lessons.md`                     | Editable workspace lessons                                           |
+| `memory/preferences.md`                 | Editable workspace preferences                                       |
+| `memory/contacts.md`                    | Editable workspace contacts                                          |
+| `skills/<slug>/SKILL.md`                | Installed capability packages                                        |
+| `workspaces/<slug>/CONTEXT.md`          | Specialist folder context                                            |
+| `workspaces/<slug>/workspaces/<child>/` | Nested specialist folder                                             |
+
+`SOUL.md`, `IDENTITY.md`, `PLATFORM.md`, and `CAPABILITIES.md` are retired legacy files. Their remaining content was migrated into `AGENTS.md` and the current policy/tool files.
+
+## Specialist folders
+
+A specialist is a folder under `workspaces/`:
+
+```text
+workspaces/
+  expenses/
+    CONTEXT.md
+    memory/
+      lessons.md
+    skills/
+      finance-audit-xls/
+        SKILL.md
+```
+
+The folder can be thin. If it only contains `CONTEXT.md`, it still inherits broader tenant instructions and guardrails. Add local `memory/` notes, `skills/`, nested `workspaces/`, or local `AGENTS.md` only when the specialist truly differs.
+
+The parent advertises the specialist in `AGENTS.md`:
+
+```md
+## Routing
+
+| Task                     | Go to                | Read                           | Skills            |
+| ------------------------ | -------------------- | ------------------------------ | ----------------- |
+| Expense policy questions | workspaces/expenses/ | workspaces/expenses/CONTEXT.md | finance-audit-xls |
+```
+
+The `Go to` path is the runtime target. The `Read` path is the human-readable contract for what context defines that target. `Skills` names capability folders that should be available when the target is active.
+
+## How the runtime reads a folder
+
+For a normal managed turn, ThinkWork composes context from:
+
+1. Tenant platform-agent defaults.
+2. The root workspace files.
+3. Active Space files.
+4. The target folder under `workspaces/<slug>/`, if a specialist is active.
+5. Relevant memory, skills, MCP tools, and thread history.
+
+The five prompt-shaping files are loaded in a stable order:
+
+```text
+AGENTS.md
+CONTEXT.md
+GUARDRAILS.md
+SPACE.md
+USER.md
+```
+
+Other files are available as workspace resources or tool configuration. The model should not need every file for every turn. Folder structure keeps unrelated instructions out of the context window.
+
+## What folders are not
+
+A folder specialist is not a separate top-level managed agent. It does not need its own budget, model, thread identity, or deployment. Those belong to the tenant platform agent and, when needed, Space runtime overrides.
+
+A folder is also not a secret store. Put credentials in the credential vault or MCP configuration, not in markdown. Put personal OAuth on the user/mobile connection flow, not in `skills/`.
+
+## Relationship to Spaces
+
+Spaces and folders solve different problems:
+
+| Use a Space for                                           | Use a folder specialist for                             |
+| --------------------------------------------------------- | ------------------------------------------------------- |
+| Membership, access, channels, email, automations          | Durable specialist instructions                         |
+| Project, customer, team, or workflow context              | Delegation targets such as `research/` or `expenses/`   |
+| Runtime overrides such as model, guardrail, budget, pause | Local memory notes and skills for one behavior boundary |
+| Space-scoped memory and knowledge                         | Nested specialists inside the tenant agent              |
+
+In practice, a Space may invoke the same platform agent, which delegates to the same `workspaces/expenses/` folder, while supplying different customer or project context.
+
+## Relationship to Skills
+
+Skills are folders too, but they are capability folders rather than agent folders:
+
+```text
+skills/
+  finance-audit-xls/
+    SKILL.md
+    references/
+    scripts/
+```
+
+Use `workspaces/<slug>/` when you need a role or specialist. Use `skills/<slug>/` when you need a reusable tool/instruction package that multiple roles can share.
+
+## External lineage
+
+ThinkWork's folder-agent model borrows from a wider context-engineering pattern:
+
+- Jake Van Clief and David McDermott's paper, [Interpretable Context Methodology: Folder Structure as Agent Architecture](https://arxiv.org/pdf/2603.16021), frames folder structure as a replacement for framework-level orchestration in sequential, human-reviewed workflows.
+- Every's essay, [The Folder Is the Agent](https://every.to/source-code/the-folder-is-the-agent), popularized the practical version of the idea for working developers: a project folder plus agent-readable context can behave like a specialist.
+
+ThinkWork adapts that pattern to a multi-tenant AWS agent harness. The folder tree is not just local context for a coding tool; it is a deployed, audited, Space-aware runtime surface.
+
+## Related pages
+
+- [Agents](/concepts/agents/) - the tenant platform-agent model.
+- [Workspace Composition](/concepts/agents/workspace-composition/) - how inherited files resolve.
+- [Inheritance Rules](/concepts/agents/inheritance-rules/) - folder-level file lookup.
+- [Template Authoring](/concepts/agents/templates/) - reusable folder trees.
+- [Import FOG/FITA Bundles](/concepts/agents/import-fog-fita/) - external folder bundle import.
+- [Workspace Orchestration](/concepts/agents/workspace-orchestration/) - async work addressed by folder path.
