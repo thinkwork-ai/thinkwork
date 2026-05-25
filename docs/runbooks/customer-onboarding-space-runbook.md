@@ -22,11 +22,13 @@ ROLE_ASSIGNEES_JSON='{"sales":{"displayName":"Sales"},"accounting":{"displayName
 pnpm exec tsx scripts/seed-customer-onboarding-space.ts
 ```
 
-Use `--dry-run` first to inspect the exact Space prompt, checklist, Space source files, and optional phase-two integration config without mutating the database.
+Use `--dry-run` first to inspect the exact Space prompt, checklist, Space source files, target Space ID, and optional phase-two integration config without mutating the database.
 
 ```sh
 TENANT_ID="<tenant-uuid>" \
-pnpm exec tsx scripts/seed-customer-onboarding-space.ts --dry-run
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f \
+  --dry-run
 ```
 
 To update the existing demo Space instead of resolving by slug, pass its ID:
@@ -37,6 +39,26 @@ TENANT_ID="<tenant-uuid>" \
 pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
   --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f
 ```
+
+For the May 2026 native-checklist demo refresh, use this exact sequence after
+the migration/API/UI changes have deployed through the normal pipeline:
+
+```sh
+TENANT_ID="<tenant-uuid>" \
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f \
+  --dry-run
+
+DATABASE_URL="$DATABASE_URL" \
+TENANT_ID="<tenant-uuid>" \
+WORKSPACE_BUCKET="<workspace-bucket>" \
+ROLE_ASSIGNEES_JSON='{"sales":{"displayName":"Sales"},"accounting":{"displayName":"Accounting"},"finance":{"displayName":"Finance"},"operations":{"displayName":"Operations"}}' \
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f \
+  --write-space-files
+```
+
+Do not pass `--include-lastmile-integration` for the native v1 demo.
 
 The script is idempotent. It upserts:
 
@@ -65,7 +87,7 @@ pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
   --write-space-files
 ```
 
-After writing files, use the Space Workspace tab's folder-structure refresh. The generated `## Folder Structure` should include `docs/customer-onboarding-intake.md` and should not expand `skills/` package trees.
+After writing files, use the Space Workspace tab's folder-structure refresh. The generated `## Folder Structure` should include `docs/customer-onboarding-intake.md` and should not expand `skills/` package trees. Skills are shown in the Skills tab, not in the workspace folder map.
 
 ## Optional Phase-Two LastMile Config
 

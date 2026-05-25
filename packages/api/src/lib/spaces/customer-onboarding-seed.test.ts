@@ -104,6 +104,9 @@ describe("customer onboarding seed defaults", () => {
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
       "docs/customer-onboarding-intake.md",
     );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).not.toContain(
+      "skills/",
+    );
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
       "creditTermsRequested = true",
     );

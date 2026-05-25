@@ -15,13 +15,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U4 Wire Customer Onboarding UX into the Spaces app
-- Active branch: `codex/u4-customer-onboarding-spaces-ui`
-- Active worktree: `.Codex/worktrees/customer-onboarding-u4`
+- Active unit: U5 Apply the refresh to the existing Customer Onboarding Space
+- Active branch: `codex/u5-customer-onboarding-space-refresh`
+- Active worktree: `.Codex/worktrees/customer-onboarding-u5`
 - Started: 2026-05-25
-- Latest merged PR: [#1697](https://github.com/thinkwork-ai/thinkwork/pull/1697)
-- Active PR: [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699)
-- CI: pending for U4; local verification passed
+- Latest merged PR: [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699)
+- Active PR: [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700)
+- CI: pending for U5; local verification passed
 
 ### Active Unit Notes
 
@@ -39,16 +39,22 @@ Target branch: `main`
 - Created isolated U4 worktree from `origin/main` at `d4dfe977`.
 - U4 scope wires the native checklist demo into the Spaces app: expanded intake form, Customer Onboarding home action, thread-side checklist panel, linked-task status updates, and Thread completion.
 - U4 local verification passed: focused Spaces onboarding/dialog/panel/thread/query tests, full `@thinkwork/spaces` test suite, `@thinkwork/spaces` typecheck, repo-wide typecheck, repo lint, touched-file Prettier, local browser smoke of the Spaces shell, and `git diff --check`. Local browser smoke rendered the shell; tenant API fetches returned `[Network] Failed to fetch` in local dev, so backend-backed data rendering remains covered by component tests and CI.
-- Opened U4 PR [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699); CI pending.
+- Opened U4 PR [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699); CI passed after rebasing onto current `main`.
+- U4 merged via [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699) at `ad74d845`.
+- Created isolated U5 worktree from `origin/main` at `ad74d845`.
+- U5 scope is operational hardening for the existing demo Space: seed-script dry-run evidence, exact runbook commands with placeholders, and folder-map guidance that keeps `skills/` out of the workspace structure map.
+- U5 local verification passed: native seed dry-run with the target Space ID, dry-run assertions for ThinkWork system of record and `folderStructureExpandsSkills: false`, focused customer onboarding seed tests, `@thinkwork/api` typecheck, repo-wide typecheck, repo lint, touched-file Prettier, and `git diff --check`.
+- Opened U5 PR [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700); CI pending.
 
 ### Progress Log
 
-| Date       | Unit | Branch                                     | PR                                                           | Status      | Verification | Notes                                               |
-| ---------- | ---- | ------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------ | --------------------------------------------------- |
-| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed` | [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) | Merged      | CI passed    | Native seed/config/runbook refresh merged.          |
-| 2026-05-25 | U2   | `codex/u2-native-checklist-linked-tasks`   | [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696) | Merged      | CI passed    | Native linked-task provider/status/mutation merged. |
-| 2026-05-25 | U3   | `codex/u3-native-onboarding-workflow`      | [#1697](https://github.com/thinkwork-ai/thinkwork/pull/1697) | Merged      | CI passed    | Native onboarding workflow pivot merged.            |
-| 2026-05-25 | U4   | `codex/u4-customer-onboarding-spaces-ui`   | [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699) | In progress | Local passed | Spaces app UX wiring pushed for CI.                 |
+| Date       | Unit | Branch                                       | PR                                                           | Status      | Verification | Notes                                                |
+| ---------- | ---- | -------------------------------------------- | ------------------------------------------------------------ | ----------- | ------------ | ---------------------------------------------------- |
+| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed`   | [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) | Merged      | CI passed    | Native seed/config/runbook refresh merged.           |
+| 2026-05-25 | U2   | `codex/u2-native-checklist-linked-tasks`     | [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696) | Merged      | CI passed    | Native linked-task provider/status/mutation merged.  |
+| 2026-05-25 | U3   | `codex/u3-native-onboarding-workflow`        | [#1697](https://github.com/thinkwork-ai/thinkwork/pull/1697) | Merged      | CI passed    | Native onboarding workflow pivot merged.             |
+| 2026-05-25 | U4   | `codex/u4-customer-onboarding-spaces-ui`     | [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699) | Merged      | CI passed    | Spaces app UX wiring merged.                         |
+| 2026-05-25 | U5   | `codex/u5-customer-onboarding-space-refresh` | [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700) | In progress | Local passed | Existing demo Space refresh hardening pushed for CI. |
 
 ### CI Failures
 
