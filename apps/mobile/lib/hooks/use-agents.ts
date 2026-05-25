@@ -13,11 +13,19 @@ export function useAgents(
   tenantId: string | undefined,
   opts?: Omit<AgentsQueryVariables, "tenantId">,
 ) {
-  return useQuery({
+  const [result, reexecute] = useQuery({
     query: AgentsQuery,
     variables: { tenantId: tenantId!, ...opts },
     pause: !tenantId,
   });
+  const data =
+    result.data && "agent" in result.data && !(result.data as any).agents
+      ? {
+          ...(result.data as any),
+          agents: (result.data as any).agent ? [(result.data as any).agent] : [],
+        }
+      : result.data;
+  return [{ ...result, data }, reexecute] as any;
 }
 
 export function useAgent(id: string | undefined) {

@@ -74,8 +74,6 @@ export default function TabsLayout() {
 
       {/* ── Hidden routes (still registered for deep links / back-compat) ── */}
       <Tabs.Screen name="threads/index" options={{ href: null }} />
-      <Tabs.Screen name="agents/index" options={{ href: null }} />
-      <Tabs.Screen name="team/index" options={{ href: null }} />
       <Tabs.Screen name="routines/index" options={{ href: null }} />
       <Tabs.Screen name="heartbeats" options={{ href: null }} />
 

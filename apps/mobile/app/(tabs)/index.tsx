@@ -38,12 +38,12 @@ import { useQuery } from "urql";
 // `dueAt`, etc.) than the chat-oriented SDK surface exposes on `Thread`.
 import {
   ThreadsQuery,
-  AssignedComputersQuery,
   AgentWorkspacesQuery,
   AgentWorkspaceReviewsQuery,
 } from "@/lib/graphql-queries";
 import {
   activeAssignedComputers,
+  agentsAsComputers,
   resolveMobileTenantId,
 } from "@/lib/mobile-tenant";
 import { TabHeader } from "@/components/layout/tab-header";
@@ -174,15 +174,20 @@ export default function ThreadsScreen() {
   const { markRead, isUnread } = useThreadReadState();
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
-  const [{ data: computersData, fetching: computersFetching }] = useQuery({
-    query: AssignedComputersQuery,
-    pause: !isAuthenticated,
+  const baseTenantId = resolveMobileTenantId(
+    authTenantId,
+    currentUser?.tenantId,
+    null,
+  );
+  const { agents, loading: agentsFetching } = useAgents({
+    tenantId: isAuthenticated ? baseTenantId : undefined,
   });
   const computers = useMemo<HomeComputer[]>(() => {
     return activeAssignedComputers(
-      (computersData?.assignedComputers ?? []) as HomeComputer[],
+      agentsAsComputers(agents as any[], baseTenantId) as HomeComputer[],
     );
-  }, [computersData?.assignedComputers]);
+  }, [agents, baseTenantId]);
+  const computersFetching = agentsFetching;
   const tenantId = resolveMobileTenantId(
     authTenantId,
     currentUser?.tenantId,
@@ -197,7 +202,6 @@ export default function ThreadsScreen() {
   } = useTurnCompletion(tenantId ?? undefined);
 
   // ── Agents + Me ──────────────────────────────────────────────────────────
-  const { agents, loading: agentsFetching } = useAgents({ tenantId });
   const selectedComputerStorageKey = tenantId
     ? `thinkwork:selected-computer:${tenantId}`
     : null;
@@ -293,14 +297,14 @@ export default function ThreadsScreen() {
 
   const queryVars = useMemo(() => {
     const vars: any = { tenantId: tenantId! };
-    if (selectedComputer?.id) vars.computerId = selectedComputer.id;
+    if (selectedComputer?.id) vars.agentId = selectedComputer.id;
     return vars;
   }, [tenantId, selectedComputer?.id]);
 
   const [{ data: threadsData }, reexecute] = useQuery({
     query: ThreadsQuery,
     variables: queryVars,
-    pause: !tenantId || computersFetching || !selectedComputer?.id,
+    pause: !tenantId || computersFetching,
   });
   // Scope reviews to the calling user. The resolver chain-walks
   // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
@@ -608,7 +612,7 @@ export default function ThreadsScreen() {
       const workspaces = overrideWorkspaces ?? selectedWorkspaces;
       console.log("[handleCreateThread]", {
         text: text.slice(0, 20),
-        computerId: selectedComputer?.id,
+        agentId: selectedComputer?.id,
         tenantId,
         userId: currentUser?.id,
         workspaceCount: workspaces.length,
@@ -616,7 +620,7 @@ export default function ThreadsScreen() {
       if (!text || !selectedComputer?.id || !tenantId) {
         console.warn("[handleCreateThread] Bailed — missing:", {
           text: !!text,
-          computerId: !!selectedComputer?.id,
+          agentId: !!selectedComputer?.id,
           tenantId: !!tenantId,
         });
         return;
@@ -643,7 +647,7 @@ export default function ThreadsScreen() {
         // Atomic create + first user message (SDK 0.2.0-beta.0+).
         const newThread = await createThread({
           tenantId,
-          computerId: selectedComputer.id,
+          agentId: selectedComputer.id,
           title: text.length > 60 ? text.slice(0, 60) + "..." : text,
           channel: "CHAT",
           createdByType: "user",

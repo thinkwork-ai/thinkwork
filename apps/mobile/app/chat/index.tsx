@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import {
+  useAgents,
   useThreadUpdatedSubscription,
   useUpdateThread,
 } from "@thinkwork/react-native-sdk";
@@ -18,9 +19,10 @@ import { useQuery } from "urql";
 // ThreadsQuery stays local — the chat dashboard accesses richer Thread
 // fields (`description`, labels, metadata, assignee detail) than the
 // chat-oriented SDK Thread type exposes.
-import { AssignedComputersQuery, ThreadsQuery } from "@/lib/graphql-queries";
+import { ThreadsQuery } from "@/lib/graphql-queries";
 import {
   activeAssignedComputers,
+  agentsAsComputers,
   resolveMobileTenantId,
 } from "@/lib/mobile-tenant";
 
@@ -73,14 +75,18 @@ export default function ChatRoute() {
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
 
-  const [{ data: computerData, fetching: computersFetching }] = useQuery({
-    query: AssignedComputersQuery,
-    pause: !isAuthenticated,
+  const baseTenantId = resolveMobileTenantId(
+    authTenantId,
+    currentUser?.tenantId,
+    null,
+  );
+  const { agents, loading: computersFetching } = useAgents({
+    tenantId: isAuthenticated ? baseTenantId : undefined,
   });
   const assignedComputers = useMemo(
     () =>
-      activeAssignedComputers((computerData?.assignedComputers ?? []) as any[]),
-    [computerData?.assignedComputers],
+      activeAssignedComputers(agentsAsComputers(agents as any[], baseTenantId)),
+    [agents, baseTenantId],
   );
   const selectedComputer = assignedComputers[0] ?? null;
   const tenantId = resolveMobileTenantId(
@@ -102,8 +108,8 @@ export default function ChatRoute() {
   // Thread tracking
   const [{ data: threadsData }, reexecuteThreads] = useQuery({
     query: ThreadsQuery,
-    variables: { tenantId: tenantId!, computerId: selectedComputer?.id },
-    pause: !tenantId || computersFetching || !selectedComputer?.id,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId || computersFetching,
   });
   const chatThreads = threadsData?.threads ?? [];
 
@@ -142,7 +148,7 @@ export default function ChatRoute() {
     const active = (chatThreads as any[])
       .filter(
         (t: any) =>
-          t.computerId === selectedComputer.id &&
+          t.agentId === selectedComputer.id &&
           t.channel === "CHAT" &&
           !t.archivedAt &&
           t.lifecycleStatus !== "COMPLETED" &&

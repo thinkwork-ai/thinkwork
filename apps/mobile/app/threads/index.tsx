@@ -27,10 +27,11 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { useQuery } from "urql";
 // TODO(sdk): SDK `useThreads` lacks filter args + `Thread.identifier`.
 //            Keep local ThreadsQuery until SDK widens.
-import { AssignedComputersQuery, ThreadsQuery } from "@/lib/graphql-queries";
+import { ThreadsQuery } from "@/lib/graphql-queries";
 import { useMe } from "@/lib/hooks/use-users";
 import {
   activeAssignedComputers,
+  agentsAsComputers,
   resolveMobileTenantId,
 } from "@/lib/mobile-tenant";
 
@@ -179,7 +180,7 @@ function CreateThreadModal({
       await createThread({
         tenantId,
         title: title.trim(),
-        computerId: computer.id,
+        agentId: computer.id,
       } as any);
       setTitle("");
       onClose();
@@ -303,16 +304,22 @@ export default function ThreadsScreen() {
     setMounted(true);
   }, []);
 
-  const [{ data: computerData, fetching: computerFetching }] = useQuery({
-    query: AssignedComputersQuery,
-    pause: !isAuthenticated,
+  const [{ data: meData }] = useMe();
+  const baseTenantId = resolveMobileTenantId(
+    authTenantId,
+    meData?.me?.tenantId,
+    null,
+  );
+  const { agents: sdkAgents, loading: agentsFetching } = useAgents({
+    tenantId: mounted && isAuthenticated ? baseTenantId : undefined,
   });
   const assignedComputers = useMemo(
     () =>
-      activeAssignedComputers((computerData?.assignedComputers ?? []) as any[]),
-    [computerData?.assignedComputers],
+      activeAssignedComputers(
+        agentsAsComputers(sdkAgents as any[], baseTenantId),
+      ),
+    [sdkAgents, baseTenantId],
   );
-  const [{ data: meData }] = useMe();
   const tenantId = resolveMobileTenantId(
     authTenantId,
     meData?.me?.tenantId,
@@ -340,11 +347,8 @@ export default function ThreadsScreen() {
 
   const [{ data: threadsData, fetching: threadsFetching }] = useQuery({
     query: ThreadsQuery,
-    variables: { tenantId: tenantId!, computerId: selectedComputer?.id },
-    pause: !tenantId || computerFetching || !selectedComputer?.id,
-  });
-  const { agents: sdkAgents, loading: agentsFetching } = useAgents({
-    tenantId: mounted ? tenantId : undefined,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId || agentsFetching,
   });
   const threads = (threadsData?.threads ?? []) as Thread[];
   // SDK's Agent type allows `status: string | null`; downstream row props
@@ -449,7 +453,7 @@ export default function ThreadsScreen() {
     );
   }, [threads]);
 
-  const isLoading = threadsFetching || agentsFetching || computerFetching;
+  const isLoading = threadsFetching || agentsFetching;
 
   const renderMobileItem = ({
     item,

@@ -19,7 +19,7 @@
       "userInterfaceStyle": "dark",
       "backgroundColor": "#070a0f",
       "supportsTablet": true,
-      "bundleIdentifier": "ai.thinkwork.agent",
+      "bundleIdentifier": "ai.thinkwork.mobile",
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",

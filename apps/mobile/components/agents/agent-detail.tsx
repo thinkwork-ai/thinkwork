@@ -18,7 +18,6 @@ import {
   useUpdateAgent,
   useDeleteAgent,
 } from "@/lib/hooks/use-agents";
-import { useTeams } from "@/lib/hooks/use-teams";
 import { useAuth } from "@/lib/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -271,8 +270,7 @@ export function AgentDetailContent({
   const tenantId = (user as any)?.tenantId;
   const [{ data: agentsData }] = useAgents(tenantId);
   const gateways = agentsData?.agents ?? undefined;
-  const [{ data: teamsData }] = useTeams(tenantId);
-  const teams = teamsData?.teams ?? undefined;
+  const teams: any[] | undefined = undefined;
   // TODO: revoke, terminate, restart, start, deleteLocal not yet available via GraphQL
   const revokeGateway = async (_args: any) => {};
   const terminateAgent = async (_args: any) => {};
