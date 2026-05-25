@@ -47,7 +47,6 @@ import {
   // Workspace orchestration
   agentWorkspaceEvents,
   agentWorkspaceRuns,
-  agentWorkspaceWaits,
   // Scheduled Jobs (unified)
   scheduledJobs,
   threadTurns,
@@ -156,7 +155,6 @@ export {
   agentWakeupRequests,
   agentWorkspaceEvents,
   agentWorkspaceRuns,
-  agentWorkspaceWaits,
   scheduledJobs,
   threadTurns,
   threadTurnEvents,
