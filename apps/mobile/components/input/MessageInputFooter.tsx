@@ -188,6 +188,28 @@ export const MessageInputFooter = forwardRef<
       ) : (
         <View className="flex-row items-center justify-between px-4 pt-1 pb-2">
           <View className="flex-row items-center gap-4">
+            {onPlusPress && (
+              <Pressable
+                onPress={plusDisabled || disabled ? undefined : onPlusPress}
+                disabled={plusDisabled || disabled}
+                className="p-1 active:opacity-70"
+                style={{ opacity: plusDisabled || disabled ? 0.35 : 1 }}
+              >
+                <Plus size={26} color={colors.mutedForeground} />
+              </Pressable>
+            )}
+            {onQuickActions && (
+              <Pressable
+                onPress={
+                  quickActionsDisabled || disabled ? undefined : onQuickActions
+                }
+                disabled={quickActionsDisabled || disabled}
+                className="p-1 active:opacity-70"
+                style={{ opacity: quickActionsDisabled || disabled ? 0.35 : 1 }}
+              >
+                <Zap size={24} color={colors.mutedForeground} />
+              </Pressable>
+            )}
             {onSpacePress && (
               <Pressable
                 onPress={disabled ? undefined : onSpacePress}
@@ -213,28 +235,6 @@ export const MessageInputFooter = forwardRef<
                   {selectedSpace?.name ?? "Default"}
                 </Text>
                 <ChevronDown size={14} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-            {onPlusPress && (
-              <Pressable
-                onPress={plusDisabled || disabled ? undefined : onPlusPress}
-                disabled={plusDisabled || disabled}
-                className="p-1 active:opacity-70"
-                style={{ opacity: plusDisabled || disabled ? 0.35 : 1 }}
-              >
-                <Plus size={26} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-            {onQuickActions && (
-              <Pressable
-                onPress={
-                  quickActionsDisabled || disabled ? undefined : onQuickActions
-                }
-                disabled={quickActionsDisabled || disabled}
-                className="p-1 active:opacity-70"
-                style={{ opacity: quickActionsDisabled || disabled ? 0.35 : 1 }}
-              >
-                <Zap size={24} color={colors.mutedForeground} />
               </Pressable>
             )}
           </View>
