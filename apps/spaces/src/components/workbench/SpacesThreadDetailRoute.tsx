@@ -176,7 +176,9 @@ export function SpacesThreadDetailRoute({
     query: ComputerThreadQuery,
     variables: { id: threadId, messageLimit: 100 },
   });
-  const threadTitle = data?.thread?.title?.trim() || "Thread";
+  const routeThread = data?.thread?.id === threadId ? data.thread : null;
+  const hasMismatchedThreadData = Boolean(data?.thread && !routeThread);
+  const threadTitle = routeThread?.title?.trim() || "Thread";
 
   // Attached artifacts feed the cascade-delete checkbox in ThreadDetailActions.
   // Paused until tenant is known.
@@ -208,7 +210,7 @@ export function SpacesThreadDetailRoute({
       requestPolicy: "cache-and-network",
     });
 
-  const computerId = data?.thread?.computerId ?? null;
+  const computerId = routeThread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
     useQuery<ThreadTasksResult>({
       query: ComputerThreadTasksQuery,
@@ -326,11 +328,11 @@ export function SpacesThreadDetailRoute({
   useEffect(() => {
     if (
       optimisticMessage &&
-      hasPersistedUserMessage(data?.thread?.messages?.edges, optimisticMessage)
+      hasPersistedUserMessage(routeThread?.messages?.edges, optimisticMessage)
     ) {
       setOptimisticMessage(null);
     }
-  }, [data?.thread?.messages?.edges, optimisticMessage]);
+  }, [routeThread?.messages?.edges, optimisticMessage]);
 
   useEffect(() => {
     function handleRunbookDecision() {
@@ -356,7 +358,7 @@ export function SpacesThreadDetailRoute({
     reexecuteTasksQuery,
   ]);
 
-  const thread = data?.thread ? toTaskThread(data.thread) : null;
+  const thread = routeThread ? toTaskThread(routeThread) : null;
   if (thread) {
     thread.turns = toTaskThreadTurns(
       tasksData?.computerTasks,
@@ -476,14 +478,14 @@ export function SpacesThreadDetailRoute({
           setArtifactFullscreen(false);
         }
       },
-      startedAt: data?.thread?.createdAt ?? null,
-      startedBy: resolveStartedBy(data?.thread),
-      agents: resolveAgentsInvolved(data?.thread),
-      attachments: data?.thread?.attachments ?? [],
+      startedAt: routeThread?.createdAt ?? null,
+      startedBy: resolveStartedBy(routeThread),
+      agents: resolveAgentsInvolved(routeThread),
+      attachments: routeThread?.attachments ?? [],
       onDownloadAttachment: (attachmentId: string) =>
         downloadThreadAttachment(threadId, attachmentId),
     }),
-    [data?.thread, threadId, threadInfoOpen],
+    [routeThread, threadId, threadInfoOpen],
   );
 
   usePageHeaderActions({
@@ -608,7 +610,7 @@ export function SpacesThreadDetailRoute({
   return (
     <TaskThreadView
       thread={visibleThread}
-      isLoading={fetching && !data}
+      isLoading={fetching || hasMismatchedThreadData}
       error={error?.message ?? null}
       streamingChunks={hasDurableAssistant ? [] : chunks}
       streamState={hasDurableAssistant ? undefined : streamState}
