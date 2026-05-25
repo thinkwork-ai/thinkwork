@@ -112,7 +112,7 @@ Here's the full path of an inbound Slack message becoming a thread turn.
 5. **Target resolution.** For a new thread, the Lambda picks a Space target: the target of an @-mention, a channel binding, or the integration default. For an existing thread, the selected Space already owns the work.
 6. **Message persisted.** A new `thread_message` row lands with role=`user`, the Slack user's name, and the full Slack event stored in `metadata` for audit.
 7. **Tenant platform agent invoked.** The managed runtime is fired asynchronously. It sees the thread, the new message, the selected Space context, and the channel-specific metadata.
-8. **Reply or delegation.** The platform agent handles the work or delegates to a sub-agent folder. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
+8. **Reply or delegation.** The platform agent handles the work or delegates to a folder specialist. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
 
 Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, Space context is visible on the thread, tool calls and memory reads are recorded, requester identity is preserved, and the outbound Slack response is logged with its Slack message id.
 

@@ -1,17 +1,19 @@
 ---
-title: Templates
-description: Templates are reusable authoring infrastructure for workspace, tool, and migration patterns. Tenant Agent and Spaces are the primary current operation surfaces.
+title: Template Authoring
+description: Design reusable folder trees for ThinkWork agents without treating templates as the primary runtime concept.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Templates are reusable bundles of configuration and workspace files. They still exist in ThinkWork, but the platform-agent and Space architecture changed where most day-to-day operator decisions live.
+Templates are authoring infrastructure. They give teams reusable starting
+points for workspace files, skills, tools, and migration flows, but they are not
+the main runtime concept users should reach for when shaping work.
 
 For current managed-agent operation:
 
-- Configure tenant-wide defaults in [Admin — Tenant Agent](/applications/admin/agents/).
-- Configure project, team, customer, channel, or workflow context in [Admin — Spaces](/applications/admin/spaces/).
-- Use templates where the UI exposes reusable authoring, migration, or legacy bundle flows.
+- Configure tenant-wide defaults in [Admin - Tenant Agent](/applications/admin/agents/).
+- Configure project, team, customer, channel, or workflow context in [Admin - Spaces](/applications/admin/spaces/).
+- Use template flows when you need a reusable folder tree, a supported migration path, or a legacy template record for audit.
 
 <Aside type="note">
   Older docs described templates as the primary way to rotate model, guardrail,
@@ -20,22 +22,51 @@ For current managed-agent operation:
   optional Space runtime overrides.
 </Aside>
 
-## What templates are still good for
+## What Templates Are For
 
-Templates remain useful when you want reusable starting points:
+Use templates when you need reusable starting points:
 
 - Workspace files and skill folders that should be copied or inherited by an authoring flow.
 - Built-in tool opt-in patterns that an existing template surface still manages.
 - MCP server assignments where the template UI is still the configured path.
 - Legacy agent-template records that must remain understandable for audit or transition.
 
-They are not the first place to look when a Space needs a different model, guardrail, budget, paused state, or sandbox. Put those differences on the Space.
+Do not use templates as the first answer when a Space needs a different model,
+guardrail, budget, paused state, or sandbox. Put those differences on the Space.
 
-## Template kinds
+## Authoring Folder Trees
 
-Agent Templates are reusable or legacy bundles for delegated-agent authoring infrastructure. The exact UI available depends on the deployment and migration state. If a template page offers a workflow, use it for that workflow; otherwise prefer Tenant Agent and Spaces.
+Agent Templates are reusable or legacy bundles for delegated-agent authoring
+infrastructure. The exact UI available depends on the deployment and migration
+state. If a template page offers a workflow, use it for that workflow; otherwise
+prefer Tenant Agent and Spaces.
 
-## Relationship to Spaces
+Start with the smallest folder tree that explains the work.
+
+1. Write the root `CONTEXT.md` for the tenant platform agent.
+2. Add one `AGENTS.md` routing row for each specialist the generalist should delegate to.
+3. Create each specialist under `workspaces/<slug>/` with a focused `CONTEXT.md`.
+4. Add folder-level `GUARDRAILS.md` only when the specialist truly needs narrower policy.
+5. Put capability guidance in `TOOLS.md` or a local `skills/<slug>/SKILL.md`.
+6. Attach skills in the `Skills` column of the routing table.
+
+Example:
+
+```md
+| Task               | Go to                  | Read                             | Skills                      |
+| ------------------ | ---------------------- | -------------------------------- | --------------------------- |
+| Expense receipts   | workspaces/expenses/   | workspaces/expenses/CONTEXT.md   | approve-receipt, tag-vendor |
+| Recruiting screens | workspaces/recruiting/ | workspaces/recruiting/CONTEXT.md | score-candidate             |
+```
+
+Prefer shallow trees. Nested specialists are allowed, but each additional
+`workspaces/<child>/` layer should earn its keep. The depth cap prevents runaway
+delegation while leaving room for realistic enterprise structures.
+
+Local skills can be imported under `skills/<slug>/SKILL.md`, but inline
+`SKILL.md` authoring in the builder is not part of the v1 surface.
+
+## Relationship To Spaces
 
 Spaces are runtime workrooms. Templates are reusable authoring bundles.
 
@@ -54,11 +85,14 @@ Use a template when you need:
 - A legacy template record preserved for audit.
 - A starting point for workspace or tool configuration where the UI explicitly supports it.
 
-## Relationship to sub-agents
+## Relationship To Folder Specialists
 
-Sub-agents are now folder-based specialties under the tenant agent. If a specialty should be available to the platform agent, author it under Tenant Agent → Sub-agents. Do not create a separate top-level managed agent solely to represent that specialty.
+Folder specialists are authored under the tenant agent at `workspaces/<slug>/`.
+If a specialty should be available to the platform agent, author it as a folder
+specialist. Do not create a separate top-level managed agent solely to represent
+that specialty.
 
-## Migration notes
+## Migration Notes
 
 After the platform-agent migration:
 
@@ -67,10 +101,12 @@ After the platform-agent migration:
 - New operator runbooks should point users to Tenant Agent and Spaces first.
 - Per-agent model/runtime rotation playbooks should be rewritten as tenant-agent default changes or Space override changes.
 
-## Related pages
+## Related Pages
 
-- [Agents](/concepts/agents/) — current tenant platform-agent model
-- [Spaces](/concepts/spaces/) — runtime workrooms and overrides
-- [Admin — Tenant Agent](/applications/admin/agents/) — tenant-wide defaults
-- [Admin — Spaces](/applications/admin/spaces/) — Space-specific configuration
-- [Admin — Agent Templates](/applications/admin/agent-templates/) — template UI where still available
+- [Agents](/concepts/agents/) - current tenant platform-agent model
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - why folders are the behavior boundary
+- [Workspace Composition](/concepts/agents/workspace-composition/) - how folder files resolve
+- [Spaces](/concepts/spaces/) - runtime workrooms and overrides
+- [Admin - Tenant Agent](/applications/admin/agents/) - tenant-wide defaults
+- [Admin - Spaces](/applications/admin/spaces/) - Space-specific configuration
+- [Admin - Agent Templates](/applications/admin/agent-templates/) - template UI where still available

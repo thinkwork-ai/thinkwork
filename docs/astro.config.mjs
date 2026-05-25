@@ -3,6 +3,10 @@ import starlight from "@astrojs/starlight";
 
 export default defineConfig({
   // site: "https://docs.thinkwork.ai",  // uncomment when custom domain is live
+  redirects: {
+    "/concepts/agents/workspace-overlay/":
+      "/concepts/agents/workspace-composition/",
+  },
   integrations: [
     starlight({
       title: "ThinkWork",
@@ -64,6 +68,22 @@ export default defineConfig({
               items: [
                 { label: "Overview", slug: "concepts/agents" },
                 {
+                  label: "Folder Is the Agent",
+                  slug: "concepts/agents/folder-is-the-agent",
+                },
+                {
+                  label: "Workspace Composition",
+                  slug: "concepts/agents/workspace-composition",
+                },
+                {
+                  label: "Workspace Orchestration",
+                  slug: "concepts/agents/workspace-orchestration",
+                },
+                {
+                  label: "Inheritance Rules",
+                  slug: "concepts/agents/inheritance-rules",
+                },
+                {
                   label: "Managed Agents",
                   slug: "concepts/agents/managed-agents",
                 },
@@ -71,37 +91,13 @@ export default defineConfig({
                   label: "Runtime Selection",
                   slug: "concepts/agents/runtime-selection",
                 },
-                { label: "Templates", slug: "concepts/agents/templates" },
                 {
-                  label: "Workspace Overlay",
-                  slug: "concepts/agents/workspace-overlay",
+                  label: "Template Authoring",
+                  slug: "concepts/agents/templates",
                 },
                 {
-                  label: "Workspace Orchestration",
-                  slug: "concepts/agents/workspace-orchestration",
-                },
-                {
-                  label: "Agent Design",
-                  collapsed: true,
-                  items: [
-                    { label: "Overview", slug: "agent-design" },
-                    {
-                      label: "Folder Is the Agent",
-                      slug: "agent-design/folder-is-the-agent",
-                    },
-                    {
-                      label: "Inheritance Rules",
-                      slug: "agent-design/inheritance-rules",
-                    },
-                    {
-                      label: "Authoring Templates",
-                      slug: "agent-design/authoring-templates",
-                    },
-                    {
-                      label: "Import FOG/FITA Bundles",
-                      slug: "agent-design/import-fog-fita",
-                    },
-                  ],
+                  label: "Import FOG/FITA Bundles",
+                  slug: "concepts/agents/import-fog-fita",
                 },
                 { label: "Skills", slug: "concepts/agents/skills" },
                 { label: "Code Sandbox", slug: "concepts/agents/code-sandbox" },
