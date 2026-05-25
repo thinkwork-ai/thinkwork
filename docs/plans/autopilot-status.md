@@ -1708,7 +1708,15 @@ None.
 
 ## CI / PR
 
-- Pending.
+- Opened [#1721](https://github.com/thinkwork-ai/thinkwork/pull/1721).
+- GitHub PR checks on [#1721](https://github.com/thinkwork-ai/thinkwork/pull/1721) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+- Squash merged [#1721](https://github.com/thinkwork-ai/thinkwork/pull/1721) as `bb3e0dfacfc8d8f0bda35bb94a3c47eb41b394ce`.
+- Deploy run `26419993441` passed, including GraphQL Lambda, Terraform apply, Admin, Spaces, Docs, Bootstrap, and Deploy Summary.
 
 ## Blockers
 
