@@ -39,7 +39,6 @@ type EvalRun {
   tenantId: ID!
   agentId: ID
   agentName: String
-  computerId: ID
   scheduledJobId: ID
   status: String!
   # Model used for the direct-AgentCore eval run. Manual runs default to
@@ -154,9 +153,6 @@ input UpdateEvalTestCaseInput {
 }
 
 input StartEvalRunInput {
-  # Deprecated for this direct-AgentCore eval path. Supplying computerId is
-  # rejected; Computer evals are intentionally out of this slice.
-  computerId: ID
   # Optional model override for the direct-AgentCore eval run. Omit to use
   # Kimi K2.5; non-default overrides must be available in model_catalog.
   model: String

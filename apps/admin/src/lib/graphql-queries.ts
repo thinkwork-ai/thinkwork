@@ -1964,7 +1964,6 @@ export const ThreadIdleLearningRunsQuery = graphql(`
     threadIdleLearningRuns(userId: $userId, limit: $limit) {
       id
       threadId
-      computerId
       requesterUserId
       status
       startedAt
