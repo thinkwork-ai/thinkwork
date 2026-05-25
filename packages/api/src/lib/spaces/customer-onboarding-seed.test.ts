@@ -113,6 +113,15 @@ describe("customer onboarding seed defaults", () => {
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
       "taxExempt = true",
     );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
+      "Skills & Human Input",
+    );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
+      "Human Question Skill Pattern",
+    );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
+      '"_type": "question_card"',
+    );
   });
 
   it("parses role assignee JSON for the seed script", () => {

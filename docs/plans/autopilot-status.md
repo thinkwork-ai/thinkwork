@@ -23,6 +23,19 @@ Target branch: `main`
 - Active PR: none
 - CI: PR 1 through PR 6 passed required checks; all implementation units merged
 
+## Follow-Up Run: Customer Onboarding Workspace Readiness Hotfix
+
+- Status: ready to merge
+- Active branch: `codex/customer-onboarding-live-workspace-fix`
+- Active worktree: `.Codex/worktrees/customer-onboarding-live-workspace-fix`
+- Started: 2026-05-25
+- Root cause: Customer Onboarding `CONTEXT.md` and intake docs existed in seed code, but live Space Workspace tabs only list S3 source files under `tenants/<tenant>/spaces/<space-slug>/source/`; existing Spaces stayed empty unless the seed script was manually run with `--write-space-files`.
+- Implemented so far: shared Customer Onboarding source-file backfill helper, deploy-bootstrap backfill for active Customer Onboarding Spaces, explicit Human Question skill pattern in Space source docs, and workflow test coverage for missing-intake question-card metadata.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-source-files.test.ts src/lib/spaces/customer-onboarding-seed.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts` passed.
+- PR: [#1704](https://github.com/thinkwork-ai/thinkwork/pull/1704)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Remaining live validation: after merge/deploy, open the Customer Onboarding Workspace tab and confirm `CONTEXT.md` plus `docs/customer-onboarding-intake.md` render; then run the Native Demo Smoke below.
+
 ### Active Unit Notes
 
 - Created isolated U1 worktree from `origin/main` at `96b9766495dbc55ee2728ee3ff439a1a87e67810`.

@@ -1,5 +1,5 @@
 import pg from "pg";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { S3Client } from "@aws-sdk/client-s3";
 
 import {
   CUSTOMER_ONBOARDING_CHECKLIST_ITEMS,
@@ -12,6 +12,7 @@ import {
   buildLastMileIntegrationConfig,
   parseRoleAssigneesJson,
 } from "../packages/api/src/lib/spaces/customer-onboarding-seed.js";
+import { ensureCustomerOnboardingSourceFiles } from "../packages/api/src/lib/spaces/customer-onboarding-source-files.js";
 
 const { Pool } = pg;
 
@@ -490,21 +491,20 @@ async function writeSpaceSourceFiles(input: {
   tenantSlug: string;
   spaceSlug: string;
 }) {
-  const s3 = new S3Client({
+  const s3Client = new S3Client({
     region:
       process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
   });
-  const prefix = `tenants/${input.tenantSlug}/spaces/${input.spaceSlug}/source/`;
-  for (const file of CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES) {
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: input.bucket,
-        Key: `${prefix}${file.path}`,
-        Body: file.content,
-        ContentType: "text/plain; charset=utf-8",
-      }),
-    );
-  }
+  const result = await ensureCustomerOnboardingSourceFiles({
+    bucket: input.bucket,
+    tenantSlug: input.tenantSlug,
+    spaceSlug: input.spaceSlug,
+    overwrite: true,
+    s3Client,
+  });
+  console.log(
+    `[customer-onboarding-seed] wrote ${result.written.length}/${result.total} Space source file(s) to ${result.targetPrefix}`,
+  );
 }
 
 function printSummary(summary: SeedSummary) {

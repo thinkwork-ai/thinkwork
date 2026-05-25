@@ -136,6 +136,27 @@ export interface CustomerOnboardingLink {
   url: string | null;
 }
 
+export interface CustomerOnboardingHumanInputRequest {
+  skill: "human_question";
+  channel: "thread";
+  checklistItemKey: "missing_onboarding_information";
+  prompt: string;
+  questionCard: {
+    _type: "question_card";
+    schema: {
+      id: "customer_onboarding_missing_intake";
+      title: "Missing onboarding information";
+      fields: CustomerOnboardingQuestionField[];
+    };
+  };
+}
+
+export interface CustomerOnboardingQuestionField {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "boolean";
+}
+
 export interface StartCustomerOnboardingWorkflowInput {
   tenantId: string;
   spaceId?: string | null;
@@ -509,6 +530,7 @@ function buildWorkflowMetadata(
   startSource: CustomerOnboardingStartSource,
   space: CustomerOnboardingWorkflowSpace,
 ): Record<string, unknown> {
+  const humanInput = buildHumanInputRequest(source);
   return {
     customerOnboarding: {
       source: startSource === "webhook" ? "lastmile_crm" : "manual",
@@ -521,6 +543,7 @@ function buildWorkflowMetadata(
       spaceId: space.id,
       spacePrompt: space.prompt,
       facts: source,
+      humanInput,
     },
   };
 }
@@ -631,6 +654,10 @@ function planNativeChecklistItems(
   return space.checklistItems.map((item) => {
     const applicability = evaluateChecklistApplicability(item, source);
     const assignee = resolveRoleAssignee(space, item.roleKey);
+    const humanInput =
+      item.key === "missing_onboarding_information" && applicability.applicable
+        ? buildHumanInputRequest(source)
+        : null;
     const task: CustomerOnboardingLinkedTaskResult = {
       checklistItemId: item.id,
       provider: "thinkwork",
@@ -654,9 +681,60 @@ function planNativeChecklistItems(
         checklistItemKey: item.key,
         checklistTemplate: item.externalTaskTemplate,
         applicability,
+        humanInput,
       },
     };
   });
+}
+
+function buildHumanInputRequest(
+  source: NormalizedCustomerOnboardingSource,
+): CustomerOnboardingHumanInputRequest | null {
+  if (source.missingFields.length === 0) return null;
+  return {
+    skill: "human_question",
+    channel: "thread",
+    checklistItemKey: "missing_onboarding_information",
+    prompt:
+      "Please provide the missing onboarding information so the checklist can continue.",
+    questionCard: {
+      _type: "question_card",
+      schema: {
+        id: "customer_onboarding_missing_intake",
+        title: "Missing onboarding information",
+        fields: source.missingFields.map(questionFieldForMissingField),
+      },
+    },
+  };
+}
+
+function questionFieldForMissingField(
+  field: string,
+): CustomerOnboardingQuestionField {
+  const labels: Record<string, string> = {
+    opportunityUrl: "Opportunity or quote link",
+    salesRep: "Sales owner",
+    contacts: "Primary customer contact",
+    dealValue: "Estimated deal or first-order value",
+    productPlan: "Product, plan, or customer class",
+    closeDate: "Target onboarding or close date",
+    documents: "Contract or order-form link",
+    primaryContact: "Primary contact name and email",
+    accountsPayableContact: "Accounts payable contact name and email",
+    billingAddress: "Billing address",
+    shippingAddress: "Shipping address",
+    taxExempt: "Are they agricultural or sales-tax exempt?",
+    creditTermsRequested: "Do they want credit terms?",
+    docusignRecipient: "DocuSign recipient name and email",
+  };
+  return {
+    id: field,
+    label: labels[field] ?? field,
+    type:
+      field === "taxExempt" || field === "creditTermsRequested"
+        ? "boolean"
+        : "text",
+  };
 }
 
 async function planExternalChecklistItems(input: {
