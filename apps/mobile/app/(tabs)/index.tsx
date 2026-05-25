@@ -40,6 +40,7 @@ import {
   ThreadsQuery,
   AgentWorkspacesQuery,
   AgentWorkspaceReviewsQuery,
+  SpacesQuery,
 } from "@/lib/graphql-queries";
 import {
   activeAssignedComputers,
@@ -78,6 +79,7 @@ import {
   MessageInputFooter,
   type MessageInputFooterRef,
   type SelectedWorkspace,
+  type SelectedSpace,
 } from "@/components/input/MessageInputFooter";
 import { CaptureFooter } from "@/components/wiki/CaptureFooter";
 import { BrainSearchSurface } from "@/components/brain/BrainSearchSurface";
@@ -100,6 +102,11 @@ import {
   type WorkspacePickerSheetRef,
   type SubAgent,
 } from "@/components/input/WorkspacePickerSheet";
+import {
+  SpacePickerSheet,
+  type SpacePickerSheetRef,
+  type SpaceOption,
+} from "@/components/input/SpacePickerSheet";
 import {
   useQuickActions,
   useCreateQuickAction,
@@ -284,16 +291,18 @@ export default function ThreadsScreen() {
 
   // ── Thread filters + query (scoped to the user's Computer) ─────────────
   const [filters, setFilters] = useState<ThreadFilters>({
+    spaceId: null,
     channels: [],
     showArchived: false,
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const hasActiveFilters = filters.channels.length > 0 || filters.showArchived;
+  const hasActiveFilters =
+    !!filters.spaceId || filters.channels.length > 0 || filters.showArchived;
 
   // Only apply filters when the filter panel is open
   const appliedFilters = filtersOpen
     ? filters
-    : ({ channels: [], showArchived: false } as ThreadFilters);
+    : ({ spaceId: null, channels: [], showArchived: false } as ThreadFilters);
 
   const queryVars = useMemo(() => {
     const vars: any = { tenantId: tenantId! };
@@ -306,6 +315,21 @@ export default function ThreadsScreen() {
     variables: queryVars,
     pause: !tenantId || computersFetching,
   });
+  const [{ data: spacesData }] = useQuery({
+    query: SpacesQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId,
+  });
+  const spaces: SpaceOption[] = useMemo(
+    () =>
+      ((spacesData?.spaces ?? []) as any[]).map((space) => ({
+        id: space.id,
+        name: space.name,
+        slug: space.slug,
+        icon: space.icon,
+      })),
+    [spacesData?.spaces],
+  );
   // Scope reviews to the calling user. The resolver chain-walks
   // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
   // user's owned-agent chain (covers AE2). Pause until both `tenantId` and
@@ -416,7 +440,12 @@ export default function ThreadsScreen() {
         (t: any) => !t.archivedAt && !archivedIds.has(t.id),
       );
     }
-    // Multi-channel filter
+    // Space + channel filters
+    if (appliedFilters.spaceId) {
+      threads = threads.filter(
+        (t: any) => t.spaceId === appliedFilters.spaceId,
+      );
+    }
     if (appliedFilters.channels.length > 0) {
       const set = new Set(appliedFilters.channels);
       threads = threads.filter((t: any) =>
@@ -430,6 +459,7 @@ export default function ThreadsScreen() {
     );
   }, [
     threadsData?.threads,
+    appliedFilters.spaceId,
     appliedFilters.channels,
     appliedFilters.showArchived,
     archivedIds,
@@ -490,11 +520,31 @@ export default function ThreadsScreen() {
   const [newThreadText, setNewThreadText] = useState("");
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const quickActionFormRef = useRef<QuickActionFormSheetRef>(null);
+  const spacePickerRef = useRef<SpacePickerSheetRef>(null);
   const workspacePickerRef = useRef<WorkspacePickerSheetRef>(null);
   const messageInputRef = useRef<MessageInputFooterRef>(null);
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
   const [selectedWorkspaces, setSelectedWorkspaces] = useState<
     SelectedWorkspace[]
   >([]);
+
+  const selectedSpace = useMemo<SelectedSpace>(
+    () => ({
+      id: selectedSpaceId,
+      name:
+        spaces.find((space) => space.id === selectedSpaceId)?.name ?? "Default",
+    }),
+    [selectedSpaceId, spaces],
+  );
+
+  useEffect(() => {
+    if (
+      selectedSpaceId &&
+      !spaces.some((space) => space.id === selectedSpaceId)
+    ) {
+      setSelectedSpaceId(null);
+    }
+  }, [selectedSpaceId, spaces]);
 
   // One-time cleanup: earlier builds persisted an offline capture queue
   // at this key. We removed that surface entirely, so purge any leftover
@@ -613,6 +663,7 @@ export default function ThreadsScreen() {
       console.log("[handleCreateThread]", {
         text: text.slice(0, 20),
         agentId: selectedComputer?.id,
+        spaceId: selectedSpaceId,
         tenantId,
         userId: currentUser?.id,
         workspaceCount: workspaces.length,
@@ -648,6 +699,7 @@ export default function ThreadsScreen() {
         const newThread = await createThread({
           tenantId,
           agentId: selectedComputer.id,
+          ...(selectedSpaceId ? { spaceId: selectedSpaceId } : {}),
           title: text.length > 60 ? text.slice(0, 60) + "..." : text,
           channel: "CHAT",
           createdByType: "user",
@@ -673,6 +725,7 @@ export default function ThreadsScreen() {
     [
       newThreadText,
       selectedWorkspaces,
+      selectedSpaceId,
       selectedComputer?.id,
       tenantId,
       currentUser?.id,
@@ -1005,7 +1058,11 @@ export default function ThreadsScreen() {
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         <WebContent>
           {activeTab === "threads" && filtersOpen && (
-            <ThreadFilterBar filters={filters} onFiltersChange={setFilters} />
+            <ThreadFilterBar
+              filters={filters}
+              spaces={spaces}
+              onFiltersChange={setFilters}
+            />
           )}
 
           {activeTab === "threads" ? (
@@ -1101,6 +1158,11 @@ export default function ThreadsScreen() {
               Keyboard.dismiss();
               quickActionsRef.current?.present();
             }}
+            selectedSpace={selectedSpace}
+            onSpacePress={() => {
+              Keyboard.dismiss();
+              spacePickerRef.current?.present();
+            }}
             onPlusPress={() => {
               Keyboard.dismiss();
               workspacePickerRef.current?.present();
@@ -1194,6 +1256,13 @@ export default function ThreadsScreen() {
             return [...prev, { id: agent.id, name: agent.name }];
           });
         }}
+      />
+
+      <SpacePickerSheet
+        ref={spacePickerRef}
+        spaces={spaces}
+        selectedId={selectedSpaceId}
+        onSelect={(space) => setSelectedSpaceId(space?.id ?? null)}
       />
 
       <QuickActionFormSheet

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { View, Pressable, Modal, Dimensions } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Check, ChevronDown, Archive } from "lucide-react-native";
@@ -6,12 +6,19 @@ import { Text } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 
 export interface ThreadFilters {
+  spaceId: string | null;
   channels: string[];
   showArchived: boolean;
 }
 
+export interface ThreadSpaceFilterOption {
+  id: string;
+  name: string;
+}
+
 interface ThreadFilterBarProps {
   filters: ThreadFilters;
+  spaces: ThreadSpaceFilterOption[];
   onFiltersChange: (filters: ThreadFilters) => void;
 }
 
@@ -31,6 +38,14 @@ function summarize(
   if (selected.length === 1)
     return options.find((o) => o.value === selected[0])?.label ?? selected[0];
   return `${selected.length} selected`;
+}
+
+function summarizeSpace(
+  selectedId: string | null,
+  spaces: ThreadSpaceFilterOption[],
+): string {
+  if (!selectedId) return "All";
+  return spaces.find((space) => space.id === selectedId)?.name ?? "Space";
 }
 
 // ── Multi-select dropdown popover ─────────────────────────────────────────
@@ -153,6 +168,98 @@ function MultiSelectDropdown({
   );
 }
 
+function SingleSelectDropdown({
+  visible,
+  anchor,
+  options,
+  selected,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  anchor: { x: number; y: number; width: number; height: number } | null;
+  options: Array<{ label: string; value: string | null }>;
+  selected: string | null;
+  onSelect: (value: string | null) => void;
+  onClose: () => void;
+}) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const colors = isDark ? COLORS.dark : COLORS.light;
+  const screenWidth = Dimensions.get("window").width;
+
+  if (!visible || !anchor) return null;
+
+  const dropdownTop = anchor.y + anchor.height + 4;
+  const dropdownLeft = Math.min(anchor.x, screenWidth - 220);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={{ flex: 1 }} onPress={onClose}>
+        <View
+          onStartShouldSetResponder={() => true}
+          style={{
+            position: "absolute",
+            top: dropdownTop,
+            left: dropdownLeft,
+            minWidth: 190,
+            maxWidth: 260,
+            backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: isDark ? 0.5 : 0.15,
+            shadowRadius: 12,
+            elevation: 8,
+            overflow: "hidden",
+          }}
+        >
+          {options.map((opt, i) => {
+            const isSelected = selected === opt.value;
+            const isLast = i === options.length - 1;
+            return (
+              <Pressable
+                key={opt.value ?? "__ALL__"}
+                onPress={() => {
+                  onSelect(opt.value);
+                  onClose();
+                }}
+                className="flex-row items-center justify-between px-4 py-3 active:opacity-70"
+                style={
+                  !isLast
+                    ? {
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.06)",
+                      }
+                    : undefined
+                }
+              >
+                <Text
+                  className={`text-sm ${isSelected ? "font-semibold" : ""}`}
+                  numberOfLines={1}
+                  style={isSelected ? { color: colors.primary } : undefined}
+                >
+                  {opt.label}
+                </Text>
+                {isSelected && <Check size={16} color={colors.primary} />}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── Filter trigger button ─────────────────────────────────────────────────
 
 function FilterButton({
@@ -180,8 +287,12 @@ function FilterButton({
           ? "border-primary bg-primary/10"
           : "border-neutral-300 dark:border-neutral-700"
       }`}
+      style={{ maxWidth: 150 }}
     >
-      <Text className={`text-xs font-medium ${isActive ? "text-primary" : ""}`}>
+      <Text
+        className={`text-xs font-medium ${isActive ? "text-primary" : ""}`}
+        numberOfLines={1}
+      >
         {label}: {value}
       </Text>
       <ChevronDown
@@ -196,11 +307,14 @@ function FilterButton({
 
 export function ThreadFilterBar({
   filters,
+  spaces,
   onFiltersChange,
 }: ThreadFilterBarProps) {
   const { colorScheme } = useColorScheme();
   const fColors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
-  const [activeDropdown, setActiveDropdown] = useState<"channel" | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<
+    "space" | "channel" | null
+  >(null);
   const [anchor, setAnchor] = useState<{
     x: number;
     y: number;
@@ -208,10 +322,11 @@ export function ThreadFilterBar({
     height: number;
   } | null>(null);
 
+  const spaceRef = useRef<View>(null);
   const channelRef = useRef<View>(null);
 
   const openDropdown = useCallback(
-    (type: "channel", ref: React.RefObject<View | null>) => {
+    (type: "space" | "channel", ref: React.RefObject<View | null>) => {
       ref.current?.measureInWindow((x, y, width, height) => {
         setAnchor({ x, y, width, height });
         setActiveDropdown(type);
@@ -235,8 +350,27 @@ export function ThreadFilterBar({
     [filters, onFiltersChange],
   );
 
+  const spaceOptions = useMemo(
+    () => [
+      { label: "All", value: null },
+      ...spaces.map((space) => ({
+        label: space.name,
+        value: space.id,
+      })),
+    ],
+    [spaces],
+  );
+
   return (
     <View className="flex-row items-center gap-2 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-800">
+      <FilterButton
+        label="Space"
+        value={summarizeSpace(filters.spaceId, spaces)}
+        isActive={!!filters.spaceId}
+        onPress={() => openDropdown("space", spaceRef)}
+        buttonRef={spaceRef}
+      />
+
       <FilterButton
         label="Type"
         value={summarize(filters.channels, CHANNEL_OPTIONS)}
@@ -267,6 +401,15 @@ export function ThreadFilterBar({
           Archived
         </Text>
       </Pressable>
+
+      <SingleSelectDropdown
+        visible={activeDropdown === "space"}
+        anchor={anchor}
+        options={spaceOptions}
+        selected={filters.spaceId}
+        onSelect={(spaceId) => onFiltersChange({ ...filters, spaceId })}
+        onClose={() => setActiveDropdown(null)}
+      />
 
       <MultiSelectDropdown
         visible={activeDropdown === "channel"}

@@ -110,6 +110,13 @@ interface ThreadRowProps {
     status: string;
     channel?: string;
     agentId?: string;
+    spaceId?: string | null;
+    space?: {
+      id: string;
+      name: string;
+      slug?: string | null;
+      icon?: string | null;
+    } | null;
     createdAt: string;
     updatedAt: string;
     lastActivityAt?: string | null;
@@ -123,6 +130,11 @@ interface ThreadRowProps {
   turnStatus?: "succeeded" | "failed" | null;
   onArchive?: (threadId: string) => Promise<boolean>;
   onPress: () => void;
+}
+
+function shouldShowSpaceBadge(space?: ThreadRowProps["thread"]["space"]) {
+  if (!space) return false;
+  return space.slug !== "default" && space.name.toLowerCase() !== "default";
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -224,6 +236,7 @@ export function ThreadRow({
   const channelKey = (thread.channel || "").toUpperCase();
   const chan = CHANNEL_CONFIG[channelKey] || DEFAULT_CHANNEL;
   const ChannelIcon = chan.icon;
+  const showSpaceBadge = shouldShowSpaceBadge(thread.space);
 
   const content = (
     <Pressable
@@ -265,7 +278,7 @@ export function ThreadRow({
       {/* Content */}
       <View className="flex-1 ml-3">
         <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center gap-2">
+          <View className="flex-1 flex-row items-center gap-2 mr-2">
             {thread.identifier && (
               <Text
                 className="text-xs font-mono text-primary"
@@ -273,6 +286,31 @@ export function ThreadRow({
               >
                 {thread.identifier}
               </Text>
+            )}
+            {showSpaceBadge && thread.space && (
+              <View
+                className="rounded-full px-1.5"
+                style={{
+                  minHeight: 16,
+                  justifyContent: "center",
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.08)"
+                    : "rgba(0,0,0,0.05)",
+                  transform: [{ translateY: -1 }],
+                }}
+              >
+                <Text
+                  className="text-[10px] font-semibold"
+                  numberOfLines={1}
+                  style={{
+                    maxWidth: 96,
+                    color: colors.mutedForeground,
+                    lineHeight: 12,
+                  }}
+                >
+                  {thread.space.name}
+                </Text>
+              </View>
             )}
             {turnStatus === "succeeded" && (
               <View className="flex-row items-center gap-0.5">
@@ -314,7 +352,7 @@ export function ThreadRow({
               </View>
             )}
           </View>
-          <View className="flex-row items-center gap-1">
+          <View className="flex-row items-center gap-1 shrink-0">
             <Muted className="text-xs">
               {formatRelativeTime(
                 thread.lastTurnCompletedAt || thread.createdAt,
