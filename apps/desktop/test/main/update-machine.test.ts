@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -326,6 +326,38 @@ describe("desktop updater controller", () => {
     });
   });
 
+  it("finds packaged update config from an app bundle path when Electron reports non-packaged", async () => {
+    const updater = new FakeAutoUpdater();
+    const resourcesDir = join(
+      userDataDir,
+      "ThinkWork Spaces (Canary).app",
+      "Contents",
+      "Resources",
+    );
+    await mkdir(resourcesDir, { recursive: true });
+    await writeFile(join(resourcesDir, "app-update.yml"), "provider: github\n", {
+      flag: "w",
+    });
+    const controller = new DesktopUpdatesController({
+      app: {
+        ...appLike(userDataDir),
+        getAppPath: () => join(resourcesDir, "app.asar"),
+        getVersion: () => "1.0.0-canary.14",
+        isPackaged: false,
+      },
+      autoUpdater: updater,
+      now: fixedClock(),
+      runtimeInfo,
+    });
+
+    await controller.start();
+
+    expect(updater.forceDevUpdateConfig).toBe(true);
+    expect(updater.updateConfigPath).toBe(join(resourcesDir, "app-update.yml"));
+    expect(updater.checkForUpdatesCalls).toBe(1);
+    expect(updater.channel).toBe("canary");
+  });
+
   it("starts in non-packaged dev mode without an updater instance", async () => {
     const controller = new DesktopUpdatesController({
       app: {
@@ -363,7 +395,9 @@ class FakeAutoUpdater extends EventEmitter implements AutoUpdaterLike {
   autoDownload = true;
   autoInstallOnAppQuit = false;
   allowPrerelease = false;
+  forceDevUpdateConfig = false;
   channel: string | null = null;
+  updateConfigPath: string | null = null;
   checkForUpdatesCalls = 0;
   quitAndInstallCalls = 0;
 

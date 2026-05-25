@@ -87,18 +87,25 @@ describe("DesktopApplicationHeader", () => {
     expect(screen.queryByText("ThinkWork Spaces")).toBeNull();
   });
 
-  it("keeps the content header empty when the route hides the top bar and the sidebar is open", () => {
+  it("removes the content header when the route hides the top bar and the sidebar is open", () => {
     pageHeaderMock.actions = {
       title: "New thread",
       hideTopBar: true,
       action: <button type="button">Hidden action</button>,
     };
 
-    render(<DesktopApplicationHeader />);
+    const { container } = render(<DesktopApplicationHeader />);
 
+    expect(container.firstElementChild).toBeNull();
     expect(screen.queryByText("Toggle Sidebar")).toBeNull();
     expect(screen.queryByText("New thread")).toBeNull();
     expect(screen.queryByText("Hidden action")).toBeNull();
+  });
+
+  it("does not add an empty content header on routes without header actions", () => {
+    const { container } = render(<DesktopApplicationHeader />);
+
+    expect(container.firstElementChild).toBeNull();
   });
 
   it("moves chrome controls onto the content header when the sidebar is fully collapsed", () => {

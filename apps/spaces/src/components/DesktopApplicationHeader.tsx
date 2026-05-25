@@ -53,6 +53,7 @@ export function DesktopApplicationHeader() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const headerActions = actions?.hideTopBar ? null : actions;
   const tabs = headerActions?.tabs ?? [];
+  const hasContent = Boolean(headerActions || tabs.length > 0);
   const activeTab =
     [...tabs]
       .reverse()
@@ -69,9 +70,13 @@ export function DesktopApplicationHeader() {
     }
   };
 
+  if (open && !hasContent) {
+    return null;
+  }
+
   return (
     <header
-      className={`desktop-app-header flex h-11 shrink-0 items-center gap-2 bg-background/95 pr-3 text-foreground ${open ? "pl-3" : "pl-20"}`}
+      className={`desktop-app-header flex h-11 shrink-0 items-center gap-2 pr-3 text-foreground ${open ? "bg-background pl-3" : "bg-background/95 pl-20"}`}
     >
       {open ? null : (
         <div className="flex shrink-0 items-center gap-1 text-sidebar-foreground">

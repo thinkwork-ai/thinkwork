@@ -1,6 +1,6 @@
 import { machine } from "node:os";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { UpdateState, UpdateTelemetryEvent } from "@thinkwork/desktop-ipc";
 import { UpdateTelemetry } from "./telemetry.js";
 import {
@@ -10,6 +10,7 @@ import {
 } from "./update-machine.js";
 
 export interface UpdatesAppLike {
+  getAppPath?(): string;
   getPath(name: "userData"): string;
   getVersion(): string;
   isPackaged: boolean;
@@ -64,7 +65,7 @@ export class DesktopUpdatesController {
     this.autoUpdater = options.autoUpdater;
     this.now = options.now ?? (() => new Date());
     this.checkOnStart = options.checkOnStart ?? true;
-    this.updateConfigPath = resolveUpdateConfigPath();
+    this.updateConfigPath = resolveUpdateConfigPath(this.app);
     this.updatesEnabled =
       options.updatesEnabled ?? shouldEnableUpdates(this.app);
     this.onStateChange = options.onStateChange ?? (() => {});
@@ -239,27 +240,57 @@ export function resolveUpdateChannel(version: string): string {
 export function shouldEnableUpdates(app: UpdatesAppLike): boolean {
   if (app.isPackaged) return true;
 
-  return !!resolveUpdateConfigPath();
+  return !!resolveUpdateConfigPath(app);
 }
 
-function resolveUpdateConfigPath(): string | null {
-  return candidateUpdateConfigPaths().find((path) => existsSync(path)) ?? null;
+function resolveUpdateConfigPath(app: UpdatesAppLike): string | null {
+  return (
+    candidateUpdateConfigPaths(app).find((path) => existsSync(path)) ?? null
+  );
 }
 
-function candidateUpdateConfigPaths(): string[] {
+function candidateUpdateConfigPaths(app: UpdatesAppLike): string[] {
   const paths = new Set<string>();
 
   if (process.resourcesPath) {
     paths.add(join(process.resourcesPath, "app-update.yml"));
+    addBundleResourceCandidates(paths, process.resourcesPath);
   }
 
   if (process.execPath) {
-    paths.add(
-      resolve(dirname(process.execPath), "../Resources/app-update.yml"),
-    );
+    paths.add(resolve(dirname(process.execPath), "../Resources/app-update.yml"));
+    addBundleResourceCandidates(paths, process.execPath);
+  }
+
+  const appPath = app.getAppPath?.();
+  if (appPath) {
+    paths.add(join(appPath, "app-update.yml"));
+    paths.add(join(dirname(appPath), "app-update.yml"));
+    addBundleResourceCandidates(paths, appPath);
   }
 
   return [...paths];
+}
+
+function addBundleResourceCandidates(
+  paths: Set<string>,
+  startPath: string,
+): void {
+  let current = startPath;
+  for (let depth = 0; depth < 16; depth += 1) {
+    const name = basename(current);
+
+    if (name === "Contents") {
+      paths.add(join(current, "Resources/app-update.yml"));
+    }
+    if (name.endsWith(".app")) {
+      paths.add(join(current, "Contents/Resources/app-update.yml"));
+    }
+
+    const parent = dirname(current);
+    if (parent === current) return;
+    current = parent;
+  }
 }
 
 function updateInfoVersion(info: unknown): string {
