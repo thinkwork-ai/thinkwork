@@ -1,6 +1,6 @@
 import { machine } from "node:os";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { UpdateState, UpdateTelemetryEvent } from "@thinkwork/desktop-ipc";
 import { UpdateTelemetry } from "./telemetry.js";
 import {
@@ -230,11 +230,23 @@ export function resolveUpdateChannel(version: string): string {
 export function shouldEnableUpdates(app: UpdatesAppLike): boolean {
   if (app.isPackaged) return true;
 
-  try {
-    return existsSync(join(process.resourcesPath, "app-update.yml"));
-  } catch {
-    return false;
+  return candidateUpdateConfigPaths().some((path) => existsSync(path));
+}
+
+function candidateUpdateConfigPaths(): string[] {
+  const paths = new Set<string>();
+
+  if (process.resourcesPath) {
+    paths.add(join(process.resourcesPath, "app-update.yml"));
   }
+
+  if (process.execPath) {
+    paths.add(
+      resolve(dirname(process.execPath), "../Resources/app-update.yml"),
+    );
+  }
+
+  return [...paths];
 }
 
 function updateInfoVersion(info: unknown): string {
