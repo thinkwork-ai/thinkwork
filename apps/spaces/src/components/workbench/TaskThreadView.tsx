@@ -1,11 +1,14 @@
 import {
   AtSign,
   ArrowUp,
+  AlertCircle,
   Bot,
   CalendarDays,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  CircleDashed,
   Code2,
   Database,
   Download,
@@ -167,6 +170,7 @@ export interface TaskThreadInfoPanelState {
   agents: string[];
   attachments: ThreadInfoAttachment[];
   onDownloadAttachment: (attachmentId: string) => void | Promise<void>;
+  checklist?: ThreadInfoChecklistState | null;
 }
 
 export interface ThreadInfoAttachment {
@@ -175,6 +179,25 @@ export interface ThreadInfoAttachment {
   mimeType?: string | null;
   sizeBytes?: number | null;
   createdAt?: string | null;
+}
+
+export interface ThreadInfoChecklistState {
+  title?: string;
+  tasks: ThreadInfoChecklistTask[];
+  isLoading?: boolean;
+  error?: string | null;
+  completedAt?: string | null;
+}
+
+export interface ThreadInfoChecklistTask {
+  id: string;
+  title: string;
+  status?: string | null;
+  required?: boolean | null;
+  roleKey?: string | null;
+  assigneeDisplay?: string | null;
+  blocked?: boolean | null;
+  updatedAt?: string | null;
 }
 
 export interface ComposerMention {
@@ -460,7 +483,7 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
 
   return (
     <aside
-      className="absolute right-6 top-4 z-20 hidden w-[300px] rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
+      className="absolute right-6 top-4 z-20 hidden max-h-[calc(100vh-8rem)] w-[300px] overflow-y-auto rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >
@@ -529,8 +552,120 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
             </div>
           </section>
         ) : null}
+
+        {state.checklist ? (
+          <ThreadInfoChecklist checklist={state.checklist} />
+        ) : null}
       </div>
     </aside>
+  );
+}
+
+function ThreadInfoChecklist({
+  checklist,
+}: {
+  checklist: ThreadInfoChecklistState;
+}) {
+  const requiredTasks = checklist.tasks.filter(
+    (task) =>
+      task.required !== false &&
+      normalizeInfoStatus(task.status) !== "not_applicable",
+  );
+  const completed = requiredTasks.filter(
+    (task) => normalizeInfoStatus(task.status) === "completed",
+  ).length;
+  const total = requiredTasks.length;
+  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return (
+    <section className="border-t border-white/10 pt-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium text-white/55">
+            {checklist.title ?? "Checklist"}
+          </h2>
+          <p className="mt-1 text-xs text-white/45">
+            {total ? `${completed}/${total} required complete` : "No tasks yet"}
+          </p>
+        </div>
+        <span className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75">
+          {progress}%
+        </span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-white/70"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {checklist.error ? (
+        <p className="mt-3 rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-100">
+          {checklist.error}
+        </p>
+      ) : checklist.isLoading && checklist.tasks.length === 0 ? (
+        <p className="mt-3 text-sm text-white/55">Loading checklist...</p>
+      ) : checklist.tasks.length === 0 ? (
+        <p className="mt-3 text-sm text-white/55">No linked tasks</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {checklist.tasks.map((task) => (
+            <ThreadInfoChecklistRow key={task.id} task={task} />
+          ))}
+        </div>
+      )}
+
+      {checklist.completedAt ? (
+        <p className="mt-3 text-xs text-white/45">
+          Thread completed {formatInfoDate(checklist.completedAt)}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ThreadInfoChecklistRow({ task }: { task: ThreadInfoChecklistTask }) {
+  const status = normalizeInfoStatus(task.status);
+  const isComplete = status === "completed";
+  const isBlocked = task.blocked || status === "blocked";
+  const Icon = isComplete
+    ? CheckCircle2
+    : isBlocked
+      ? AlertCircle
+      : CircleDashed;
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+      <div className="flex items-start gap-2">
+        <Icon
+          className={cn(
+            "mt-0.5 size-3.5 shrink-0",
+            isComplete
+              ? "text-emerald-300"
+              : isBlocked
+                ? "text-red-300"
+                : "text-white/45",
+          )}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 flex-1 truncate text-xs font-medium text-white/80">
+              {task.title}
+            </p>
+            <span className="shrink-0 rounded-full bg-white/8 px-1.5 py-0.5 text-[11px] text-white/65">
+              {formatInfoStatus(task.status)}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-white/40">
+            {task.required === false ? null : <span>Required</span>}
+            {task.assigneeDisplay ? <span>{task.assigneeDisplay}</span> : null}
+            {task.roleKey ? (
+              <span>{formatInfoStatus(task.roleKey)}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -565,6 +700,24 @@ function formatInfoDate(value?: string | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function normalizeInfoStatus(value?: string | null) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function formatInfoStatus(value?: string | null) {
+  return (
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ") || "Unknown"
+  );
 }
 
 function formatFileSize(value: number) {

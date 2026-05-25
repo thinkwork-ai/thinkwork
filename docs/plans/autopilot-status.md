@@ -39,13 +39,25 @@ Target branch: `main`
 
 ## Follow-Up Run: Workspace Tree Magic Folder Removal
 
-- Status: active
-- Active branch: `codex/remove-magic-memory-folder`
-- Active worktree: `.Codex/worktrees/remove-magic-memory-folder`
+- Status: merged
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: Admin `WorkspaceEditor` injected `memory/` for context-mode workspaces and the shared tree builder injected `skills/` by default. The live Customer Onboarding S3 source folder only contains `CONTEXT.md` and `docs/customer-onboarding-intake.md`; the extra row was UI-only.
 - Scope: make workspace trees file-backed only. Root folders render only when returned by the workspace source listing.
 - Verification: focused admin tree/editor tests passed; admin production build passed; touched-file Prettier check passed; `git diff --check` passed.
+- PR: [#1706](https://github.com/thinkwork-ai/thinkwork/pull/1706)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+
+## Follow-Up Run: Customer Onboarding Info Panel Checklist
+
+- Status: active
+- Active branch: `codex/onboarding-info-panel`
+- Active worktree: `.Codex/worktrees/onboarding-info-panel`
+- Started: 2026-05-25
+- Root cause: the Customer Onboarding checklist panel was wired as a separate side panel, while the Spaces thread Info Panel remained empty below thread metadata. The demo requires task status to be visible from the Info Panel.
+- Scope: mirror linked checklist progress and task status rows inside the existing thread Info Panel, fed by the same `threadLinkedTasks` data that updates after chat/subscription refreshes.
+- Verification: focused Spaces thread/detail tests passed; Spaces production build passed; touched-file Prettier check passed; `git diff --check` passed.
 
 ### Active Unit Notes
 

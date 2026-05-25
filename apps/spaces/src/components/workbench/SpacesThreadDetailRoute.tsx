@@ -531,8 +531,28 @@ export function SpacesThreadDetailRoute({
       attachments: data?.thread?.attachments ?? [],
       onDownloadAttachment: (attachmentId: string) =>
         downloadThreadAttachment(threadId, attachmentId),
+      checklist: showOnboardingChecklist
+        ? {
+            title: "Onboarding checklist",
+            tasks: linkedTasks,
+            isLoading: linkedTasksFetching && linkedTasks.length === 0,
+            error: linkedTasksError?.message ?? null,
+            completedAt:
+              normalizeThreadStatus(data?.thread?.status) === "done"
+                ? data?.thread?.updatedAt
+                : null,
+          }
+        : null,
     }),
-    [data?.thread, threadId, threadInfoOpen],
+    [
+      data?.thread,
+      linkedTasks,
+      linkedTasksError?.message,
+      linkedTasksFetching,
+      showOnboardingChecklist,
+      threadId,
+      threadInfoOpen,
+    ],
   );
 
   usePageHeaderActions({
