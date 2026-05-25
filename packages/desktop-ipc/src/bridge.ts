@@ -1,5 +1,6 @@
 import type {
   DeepLinkCallback,
+  DesktopConfig,
   PendingOAuthCallback,
   OAuthErrorEvent,
   RemoveTokenStorageItemRequest,
@@ -27,6 +28,7 @@ export interface ThinkworkBridge {
   consumePendingOAuth(): Promise<PendingOAuthCallback | null>;
   onDeepLink(listener: (callback: DeepLinkCallback) => void): Unsubscribe;
   onOAuthError(listener: (event: OAuthErrorEvent) => void): Unsubscribe;
+  getDesktopConfig(): Promise<DesktopConfig>;
   getUpdateState(): Promise<UpdateState>;
   checkForUpdates(): Promise<void>;
   downloadUpdate(): Promise<void>;

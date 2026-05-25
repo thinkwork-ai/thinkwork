@@ -131,6 +131,36 @@ describe("SignInPage", () => {
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
   });
 
+  it("shows incomplete packaged desktop configuration before OAuth starts", async () => {
+    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
+      getDesktopConfig: vi.fn().mockResolvedValue({
+        stage: "dev",
+        configured: false,
+        missing: ["VITE_API_URL", "VITE_COGNITO_DOMAIN"],
+        oauthRedirectUri: "thinkwork-dev://oauth/callback",
+        endpoints: {
+          apiUrl: null,
+          graphqlHttpUrl: "https://api.example.com/graphql",
+          graphqlUrl: "https://appsync.example.com/graphql",
+          graphqlWsUrl: "wss://appsync.example.com/graphql",
+          cognitoDomain: null,
+        },
+      }),
+      startOAuth: vi.fn(),
+      onOAuthError: () => () => {},
+    });
+
+    render(<SignInPage />);
+
+    await screen.findByText("Configuration incomplete for dev");
+    expect(screen.getByText(/Missing VITE_API_URL/)).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
   it("uses the existing browser OAuth redirect outside desktop mode", () => {
     const navigations: string[] = [];
     Object.defineProperty(window, "location", {

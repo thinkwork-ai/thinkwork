@@ -16,6 +16,11 @@ export interface DesktopEnvSnapshot {
   cognito: CognitoEnvSnapshot;
 }
 
+export interface DesktopEnvValidation {
+  configured: boolean;
+  missing: readonly string[];
+}
+
 declare const __THINKWORK_DESKTOP_ENV__:
   | Partial<Record<string, string>>
   | undefined;
@@ -26,19 +31,44 @@ export function snapshotDesktopEnv(
   const mergedEnv = mergeDesktopEnv(env);
 
   return Object.freeze({
-    nodeEnv: mergedEnv.NODE_ENV ?? "development",
-    stage: mergedEnv.THINKWORK_STAGE ?? mergedEnv.VITE_THINKWORK_STAGE ?? "dev",
-    rendererUrl: mergedEnv.ELECTRON_RENDERER_URL ?? null,
-    apiUrl: mergedEnv.VITE_API_URL ?? null,
-    graphqlHttpUrl: mergedEnv.VITE_GRAPHQL_HTTP_URL ?? null,
-    graphqlUrl: mergedEnv.VITE_GRAPHQL_URL ?? null,
-    graphqlWsUrl: mergedEnv.VITE_GRAPHQL_WS_URL ?? null,
-    sandboxFrameSrc: mergedEnv.VITE_SANDBOX_IFRAME_SRC ?? null,
+    nodeEnv: optionalEnv(mergedEnv.NODE_ENV) ?? "development",
+    stage:
+      optionalEnv(mergedEnv.THINKWORK_STAGE) ??
+      optionalEnv(mergedEnv.VITE_THINKWORK_STAGE) ??
+      "dev",
+    rendererUrl: optionalEnv(mergedEnv.ELECTRON_RENDERER_URL),
+    apiUrl: optionalEnv(mergedEnv.VITE_API_URL),
+    graphqlHttpUrl: optionalEnv(mergedEnv.VITE_GRAPHQL_HTTP_URL),
+    graphqlUrl: optionalEnv(mergedEnv.VITE_GRAPHQL_URL),
+    graphqlWsUrl: optionalEnv(mergedEnv.VITE_GRAPHQL_WS_URL),
+    sandboxFrameSrc: optionalEnv(mergedEnv.VITE_SANDBOX_IFRAME_SRC),
     cognito: Object.freeze({
-      userPoolId: mergedEnv.VITE_COGNITO_USER_POOL_ID ?? null,
-      clientId: mergedEnv.VITE_COGNITO_CLIENT_ID ?? null,
-      domain: mergedEnv.VITE_COGNITO_DOMAIN ?? null,
+      userPoolId: optionalEnv(mergedEnv.VITE_COGNITO_USER_POOL_ID),
+      clientId: optionalEnv(mergedEnv.VITE_COGNITO_CLIENT_ID),
+      domain: optionalEnv(mergedEnv.VITE_COGNITO_DOMAIN),
     }),
+  });
+}
+
+export function validateDesktopEnv(
+  env: DesktopEnvSnapshot,
+): DesktopEnvValidation {
+  const required: Array<[string, string | null]> = [
+    ["VITE_API_URL", env.apiUrl],
+    ["VITE_GRAPHQL_HTTP_URL", env.graphqlHttpUrl],
+    ["VITE_GRAPHQL_URL", env.graphqlUrl],
+    ["VITE_GRAPHQL_WS_URL", env.graphqlWsUrl],
+    ["VITE_COGNITO_USER_POOL_ID", env.cognito.userPoolId],
+    ["VITE_COGNITO_CLIENT_ID", env.cognito.clientId],
+    ["VITE_COGNITO_DOMAIN", env.cognito.domain],
+  ];
+  const missing = required
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+
+  return Object.freeze({
+    configured: missing.length === 0,
+    missing: Object.freeze(missing),
   });
 }
 
@@ -52,4 +82,10 @@ function mergeDesktopEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     ...buildEnv,
     ...env,
   };
+}
+
+function optionalEnv(value: string | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

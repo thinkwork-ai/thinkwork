@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import type { DesktopConfig } from "@thinkwork/desktop-ipc";
 import { useEffect, useState } from "react";
 import { Button } from "@thinkwork/ui";
 import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
@@ -23,6 +24,9 @@ export function SignInPage() {
   const navigate = useNavigate();
   const isDesktop = isDesktopBuild();
   const [error, setError] = useState<string | null>(null);
+  const [desktopConfig, setDesktopConfig] = useState<DesktopConfig | null>(
+    null,
+  );
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
 
   // If the user is already signed in, send them to the new-thread workspace.
@@ -42,10 +46,41 @@ export function SignInPage() {
     });
   }, []);
 
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (!bridge || typeof bridge.getDesktopConfig !== "function") return;
+
+    let cancelled = false;
+    void bridge
+      .getDesktopConfig()
+      .then((config) => {
+        if (!cancelled) setDesktopConfig(config);
+      })
+      .catch((configError) => {
+        if (!cancelled) {
+          setError(
+            configError instanceof Error
+              ? configError.message
+              : "Desktop configuration could not be read.",
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function handleGoogle() {
     setError(null);
     const bridge = getDesktopBridge();
     if (bridge) {
+      if (desktopConfig && !desktopConfig.configured) {
+        setError(
+          `Desktop is missing configuration: ${desktopConfig.missing.join(", ")}`,
+        );
+        return;
+      }
       setIsStartingOAuth(true);
       try {
         await bridge.startOAuth(next ? { next } : undefined);
@@ -91,11 +126,29 @@ export function SignInPage() {
             {error}
           </p>
         )}
+        {isDesktop && desktopConfig && (
+          <div className="text-center text-xs text-muted-foreground">
+            <p>
+              {desktopConfig.configured
+                ? `Connected to ${desktopConfig.stage}`
+                : `Configuration incomplete for ${desktopConfig.stage}`}
+            </p>
+            {!desktopConfig.configured && (
+              <p className="mt-1 text-destructive">
+                Missing {desktopConfig.missing.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
         <Button
           onClick={() => void handleGoogle()}
           size="lg"
           className="min-w-40"
-          disabled={isLoading || isStartingOAuth}
+          disabled={
+            isLoading ||
+            isStartingOAuth ||
+            Boolean(desktopConfig && !desktopConfig.configured)
+          }
         >
           {isLoading
             ? "Checking session..."

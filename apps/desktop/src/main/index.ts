@@ -11,7 +11,7 @@ import {
   resolveDeepLinkScheme,
   type DeepLinkDispatcher,
 } from "./deep-link.js";
-import { snapshotDesktopEnv } from "./env.js";
+import { snapshotDesktopEnv, validateDesktopEnv } from "./env.js";
 import { registerDesktopIpcHandlers } from "./ipc-handlers.js";
 import { installDesktopMenu } from "./menus.js";
 import { configureDevUserDataPath } from "./user-data.js";
@@ -20,12 +20,18 @@ declare const __THINKWORK_APPLE_TEAM_ID__: string;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const expectedAppleTeamId = __THINKWORK_APPLE_TEAM_ID__;
+const desktopEnv = snapshotDesktopEnv();
+const desktopEnvValidation = validateDesktopEnv(desktopEnv);
+if (!desktopEnvValidation.configured) {
+  console.error(
+    "[desktop] missing first-launch configuration",
+    desktopEnvValidation.missing,
+  );
+}
 configureDevUserDataPath(app);
 void configureDesktopBranding({ app, nativeImage, rootDir: __dirname });
 const deepLinkController = createDeepLinkController({
-  scheme: resolveDeepLinkScheme(
-    process.env.THINKWORK_STAGE ?? process.env.VITE_THINKWORK_STAGE,
-  ),
+  scheme: resolveDeepLinkScheme(desktopEnv.stage),
   logger: console,
 });
 
@@ -93,7 +99,7 @@ if (!app.requestSingleInstanceLock()) {
 
   if (codeSignatureVerified) {
     void bootstrapDesktopApp({
-      snapshotEnv: snapshotDesktopEnv,
+      snapshotEnv: () => desktopEnv,
       preloadPath: join(__dirname, "../preload/index.cjs"),
       protocol,
       installMenus: (handlers) =>

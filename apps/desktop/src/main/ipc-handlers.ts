@@ -4,6 +4,7 @@ import { registerAuthBridgeHandlers } from "./auth-bridge.js";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
+  GET_DESKTOP_CONFIG_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
@@ -11,6 +12,7 @@ import {
   UPDATE_TELEMETRY_EVENT_CHANNEL,
   CheckForUpdatesRequestSchema,
   DownloadUpdateRequestSchema,
+  GetDesktopConfigRequestSchema,
   GetUpdateStateRequestSchema,
   InstallUpdateRequestSchema,
   ReportInstallOutcomeRequestSchema,
@@ -18,7 +20,9 @@ import {
   type DeepLinkCallback,
 } from "@thinkwork/desktop-ipc";
 import type { DeepLinkDispatcher } from "./deep-link.js";
+import { resolveDeepLinkScheme } from "./deep-link.js";
 import type { DesktopEnvSnapshot } from "./env.js";
+import { validateDesktopEnv } from "./env.js";
 import type { DesktopMenuCommandHandlers } from "./menus.js";
 import { DesktopOAuthController } from "./oauth.js";
 import { createDesktopUpdatesController } from "./updates.js";
@@ -62,6 +66,24 @@ export async function registerDesktopIpcHandlers(
   });
   await updates.start();
 
+  ipcMain.handle(GET_DESKTOP_CONFIG_CHANNEL, (event, payload) => {
+    assertSafeSenderFrame(event);
+    GetDesktopConfigRequestSchema.parse(payload);
+    const validation = validateDesktopEnv(options.env);
+    return {
+      stage: options.env.stage,
+      configured: validation.configured,
+      missing: validation.missing,
+      oauthRedirectUri: `${resolveDeepLinkScheme(options.env.stage)}://oauth/callback`,
+      endpoints: {
+        apiUrl: options.env.apiUrl,
+        graphqlHttpUrl: options.env.graphqlHttpUrl,
+        graphqlUrl: options.env.graphqlUrl,
+        graphqlWsUrl: options.env.graphqlWsUrl,
+        cognitoDomain: options.env.cognito.domain,
+      },
+    };
+  });
   ipcMain.handle(GET_UPDATE_STATE_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
     GetUpdateStateRequestSchema.parse(payload);
