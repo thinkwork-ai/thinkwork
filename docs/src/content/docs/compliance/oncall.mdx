@@ -7,14 +7,14 @@ When a compliance alarm fires, find it in the table below and follow the linked 
 
 ## Alarm → playbook
 
-| Alarm | Playbook |
-|-------|----------|
-| `thinkwork-{stage}-compliance-anchor-dlq-depth` (or U8a/U8b equivalent) | [Anchor DLQ depth non-zero](#anchor-dlq-depth-non-zero) |
-| `thinkwork-{stage}-compliance-exports-dlq-depth` | [Exports DLQ depth non-zero](#exports-dlq-depth-non-zero) |
-| `thinkwork-{stage}-compliance-anchor-watchdog-heartbeat-missing` | [Anchor watchdog heartbeat missing](#anchor-watchdog-heartbeat-missing) |
-| `thinkwork-{stage}-compliance-anchor-gap` | [Anchor gap too large](#anchor-gap-too-large) |
-| (CI gate, not CloudWatch) deploy fails on drift gate | [Drift gate fails on deploy](#drift-gate-fails-on-deploy) |
-| (No alarm; surface via DB monitoring) `audit_outbox` growing unbounded | [audit_outbox runaway](#audit_outbox-runaway) |
+| Alarm                                                                       | Playbook                                                                    |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `thinkwork-{stage}-compliance-anchor-dlq-depth` (or U8a/U8b equivalent)     | [Anchor DLQ depth non-zero](#anchor-dlq-depth-non-zero)                     |
+| `thinkwork-{stage}-compliance-exports-dlq-depth`                            | [Exports DLQ depth non-zero](#exports-dlq-depth-non-zero)                   |
+| `thinkwork-{stage}-compliance-anchor-watchdog-heartbeat-missing`            | [Anchor watchdog heartbeat missing](#anchor-watchdog-heartbeat-missing)     |
+| `thinkwork-{stage}-compliance-anchor-gap`                                   | [Anchor gap too large](#anchor-gap-too-large)                               |
+| (CI gate, not CloudWatch) deploy fails on drift gate                        | [Drift gate fails on deploy](#drift-gate-fails-on-deploy)                   |
+| (No alarm; surface via DB monitoring) `audit_outbox` growing unbounded      | [audit_outbox runaway](#audit_outbox-runaway)                               |
 | (No alarm; surface via Strands runtime errors) audit emits silently failing | [Strands runtime emit silent failure](#strands-runtime-emit-silent-failure) |
 
 ---
@@ -68,8 +68,10 @@ Anchor Lambda: [`packages/lambda/compliance-anchor.ts`](https://github.com/think
      ```
 
      Purge the DLQ message. Operator submits a fresh export with the same filter.
+
    - **`failed`:** runner already wrote the failure before exiting. DLQ message is redundant. Purge.
    - **`queued`:** the runner never claimed the job (CAS guard didn't fire). The Lambda likely crashed at boot — env var missing, Aurora connection failed at module-load. Check CloudWatch logs for the function. After fixing, **replay is safe** because the CAS guard makes re-delivery a no-op when the job is no longer queued; but typically the underlying problem (env or IAM) needs a code/Terraform fix first.
+
 4. Once the root cause is fixed and any stuck rows are reconciled, purge the DLQ.
 
 Runner Lambda: [`packages/lambda/compliance-export-runner.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-export-runner.ts). DLQ + alarm provisioned by [`terraform/modules/app/lambda-api/handlers.tf`](https://github.com/thinkwork-ai/thinkwork/blob/main/terraform/modules/app/lambda-api/handlers.tf).
@@ -141,6 +143,7 @@ but the object is missing on dev.
    ```
 
    Construct the URL: `postgresql://<username>:<URL-encoded-password>@<host>:<port>/<dbname>?sslmode=require`. The `!` character URL-encodes to `%21` if present in the password.
+
 3. Apply the migration: `psql "$DATABASE_URL" -f packages/database-pg/drizzle/00NN_<name>.sql`.
 4. Re-run the failed GitHub Actions job. Drift gate passes.
 
@@ -165,6 +168,7 @@ Reference: [feedback_handrolled_migrations_apply_to_dev](`memory/feedback_handro
    ```
 
    Healthy: less than 100. Concerning: more than 10,000. Critical: more than 100,000 (index degradation impacts emit-side performance).
+
 2. Check drainer Lambda CloudWatch logs. Look for ERROR-level entries; these are usually:
    - **Aurora reader credential expired** — rotate via `STAGE=<stage> bash scripts/bootstrap-compliance-roles.sh`. The drainer reads as `compliance_drainer`; secret name is `thinkwork-{stage}-compliance-drainer-credentials`.
    - **Reserved-concurrency exhausted** — another invocation is hung. Check the Lambda's "Throttles" metric; if non-zero, force-stop hung executions via the AWS console.
@@ -177,7 +181,7 @@ Drainer Lambda: [`packages/lambda/compliance-outbox-drainer.ts`](https://github.
 
 ## Strands runtime emit silent failure
 
-**Symptom:** Audit events from Strands runtime (sub-agent operations, tool invocations from Python containers) stop appearing in `audit_events` while Yoga-emitted events continue normally. Strands logs show no obvious errors.
+**Symptom:** Audit events from Strands runtime (folder-specialist operations, tool invocations from Python containers) stop appearing in `audit_events` while Yoga-emitted events continue normally. Strands logs show no obvious errors.
 
 **Likely cause:** Env-var shadowing on the Strands container. The `ComplianceClient` reads `THINKWORK_API_URL` + `API_AUTH_SECRET` once at module load; if Lambda's warm-container update path re-injects these env vars mid-process, a re-read mid-handler can pick up stale values that don't match the live API endpoint.
 

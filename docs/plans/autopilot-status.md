@@ -6,6 +6,160 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Customer Onboarding Native Checklist Demo
+
+Plan: `docs/plans/2026-05-25-004-feat-customer-onboarding-native-checklist-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Latest merged PR: [#1701](https://github.com/thinkwork-ai/thinkwork/pull/1701)
+- Active PR: none
+- CI: PR 1 through PR 6 passed required checks; all implementation units merged
+
+## Follow-Up Run: Customer Onboarding Workspace Readiness Hotfix
+
+- Status: ready to merge
+- Active branch: `codex/customer-onboarding-live-workspace-fix`
+- Active worktree: `.Codex/worktrees/customer-onboarding-live-workspace-fix`
+- Started: 2026-05-25
+- Root cause: Customer Onboarding `CONTEXT.md` and intake docs existed in seed code, but live Space Workspace tabs only list S3 source files under `tenants/<tenant>/spaces/<space-slug>/source/`; existing Spaces stayed empty unless the seed script was manually run with `--write-space-files`.
+- Implemented so far: shared Customer Onboarding source-file backfill helper, deploy-bootstrap backfill for active Customer Onboarding Spaces, explicit Human Question skill pattern in Space source docs, and workflow test coverage for missing-intake question-card metadata.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-source-files.test.ts src/lib/spaces/customer-onboarding-seed.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts` passed.
+- PR: [#1704](https://github.com/thinkwork-ai/thinkwork/pull/1704)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy note: main deploy `26408828637` passed, but the `Bootstrap` job skipped because the workflow only treated `packages/workspace-defaults/files/**` as workspace-default changes. Follow-up branch `codex/customer-onboarding-bootstrap-trigger` adds the Customer Onboarding seed/backfill files to that trigger so the next deploy runs the source-file backfill.
+- Remaining live validation: after the follow-up merge/deploy, open the Customer Onboarding Workspace tab and confirm `CONTEXT.md` plus `docs/customer-onboarding-intake.md` render; then run the Native Demo Smoke below.
+
+## Follow-Up Run: Workspace Tree Magic Folder Removal
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: Admin `WorkspaceEditor` injected `memory/` for context-mode workspaces and the shared tree builder injected `skills/` by default. The live Customer Onboarding S3 source folder only contains `CONTEXT.md` and `docs/customer-onboarding-intake.md`; the extra row was UI-only.
+- Scope: make workspace trees file-backed only. Root folders render only when returned by the workspace source listing.
+- Verification: focused admin tree/editor tests passed; admin production build passed; touched-file Prettier check passed; `git diff --check` passed.
+- PR: [#1706](https://github.com/thinkwork-ai/thinkwork/pull/1706)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+
+## Follow-Up Run: Customer Onboarding Info Panel Checklist
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: the Customer Onboarding checklist panel was wired as a separate side panel, while the Spaces thread Info Panel remained empty below thread metadata. The demo requires task status to be visible from the Info Panel.
+- Scope: mirror linked checklist progress and task status rows inside the existing thread Info Panel, fed by the same `threadLinkedTasks` data that updates after chat/subscription refreshes.
+- Verification: focused Spaces thread/detail tests passed; Spaces production build passed; touched-file Prettier check passed; `git diff --check` passed.
+- PR: [#1708](https://github.com/thinkwork-ai/thinkwork/pull/1708)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26411044960` completed successfully; Build & Deploy Spaces and Build & Deploy Admin both passed.
+
+## Follow-Up Run: Spaces Space Query Compatibility
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: live E2E to `https://app.thinkwork.ai/spaces/0b640386-05d7-4dbb-9585-e4c0b8c03f5f` failed before the workflow could start because `SpaceQuery` still requested retired `Space.agentAssignments`.
+- Scope: remove the stale `agentAssignments` selection from the Spaces app Space query so the Customer Onboarding space route can load against the deployed schema.
+- Verification: focused Spaces GraphQL query test passed; Spaces production build passed; touched-file Prettier check passed; `git diff --check` passed.
+- PR: [#1709](https://github.com/thinkwork-ai/thinkwork/pull/1709)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26411633710` completed successfully; live Customer Onboarding route loads and shows the Start onboarding form.
+
+## Follow-Up Run: Customer Onboarding Thread Trigger
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: live E2E proved the Space files were present, but the existing Customer Onboarding Space could still have zero database checklist rows. Also, ordinary `createThread` calls in that Space did not invoke the onboarding workflow; only the dedicated Start onboarding mutation did.
+- Scope: repair missing native checklist rows when the workflow starts, route ordinary Customer Onboarding Space thread creation through the native onboarding workflow, and make the kickoff message ask the human for missing intake fields in chat.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/threads/createThread.onboarding.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier check; `git diff --check`.
+- PR: [#1710](https://github.com/thinkwork-ai/thinkwork/pull/1710)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26412725311` completed successfully; live normal thread creation reached the Customer Onboarding workflow but exposed dev DB drift on the `linked_tasks_provider_allowed` CHECK constraint.
+
+## Follow-Up Run: Native Checklist DB Constraint Apply
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: `packages/database-pg/drizzle/0135_native_checklist_linked_tasks.sql` existed, but deploy's manual migration drift gate is disabled and the migration was not applied to dev. Live E2E failed inserting `provider = 'thinkwork'` with `linked_tasks_provider_allowed`.
+- Scope: run the existing idempotent native-checklist constraint migration from the normal deploy pipeline before Terraform apply, matching the workflow's other explicit DB backfill steps.
+- Verification: touched-file Prettier check; `git diff --check`; CI passed.
+- PR: [#1711](https://github.com/thinkwork-ai/thinkwork/pull/1711)
+- Deploy: main deploy `26413325001` completed the `Apply native checklist linked task constraints` step successfully. Live Customer Onboarding normal thread creation now creates the Thread, asks the missing intake questions, and renders the checklist in the Spaces Info Panel.
+
+## Follow-Up Run: Customer Onboarding Chat Checklist Updates
+
+- Status: active
+- Active branch: `codex/customer-onboarding-chat-updates`
+- Active worktree: `.Codex/worktrees/customer-onboarding-chat-updates`
+- Started: 2026-05-25
+- Root cause: live E2E after PR #1711 verified Thread creation, missing-question prompting, and Info Panel checklist rendering, but a human answer in chat did not update missing intake state or checklist statuses.
+- Scope: add a deterministic Customer Onboarding `sendMessage` hook that extracts intake answers and completion statements from same-thread chat, updates `threads.metadata.customerOnboarding`, updates ThinkWork linked checklist rows, records linked-task events, and writes an assistant summary message. Handled onboarding chat updates skip the generic default-agent turn so the demo path is deterministic.
+- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
+
+### Active Unit Notes
+
+- Created isolated U1 worktree from `origin/main` at `96b9766495dbc55ee2728ee3ff439a1a87e67810`.
+- U1 scope includes the plan file, native-first Customer Onboarding seed constants, idempotent seed-script updates, Space source file seeds, and native-first runbook copy.
+- Local research found `space_agent_assignments` is already retired on `main`; U1 removes the stale seed-script write and documents coordinator wakeups as tenant-platform-agent based.
+- Local verification passed: focused seed tests, full `@thinkwork/api` test suite, repo-wide typecheck, repo lint, touched-file Prettier check, `git diff --check`, and native dry-run validation.
+- U1 merged via [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) at `d22a771d`.
+- Created isolated U2 worktree from `origin/main` at `d22a771d`.
+- U2 verification passed: focused linked-task API tests, linked-task database schema tests, GraphQL contract test, full `@thinkwork/api` test suite, repo-wide typecheck, repo lint, touched-file Prettier check, `git diff --check`, and `pnpm schema:build`.
+- U2 merged via [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696) at `94650bac`.
+- Created isolated U3 worktree from `origin/main` at `94650bac`.
+- U3 verification passed: customer onboarding workflow tests, startCustomerOnboarding resolver tests, full `@thinkwork/api` test suite, repo-wide typecheck, repo lint, touched-file Prettier check, and `git diff --check`.
+- U3 merged via [#1697](https://github.com/thinkwork-ai/thinkwork/pull/1697) at `d4dfe977`.
+- Created isolated U4 worktree from `origin/main` at `d4dfe977`.
+- U4 scope wires the native checklist demo into the Spaces app: expanded intake form, Customer Onboarding home action, thread-side checklist panel, linked-task status updates, and Thread completion.
+- U4 local verification passed: focused Spaces onboarding/dialog/panel/thread/query tests, full `@thinkwork/spaces` test suite, `@thinkwork/spaces` typecheck, repo-wide typecheck, repo lint, touched-file Prettier, local browser smoke of the Spaces shell, and `git diff --check`. Local browser smoke rendered the shell; tenant API fetches returned `[Network] Failed to fetch` in local dev, so backend-backed data rendering remains covered by component tests and CI.
+- Opened U4 PR [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699); CI passed after rebasing onto current `main`.
+- U4 merged via [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699) at `ad74d845`.
+- Created isolated U5 worktree from `origin/main` at `ad74d845`.
+- U5 scope is operational hardening for the existing demo Space: seed-script dry-run evidence, exact runbook commands with placeholders, and folder-map guidance that keeps `skills/` out of the workspace structure map.
+- U5 local verification passed: native seed dry-run with the target Space ID, dry-run assertions for ThinkWork system of record and `folderStructureExpandsSkills: false`, focused customer onboarding seed tests, `@thinkwork/api` typecheck, repo-wide typecheck, repo lint, touched-file Prettier, and `git diff --check`.
+- Opened U5 PR [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700); CI passed.
+- U5 merged via [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700) at `6b460629`.
+- Created isolated U6 worktree from `origin/main` at `6b460629`.
+- U6 scope is final schema/codegen drift detection and focused verification after the native linked-task GraphQL changes.
+- U6 generated schema/codegen for `terraform/schema.graphql`, `apps/cli`, `apps/admin`, and `apps/mobile`; Spaces has no codegen script and uses raw gql literals.
+- U6 local verification passed: GraphQL contract test, focused Spaces query/dialog/panel/thread tests, mobile test suite, API/CLI/Spaces typecheck, repo-wide typecheck, repo lint, and `git diff --check`.
+- Opened U6 PR [#1701](https://github.com/thinkwork-ai/thinkwork/pull/1701); CI passed.
+- U6 merged via [#1701](https://github.com/thinkwork-ai/thinkwork/pull/1701) at `7fc3aa2f`.
+- Customer Onboarding Native Checklist Demo run complete: all implementation units merged into `main`.
+
+### Progress Log
+
+| Date       | Unit | Branch                                              | PR                                                           | Status | Verification | Notes                                               |
+| ---------- | ---- | --------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------ | --------------------------------------------------- |
+| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed`          | [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) | Merged | CI passed    | Native seed/config/runbook refresh merged.          |
+| 2026-05-25 | U2   | `codex/u2-native-checklist-linked-tasks`            | [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696) | Merged | CI passed    | Native linked-task provider/status/mutation merged. |
+| 2026-05-25 | U3   | `codex/u3-native-onboarding-workflow`               | [#1697](https://github.com/thinkwork-ai/thinkwork/pull/1697) | Merged | CI passed    | Native onboarding workflow pivot merged.            |
+| 2026-05-25 | U4   | `codex/u4-customer-onboarding-spaces-ui`            | [#1699](https://github.com/thinkwork-ai/thinkwork/pull/1699) | Merged | CI passed    | Spaces app UX wiring merged.                        |
+| 2026-05-25 | U5   | `codex/u5-customer-onboarding-space-refresh`        | [#1700](https://github.com/thinkwork-ai/thinkwork/pull/1700) | Merged | CI passed    | Existing demo Space refresh hardening merged.       |
+| 2026-05-25 | U6   | `codex/u6-customer-onboarding-codegen-verification` | [#1701](https://github.com/thinkwork-ai/thinkwork/pull/1701) | Merged | CI passed    | Schema/codegen verification merged.                 |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
 ## Current Run: Folder Is The Agent ThinkWork Alignment
 
 Plan: `docs/plans/2026-05-24-004-refactor-folder-is-the-agent-thinkwork-alignment-plan.md`
@@ -1482,6 +1636,40 @@ Target branch: `main`
   - `test`
   - `typecheck`
   - `verify`
+
+## Blockers
+
+None.
+
+# Customer Onboarding Progress Workflow Refresh - 2026-05-25
+
+## Status
+
+- Branch: `codex/customer-onboarding-progress-refresh`
+- Plan: `docs/plans/2026-05-25-005-fix-customer-onboarding-progress-workflow-plan.md`
+- Started: `2026-05-25T18:35:00Z`
+- Active unit: PR/CI/deploy/E2E
+
+## Implemented
+
+- Updated Customer Onboarding Space source files so `status` means Info Panel `Progress`, with owner/blocker rules and human-question guidance.
+- Extended the same-thread Customer Onboarding chat hook to answer status from native checklist progress and map task-prefixed replies to `completed`, `in_progress`, `blocked`, or `not_applicable`.
+- Removed the duplicate Customer Onboarding side panel from the Spaces thread route; Progress now lives in the Info Panel.
+- Kept `ArtifactSidePanel` available only when an actual selected artifact is open, preventing empty-panel refresh flashes.
+- Added task-click composer prefill, e.g. `Send and receive DocuSign package: `.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-seed.test.ts src/lib/spaces/customer-onboarding-source-files.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces test -- src/components/workbench/TaskThreadView.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx` - passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `git diff --check` - passed.
+- `pnpm dlx prettier@3.5.3 --check ...` - passed.
+
+## PR / Deploy
+
+- Pending.
 
 ## Blockers
 

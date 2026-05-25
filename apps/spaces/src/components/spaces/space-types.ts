@@ -37,6 +37,8 @@ export interface SpaceThreadSummary {
 
 export interface LinkedTaskSummary {
   id: string;
+  checklistItemId?: string | null;
+  provider?: string | null;
   title: string;
   required?: boolean | null;
   roleKey?: string | null;
@@ -47,7 +49,14 @@ export interface LinkedTaskSummary {
   blocked?: boolean | null;
   syncStatus?: string | null;
   lastSyncedAt?: string | null;
+  metadata?: unknown;
   updatedAt?: string | null;
+}
+
+export interface OnboardingPersonContext {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
 }
 
 export interface OnboardingSourceContext {
@@ -56,9 +65,22 @@ export interface OnboardingSourceContext {
   customerName?: string | null;
   companyName?: string | null;
   salesRep?: string | null;
+  primaryContact?: OnboardingPersonContext | null;
+  accountsPayableContact?: OnboardingPersonContext | null;
+  billingAddress?: string | null;
+  shippingAddress?: string | null;
+  billingSameAsShipping?: boolean | null;
   dealValue?: string | null;
   productPlan?: string | null;
   closeDate?: string | null;
+  taxExempt?: boolean | null;
+  taxExemptionType?: string | null;
+  creditTermsRequested?: boolean | null;
+  requestedTerms?: string | null;
+  docusignRecipient?: OnboardingPersonContext | null;
+  dunAndBradstreetId?: string | null;
+  p21CustomerId?: string | null;
+  accountSetupBlockers?: string | null;
   missingFields?: string[];
 }
 
@@ -87,6 +109,9 @@ export function sourceContextFromThreadMetadata(
   const onboarding = parseSpaceRecord(root.customerOnboarding);
   const facts = parseSpaceRecord(onboarding.facts);
   const salesRep = parseSpaceRecord(facts.salesRep);
+  const primaryContact = personValue(facts.primaryContact);
+  const accountsPayableContact = personValue(facts.accountsPayableContact);
+  const docusignRecipient = personValue(facts.docusignRecipient);
   return {
     opportunityId: stringValue(onboarding.opportunityId ?? facts.opportunityId),
     opportunityUrl: stringValue(facts.opportunityUrl),
@@ -96,9 +121,22 @@ export function sourceContextFromThreadMetadata(
       stringValue(salesRep.name) ??
       stringValue(salesRep.email) ??
       stringValue(facts.salesRep),
+    primaryContact,
+    accountsPayableContact,
+    billingAddress: stringValue(facts.billingAddress),
+    shippingAddress: stringValue(facts.shippingAddress),
+    billingSameAsShipping: booleanOrNull(facts.billingSameAsShipping),
     dealValue: stringValue(facts.dealValue),
     productPlan: stringValue(facts.productPlan),
     closeDate: stringValue(facts.closeDate),
+    taxExempt: booleanOrNull(facts.taxExempt),
+    taxExemptionType: stringValue(facts.taxExemptionType),
+    creditTermsRequested: booleanOrNull(facts.creditTermsRequested),
+    requestedTerms: stringValue(facts.requestedTerms),
+    docusignRecipient,
+    dunAndBradstreetId: stringValue(facts.dunAndBradstreetId),
+    p21CustomerId: stringValue(facts.p21CustomerId),
+    accountSetupBlockers: stringValue(facts.accountSetupBlockers),
     missingFields: stringArray(onboarding.missingFields ?? facts.missingFields),
   };
 }
@@ -124,6 +162,25 @@ export function formatSpaceLabel(value?: string | null) {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function booleanOrNull(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (["true", "yes", "1"].includes(normalized)) return true;
+  if (["false", "no", "0"].includes(normalized)) return false;
+  return null;
+}
+
+function personValue(value: unknown): OnboardingPersonContext | null {
+  const record = parseSpaceRecord(value);
+  const person = {
+    name: stringValue(record.name),
+    email: stringValue(record.email),
+    phone: stringValue(record.phone),
+  };
+  return person.name || person.email || person.phone ? person : null;
 }
 
 function stringArray(value: unknown): string[] {

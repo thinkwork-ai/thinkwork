@@ -44,6 +44,7 @@ export const threadTurns_ = async (
       finished_at: threadTurns.finished_at,
       error: threadTurns.error,
       error_code: threadTurns.error_code,
+      system_prompt: threadTurns.system_prompt,
       usage_json: threadTurns.usage_json,
       result_json: threadTurns.result_json,
       context_snapshot: threadTurns.context_snapshot,

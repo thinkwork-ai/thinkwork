@@ -6,7 +6,9 @@ status: active
 
 # Customer Onboarding Space Runbook
 
-This runbook packages the v1 Spaces proof: a LastMile CRM closed-won webhook starts a Customer Onboarding Thread, mirrors the Space checklist into LastMile Tasks, subscribes the coordinator agent, and keeps humans in the Thread as the durable collaboration record.
+This runbook packages the native v1 Spaces proof: a user starts a Customer Onboarding Thread, ThinkWork creates checklist rows from the Space template, and humans work the checklist in the Thread until a human marks the Thread complete.
+
+LastMile CRM/Tasks, DocuSign, Dun & Bradstreet, credit, tax-form, and P21 integrations are phase-two work. For the initial demo, those systems are manual ThinkWork checklist steps.
 
 ## Seed a Tenant
 
@@ -15,82 +17,112 @@ Run the seed against a dev or stage database. Do not run it against production o
 ```sh
 DATABASE_URL="$DATABASE_URL" \
 TENANT_ID="<tenant-uuid>" \
-COORDINATOR_AGENT_SLUG="coordinator" \
 OWNER_USER_ID="<owner-user-uuid>" \
-ROLE_ASSIGNEES_JSON='{"sales":{"externalId":"lm-sales","displayName":"Sales"},"accounting":{"externalId":"lm-accounting","displayName":"Accounting"},"finance":{"externalId":"lm-finance","displayName":"Finance"},"operations":{"externalId":"lm-ops","displayName":"Operations"}}' \
-LASTMILE_WRITEBACK_POLICY="status_only" \
+ROLE_ASSIGNEES_JSON='{"sales":{"displayName":"Sales"},"accounting":{"displayName":"Accounting"},"finance":{"displayName":"Finance"},"operations":{"displayName":"Operations"}}' \
 pnpm exec tsx scripts/seed-customer-onboarding-space.ts
 ```
 
-Use `--dry-run` first to inspect the exact Space prompt, checklist, and LastMile integration config without mutating the database.
+Use `--dry-run` first to inspect the exact Space prompt, checklist, Space source files, target Space ID, and optional phase-two integration config without mutating the database.
 
 ```sh
 TENANT_ID="<tenant-uuid>" \
-pnpm exec tsx scripts/seed-customer-onboarding-space.ts --dry-run
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f \
+  --dry-run
 ```
+
+To update the existing demo Space instead of resolving by slug, pass its ID:
+
+```sh
+DATABASE_URL="$DATABASE_URL" \
+TENANT_ID="<tenant-uuid>" \
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f
+```
+
+For the May 2026 native-checklist demo refresh, use this exact sequence after
+the migration/API/UI changes have deployed through the normal pipeline:
+
+```sh
+TENANT_ID="<tenant-uuid>" \
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f \
+  --dry-run
+
+DATABASE_URL="$DATABASE_URL" \
+TENANT_ID="<tenant-uuid>" \
+WORKSPACE_BUCKET="<workspace-bucket>" \
+ROLE_ASSIGNEES_JSON='{"sales":{"displayName":"Sales"},"accounting":{"displayName":"Accounting"},"finance":{"displayName":"Finance"},"operations":{"displayName":"Operations"}}' \
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f \
+  --write-space-files
+```
+
+Do not pass `--include-lastmile-integration` for the native v1 demo.
 
 The script is idempotent. It upserts:
 
-- `spaces` row with slug `customer-onboarding` and template key `customer_onboarding`
+- `spaces` row with slug `customer-onboarding`, kind `customer_onboarding`, and template key `customer_onboarding`
 - checklist template `customer-onboarding-v1`
-- checklist items for DocuSign, sales tax exemption, ERP setup, credit report, and kickoff review
-- `lastmile_tasks` integration with the configured writeback policy
+- ThinkWork-native checklist items for DocuSign, Dun & Bradstreet, credit check, tax exemption forms, P21 setup, missing information, and final review
 - Space membership for all tenant users unless `MEMBER_USER_IDS` or repeated `--member-user-id` values are supplied
-- coordinator `space_agent_assignments` row for `COORDINATOR_AGENT_ID` or the agent slug from `COORDINATOR_AGENT_SLUG`
 
-## Webhook Secret
+Coordinator wakeups use the tenant platform agent. The old `space_agent_assignments` table is no longer part of the seed path.
 
-Create or rotate the HMAC signing secret for LastMile CRM:
+The deploy bootstrap also checks every active Customer Onboarding Space and
+backfills missing Space source files into the prefix used by the Workspace tab.
+Existing operator-authored files are preserved by that deploy-time path.
 
-```sh
-scripts/smoke/webhook-secret-put.sh <tenant-id> crm-opportunity
-```
+## Seed Space Source Files
 
-Configure LastMile CRM to POST closed-won opportunity events to:
+The v1 Space uses ICM-style source files:
 
-```text
-https://<api-host>/webhooks/crm-opportunity/<tenant-id>
-```
+- `CONTEXT.md` is the operating contract.
+- `docs/customer-onboarding-intake.md` holds the editable intake questions and checklist rules.
 
-Required payload fields:
-
-- `event`: `opportunity.won` or `opportunity.closed_won`
-- `opportunityId`
-- either `customerId`, `customerName`, or `companyName`
-
-Recommended payload fields:
-
-- `opportunityUrl`
-- `salesRep`
-- `contacts`
-- `dealValue`
-- `productPlan` or `product` plus `plan`
-- `closeDate`
-- `documents`
-- `notes`
-- `specialRequirements`
-
-## Smoke Test
+To write those files to the Space source prefix, include `--write-space-files` and `WORKSPACE_BUCKET` after confirming the dry-run output:
 
 ```sh
-scripts/smoke/webhook-smoke.sh \
-  --tenant-id <tenant-id> \
-  --integration crm-opportunity \
-  --payload scripts/smoke/fixtures/crm-opportunity-won.json
+DATABASE_URL="$DATABASE_URL" \
+TENANT_ID="<tenant-uuid>" \
+WORKSPACE_BUCKET="<workspace-bucket>" \
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --space-id 0b640386-05d7-4dbb-9585-e4c0b8c03f5f \
+  --write-space-files
 ```
 
-Expected response:
+After writing files, use the Space Workspace tab's folder-structure refresh. The generated `## Folder Structure` should include `docs/customer-onboarding-intake.md` and should not expand `skills/` package trees. Skills are shown in the Skills tab, not in the workspace folder map.
 
-```json
-{
-  "threadId": "<uuid>",
-  "idempotent": false,
-  "linkedTaskCount": 5,
-  "missingFields": []
-}
+The source files include a Human Question skill pattern. When required intake is
+missing, the coordinator should ask the human in the current Thread using a
+question-card-shaped prompt and keep the `missing_onboarding_information`
+checklist row open until the answer is captured.
+
+## Optional Phase-Two LastMile Config
+
+Only include LastMile integration config when deliberately testing the future external-task path:
+
+```sh
+DATABASE_URL="$DATABASE_URL" \
+TENANT_ID="<tenant-uuid>" \
+LASTMILE_WRITEBACK_POLICY="status_only" \
+LASTMILE_PROJECT_ID="<lastmile-project-id>" \
+pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
+  --include-lastmile-integration
 ```
 
-Rerunning the same fixture should return the same Thread with `idempotent: true` and `linkedTaskCount: 0`.
+This is not required for the native v1 demo.
+
+## Native Demo Smoke
+
+1. Open the Customer Onboarding Space in the Spaces app.
+2. Start onboarding manually.
+3. Answer the intake questions, including tax exemption and credit terms.
+4. Confirm the Thread kickoff includes the customer facts and missing answers.
+5. Confirm checklist rows appear for DocuSign, D&B, P21, final review, missing information when needed, and conditional credit/tax work.
+6. If required intake is missing, confirm the Thread asks the human for the missing fields and the missing-information row stays open.
+7. Mark required checklist rows complete.
+8. Mark the Thread `DONE` after human review.
 
 ## Verify
 
@@ -99,15 +131,17 @@ SELECT id, slug, name, template_key, status
 FROM spaces
 WHERE tenant_id = '<tenant-id>' AND slug = 'customer-onboarding';
 
-SELECT t.id, t.identifier, t.title, t.space_id, t.metadata
+SELECT key, title, required, external_task_template
+FROM space_checklist_items
+WHERE tenant_id = '<tenant-id>' AND space_id = '<space-id>'
+ORDER BY sort_order;
+
+SELECT t.id, t.identifier, t.title, t.status, t.space_id, t.metadata
 FROM threads t
 WHERE t.tenant_id = '<tenant-id>'
-  AND t.metadata->'customerOnboarding'->>'opportunityId' = 'smoke-opp-0001';
-
-SELECT title, status, sync_status, external_task_id, external_task_url
-FROM linked_tasks
-WHERE tenant_id = '<tenant-id>' AND thread_id = '<thread-id>'
-ORDER BY created_at;
+  AND t.space_id = '<space-id>'
+ORDER BY t.created_at DESC
+LIMIT 5;
 ```
 
 ## Rollback
@@ -120,4 +154,4 @@ SET status = 'archived', updated_at = now()
 WHERE tenant_id = '<tenant-id>' AND slug = 'customer-onboarding';
 ```
 
-Do not delete linked task rows after a webhook smoke unless the external LastMile task cleanup has also been handled. ThinkWork treats LastMile Tasks as the system of record, so database cleanup alone can create confusing external state.
+Do not run production mutations manually. Production changes should flow through the normal merge/deploy path and approved operational process.

@@ -106,6 +106,23 @@ describe("threadLinkedTasks", () => {
       blocked: true,
       sync_status: "warning",
     });
+    captures.linkedTaskRows.push({
+      id: "linked-task-2",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      thread_id: "thread-1",
+      checklist_item_id: "checklist-2",
+      provider: "thinkwork",
+      external_task_id: "thinkwork:thread-1:tax_exemption_forms",
+      external_task_url: null,
+      title: "Collect tax exemption forms",
+      required: false,
+      role_key: "accounting",
+      assignee_display: "Accounting",
+      status: "not_applicable",
+      blocked: false,
+      sync_status: "synced",
+    });
 
     await expect(
       threadLinkedTasks(
@@ -129,6 +146,17 @@ describe("threadLinkedTasks", () => {
         status: "BLOCKED",
         blocked: true,
         syncStatus: "WARNING",
+      }),
+      expect.objectContaining({
+        id: "linked-task-2",
+        provider: "THINKWORK",
+        externalTaskId: "thinkwork:thread-1:tax_exemption_forms",
+        externalTaskUrl: null,
+        title: "Collect tax exemption forms",
+        required: false,
+        status: "NOT_APPLICABLE",
+        blocked: false,
+        syncStatus: "SYNCED",
       }),
     ]);
     expect(mockHasSpaceMemberAccess).toHaveBeenCalledWith(

@@ -80,7 +80,13 @@ beforeEach(() => {
       metadata: null,
     },
     idempotent: false,
-    linkedTasks: [{ checklistItemId: "item-1", externalTaskId: "LM-1" }],
+    linkedTasks: [
+      {
+        checklistItemId: "item-1",
+        provider: "thinkwork",
+        externalTaskId: "thinkwork:thread-1:item-1",
+      },
+    ],
     missingFields: ["documents"],
   });
   mockSelect.mockReset();

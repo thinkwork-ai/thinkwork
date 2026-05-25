@@ -5,6 +5,7 @@ export const LINKED_TASK_STATUSES = [
   "completed",
   "blocked",
   "cancelled",
+  "not_applicable",
 ] as const;
 
 export const LINKED_TASK_SYNC_STATUSES = [
@@ -81,13 +82,26 @@ export function normalizeExternalTaskStatus(
     return { status: "cancelled", blocked: false, syncStatus: "synced" };
   }
 
+  if (
+    normalized === "not_applicable" ||
+    normalized === "not_applicable_not_needed" ||
+    normalized === "n_a" ||
+    normalized === "na"
+  ) {
+    return { status: "not_applicable", blocked: false, syncStatus: "synced" };
+  }
+
   return { status: "unknown", blocked: false, syncStatus: "warning" };
 }
 
 export function requiredTasksComplete(
   tasks: RequiredCompletionTask[],
 ): boolean {
-  const requiredTasks = tasks.filter((task) => task.required !== false);
+  const requiredTasks = tasks.filter(
+    (task) =>
+      task.required !== false &&
+      normalizeStatusToken(task.status) !== "not_applicable",
+  );
   if (requiredTasks.length === 0) return false;
   return requiredTasks.every(
     (task) => normalizeStatusToken(task.status) === "completed",
@@ -99,6 +113,7 @@ export function countRequiredTasks(tasks: RequiredCompletionTask[]) {
   let completed = 0;
   for (const task of tasks) {
     if (task.required === false) continue;
+    if (normalizeStatusToken(task.status) === "not_applicable") continue;
     required += 1;
     if (normalizeStatusToken(task.status) === "completed") completed += 1;
   }
@@ -110,6 +125,6 @@ function normalizeStatusToken(value: unknown): string | null {
   const normalized = String(value)
     .trim()
     .toLowerCase()
-    .replace(/[\s-]+/g, "_");
+    .replace(/[\s/-]+/g, "_");
   return normalized.length > 0 ? normalized : null;
 }

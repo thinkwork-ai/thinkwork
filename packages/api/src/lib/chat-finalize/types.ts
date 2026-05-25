@@ -33,11 +33,15 @@ export interface FinalizePayload {
   status: "completed" | "failed";
   /** Free-text error when `status: "failed"`. */
   error_message?: string;
+  /** Composed runtime system prompt captured for this turn, when available. */
+  composed_system_prompt?: string | null;
   /** Computer task / event context for tasks that originated from the Computer surface. */
   computer_id?: string | null;
   computer_task_id?: string | null;
   /** The AgentCore response payload — same shape `invokeResult.response` had today. */
   response?: {
+    /** Composed runtime system prompt captured for this turn, when available. */
+    composed_system_prompt?: string | null;
     /** Bedrock content (string or ChatCompletion-shaped object). */
     content?: string;
     output?: string;

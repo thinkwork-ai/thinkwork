@@ -72,7 +72,7 @@ describe("workspace editor target capabilities", () => {
     expect(workspaceEditorTargetKey({ catalog: true })).toBe("catalog");
   });
 
-  it("does not synthesize workspace skills folders in catalog mode", () => {
+  it("does not synthesize workspace folders in catalog mode", () => {
     expect(workspaceEditorReservedRootFolders("catalog")).toEqual([]);
     expect(
       buildWorkspaceTree([], {
@@ -86,9 +86,23 @@ describe("workspace editor target capabilities", () => {
     ).toEqual(["finance-audit-xls"]);
   });
 
-  it("keeps workspace and context reserved folder behavior", () => {
-    expect(workspaceEditorReservedRootFolders("agent")).toBeUndefined();
-    expect(workspaceEditorReservedRootFolders("context")).toEqual(["memory"]);
+  it("does not synthesize magic root folders in any workspace mode", () => {
+    for (const mode of [
+      "agent",
+      "template",
+      "computer",
+      "context",
+      "catalog",
+      "defaults",
+    ] as const) {
+      expect(workspaceEditorReservedRootFolders(mode)).toEqual([]);
+    }
+
+    expect(
+      buildWorkspaceTree(["CONTEXT.md", "docs/customer-onboarding-intake.md"], {
+        reservedRootFolders: workspaceEditorReservedRootFolders("context"),
+      }).map((node) => node.path),
+    ).toEqual(["docs", "CONTEXT.md"]);
   });
 
   it("collects installed skill catalog refs from workspace file paths", () => {

@@ -88,6 +88,8 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+const WORKSPACE_RENDERER_FUNCTION_NAME =
+  process.env.WORKSPACE_RENDERER_FUNCTION_NAME || "";
 
 function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
   return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
@@ -130,8 +132,9 @@ async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -181,6 +184,154 @@ async function invokeAgentCore(
   }
   const result = (await resp.json()) as Record<string, unknown>;
   return { ok: true, status: 200, result };
+}
+
+interface EffectiveWorkspacePolicy {
+  blockedTools: string[];
+  allowedTools: string[] | null;
+  mcpAllowedServers: string[] | null;
+  mcpBlockedServers: string[];
+  diagnostics: string[];
+}
+
+interface RenderWorkspaceTupleForWakeupResult {
+  rendered: boolean;
+  renderedPrefix?: string;
+  cacheStatus?: "hit" | "miss";
+  activeSpace?: {
+    id: string;
+    slug: string;
+    name: string;
+    isDefault: boolean;
+  };
+  effectivePolicy?: EffectiveWorkspacePolicy;
+  errorCode?: string;
+  statusCode?: number;
+  reason?: string;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+function isNullableStringArray(value: unknown): value is string[] | null {
+  return value === null || isStringArray(value);
+}
+
+function isEffectiveWorkspacePolicy(
+  value: unknown,
+): value is EffectiveWorkspacePolicy {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    isStringArray(obj.blockedTools) &&
+    isNullableStringArray(obj.allowedTools) &&
+    isNullableStringArray(obj.mcpAllowedServers) &&
+    isStringArray(obj.mcpBlockedServers) &&
+    isStringArray(obj.diagnostics)
+  );
+}
+
+export async function renderWorkspaceTupleForWakeup(input: {
+  tenantId: string;
+  agentId: string;
+  spaceId: string;
+  userId?: string | null;
+  agentBlockedTools?: unknown;
+  agentAllowedTools?: unknown;
+}): Promise<RenderWorkspaceTupleForWakeupResult> {
+  if (!WORKSPACE_RENDERER_FUNCTION_NAME) {
+    return { rendered: false, reason: "workspace_renderer_unconfigured" };
+  }
+
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
+  const lambda = new LambdaClient({
+    region: process.env.AWS_REGION || "us-east-1",
+  });
+  const response = await lambda.send(
+    new InvokeCommand({
+      FunctionName: WORKSPACE_RENDERER_FUNCTION_NAME,
+      InvocationType: "RequestResponse",
+      Payload: new TextEncoder().encode(
+        JSON.stringify({
+          tenantId: input.tenantId,
+          agentId: input.agentId,
+          spaceId: input.spaceId,
+          userId: input.userId ?? null,
+          agentBlockedTools: input.agentBlockedTools,
+          agentAllowedTools: input.agentAllowedTools,
+        }),
+      ),
+    }),
+  );
+
+  const rawPayload = response.Payload
+    ? new TextDecoder().decode(response.Payload)
+    : "{}";
+  if (response.FunctionError) {
+    return {
+      rendered: false,
+      reason: `workspace_renderer_function_error:${response.FunctionError}`,
+    };
+  }
+
+  const parsed = JSON.parse(rawPayload) as Record<string, unknown>;
+  if (parsed.ok !== true || typeof parsed.renderedPrefix !== "string") {
+    const errorPayload =
+      typeof parsed.error === "object" && parsed.error
+        ? (parsed.error as Record<string, unknown>)
+        : null;
+    return {
+      rendered: false,
+      errorCode:
+        typeof errorPayload?.code === "string" ? errorPayload.code : undefined,
+      statusCode:
+        typeof parsed.statusCode === "number" ? parsed.statusCode : undefined,
+      reason: errorPayload
+        ? JSON.stringify(errorPayload)
+        : "workspace_renderer_failed",
+    };
+  }
+
+  const activeSpace =
+    parsed.activeSpace && typeof parsed.activeSpace === "object"
+      ? (parsed.activeSpace as RenderWorkspaceTupleForWakeupResult["activeSpace"])
+      : undefined;
+
+  return {
+    rendered: true,
+    renderedPrefix: parsed.renderedPrefix,
+    cacheStatus:
+      parsed.cacheStatus === "hit" || parsed.cacheStatus === "miss"
+        ? parsed.cacheStatus
+        : undefined,
+    activeSpace,
+    effectivePolicy: isEffectiveWorkspacePolicy(parsed.effectivePolicy)
+      ? parsed.effectivePolicy
+      : undefined,
+  };
+}
+
+export function extractComposedSystemPrompt(
+  result: Record<string, unknown>,
+): string | null {
+  const response =
+    result.response && typeof result.response === "object"
+      ? (result.response as Record<string, unknown>)
+      : null;
+  for (const candidate of [
+    result.composed_system_prompt,
+    response?.composed_system_prompt,
+  ]) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
 }
 
 const db = getDb();
@@ -292,7 +443,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       adapter_type: agents.adapter_type,
       runtime: agents.runtime,
       template_runtime: agentTemplates.runtime,
-      model: agentTemplates.model,
+      model: agents.model,
+      template_model: agentTemplates.model,
       name: agents.name,
       slug: agents.slug,
       system_prompt: agents.system_prompt,
@@ -317,12 +469,25 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     return;
   }
 
+  const payload = wakeup.payload as Record<string, unknown> | null;
+  const runtimeType = normalizeAgentRuntimeType(
+    agent.runtime ?? agent.template_runtime,
+  );
+  const agentModel = agent.model ?? agent.template_model ?? null;
+
   // PRD-02: Pre-invocation budget gate
   if (agent.budget_paused) {
+    const error = "Agent paused: budget exceeded";
     console.log(
       `[wakeup-processor] Agent ${wakeup.agent_id} is budget-paused, skipping`,
     );
-    await failWakeup(wakeup.id, "Agent paused: budget exceeded");
+    await failWakeupBeforeRun({
+      wakeup,
+      payload,
+      error,
+      runtimeType,
+      model: agentModel,
+    });
     return;
   }
 
@@ -435,7 +600,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     logPrefix: "[wakeup-processor]",
   });
 
-  const payload = wakeup.payload as Record<string, unknown> | null;
   const workspacePayload =
     wakeup.source === "workspace_event"
       ? normalizeWorkspaceWakeupPayload(payload)
@@ -527,8 +691,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     }
   }
 
-  const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);
-
   // Look up agent's assigned knowledge bases (PRD-13)
   const kbRows = await db
     .select({
@@ -603,10 +765,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ? (templateContextEngineResult.value ?? undefined)
       : undefined
     : undefined;
-
-  const runtimeType = normalizeAgentRuntimeType(
-    agent.runtime ?? agent.template_runtime,
-  );
 
   // 4. Create trigger_run record
   // Extract trigger_id from trigger_detail if present (e.g. "manual_fire:trigger:UUID" or "schedule:job-XXX")
@@ -783,12 +941,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } =
-          await import("../lib/orchestration/process-parser.js");
-        const { materializeProcess } =
-          await import("../lib/orchestration/process-materializer.js");
-        const { S3Client, GetObjectCommand } =
-          await import("@aws-sdk/client-s3");
+        const { parseProcessTemplate } = await import(
+          "../lib/orchestration/process-parser.js"
+        );
+        const { materializeProcess } = await import(
+          "../lib/orchestration/process-materializer.js"
+        );
+        const { S3Client, GetObjectCommand } = await import(
+          "@aws-sdk/client-s3"
+        );
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -887,6 +1048,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_snapshot: {
         ...((wakeup.payload as Record<string, unknown> | undefined) ?? {}),
         runtime_type: runtimeType,
+        model: agentModel,
       },
       thread_id: runThreadId || undefined,
       turn_number: turnNumber || undefined,
@@ -1069,8 +1231,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     }
   }
 
-  // Load thread context — used by prompt template rendering AND trigger channel resolution
+  // Load thread context — used by prompt template rendering, trigger channel
+  // resolution, and rendered workspace tuple selection for chat turns.
   let threadContext: PromptTemplateContext["thread"] | undefined;
+  let runSpaceId = String(payload?.spaceId || "") || undefined;
   if (runThreadId) {
     try {
       const { threads } = await import("@thinkwork/database-pg/schema");
@@ -1080,11 +1244,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           title: threads.title,
           status: threads.status,
           channel: threads.channel,
+          space_id: threads.space_id,
           metadata: threads.metadata,
         })
         .from(threads)
         .where(eq(threads.id, runThreadId));
       if (threadRow) {
+        runSpaceId ||= threadRow.space_id ?? undefined;
         threadContext = {
           id: runThreadId,
           identifier: threadRow.identifier || undefined,
@@ -1109,6 +1275,85 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     }
   }
 
+  let renderedWorkspace: RenderWorkspaceTupleForWakeupResult = {
+    rendered: false,
+    reason: "not_attempted",
+  };
+  let renderedWorkspacePrefix: string | undefined;
+  let effectiveBlockedTools = blockedTools;
+  let effectiveMcpPolicy: EffectiveWorkspacePolicy | null = null;
+  if (runSpaceId) {
+    try {
+      renderedWorkspace = await renderWorkspaceTupleForWakeup({
+        tenantId: wakeup.tenant_id,
+        agentId: wakeup.agent_id,
+        spaceId: runSpaceId,
+        userId: invokerUserId ?? null,
+        agentBlockedTools: blockedTools,
+      });
+      if (renderedWorkspace.rendered) {
+        renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
+        effectiveMcpPolicy = renderedWorkspace.effectivePolicy ?? null;
+        effectiveBlockedTools =
+          renderedWorkspace.effectivePolicy?.blockedTools ?? blockedTools;
+        console.log(
+          `[wakeup-processor] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? runSpaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"}`,
+        );
+      } else {
+        console.log(
+          `[wakeup-processor] rendered workspace tuple skipped: ${renderedWorkspace.reason}`,
+        );
+        if (renderedWorkspace.errorCode === "SpaceAccessDenied") {
+          throw new Error(
+            `workspace_renderer_access_denied:${renderedWorkspace.reason ?? "SpaceAccessDenied"}`,
+          );
+        }
+      }
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        err.message.startsWith("workspace_renderer_access_denied:")
+      ) {
+        throw err;
+      }
+      console.error(
+        `[wakeup-processor] rendered workspace tuple failed; falling back to legacy workspace sync:`,
+        err,
+      );
+    }
+  }
+
+  const isEffectivelyBlocked = (toolName: string): boolean =>
+    effectiveBlockedTools.includes(toolName);
+  const isAnyEffectivelyBlocked = (...toolNames: string[]): boolean =>
+    toolNames.some((toolName) => isEffectivelyBlocked(toolName));
+  const effectiveSkillsConfig =
+    effectiveBlockedTools.length > 0
+      ? skillsConfig.filter(
+          (skill: { skillId: string }) =>
+            !effectiveBlockedTools.includes(skill.skillId),
+        )
+      : skillsConfig;
+  const effectiveWebSearchConfig = !isAnyEffectivelyBlocked(
+    "web-search",
+    "web_search",
+  )
+    ? resolveWebSearchConfigFromSkills(effectiveSkillsConfig)
+    : undefined;
+  const effectiveSendEmailConfig =
+    sendEmailConfig && !isEffectivelyBlocked("send_email")
+      ? sendEmailConfig
+      : undefined;
+  const effectiveContextEngineEnabled =
+    contextEngineEnabled &&
+    !isAnyEffectivelyBlocked("query_context", "context_engine");
+  const effectiveContextEngineConfig = effectiveContextEngineEnabled
+    ? contextEngineConfig
+    : undefined;
+  const effectiveBrowserAutomationEnabled =
+    browserAutomationEnabled &&
+    !isAnyEffectivelyBlocked("browser_automation", "browser");
+
   // Resolve thread_id — for email_triage, use the dedicated triage thread
   let resolvedThreadId = String(payload?.threadId || "");
   if (wakeup.source === "email_triage" && !resolvedThreadId) {
@@ -1127,7 +1372,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // Include all MCP servers — the container routes them appropriately:
   // Thinkwork tools → MCP_BASE_URL; external tools use their configured server.
   const mcpServers = ["web-search", "artifacts"];
-  for (const skill of skillsConfig) {
+  for (const skill of effectiveSkillsConfig) {
     if (skill.mcpServer && !mcpServers.includes(skill.mcpServer)) {
       mcpServers.push(skill.mcpServer);
     }
@@ -1140,30 +1385,44 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     mcpServers.push("workspace-memory");
   // Include Google tools when the agent has those skills installed
   if (
-    skillsConfig.some((s) => s.skillId === "google-email") &&
+    effectiveSkillsConfig.some((s) => s.skillId === "google-email") &&
     !mcpServers.includes("google-email")
   ) {
     mcpServers.push("google-email");
   }
   if (
-    skillsConfig.some((s) => s.skillId === "google-calendar") &&
+    effectiveSkillsConfig.some((s) => s.skillId === "google-calendar") &&
     !mcpServers.includes("google-calendar")
   ) {
     mcpServers.push("google-calendar");
   }
   if (
-    skillsConfig.some((s) => s.skillId === "restaurant-reservations") &&
+    effectiveSkillsConfig.some(
+      (s) => s.skillId === "restaurant-reservations",
+    ) &&
     !mcpServers.includes("restaurant")
   ) {
     mcpServers.push("restaurant");
   }
 
   // Build MCP configs from agent_mcp_servers + tenant_mcp_servers.
-  const mcpConfigs = await buildMcpConfigs(
+  const mcpConfigsRaw = await buildMcpConfigs(
     wakeup.agent_id,
     agent.human_pair_id,
     "[wakeup-processor]",
   );
+  const mcpConfigs = mcpConfigsRaw.filter((config: { name: string }) => {
+    if (effectiveMcpPolicy?.mcpBlockedServers.includes(config.name)) {
+      return false;
+    }
+    if (
+      effectiveMcpPolicy?.mcpAllowedServers &&
+      !effectiveMcpPolicy.mcpAllowedServers.includes(config.name)
+    ) {
+      return false;
+    }
+    return true;
+  });
 
   const startMs = Date.now();
   // Generate trace ID for observability correlation (PRD-20)
@@ -1234,18 +1493,20 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       human_name: humanName || undefined,
       workspace_bucket: WORKSPACE_BUCKET || undefined,
       workspace_prefix: workspacePrefix,
+      rendered_workspace_prefix: renderedWorkspacePrefix,
       appsync_endpoint: APPSYNC_ENDPOINT || undefined,
       appsync_api_key: APPSYNC_API_KEY || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-      web_search_config: webSearchConfig,
-      send_email_config: sendEmailConfig
-        ? { ...sendEmailConfig, threadId: resolvedThreadId }
+      web_search_config: effectiveWebSearchConfig,
+      send_email_config: effectiveSendEmailConfig
+        ? { ...effectiveSendEmailConfig, threadId: resolvedThreadId }
         : undefined,
-      context_engine_enabled: contextEngineEnabled || undefined,
-      context_engine_config: contextEngineConfig,
+      context_engine_enabled: effectiveContextEngineEnabled || undefined,
+      context_engine_config: effectiveContextEngineConfig,
       runtime_type: runtimeType,
-      model: agent.model,
-      skills: skillsConfig.length > 0 ? skillsConfig : undefined,
+      model: agentModel,
+      skills:
+        effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
       knowledge_bases: knowledgeBasesConfig,
       guardrail_config: guardrailPayload || undefined,
       mcp_servers: mcpServers,
@@ -1255,8 +1516,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
       session_key: triggerId || `wakeup-${wakeup.source}`,
       trigger_channel: triggerChannel || undefined,
-      blocked_tools: blockedTools.length > 0 ? blockedTools : undefined,
-      browser_automation_enabled: browserAutomationEnabled || undefined,
+      blocked_tools:
+        effectiveBlockedTools.length > 0 ? effectiveBlockedTools : undefined,
+      browser_automation_enabled:
+        effectiveBrowserAutomationEnabled || undefined,
+      turn_context: renderedWorkspace.rendered
+        ? {
+            spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
+            spaceSlug: renderedWorkspace.activeSpace?.slug ?? undefined,
+            renderedWorkspacePrefix,
+          }
+        : undefined,
     };
 
     if (wakeup.source === "workspace_event" && workspacePayload) {
@@ -1299,6 +1569,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     }
 
     const invokeResult = invokeResponse.result;
+    const capturedSystemPrompt = extractComposedSystemPrompt(invokeResult);
     const rawResponseText = extractResponseText(
       invokeResult.response || invokeResult,
     );
@@ -1607,7 +1878,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         tenantId: wakeup.tenant_id,
         agentId: wakeup.agent_id,
         requestId: wakeup.id,
-        model: usage.model || agent.model || null,
+        model: usage.model || agentModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cachedReadTokens: usage.cachedReadTokens,
@@ -1628,7 +1899,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           agentName: agent.name,
           eventType: "invocation",
           amountUsd: costResult.totalUsd,
-          model: usage.model || agent.model || null,
+          model: usage.model || agentModel,
         });
       }
     } catch (costErr) {
@@ -1711,18 +1982,22 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             human_name: humanName || undefined,
             workspace_bucket: WORKSPACE_BUCKET || undefined,
             workspace_prefix: workspacePrefix,
+            rendered_workspace_prefix: renderedWorkspacePrefix,
             appsync_endpoint: APPSYNC_ENDPOINT || undefined,
             appsync_api_key: APPSYNC_API_KEY || undefined,
             hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-            web_search_config: webSearchConfig,
-            send_email_config: sendEmailConfig
-              ? { ...sendEmailConfig, threadId: resolvedThreadId }
+            web_search_config: effectiveWebSearchConfig,
+            send_email_config: effectiveSendEmailConfig
+              ? { ...effectiveSendEmailConfig, threadId: resolvedThreadId }
               : undefined,
-            context_engine_enabled: contextEngineEnabled || undefined,
-            context_engine_config: contextEngineConfig,
+            context_engine_enabled: effectiveContextEngineEnabled || undefined,
+            context_engine_config: effectiveContextEngineConfig,
             runtime_type: runtimeType,
-            model: agent.model,
-            skills: skillsConfig.length > 0 ? skillsConfig : undefined,
+            model: agentModel,
+            skills:
+              effectiveSkillsConfig.length > 0
+                ? effectiveSkillsConfig
+                : undefined,
             knowledge_bases: knowledgeBasesConfig,
             guardrail_config: guardrailPayload || undefined,
             mcp_servers: mcpServers,
@@ -1733,8 +2008,19 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             session_key: triggerId || `wakeup-${wakeup.source}`,
             trigger_channel:
               threadContext?.channel || wakeup.source || undefined,
-            blocked_tools: blockedTools.length > 0 ? blockedTools : undefined,
-            browser_automation_enabled: browserAutomationEnabled || undefined,
+            blocked_tools:
+              effectiveBlockedTools.length > 0
+                ? effectiveBlockedTools
+                : undefined,
+            browser_automation_enabled:
+              effectiveBrowserAutomationEnabled || undefined,
+            turn_context: renderedWorkspace.rendered
+              ? {
+                  spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
+                  spaceSlug: renderedWorkspace.activeSpace?.slug ?? undefined,
+                  renderedWorkspacePrefix,
+                }
+              : undefined,
           },
           runtimeType,
         );
@@ -1761,7 +2047,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             tenantId: wakeup.tenant_id,
             agentId: wakeup.agent_id,
             requestId: `${wakeup.id}-loop-${loopTurn}`,
-            model: loopUsage.model || agent.model || null,
+            model: loopUsage.model || agentModel,
             inputTokens: loopUsage.inputTokens,
             outputTokens: loopUsage.outputTokens,
             cachedReadTokens: loopUsage.cachedReadTokens,
@@ -1828,6 +2114,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       .set({
         status: "succeeded",
         finished_at: new Date(),
+        system_prompt: capturedSystemPrompt || undefined,
         result_json: { response: responseText.slice(0, 10000) },
         usage_json: {
           duration_ms: durationMs,
@@ -1903,8 +2190,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
@@ -2057,6 +2345,107 @@ async function failWakeup(wakeupId: string, error: string): Promise<void> {
     .update(agentWakeupRequests)
     .set({ status: "failed", finished_at: new Date() })
     .where(eq(agentWakeupRequests.id, wakeupId));
+}
+
+async function failWakeupBeforeRun(input: {
+  wakeup: WakeupRow;
+  payload: Record<string, unknown> | null;
+  error: string;
+  runtimeType: AgentRuntimeType;
+  model: string | null;
+}): Promise<void> {
+  const now = new Date();
+  const threadId = String(input.payload?.threadId || "") || undefined;
+  let runId: string | null = null;
+
+  if (threadId) {
+    let turnNumber: number | undefined;
+    try {
+      const [countRow] = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(threadTurns)
+        .where(eq(threadTurns.thread_id, threadId));
+      turnNumber = (countRow?.count || 0) + 1;
+    } catch {}
+
+    const [run] = await db
+      .insert(threadTurns)
+      .values({
+        tenant_id: input.wakeup.tenant_id,
+        agent_id: input.wakeup.agent_id,
+        wakeup_request_id: input.wakeup.id,
+        invocation_source: input.wakeup.source,
+        trigger_detail: input.wakeup.trigger_detail,
+        runtime_type: input.runtimeType,
+        status: "failed",
+        started_at: now,
+        finished_at: now,
+        error: input.error,
+        thread_id: threadId,
+        turn_number: turnNumber,
+        context_snapshot: {
+          ...(input.payload ?? {}),
+          runtime_type: input.runtimeType,
+          model: input.model,
+        },
+      })
+      .returning({ id: threadTurns.id });
+    runId = run?.id ?? null;
+
+    await db
+      .update(threads)
+      .set({
+        last_turn_completed_at: now,
+        last_response_preview: `Error: ${input.error}`.slice(0, 200),
+      })
+      .where(eq(threads.id, threadId));
+
+    if (runId) {
+      await notifyThreadTurnUpdate({
+        runId,
+        triggerId: null,
+        tenantId: input.wakeup.tenant_id,
+        threadId,
+        agentId: input.wakeup.agent_id,
+        status: "failed",
+        triggerName: null,
+      });
+    }
+
+    if (input.wakeup.source === "chat_message") {
+      const content =
+        "This agent is paused because its budget has been exceeded. Ask an operator to unpause it, then try again.";
+      try {
+        const errReply = await insertAssistantMessage(
+          threadId,
+          input.wakeup.tenant_id,
+          input.wakeup.agent_id,
+          content,
+        );
+        if (errReply) {
+          await notifyNewMessage({
+            messageId: errReply.id,
+            threadId,
+            tenantId: input.wakeup.tenant_id,
+            role: "assistant",
+            content,
+            senderType: "agent",
+            senderId: input.wakeup.agent_id,
+          });
+        }
+      } catch (err) {
+        console.error(
+          `[wakeup-processor] Failed to insert pre-run failure message:`,
+          err,
+        );
+      }
+    }
+  }
+
+  await db
+    .update(agentWakeupRequests)
+    .set({ status: "failed", finished_at: now, run_id: runId ?? undefined })
+    .where(eq(agentWakeupRequests.id, input.wakeup.id));
 }
 
 async function updateWorkspaceRunAfterTurn(

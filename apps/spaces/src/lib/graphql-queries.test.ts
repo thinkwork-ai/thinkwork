@@ -25,6 +25,8 @@ import {
   ThreadMentionTargetsQuery,
   ThreadsPagedQuery,
   ThreadTurnUpdatedSubscription,
+  UpdateLinkedTaskMutation,
+  UpdateThreadMutation,
 } from "./graphql-queries";
 
 describe("computer GraphQL queries", () => {
@@ -119,14 +121,18 @@ describe("computer GraphQL queries", () => {
     expect(print(SpacesQuery)).toContain("unreadThreadCount");
     expect(print(SpacesQuery)).toContain("lastActivityAt");
     expect(print(SpaceQuery)).toContain("checklistTemplates");
-    expect(print(SpaceQuery)).toContain("agentAssignments");
+    expect(print(SpaceQuery)).not.toContain("agentAssignments");
     expect(print(SpaceThreadsQuery)).toContain("spaceId: $spaceId");
     expect(print(SpaceThreadContextQuery)).toContain("participants");
     expect(print(ThreadLinkedTasksQuery)).toContain("threadLinkedTasks");
+    expect(print(ThreadLinkedTasksQuery)).toContain("provider");
+    expect(print(ThreadLinkedTasksQuery)).toContain("metadata");
+    expect(print(UpdateLinkedTaskMutation)).toContain("updateLinkedTask");
     expect(print(StartCustomerOnboardingMutation)).toContain(
       "startCustomerOnboarding",
     );
     expect(print(StartCustomerOnboardingMutation)).toContain("missingFields");
+    expect(print(UpdateThreadMutation)).toContain("status");
   });
 
   it("requests global Inbox rows with Space identity and unread filter", () => {

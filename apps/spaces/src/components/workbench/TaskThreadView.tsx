@@ -1,18 +1,20 @@
 import {
   AtSign,
   ArrowUp,
+  AlertCircle,
   Bot,
   CalendarDays,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  CircleDashed,
   Code2,
   Database,
   Download,
   FileText,
   ListChecks,
   Mic,
-  Plus,
   Search,
   Sparkles,
   Users,
@@ -168,6 +170,7 @@ export interface TaskThreadInfoPanelState {
   agents: string[];
   attachments: ThreadInfoAttachment[];
   onDownloadAttachment: (attachmentId: string) => void | Promise<void>;
+  checklist?: ThreadInfoChecklistState | null;
 }
 
 export interface ThreadInfoAttachment {
@@ -176,6 +179,27 @@ export interface ThreadInfoAttachment {
   mimeType?: string | null;
   sizeBytes?: number | null;
   createdAt?: string | null;
+}
+
+export interface ThreadInfoChecklistState {
+  title?: string;
+  tasks: ThreadInfoChecklistTask[];
+  isLoading?: boolean;
+  error?: string | null;
+  completedAt?: string | null;
+  isCompleting?: boolean;
+  onCompleteThread?: () => Promise<void> | void;
+}
+
+export interface ThreadInfoChecklistTask {
+  id: string;
+  title: string;
+  status?: string | null;
+  required?: boolean | null;
+  roleKey?: string | null;
+  assigneeDisplay?: string | null;
+  blocked?: boolean | null;
+  updatedAt?: string | null;
 }
 
 export interface ComposerMention {
@@ -202,6 +226,10 @@ export function TaskThreadView({
   const [composerBottomInsetPx, setComposerBottomInsetPx] = useState(
     DEFAULT_COMPOSER_BOTTOM_INSET_PX,
   );
+  const [composerPrefill, setComposerPrefill] = useState<{
+    text: string;
+    token: number;
+  } | null>(null);
 
   useLayoutEffect(() => {
     const composerDock = composerDockRef.current;
@@ -255,9 +283,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-    !showStreamingBuffer &&
-    !showProcessingShimmer,
+      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+      !showStreamingBuffer &&
+      !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -271,6 +299,9 @@ export function TaskThreadView({
     artifactPanelState?.artifacts.find(
       (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
     ) ?? null;
+  const artifactPanelOpen = Boolean(
+    artifactPanelState?.isOpen && selectedArtifact,
+  );
   const infoPanelOpen = infoPanelState?.isOpen ?? false;
 
   return (
@@ -336,7 +367,15 @@ export function TaskThreadView({
           </ConversationContent>
         </Conversation>
 
-        <ThreadInfoPanel state={infoPanelState} />
+        <ThreadInfoPanel
+          state={infoPanelState}
+          onTaskPrompt={(task) =>
+            setComposerPrefill({
+              text: `${task.title}: `,
+              token: Date.now(),
+            })
+          }
+        />
 
         <div
           ref={composerDockRef}
@@ -352,6 +391,7 @@ export function TaskThreadView({
               disabled={!onSendFollowUp || isSending}
               isSending={isSending}
               mentionTargets={mentionTargets}
+              prefill={composerPrefill}
               onSubmit={onSendFollowUp}
             />
           </div>
@@ -360,7 +400,7 @@ export function TaskThreadView({
 
       <ArtifactSidePanel
         artifact={selectedArtifact}
-        open={artifactPanelState?.isOpen ?? false}
+        open={artifactPanelOpen}
         fullscreen={artifactPanelState?.isFullscreen ?? false}
       />
     </main>
@@ -453,7 +493,13 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
+function ThreadInfoPanel({
+  state,
+  onTaskPrompt,
+}: {
+  state?: TaskThreadInfoPanelState;
+  onTaskPrompt: (task: ThreadInfoChecklistTask) => void;
+}) {
   if (!state?.isOpen) return null;
 
   const startedAt = formatInfoDate(state.startedAt);
@@ -461,7 +507,7 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
 
   return (
     <aside
-      className="absolute right-6 top-4 z-20 hidden w-[300px] rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
+      className="absolute right-6 top-4 z-20 hidden max-h-[calc(100vh-8rem)] w-[300px] overflow-y-auto rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >
@@ -530,8 +576,186 @@ function ThreadInfoPanel({ state }: { state?: TaskThreadInfoPanelState }) {
             </div>
           </section>
         ) : null}
+
+        {state.checklist ? (
+          <ThreadInfoChecklist
+            checklist={state.checklist}
+            onTaskPrompt={onTaskPrompt}
+          />
+        ) : null}
       </div>
     </aside>
+  );
+}
+
+function ThreadInfoChecklist({
+  checklist,
+  onTaskPrompt,
+}: {
+  checklist: ThreadInfoChecklistState;
+  onTaskPrompt: (task: ThreadInfoChecklistTask) => void;
+}) {
+  const requiredTasks = checklist.tasks.filter(
+    (task) =>
+      task.required !== false &&
+      normalizeInfoStatus(task.status) !== "not_applicable",
+  );
+  const completed = requiredTasks.filter(
+    (task) => normalizeInfoStatus(task.status) === "completed",
+  ).length;
+  const total = requiredTasks.length;
+  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return (
+    <section className="border-t border-white/10 pt-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium text-white/55">Progress</h2>
+          <p className="mt-1 text-xs text-white/45">
+            {total ? `${completed}/${total} required complete` : "No tasks yet"}
+          </p>
+        </div>
+        <span className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75">
+          {progress}%
+        </span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-white/70"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {checklist.error ? (
+        <p className="mt-3 rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-100">
+          {checklist.error}
+        </p>
+      ) : checklist.isLoading && checklist.tasks.length === 0 ? (
+        <p className="mt-3 text-sm text-white/55">Loading checklist...</p>
+      ) : checklist.tasks.length === 0 ? (
+        <p className="mt-3 text-sm text-white/55">No linked tasks</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {checklist.tasks.map((task) => (
+            <ThreadInfoChecklistRow
+              key={task.id}
+              task={task}
+              onTaskPrompt={onTaskPrompt}
+            />
+          ))}
+        </div>
+      )}
+
+      {checklist.completedAt ? (
+        <p className="mt-3 text-xs text-white/45">
+          Thread completed {formatInfoDate(checklist.completedAt)}
+        </p>
+      ) : null}
+      <ThreadInfoCompletionAction checklist={checklist} />
+    </section>
+  );
+}
+
+function ThreadInfoChecklistRow({
+  task,
+  onTaskPrompt,
+}: {
+  task: ThreadInfoChecklistTask;
+  onTaskPrompt: (task: ThreadInfoChecklistTask) => void;
+}) {
+  const status = normalizeInfoStatus(task.status);
+  const isComplete = status === "completed";
+  const isBlocked = task.blocked || status === "blocked";
+  const Icon = isComplete
+    ? CheckCircle2
+    : isBlocked
+      ? AlertCircle
+      : CircleDashed;
+
+  return (
+    <button
+      type="button"
+      className="block w-full rounded-lg border border-white/10 bg-white/[0.03] p-2.5 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+      onClick={() => onTaskPrompt(task)}
+      aria-label={`Update ${task.title}`}
+    >
+      <div className="flex items-start gap-2">
+        <Icon
+          className={cn(
+            "mt-0.5 size-3.5 shrink-0",
+            isComplete
+              ? "text-emerald-300"
+              : isBlocked
+                ? "text-red-300"
+                : "text-white/45",
+          )}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 flex-1 truncate text-xs font-medium text-white/80">
+              {task.title}
+            </p>
+            <span className="shrink-0 rounded-full bg-white/8 px-1.5 py-0.5 text-[11px] text-white/65">
+              {formatInfoStatus(task.status)}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-white/40">
+            {task.required === false ? null : <span>Required</span>}
+            {task.assigneeDisplay ? <span>{task.assigneeDisplay}</span> : null}
+            {task.roleKey ? (
+              <span>{formatInfoStatus(task.roleKey)}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ThreadInfoCompletionAction({
+  checklist,
+}: {
+  checklist: ThreadInfoChecklistState;
+}) {
+  const requiredTasks = checklist.tasks.filter(
+    (task) =>
+      task.required !== false &&
+      normalizeInfoStatus(task.status) !== "not_applicable",
+  );
+  const allRequiredComplete =
+    requiredTasks.length > 0 &&
+    requiredTasks.every(
+      (task) => normalizeInfoStatus(task.status) === "completed",
+    );
+  const hasBlockers = requiredTasks.some(
+    (task) => task.blocked || normalizeInfoStatus(task.status) === "blocked",
+  );
+  const canComplete =
+    allRequiredComplete &&
+    !hasBlockers &&
+    !checklist.completedAt &&
+    Boolean(checklist.onCompleteThread);
+  const label = checklist.completedAt
+    ? "Completed"
+    : allRequiredComplete
+      ? hasBlockers
+        ? "Review blockers before completing"
+        : "Ready to complete"
+      : "Waiting on required tasks";
+
+  return (
+    <div className="mt-4 border-t border-white/10 pt-3">
+      <p className="mb-2 text-xs font-medium text-white/55">{label}</p>
+      <button
+        type="button"
+        className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-3 text-xs font-medium text-white/75 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-45"
+        disabled={!canComplete || checklist.isCompleting}
+        onClick={() => void checklist.onCompleteThread?.()}
+      >
+        <CheckCircle2 className="size-3.5" />
+        Complete Thread
+      </button>
+    </div>
   );
 }
 
@@ -566,6 +790,24 @@ function formatInfoDate(value?: string | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function normalizeInfoStatus(value?: string | null) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function formatInfoStatus(value?: string | null) {
+  return (
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ") || "Unknown"
+  );
 }
 
 function formatFileSize(value: number) {
@@ -1054,12 +1296,14 @@ function FollowUpComposer({
   disabled,
   isSending,
   mentionTargets,
+  prefill,
   onSubmit,
 }: {
   taskQueue?: ActiveTaskQueue | null;
   disabled?: boolean;
   isSending?: boolean;
   mentionTargets: MentionTarget[];
+  prefill?: { text: string; token: number } | null;
   onSubmit?: (
     content: string,
     files?: File[],
@@ -1068,6 +1312,8 @@ function FollowUpComposer({
 }) {
   const composer = useComposerState(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
+  const prefillText = prefill?.text;
+  const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
     () => currentMentionQuery(composer.text),
     [composer.text],
@@ -1088,6 +1334,11 @@ function FollowUpComposer({
   useEffect(() => {
     setActiveMentionIndex(0);
   }, [mentionQuery, mentionOptions.length]);
+
+  useEffect(() => {
+    if (!prefillText) return;
+    composer.setText(prefillText);
+  }, [prefillText, prefillToken]);
 
   // Plan-012 U13: in-thread composer migrated to AI Elements
   // <PromptInput>. Shares useComposerState with the empty-thread

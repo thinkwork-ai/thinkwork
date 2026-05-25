@@ -1031,6 +1031,7 @@ export async function postCompletion(
 export interface FinalizeCallbackArgs {
   payload: Record<string, unknown>;
   identity: IdentitySnapshot;
+  systemPrompt?: string;
   result:
     | { status: "ok"; runResult: RunAgentLoopResult; latencyMs: number }
     | { status: "error"; error: unknown; latencyMs: number };
@@ -1076,6 +1077,7 @@ function buildFinalizeBody(
     user_message: asString(payload.message),
     agent_model: runResult?.modelId || asString(payload.model) || null,
     runtime_type: "pi",
+    composed_system_prompt: args.systemPrompt || null,
     agent_slug: asString(payload.instance_id) || null,
     agent_name: asString(payload.agent_name) || null,
     duration_ms: result.latencyMs,
@@ -1101,6 +1103,7 @@ function buildFinalizeBody(
     },
     response: runResult
       ? {
+          composed_system_prompt: args.systemPrompt || null,
           content: runResult.content,
           runtime: "pi",
           model: runResult.modelId,
@@ -1111,6 +1114,7 @@ function buildFinalizeBody(
           hindsight_usage: [],
         }
       : {
+          composed_system_prompt: args.systemPrompt || null,
           runtime: "pi",
           tools_called: [],
           tool_invocations: [],
@@ -1162,8 +1166,8 @@ function isFinalizeCallbackConfigured(
 ): boolean {
   return Boolean(
     asString(payload.finalize_callback_url) &&
-    asString(payload.finalize_callback_secret) &&
-    asString(payload.thread_turn_id),
+      asString(payload.finalize_callback_secret) &&
+      asString(payload.thread_turn_id),
   );
 }
 
@@ -1622,6 +1626,7 @@ export async function handleInvocation(
       const finalized = await postFinalizeCallback({
         payload: args.payload,
         identity,
+        systemPrompt,
         result: { status: "error", error: runError, latencyMs },
         fetchImpl,
       });
@@ -1695,6 +1700,7 @@ export async function handleInvocation(
     const finalized = await postFinalizeCallback({
       payload: args.payload,
       identity,
+      systemPrompt,
       result: { status: "ok", runResult, latencyMs },
       fetchImpl,
     });

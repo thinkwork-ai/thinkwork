@@ -1,0 +1,49 @@
+---
+title: Applications
+description: The ThinkWork application surfaces for end users, operators, developers, and deployment workflows.
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+Applications are the places people actually use ThinkWork. The platform primitives under Components explain how work is represented; the applications are where end users talk with agents, operators configure tenants, and developers deploy or inspect a stack.
+
+ThinkWork has four primary application surfaces. Desktop and Mobile are for end users doing work with agents. Admin is the tenant control plane for operators and agent authors. CLI is the scriptable deployment and operations surface for teams that run ThinkWork in their own AWS account.
+
+| Application   | Primary audience            | Main job                                                                              | Start here                            |
+| ------------- | --------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------- |
+| Desktop App   | End users                   | Installed macOS Spaces app for daily thread, agent, and artifact work                 | [Desktop App](/applications/desktop/) |
+| Mobile App    | End users                   | On-the-go chat, external tasks, personal integrations, and push notifications         | [Mobile App](/applications/mobile/)   |
+| Admin Web App | Operators and agent authors | Tenant configuration, agent authoring, Spaces, controls, analytics, and Company Brain | [Admin Web App](/applications/admin/) |
+| CLI           | Operators and developers    | Deploy, inspect, and operate ThinkWork stacks from scripts or a terminal              | [CLI Overview](/applications/cli/)    |
+
+<CardGrid>
+  <Card title="Desktop App" icon="desktop">
+    A dedicated macOS app for ThinkWork Spaces: threads, agent chat, generated
+    artifacts, side panels, and command composer in an installed window.
+  </Card>
+  <Card title="Mobile App" icon="mobile">
+    The end-user iOS client for chat, review, external tasks, personal
+    integrations, MCP Connect, and push notifications.
+  </Card>
+  <Card title="Admin Web App" icon="setting">
+    The operator control plane for tenant configuration, agent authoring,
+    Spaces, Skills, Company Brain, guardrails, analytics, and settings.
+  </Card>
+  <Card title="CLI" icon="terminal">
+    The `thinkwork-cli` package for deployment, stack inspection, API-side
+    operations, and automation-friendly management commands.
+  </Card>
+</CardGrid>
+
+## How to choose
+
+Start with [Desktop App](/applications/desktop/) when you want the installed end-user experience. Start with [Mobile App](/applications/mobile/) when the work happens through notifications, tasks, personal integrations, or a phone. Start with [Admin Web App](/applications/admin/) when you are configuring the tenant itself. Start with [CLI](/applications/cli/) when the question is deployment, scripting, or stack operations.
+
+For the platform model underneath these apps, read [Threads](/concepts/threads/), [Spaces](/concepts/spaces/), and [Agents](/concepts/agents/).
+
+## Related pages
+
+- [Architecture](/architecture/) — how the applications fit into the AWS-native deployment
+- [Threads](/concepts/threads/) — the durable work record shared by the apps
+- [Spaces](/concepts/spaces/) — contextual workrooms used by Desktop, Mobile, and Admin
+- [React Native SDK](/sdks/react-native/) — the SDK behind the mobile client

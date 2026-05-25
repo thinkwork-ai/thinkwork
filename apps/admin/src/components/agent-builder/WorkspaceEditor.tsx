@@ -96,11 +96,9 @@ export function workspaceEditorActions(
 }
 
 export function workspaceEditorReservedRootFolders(
-  mode: WorkspaceEditorMode,
-): readonly string[] | undefined {
-  if (mode === "context") return ["memory"];
-  if (mode === "catalog") return [];
-  return undefined;
+  _mode: WorkspaceEditorMode,
+): readonly string[] {
+  return [];
 }
 
 export interface WorkspaceEditorProps {

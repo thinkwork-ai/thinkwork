@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useSubscription } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -10,6 +10,7 @@ import { LiveRunWidget } from "@/components/threads/LiveRunWidget";
 import { ThreadLifecycleBadge } from "@/components/threads/ThreadLifecycleBadge";
 import { Identity } from "@/components/Identity";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { SystemPromptSheet } from "@/components/SystemPromptSheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -35,6 +36,7 @@ import {
   OnThreadUpdatedSubscription,
   OnThreadTurnUpdatedSubscription,
   ThreadTracesQuery,
+  ThreadSystemPromptQuery,
 } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,7 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Hash,
   Lock,
   MoreHorizontal,
   SlidersHorizontal,
@@ -118,6 +121,20 @@ function userDisplayName(thread: {
     thread.user?.name ||
     thread.user?.email ||
     (thread.userId ? "Unknown User" : "User")
+  );
+}
+
+function spaceDisplayName(thread: {
+  readonly spaceId?: string | null;
+  readonly space?: {
+    readonly name?: string | null;
+    readonly slug?: string | null;
+  } | null;
+}): string {
+  return (
+    thread.space?.name ||
+    thread.space?.slug ||
+    (thread.spaceId ? "Unknown Space" : "—")
   );
 }
 
@@ -303,6 +320,13 @@ function ThreadDetailPage() {
     requestPolicy: "cache-and-network",
   });
 
+  const [threadPromptResult] = useQuery({
+    query: ThreadSystemPromptQuery,
+    variables: { tenantId: tenantId!, threadId },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+
   const [, updateThread] = useMutation(UpdateThreadMutation);
   const [, deleteThread] = useMutation(DeleteThreadMutation);
 
@@ -334,6 +358,8 @@ function ThreadDetailPage() {
   const threadComputerLabel = thread ? computerDisplayName(thread) : "Computer";
   const threadUserLabel = thread ? userDisplayName(thread) : "User";
   const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
+  const threadSystemPrompt =
+    threadPromptResult.data?.threadTurns?.[0]?.systemPrompt ?? null;
 
   // ---- Derived data ----
   const agentMap = useMemo(() => {
@@ -396,13 +422,14 @@ function ThreadDetailPage() {
       openPanel(
         <ThreadProperties
           thread={thread}
+          systemPrompt={threadSystemPrompt}
           loading={threadResult.fetching && !thread.lifecycleStatus}
         />,
       );
     }
     return () => closePanel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread]);
+  }, [thread, threadSystemPrompt]);
 
   // ---- Loading & Error states ----
   if (threadResult.fetching && !thread) return <PageSkeleton />;
@@ -555,6 +582,7 @@ function ThreadDetailPage() {
             </h3>
             <ThreadProperties
               thread={thread}
+              systemPrompt={threadSystemPrompt}
               inline
               loading={threadResult.fetching && !thread.lifecycleStatus}
             />
@@ -651,6 +679,7 @@ function ThreadDetailPage() {
             <div className="px-4 pb-4">
               <ThreadProperties
                 thread={thread}
+                systemPrompt={threadSystemPrompt}
                 inline
                 loading={threadResult.fetching && !thread.lifecycleStatus}
               />
@@ -669,13 +698,21 @@ function ThreadDetailPage() {
 interface ThreadPropertiesProps {
   thread: {
     readonly id: string;
+    readonly number?: number | null;
+    readonly identifier?: string | null;
     readonly lifecycleStatus?: ThreadLifecycleStatus | null;
     readonly channel?: string | null;
     readonly assigneeType?: string | null;
     readonly assigneeId?: string | null;
     readonly computerId?: string | null;
+    readonly spaceId?: string | null;
     readonly userId?: string | null;
     readonly computer?: {
+      readonly id: string;
+      readonly name?: string | null;
+      readonly slug?: string | null;
+    } | null;
+    readonly space?: {
       readonly id: string;
       readonly name?: string | null;
       readonly slug?: string | null;
@@ -710,11 +747,18 @@ interface ThreadPropertiesProps {
     readonly createdAt: string;
     readonly updatedAt: string;
   };
+  systemPrompt?: string | null;
   inline?: boolean;
   loading?: boolean;
 }
 
-function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
+function ThreadProperties({
+  thread,
+  systemPrompt,
+  inline,
+  loading,
+}: ThreadPropertiesProps) {
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   // Turn + token + cost summary computed from the existing messages edges.
   // Turn count = assistant message count (a proxy for agent-turn count that
   // avoids an extra query; mirrors the Activity header's existing shape).
@@ -754,6 +798,32 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
         <span className="text-xs">{triggerLabel(thread.channel)}</span>
       </PropRow>
 
+      <PropRow label="Space">
+        {thread.spaceId || thread.space ? (
+          <Badge
+            variant="outline"
+            className="max-w-40 gap-1 px-1.5 text-xs font-normal text-muted-foreground"
+            title={`Space: ${spaceDisplayName(thread)}`}
+          >
+            <Hash className="h-3 w-3 shrink-0" />
+            <span className="truncate">{spaceDisplayName(thread)}</span>
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </PropRow>
+
+      <PropRow label="System prompt">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={() => setShowSystemPrompt(true)}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          View
+        </button>
+      </PropRow>
+
       {turnCount > 0 && (
         <PropRow label="Turns">
           <span className="text-xs text-muted-foreground">
@@ -765,20 +835,6 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
       {thread.computerId ? (
         <PropRow label="User">
           <span className="text-xs truncate">{userDisplayName(thread)}</span>
-        </PropRow>
-      ) : thread.agent ? (
-        <PropRow label="Agent">
-          <Link
-            to="/agent"
-            className="flex items-center gap-1 hover:bg-accent rounded-md px-1 -mx-1 transition-colors"
-          >
-            <Identity
-              name={thread.agent.name}
-              avatarUrl={thread.agent.avatarUrl}
-              size="sm"
-            />
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          </Link>
         </PropRow>
       ) : null}
 
@@ -826,6 +882,15 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
           {formatDateTime(thread.cancelledAt)}
         </PropRow>
       )}
+      <SystemPromptSheet
+        titleSuffix={thread.identifier ?? `#${thread.number ?? thread.id}`}
+        capturedSystemPrompt={systemPrompt ?? null}
+        open={showSystemPrompt}
+        onOpenChange={setShowSystemPrompt}
+        capturedDescription="The composed system prompt the runtime ran against the latest captured turn in this thread — workspace files (PLATFORM/CAPABILITIES/GUARDRAILS/MEMORY_GUIDE/SOUL/IDENTITY/USER/AGENTS/CONTEXT/TOOLS) plus the runtime tool policy, captured from the agent at invoke time."
+        emptyDescription="No system prompt has been captured for this thread yet. New chat turns capture the composed prompt at runtime finalize time."
+        emptyMessage="No system prompt available for this thread."
+      />
     </div>
   );
 }

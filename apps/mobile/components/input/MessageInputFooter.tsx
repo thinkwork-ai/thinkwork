@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import {
   View,
+  Text,
   TextInput,
   Pressable,
   Platform,
@@ -15,13 +16,19 @@ import {
   ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowUp, Plus, Zap, Mic } from "lucide-react-native";
+import { ArrowUp, Plus, Zap, Mic, ChevronDown } from "lucide-react-native";
+import { IconPlanet } from "@tabler/icons-react-native";
 import { COLORS } from "@/lib/theme";
 import { VoiceDictationBar } from "./VoiceDictationBar";
 import { WorkspaceChip } from "./WorkspaceChip";
 
 export interface SelectedWorkspace {
   id: string;
+  name: string;
+}
+
+export interface SelectedSpace {
+  id: string | null;
   name: string;
 }
 
@@ -43,6 +50,9 @@ interface MessageInputFooterProps {
   onPlusPress?: () => void;
   /** Render the plus button dimmed and swallow presses. */
   plusDisabled?: boolean;
+  /** Open the space picker. */
+  onSpacePress?: () => void;
+  selectedSpace?: SelectedSpace | null;
   /** Disable composing and submission while keeping the footer visible. */
   disabled?: boolean;
   /** Currently selected workspaces shown as chips */
@@ -71,6 +81,8 @@ export const MessageInputFooter = forwardRef<
     quickActionsDisabled,
     onPlusPress,
     plusDisabled,
+    onSpacePress,
+    selectedSpace,
     disabled,
     selectedWorkspaces,
     onRemoveWorkspace,
@@ -196,6 +208,34 @@ export const MessageInputFooter = forwardRef<
                 style={{ opacity: quickActionsDisabled || disabled ? 0.35 : 1 }}
               >
                 <Zap size={24} color={colors.mutedForeground} />
+              </Pressable>
+            )}
+            {onSpacePress && (
+              <Pressable
+                onPress={disabled ? undefined : onSpacePress}
+                disabled={disabled}
+                className="flex-row items-center gap-1.5 rounded-lg px-2.5 py-1.5 active:opacity-70"
+                style={{
+                  minHeight: 32,
+                  opacity: disabled ? 0.35 : 1,
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.05)",
+                }}
+              >
+                <IconPlanet size={15} color={colors.mutedForeground} />
+                <Text
+                  style={{
+                    color: colors.mutedForeground,
+                    fontSize: 13,
+                    fontWeight: "600",
+                    maxWidth: 88,
+                  }}
+                  numberOfLines={1}
+                >
+                  {selectedSpace?.name ?? "Default"}
+                </Text>
+                <ChevronDown size={14} color={colors.mutedForeground} />
               </Pressable>
             )}
           </View>

@@ -155,6 +155,12 @@ def make_hindsight_tools(
         raw Hindsight facts after `recall()` was incomplete, or when the user
         explicitly asks you to inspect Hindsight.
 
+        Before using any memory tool, answer from the current prompt and
+        workspace files when possible. USER.md is already in-context for known
+        requesters and is authoritative for profile, preference, and family
+        facts. Do NOT call `hindsight_recall` to re-fetch facts already present
+        in USER.md.
+
         Use `recall()` first when the user asks ANY of:
           * "Where does <person> work?"
           * "Who is <person>?"
@@ -192,7 +198,9 @@ def make_hindsight_tools(
         The ONLY case where you may skip the reflect follow-up is a narrowly
         scoped factual lookup with a single expected answer, e.g. "what is X's
         email address?", "where does Y work?", "when did we last talk about
-        Z?". For anything broader, run BOTH tools.
+        Z?". Always skip both Hindsight tools when the answer is already in
+        USER.md. For anything broader that is not already in context, run BOTH
+        tools.
         """
         last_exc: Exception | None = None
         for attempt in range(3):
@@ -259,6 +267,9 @@ def make_hindsight_tools(
         scoped factual lookup with a single expected answer. For anything
         broader — anything that asks for context, summary, briefing,
         narrative, or synthesis — run reflect after recall.
+
+        Do not use this tool for requester profile, preference, or family facts
+        already present in USER.md. Answer directly from the current prompt.
         """
         last_exc: Exception | None = None
         for attempt in range(3):

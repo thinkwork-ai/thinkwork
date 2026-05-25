@@ -181,18 +181,6 @@ export const SpaceQuery = gql`
         status
         writebackPolicy
       }
-      agentAssignments {
-        id
-        agentId
-        localRole
-        autoSubscribe
-        status
-        agent {
-          id
-          name
-          slug
-        }
-      }
     }
   }
 `;
@@ -272,6 +260,8 @@ export const ThreadLinkedTasksQuery = gql`
   query ThreadLinkedTasks($tenantId: ID!, $threadId: ID!) {
     threadLinkedTasks(tenantId: $tenantId, threadId: $threadId) {
       id
+      checklistItemId
+      provider
       title
       required
       roleKey
@@ -282,6 +272,29 @@ export const ThreadLinkedTasksQuery = gql`
       blocked
       syncStatus
       lastSyncedAt
+      metadata
+      updatedAt
+    }
+  }
+`;
+
+export const UpdateLinkedTaskMutation = gql`
+  mutation UpdateLinkedTask($input: UpdateLinkedTaskInput!) {
+    updateLinkedTask(input: $input) {
+      id
+      checklistItemId
+      provider
+      title
+      required
+      roleKey
+      assigneeDisplay
+      externalTaskId
+      externalTaskUrl
+      status
+      blocked
+      syncStatus
+      lastSyncedAt
+      metadata
       updatedAt
     }
   }
@@ -323,6 +336,7 @@ export const ComputerThreadQuery = gql`
       spaceId
       channel
       lifecycleStatus
+      metadata
       lastResponsePreview
       costSummary
       createdAt
@@ -931,6 +945,7 @@ export const UpdateThreadMutation = gql`
   mutation UpdateThread($id: ID!, $input: UpdateThreadInput!) {
     updateThread(id: $id, input: $input) {
       id
+      status
       archivedAt
       updatedAt
     }

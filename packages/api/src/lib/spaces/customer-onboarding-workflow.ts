@@ -27,6 +27,11 @@ import {
   createCoordinatorAgentService,
   type CoordinatorAgentService,
 } from "./coordinator-agent.js";
+import {
+  CUSTOMER_ONBOARDING_CHECKLIST_ITEMS,
+  CUSTOMER_ONBOARDING_CHECKLIST_KEY,
+  buildCustomerOnboardingChecklistConfig,
+} from "./customer-onboarding-seed.js";
 
 export const CUSTOMER_ONBOARDING_TEMPLATE_KEY = "customer_onboarding";
 
@@ -51,6 +56,31 @@ export interface CustomerOnboardingSourceInput {
   documents?: unknown;
   links?: unknown;
   specialRequirements?: string | null;
+  primaryContact?: unknown;
+  accountsPayableContact?: unknown;
+  billingAddress?: string | null;
+  shippingAddress?: string | null;
+  billingSameAsShipping?: boolean | string | null;
+  purchaseOrderNumber?: string | null;
+  invoiceDeliveryMethod?: string | null;
+  taxExempt?: boolean | string | null;
+  taxExemptionType?: string | null;
+  taxExemptionFormReceived?: boolean | string | null;
+  taxExemptionFormLocation?: string | null;
+  creditTermsRequested?: boolean | string | null;
+  requestedTerms?: string | null;
+  estimatedFirstOrderValue?: string | number | null;
+  creditApprovalNotes?: string | null;
+  docusignRecipient?: unknown;
+  contractLink?: string | null;
+  dunAndBradstreetId?: string | null;
+  compliancePortal?: string | null;
+  p21CustomerId?: string | null;
+  taxCode?: string | null;
+  salesTerritory?: string | null;
+  shippingMethod?: string | null;
+  freightTerms?: string | null;
+  accountSetupBlockers?: string | null;
   [key: string]: unknown;
 }
 
@@ -77,6 +107,31 @@ export interface NormalizedCustomerOnboardingSource {
   documents: CustomerOnboardingLink[];
   links: CustomerOnboardingLink[];
   specialRequirements: string | null;
+  primaryContact: CustomerOnboardingPerson | null;
+  accountsPayableContact: CustomerOnboardingPerson | null;
+  billingAddress: string | null;
+  shippingAddress: string | null;
+  billingSameAsShipping: boolean | null;
+  purchaseOrderNumber: string | null;
+  invoiceDeliveryMethod: string | null;
+  taxExempt: boolean | null;
+  taxExemptionType: string | null;
+  taxExemptionFormReceived: boolean | null;
+  taxExemptionFormLocation: string | null;
+  creditTermsRequested: boolean | null;
+  requestedTerms: string | null;
+  estimatedFirstOrderValue: string | null;
+  creditApprovalNotes: string | null;
+  docusignRecipient: CustomerOnboardingPerson | null;
+  contractLink: string | null;
+  dunAndBradstreetId: string | null;
+  compliancePortal: string | null;
+  p21CustomerId: string | null;
+  taxCode: string | null;
+  salesTerritory: string | null;
+  shippingMethod: string | null;
+  freightTerms: string | null;
+  accountSetupBlockers: string | null;
   missingFields: string[];
   raw: CustomerOnboardingSourceInput;
 }
@@ -84,6 +139,27 @@ export interface NormalizedCustomerOnboardingSource {
 export interface CustomerOnboardingLink {
   title: string | null;
   url: string | null;
+}
+
+export interface CustomerOnboardingHumanInputRequest {
+  skill: "human_question";
+  channel: "thread";
+  checklistItemKey: "missing_onboarding_information";
+  prompt: string;
+  questionCard: {
+    _type: "question_card";
+    schema: {
+      id: "customer_onboarding_missing_intake";
+      title: "Missing onboarding information";
+      fields: CustomerOnboardingQuestionField[];
+    };
+  };
+}
+
+export interface CustomerOnboardingQuestionField {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "boolean";
 }
 
 export interface StartCustomerOnboardingWorkflowInput {
@@ -115,6 +191,7 @@ export interface CustomerOnboardingThreadRef {
 
 export interface CustomerOnboardingLinkedTaskResult {
   checklistItemId: string;
+  provider: "lastmile" | "thinkwork";
   title: string;
   externalTaskId: string;
   externalTaskUrl: string | null;
@@ -122,6 +199,17 @@ export interface CustomerOnboardingLinkedTaskResult {
   blocked: boolean;
   syncStatus: LinkedTaskSyncStatus;
   providerError?: LastMileProviderError;
+}
+
+interface PlannedChecklistItem {
+  item: CustomerOnboardingChecklistItem;
+  task: CustomerOnboardingLinkedTaskResult;
+  required: boolean;
+  assignee: {
+    externalId: string | null;
+    displayName: string | null;
+  } | null;
+  metadata: Record<string, unknown>;
 }
 
 export interface CustomerOnboardingWorkflowSpace {
@@ -181,6 +269,10 @@ export interface CustomerOnboardingWorkflowRepository {
     tenantId: string;
     spaceId?: string | null;
   }): Promise<CustomerOnboardingWorkflowSpace | null>;
+  ensureNativeChecklist?(input: {
+    tenantId: string;
+    spaceId: string;
+  }): Promise<void>;
   findExistingThread(input: {
     tenantId: string;
     spaceId: string;
@@ -229,10 +321,32 @@ export async function startCustomerOnboardingWorkflow(
   const coordinator = deps.coordinator ?? createCoordinatorAgentService();
   const normalized = normalizeCustomerOnboardingSource(input.opportunity);
 
-  const space = await repository.findSpace({
+  let space = await repository.findSpace({
     tenantId: input.tenantId,
     spaceId: input.spaceId,
   });
+  if (!space) {
+    throw new CustomerOnboardingWorkflowError(
+      "Customer Onboarding Space not found",
+      404,
+      "CUSTOMER_ONBOARDING_SPACE_NOT_FOUND",
+    );
+  }
+  if (
+    space.checklistItems.length === 0 &&
+    shouldUseNativeChecklist(input, space) &&
+    repository.ensureNativeChecklist
+  ) {
+    await repository.ensureNativeChecklist({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+    });
+    space = await repository.findSpace({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+    });
+  }
+
   if (!space) {
     throw new CustomerOnboardingWorkflowError(
       "Customer Onboarding Space not found",
@@ -275,48 +389,28 @@ export async function startCustomerOnboardingWorkflow(
     metadata,
   });
 
-  const linkedTaskResults: CustomerOnboardingLinkedTaskResult[] = [];
-  for (const item of space.checklistItems) {
-    const assignee = resolveRoleAssignee(space, item.roleKey);
-    const taskResult = await taskAdapter.createTask({
-      tenantId: input.tenantId,
-      spaceId: space.id,
-      threadId: thread.id,
-      checklistItemId: item.id,
-      idempotencyKey: `customer-onboarding:${input.tenantId}:${normalized.opportunityId}:${item.key}`,
-      title: renderTaskTitle(item, normalized),
-      description: renderTaskDescription(item, normalized),
-      required: item.required,
-      assignee,
-      metadata: {
-        workflow: "customer_onboarding",
-        opportunityId: normalized.opportunityId,
-        customerId: normalized.customerId,
-        checklistItemKey: item.key,
-        externalTaskTemplate: item.externalTaskTemplate,
-      },
-    });
+  const checklistPlan = shouldUseNativeChecklist(input, space)
+    ? planNativeChecklistItems(space, thread.id, normalized)
+    : await planExternalChecklistItems({
+        input,
+        space,
+        threadId: thread.id,
+        normalized,
+        taskAdapter,
+      });
 
-    const mirrored = taskResult.ok
-      ? linkedTaskFromSnapshot(item, taskResult.value)
-      : linkedTaskFromProviderError(thread.id, item, taskResult.providerError);
-    linkedTaskResults.push(mirrored);
+  const linkedTaskResults = checklistPlan.map((planned) => planned.task);
+  for (const planned of checklistPlan) {
     await repository.createLinkedTask({
       tenantId: input.tenantId,
       spaceId: space.id,
       threadId: thread.id,
-      checklistItem: item,
-      task: mirrored,
-      required: item.required,
-      roleKey: item.roleKey,
-      assignee: taskResult.ok ? taskResult.value.assignee : null,
-      metadata: {
-        workflow: "customer_onboarding",
-        opportunityId: normalized.opportunityId,
-        checklistItemKey: item.key,
-        providerError: taskResult.ok ? undefined : taskResult.providerError,
-        raw: taskResult.ok ? taskResult.value.raw : undefined,
-      },
+      checklistItem: planned.item,
+      task: planned.task,
+      required: planned.required,
+      roleKey: planned.item.roleKey,
+      assignee: planned.assignee,
+      metadata: planned.metadata,
     });
   }
 
@@ -326,8 +420,9 @@ export async function startCustomerOnboardingWorkflow(
     threadId: thread.id,
     reason: "kickoff_triage",
     idempotencyKey: `space-coordinator:${input.tenantId}:${thread.id}:kickoff_triage`,
-    summary:
-      "A new customer onboarding Thread was created and checklist tasks were mirrored. Review missing facts, unassigned tasks, and possible blockers.",
+    summary: shouldUseNativeChecklist(input, space)
+      ? `A new customer onboarding Thread was created with ${linkedTaskResults.length} ThinkWork checklist rows. Review missing facts, not-applicable items, and possible blockers.`
+      : "A new customer onboarding Thread was created and checklist tasks were mirrored. Review missing facts, unassigned tasks, and possible blockers.",
     requestedBy: input.startedBy ?? { type: "system" },
   });
 
@@ -396,6 +491,35 @@ export function normalizeCustomerOnboardingSource(
     documents: normalizeLinks(payload.documents),
     links: normalizeLinks(payload.links),
     specialRequirements: stringValue(payload.specialRequirements),
+    primaryContact:
+      normalizePerson(payload.primaryContact) ?? firstPerson(payload.contacts),
+    accountsPayableContact: normalizePerson(payload.accountsPayableContact),
+    billingAddress: stringValue(payload.billingAddress),
+    shippingAddress: stringValue(payload.shippingAddress),
+    billingSameAsShipping: booleanValue(payload.billingSameAsShipping),
+    purchaseOrderNumber: stringValue(payload.purchaseOrderNumber),
+    invoiceDeliveryMethod: stringValue(payload.invoiceDeliveryMethod),
+    taxExempt: booleanValue(payload.taxExempt),
+    taxExemptionType: stringValue(payload.taxExemptionType),
+    taxExemptionFormReceived: booleanValue(payload.taxExemptionFormReceived),
+    taxExemptionFormLocation: stringValue(payload.taxExemptionFormLocation),
+    creditTermsRequested: booleanValue(payload.creditTermsRequested),
+    requestedTerms: stringValue(payload.requestedTerms),
+    estimatedFirstOrderValue:
+      typeof payload.estimatedFirstOrderValue === "number"
+        ? String(payload.estimatedFirstOrderValue)
+        : stringValue(payload.estimatedFirstOrderValue),
+    creditApprovalNotes: stringValue(payload.creditApprovalNotes),
+    docusignRecipient: normalizePerson(payload.docusignRecipient),
+    contractLink: stringValue(payload.contractLink),
+    dunAndBradstreetId: stringValue(payload.dunAndBradstreetId),
+    compliancePortal: stringValue(payload.compliancePortal),
+    p21CustomerId: stringValue(payload.p21CustomerId),
+    taxCode: stringValue(payload.taxCode),
+    salesTerritory: stringValue(payload.salesTerritory),
+    shippingMethod: stringValue(payload.shippingMethod),
+    freightTerms: stringValue(payload.freightTerms),
+    accountSetupBlockers: stringValue(payload.accountSetupBlockers),
     missingFields: [],
     raw: payload,
   };
@@ -412,6 +536,17 @@ function missingFields(source: NormalizedCustomerOnboardingSource): string[] {
   if (!source.productPlan) missing.push("productPlan");
   if (!source.closeDate) missing.push("closeDate");
   if (source.documents.length === 0) missing.push("documents");
+  if (!source.primaryContact) missing.push("primaryContact");
+  if (!source.accountsPayableContact) missing.push("accountsPayableContact");
+  if (!source.billingAddress) missing.push("billingAddress");
+  if (!source.billingSameAsShipping && !source.shippingAddress) {
+    missing.push("shippingAddress");
+  }
+  if (source.taxExempt === null) missing.push("taxExempt");
+  if (source.creditTermsRequested === null) {
+    missing.push("creditTermsRequested");
+  }
+  if (!source.docusignRecipient) missing.push("docusignRecipient");
   return missing;
 }
 
@@ -426,6 +561,7 @@ function buildWorkflowMetadata(
   startSource: CustomerOnboardingStartSource,
   space: CustomerOnboardingWorkflowSpace,
 ): Record<string, unknown> {
+  const humanInput = buildHumanInputRequest(source);
   return {
     customerOnboarding: {
       source: startSource === "webhook" ? "lastmile_crm" : "manual",
@@ -438,6 +574,7 @@ function buildWorkflowMetadata(
       spaceId: space.id,
       spacePrompt: space.prompt,
       facts: source,
+      humanInput,
     },
   };
 }
@@ -454,6 +591,41 @@ function buildKickoffMessage(
   if (source.dealValue) lines.push(`Deal value: ${source.dealValue}`);
   if (source.productPlan) lines.push(`Product/plan: ${source.productPlan}`);
   if (source.closeDate) lines.push(`Close date: ${source.closeDate}`);
+  if (source.primaryContact) {
+    lines.push(`Primary contact: ${formatPerson(source.primaryContact)}`);
+  }
+  if (source.accountsPayableContact) {
+    lines.push(
+      `Accounts payable contact: ${formatPerson(source.accountsPayableContact)}`,
+    );
+  }
+  if (source.billingAddress)
+    lines.push(`Billing address: ${source.billingAddress}`);
+  if (source.shippingAddress) {
+    lines.push(`Shipping address: ${source.shippingAddress}`);
+  } else if (source.billingSameAsShipping) {
+    lines.push("Shipping address: same as billing");
+  }
+  if (source.taxExempt !== null) {
+    lines.push(`Tax exempt: ${source.taxExempt ? "yes" : "no"}`);
+  }
+  if (source.creditTermsRequested !== null) {
+    lines.push(
+      `Credit terms requested: ${source.creditTermsRequested ? "yes" : "no"}`,
+    );
+  }
+  if (source.docusignRecipient) {
+    lines.push(`DocuSign recipient: ${formatPerson(source.docusignRecipient)}`);
+  }
+  if (source.contractLink) lines.push(`Contract link: ${source.contractLink}`);
+  if (source.dunAndBradstreetId) {
+    lines.push(`Dun & Bradstreet ID: ${source.dunAndBradstreetId}`);
+  }
+  if (source.p21CustomerId)
+    lines.push(`P21 customer ID: ${source.p21CustomerId}`);
+  if (source.accountSetupBlockers) {
+    lines.push(`Account setup blockers: ${source.accountSetupBlockers}`);
+  }
   if (source.notes) lines.push(`Notes: ${source.notes}`);
   if (source.specialRequirements) {
     lines.push(`Special requirements: ${source.specialRequirements}`);
@@ -464,7 +636,13 @@ function buildKickoffMessage(
     );
   }
   if (source.missingFields.length > 0) {
-    lines.push(`Missing CRM fields: ${source.missingFields.join(", ")}`);
+    lines.push(`Missing onboarding fields: ${source.missingFields.join(", ")}`);
+    lines.push(
+      "Question: Please provide the missing onboarding information so the checklist can continue.",
+    );
+    for (const field of source.missingFields) {
+      lines.push(`- ${questionFieldForMissingField(field).label}`);
+    }
   }
   return lines.join("\n");
 }
@@ -475,6 +653,14 @@ function renderTaskTitle(
 ): string {
   const customer =
     source.companyName ?? source.customerName ?? source.customerId;
+  const template = stringValue(
+    objectRecord(item.externalTaskTemplate).titleTemplate,
+  );
+  if (template) {
+    return template
+      .replace(/\{\{\s*customer\s*\}\}/g, customer ?? "customer")
+      .replace(/\{\{\s*opportunityId\s*\}\}/g, source.opportunityId);
+  }
   return `${item.title} - ${customer}`;
 }
 
@@ -484,6 +670,210 @@ function renderTaskDescription(
 ): string {
   const base = item.description ? `${item.description}\n\n` : "";
   return `${base}${buildKickoffMessage(source)}`;
+}
+
+function shouldUseNativeChecklist(
+  input: StartCustomerOnboardingWorkflowInput,
+  space: CustomerOnboardingWorkflowSpace,
+): boolean {
+  return (
+    input.source === "manual" ||
+    stringValue(space.config?.checklistSystemOfRecord) === "thinkwork" ||
+    stringValue(space.config?.systemOfRecord) === "thinkwork"
+  );
+}
+
+function planNativeChecklistItems(
+  space: CustomerOnboardingWorkflowSpace,
+  threadId: string,
+  source: NormalizedCustomerOnboardingSource,
+): PlannedChecklistItem[] {
+  return space.checklistItems.map((item) => {
+    const applicability = evaluateChecklistApplicability(item, source);
+    const assignee = resolveRoleAssignee(space, item.roleKey);
+    const humanInput =
+      item.key === "missing_onboarding_information" && applicability.applicable
+        ? buildHumanInputRequest(source)
+        : null;
+    const task: CustomerOnboardingLinkedTaskResult = {
+      checklistItemId: item.id,
+      provider: "thinkwork",
+      title: renderTaskTitle(item, source),
+      externalTaskId: `thinkwork:${threadId}:${item.key}`,
+      externalTaskUrl: null,
+      status: applicability.applicable ? "todo" : "not_applicable",
+      blocked: false,
+      syncStatus: "synced",
+    };
+    return {
+      item,
+      task,
+      required: applicability.required,
+      assignee,
+      metadata: {
+        workflow: "customer_onboarding",
+        systemOfRecord: "thinkwork",
+        opportunityId: source.opportunityId,
+        customerId: source.customerId,
+        checklistItemKey: item.key,
+        checklistTemplate: item.externalTaskTemplate,
+        applicability,
+        humanInput,
+      },
+    };
+  });
+}
+
+function buildHumanInputRequest(
+  source: NormalizedCustomerOnboardingSource,
+): CustomerOnboardingHumanInputRequest | null {
+  if (source.missingFields.length === 0) return null;
+  return {
+    skill: "human_question",
+    channel: "thread",
+    checklistItemKey: "missing_onboarding_information",
+    prompt:
+      "Please provide the missing onboarding information so the checklist can continue.",
+    questionCard: {
+      _type: "question_card",
+      schema: {
+        id: "customer_onboarding_missing_intake",
+        title: "Missing onboarding information",
+        fields: source.missingFields.map(questionFieldForMissingField),
+      },
+    },
+  };
+}
+
+function questionFieldForMissingField(
+  field: string,
+): CustomerOnboardingQuestionField {
+  const labels: Record<string, string> = {
+    opportunityUrl: "Opportunity or quote link",
+    salesRep: "Sales owner",
+    contacts: "Primary customer contact",
+    dealValue: "Estimated deal or first-order value",
+    productPlan: "Product, plan, or customer class",
+    closeDate: "Target onboarding or close date",
+    documents: "Contract or order-form link",
+    primaryContact: "Primary contact name and email",
+    accountsPayableContact: "Accounts payable contact name and email",
+    billingAddress: "Billing address",
+    shippingAddress: "Shipping address",
+    taxExempt: "Are they agricultural or sales-tax exempt?",
+    creditTermsRequested: "Do they want credit terms?",
+    docusignRecipient: "DocuSign recipient name and email",
+  };
+  return {
+    id: field,
+    label: labels[field] ?? field,
+    type:
+      field === "taxExempt" || field === "creditTermsRequested"
+        ? "boolean"
+        : "text",
+  };
+}
+
+async function planExternalChecklistItems(input: {
+  input: StartCustomerOnboardingWorkflowInput;
+  space: CustomerOnboardingWorkflowSpace;
+  threadId: string;
+  normalized: NormalizedCustomerOnboardingSource;
+  taskAdapter: LastMileTasksWorkflowAdapter;
+}): Promise<PlannedChecklistItem[]> {
+  const planned: PlannedChecklistItem[] = [];
+  for (const item of input.space.checklistItems) {
+    const assignee = resolveRoleAssignee(input.space, item.roleKey);
+    const taskResult = await input.taskAdapter.createTask({
+      tenantId: input.input.tenantId,
+      spaceId: input.space.id,
+      threadId: input.threadId,
+      checklistItemId: item.id,
+      idempotencyKey: `customer-onboarding:${input.input.tenantId}:${input.normalized.opportunityId}:${item.key}`,
+      title: renderTaskTitle(item, input.normalized),
+      description: renderTaskDescription(item, input.normalized),
+      required: item.required,
+      assignee,
+      metadata: {
+        workflow: "customer_onboarding",
+        opportunityId: input.normalized.opportunityId,
+        customerId: input.normalized.customerId,
+        checklistItemKey: item.key,
+        externalTaskTemplate: item.externalTaskTemplate,
+      },
+    });
+
+    const task = taskResult.ok
+      ? linkedTaskFromSnapshot(item, taskResult.value)
+      : linkedTaskFromProviderError(
+          input.threadId,
+          item,
+          taskResult.providerError,
+        );
+    planned.push({
+      item,
+      task,
+      required: item.required,
+      assignee: taskResult.ok ? taskResult.value.assignee : null,
+      metadata: {
+        workflow: "customer_onboarding",
+        opportunityId: input.normalized.opportunityId,
+        checklistItemKey: item.key,
+        providerError: taskResult.ok ? undefined : taskResult.providerError,
+        raw: taskResult.ok ? taskResult.value.raw : undefined,
+      },
+    });
+  }
+  return planned;
+}
+
+function evaluateChecklistApplicability(
+  item: CustomerOnboardingChecklistItem,
+  source: NormalizedCustomerOnboardingSource,
+) {
+  const template = objectRecord(item.externalTaskTemplate);
+  const applicability = stringValue(template.applicability) ?? "always";
+  const intakeField = stringValue(template.intakeField);
+  if (applicability === "when_true") {
+    const value = intakeField ? booleanIntakeValue(source, intakeField) : null;
+    const applicable = value === true;
+    return {
+      applicability,
+      intakeField,
+      applicable,
+      required: applicable && item.required,
+      reason: applicable
+        ? `${intakeField} is true`
+        : `${intakeField ?? "intake field"} is not true`,
+    };
+  }
+  if (applicability === "when_missing_required_intake") {
+    const applicable = source.missingFields.length > 0;
+    return {
+      applicability,
+      applicable,
+      required: applicable && item.required,
+      missingFields: source.missingFields,
+      reason: applicable
+        ? "required intake is missing"
+        : "required intake is complete",
+    };
+  }
+  return {
+    applicability: "always",
+    applicable: true,
+    required: item.required,
+    reason: "always required",
+  };
+}
+
+function booleanIntakeValue(
+  source: NormalizedCustomerOnboardingSource,
+  field: string,
+): boolean | null {
+  if (field === "creditTermsRequested") return source.creditTermsRequested;
+  if (field === "taxExempt") return source.taxExempt;
+  return null;
 }
 
 function resolveRoleAssignee(
@@ -513,6 +903,7 @@ function linkedTaskFromSnapshot(
 ): CustomerOnboardingLinkedTaskResult {
   return {
     checklistItemId: item.id,
+    provider: "lastmile",
     title: snapshot.title ?? item.title,
     externalTaskId: snapshot.externalTaskId,
     externalTaskUrl: snapshot.externalTaskUrl,
@@ -529,6 +920,7 @@ function linkedTaskFromProviderError(
 ): CustomerOnboardingLinkedTaskResult {
   return {
     checklistItemId: item.id,
+    provider: "lastmile",
     title: item.title,
     externalTaskId: `pending:${threadId}:${item.id}`,
     externalTaskUrl: null,
@@ -638,6 +1030,73 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
           }
         : null,
     };
+  }
+
+  async ensureNativeChecklist(input: {
+    tenantId: string;
+    spaceId: string;
+  }): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [template] = await tx
+        .insert(spaceChecklistTemplates)
+        .values({
+          tenant_id: input.tenantId,
+          space_id: input.spaceId,
+          key: CUSTOMER_ONBOARDING_CHECKLIST_KEY,
+          name: "Customer Onboarding v1",
+          description:
+            "Required native onboarding checklist items for ThinkWork-managed Customer Onboarding Threads.",
+          config: buildCustomerOnboardingChecklistConfig(),
+        })
+        .onConflictDoUpdate({
+          target: [
+            spaceChecklistTemplates.tenant_id,
+            spaceChecklistTemplates.space_id,
+            spaceChecklistTemplates.key,
+          ],
+          set: {
+            name: "Customer Onboarding v1",
+            description:
+              "Required native onboarding checklist items for ThinkWork-managed Customer Onboarding Threads.",
+            config: buildCustomerOnboardingChecklistConfig(),
+            updated_at: new Date(),
+          },
+        })
+        .returning({ id: spaceChecklistTemplates.id });
+
+      for (const item of CUSTOMER_ONBOARDING_CHECKLIST_ITEMS) {
+        await tx
+          .insert(spaceChecklistItems)
+          .values({
+            tenant_id: input.tenantId,
+            space_id: input.spaceId,
+            template_id: template.id,
+            key: item.key,
+            title: item.title,
+            description: item.description,
+            role_key: item.roleKey,
+            required: item.required,
+            sort_order: item.sortOrder,
+            external_task_template: item.checklistTemplate,
+          })
+          .onConflictDoUpdate({
+            target: [
+              spaceChecklistItems.tenant_id,
+              spaceChecklistItems.template_id,
+              spaceChecklistItems.key,
+            ],
+            set: {
+              title: item.title,
+              description: item.description,
+              role_key: item.roleKey,
+              required: item.required,
+              sort_order: item.sortOrder,
+              external_task_template: item.checklistTemplate,
+              updated_at: new Date(),
+            },
+          });
+      }
+    });
   }
 
   async findExistingThread(input: {
@@ -751,7 +1210,7 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
         space_id: input.spaceId,
         thread_id: input.threadId,
         checklist_item_id: input.checklistItem.id,
-        provider: "lastmile",
+        provider: input.task.provider,
         external_task_id: input.task.externalTaskId,
         external_task_url: input.task.externalTaskUrl,
         title: input.task.title,
@@ -773,7 +1232,7 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
       linked_task_id: row.id,
       space_id: input.spaceId,
       thread_id: input.threadId,
-      provider: "lastmile",
+      provider: input.task.provider,
       event_type: input.task.providerError ? "sync_failed" : "created",
       new_status: input.task.status,
       message: input.task.providerError
@@ -807,6 +1266,10 @@ function normalizePeople(value: unknown): CustomerOnboardingPerson[] {
     .filter((person): person is CustomerOnboardingPerson => Boolean(person));
 }
 
+function firstPerson(value: unknown): CustomerOnboardingPerson | null {
+  return normalizePeople(value)[0] ?? null;
+}
+
 function normalizePerson(value: unknown): CustomerOnboardingPerson | null {
   if (typeof value === "string") return { name: value };
   const record = objectRecord(value);
@@ -816,6 +1279,15 @@ function normalizePerson(value: unknown): CustomerOnboardingPerson | null {
     email: stringValue(record.email),
   };
   return person.id || person.name || person.email ? person : null;
+}
+
+function booleanValue(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (["true", "yes", "y", "1"].includes(normalized)) return true;
+  if (["false", "no", "n", "0"].includes(normalized)) return false;
+  return null;
 }
 
 function normalizeLinks(value: unknown): CustomerOnboardingLink[] {

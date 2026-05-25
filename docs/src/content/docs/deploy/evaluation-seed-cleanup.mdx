@@ -48,6 +48,7 @@ psql "$DATABASE_URL" \
 Legacy seed rows should be gone:
 
 ```sql
+-- The `sub-agents` category is a legacy seed label retained for cleanup.
 SELECT category, count(*)
 FROM eval_test_cases
 WHERE source = 'yaml-seed'
