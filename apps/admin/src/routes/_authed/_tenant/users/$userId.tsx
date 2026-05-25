@@ -140,6 +140,7 @@ function UserDetailPage() {
           <WorkspaceEditor
             target={{ userId: member.user.id }}
             mode="context"
+            defaultOpenFile="USER.md"
             className="h-full min-h-0"
           />
         </TabsContent>

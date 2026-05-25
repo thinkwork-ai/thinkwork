@@ -338,6 +338,49 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/navigationBlocker\.reset\(\)/);
   });
 
+  it("supports opt-in default file selection without choosing arbitrary files", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+    const agentWorkspaceSource = readFileSync(
+      new URL(
+        "../../tenant-agent/TenantAgentWorkspaceTab.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const spaceChromeSource = readFileSync(
+      new URL("../../spaces/SpaceDetailChrome.tsx", import.meta.url),
+      "utf8",
+    );
+    const userRouteSource = readFileSync(
+      new URL(
+        "../../../routes/_authed/_tenant/users/$userId.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const userKnowledgeSource = readFileSync(
+      new URL(
+        "../../../routes/_authed/_tenant/knowledge/user.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(editorSource).toMatch(/defaultOpenFile\?: string/);
+    expect(editorSource).toMatch(/openFileRef\.current = filePath/);
+    expect(editorSource).toMatch(/!files\.includes\(defaultOpenFile\)/);
+    expect(editorSource).toMatch(/openFileRef\.current !== null/);
+    expect(editorSource).toMatch(/requestOpenWorkspaceFile\(defaultOpenFile\)/);
+    expect(editorSource).not.toMatch(/files\[0\]/);
+    expect(agentWorkspaceSource).toContain('defaultOpenFile="AGENTS.md"');
+    expect(spaceChromeSource).toContain('defaultOpenFile="SPACE.md"');
+    expect(userRouteSource).toContain('defaultOpenFile="USER.md"');
+    expect(userKnowledgeSource).not.toContain("defaultOpenFile");
+  });
+
   it("uses inline tree editing for new files, new folders, and rename", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),
