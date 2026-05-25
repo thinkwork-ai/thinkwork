@@ -8,10 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import {
-  UpdateLinkedTaskMutation,
-  UpdateThreadMutation,
-} from "@/lib/graphql-queries";
+import { UpdateThreadMutation } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import {
   SpacesThreadDetailRoute,
@@ -77,7 +74,6 @@ const reexecuteLinkedTasksQuery = vi.fn();
 const reexecuteTasksQuery = vi.fn();
 const sendMessage = vi.fn();
 const updateThreadMock = vi.fn();
-const updateLinkedTaskMock = vi.fn();
 const resetStreamingChunks = vi.fn();
 
 let threadData: unknown;
@@ -95,7 +91,6 @@ beforeEach(() => {
   reexecuteTasksQuery.mockReset();
   sendMessage.mockReset();
   updateThreadMock.mockReset();
-  updateLinkedTaskMock.mockReset();
   resetStreamingChunks.mockReset();
   streamingChunks = [];
   threadData = {
@@ -138,18 +133,11 @@ beforeEach(() => {
 
   sendMessage.mockResolvedValue({});
   updateThreadMock.mockResolvedValue({});
-  updateLinkedTaskMock.mockResolvedValue({});
   vi.mocked(useMutation).mockImplementation((mutation) => {
     if (mutation === UpdateThreadMutation) {
       return [
         { fetching: false, stale: false, hasNext: false },
         updateThreadMock,
-      ];
-    }
-    if (mutation === UpdateLinkedTaskMutation) {
-      return [
-        { fetching: false, stale: false, hasNext: false },
-        updateLinkedTaskMock,
       ];
     }
     return [{ fetching: false, stale: false, hasNext: false }, sendMessage];
@@ -403,7 +391,7 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 
-  it("renders and updates native onboarding checklist rows", async () => {
+  it("renders native onboarding Progress in the Info Panel and task clicks prefill the composer", async () => {
     threadData = {
       thread: {
         id: "thread-1",
@@ -437,24 +425,19 @@ describe("SpacesThreadDetailRoute", () => {
     };
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+    fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
 
+    expect(screen.getByText("Progress")).toBeTruthy();
     expect(screen.getByText("Get contract signed")).toBeTruthy();
-    fireEvent.click(screen.getByRole("combobox", { name: "Checklist status" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Completed" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Update Get contract signed" }),
+    );
 
-    await waitFor(() => {
-      expect(updateLinkedTaskMock).toHaveBeenCalledWith({
-        input: {
-          tenantId: "tenant-1",
-          threadId: "thread-1",
-          linkedTaskId: "linked-1",
-          status: "COMPLETED",
-        },
-      });
-    });
-    expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
+    expect(screen.getByLabelText("Follow up")).toHaveProperty(
+      "value",
+      "Get contract signed: ",
+    );
   });
 
   it("completes an onboarding Thread after required checklist rows are complete", async () => {
@@ -484,10 +467,9 @@ describe("SpacesThreadDetailRoute", () => {
     };
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+    fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
     fireEvent.click(screen.getByRole("button", { name: "Complete Thread" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Complete Thread" }),
-    );
 
     await waitFor(() => {
       expect(updateThreadMock).toHaveBeenCalledWith({
@@ -497,6 +479,13 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 });
+
+function renderHeaderAction() {
+  const lastCall = vi.mocked(usePageHeaderActions).mock.calls.at(-1);
+  const action = lastCall?.[0]?.action;
+  if (!action) throw new Error("expected page header action");
+  render(<>{action}</>);
+}
 
 function queryState(data: unknown) {
   return { data, fetching: false, stale: false, hasNext: false };

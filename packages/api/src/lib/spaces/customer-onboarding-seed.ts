@@ -169,8 +169,11 @@ This Space coordinates customer onboarding from a ThinkWork-native checklist. A 
 
 - Keep the Thread as the case file for kickoff facts, missing answers, checklist status, blocker discussion, documents, and final summary.
 - Read \`docs/customer-onboarding-intake.md\` before creating or interpreting onboarding checklist work.
+- Treat the Info Panel \`Progress\` section as the canonical onboarding status. If a user asks "status", "progress", or "what is the status?", answer from the checklist rows and owners in Progress.
 - Treat DocuSign, Dun & Bradstreet, credit review, tax exemption forms, and P21 setup as manual checklist steps until external integrations are enabled.
 - When required intake is missing, ask the human in the Thread using the Human Question skill pattern from \`docs/customer-onboarding-intake.md\`; keep the missing-information checklist row open until the answer is captured.
+- When a human gives a task update in chat, map it back to the matching Progress item. "Done" means completed; "sent", "started", or "submitted" means in progress unless the reply says it is waiting on someone; "waiting on", "blocked", or "on hold" means blocked; "not applicable" means not applicable.
+- Every Progress item needs an owner signal. Prefer an assigned Space member; otherwise use the role owner: Sales, Finance, Accounting, or Operations.
 - Do not mark onboarding complete automatically. Required checklist items must be complete and a human must confirm completion.
 
 ## Folder Structure
@@ -194,6 +197,16 @@ Use the Human Question skill pattern when you need a human answer before the che
 - Ask grouped, answerable questions using the question-card schema in \`docs/customer-onboarding-intake.md\`.
 - Tie the request to the \`missing_onboarding_information\` checklist row.
 - After the human answers, summarize the captured facts in the Thread and update checklist rows that are now unblocked.
+
+## Status Responses
+
+When a user asks for status, respond with:
+
+- Overall Progress, for example: \`3/6 required onboarding tasks complete\`.
+- Blockers and who owns them.
+- Required tasks still waiting, grouped by owner/role.
+- Missing intake answers, if any.
+- Whether the Thread can be completed.
 `,
     },
     {
@@ -255,6 +268,26 @@ Use the Human Question skill pattern when you need a human answer before the che
 - Required when \`taxExempt = true\`: collect and validate tax exemption forms.
 - Required when required intake is missing: resolve missing onboarding information.
 - Optional/manual override: any item can be marked not applicable by a human with a note.
+
+## Progress Status Rules
+
+The Spaces Info Panel shows the canonical Progress list.
+
+- Todo: task exists but no work has started.
+- In progress: work has started or has been sent/submitted.
+- Blocked: work is waiting on another person, missing approval, missing forms, or another blocker.
+- Completed: the owner verified the task is done.
+- Not applicable: a human confirmed the task does not apply to this customer.
+
+Use Progress, not generic CRM or lead status, when someone asks "what is the status?" inside this Space.
+
+## Owners
+
+- DocuSign package and missing intake: Sales.
+- Dun & Bradstreet and credit check: Finance.
+- Tax exemption forms: Accounting.
+- P21 setup and final review: Operations.
+- If a Space member is assigned to the role, show that member as the owner; otherwise show the role as the owner.
 
 ## Human Question Skill Pattern
 

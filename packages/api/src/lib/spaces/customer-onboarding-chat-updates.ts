@@ -26,6 +26,7 @@ export interface CustomerOnboardingChatUpdateResult {
   handled: boolean;
   assistantMessageId: string | null;
   missingFields: string[];
+  statusRequest: boolean;
   statusChanges: Array<{
     checklistItemKey: string;
     title: string;
@@ -69,6 +70,16 @@ const TASK_KEY_ALIASES: Array<{
 const DONE_WORDS =
   /\b(?:done|complete|completed|checked|collected|received|signed|approved|entered|created|set up|setup)\b/i;
 
+const STATUS_REQUEST =
+  /\b(?:what(?:'s| is)?|show|give me|current|latest)?\s*(?:the\s+)?(?:onboarding\s+)?(?:status|progress|checklist)\b/i;
+
+const BLOCKED_WORDS =
+  /\b(?:blocked|blocker|stuck|waiting on|waiting for|hold|on hold|cannot|can't)\b/i;
+const IN_PROGRESS_WORDS =
+  /\b(?:sent|started|working|in progress|pending|waiting on|waiting for|submitted)\b/i;
+const NOT_APPLICABLE_WORDS =
+  /\b(?:not applicable|n\/a|na|not needed|skip|skipped|waived)\b/i;
+
 export async function applyCustomerOnboardingChatUpdate(
   input: ApplyCustomerOnboardingChatUpdateInput,
 ): Promise<CustomerOnboardingChatUpdateResult | null> {
@@ -76,7 +87,9 @@ export async function applyCustomerOnboardingChatUpdate(
   const extracted = extractCustomerOnboardingChatUpdate(input.content);
   if (
     Object.keys(extracted.facts).length === 0 &&
-    extracted.completedTaskKeys.length === 0
+    extracted.completedTaskKeys.length === 0 &&
+    extracted.taskStatusUpdates.length === 0 &&
+    !extracted.statusRequest
   ) {
     return null;
   }
@@ -132,6 +145,9 @@ export async function applyCustomerOnboardingChatUpdate(
 
     const statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"] =
       [];
+    const explicitStatusByKey = new Map(
+      extracted.taskStatusUpdates.map((update) => [update.key, update]),
+    );
     for (const task of taskRows) {
       const key = stringValue(objectRecord(task.metadata).checklistItemKey);
       if (!key) continue;
@@ -142,6 +158,7 @@ export async function applyCustomerOnboardingChatUpdate(
         currentStatus: previousStatus,
         normalized,
         completedTaskKeys: extracted.completedTaskKeys,
+        explicitStatus: explicitStatusByKey.get(key)?.status,
       });
       if (nextStatus === previousStatus) continue;
 
@@ -149,7 +166,9 @@ export async function applyCustomerOnboardingChatUpdate(
         ...objectRecord(task.metadata),
         nativeChecklist: compactObject({
           ...objectRecord(objectRecord(task.metadata).nativeChecklist),
-          lastStatusNote: "Updated from Customer Onboarding chat response.",
+          lastStatusNote:
+            explicitStatusByKey.get(key)?.note ??
+            "Updated from Customer Onboarding chat response.",
           lastStatusMetadata: {
             source: "customer_onboarding_chat_update",
             extractedFacts: extracted.facts,
@@ -196,11 +215,13 @@ export async function applyCustomerOnboardingChatUpdate(
       });
     }
 
-    const assistantContent = buildAssistantSummary({
-      normalized,
-      statusChanges,
-      completedTaskKeys: extracted.completedTaskKeys,
-    });
+    const assistantContent = extracted.statusRequest
+      ? buildProgressStatusSummary({ normalized, taskRows, statusChanges })
+      : buildAssistantSummary({
+          normalized,
+          statusChanges,
+          completedTaskKeys: extracted.completedTaskKeys,
+        });
     const [assistantMessage] = await tx
       .insert(messages)
       .values({
@@ -212,6 +233,7 @@ export async function applyCustomerOnboardingChatUpdate(
         metadata: {
           kind: "customer_onboarding_chat_update",
           workflow: "customer_onboarding",
+          statusRequest: extracted.statusRequest,
           missingFields: normalized.missingFields,
           statusChanges,
         },
@@ -223,6 +245,7 @@ export async function applyCustomerOnboardingChatUpdate(
       handled: true,
       assistantMessageId: assistantMessage?.id ?? null,
       missingFields: normalized.missingFields,
+      statusRequest: extracted.statusRequest,
       statusChanges,
     };
   });
@@ -231,6 +254,12 @@ export async function applyCustomerOnboardingChatUpdate(
 export function extractCustomerOnboardingChatUpdate(content: string): {
   facts: CustomerOnboardingSourceInput;
   completedTaskKeys: string[];
+  taskStatusUpdates: Array<{
+    key: string;
+    status: LinkedTaskStatus;
+    note: string;
+  }>;
+  statusRequest: boolean;
 } {
   const facts: CustomerOnboardingSourceInput = {};
   const segments = content
@@ -291,7 +320,10 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
   }
 
   if (!facts.opportunityUrl) {
-    facts.opportunityUrl = labeledUrl(whole, /opportunity (?:link|url)/i);
+    const opportunityUrl = labeledUrl(whole, /opportunity (?:link|url)/i);
+    if (opportunityUrl) {
+      facts.opportunityUrl = opportunityUrl;
+    }
   }
   if (!facts.contractLink) {
     const contractUrl = labeledUrl(whole, /(?:contract|docusign) link/i);
@@ -302,11 +334,23 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
   }
 
   const completedTaskKeys = new Set<string>();
+  const taskStatusUpdates = new Map<
+    string,
+    { key: string; status: LinkedTaskStatus; note: string }
+  >();
   for (const segment of segments) {
-    if (!DONE_WORDS.test(segment)) continue;
+    const explicitStatus = statusFromSegment(segment);
+    if (!explicitStatus) continue;
     for (const { key, patterns } of TASK_KEY_ALIASES) {
       if (patterns.some((pattern) => pattern.test(segment))) {
-        completedTaskKeys.add(key);
+        taskStatusUpdates.set(key, {
+          key,
+          status: explicitStatus,
+          note: segment,
+        });
+        if (explicitStatus === "completed") {
+          completedTaskKeys.add(key);
+        }
       }
     }
   }
@@ -318,6 +362,8 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
   return {
     facts: compactObject(facts) as CustomerOnboardingSourceInput,
     completedTaskKeys: [...completedTaskKeys],
+    taskStatusUpdates: [...taskStatusUpdates.values()],
+    statusRequest: isStatusRequest(whole),
   };
 }
 
@@ -414,7 +460,9 @@ function desiredStatusForTask(input: {
   currentStatus: LinkedTaskStatus;
   normalized: NormalizedCustomerOnboardingSource;
   completedTaskKeys: string[];
+  explicitStatus?: LinkedTaskStatus;
 }): LinkedTaskStatus {
+  if (input.explicitStatus) return input.explicitStatus;
   if (input.completedTaskKeys.includes(input.checklistItemKey)) {
     return "completed";
   }
@@ -432,6 +480,21 @@ function desiredStatusForTask(input: {
       : "not_applicable";
   }
   return input.currentStatus;
+}
+
+function statusFromSegment(segment: string): LinkedTaskStatus | null {
+  if (NOT_APPLICABLE_WORDS.test(segment)) return "not_applicable";
+  if (DONE_WORDS.test(segment)) return "completed";
+  if (BLOCKED_WORDS.test(segment)) return "blocked";
+  if (IN_PROGRESS_WORDS.test(segment)) return "in_progress";
+  return null;
+}
+
+function isStatusRequest(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  if (STATUS_REQUEST.test(trimmed)) return true;
+  return /^(?:status|progress|checklist)\??$/i.test(trimmed);
 }
 
 function activeStatus(currentStatus: LinkedTaskStatus): LinkedTaskStatus {
@@ -461,6 +524,77 @@ function buildAssistantSummary(input: {
   } else if (input.completedTaskKeys.length > 0) {
     lines.push("I did not find matching ThinkWork checklist rows to update.");
   }
+  return lines.join("\n");
+}
+
+function buildProgressStatusSummary(input: {
+  normalized: NormalizedCustomerOnboardingSource;
+  taskRows: Array<typeof linkedTasks.$inferSelect>;
+  statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"];
+}): string {
+  const statusChangesByKey = new Map(
+    input.statusChanges.map((change) => [
+      change.checklistItemKey,
+      change.nextStatus,
+    ]),
+  );
+  const tasks = input.taskRows.map((task) => ({
+    title: task.title,
+    status:
+      statusChangesByKey.get(
+        stringValue(objectRecord(task.metadata).checklistItemKey) ?? "",
+      ) ?? (task.status as LinkedTaskStatus),
+    required: task.required !== false,
+    blocked: task.blocked || task.status === "blocked",
+    owner:
+      stringValue(task.assignee_display) ??
+      formatStatusLabel(stringValue(task.role_key)) ??
+      "Unassigned",
+  }));
+  const requiredTasks = tasks.filter(
+    (task) => task.required && task.status !== "not_applicable",
+  );
+  const completed = requiredTasks.filter(
+    (task) => task.status === "completed",
+  ).length;
+  const total = requiredTasks.length;
+  const blockers = tasks.filter((task) => task.blocked);
+  const waiting = requiredTasks.filter((task) =>
+    ["todo", "in_progress", "blocked", "unknown"].includes(task.status),
+  );
+
+  const lines = [
+    `Progress: ${completed}/${total} required onboarding tasks complete.`,
+  ];
+
+  if (input.normalized.missingFields.length > 0) {
+    lines.push(`Missing intake: ${input.normalized.missingFields.join(", ")}.`);
+  }
+  if (input.statusChanges.length > 0) {
+    lines.push("Just updated:");
+    for (const change of input.statusChanges) {
+      lines.push(
+        `- ${change.title}: ${formatStatusLabel(change.previousStatus)} -> ${formatStatusLabel(change.nextStatus)}`,
+      );
+    }
+  }
+  if (blockers.length > 0) {
+    lines.push("Blockers:");
+    for (const task of blockers) {
+      lines.push(`- ${task.title} (${task.owner})`);
+    }
+  }
+  if (waiting.length > 0) {
+    lines.push("Still waiting on:");
+    for (const task of waiting) {
+      lines.push(
+        `- ${task.title}: ${formatStatusLabel(task.status)} (${task.owner})`,
+      );
+    }
+  } else if (total > 0) {
+    lines.push("All required onboarding tasks are complete.");
+  }
+
   return lines.join("\n");
 }
 
@@ -508,6 +642,17 @@ function labeledUrl(content: string, label: RegExp): string | null {
     new RegExp(`${label.source}[^\\n;]*?(https?:\\/\\/[^\\s;,)]+)`, "i"),
   );
   return match?.[1] ?? null;
+}
+
+function formatStatusLabel(value?: string | null): string | null {
+  const label = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+  return label || null;
 }
 
 function objectRecord(value: unknown): JsonRecord {

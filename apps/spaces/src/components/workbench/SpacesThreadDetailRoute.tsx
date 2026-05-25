@@ -3,10 +3,8 @@ import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
-import { OnboardingChecklistPanel } from "@/components/spaces/OnboardingChecklistPanel";
 import {
   parseSpaceRecord,
-  sourceContextFromThreadMetadata,
   type LinkedTaskSummary,
 } from "@/components/spaces/space-types";
 import {
@@ -33,7 +31,6 @@ import {
   ThreadMentionTargetsQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
-  UpdateLinkedTaskMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
@@ -184,9 +181,6 @@ export function SpacesThreadDetailRoute({
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
   const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
-  const [updatingLinkedTaskId, setUpdatingLinkedTaskId] = useState<
-    string | null
-  >(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
   );
@@ -262,7 +256,6 @@ export function SpacesThreadDetailRoute({
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const [{ fetching: completingThread }, updateThread] =
     useMutation(UpdateThreadMutation);
-  const [, updateLinkedTask] = useMutation(UpdateLinkedTaskMutation);
   const {
     chunks,
     streamState,
@@ -423,9 +416,6 @@ export function SpacesThreadDetailRoute({
   );
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
-  const onboardingSourceContext = sourceContextFromThreadMetadata(
-    data?.thread?.metadata,
-  );
   const isCustomerOnboardingThread =
     hasCustomerOnboardingMetadata(data?.thread?.metadata) ||
     linkedTasks.length > 0;
@@ -533,7 +523,7 @@ export function SpacesThreadDetailRoute({
         downloadThreadAttachment(threadId, attachmentId),
       checklist: showOnboardingChecklist
         ? {
-            title: "Onboarding checklist",
+            title: "Progress",
             tasks: linkedTasks,
             isLoading: linkedTasksFetching && linkedTasks.length === 0,
             error: linkedTasksError?.message ?? null,
@@ -541,6 +531,8 @@ export function SpacesThreadDetailRoute({
               normalizeThreadStatus(data?.thread?.status) === "done"
                 ? data?.thread?.updatedAt
                 : null,
+            isCompleting: completingThread,
+            onCompleteThread: handleCompleteThread,
           }
         : null,
     }),
@@ -552,6 +544,7 @@ export function SpacesThreadDetailRoute({
       showOnboardingChecklist,
       threadId,
       threadInfoOpen,
+      completingThread,
     ],
   );
 
@@ -592,7 +585,7 @@ export function SpacesThreadDetailRoute({
         >
           <Info className="size-4" />
         </Button>
-        {artifactPanelOpen && threadArtifacts.length > 0 ? (
+        {artifactPanelOpen && effectiveSelectedArtifactId ? (
           <Button
             type="button"
             variant="ghost"
@@ -621,7 +614,7 @@ export function SpacesThreadDetailRoute({
             )}
           </Button>
         ) : null}
-        {threadArtifacts.length > 0 ? (
+        {effectiveSelectedArtifactId ? (
           <Button
             type="button"
             variant="ghost"
@@ -673,25 +666,6 @@ export function SpacesThreadDetailRoute({
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
   ]);
-
-  async function handleUpdateLinkedTask(taskId: string, status: string) {
-    if (!tenantId) return;
-    setUpdatingLinkedTaskId(taskId);
-    const result = await updateLinkedTask({
-      input: {
-        tenantId,
-        threadId,
-        linkedTaskId: taskId,
-        status,
-      },
-    });
-    setUpdatingLinkedTaskId(null);
-    if (result.error) {
-      toast.error(result.error.message);
-      return;
-    }
-    reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
-  }
 
   async function handleCompleteThread() {
     const result = await updateThread({
@@ -784,35 +758,13 @@ export function SpacesThreadDetailRoute({
         reexecuteTasksQuery({ requestPolicy: "network-only" });
         reexecuteEventsQuery({ requestPolicy: "network-only" });
         reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+        reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       }}
       runbookQueues={runbookQueues}
     />
   );
 
-  if (!showOnboardingChecklist) return threadView;
-
-  return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-background lg:flex-row">
-      <div className="min-h-0 min-w-0 flex-1">{threadView}</div>
-      <div className="h-[42vh] shrink-0 border-t lg:h-full lg:w-[360px] lg:border-l lg:border-t-0">
-        <OnboardingChecklistPanel
-          tasks={linkedTasks}
-          sourceContext={onboardingSourceContext}
-          isLoading={linkedTasksFetching && linkedTasks.length === 0}
-          error={linkedTasksError?.message ?? null}
-          completedAt={
-            normalizeThreadStatus(data?.thread?.status) === "done"
-              ? data?.thread?.updatedAt
-              : null
-          }
-          isCompleting={completingThread}
-          updatingTaskId={updatingLinkedTaskId}
-          onUpdateTask={handleUpdateLinkedTask}
-          onCompleteThread={handleCompleteThread}
-        />
-      </div>
-    </div>
-  );
+  return threadView;
 }
 
 export function deriveThreadArtifacts(
@@ -1127,9 +1079,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

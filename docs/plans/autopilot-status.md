@@ -1641,6 +1641,40 @@ Target branch: `main`
 
 None.
 
+# Customer Onboarding Progress Workflow Refresh - 2026-05-25
+
+## Status
+
+- Branch: `codex/customer-onboarding-progress-refresh`
+- Plan: `docs/plans/2026-05-25-005-fix-customer-onboarding-progress-workflow-plan.md`
+- Started: `2026-05-25T18:35:00Z`
+- Active unit: PR/CI/deploy/E2E
+
+## Implemented
+
+- Updated Customer Onboarding Space source files so `status` means Info Panel `Progress`, with owner/blocker rules and human-question guidance.
+- Extended the same-thread Customer Onboarding chat hook to answer status from native checklist progress and map task-prefixed replies to `completed`, `in_progress`, `blocked`, or `not_applicable`.
+- Removed the duplicate Customer Onboarding side panel from the Spaces thread route; Progress now lives in the Info Panel.
+- Kept `ArtifactSidePanel` available only when an actual selected artifact is open, preventing empty-panel refresh flashes.
+- Added task-click composer prefill, e.g. `Send and receive DocuSign package: `.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-seed.test.ts src/lib/spaces/customer-onboarding-source-files.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces test -- src/components/workbench/TaskThreadView.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx` - passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `git diff --check` - passed.
+- `pnpm dlx prettier@3.5.3 --check ...` - passed.
+
+## PR / Deploy
+
+- Pending.
+
+## Blockers
+
+None.
+
 # Pi Skill Catalog U16a - Retire Table Consumers - 2026-05-24
 
 ## Status

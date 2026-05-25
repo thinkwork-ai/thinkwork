@@ -116,8 +116,20 @@ describe("customer onboarding seed defaults", () => {
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
       "Skills & Human Input",
     );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
+      "Info Panel `Progress` section",
+    );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
+      "what is the status",
+    );
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
       "Human Question Skill Pattern",
+    );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
+      "Progress Status Rules",
+    );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
+      "Owners",
     );
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
       '"_type": "question_card"',

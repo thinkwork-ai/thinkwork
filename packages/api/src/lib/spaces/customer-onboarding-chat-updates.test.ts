@@ -53,6 +53,7 @@ describe("extractCustomerOnboardingChatUpdate", () => {
       "dun_and_bradstreet_check",
       "tax_exemption_forms",
     ]);
+    expect(result.statusRequest).toBe(false);
   });
 
   it("keeps negative credit terms negative", () => {
@@ -64,6 +65,50 @@ describe("extractCustomerOnboardingChatUpdate", () => {
       creditTermsRequested: false,
       taxExempt: false,
     });
+  });
+
+  it("recognizes status requests as Customer Onboarding progress requests", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      "what is the onboarding status?",
+    );
+
+    expect(result.statusRequest).toBe(true);
+    expect(result.facts).toEqual({});
+    expect(result.taskStatusUpdates).toEqual([]);
+  });
+
+  it("maps task-prefixed chat replies to native checklist statuses", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      [
+        "Send and receive DocuSign package: sent but waiting on customer",
+        "Run credit check: blocked by finance approval",
+        "Enter customer information into P21: done",
+        "Collect tax exemption forms: not applicable",
+      ].join("; "),
+    );
+
+    expect(result.taskStatusUpdates).toEqual([
+      {
+        key: "docusign_package",
+        status: "blocked",
+        note: "Send and receive DocuSign package: sent but waiting on customer",
+      },
+      {
+        key: "credit_check",
+        status: "blocked",
+        note: "Run credit check: blocked by finance approval",
+      },
+      {
+        key: "p21_customer_setup",
+        status: "completed",
+        note: "Enter customer information into P21: done",
+      },
+      {
+        key: "tax_exemption_forms",
+        status: "not_applicable",
+        note: "Collect tax exemption forms: not applicable",
+      },
+    ]);
   });
 });
 
