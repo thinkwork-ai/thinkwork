@@ -76,6 +76,14 @@ type LinkedTaskEvent {
   createdAt: AWSDateTime!
 }
 
+type ThreadProgressMarkdown {
+  tenantId: ID!
+  tenantSlug: String!
+  threadId: ID!
+  key: String!
+  content: String!
+}
+
 input UpdateLinkedTaskInput {
   tenantId: ID!
   threadId: ID!
@@ -87,6 +95,7 @@ input UpdateLinkedTaskInput {
 
 extend type Query {
   threadLinkedTasks(tenantId: ID!, threadId: ID!): [LinkedTask!]!
+  threadProgressMarkdown(tenantId: ID!, threadId: ID!): ThreadProgressMarkdown
 }
 
 extend type Mutation {

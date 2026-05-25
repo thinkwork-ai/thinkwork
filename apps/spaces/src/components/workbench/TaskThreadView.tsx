@@ -198,6 +198,7 @@ export interface ThreadInfoChecklistTask {
   roleKey?: string | null;
   assigneeDisplay?: string | null;
   blocked?: boolean | null;
+  notes?: string | null;
   updatedAt?: string | null;
 }
 
@@ -634,7 +635,7 @@ function ThreadInfoChecklist({
       ) : checklist.tasks.length === 0 ? (
         <p className="mt-3 text-sm text-white/55">No linked tasks</p>
       ) : (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-1">
           {checklist.tasks.map((task) => (
             <ThreadInfoChecklistRow
               key={task.id}
@@ -674,7 +675,7 @@ function ThreadInfoChecklistRow({
   return (
     <button
       type="button"
-      className="block w-full rounded-lg border border-white/10 bg-white/[0.03] p-2.5 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+      className="block w-full rounded-md px-0.5 py-1.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       onClick={() => onTaskPrompt(task)}
       aria-label={`Update ${task.title}`}
     >
@@ -690,21 +691,24 @@ function ThreadInfoChecklistRow({
           )}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <p className="min-w-0 flex-1 truncate text-xs font-medium text-white/80">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-white/80">
               {task.title}
             </p>
-            <span className="shrink-0 rounded-full bg-white/8 px-1.5 py-0.5 text-[11px] text-white/65">
-              {formatInfoStatus(task.status)}
-            </span>
           </div>
-          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-white/40">
-            {task.required === false ? null : <span>Required</span>}
+          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] leading-snug text-white/40">
+            <span>{formatInfoStatus(task.status)}</span>
+            {task.required === false ? <span>Optional</span> : null}
             {task.assigneeDisplay ? <span>{task.assigneeDisplay}</span> : null}
-            {task.roleKey ? (
+            {!task.assigneeDisplay && task.roleKey ? (
               <span>{formatInfoStatus(task.roleKey)}</span>
             ) : null}
           </div>
+          {task.notes ? (
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/35">
+              {task.notes}
+            </p>
+          ) : null}
         </div>
       </div>
     </button>

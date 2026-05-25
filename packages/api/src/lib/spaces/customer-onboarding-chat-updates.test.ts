@@ -110,6 +110,26 @@ describe("extractCustomerOnboardingChatUpdate", () => {
       },
     ]);
   });
+
+  it("treats natural credit approval replies as credit-check completion evidence", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      "Credit check and limit set at $10k",
+    );
+
+    expect(result.facts).toMatchObject({
+      creditTermsRequested: true,
+      requestedTerms: "Credit limit $10k",
+      creditApprovalNotes: "Credit check and limit set at $10k",
+    });
+    expect(result.taskStatusUpdates).toEqual([
+      {
+        key: "credit_check",
+        status: "completed",
+        note: "Credit check and limit set at $10k",
+      },
+    ]);
+    expect(result.completedTaskKeys).toEqual(["credit_check"]);
+  });
 });
 
 describe("sendMessage customer onboarding hook", () => {
