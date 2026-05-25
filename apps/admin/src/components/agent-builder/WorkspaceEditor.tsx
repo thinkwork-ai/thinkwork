@@ -110,6 +110,7 @@ export interface WorkspaceEditorProps {
   agentSlug?: string;
   templateSlug?: string;
   initialFolder?: string;
+  defaultOpenFile?: string;
   className?: string;
 }
 
@@ -188,6 +189,7 @@ export function WorkspaceEditor({
   target,
   mode,
   initialFolder,
+  defaultOpenFile,
   className,
 }: WorkspaceEditorProps) {
   const key = workspaceEditorTargetKey(target);
@@ -393,6 +395,7 @@ export function WorkspaceEditor({
       const requestId = loadRequestId.current + 1;
       loadRequestId.current = requestId;
       const previousOpenFile = openFileRef.current;
+      openFileRef.current = filePath;
       setOpenFile(filePath);
       setFocusedTreePath(filePath);
       setLoadingContent(true);
@@ -449,6 +452,18 @@ export function WorkspaceEditor({
       requestOpenWorkspaceFile(contextPath);
     }
   }, [initialFolder, files, requestOpenWorkspaceFile]);
+
+  useEffect(() => {
+    if (
+      !defaultOpenFile ||
+      files.length === 0 ||
+      openFileRef.current !== null ||
+      !files.includes(defaultOpenFile)
+    ) {
+      return;
+    }
+    requestOpenWorkspaceFile(defaultOpenFile);
+  }, [defaultOpenFile, files, requestOpenWorkspaceFile]);
 
   const toggleFolder = (path: string) => {
     setFocusedTreePath(path);

@@ -6,6 +6,7 @@ export function TenantAgentWorkspaceTab({ agentId }: { agentId: string }) {
       target={{ agentId }}
       mode="agent"
       agentId={agentId}
+      defaultOpenFile="AGENTS.md"
       className="min-h-[620px]"
     />
   );
