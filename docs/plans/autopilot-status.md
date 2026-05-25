@@ -51,13 +51,26 @@ Target branch: `main`
 
 ## Follow-Up Run: Customer Onboarding Info Panel Checklist
 
-- Status: active
-- Active branch: `codex/onboarding-info-panel`
-- Active worktree: `.Codex/worktrees/onboarding-info-panel`
+- Status: merged
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: the Customer Onboarding checklist panel was wired as a separate side panel, while the Spaces thread Info Panel remained empty below thread metadata. The demo requires task status to be visible from the Info Panel.
 - Scope: mirror linked checklist progress and task status rows inside the existing thread Info Panel, fed by the same `threadLinkedTasks` data that updates after chat/subscription refreshes.
 - Verification: focused Spaces thread/detail tests passed; Spaces production build passed; touched-file Prettier check passed; `git diff --check` passed.
+- PR: [#1708](https://github.com/thinkwork-ai/thinkwork/pull/1708)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26411044960` completed successfully; Build & Deploy Spaces and Build & Deploy Admin both passed.
+
+## Follow-Up Run: Spaces Space Query Compatibility
+
+- Status: active
+- Active branch: `codex/spaces-space-query-fix`
+- Active worktree: `.Codex/worktrees/spaces-space-query-fix`
+- Started: 2026-05-25
+- Root cause: live E2E to `https://app.thinkwork.ai/spaces/0b640386-05d7-4dbb-9585-e4c0b8c03f5f` failed before the workflow could start because `SpaceQuery` still requested retired `Space.agentAssignments`.
+- Scope: remove the stale `agentAssignments` selection from the Spaces app Space query so the Customer Onboarding space route can load against the deployed schema.
+- Verification: focused Spaces GraphQL query test passed; Spaces production build passed; touched-file Prettier check passed; `git diff --check` passed.
 
 ### Active Unit Notes
 

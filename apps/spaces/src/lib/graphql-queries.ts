@@ -181,18 +181,6 @@ export const SpaceQuery = gql`
         status
         writebackPolicy
       }
-      agentAssignments {
-        id
-        agentId
-        localRole
-        autoSubscribe
-        status
-        agent {
-          id
-          name
-          slug
-        }
-      }
     }
   }
 `;
