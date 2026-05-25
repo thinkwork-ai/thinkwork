@@ -37,6 +37,16 @@ Target branch: `main`
 - Deploy note: main deploy `26408828637` passed, but the `Bootstrap` job skipped because the workflow only treated `packages/workspace-defaults/files/**` as workspace-default changes. Follow-up branch `codex/customer-onboarding-bootstrap-trigger` adds the Customer Onboarding seed/backfill files to that trigger so the next deploy runs the source-file backfill.
 - Remaining live validation: after the follow-up merge/deploy, open the Customer Onboarding Workspace tab and confirm `CONTEXT.md` plus `docs/customer-onboarding-intake.md` render; then run the Native Demo Smoke below.
 
+## Follow-Up Run: Workspace Tree Magic Folder Removal
+
+- Status: active
+- Active branch: `codex/remove-magic-memory-folder`
+- Active worktree: `.Codex/worktrees/remove-magic-memory-folder`
+- Started: 2026-05-25
+- Root cause: Admin `WorkspaceEditor` injected `memory/` for context-mode workspaces and the shared tree builder injected `skills/` by default. The live Customer Onboarding S3 source folder only contains `CONTEXT.md` and `docs/customer-onboarding-intake.md`; the extra row was UI-only.
+- Scope: make workspace trees file-backed only. Root folders render only when returned by the workspace source listing.
+- Verification: focused admin tree/editor tests passed; admin production build passed; touched-file Prettier check passed; `git diff --check` passed.
+
 ### Active Unit Notes
 
 - Created isolated U1 worktree from `origin/main` at `96b9766495dbc55ee2728ee3ff439a1a87e67810`.

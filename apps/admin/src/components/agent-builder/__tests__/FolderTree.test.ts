@@ -15,12 +15,8 @@ describe("buildWorkspaceTree", () => {
       "expenses/escalation/GUARDRAILS.md",
     ]);
 
-    // skills/ renders even when empty, so operators have a stable surface
-    // to add skills. memory/ is not synthesized because it must be
-    // deletable once its backing files are gone.
     expect(tree.map((node) => [node.name, node.path, node.isFolder])).toEqual([
       ["expenses", "expenses", true],
-      ["skills", "skills", true],
       ["AGENTS.md", "AGENTS.md", false],
     ]);
     const expensesNode = tree.find((node) => node.path === "expenses");
@@ -43,7 +39,6 @@ describe("buildWorkspaceTree", () => {
 
     expect(tree.map((node) => node.path)).toEqual([
       "attachments",
-      "skills",
       "workspaces",
       "AGENTS.md",
     ]);
@@ -78,12 +73,11 @@ describe("buildWorkspaceTree", () => {
     expect(tree.map((node) => node.path)).toEqual([
       "expenses",
       "recruiting",
-      "skills",
       "AGENTS.md",
     ]);
   });
 
-  it("renders reserved root folders as normal tree folders", () => {
+  it("renders real root folders as normal tree folders", () => {
     const tree = buildWorkspaceTree([
       "memory/lessons.md",
       "skills/foo/SKILL.md",
