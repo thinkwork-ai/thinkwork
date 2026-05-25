@@ -61,6 +61,7 @@ export type ThreadsTableItem = {
   readonly lastTurnCompletedAt?: unknown;
   readonly lastRuntimeType?: string | null;
   readonly lastModel?: string | null;
+  readonly lastModelDisplayName?: string | null;
   readonly lastReadAt?: unknown;
   readonly archivedAt?: unknown;
   readonly createdAt: unknown;
@@ -208,6 +209,9 @@ export function ThreadsTable({
         size: 190,
         cell: ({ row }) => {
           const model = row.original.lastModel;
+          const modelDisplayName =
+            row.original.lastModelDisplayName ??
+            (model ? formatModelId(model) : null);
           return (
             <div className="flex h-10 items-center justify-center px-2">
               {model ? (
@@ -216,7 +220,7 @@ export function ThreadsTable({
                   className="max-w-full truncate text-xs font-normal"
                   title={`Model: ${model}`}
                 >
-                  {formatModelId(model)}
+                  {modelDisplayName}
                 </Badge>
               ) : (
                 <span className="text-xs text-muted-foreground">—</span>

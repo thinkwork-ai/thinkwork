@@ -72,6 +72,9 @@ describe("Spaces admin routes", () => {
     expect(listRouteSource).toContain("CreateSpaceMutation");
     expect(listRouteSource).toContain("New Space");
     expect(listRouteSource).toContain("<DataTable");
+    expect(listRouteSource).toContain(
+      ".sort((a, b) => a.name.localeCompare(b.name))",
+    );
     expect(listRouteSource).toContain('header: "Space"');
     expect(listRouteSource).toContain('header: "Access"');
     expect(listRouteSource).toContain('header: "Status"');
