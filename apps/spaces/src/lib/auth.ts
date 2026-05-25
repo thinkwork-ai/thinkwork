@@ -17,6 +17,7 @@ const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN || "";
 
 let _userPool: CognitoUserPool | null = null;
 let tokenStorage: TokenStorage = new LocalStorageTokenStorage();
+const TOKEN_REFRESH_SKEW_MS = 30_000;
 
 export function configureTokenStorage(storage: TokenStorage): void {
   if (tokenStorage === storage) return;
@@ -236,21 +237,88 @@ export function getCurrentSession(): Promise<CognitoUserSession | null> {
 // Token helpers — fall back to raw localStorage for OAuth sessions
 // ---------------------------------------------------------------------------
 
-function getStoredIdToken(): string | null {
+function getStoredTokenName(): string | null {
   const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
-  const lastUser = tokenStorage.getItem(`${prefix}.LastAuthUser`);
+  return tokenStorage.getItem(`${prefix}.LastAuthUser`);
+}
+
+function getStoredToken(kind: "idToken" | "accessToken" | "refreshToken") {
+  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const lastUser = getStoredTokenName();
   if (!lastUser) return null;
-  return tokenStorage.getItem(`${prefix}.${lastUser}.idToken`);
+  return tokenStorage.getItem(`${prefix}.${lastUser}.${kind}`);
+}
+
+function getStoredIdToken(): string | null {
+  return getStoredToken("idToken");
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const [, payload] = token.split(".");
+  if (!payload) return null;
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isExpiredJwt(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  const exp = payload?.exp;
+  return (
+    typeof exp === "number" && exp * 1000 <= Date.now() + TOKEN_REFRESH_SKEW_MS
+  );
+}
+
+async function refreshStoredOAuthSession(): Promise<{
+  idToken: string;
+  accessToken: string;
+} | null> {
+  const username = getStoredTokenName();
+  const refreshToken = getStoredToken("refreshToken");
+  if (!username || !refreshToken || !CLIENT_ID || !COGNITO_DOMAIN) return null;
+
+  const response = await fetch(`${getCognitoDomainBase()}/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: CLIENT_ID,
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!response.ok) return null;
+
+  const raw = (await response.json()) as Record<string, unknown>;
+  if (
+    typeof raw.id_token !== "string" ||
+    typeof raw.access_token !== "string"
+  ) {
+    return null;
+  }
+
+  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  tokenStorage.setItem(`${prefix}.${username}.idToken`, raw.id_token);
+  tokenStorage.setItem(`${prefix}.${username}.accessToken`, raw.access_token);
+  tokenStorage.setItem(`${prefix}.${username}.clockDrift`, "0");
+  if (typeof raw.refresh_token === "string") {
+    tokenStorage.setItem(`${prefix}.${username}.refreshToken`, raw.refresh_token);
+  }
+
+  return { idToken: raw.id_token, accessToken: raw.access_token };
 }
 
 export async function getAccessToken(): Promise<string | null> {
   const session = await getCurrentSession();
   if (session) return session.getAccessToken().getJwtToken();
   // Fallback for OAuth sessions
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
-  const lastUser = tokenStorage.getItem(`${prefix}.LastAuthUser`);
-  if (!lastUser) return null;
-  return tokenStorage.getItem(`${prefix}.${lastUser}.accessToken`);
+  const stored = getStoredToken("accessToken");
+  if (stored && !isExpiredJwt(stored)) return stored;
+  return (await refreshStoredOAuthSession())?.accessToken ?? null;
 }
 
 export async function getIdToken(): Promise<string | null> {
@@ -258,7 +326,9 @@ export async function getIdToken(): Promise<string | null> {
   if (session) return session.getIdToken().getJwtToken();
   // Fallback for OAuth sessions where amazon-cognito-identity-js can't
   // reconstruct the session (no SRP verifier for federated users)
-  return getStoredIdToken();
+  const stored = getStoredIdToken();
+  if (stored && !isExpiredJwt(stored)) return stored;
+  return (await refreshStoredOAuthSession())?.idToken ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -281,18 +351,16 @@ export function getCurrentUser(): AuthUser | null {
   // Fallback: parse id token directly from token storage (OAuth sessions)
   if (!authUser) {
     const rawToken = getStoredIdToken();
-    if (rawToken) {
-      try {
-        const payload = JSON.parse(atob(rawToken.split(".")[1]));
+    if (rawToken && !isExpiredJwt(rawToken)) {
+      const payload = decodeJwtPayload(rawToken);
+      if (payload) {
         authUser = {
-          email: payload["email"] ?? "",
-          name: payload["name"] ?? undefined,
-          sub: payload["sub"] ?? "",
-          tenantId: payload["custom:tenant_id"] ?? undefined,
-          groups: payload["cognito:groups"] ?? [],
+          email: (payload["email"] as string) ?? "",
+          name: (payload["name"] as string) ?? undefined,
+          sub: (payload["sub"] as string) ?? "",
+          tenantId: (payload["custom:tenant_id"] as string) ?? undefined,
+          groups: (payload["cognito:groups"] as string[]) ?? [],
         };
-      } catch {
-        // Corrupted token — ignore
       }
     }
   }
