@@ -107,6 +107,11 @@ import {
   uninstallCatalogSkill,
 } from "./src/lib/catalog-uninstall.js";
 import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
+import {
+  identityFieldLabel,
+  isAgentIdentityField,
+  replaceAgentsMdIdentityField,
+} from "./src/lib/agents-md-persona-surgery.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -2451,32 +2456,16 @@ async function finalizeRenameSideEffects(
   return await refreshAgentAgentsMdSections(target, "rename");
 }
 
-// Line-surgery anchors for IDENTITY.md personality fields. Only these 4
+// Line-surgery anchors for AGENTS.md identity personality fields. Only these 4
 // lines are editable via `update-identity-field`; the Name line is
 // reserved for `update_agent_name` (which goes through the updateAgent
 // mutation + writeIdentityMdForAgent). Never exposing Name here is a
 // narrow-scope guarantee — the tool's Literal type is backed by this
 // server-side whitelist.
-const IDENTITY_FIELD_ANCHORS: Record<
-  "creature" | "vibe" | "emoji" | "avatar",
-  RegExp
-> = {
-  creature: /^- \*\*Creature:\*\*.*$/m,
-  vibe: /^- \*\*Vibe:\*\*.*$/m,
-  emoji: /^- \*\*Emoji:\*\*.*$/m,
-  avatar: /^- \*\*Avatar:\*\*.*$/m,
-};
-
-function identityFieldLabel(
-  field: keyof typeof IDENTITY_FIELD_ANCHORS,
-): string {
-  return field.charAt(0).toUpperCase() + field.slice(1);
-}
-
 async function handleUpdateIdentityField(
   deps: HandlerDeps,
   field: string,
-  value: string,
+  value: unknown,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
   if (target.kind !== "agent") {
@@ -2488,7 +2477,7 @@ async function handleUpdateIdentityField(
   // Service-auth (apikey) callers must present x-agent-id matching the
   // target agent. Mirrors the updateAgent mutation's authz guard —
   // without this, any apikey holder in the tenant can edit another
-  // agent's IDENTITY.md personality fields.
+  // agent's AGENTS.md identity personality fields.
   if (deps.auth.authType === "apikey") {
     if (!deps.auth.agentId || deps.auth.agentId !== target.agentId) {
       return json(403, {
@@ -2498,7 +2487,7 @@ async function handleUpdateIdentityField(
       });
     }
   }
-  if (!Object.prototype.hasOwnProperty.call(IDENTITY_FIELD_ANCHORS, field)) {
+  if (!isAgentIdentityField(field)) {
     return json(400, {
       ok: false,
       error: `Unknown identity field '${field}'. Allowed: creature, vibe, emoji, avatar.`,
@@ -2507,23 +2496,13 @@ async function handleUpdateIdentityField(
   if (typeof value !== "string") {
     return json(400, { ok: false, error: "value must be a string" });
   }
-  // Defensive sanitization — mirror writeIdentityMdForAgent's name-line
-  // treatment. Newlines collapsed to spaces so a value can't inject
-  // extra markdown bullets; the regex replacer function form prevents
-  // `$&`, `$'`, `` $` ``, `$1` from expanding as backreferences.
-  // Includes U+2028 LINE SEPARATOR + U+2029 PARAGRAPH SEPARATOR — these
-  // are treated as line breaks by some Markdown renderers and can
-  // otherwise inject a forged bullet past the \r\n guard.
-  const safeValue = value.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
-  const typedField = field as keyof typeof IDENTITY_FIELD_ANCHORS;
-  const anchor = IDENTITY_FIELD_ANCHORS[typedField];
-  const label = identityFieldLabel(typedField);
+  const label = identityFieldLabel(field);
 
-  const identityKey = target.key("IDENTITY.md");
+  const agentsMdKey = target.key("AGENTS.md");
   let existing: string | null = null;
   try {
     const resp = await s3.send(
-      new GetObjectCommand({ Bucket: bucket(), Key: identityKey }),
+      new GetObjectCommand({ Bucket: bucket(), Key: agentsMdKey }),
     );
     existing = (await resp.Body?.transformToString("utf-8")) ?? "";
   } catch (err) {
@@ -2538,22 +2517,25 @@ async function handleUpdateIdentityField(
     if (!isNotFound) throw err;
   }
 
-  if (!existing || !anchor.test(existing)) {
+  if (!existing) {
     return json(422, {
       ok: false,
-      error: `IDENTITY.md is missing the ${label} line anchor; have your human rerun the template migration.`,
+      error: `AGENTS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
     });
   }
 
-  const rendered = existing.replace(
-    anchor,
-    () => `- **${label}:** ${safeValue}`,
-  );
+  const rendered = replaceAgentsMdIdentityField(existing, field, value);
+  if (rendered === null) {
+    return json(422, {
+      ok: false,
+      error: `AGENTS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
+    });
+  }
 
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket(),
-      Key: identityKey,
+      Key: agentsMdKey,
       Body: rendered,
       ContentType: "text/plain; charset=utf-8",
     }),
@@ -2969,7 +2951,7 @@ export async function handler(
         return await handleUpdateIdentityField(
           deps,
           String(body.field),
-          String(body.value),
+          body.value,
         );
       }
       default:

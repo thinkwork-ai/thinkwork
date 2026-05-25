@@ -59,7 +59,7 @@ describe("Computer runtime workspace", () => {
 
   it("builds a system prompt from durable workspace files", async () => {
     const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
-    await writeFile(join(root, "IDENTITY.md"), "# Identity\nName: Marco\n", {
+    await writeFile(join(root, "AGENTS.md"), "# Agents\nName: Marco\n", {
       encoding: "utf8",
     });
     await writeFile(join(root, "USER.md"), "# User\nName: Eric\n", {
@@ -68,7 +68,7 @@ describe("Computer runtime workspace", () => {
 
     const prompt = await readWorkspaceSystemPrompt(root);
 
-    expect(prompt).toContain("# IDENTITY.md");
+    expect(prompt).toContain("# AGENTS.md");
     expect(prompt).toContain("Name: Marco");
     expect(prompt).toContain("# USER.md");
     expect(prompt).toContain("Name: Eric");

@@ -141,7 +141,7 @@ describe("readWorkspaceFiles (agent-prefix direct)", () => {
     pushDbRows([agentRow()]); // readWorkspaceFiles agent lookup
     pushDbRows([tenantRow()]); // resolveTenantSlug
 
-    const PRESENT = ["AGENTS.md", "IDENTITY.md", "memory/lessons.md"];
+    const PRESENT = ["AGENTS.md", "CONTEXT.md", "memory/lessons.md"];
     s3Mock
       .on(ListObjectsV2Command, {
         Prefix: "tenants/acme/agents/marco/workspace/",

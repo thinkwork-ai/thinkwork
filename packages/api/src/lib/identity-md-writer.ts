@@ -1,24 +1,22 @@
 /**
- * IDENTITY.md write-at-rename (name-line surgery).
+ * AGENTS.md identity write-at-rename (name-line surgery).
  *
  * Called from `updateAgent` when `name` changes. Reads the agent's
- * current IDENTITY.md override (if any) and rewrites ONLY the Name line —
+ * current AGENTS.md override (if any) and rewrites ONLY the Name line —
  * the rest of the file (Creature, Vibe, Emoji, Avatar, any agent-owned
  * backstory below) survives intact.
  *
  * If no override exists yet, the writer seeds the agent prefix with the
- * template IDENTITY.md and `{{AGENT_NAME}}` substituted to the current
+ * template AGENTS.md and `{{AGENT_NAME}}` substituted to the current
  * agent name.
  *
  * Two anchor shapes are recognized:
  *   - New bullet: `- **Name:** <value>`
  *   - Legacy prose: `Your name is **<value>**.`
  *
- * If neither anchor matches (agent has fully rewritten the file into
- * free prose), the writer logs a warning and performs a full rewrite
- * using the template — personality prose the agent authored is lost in
- * that narrow case, but that's the only correct thing to do if the Name
- * anchor is gone.
+ * If neither anchor matches, the writer inserts a Name line into an existing
+ * Identity section or appends a minimal Identity section so custom prose
+ * outside the anchor survives.
  *
  * Transactional contract: the caller wraps the DB update + this writer
  * in `db.transaction`. If the S3 PUT throws, the transaction rolls back
@@ -35,6 +33,7 @@ import { eq } from "drizzle-orm";
 import { agents, tenants } from "@thinkwork/database-pg/schema";
 import { loadDefaults } from "@thinkwork/workspace-defaults";
 import { db as defaultDb } from "../graphql/utils.js";
+import { upsertAgentsMdName } from "./agents-md-persona-surgery.js";
 import { substitute } from "./placeholder-substitution.js";
 
 const REGION =
@@ -50,7 +49,7 @@ function bucket(): string {
 export type DbOrTx = { select: typeof defaultDb.select };
 
 function agentKey(tenantSlug: string, agentSlug: string): string {
-  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/IDENTITY.md`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/AGENTS.md`;
 }
 
 function isNotFound(err: unknown): boolean {
@@ -162,41 +161,9 @@ export class IdentityMdWriterError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Name-line surgery
-// ---------------------------------------------------------------------------
-
-// New bullet shape: `- **Name:** <anything to end of line>` (multiline match).
-const NEW_ANCHOR_RE = /^- \*\*Name:\*\*.*$/m;
-
-// Legacy prose shape: `Your name is **<value>**.`
-// Non-greedy inner capture; anchor to the `. ` sentence terminator.
-const LEGACY_ANCHOR_RE = /Your name is \*\*[^*]+\*\*\./;
-
-function surgery(existing: string, newName: string): string | null {
-  // Defensive: strip newlines so a malicious name can't inject extra
-  // markdown lines. Collapse to spaces, trim runs.
-  // Includes U+2028 / U+2029 so a name with line separators can't
-  // inject extra markdown lines past the \r\n guard.
-  const safeName = newName.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
-
-  // Use function-form replacement so `$&`, `$'`, `` $` ``, `$1` in
-  // `safeName` are NOT interpreted as backreferences by String.replace.
-  if (NEW_ANCHOR_RE.test(existing)) {
-    return existing.replace(NEW_ANCHOR_RE, () => `- **Name:** ${safeName}`);
-  }
-  if (LEGACY_ANCHOR_RE.test(existing)) {
-    return existing.replace(
-      LEGACY_ANCHOR_RE,
-      () => `Your name is **${safeName}**.`,
-    );
-  }
-  return null;
-}
-
 function renderTemplate(agentName: string): string {
   const templates = loadDefaults();
-  const template = templates["IDENTITY.md"];
+  const template = templates["AGENTS.md"];
   return substitute({ AGENT_NAME: agentName }, template);
 }
 
@@ -205,18 +172,18 @@ function renderTemplate(agentName: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Rewrite the agent's IDENTITY.md with the current agent name.
+ * Rewrite the agent's AGENTS.md identity section with the current agent name.
  *
  * - If an override exists and has a recognized Name anchor, replace only
  *   that line. Everything else in the file is preserved.
- * - If an override exists but neither anchor matches, log a warning and
- *   fall through to a full template rewrite.
+ * - If an override exists but neither anchor matches, insert a Name line into
+ *   an existing Identity section or append a minimal Identity section.
  * - If no override exists, seed the agent prefix with the template
- *   IDENTITY.md with `{{AGENT_NAME}}` substituted.
+ *   AGENTS.md with `{{AGENT_NAME}}` substituted.
  *
  * Per docs/plans/2026-04-27-003: there is no composer cache to
  * invalidate. The runtimes pull the agent prefix on every invocation,
- * so IDENTITY.md changes propagate on the next turn without ceremony.
+ * so AGENTS.md changes propagate on the next turn without ceremony.
  */
 export async function writeIdentityMdForAgent(
   tx: DbOrTx,
@@ -234,7 +201,7 @@ export async function writeIdentityMdForAgent(
   if (!resolved) {
     throw new IdentityMdWriterError(
       "AGENT_UNRESOLVABLE",
-      "Could not resolve agent or tenant for IDENTITY.md write",
+      "Could not resolve agent or tenant for AGENTS.md identity write",
     );
   }
 
@@ -247,15 +214,7 @@ export async function writeIdentityMdForAgent(
   if (existing === null) {
     rendered = renderTemplate(resolved.agentName);
   } else {
-    const mutated = surgery(existing, resolved.agentName);
-    if (mutated !== null) {
-      rendered = mutated;
-    } else {
-      console.warn(
-        `[identity-md-writer] no Name anchor matched for agentId=${agentId}; performing full template rewrite`,
-      );
-      rendered = renderTemplate(resolved.agentName);
-    }
+    rendered = upsertAgentsMdName(existing, resolved.agentName);
   }
 
   await putWithOneRetry(
