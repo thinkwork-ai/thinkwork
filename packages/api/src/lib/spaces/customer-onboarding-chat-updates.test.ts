@@ -1,0 +1,87 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+import { extractCustomerOnboardingChatUpdate } from "./customer-onboarding-chat-updates.js";
+
+describe("extractCustomerOnboardingChatUpdate", () => {
+  it("extracts intake answers and same-thread checklist completions", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      [
+        "Here is the missing onboarding data: opportunity link https://crm.example.com/opportunities/e2e-trigger-co",
+        "sales owner Ruben Valdez",
+        "primary customer contact Jordan Lee, jordan@example.com",
+        "estimated value $42,000",
+        "product plan All PVL products",
+        "target onboarding date 2026-06-15",
+        "contract link https://docusign.example.com/envelopes/e2e-trigger-co",
+        "accounts payable contact Pat Morgan, ap@example.com",
+        "billing address 100 Main St, Austin, TX 78701",
+        "shipping address same as billing",
+        "agricultural/sales-tax exempt yes",
+        "credit terms requested yes",
+        "DocuSign recipient Jordan Lee, jordan@example.com",
+        "Also mark Dun & Bradstreet checked complete and tax exemption forms collected complete.",
+      ].join("; "),
+    );
+
+    expect(result.facts).toMatchObject({
+      opportunityUrl: "https://crm.example.com/opportunities/e2e-trigger-co",
+      salesRep: "Ruben Valdez",
+      dealValue: "$42,000",
+      productPlan: "All PVL products",
+      closeDate: "2026-06-15",
+      contractLink: "https://docusign.example.com/envelopes/e2e-trigger-co",
+      billingAddress: "100 Main St, Austin, TX 78701",
+      billingSameAsShipping: true,
+      taxExempt: true,
+      creditTermsRequested: true,
+      taxExemptionFormReceived: true,
+    });
+    expect(result.facts.primaryContact).toEqual({
+      name: "Jordan Lee",
+      email: "jordan@example.com",
+    });
+    expect(result.facts.accountsPayableContact).toEqual({
+      name: "Pat Morgan",
+      email: "ap@example.com",
+    });
+    expect(result.facts.docusignRecipient).toEqual({
+      name: "Jordan Lee",
+      email: "jordan@example.com",
+    });
+    expect(result.completedTaskKeys).toEqual([
+      "dun_and_bradstreet_check",
+      "tax_exemption_forms",
+    ]);
+  });
+
+  it("keeps negative credit terms negative", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      "Credit terms requested no; tax exempt no.",
+    );
+
+    expect(result.facts).toMatchObject({
+      creditTermsRequested: false,
+      taxExempt: false,
+    });
+  });
+});
+
+describe("sendMessage customer onboarding hook", () => {
+  it("applies onboarding chat updates before default agent dispatch", () => {
+    const source = readFileSync(
+      new URL(
+        "../../graphql/resolvers/messages/sendMessage.mutation.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(source).toContain("applyCustomerOnboardingChatUpdate");
+    expect(source).toContain("customerOnboardingHandled");
+    expect(
+      source.indexOf("await applyCustomerOnboardingChatUpdate"),
+    ).toBeLessThan(source.indexOf("await dispatchDefaultAgentTurn"));
+    expect(source).toContain("!customerOnboardingHandled");
+  });
+});
