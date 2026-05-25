@@ -1,71 +1,89 @@
 ---
 title: Agents
-description: "The ThinkWork agent framework: one tenant platform agent, Space-scoped context, folder-based sub-agents, and connected runtimes."
+description: "The ThinkWork agent model: one tenant platform agent, Space-scoped runtime context, folder-based specialists, and connected runtimes."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-An agent in ThinkWork is the runtime actor that reads a thread, plans the next step, calls tools, and writes the result back. The current managed-agent model is centered on a **single tenant platform agent** rather than a roster of separate top-level managed agents.
+An agent in ThinkWork is the runtime actor that reads a thread, chooses the next step, calls tools, and writes the result back. In the current managed model, a tenant does not operate a roster of separate top-level managed agents. It operates **one tenant platform agent** whose behavior is shaped by the Space and folder context for the current work.
 
-The tenant platform agent supplies the baseline identity, model, budget, sandbox, system prompt, and workspace. [Spaces](/concepts/spaces/) supply the local workroom: project context, membership, tools, memory, automations, email address, and optional runtime overrides.
+The useful mental model is:
+
+```text
+Tenant platform agent
+  + Space context
+  + folder-specialist context
+  + tools, memory, and guardrails
+  = the agent behavior for this turn
+```
+
+The database row gives ThinkWork something stable to bill, audit, pause, and invoke. The folder tree gives the model its instructions, routing map, memory notes, skills, and specialist workrooms.
 
 <Aside type="note">
-  If older docs, URLs, or records mention `/agents` or individual managed-agent
-  ids, treat them as legacy compatibility surfaces. Current managed work flows
-  through the tenant platform agent plus Space context.
+  If older docs, URLs, or records mention `/agents` or many individual managed
+  agent ids, treat them as legacy compatibility surfaces. Current managed work
+  flows through the tenant platform agent plus Space and folder context.
 </Aside>
 
 ## The current model
 
-ThinkWork separates three layers:
+ThinkWork separates agent behavior into three layers:
 
-| Layer                 | Purpose                                                            | Operator surface                                    |
-| --------------------- | ------------------------------------------------------------------ | --------------------------------------------------- |
-| Tenant platform agent | Tenant-wide baseline identity and instructions                     | [Admin — Tenant Agent](/applications/admin/agents/) |
-| Space                 | Contextual workroom with local policy, tools, memory, and channels | [Admin — Spaces](/applications/admin/spaces/)       |
-| Sub-agent folder      | Specialty behavior delegated by the platform agent                 | Tenant Agent → Sub-agents                           |
+| Layer                 | Purpose                                                             | Operator surface                                    |
+| --------------------- | ------------------------------------------------------------------- | --------------------------------------------------- |
+| Tenant platform agent | Tenant-wide baseline identity, model, budget, sandbox, and folders  | [Admin - Tenant Agent](/applications/admin/agents/) |
+| Space                 | Local workroom: context, access, tools, memory, channels, overrides | [Admin - Spaces](/applications/admin/spaces/)       |
+| Folder specialist     | Delegated behavior stored as files under `workspaces/<slug>/`       | Tenant Agent workspace authoring flows              |
 
-This keeps the operational model small. Operators tune the platform agent once, create Spaces for distinct work contexts, and add sub-agent folders only when a specialty needs its own instructions.
+This keeps operations small. Configure the platform agent once, create Spaces for real business contexts, and add folder specialists only where the platform agent needs a durable specialty.
 
 ## What the tenant platform agent owns
 
-The tenant agent owns the broad defaults:
+The tenant platform agent owns defaults that should be true across the tenant:
 
-- Name and role.
+- Display name and broad role.
 - Default Bedrock model.
 - Default monthly budget.
 - Default sandbox behavior.
-- Baseline system prompt.
 - Baseline workspace files.
-- Folder-based sub-agent definitions.
+- Root `AGENTS.md` routing and specialist folders.
 
-These are tenant defaults, not project details. If a Space needs a different model, guardrail, budget, paused state, or sandbox mode, set a Space runtime override and leave the tenant default stable.
+These are tenant defaults, not project details. If a Space needs a different model, guardrail, budget, paused state, sandbox mode, tool set, email channel, or memory scope, configure the Space instead.
 
 ## What Spaces own
 
-A Space gives the platform agent its immediate context. Spaces can carry:
+A Space gives the platform agent the current workroom. It can carry:
 
-- Workspace files and runbooks.
+- Workspace files for a project, customer, team, workflow, or channel.
 - Public or private membership.
 - Built-in tools and MCP server availability.
 - Knowledge bases and Space-scoped memory.
-- Automations.
-- Email triggers.
+- Automations and email triggers.
 - Runtime overrides.
 
-When a thread starts in a Space, ThinkWork invokes the tenant platform agent with the Space context rendered into the runtime workspace. The thread still has one agent identity for audit and cost accounting, but the behavior is shaped by the Space.
+When a thread starts in a Space, ThinkWork invokes the tenant platform agent with that Space context rendered into the runtime workspace. The turn still has one managed-agent identity for audit and cost accounting, but its behavior is shaped by the Space.
 
-## Sub-agents
+## Folder specialists
 
-Sub-agents are authored as folders under the tenant agent's `subagents` workspace area. A sub-agent folder contains the instructions and supporting files for a specialty the platform agent can delegate to.
+Folder specialists are authored under `workspaces/<slug>/`. A specialist can be as small as one `CONTEXT.md` file, or it can carry its own `AGENTS.md`, `memory/`, `skills/`, and nested `workspaces/` children.
 
-Use sub-agents for durable specialties such as research, triage, QA, drafting, or customer onboarding. Use a Space when the difference is context, access, channel, memory, or runtime policy.
+Use a folder specialist when the platform agent needs a durable specialty such as research, triage, QA, drafting, finance review, or customer onboarding. Use a Space when the difference is access, audience, project context, channel, memory, or runtime policy.
+
+The root `AGENTS.md` is the routing map. A row such as this makes the specialist available:
+
+```md
+| Task                     | Go to                | Read                           | Skills            |
+| ------------------------ | -------------------- | ------------------------------ | ----------------- |
+| Expense policy questions | workspaces/expenses/ | workspaces/expenses/CONTEXT.md | finance-audit-xls |
+```
+
+The folder path is the specialist boundary. The runtime can load only the files relevant to that boundary instead of handing every prompt, skill, and note to every turn.
 
 ## Managed and connected runtimes
 
 Most tenants use the managed runtime path: ThinkWork runs the tenant platform agent on Bedrock AgentCore inside your AWS account. The harness, state, memory, guardrails, audit, and data stay inside your deployment boundary.
 
-Connected agents still exist for bring-your-own-runtime integrations. They are useful when you already operate an external agent service and want ThinkWork's threads, auth, audit, and control plane around it. Connected agents are registered through [Agent Invites](/applications/admin/agent-invites/), not through the tenant platform agent page.
+Connected agents still exist for bring-your-own-runtime integrations. Use them when you already operate an external agent service and want ThinkWork's threads, auth, audit, and control plane around it. Connected agents are registered through [Agent Invites](/applications/admin/agent-invites/), not through the tenant platform-agent page.
 
 ## How a turn runs
 
@@ -76,29 +94,34 @@ Thread event
   -> resolve tenant and Space
   -> load tenant platform agent
   -> apply Space runtime overrides or inherit tenant defaults
-  -> render tenant + Space workspace context
+  -> render root folder + Space context + specialist folder context
   -> invoke managed runtime
+  -> run tools or skills if requested
   -> write messages, turns, cost, audit, and tool events back to the thread
   -> publish updates to admin and mobile clients
 ```
 
-The Space can change what context and tools the agent sees. It does not create a separate top-level managed-agent identity for every workroom.
+Every new turn resolves current configuration. In-flight turns keep the files and settings they loaded when they started.
 
-## Templates after the Space architecture
+## What belongs where
 
-Templates remain useful authoring infrastructure, especially for reusable workspace and tool patterns. They are no longer the main day-to-day surface for tuning managed-agent identity across a fleet of top-level agents.
-
-For normal operation:
-
-- Configure the baseline in [Admin — Tenant Agent](/applications/admin/agents/).
-- Configure local context and overrides in [Admin — Spaces](/applications/admin/spaces/).
-- Use templates where the UI still exposes reusable authoring or migration flows.
+| Put it here                | When it is about                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| Tenant Agent config        | Tenant-wide model, budget, sandbox, and broad role                               |
+| Root `AGENTS.md`           | Routing, identity, folder map, and specialist ownership                          |
+| Root `CONTEXT.md`          | General responsibilities that apply before a specialist or Space narrows context |
+| `workspaces/<slug>/`       | Durable specialist instructions and resources                                    |
+| Space workspace            | Project, team, customer, channel, or workflow context                            |
+| `skills/<slug>/SKILL.md`   | Reusable capability packages                                                     |
+| `memory/*.md`              | Editable workspace notes, not long-term transcript retention                     |
+| Tenant MCP / credential UI | Secrets, OAuth, and external service configuration                               |
 
 ## Related pages
 
-- [Spaces](/concepts/spaces/) — contextual workrooms
-- [Admin — Tenant Agent](/applications/admin/agents/) — tenant platform-agent configuration
-- [Admin — Spaces](/applications/admin/spaces/) — Space configuration and runtime overrides
-- [Runtime Configuration](/concepts/agents/runtime-selection/) — how tenant defaults and Space overrides resolve
-- [Managed Agents](/concepts/agents/managed-agents/) — runtime internals
-- [Agent Invites](/applications/admin/agent-invites/) — connected runtime registration
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - why folders are the behavior boundary.
+- [Workspace Composition](/concepts/agents/workspace-composition/) - how files resolve from defaults, templates, agent folders, Spaces, and users.
+- [Managed Agents](/concepts/agents/managed-agents/) - runtime internals.
+- [Runtime Configuration](/concepts/agents/runtime-selection/) - tenant defaults and Space overrides.
+- [Skills](/concepts/agents/skills/) - capability folders loaded by the runtime.
+- [Workspace Orchestration](/concepts/agents/workspace-orchestration/) - async folder-native work.
+- [Spaces](/concepts/spaces/) - contextual workrooms.

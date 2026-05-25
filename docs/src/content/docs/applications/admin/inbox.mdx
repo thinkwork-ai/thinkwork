@@ -126,7 +126,7 @@ The CLI scaffolds `thinkwork inbox list / get / approve / reject / request-revis
 ### Background and links
 
 - The cutover backfill script (one-shot, idempotent) lives at `packages/api/scripts/backfill-system-reviews-to-inbox.ts` and was used to materialize inbox items for any system runs that pre-dated the routing refactor.
-- The underlying routing model — chain walk, mobile vs Inbox split, sub-agent surfacing — is documented in [Workspace Orchestration → Human review flow](/concepts/agents/workspace-orchestration/#human-review-flow).
+- The underlying routing model — chain walk, mobile vs Inbox split, and folder-specialist review surfacing — is documented in [Workspace Orchestration → Human review flow](/concepts/agents/workspace-orchestration/#human-review-flow).
 
 ## Workflows
 
@@ -163,7 +163,7 @@ The CLI scaffolds `thinkwork inbox list / get / approve / reject / request-revis
 ## Related pages
 
 - [Threads](/applications/admin/threads/) — inbox items usually link back to a parent thread
-- [Tenant Agent](/applications/admin/agents/) — configure platform-agent workspace and sub-agent folders
+- [Tenant Agent](/applications/admin/agents/) — configure platform-agent workspace and folder specialists
 - [Spaces](/applications/admin/spaces/) — configure Space context that can produce review work
 - [Security Center](/applications/admin/security-center/) — policy and guardrail enforcement
 - [Control (concept)](/concepts/control/) — the product model for approvals and controls

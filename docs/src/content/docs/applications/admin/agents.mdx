@@ -1,6 +1,6 @@
 ---
 title: Admin — Tenant Agent
-description: "Configure the tenant platform agent baseline: identity, model, budget, sandbox, system prompt, workspace files, and sub-agent folders."
+description: "Configure the tenant platform agent baseline: identity, model, budget, sandbox, workspace files, and folder specialists."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -49,7 +49,8 @@ Good tenant-agent settings answer questions such as:
 - What broad safety and budget defaults should apply before a Space narrows them?
 - What instructions should every Space receive before local context is added?
 
-Project-specific context belongs in a Space. Specialty behaviors belong in sub-agent folders or Space workspace files.
+Project-specific context belongs in a Space. Specialty behaviors belong in
+`workspaces/<slug>/` folder specialists or Space workspace files.
 
 ### Workspace
 
@@ -57,11 +58,16 @@ The Workspace tab shows files the tenant platform agent reads as part of its bas
 
 Do not put Space-specific procedures here if they only apply to one workroom. Put those files on the Space workspace instead so other Spaces do not inherit irrelevant instructions.
 
-### Sub-agents
+### Folder specialists
 
-The Sub-agents tab is a workspace editor opened at the `subagents` folder. Sub-agents are now authored as folder-based specialties under the tenant agent instead of as separate top-level agent records.
+The folder-specialist authoring surface edits `workspaces/<slug>/` folders.
+Specialists are authored as files under the tenant agent instead of as separate
+top-level agent records.
 
-A sub-agent folder should carry the focused context a specialty needs: role, instructions, and supporting files. The tenant platform agent can delegate to those specialties at runtime while preserving a single platform-agent identity for the tenant.
+A specialist folder should carry the focused context a specialty needs: role,
+instructions, memory notes, skills, and supporting files. The tenant platform
+agent can delegate to those specialties at runtime while preserving a single
+platform-agent identity for the tenant.
 
 ## How Spaces use the tenant agent
 
@@ -97,6 +103,7 @@ Cold-contact delivery is accepted only when email triggers are enabled for that 
 
 - [Admin — Spaces](/applications/admin/spaces/) — Space configuration, workspace, tools, memory, automations, runtime overrides, and email triggers
 - [Agents (concept)](/concepts/agents/) — the platform-agent model
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) — why specialists are folders
 - [Spaces (concept)](/concepts/spaces/) — Spaces as contextual workrooms
 - [Runtime Configuration](/concepts/agents/runtime-selection/) — tenant-agent defaults and Space overrides
 - [Skills Catalog](/applications/admin/skills-catalog/) — reusable workspace skills
