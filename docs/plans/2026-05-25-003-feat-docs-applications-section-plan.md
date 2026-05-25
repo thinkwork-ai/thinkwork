@@ -1,7 +1,7 @@
 ---
 title: "feat: Promote Applications docs and polish Desktop identity"
 type: feat
-status: active
+status: completed
 date: 2026-05-25
 origin: docs/brainstorms/2026-05-25-docs-applications-section-and-desktop-showcase-requirements.md
 ---

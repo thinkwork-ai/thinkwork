@@ -43,6 +43,161 @@ export default defineConfig({
           ],
         },
         {
+          label: "Applications",
+          collapsed: true,
+          items: [
+            { label: "Overview", slug: "applications" },
+            {
+              label: "Admin",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "applications/admin" },
+                {
+                  label: "Authentication & Tenancy",
+                  slug: "applications/admin/authentication-and-tenancy",
+                },
+                {
+                  label: "Work",
+                  collapsed: true,
+                  items: [
+                    {
+                      label: "Dashboard",
+                      slug: "applications/admin/dashboard",
+                    },
+                    {
+                      label: "Threads",
+                      slug: "applications/admin/threads",
+                    },
+                    { label: "Inbox", slug: "applications/admin/inbox" },
+                    {
+                      label: "Automations",
+                      slug: "applications/admin/automations",
+                    },
+                  ],
+                },
+                {
+                  label: "Platform",
+                  collapsed: true,
+                  items: [
+                    {
+                      label: "Tenant Agent",
+                      slug: "applications/admin/agents",
+                    },
+                    { label: "Spaces", slug: "applications/admin/spaces" },
+                    {
+                      label: "Agent Templates",
+                      slug: "applications/admin/agent-templates",
+                    },
+                    {
+                      label: "Agent Invites",
+                      slug: "applications/admin/agent-invites",
+                    },
+                    {
+                      label: "Skills Catalog",
+                      slug: "applications/admin/skills-catalog",
+                    },
+                    {
+                      label: "Tenant MCP Servers",
+                      slug: "applications/admin/mcp-servers",
+                    },
+                    {
+                      label: "Built-in Tools",
+                      slug: "applications/admin/builtin-tools",
+                    },
+                    {
+                      label: "Security Center",
+                      slug: "applications/admin/security-center",
+                    },
+                  ],
+                },
+                {
+                  label: "Manage",
+                  collapsed: true,
+                  items: [
+                    {
+                      label: "Company Brain",
+                      slug: "applications/admin/knowledge",
+                    },
+                    {
+                      label: "Ontology",
+                      slug: "applications/admin/ontology",
+                    },
+                    {
+                      label: "Memory Facet",
+                      slug: "applications/admin/memory",
+                    },
+                    {
+                      label: "Knowledge Bases",
+                      slug: "applications/admin/knowledge-bases",
+                    },
+                    {
+                      label: "Analytics",
+                      slug: "applications/admin/analytics",
+                    },
+                    {
+                      label: "Evaluations",
+                      slug: "applications/admin/evaluations",
+                    },
+                    {
+                      label: "Webhooks",
+                      slug: "applications/admin/webhooks",
+                    },
+                    {
+                      label: "Artifacts",
+                      slug: "applications/admin/artifacts",
+                    },
+                    { label: "Humans", slug: "applications/admin/humans" },
+                    {
+                      label: "Settings",
+                      slug: "applications/admin/settings",
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              label: "Mobile",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "applications/mobile" },
+                {
+                  label: "Authentication",
+                  slug: "applications/mobile/authentication",
+                },
+                {
+                  label: "Threads & Chat",
+                  slug: "applications/mobile/threads-and-chat",
+                },
+                {
+                  label: "Integrations & MCP Connect",
+                  slug: "applications/mobile/integrations-and-mcp-connect",
+                },
+                {
+                  label: "Push Notifications",
+                  slug: "applications/mobile/push-notifications",
+                },
+                {
+                  label: "Distribution",
+                  slug: "applications/mobile/distribution",
+                },
+              ],
+            },
+            {
+              label: "Desktop",
+              collapsed: true,
+              items: [{ label: "Overview", slug: "applications/desktop" }],
+            },
+            {
+              label: "CLI",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "applications/cli" },
+                { label: "Commands", slug: "applications/cli/commands" },
+              ],
+            },
+          ],
+        },
+        {
           label: "Components",
           collapsed: true,
           items: [
@@ -295,160 +450,6 @@ export default defineConfig({
                       label: "Upgrading from 0.1",
                       slug: "sdks/react-native/migration",
                     },
-                  ],
-                },
-              ],
-            },
-            {
-              label: "Applications",
-              collapsed: true,
-              items: [
-                {
-                  label: "Admin",
-                  collapsed: true,
-                  items: [
-                    { label: "Overview", slug: "applications/admin" },
-                    {
-                      label: "Authentication & Tenancy",
-                      slug: "applications/admin/authentication-and-tenancy",
-                    },
-                    {
-                      label: "Work",
-                      collapsed: true,
-                      items: [
-                        {
-                          label: "Dashboard",
-                          slug: "applications/admin/dashboard",
-                        },
-                        {
-                          label: "Threads",
-                          slug: "applications/admin/threads",
-                        },
-                        { label: "Inbox", slug: "applications/admin/inbox" },
-                        {
-                          label: "Automations",
-                          slug: "applications/admin/automations",
-                        },
-                      ],
-                    },
-                    {
-                      label: "Platform",
-                      collapsed: true,
-                      items: [
-                        {
-                          label: "Tenant Agent",
-                          slug: "applications/admin/agents",
-                        },
-                        { label: "Spaces", slug: "applications/admin/spaces" },
-                        {
-                          label: "Agent Templates",
-                          slug: "applications/admin/agent-templates",
-                        },
-                        {
-                          label: "Agent Invites",
-                          slug: "applications/admin/agent-invites",
-                        },
-                        {
-                          label: "Skills Catalog",
-                          slug: "applications/admin/skills-catalog",
-                        },
-                        {
-                          label: "Tenant MCP Servers",
-                          slug: "applications/admin/mcp-servers",
-                        },
-                        {
-                          label: "Built-in Tools",
-                          slug: "applications/admin/builtin-tools",
-                        },
-                        {
-                          label: "Security Center",
-                          slug: "applications/admin/security-center",
-                        },
-                      ],
-                    },
-                    {
-                      label: "Manage",
-                      collapsed: true,
-                      items: [
-                        {
-                          label: "Company Brain",
-                          slug: "applications/admin/knowledge",
-                        },
-                        {
-                          label: "Ontology",
-                          slug: "applications/admin/ontology",
-                        },
-                        {
-                          label: "Memory Facet",
-                          slug: "applications/admin/memory",
-                        },
-                        {
-                          label: "Knowledge Bases",
-                          slug: "applications/admin/knowledge-bases",
-                        },
-                        {
-                          label: "Analytics",
-                          slug: "applications/admin/analytics",
-                        },
-                        {
-                          label: "Evaluations",
-                          slug: "applications/admin/evaluations",
-                        },
-                        {
-                          label: "Webhooks",
-                          slug: "applications/admin/webhooks",
-                        },
-                        {
-                          label: "Artifacts",
-                          slug: "applications/admin/artifacts",
-                        },
-                        { label: "Humans", slug: "applications/admin/humans" },
-                        {
-                          label: "Settings",
-                          slug: "applications/admin/settings",
-                        },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  label: "Mobile",
-                  collapsed: true,
-                  items: [
-                    { label: "Overview", slug: "applications/mobile" },
-                    {
-                      label: "Authentication",
-                      slug: "applications/mobile/authentication",
-                    },
-                    {
-                      label: "Threads & Chat",
-                      slug: "applications/mobile/threads-and-chat",
-                    },
-                    {
-                      label: "Integrations & MCP Connect",
-                      slug: "applications/mobile/integrations-and-mcp-connect",
-                    },
-                    {
-                      label: "Push Notifications",
-                      slug: "applications/mobile/push-notifications",
-                    },
-                    {
-                      label: "Distribution",
-                      slug: "applications/mobile/distribution",
-                    },
-                  ],
-                },
-                {
-                  label: "Desktop",
-                  collapsed: true,
-                  items: [{ label: "Overview", slug: "applications/desktop" }],
-                },
-                {
-                  label: "CLI",
-                  collapsed: true,
-                  items: [
-                    { label: "Overview", slug: "applications/cli" },
-                    { label: "Commands", slug: "applications/cli/commands" },
                   ],
                 },
               ],
