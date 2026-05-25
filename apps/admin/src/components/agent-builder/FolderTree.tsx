@@ -39,11 +39,9 @@ export type TreeNode = {
   children: TreeNode[];
 };
 
-// Reserved root folders that should render in the tree even when empty.
-// Keep skills/ visible as a stable place to add workspace skills. Do not
-// synthesize memory/ here: operators can delete that folder, and once its
-// backing objects are gone the tree should not recreate the row.
-const RESERVED_ROOT_FOLDERS = ["skills"] as const;
+// Workspace trees are file-backed: do not synthesize root folders that are
+// not present in the source listing.
+const RESERVED_ROOT_FOLDERS = [] as const;
 
 export function buildWorkspaceTree(
   files: string[],
