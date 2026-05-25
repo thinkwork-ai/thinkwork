@@ -102,13 +102,53 @@ Target branch: `main`
 
 ## Follow-Up Run: Customer Onboarding Chat Checklist Updates
 
-- Status: active
-- Active branch: `codex/customer-onboarding-chat-updates`
-- Active worktree: `.Codex/worktrees/customer-onboarding-chat-updates`
+- Status: merged
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: live E2E after PR #1711 verified Thread creation, missing-question prompting, and Info Panel checklist rendering, but a human answer in chat did not update missing intake state or checklist statuses.
 - Scope: add a deterministic Customer Onboarding `sendMessage` hook that extracts intake answers and completion statements from same-thread chat, updates `threads.metadata.customerOnboarding`, updates ThinkWork linked checklist rows, records linked-task events, and writes an assistant summary message. Handled onboarding chat updates skip the generic default-agent turn so the demo path is deterministic.
-- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
+- PR: [#1713](https://github.com/thinkwork-ai/thinkwork/pull/1713)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy completed successfully.
+
+## Follow-Up Run: Customer Onboarding Start Enum Serialization
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: live Start onboarding GraphQL responses returned raw lowercase linked-task status/priority values, which violated the GraphQL enum contract after the native checklist rows were created.
+- Scope: serialize Start onboarding `linkedTasks` through the shared GraphQL linked-task mapper so status, priority, source, and provider values match the public schema.
+- Verification: focused Start onboarding resolver tests passed; `@thinkwork/api` typecheck passed; touched-file Prettier; `git diff --check`.
+- PR: [#1717](https://github.com/thinkwork-ai/thinkwork/pull/1717)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy completed successfully.
+
+## Follow-Up Run: Workspace Map Skills Regression
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: a later workspace-map refresh reintroduced the materialized `skills/` tree into AGENTS.md Folder Structure output, even though Skills are documented in the separate Skills & Tools section.
+- Scope: filter `skills/**` from generated Folder Structure trees while preserving Skills & Tools tables; update the repair script templates; hotfix the live fleet workspace AGENTS.md in S3.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts scripts/repair-agent-workspace-blueprint.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
+- PR: [#1718](https://github.com/thinkwork-ai/thinkwork/pull/1718)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy completed successfully.
+
+## Follow-Up Run: Thread Progress Markdown
+
+- Status: active
+- Active branch: `codex/thread-progress-md`
+- Active worktree: `.Codex/worktrees/thread-progress-md`
+- Started: 2026-05-25
+- Root cause: the Info Panel checklist is the visible operational state, but the agent turn context does not yet receive a durable thread-level progress ledger. Status answers can drift unless every turn sees the current goal, tasks, owners, blockers, missing information, and next steps.
+- Scope: render a per-thread `PROGRESS.md` into S3 at `tenants/<tenant-slug>/threads/<thread-id>/PROGRESS.md`, refresh it after Customer Onboarding workflow creation, deterministic chat updates, and assistant finalization, then inject the file into future agent wakeup context when present.
+- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/thread-progress/storage.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/chat-finalize/process-finalize.test.ts src/handlers/wakeup-processor.system-prompt.test.ts`; `pnpm --filter @thinkwork/api typecheck`.
+- PR: pending.
 
 ### Active Unit Notes
 

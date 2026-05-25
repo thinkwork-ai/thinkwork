@@ -13,6 +13,7 @@ import {
   type CustomerOnboardingSourceInput,
   type NormalizedCustomerOnboardingSource,
 } from "./customer-onboarding-workflow.js";
+import { refreshCustomerOnboardingProgressMarkdownSafely } from "./customer-onboarding-progress-md.js";
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
 
 interface ApplyCustomerOnboardingChatUpdateInput {
@@ -118,7 +119,7 @@ export async function applyCustomerOnboardingChatUpdate(
   const normalized = normalizeCustomerOnboardingSource(mergedOpportunity);
   const now = new Date();
 
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const nextMetadata = buildUpdatedThreadMetadata({
       current: threadMetadata,
       normalized,
@@ -249,6 +250,13 @@ export async function applyCustomerOnboardingChatUpdate(
       statusChanges,
     };
   });
+
+  await refreshCustomerOnboardingProgressMarkdownSafely({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+  });
+
+  return result;
 }
 
 export function extractCustomerOnboardingChatUpdate(content: string): {

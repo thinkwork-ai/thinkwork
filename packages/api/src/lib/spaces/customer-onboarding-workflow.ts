@@ -32,6 +32,7 @@ import {
   CUSTOMER_ONBOARDING_CHECKLIST_KEY,
   buildCustomerOnboardingChecklistConfig,
 } from "./customer-onboarding-seed.js";
+import { refreshCustomerOnboardingProgressMarkdownSafely } from "./customer-onboarding-progress-md.js";
 
 export const CUSTOMER_ONBOARDING_TEMPLATE_KEY = "customer_onboarding";
 
@@ -296,6 +297,9 @@ export interface CustomerOnboardingWorkflowDeps {
   repository?: CustomerOnboardingWorkflowRepository;
   taskAdapter?: LastMileTasksWorkflowAdapter;
   coordinator?: Pick<CoordinatorAgentService, "enqueueWakeup">;
+  progressReporter?: {
+    refresh(input: { tenantId: string; threadId: string }): Promise<unknown>;
+  };
   now?: () => Date;
 }
 
@@ -316,6 +320,11 @@ export async function startCustomerOnboardingWorkflow(
 ): Promise<CustomerOnboardingWorkflowResult> {
   const repository =
     deps.repository ?? new DrizzleCustomerOnboardingRepository();
+  const progressReporter =
+    deps.progressReporter ??
+    (deps.repository
+      ? null
+      : { refresh: refreshCustomerOnboardingProgressMarkdownSafely });
   const taskAdapter =
     deps.taskAdapter ?? createUnavailableLastMileTaskAdapter();
   const coordinator = deps.coordinator ?? createCoordinatorAgentService();
@@ -368,6 +377,10 @@ export async function startCustomerOnboardingWorkflow(
     opportunityId: normalized.opportunityId,
   });
   if (existing) {
+    await progressReporter?.refresh({
+      tenantId: input.tenantId,
+      threadId: existing.id,
+    });
     return {
       thread: existing,
       idempotent: true,
@@ -413,6 +426,11 @@ export async function startCustomerOnboardingWorkflow(
       metadata: planned.metadata,
     });
   }
+
+  await progressReporter?.refresh({
+    tenantId: input.tenantId,
+    threadId: thread.id,
+  });
 
   await coordinator.enqueueWakeup({
     tenantId: input.tenantId,
@@ -946,7 +964,9 @@ function createUnavailableLastMileTaskAdapter(): LastMileTasksWorkflowAdapter {
   };
 }
 
-class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowRepository {
+class DrizzleCustomerOnboardingRepository
+  implements CustomerOnboardingWorkflowRepository
+{
   private readonly db = getDb();
 
   async findSpace(input: {

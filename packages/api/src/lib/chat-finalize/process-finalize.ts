@@ -40,6 +40,7 @@ import {
 import { notifyThreadUpdate } from "../../graphql/notify.js";
 import { sendTurnCompletedPush } from "../push-notifications.js";
 import { sendThreadReplyEmail } from "../email/thread-reply.js";
+import { refreshCustomerOnboardingProgressMarkdownSafely } from "../spaces/customer-onboarding-progress-md.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -444,6 +445,13 @@ export async function processFinalize(
     } catch (err) {
       console.error("[chat-finalize] Email reply dispatch failed:", err);
     }
+  }
+
+  if (assistantMsg) {
+    await refreshCustomerOnboardingProgressMarkdownSafely({
+      tenantId,
+      threadId,
+    });
   }
 
   return { finalized: true, messageId: assistantMsg?.id ?? null };
