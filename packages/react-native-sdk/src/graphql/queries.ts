@@ -13,13 +13,15 @@ export const MeQuery = gql`
 
 export const AgentsQuery = gql`
   query Agents($tenantId: ID!) {
-    agents(tenantId: $tenantId) {
+    agent: tenantAgent(tenantId: $tenantId) {
       id
+      tenantId
       name
       slug
       role
       type
       status
+      runtime
       avatarUrl
     }
   }

@@ -349,13 +349,11 @@ function RootLayoutNav() {
               />
               <Stack.Screen name="threads" />
               <Stack.Screen name="routines/[id]/index" />
-              <Stack.Screen name="routines/[id]/runs" />
               <Stack.Screen
                 name="settings/index"
                 options={{ headerShown: false }}
               />
               <Stack.Screen name="settings/account" />
-              <Stack.Screen name="settings/team" />
               <Stack.Screen name="settings/profile" />
               <Stack.Screen name="settings/credentials" />
               <Stack.Screen name="settings/integration-detail" />
@@ -365,10 +363,6 @@ function RootLayoutNav() {
                 options={{ headerShown: false }}
               />
               <Stack.Screen name="invite/[token]" />
-              <Stack.Screen name="team/[id]" />
-              <Stack.Screen name="team/add-users" />
-              <Stack.Screen name="team/edit-member" />
-              <Stack.Screen name="team/pick-user" />
               <Stack.Screen name="agents/[id]/files" />
               <Stack.Screen name="agents/[id]/file-view" />
               <Stack.Screen name="agents/[id]/skills" />

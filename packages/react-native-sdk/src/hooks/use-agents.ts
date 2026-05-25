@@ -8,14 +8,16 @@ export function useAgents({
 }: {
   tenantId: string | null | undefined;
 }) {
-  const [{ data, fetching, error }, refetch] = useQuery<{ agents: Agent[] }>({
+  const [{ data, fetching, error }, refetch] = useQuery<{
+    agent?: Agent | null;
+  }>({
     query: AgentsQuery,
     variables: { tenantId },
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
 
-  const agents = useMemo(() => data?.agents ?? [], [data]);
+  const agents = useMemo(() => (data?.agent ? [data.agent] : []), [data]);
 
   return {
     agents,
