@@ -261,6 +261,29 @@ describe("desktop updater controller", () => {
     expect(updater.quitAndInstallCalls).toBe(1);
   });
 
+  it("checks for packaged updates when the app starts", async () => {
+    const updater = new FakeAutoUpdater();
+    const states: UpdateState[] = [];
+    const controller = new DesktopUpdatesController({
+      app: appLike(userDataDir),
+      autoUpdater: updater,
+      now: fixedClock(),
+      runtimeInfo,
+      onStateChange: (state) => states.push(state),
+    });
+
+    await controller.start();
+
+    expect(updater.checkForUpdatesCalls).toBe(1);
+    expect(updater.autoDownload).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(updater.channel).toBe("latest");
+    expect(states.at(-1)).toMatchObject({
+      status: "available",
+      availableVersion: "1.0.1",
+    });
+  });
+
   it("starts in non-packaged dev mode without an updater instance", async () => {
     const controller = new DesktopUpdatesController({
       app: {
@@ -298,9 +321,11 @@ class FakeAutoUpdater extends EventEmitter implements AutoUpdaterLike {
   autoDownload = true;
   autoInstallOnAppQuit = false;
   channel: string | null = null;
+  checkForUpdatesCalls = 0;
   quitAndInstallCalls = 0;
 
   async checkForUpdates(): Promise<unknown> {
+    this.checkForUpdatesCalls += 1;
     this.emit("checking-for-update");
     this.emit("update-available", { version: "1.0.1" });
     return undefined;

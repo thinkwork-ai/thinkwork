@@ -6,7 +6,6 @@ import { DesktopApplicationHeader } from "@/components/DesktopApplicationHeader"
 import { SpacesSidebar } from "@/components/SpacesSidebar";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { NoTenantAssigned } from "@/components/NoTenantAssigned";
-import { UpdateBanner } from "@/components/update-banner";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
@@ -47,7 +46,6 @@ function ShellLayout() {
         className={`min-h-0 min-w-0 flex flex-col ${isDesktop ? "h-full pt-[var(--desktop-app-header-height)]" : "h-svh"}`}
       >
         {isDesktop ? null : <AppTopBar />}
-        <UpdateBanner />
         <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
           <Outlet />
         </main>

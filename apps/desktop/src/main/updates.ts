@@ -30,6 +30,7 @@ export interface CreateDesktopUpdatesControllerOptions {
   now?: () => Date;
   runtimeInfo?: DesktopRuntimeInfo;
   channel?: string;
+  checkOnStart?: boolean;
   onStateChange?: (state: UpdateState) => void;
   onTelemetry?: (event: UpdateTelemetryEvent) => void;
   logger?: Pick<typeof console, "warn">;
@@ -43,6 +44,7 @@ export class DesktopUpdatesController {
   private readonly app: UpdatesAppLike;
   private readonly autoUpdater?: AutoUpdaterLike;
   private readonly now: () => Date;
+  private readonly checkOnStart: boolean;
   private readonly onStateChange: (state: UpdateState) => void;
   private readonly telemetry: UpdateTelemetry;
   private readonly logger: Pick<typeof console, "warn">;
@@ -53,6 +55,7 @@ export class DesktopUpdatesController {
     this.app = options.app;
     this.autoUpdater = options.autoUpdater;
     this.now = options.now ?? (() => new Date());
+    this.checkOnStart = options.checkOnStart ?? true;
     this.onStateChange = options.onStateChange ?? (() => {});
     this.logger = options.logger ?? console;
     const channel =
@@ -80,6 +83,10 @@ export class DesktopUpdatesController {
     this.autoUpdater.autoInstallOnAppQuit = true;
     this.autoUpdater.channel = this.state.channel;
     this.registerUpdaterEvents();
+
+    if (this.checkOnStart) {
+      void this.checkForUpdates();
+    }
   }
 
   getState(): UpdateState {

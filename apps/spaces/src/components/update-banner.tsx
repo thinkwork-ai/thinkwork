@@ -1,31 +1,46 @@
 import { useEffect, useState } from "react";
 import type { UpdateState } from "@thinkwork/desktop-ipc";
-import { Button } from "@thinkwork/ui";
+import { Button, Spinner } from "@thinkwork/ui";
 import { getDesktopBridge } from "@/lib/desktop-runtime";
 import { isDesktop } from "@/lib/desktop-detection";
 
+type DesktopUpdateBridge = NonNullable<ReturnType<typeof getDesktopBridge>>;
+
+export function DesktopUpdateBadge() {
+  const updateState = useDesktopUpdateState();
+
+  if (!updateState || !shouldShowUpdateControl(updateState)) return null;
+
+  const bridge = getDesktopBridge();
+  const action = updateAction(updateState);
+  const label = updateLabel(updateState);
+  const title = updateTitle(updateState);
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={action?.variant ?? "secondary"}
+      className="h-7 rounded-full border-[#54a9ff]/60 bg-[#2f9bff] px-3 text-xs font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] hover:bg-[#2388e6] disabled:border-[#3a3a3a] disabled:bg-[#2d2d2d] disabled:text-[#a5a5a5]"
+      title={title}
+      aria-label={title}
+      disabled={!action || !bridge}
+      onClick={() => {
+        if (!action || !bridge) return;
+        void action.run(bridge);
+      }}
+    >
+      {updateState.status === "checking" ||
+      updateState.status === "downloading" ? (
+        <Spinner className="size-3" />
+      ) : null}
+      {label}
+    </Button>
+  );
+}
+
 export function UpdateBanner() {
-  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
-
-  useEffect(() => {
-    if (!isDesktop()) return;
-
-    const bridge = getDesktopBridge();
-    if (!bridge) return;
-
-    let mounted = true;
-    void bridge.getUpdateState().then((state) => {
-      if (mounted) setUpdateState(state);
-    });
-    const unsubscribe = bridge.onUpdateState((state) => {
-      setUpdateState(state);
-    });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, []);
+  const updateState = useDesktopUpdateState();
 
   if (!updateState || !shouldShowBanner(updateState)) return null;
 
@@ -57,7 +72,7 @@ export function UpdateBanner() {
             variant={action.variant}
             onClick={() => void action.run(bridge)}
           >
-            {action.label}
+            {action.bannerLabel}
           </Button>
         )}
       </div>
@@ -65,8 +80,43 @@ export function UpdateBanner() {
   );
 }
 
+function useDesktopUpdateState() {
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+
+    const bridge = getDesktopBridge();
+    if (!bridge) return;
+
+    let mounted = true;
+    void bridge.getUpdateState().then((state) => {
+      if (mounted) setUpdateState(state);
+    });
+    const unsubscribe = bridge.onUpdateState((state) => {
+      setUpdateState(state);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  return updateState;
+}
+
 function shouldShowBanner(state: UpdateState): boolean {
   return state.status !== "disabled" && state.status !== "up-to-date";
+}
+
+function shouldShowUpdateControl(state: UpdateState): boolean {
+  return (
+    state.status === "available" ||
+    state.status === "downloading" ||
+    state.status === "downloaded" ||
+    (state.status === "error" && state.canRetry)
+  );
 }
 
 function updateMessage(state: UpdateState): string {
@@ -88,14 +138,14 @@ function updateMessage(state: UpdateState): string {
 }
 
 function updateAction(state: UpdateState): {
-  label: string;
-  variant: "default" | "outline";
-  run: (bridge: NonNullable<ReturnType<typeof getDesktopBridge>>) => void;
+  bannerLabel: string;
+  variant: "default" | "outline" | "secondary";
+  run: (bridge: DesktopUpdateBridge) => void;
 } | null {
   switch (state.status) {
     case "available":
       return {
-        label: "Download",
+        bannerLabel: "Download",
         variant: "default",
         run: (bridge) => {
           void bridge.downloadUpdate();
@@ -103,7 +153,7 @@ function updateAction(state: UpdateState): {
       };
     case "downloaded":
       return {
-        label: "Restart to install",
+        bannerLabel: "Restart to install",
         variant: "default",
         run: (bridge) => {
           void bridge.installUpdate();
@@ -112,7 +162,7 @@ function updateAction(state: UpdateState): {
     case "error":
       if (!state.canRetry) return null;
       return {
-        label: "Retry",
+        bannerLabel: "Retry",
         variant: "outline",
         run: (bridge) => {
           void bridge.checkForUpdates();
@@ -126,10 +176,52 @@ function updateAction(state: UpdateState): {
   }
 }
 
+function updateLabel(state: UpdateState): string {
+  switch (state.status) {
+    case "available":
+      return "Update";
+    case "downloading":
+      return formatCompactPercent(state.downloadPercent);
+    case "downloaded":
+      return "Restart";
+    case "error":
+      return "Retry";
+    case "checking":
+      return "Checking";
+    case "disabled":
+    case "up-to-date":
+      return "";
+  }
+}
+
+function updateTitle(state: UpdateState): string {
+  switch (state.status) {
+    case "available":
+      return `Download update ${formatVersion(state.availableVersion)}`;
+    case "downloading":
+      return `Downloading update${formatPercent(state.downloadPercent)}`;
+    case "downloaded":
+      return `Restart to install update ${formatVersion(state.downloadedVersion)}`;
+    case "error":
+      return state.message
+        ? `Retry update: ${state.message}`
+        : "Retry update";
+    case "checking":
+      return "Checking for updates";
+    case "disabled":
+    case "up-to-date":
+      return "";
+  }
+}
+
 function formatVersion(version: string | null): string {
   return version ? `v${version}` : "available";
 }
 
 function formatPercent(percent: number | null): string {
   return typeof percent === "number" ? ` ${Math.round(percent)}%...` : "...";
+}
+
+function formatCompactPercent(percent: number | null): string {
+  return typeof percent === "number" ? `${Math.round(percent)}%` : "Updating";
 }

@@ -7,6 +7,7 @@ import {
   ToggleGroupItem,
 } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
+import { DesktopUpdateBadge } from "@/components/update-banner";
 
 export function DesktopApplicationHeader() {
   const { actions } = usePageHeader();
@@ -54,6 +55,7 @@ export function DesktopApplicationHeader() {
           <ArrowRight className="size-4" />
           <span className="sr-only">Forward</span>
         </Button>
+        <DesktopUpdateBadge />
       </div>
       <div className="flex min-w-0 items-center gap-2 bg-background/95 pl-3 pr-3">
         {headerActions ? (

@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThinkworkBridge, UpdateState } from "@thinkwork/desktop-ipc";
-import { UpdateBanner } from "./update-banner";
+import { DesktopUpdateBadge, UpdateBanner } from "./update-banner";
 
 const desktopDetectionMocks = vi.hoisted(() => ({
   isDesktop: vi.fn(),
@@ -104,6 +104,70 @@ describe("UpdateBanner", () => {
     fireEvent.click(screen.getByRole("button", { name: "Restart to install" }));
 
     expect(bridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DesktopUpdateBadge", () => {
+  it("renders a Codex-style available update badge and downloads on click", async () => {
+    const bridge = createBridge(
+      updateState({ status: "available", availableVersion: "1.2.3" }),
+    );
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(bridge);
+
+    render(<DesktopUpdateBadge />);
+
+    const button = await screen.findByRole("button", {
+      name: "Download update v1.2.3",
+    });
+
+    expect(button.textContent).toContain("Update");
+    expect(button.className).toContain("bg-[#2f9bff]");
+    fireEvent.click(button);
+
+    expect(bridge.downloadUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders download progress without expanding the chrome label", async () => {
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(
+      createBridge(updateState({ status: "downloading", downloadPercent: 42 })),
+    );
+
+    render(<DesktopUpdateBadge />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Downloading update 42%...",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("42%")).toBeTruthy();
+  });
+
+  it("installs a downloaded update from the badge", async () => {
+    const bridge = createBridge(
+      updateState({ status: "downloaded", downloadedVersion: "1.2.3" }),
+    );
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(bridge);
+
+    render(<DesktopUpdateBadge />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Restart to install update v1.2.3",
+      }),
+    );
+
+    expect(screen.getByText("Restart")).toBeTruthy();
+    expect(bridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays hidden when desktop updates are disabled", async () => {
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(
+      createBridge(updateState({ status: "disabled" })),
+    );
+
+    render(<DesktopUpdateBadge />);
+
+    await waitFor(() => expect(screen.queryByRole("button")).toBeNull());
   });
 });
 

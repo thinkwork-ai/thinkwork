@@ -9,6 +9,10 @@ vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeader: () => ({ actions: pageHeaderMock.actions }),
 }));
 
+vi.mock("@/components/update-banner", () => ({
+  DesktopUpdateBadge: () => <button type="button">Update</button>,
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
