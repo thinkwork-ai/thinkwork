@@ -1648,7 +1648,7 @@ None.
 - Branch: `codex/customer-onboarding-progress-refresh`
 - Plan: `docs/plans/2026-05-25-005-fix-customer-onboarding-progress-workflow-plan.md`
 - Started: `2026-05-25T18:35:00Z`
-- Active unit: PR/CI/deploy/E2E
+- Active unit: Live E2E follow-up fix
 
 ## Implemented
 
@@ -1669,7 +1669,9 @@ None.
 
 ## PR / Deploy
 
-- Pending.
+- [#1715](https://github.com/thinkwork-ai/thinkwork/pull/1715) merged to `main` as `47e1ce9514532872f98e5ff224288542c165b47d`.
+- Main deploy run `26415377371` passed, including Lambda, Terraform, Spaces, Admin, Bootstrap, and Deploy Summary.
+- Live E2E found a follow-up blocker in the manual Start onboarding mutation: linked-task status payloads were returned as lowercase internal tokens (`todo`, `synced`), which GraphQL rejected for enum fields. Follow-up branch `codex/customer-onboarding-start-status-enums` maps those mutation linked-task results through the shared GraphQL linked-task serializer.
 
 ## Blockers
 
