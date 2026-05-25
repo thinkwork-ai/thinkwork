@@ -220,8 +220,38 @@ export class DesktopUpdatesController {
 export async function createDesktopUpdatesController(
   options: Omit<CreateDesktopUpdatesControllerOptions, "autoUpdater">,
 ): Promise<DesktopUpdatesController> {
-  const { autoUpdater } = await import("electron-updater");
+  const autoUpdater = resolveImportedAutoUpdater(await import("electron-updater"));
   return new DesktopUpdatesController({ ...options, autoUpdater });
+}
+
+export function resolveImportedAutoUpdater(module: unknown): AutoUpdaterLike {
+  const candidates = [
+    module,
+    readModuleProperty(module, "default"),
+    readModuleProperty(module, "module.exports"),
+  ];
+
+  for (const candidate of candidates) {
+    const autoUpdater = readModuleProperty(candidate, "autoUpdater");
+    if (isAutoUpdaterLike(autoUpdater)) return autoUpdater;
+  }
+
+  throw new Error("electron-updater did not expose autoUpdater");
+}
+
+function readModuleProperty(module: unknown, key: string): unknown {
+  if (!module || typeof module !== "object") return undefined;
+  return (module as Record<string, unknown>)[key];
+}
+
+function isAutoUpdaterLike(value: unknown): value is AutoUpdaterLike {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "checkForUpdates" in value &&
+    typeof (value as { checkForUpdates?: unknown }).checkForUpdates ===
+      "function"
+  );
 }
 
 export function detectRuntimeInfo(app: UpdatesAppLike): DesktopRuntimeInfo {

@@ -12,6 +12,7 @@ import {
 import {
   DesktopUpdatesController,
   detectRuntimeInfo,
+  resolveImportedAutoUpdater,
   type AutoUpdaterLike,
   type UpdatesAppLike,
 } from "../../src/main/updates";
@@ -371,6 +372,19 @@ describe("desktop updater controller", () => {
     await expect(controller.checkForUpdates()).resolves.toBeUndefined();
     await expect(controller.downloadUpdate()).resolves.toBeUndefined();
     expect(controller.getState()).toMatchObject({ status: "disabled" });
+  });
+});
+
+describe("desktop updater import", () => {
+  it("resolves autoUpdater from CommonJS dynamic import shapes", () => {
+    const updater = new FakeAutoUpdater();
+
+    expect(resolveImportedAutoUpdater({ default: { autoUpdater: updater } })).toBe(
+      updater,
+    );
+    expect(
+      resolveImportedAutoUpdater({ "module.exports": { autoUpdater: updater } }),
+    ).toBe(updater);
   });
 });
 
