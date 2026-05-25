@@ -6,6 +6,44 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Customer Onboarding Native Checklist Demo
+
+Plan: `docs/plans/2026-05-25-004-feat-customer-onboarding-native-checklist-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: U1 Refresh Customer Onboarding seed and Space files
+- Active branch: `codex/u1-customer-onboarding-native-seed`
+- Active worktree: `.Codex/worktrees/customer-onboarding-u1`
+- Started: 2026-05-25
+- Latest merged PR: none for this run
+- Active PR: [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695)
+- CI: pending; local verification passed
+
+### Active Unit Notes
+
+- Created isolated U1 worktree from `origin/main` at `96b9766495dbc55ee2728ee3ff439a1a87e67810`.
+- U1 scope includes the plan file, native-first Customer Onboarding seed constants, idempotent seed-script updates, Space source file seeds, and native-first runbook copy.
+- Local research found `space_agent_assignments` is already retired on `main`; U1 removes the stale seed-script write and documents coordinator wakeups as tenant-platform-agent based.
+- Local verification passed: focused seed tests, full `@thinkwork/api` test suite, repo-wide typecheck, repo lint, touched-file Prettier check, `git diff --check`, and native dry-run validation.
+
+### Progress Log
+
+| Date       | Unit | Branch                                     | PR                                                           | Status      | Verification             | Notes                                                 |
+| ---------- | ---- | ------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------------------ | ----------------------------------------------------- |
+| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed` | [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) | In progress | Local passed; CI pending | Native seed/config/runbook refresh pushed for review. |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
 ## Current Run: Folder Is The Agent ThinkWork Alignment
 
 Plan: `docs/plans/2026-05-24-004-refactor-folder-is-the-agent-thinkwork-alignment-plan.md`
