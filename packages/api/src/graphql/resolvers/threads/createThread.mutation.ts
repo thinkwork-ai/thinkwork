@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { GraphQLContext } from "../../context.js";
 import { GraphQLError } from "graphql";
 import {
@@ -31,6 +32,11 @@ import {
   PlatformAgentNotFoundError,
   resolveTenantPlatformAgent,
 } from "../../../lib/agents/tenant-platform-agent.js";
+import {
+  CUSTOMER_ONBOARDING_TEMPLATE_KEY,
+  CustomerOnboardingWorkflowError,
+  startCustomerOnboardingWorkflow,
+} from "../../../lib/spaces/customer-onboarding-workflow.js";
 
 export const createThread = async (
   _parent: any,
@@ -60,7 +66,15 @@ export const createThread = async (
     });
   }
 
-  let threadSpace: { id: string; tenant_id: string; status: string };
+  let threadSpace: {
+    id: string;
+    tenant_id: string;
+    name?: string;
+    status: string;
+    kind?: string;
+    template_key?: string | null;
+    config?: unknown;
+  };
   if (!i.spaceId) {
     threadSpace = await ensureDefaultThreadSpace({
       tenantId: i.tenantId,
@@ -71,7 +85,11 @@ export const createThread = async (
       .select({
         id: spaces.id,
         tenant_id: spaces.tenant_id,
+        name: spaces.name,
         status: spaces.status,
+        kind: spaces.kind,
+        template_key: spaces.template_key,
+        config: spaces.config,
       })
       .from(spaces)
       .where(eq(spaces.id, i.spaceId));
@@ -94,6 +112,16 @@ export const createThread = async (
       extensions: { code: "FORBIDDEN" },
     });
   }
+
+  if (isCustomerOnboardingSpace(threadSpace)) {
+    return createCustomerOnboardingThreadFromSpaceTrigger({
+      input: i,
+      space: threadSpace,
+      createdByType,
+      createdById,
+    });
+  }
+
   const threadAgentId =
     i.agentId ?? (await resolveDefaultThreadAgentId(i.tenantId));
 
@@ -279,6 +307,142 @@ async function resolveDefaultThreadAgentId(tenantId: string) {
     if (error instanceof PlatformAgentNotFoundError) return null;
     throw error;
   }
+}
+
+async function createCustomerOnboardingThreadFromSpaceTrigger(input: {
+  input: any;
+  space: {
+    id: string;
+    name?: string;
+    kind?: string;
+    template_key?: string | null;
+    config?: unknown;
+  };
+  createdByType: "user" | "agent" | "system";
+  createdById: string | null | undefined;
+}) {
+  try {
+    const result = await startCustomerOnboardingWorkflow({
+      tenantId: input.input.tenantId,
+      spaceId: input.space.id,
+      source: "manual",
+      opportunity: buildCustomerOnboardingOpportunityFromThreadCreate(
+        input.input,
+      ),
+      startedBy: {
+        type: input.createdByType === "user" ? "user" : "system",
+        id: input.createdByType === "user" ? input.createdById : null,
+      },
+    });
+    const [threadRow] = await db
+      .select()
+      .from(threads)
+      .where(eq(threads.id, result.thread.id));
+    return threadRow ? threadToCamel(threadRow) : result.thread;
+  } catch (error) {
+    if (error instanceof CustomerOnboardingWorkflowError) {
+      throw new GraphQLError(error.message, {
+        extensions: { code: error.code, http: { status: error.status } },
+      });
+    }
+    throw error;
+  }
+}
+
+function buildCustomerOnboardingOpportunityFromThreadCreate(
+  input: any,
+): Record<string, unknown> {
+  const metadata = parseJsonObject(input.metadata);
+  const fromMetadata =
+    optionalObjectRecord(metadata.customerOnboarding) ??
+    optionalObjectRecord(metadata.opportunity) ??
+    metadata;
+  const firstMessage = stringValue(input.firstMessage);
+  const title = stringValue(input.title);
+  const customerName =
+    stringValue(fromMetadata.customerName) ??
+    stringValue(fromMetadata.companyName) ??
+    stringValue(fromMetadata.customer) ??
+    inferCustomerNameFromThreadText(title, firstMessage) ??
+    "New customer";
+
+  return {
+    ...fromMetadata,
+    event: stringValue(fromMetadata.event) ?? "thread_created",
+    opportunityId:
+      stringValue(fromMetadata.opportunityId) ??
+      stringValue(fromMetadata.id) ??
+      `thread:${randomUUID()}`,
+    customerName,
+    companyName: stringValue(fromMetadata.companyName) ?? customerName,
+    notes: [stringValue(fromMetadata.notes), firstMessage]
+      .filter(Boolean)
+      .join("\n\n"),
+  };
+}
+
+function inferCustomerNameFromThreadText(
+  title: string | null,
+  firstMessage: string | null,
+): string | null {
+  const source =
+    title && title !== "Untitled conversation" ? title : firstMessage;
+  if (!source) return null;
+  const inferred = source
+    .replace(/\bonboard(?:ing)?\b/gi, "")
+    .replace(/\bcustomer\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.?!,:;-]+$/g, "")
+    .slice(0, 80);
+  return inferred || null;
+}
+
+function isCustomerOnboardingSpace(space: {
+  kind?: string;
+  template_key?: string | null;
+  config?: unknown;
+}) {
+  const config = objectRecord(space.config);
+  return (
+    normalizeKey(space.kind) === CUSTOMER_ONBOARDING_TEMPLATE_KEY ||
+    normalizeKey(space.template_key) === CUSTOMER_ONBOARDING_TEMPLATE_KEY ||
+    normalizeKey(config.workflow) === CUSTOMER_ONBOARDING_TEMPLATE_KEY
+  );
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return objectRecord(parsed);
+  } catch {
+    return {};
+  }
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function optionalObjectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeKey(value: unknown): string | null {
+  return stringValue(value)?.toLowerCase() ?? null;
 }
 
 async function persistOpeningMessageMentions(input: {

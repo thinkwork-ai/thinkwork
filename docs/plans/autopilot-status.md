@@ -64,13 +64,26 @@ Target branch: `main`
 
 ## Follow-Up Run: Spaces Space Query Compatibility
 
-- Status: active
-- Active branch: `codex/spaces-space-query-fix`
-- Active worktree: `.Codex/worktrees/spaces-space-query-fix`
+- Status: merged
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: live E2E to `https://app.thinkwork.ai/spaces/0b640386-05d7-4dbb-9585-e4c0b8c03f5f` failed before the workflow could start because `SpaceQuery` still requested retired `Space.agentAssignments`.
 - Scope: remove the stale `agentAssignments` selection from the Spaces app Space query so the Customer Onboarding space route can load against the deployed schema.
 - Verification: focused Spaces GraphQL query test passed; Spaces production build passed; touched-file Prettier check passed; `git diff --check` passed.
+- PR: [#1709](https://github.com/thinkwork-ai/thinkwork/pull/1709)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26411633710` completed successfully; live Customer Onboarding route loads and shows the Start onboarding form.
+
+## Follow-Up Run: Customer Onboarding Thread Trigger
+
+- Status: active
+- Active branch: `codex/customer-onboarding-checklist-seed`
+- Active worktree: `.Codex/worktrees/customer-onboarding-checklist-seed`
+- Started: 2026-05-25
+- Root cause: live E2E proved the Space files were present, but the existing Customer Onboarding Space could still have zero database checklist rows. Also, ordinary `createThread` calls in that Space did not invoke the onboarding workflow; only the dedicated Start onboarding mutation did.
+- Scope: repair missing native checklist rows when the workflow starts, route ordinary Customer Onboarding Space thread creation through the native onboarding workflow, and make the kickoff message ask the human for missing intake fields in chat.
+- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/threads/createThread.onboarding.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier check; `git diff --check`.
 
 ### Active Unit Notes
 
