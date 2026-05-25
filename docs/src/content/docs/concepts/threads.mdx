@@ -90,7 +90,7 @@ The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn
 
 Channel support has three seams: a new channel value in the thread model, an inbound handler that maps provider events into the thread model, and an outbound handler that knows how to reply via the provider's API. The shape is the same for every channel; each integration fills it in.
 
-Integration-origin threads also carry provider metadata, such as Linear issue id, integration execution id, Space id, Computer task id, and provider writeback state. The channel tells operators what kind of source created the thread; the Space and metadata tie the visible thread back to the durable integration lifecycle.
+Integration-origin threads also carry provider metadata, such as Linear issue id, integration execution id, Space id, and provider writeback state. The channel tells operators what kind of source created the thread; the Space and metadata tie the visible thread back to the durable integration lifecycle.
 
 ## Reopen, don't recreate
 
@@ -111,7 +111,7 @@ That guarantees conversation continuity. An agent that answered a Slack question
 
 The reopen happens at the integration boundary — whenever an inbound event arrives, the integration looks for an existing open thread matching the external-system keys before deciding to create a new one. A thread in `DONE` status implicitly returns to `IN_PROGRESS` on reopen.
 
-Tracker-style integration work, such as the private extension Linear checkpoint, also uses provider metadata to keep one external work item linked to one Computer-owned thread. Repeated polling of the same Linear issue should update or recognize the existing lifecycle instead of creating duplicate visible work.
+Tracker-style integration work, such as the private extension Linear checkpoint, also uses provider metadata to keep one external work item linked to one Space-owned thread. Repeated polling of the same Linear issue should update or recognize the existing lifecycle instead of creating duplicate visible work.
 
 ## The status lifecycle
 
@@ -256,7 +256,7 @@ The mobile app has no delete surface at all. End-users archive, operators can de
 - [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/) — the end-user view
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — what runs inside a turn
 - [Concepts: Integrations](/concepts/integrations) — how inbound events become threads
-- [Integration Lifecycle](/concepts/integrations/) — how integration executions, Computer tasks, and threads link together
+- [Integration Lifecycle](/concepts/integrations/) — how integration executions and threads link together
 - [API Reference: GraphQL](/api/graphql/) — the thread queries, mutations, and subscriptions
 
 ## Under the hood

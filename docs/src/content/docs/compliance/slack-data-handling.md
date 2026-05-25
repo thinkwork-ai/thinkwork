@@ -1,7 +1,11 @@
 ---
 title: Slack Data Handling
-description: "Privacy and compliance disclosure for the ThinkWork Slack workspace app."
+description: "Privacy and compliance disclosure for the ThinkWork Slack workspace app (currently disabled pending Spaces-based redesign)."
 ---
+
+:::caution[Slack integration is currently disabled]
+The Slack workspace app described on this page is **not operational in v1**. The previous Computer-routed implementation was retired in PR #1666. This compliance disclosure is preserved as historical reference and as a starting point for the replacement Spaces-based integration's compliance review.
+:::
 
 This page describes what the ThinkWork Slack workspace app processes, where that data is stored, and how operators can explain the integration to enterprise IT and compliance reviewers.
 

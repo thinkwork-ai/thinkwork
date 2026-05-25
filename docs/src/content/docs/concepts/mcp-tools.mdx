@@ -1,29 +1,29 @@
 ---
 title: MCP Tools
-description: Register MCP servers and expose external capabilities to Computers and managed Agents.
+description: Register MCP servers and expose external capabilities to Spaces and the tenant platform agent.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-MCP (Model Context Protocol) is ThinkWork's OSS path for external tools. MCP servers expose capabilities that Computers and managed Agents can call during work, while ThinkWork controls registration, assignment, auth resolution, and audit.
+MCP (Model Context Protocol) is ThinkWork's OSS path for external tools. MCP servers expose capabilities that the tenant platform agent can call during work, while ThinkWork controls registration, assignment, auth resolution, and audit.
 
-Use MCP tools when a Computer or managed Agent needs to call remote capabilities during a turn, such as CRM lookups, ticket updates, internal API operations, search, or database queries exposed by an MCP server.
+Use MCP tools when the tenant platform agent needs to call remote capabilities during a turn, such as CRM lookups, ticket updates, internal API operations, search, or database queries exposed by an MCP server.
 
 ## How it works
 
 ```text
 Admin registers MCP server
-    -> Assigns it to a template, Computer, or managed Agent
+    -> Assigns it to a template or Space
     -> Invocation resolves tenant or user auth
     -> Runtime connects to MCP server
     -> Tools are discovered
-    -> Computer or managed Agent calls tools during the turn
+    -> Tenant platform agent calls tools during the turn
     -> Calls are logged in the thread timeline
 ```
 
 ## Registration
 
-MCP servers are registered at the tenant level, then assigned to templates, Computers, or managed Agents depending on the product surface.
+MCP servers are registered at the tenant level, then assigned to templates or Spaces depending on the product surface.
 
 Typical config includes:
 

@@ -5,7 +5,7 @@ description: The ThinkWork admin web app — a Vite + React 19 dashboard for pla
 
 import { Aside } from "@astrojs/starlight/components";
 
-The admin web app is the operator-facing control plane for a ThinkWork deployment. Platform operators, agent authors, and audit owners live here — configuring the tenant platform agent, Spaces, Computers, threads, MCP servers, webhooks, tenant settings, and controls. End users live in the [Mobile App](/applications/mobile/).
+The admin web app is the operator-facing control plane for a ThinkWork deployment. Platform operators, agent authors, and audit owners live here — configuring the tenant platform agent, Spaces, threads, MCP servers, webhooks, tenant settings, and controls. End users live in the [Mobile App](/applications/mobile/).
 
 The admin app is a Vite + React 19 single-page application with file-based routing through **TanStack Router**. It talks to the same GraphQL + REST endpoints the mobile app does, scoped with an `x-tenant-id` header on every request, and it authenticates through **AWS Cognito** with optional Google SSO.
 

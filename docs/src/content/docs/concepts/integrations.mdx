@@ -15,7 +15,7 @@ The OSS integration foundation includes:
 - OAuth redirect and token handling patterns
 - MCP server registration and per-user MCP auth
 - webhooks as explicit API surfaces
-- thread and Computer primitives that integrations can target
+- thread and Space primitives that integrations can target
 
 It does not include a public integration catalog, integration execution table, private extension route, Linear tracker flow, or integration lifecycle API.
 
@@ -25,9 +25,9 @@ External-system access should be modeled at the right level:
 
 | Need                                             | Preferred shape                                                  |
 | ------------------------------------------------ | ---------------------------------------------------------------- |
-| A Computer needs tools during work               | MCP server or built-in skill/tool                                |
+| The tenant platform agent needs tools during work | MCP server or built-in skill/tool                               |
 | A user needs provider OAuth                      | Mobile per-user connection flow                                  |
-| A user-owned connector emits an event            | Connector trigger targeting an assigned shared Computer          |
+| A user-owned connector emits an event            | Connector trigger targeting a Space                              |
 | A tenant needs an inbound endpoint               | Explicit webhook/API route                                       |
 | An enterprise customer needs a packaged workflow | Private extension with its own tables, runtime, and admin module |
 
@@ -35,7 +35,7 @@ This keeps OSS ThinkWork focused on the harness and avoids shipping under-proven
 
 ## OAuth and credentials
 
-OAuth credentials and provider tokens remain part of the platform. They should be resolved only by the runtime surface that needs them. User-owned connectors such as Gmail and Calendar stay tied to the consenting user; event triggers route into assigned shared Computers with explicit requester and credential-subject attribution rather than creating personal Computer identities.
+OAuth credentials and provider tokens remain part of the platform. They should be resolved only by the runtime surface that needs them. User-owned connectors such as Gmail and Calendar stay tied to the consenting user; event triggers route into Spaces with explicit requester and credential-subject attribution.
 
 <Aside type="note">
   Per-user provider setup belongs in the mobile connection flow when user
