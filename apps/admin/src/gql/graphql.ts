@@ -975,6 +975,7 @@ export type CustomerOnboardingLinkedTaskResult = {
   checklistItemId: Scalars['ID']['output'];
   externalTaskId: Scalars['String']['output'];
   externalTaskUrl?: Maybe<Scalars['String']['output']>;
+  provider: LinkedTaskProvider;
   status: LinkedTaskStatus;
   syncStatus: LinkedTaskSyncStatus;
   title: Scalars['String']['output'];
@@ -1340,12 +1341,14 @@ export enum LinkedTaskEventType {
   Created = 'CREATED',
   DueDateChanged = 'DUE_DATE_CHANGED',
   Reassigned = 'REASSIGNED',
+  StatusChanged = 'STATUS_CHANGED',
   SyncFailed = 'SYNC_FAILED',
   WritebackPosted = 'WRITEBACK_POSTED'
 }
 
 export enum LinkedTaskProvider {
-  Lastmile = 'LASTMILE'
+  Lastmile = 'LASTMILE',
+  Thinkwork = 'THINKWORK'
 }
 
 export enum LinkedTaskStatus {
@@ -1353,6 +1356,7 @@ export enum LinkedTaskStatus {
   Cancelled = 'CANCELLED',
   Completed = 'COMPLETED',
   InProgress = 'IN_PROGRESS',
+  NotApplicable = 'NOT_APPLICABLE',
   Todo = 'TODO',
   Unknown = 'UNKNOWN'
 }
@@ -1818,6 +1822,7 @@ export type Mutation = {
   updateArtifact: Artifact;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
+  updateLinkedTask: LinkedTask;
   updateMemoryRecord: Scalars['Boolean']['output'];
   updateOntologyChangeSet: OntologyChangeSet;
   updateOntologyEntityType: OntologyEntityType;
@@ -2574,6 +2579,11 @@ export type MutationUpdateEvalTestCaseArgs = {
 export type MutationUpdateKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
   input: UpdateKnowledgeBaseInput;
+};
+
+
+export type MutationUpdateLinkedTaskArgs = {
+  input: UpdateLinkedTaskInput;
 };
 
 
@@ -5296,6 +5306,15 @@ export type UpdateEvalTestCaseInput = {
 export type UpdateKnowledgeBaseInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateLinkedTaskInput = {
+  linkedTaskId: Scalars['ID']['input'];
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+  status: LinkedTaskStatus;
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 export type UpdateOntologyChangeSetInput = {
