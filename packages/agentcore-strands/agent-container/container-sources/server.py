@@ -2398,6 +2398,7 @@ def _build_finalize_payload(
         "user_message": payload.get("message") or "",
         "agent_model": result.get("model") or payload.get("model") or None,
         "runtime_type": payload.get("runtime_type") or result.get("runtime") or "strands",
+        "composed_system_prompt": result.get("composed_system_prompt") or None,
         "agent_slug": payload.get("instance_id") or None,
         "agent_name": payload.get("agent_name") or None,
         "duration_ms": duration_ms,
@@ -2415,6 +2416,7 @@ def _build_finalize_payload(
             "cached_read_tokens": usage.get("cached_read_tokens", 0),
         },
         "response": {
+            "composed_system_prompt": result.get("composed_system_prompt") or None,
             # OpenAI-shape choices[].message.content is what chat-finalize's
             # extractResponseText() walks; preserve the shape verbatim.
             "choices": result.get("choices"),
@@ -3008,6 +3010,7 @@ def _execute_agent_turn(payload: dict) -> dict:
 
         return {
             "response_text": response_text,
+            "composed_system_prompt": system_prompt,
             "strands_usage": strands_usage,
             "duration_ms": duration_ms,
             "invocation_tool_costs": invocation_tool_costs,

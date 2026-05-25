@@ -18,7 +18,7 @@
 
 import { useMemo } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Lock } from "lucide-react";
+import { Lock, Hash } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { StatusIcon } from "@/components/threads/StatusIcon";
@@ -39,6 +39,11 @@ export type ThreadsTableItem = {
     readonly avatarUrl?: string | null;
   } | null;
   readonly computer?: {
+    readonly id: string;
+    readonly name: string;
+    readonly slug?: string | null;
+  } | null;
+  readonly space?: {
     readonly id: string;
     readonly name: string;
     readonly slug?: string | null;
@@ -120,7 +125,6 @@ export function ThreadsTable({
       {
         id: "thread",
         header: "Thread",
-        size: 620,
         cell: ({ row }) => {
           const thread = row.original;
           const identifier = thread.identifier ?? `#${thread.number}`;
@@ -147,7 +151,17 @@ export function ThreadsTable({
                 )}
               </span>
 
-              <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+              <span className="min-w-0 truncate">{thread.title}</span>
+              {thread.space && (
+                <Badge
+                  variant="outline"
+                  className="hidden max-w-36 shrink-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground sm:inline-flex"
+                  title={`Space: ${thread.space.name}`}
+                >
+                  <Hash className="h-3 w-3" />
+                  <span className="truncate">{thread.space.name}</span>
+                </Badge>
+              )}
             </div>
           );
         },
@@ -201,12 +215,12 @@ export function ThreadsTable({
       {
         id: "user",
         header: "User",
-        size: 150,
+        size: 120,
         cell: ({ row }) => {
           const label = threadUserLabel(row.original);
           return (
             <div
-              className="h-10 truncate px-2 text-sm leading-10 text-muted-foreground"
+              className="h-10 whitespace-nowrap px-2 text-sm leading-10 text-muted-foreground"
               title={label}
             >
               {row.original.userId || row.original.user ? label : "—"}

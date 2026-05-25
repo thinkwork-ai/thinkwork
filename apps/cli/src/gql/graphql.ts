@@ -5211,6 +5211,7 @@ export type ThreadTurn = {
   sessionIdBefore?: Maybe<Scalars['String']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: Scalars['String']['output'];
+  systemPrompt?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId?: Maybe<Scalars['ID']['output']>;
   totalCost?: Maybe<Scalars['Float']['output']>;

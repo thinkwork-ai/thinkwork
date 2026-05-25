@@ -460,6 +460,11 @@ export const ThreadsPagedQuery = gql`
         assigneeId
         agentId
         spaceId
+        space {
+          id
+          name
+          slug
+        }
         userId
         agent {
           id
@@ -565,6 +570,15 @@ export const ThreadDetailQuery = graphql(`
       }
       createdAt
       updatedAt
+    }
+  }
+`);
+
+export const ThreadSystemPromptQuery = graphql(`
+  query ThreadSystemPrompt($tenantId: ID!, $threadId: ID!) {
+    threadTurns(tenantId: $tenantId, threadId: $threadId, limit: 1) {
+      id
+      systemPrompt
     }
   }
 `);

@@ -60,6 +60,25 @@ export interface ProcessFinalizeResult {
   messageId: string | null;
 }
 
+export function capturedSystemPromptFromFinalizePayload(
+  payload: Pick<FinalizePayload, "composed_system_prompt" | "response">,
+): string | null {
+  const response = payload.response as
+    | (Record<string, unknown> & { composed_system_prompt?: unknown })
+    | undefined;
+  const candidates = [
+    payload.composed_system_prompt,
+    response?.composed_system_prompt,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 /**
  * Runs the post-AgentCore finalize chain. Idempotent on
  * `thread_turns.finalized_at` — a second call for the same turn returns
@@ -113,12 +132,14 @@ export async function processFinalize(
       computerId,
       computerTaskId,
       errorMessage,
+      systemPrompt: capturedSystemPromptFromFinalizePayload(payload),
     });
     return { finalized: true, messageId: null };
   }
 
   // ---- Completed-turn finalize chain ----------------------------------
   const invokeResult = payload.response ?? {};
+  const capturedSystemPrompt = capturedSystemPromptFromFinalizePayload(payload);
   const responseRuntimeType =
     typeof invokeResult.runtime === "string" ? invokeResult.runtime : null;
   const runtimeType =
@@ -282,6 +303,7 @@ export async function processFinalize(
         status: "succeeded",
         finished_at: new Date(),
         runtime_type: runtimeType || undefined,
+        system_prompt: capturedSystemPrompt || undefined,
         result_json: {
           response: responseText.slice(0, 10000),
           runtime: runtimeType || undefined,
@@ -435,6 +457,7 @@ interface HandleFailedTurnInput {
   computerId?: string | null;
   computerTaskId?: string | null;
   errorMessage?: string;
+  systemPrompt?: string | null;
 }
 
 async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
@@ -458,6 +481,7 @@ async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
         status: "failed",
         finished_at: new Date(),
         error: errMessage,
+        system_prompt: input.systemPrompt || undefined,
       })
       .where(eq(threadTurns.id, turnId));
 
