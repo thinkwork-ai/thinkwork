@@ -267,6 +267,24 @@ describe("TaskThreadView", () => {
               createdAt: "2026-05-18T20:51:00.000Z",
             },
           ],
+          checklist: {
+            title: "Onboarding checklist",
+            tasks: [
+              {
+                id: "linked-1",
+                title: "Get contract signed",
+                status: "COMPLETED",
+                required: true,
+                assigneeDisplay: "Ops",
+              },
+              {
+                id: "linked-2",
+                title: "Enter customer information into P21",
+                status: "TODO",
+                required: true,
+              },
+            ],
+          },
           onDownloadAttachment,
         }}
       />,
@@ -291,6 +309,12 @@ describe("TaskThreadView", () => {
     expect(within(panel).getByText("Date started")).toBeTruthy();
     expect(within(panel).getByText("Eric Odom")).toBeTruthy();
     expect(within(panel).getByText("Executive")).toBeTruthy();
+    expect(within(panel).getByText("Onboarding checklist")).toBeTruthy();
+    expect(within(panel).getByText("1/2 required complete")).toBeTruthy();
+    expect(within(panel).getByText("Get contract signed")).toBeTruthy();
+    expect(
+      within(panel).getByText("Enter customer information into P21"),
+    ).toBeTruthy();
     fireEvent.click(
       within(panel).getByRole("button", { name: /general-ledger/i }),
     );
