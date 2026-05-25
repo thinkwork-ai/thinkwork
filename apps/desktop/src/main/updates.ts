@@ -1,4 +1,6 @@
 import { machine } from "node:os";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { UpdateState, UpdateTelemetryEvent } from "@thinkwork/desktop-ipc";
 import { UpdateTelemetry } from "./telemetry.js";
 import {
@@ -17,6 +19,7 @@ export interface UpdatesAppLike {
 export interface AutoUpdaterLike {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
+  allowPrerelease?: boolean;
   channel?: string | null;
   on(event: string, listener: (...args: unknown[]) => void): this;
   checkForUpdates(): Promise<unknown>;
@@ -31,6 +34,7 @@ export interface CreateDesktopUpdatesControllerOptions {
   runtimeInfo?: DesktopRuntimeInfo;
   channel?: string;
   checkOnStart?: boolean;
+  updatesEnabled?: boolean;
   onStateChange?: (state: UpdateState) => void;
   onTelemetry?: (event: UpdateTelemetryEvent) => void;
   logger?: Pick<typeof console, "warn">;
@@ -45,6 +49,7 @@ export class DesktopUpdatesController {
   private readonly autoUpdater?: AutoUpdaterLike;
   private readonly now: () => Date;
   private readonly checkOnStart: boolean;
+  private readonly updatesEnabled: boolean;
   private readonly onStateChange: (state: UpdateState) => void;
   private readonly telemetry: UpdateTelemetry;
   private readonly logger: Pick<typeof console, "warn">;
@@ -56,6 +61,7 @@ export class DesktopUpdatesController {
     this.autoUpdater = options.autoUpdater;
     this.now = options.now ?? (() => new Date());
     this.checkOnStart = options.checkOnStart ?? true;
+    this.updatesEnabled = options.updatesEnabled ?? shouldEnableUpdates(this.app);
     this.onStateChange = options.onStateChange ?? (() => {});
     this.logger = options.logger ?? console;
     const channel =
@@ -77,10 +83,11 @@ export class DesktopUpdatesController {
     this.started = true;
     await this.telemetry.reportLaunchOutcome();
 
-    if (!this.app.isPackaged || !this.autoUpdater) return;
+    if (!this.updatesEnabled || !this.autoUpdater) return;
 
     this.autoUpdater.autoDownload = false;
     this.autoUpdater.autoInstallOnAppQuit = true;
+    this.autoUpdater.allowPrerelease = this.state.channel !== "latest";
     this.autoUpdater.channel = this.state.channel;
     this.registerUpdaterEvents();
 
@@ -94,7 +101,7 @@ export class DesktopUpdatesController {
   }
 
   async checkForUpdates(): Promise<void> {
-    if (!this.app.isPackaged || !this.autoUpdater) return;
+    if (!this.updatesEnabled || !this.autoUpdater) return;
 
     this.dispatch({
       type: "checking-for-update",
@@ -112,7 +119,7 @@ export class DesktopUpdatesController {
   }
 
   async downloadUpdate(): Promise<void> {
-    if (!this.app.isPackaged || !this.autoUpdater) return;
+    if (!this.updatesEnabled || !this.autoUpdater) return;
 
     this.dispatch({ type: "download-started" });
     try {
@@ -128,7 +135,7 @@ export class DesktopUpdatesController {
 
   installUpdate(): void {
     if (
-      !this.app.isPackaged ||
+      !this.updatesEnabled ||
       !this.autoUpdater ||
       !this.state.downloadedVersion
     ) {
@@ -218,6 +225,16 @@ export function detectRuntimeInfo(app: UpdatesAppLike): DesktopRuntimeInfo {
 export function resolveUpdateChannel(version: string): string {
   const prerelease = version.match(/-(canary|beta|alpha)(?:[.-]|$)/);
   return prerelease?.[1] ?? "latest";
+}
+
+export function shouldEnableUpdates(app: UpdatesAppLike): boolean {
+  if (app.isPackaged) return true;
+
+  try {
+    return existsSync(join(process.resourcesPath, "app-update.yml"));
+  } catch {
+    return false;
+  }
 }
 
 function updateInfoVersion(info: unknown): string {

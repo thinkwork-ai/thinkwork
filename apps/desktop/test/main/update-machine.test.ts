@@ -277,8 +277,50 @@ describe("desktop updater controller", () => {
     expect(updater.checkForUpdatesCalls).toBe(1);
     expect(updater.autoDownload).toBe(false);
     expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(updater.allowPrerelease).toBe(false);
     expect(updater.channel).toBe("latest");
     expect(states.at(-1)).toMatchObject({
+      status: "available",
+      availableVersion: "1.0.1",
+    });
+  });
+
+  it("enables prerelease updates for canary builds", async () => {
+    const updater = new FakeAutoUpdater();
+    const controller = new DesktopUpdatesController({
+      app: {
+        ...appLike(userDataDir),
+        getVersion: () => "1.0.0-canary.1",
+      },
+      autoUpdater: updater,
+      now: fixedClock(),
+      runtimeInfo,
+    });
+
+    await controller.start();
+
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe("canary");
+  });
+
+  it("can enable updates for packaged builds when Electron reports non-packaged", async () => {
+    const updater = new FakeAutoUpdater();
+    const controller = new DesktopUpdatesController({
+      app: {
+        ...appLike(userDataDir),
+        isPackaged: false,
+      },
+      autoUpdater: updater,
+      updatesEnabled: true,
+      now: fixedClock(),
+      runtimeInfo,
+    });
+
+    await controller.start();
+    await controller.checkForUpdates();
+
+    expect(updater.checkForUpdatesCalls).toBe(2);
+    expect(controller.getState()).toMatchObject({
       status: "available",
       availableVersion: "1.0.1",
     });
@@ -320,6 +362,7 @@ function tick(): Promise<void> {
 class FakeAutoUpdater extends EventEmitter implements AutoUpdaterLike {
   autoDownload = true;
   autoInstallOnAppQuit = false;
+  allowPrerelease = false;
   channel: string | null = null;
   checkForUpdatesCalls = 0;
   quitAndInstallCalls = 0;
