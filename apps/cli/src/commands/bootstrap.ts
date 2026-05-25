@@ -46,7 +46,7 @@ export function registerBootstrapCommand(program: Command): void {
   program
     .command("bootstrap")
     .description(
-      "Seed workspace defaults, skill catalog, and per-tenant files for a stage. Prompts for stage in a TTY when omitted.",
+      "Seed workspace defaults and per-tenant workspace files for a stage. Prompts for stage in a TTY when omitted.",
     )
     .option("-s, --stage <name>", "Deployment stage")
     .action(async (opts: { stage?: string }) => {

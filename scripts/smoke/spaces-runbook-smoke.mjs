@@ -2,9 +2,10 @@
 /**
  * Smoke test the Computer runbook foundation.
  *
- * By default this performs a deterministic dry-run against repo-authored
- * runbooks and smoke assertions. Set SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 to run
- * the deployed GraphQL/DB path against a real Computer.
+ * By default this reports the smoke inputs without touching deployed
+ * resources. Tenant S3 catalog validation requires live mode. Set
+ * SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 to run the deployed GraphQL/DB path
+ * against a real Computer.
  *
  * Required for live mode:
  *   DATABASE_URL
@@ -456,80 +457,13 @@ function resolveComputerIdentity(source) {
 }
 
 function runDryRun() {
-  const crm = loadRunbook("crm-dashboard");
-  const research = loadRunbook("research-dashboard");
-  const map = loadRunbook("map-artifact");
-
-  assertRunbook(crm, {
-    slug: "crm-dashboard",
-    explicitAlias: "crm dashboard",
-    produceContains: ["CrmDashboardData", "metadata.runbookSlug", "save_app"],
-  });
-  assertRunbook(research, {
-    slug: "research-dashboard",
-    explicitAlias: "research dashboard",
-    produceContains: [
-      "findings alongside evidence",
-      "research-dashboard",
-      "save_app",
-    ],
-  });
-  assertRunbook(map, {
-    slug: "map-artifact",
-    explicitAlias: "map artifact",
-    produceContains: ["MapView", "map-artifact", "save_app"],
-  });
-
   return {
     prompts: PROMPTS,
-    runbooks: [crm.slug, research.slug, map.slug],
+    expectedRunbooks: ["crm-dashboard", "research-dashboard", "map-artifact"],
+    catalogValidation: "live-mode only",
     expectedPartTypes: ["data-runbook-confirmation", "data-runbook-queue"],
     liveModeEnv: "SMOKE_ENABLE_COMPUTER_RUNBOOKS=1",
   };
-}
-
-function loadRunbook(slug) {
-  const root = path.join("packages", "skill-catalog", slug);
-  const contract = parseJsonObject(
-    fs.readFileSync(
-      path.join(root, "references", "thinkwork-runbook.json"),
-      "utf8",
-    ),
-  );
-  const phases = Array.isArray(contract.phases)
-    ? contract.phases.map((phase) => ({
-        ...phase,
-        guidanceMarkdown: fs.readFileSync(
-          path.join(root, phase.guidance),
-          "utf8",
-        ),
-      }))
-    : [];
-  return {
-    slug,
-    contract,
-    phases,
-  };
-}
-
-function assertRunbook(runbook, { slug, explicitAlias, produceContains }) {
-  if (runbook.slug !== slug) throw new Error(`Expected runbook ${slug}.`);
-  if (!runbook.contract.routing?.explicitAliases?.includes(explicitAlias)) {
-    throw new Error(`${slug} missing explicit alias ${explicitAlias}.`);
-  }
-  const phaseIds = runbook.phases.map((phase) => phase.id).join(",");
-  if (phaseIds !== "discover,analyze,produce,validate") {
-    throw new Error(`${slug} phase order drifted: ${phaseIds}.`);
-  }
-  const produce = runbook.phases.find((phase) => phase.id === "produce");
-  if (!produce?.capabilityRoles?.includes("artifact_build")) {
-    throw new Error(`${slug} produce phase must declare artifact_build.`);
-  }
-  for (const token of produceContains) {
-    if (!produce?.guidanceMarkdown.includes(token)) {
-      throw new Error(`${slug} produce guidance missing ${token}.`);
-    }
-  }
 }
 
 function psql(sql) {

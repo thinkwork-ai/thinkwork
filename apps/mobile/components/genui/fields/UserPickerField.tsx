@@ -30,7 +30,7 @@ interface TenantMember {
 
 // Inline raw GraphQL query — bypasses codegen for this one-off use.
 // Mirrors the agent-side `_fetch_tenant_members` query in
-// packages/skill-catalog/agent-thread-management/scripts/threads.py.
+// legacy agent-thread-management skill helper.
 const TenantUsersQuery = gql`
   query TenantUsersForFormPicker($tenantId: ID!) {
     tenantMembers(tenantId: $tenantId) {
@@ -52,7 +52,14 @@ const TenantUsersQuery = gql`
  * types. Stores the selected user's email so the agent can pass it
  * straight into create_sub_thread.assignee_email.
  */
-export function UserPickerField({ id, label, required, value, disabled, onChange }: UserPickerFieldProps) {
+export function UserPickerField({
+  id,
+  label,
+  required,
+  value,
+  disabled,
+  onChange,
+}: UserPickerFieldProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -81,9 +88,10 @@ export function UserPickerField({ id, label, required, value, disabled, onChange
     const q = query.trim().toLowerCase();
     if (!q) return allUsers.slice(0, 20);
     return allUsers
-      .filter((u) =>
-        (u.name || "").toLowerCase().includes(q) ||
-        (u.email || "").toLowerCase().includes(q),
+      .filter(
+        (u) =>
+          (u.name || "").toLowerCase().includes(q) ||
+          (u.email || "").toLowerCase().includes(q),
       )
       .slice(0, 20);
   }, [allUsers, query]);
@@ -97,8 +105,14 @@ export function UserPickerField({ id, label, required, value, disabled, onChange
   if (selected && !open) {
     return (
       <View className="mb-4">
-        <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
-          {label}{required ? " *" : ""}
+        <Text
+          size="xs"
+          weight="medium"
+          variant="muted"
+          className="uppercase tracking-wide mb-1.5"
+        >
+          {label}
+          {required ? " *" : ""}
         </Text>
         <View
           className="flex-row items-center justify-between rounded-xl border px-3 py-3"
@@ -109,15 +123,22 @@ export function UserPickerField({ id, label, required, value, disabled, onChange
           }}
         >
           <View className="flex-1 mr-2">
-            <Text size="base" weight="medium">{selected.name || selected.email}</Text>
+            <Text size="base" weight="medium">
+              {selected.name || selected.email}
+            </Text>
             {selected.name && (
-              <Text size="xs" variant="muted">{selected.email}</Text>
+              <Text size="xs" variant="muted">
+                {selected.email}
+              </Text>
             )}
           </View>
           {!disabled && (
             <Pressable
               testID={`questioncard-field-${id}-clear`}
-              onPress={() => { onChange(""); setOpen(true); }}
+              onPress={() => {
+                onChange("");
+                setOpen(true);
+              }}
               className="p-1 active:opacity-70"
             >
               <X size={16} color={colors.mutedForeground} />
@@ -131,8 +152,14 @@ export function UserPickerField({ id, label, required, value, disabled, onChange
   // Search view
   return (
     <View className="mb-4">
-      <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide mb-1.5">
-        {label}{required ? " *" : ""}
+      <Text
+        size="xs"
+        weight="medium"
+        variant="muted"
+        className="uppercase tracking-wide mb-1.5"
+      >
+        {label}
+        {required ? " *" : ""}
       </Text>
       <View
         className="flex-row items-center rounded-xl border px-3"
@@ -147,7 +174,10 @@ export function UserPickerField({ id, label, required, value, disabled, onChange
           testID={`questioncard-field-${id}`}
           value={query}
           editable={!disabled}
-          onChangeText={(t) => { setQuery(t); setOpen(true); }}
+          onChangeText={(t) => {
+            setQuery(t);
+            setOpen(true);
+          }}
           onFocus={() => setOpen(true)}
           placeholder={fetching ? "Loading users…" : "Search by name or email"}
           placeholderTextColor={placeholderColor}
@@ -181,13 +211,19 @@ export function UserPickerField({ id, label, required, value, disabled, onChange
               className="flex-row items-center justify-between px-3 py-2.5 active:opacity-70"
               style={{
                 borderBottomWidth: 0.5,
-                borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                borderBottomColor: isDark
+                  ? "rgba(255,255,255,0.08)"
+                  : "rgba(0,0,0,0.06)",
               }}
             >
               <View className="flex-1">
-                <Text size="sm" weight="medium">{u.name || u.email}</Text>
+                <Text size="sm" weight="medium">
+                  {u.name || u.email}
+                </Text>
                 {u.name && (
-                  <Text size="xs" variant="muted">{u.email}</Text>
+                  <Text size="xs" variant="muted">
+                    {u.email}
+                  </Text>
                 )}
               </View>
               {value === u.email && <Check size={14} color={colors.primary} />}
@@ -196,7 +232,9 @@ export function UserPickerField({ id, label, required, value, disabled, onChange
         </View>
       )}
       {open && !fetching && filtered.length === 0 && (
-        <Text size="xs" variant="muted" className="mt-2 ml-1">No users match.</Text>
+        <Text size="xs" variant="muted" className="mt-2 ml-1">
+          No users match.
+        </Text>
       )}
     </View>
   );

@@ -6,9 +6,8 @@ FROM node:20-bookworm-slim
 
 # Python 3.11 + pip for the skill-bridge subprocess (plan §005 U5).
 # Bookworm ships python 3.11 as `python3`; no separate version pin needed.
-# `boto3` covers every third-party import in `packages/skill-catalog/*/scripts/`
-# at the time of writing — verified by grep against `^import\|^from` across
-# all skill scripts. New skills that add deps should extend
+# `boto3` covers every third-party import used by the current workspace
+# script-skill corpus. New skills that add deps should extend
 # `packages/agentcore-pi/agent-container/requirements.txt` rather than
 # inlining `pip install` here.
 RUN apt-get update && apt-get install -y --no-install-recommends \

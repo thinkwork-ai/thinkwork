@@ -1,11 +1,10 @@
 """Plan §005 U5 — Python skill-bridge for the Pi (Node) runtime.
 
-The Pi agent loop runs in Node. Python script-skills from
-`packages/skill-catalog/` are not in-process imports here (the way they
-are in the Strands runtime); they execute via subprocess instead. This
-script is the bridge — Node spawns it, sends a JSON envelope on stdin,
-the bridge imports the named script + calls the named function with
-**kwargs, and emits a result envelope on stdout.
+The Pi agent loop runs in Node. Python script-skills from the materialized
+workspace are not in-process imports here; they execute via subprocess
+instead. This script is the bridge — Node spawns it, sends a JSON envelope
+on stdin, the bridge imports the named script + calls the named function
+with **kwargs, and emits a result envelope on stdout.
 
 Envelope contract (stdin):
 

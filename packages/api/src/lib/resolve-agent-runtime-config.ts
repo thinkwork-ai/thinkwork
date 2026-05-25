@@ -16,7 +16,7 @@
  *   - agent + tenant metadata (name, slug, model, blocked tools, sandbox config)
  *   - guardrail (agent-assigned, else tenant default)
  *   - `skillsConfig`: the full skill list the container should register,
- *     including catalog defaults (agent-thread-management, artifacts,
+ *     including tenant catalog defaults (agent-thread-management, artifacts,
  *     workspace-memory), tenant-configured built-in tools, and
  *     per-skill env overrides (OAuth-resolved tokens, CURRENT_USER_EMAIL when
  *     a human invoker is known) with the template blocked-tools filter
@@ -201,14 +201,15 @@ export interface ResolveAgentRuntimeConfigOptions {
   appsyncApiKey?: string;
 }
 
-const DEFAULT_SKILLS: ReadonlyArray<{ skillId: string; s3Key: string }> = [
-  {
-    skillId: "agent-thread-management",
-    s3Key: "skills/catalog/agent-thread-management",
-  },
-  { skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
-  { skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
+const DEFAULT_SKILLS: ReadonlyArray<{ skillId: string }> = [
+  { skillId: "agent-thread-management" },
+  { skillId: "artifacts" },
+  { skillId: "workspace-memory" },
 ];
+
+function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
+  return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
+}
 
 const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
 const s3 = new S3Client({
@@ -428,6 +429,7 @@ export async function resolveAgentRuntimeConfig(
     if (currentUserEmail) env.CURRENT_USER_EMAIL = currentUserEmail;
     skillsConfig.push({
       ...ds,
+      s3Key: tenantCatalogSkillS3Key(tenantSlug, ds.skillId),
       secretRef: undefined,
       envOverrides: env,
     });
@@ -454,7 +456,7 @@ export async function resolveAgentRuntimeConfig(
       }
       skillsConfig.push({
         skillId: bt.toolSlug,
-        s3Key: `skills/catalog/${bt.toolSlug}`,
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, bt.toolSlug),
         secretRef: undefined,
         envOverrides: bt.envOverrides,
       });

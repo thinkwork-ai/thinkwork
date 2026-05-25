@@ -7,7 +7,9 @@ are the only consumer until that lands.
 
 from __future__ import annotations
 
+import ast
 import logging
+from pathlib import Path
 
 import pytest
 from skill_resolver import (
@@ -24,16 +26,32 @@ def test_max_folder_depth_is_5_per_key_decisions_008():
     assert MAX_FOLDER_DEPTH == 5
 
 
-def test_delegate_tool_imports_shared_max_folder_depth():
-    """U9's MAX_DEPTH alias must point at the shared constant."""
-    import delegate_to_workspace_tool as dtw
-    assert dtw.MAX_DEPTH == MAX_FOLDER_DEPTH
-
-
 def test_write_memory_tool_imports_shared_max_folder_depth():
     """U12's _MAX_FOLDER_DEPTH alias must point at the shared constant."""
-    import write_memory_tool as wmt
-    assert wmt._MAX_FOLDER_DEPTH == MAX_FOLDER_DEPTH
+    source = (
+        Path(__file__).with_name("container-sources") / "write_memory_tool.py"
+    ).read_text(encoding="utf-8")
+    module = ast.parse(source)
+
+    imports_shared_constant = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "skill_resolver"
+        and any(alias.name == "MAX_FOLDER_DEPTH" for alias in node.names)
+        for node in module.body
+    )
+    aliases_shared_constant = any(
+        isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_MAX_FOLDER_DEPTH"
+            for target in node.targets
+        )
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "MAX_FOLDER_DEPTH"
+        for node in module.body
+    )
+
+    assert imports_shared_constant
+    assert aliases_shared_constant
 
 # A minimal SKILL.md body with frontmatter the parser will accept.
 LOCAL_SKILL_MD = """---
@@ -56,7 +74,7 @@ Root body.
 
 PLATFORM_SKILL_MD = """---
 name: approve-receipt
-description: Platform skill from skill-catalog
+description: Platform skill from catalog manifest
 execution: script
 ---
 Platform body.

@@ -293,8 +293,8 @@ export async function requireAdminOrServiceCaller(
  * billing / spend mutations, bulk purges). None of those resolvers
  * exist today; the thinkwork-admin plan (Unit 11) ships this helper
  * as a primitive ready for when they land. The thinkwork-admin
- * manifest also enforces a name-exclusion invariant — see
- * `packages/skill-catalog/thinkwork-admin/SKILL.md` lint test.
+ * manifest also enforced a name-exclusion invariant while the legacy
+ * repo-backed admin skill existed.
  */
 export function requireNotFromAdminSkill(ctx: GraphQLContext): void {
   if (ctx.auth.authType !== "cognito") {

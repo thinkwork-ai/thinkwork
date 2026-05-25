@@ -1,6 +1,6 @@
 /**
  * Agent operations — mutations + reads. Mirrors
- * packages/skill-catalog/thinkwork-admin/scripts/operations/agents.py
+ * legacy thinkwork-admin skill agent helpers
  * and the agent reads from reads.py.
  */
 

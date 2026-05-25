@@ -220,7 +220,7 @@ thinkwork deploy -s dev -c app
 
 ## bootstrap
 
-Seed workspace defaults, the skill catalog, and per-tenant files for a deployed stack.
+Seed workspace defaults and per-tenant workspace files for a deployed stack.
 
 ```bash
 thinkwork bootstrap -s <stage>
@@ -1169,20 +1169,14 @@ thinkwork webhook deliveries <id> [--limit]
 
 ### skill
 
-Browse the catalog and install / upgrade / uninstall tenant-scoped skills. Custom-skill authoring is `thinkwork skill push <folder>` — that uploads a folder and registers it as a tenant-owned skill.
+Push custom skill plugins. The old tenant catalog CLI verbs are retained only to print retirement guidance; browse and install catalog folders from the admin Agent **Skills** tab.
 
 ```bash
-thinkwork skill catalog [--search] [--tag]
-thinkwork skill list [--custom-only]
-thinkwork skill install <slug> [--version]
-thinkwork skill upgrade <slug> [--version]
-thinkwork skill delete <slug> [--yes]
 thinkwork skill push <folder>
 ```
 
-- `install` and `upgrade` both call the same idempotent `installSkill` mutation — upsert into `tenant_skills`. When `--version` is omitted the resolver reads the catalog's current version; for slugs not in the catalog, `--version` is required.
-- `delete` removes the `tenant_skills` row (does NOT cascade to agent assignments). Confirmation prompt unless `--yes`.
-- `skill create` and `skill update` are **retired** — use `skill push` for authoring. Running them prints the explanation and exits 2.
+- `skill push` uploads a plugin folder through the REST plugin-upload flow.
+- `skill catalog`, `skill list`, `skill install`, `skill upgrade`, `skill delete`, `skill create`, and `skill update` are **retired**. Running them prints the explanation and exits 2.
 
 ### memory
 

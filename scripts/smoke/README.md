@@ -12,22 +12,22 @@ This kit fills the gap.
 
 ## Files
 
-| File                                      | Role                                                                                                                                                                |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `_env.sh`                                 | Sourced helper: resolves `API_URL`, `API_AUTH_SECRET`, `DATABASE_URL`; provides `preflight_skill_runs_schema` + `wait_for_terminal_status`.                         |
-| `chat-smoke.sh`                           | POST `/api/skills/start` with `invocationSource=chat`; asserts `skill_runs` row transitions out of `running`.                                                       |
-| `catalog-smoke.sh`                        | POST `/api/skills/start` with `invocationSource=catalog`; same assertion.                                                                                           |
-| `scheduled-smoke.sh`                      | Insert `scheduled_jobs` + invoke `job-trigger` Lambda; asserts a scheduled `skill_runs` row. `--force` required (mutates DB).                                       |
-| `run-all.sh`                              | Aggregator — runs chat + catalog + scheduled (or `--ci` subset) and prints a PASS/FAIL line per path.                                                               |
-| `webhook-secret-put.sh`                   | Create or rotate a per-(tenant, integration) signing secret in Secrets Manager.                                                                                     |
-| `webhook-smoke.sh`                        | HMAC-sign + POST a payload to the deployed webhook Lambda.                                                                                                          |
-| `CHECKS.md`                               | Definition-of-passing + the full runbook per path. Read this first if a smoke fails.                                                                                |
-| `fixtures/sales-prep-chat.json`           | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog).                                                                                  |
-| `fixtures/sales-prep-catalog.json`        | Inputs for `catalog-smoke.sh`.                                                                                                                                      |
-| `fixtures/crm-opportunity-won.json`       | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                        |
-| `fixtures/task-completed.json`            | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                            |
-| `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                       |
-| `spaces-runbook-smoke.mjs`              | Computer runbook smoke. Dry-run validates repo runbooks; live mode checks auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
+| File                                      | Role                                                                                                                                                                                                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_env.sh`                                 | Sourced helper: resolves `API_URL`, `API_AUTH_SECRET`, `DATABASE_URL`; provides `preflight_skill_runs_schema` + `wait_for_terminal_status`.                                                                                                 |
+| `chat-smoke.sh`                           | POST `/api/skills/start` with `invocationSource=chat`; asserts `skill_runs` row transitions out of `running`.                                                                                                                               |
+| `catalog-smoke.sh`                        | POST `/api/skills/start` with `invocationSource=catalog`; same assertion.                                                                                                                                                                   |
+| `scheduled-smoke.sh`                      | Insert `scheduled_jobs` + invoke `job-trigger` Lambda; asserts a scheduled `skill_runs` row. `--force` required (mutates DB).                                                                                                               |
+| `run-all.sh`                              | Aggregator — runs chat + catalog + scheduled (or `--ci` subset) and prints a PASS/FAIL line per path.                                                                                                                                       |
+| `webhook-secret-put.sh`                   | Create or rotate a per-(tenant, integration) signing secret in Secrets Manager.                                                                                                                                                             |
+| `webhook-smoke.sh`                        | HMAC-sign + POST a payload to the deployed webhook Lambda.                                                                                                                                                                                  |
+| `CHECKS.md`                               | Definition-of-passing + the full runbook per path. Read this first if a smoke fails.                                                                                                                                                        |
+| `fixtures/sales-prep-chat.json`           | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog).                                                                                                                                                          |
+| `fixtures/sales-prep-catalog.json`        | Inputs for `catalog-smoke.sh`.                                                                                                                                                                                                              |
+| `fixtures/crm-opportunity-won.json`       | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                                                                                                |
+| `fixtures/task-completed.json`            | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                    |
+| `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                               |
+| `spaces-runbook-smoke.mjs`                | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
 
 ## Quick start — run the full smoke suite
 
@@ -57,7 +57,7 @@ node scripts/smoke/spaces-runbook-smoke.mjs
 SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/spaces-runbook-smoke.mjs
 ```
 
-Live mode requires a deployed Computer stack and GraphQL/database credentials. It checks:
+Dry-run is informational only because runbook definitions now live in each tenant's S3 skill catalog. Live mode requires a deployed Computer stack and GraphQL/database credentials. It checks:
 
 - auto-selected `map-artifact` creates `data-runbook-confirmation` before execution
 - explicit `crm-dashboard` creates `data-runbook-queue` without confirmation
