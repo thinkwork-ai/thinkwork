@@ -227,7 +227,6 @@ export async function repairWorkspaceBlueprint(
 }
 
 export function renderRootAgentsMd(model: BlueprintModel): string {
-  const rootSkills = formatList(model.rootSkillSlugs);
   const rows = model.subAgents
     .map(
       (subAgent) =>
@@ -247,7 +246,6 @@ This folder is the agent. Keep root files small and route work to scoped folders
 
 - AGENTS.md - always-loaded map and routing table.
 - CONTEXT.md - root router for deciding what to load next.
-- skills/ - root-level skills available to the primary agent: ${rootSkills}.
 - memory/ - primary agent memory.
 - review/ and events/ - operational records; do not route task work here.
 ${model.subAgents
@@ -310,7 +308,6 @@ ${routingRows}
 }
 
 export function renderSubAgentContextMd(subAgent: BlueprintSubAgent): string {
-  const skills = formatList(subAgent.skillSlugs);
   const skillRows = subAgent.skillSlugs
     .map(
       (skill) =>
@@ -335,7 +332,6 @@ ${skillRows || "| General scoped work | this CONTEXT.md | The task names this wo
 ## Folder Structure
 
 - CONTEXT.md - this router and scoped operating notes.
-- skills/ - local skills: ${skills}.
 
 ## Process
 
@@ -540,7 +536,9 @@ function assertRunId(runId: string): void {
   }
 }
 
-export class S3WorkspaceBlueprintObjectStore implements WorkspaceBlueprintObjectStore {
+export class S3WorkspaceBlueprintObjectStore
+  implements WorkspaceBlueprintObjectStore
+{
   private readonly client: S3Client;
   private readonly bucket: string;
 
