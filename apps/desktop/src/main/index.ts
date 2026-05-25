@@ -21,6 +21,9 @@ declare const __THINKWORK_APPLE_TEAM_ID__: string;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const expectedAppleTeamId = __THINKWORK_APPLE_TEAM_ID__;
 const desktopEnv = snapshotDesktopEnv();
+const deepLinkScheme = resolveDeepLinkScheme(
+  desktopEnv.deepLinkScheme ?? desktopEnv.stage,
+);
 const desktopEnvValidation = validateDesktopEnv(desktopEnv);
 if (!desktopEnvValidation.configured) {
   console.error(
@@ -31,7 +34,7 @@ if (!desktopEnvValidation.configured) {
 configureDevUserDataPath(app);
 void configureDesktopBranding({ app, nativeImage, rootDir: __dirname });
 const deepLinkController = createDeepLinkController({
-  scheme: resolveDeepLinkScheme(desktopEnv.stage),
+  scheme: deepLinkScheme,
   logger: console,
 });
 

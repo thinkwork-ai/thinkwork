@@ -70,11 +70,14 @@ export async function registerDesktopIpcHandlers(
     assertSafeSenderFrame(event);
     GetDesktopConfigRequestSchema.parse(payload);
     const validation = validateDesktopEnv(options.env);
+    const deepLinkScheme = resolveDeepLinkScheme(
+      options.env.deepLinkScheme ?? options.env.stage,
+    );
     return {
       stage: options.env.stage,
       configured: validation.configured,
       missing: validation.missing,
-      oauthRedirectUri: `${resolveDeepLinkScheme(options.env.stage)}://oauth/callback`,
+      oauthRedirectUri: `${deepLinkScheme}://oauth/callback`,
       endpoints: {
         apiUrl: options.env.apiUrl,
         graphqlHttpUrl: options.env.graphqlHttpUrl,

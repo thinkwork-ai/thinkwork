@@ -12,7 +12,9 @@ describe("desktop deep links", () => {
     expect(resolveDeepLinkScheme("production")).toBe("thinkwork");
     expect(resolveDeepLinkScheme("stable")).toBe("thinkwork");
     expect(resolveDeepLinkScheme("canary")).toBe("thinkwork-canary");
+    expect(resolveDeepLinkScheme("thinkwork-canary")).toBe("thinkwork-canary");
     expect(resolveDeepLinkScheme("dev")).toBe("thinkwork-dev");
+    expect(resolveDeepLinkScheme("thinkwork-dev")).toBe("thinkwork-dev");
     expect(resolveDeepLinkScheme(undefined)).toBe("thinkwork-dev");
   });
 

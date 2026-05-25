@@ -7,6 +7,7 @@ export interface CognitoEnvSnapshot {
 export interface DesktopEnvSnapshot {
   nodeEnv: string;
   stage: string;
+  deepLinkScheme: string | null;
   rendererUrl: string | null;
   apiUrl: string | null;
   graphqlHttpUrl: string | null;
@@ -36,6 +37,7 @@ export function snapshotDesktopEnv(
       optionalEnv(mergedEnv.THINKWORK_STAGE) ??
       optionalEnv(mergedEnv.VITE_THINKWORK_STAGE) ??
       "dev",
+    deepLinkScheme: optionalEnv(mergedEnv.THINKWORK_DESKTOP_SCHEME),
     rendererUrl: optionalEnv(mergedEnv.ELECTRON_RENDERER_URL),
     apiUrl: optionalEnv(mergedEnv.VITE_API_URL),
     graphqlHttpUrl: optionalEnv(mergedEnv.VITE_GRAPHQL_HTTP_URL),

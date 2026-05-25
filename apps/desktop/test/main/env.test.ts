@@ -6,6 +6,7 @@ describe("snapshotDesktopEnv", () => {
     const snapshot = snapshotDesktopEnv({
       NODE_ENV: "production",
       THINKWORK_STAGE: "canary",
+      THINKWORK_DESKTOP_SCHEME: "thinkwork-canary",
       ELECTRON_RENDERER_URL: "http://localhost:5174",
       VITE_COGNITO_USER_POOL_ID: "us-east-1_test",
       VITE_COGNITO_CLIENT_ID: "client-id",
@@ -15,6 +16,7 @@ describe("snapshotDesktopEnv", () => {
     expect(snapshot).toEqual({
       nodeEnv: "production",
       stage: "canary",
+      deepLinkScheme: "thinkwork-canary",
       rendererUrl: "http://localhost:5174",
       apiUrl: null,
       graphqlHttpUrl: null,
@@ -40,6 +42,7 @@ describe("snapshotDesktopEnv", () => {
     env.ELECTRON_RENDERER_URL = "http://localhost:9999";
 
     expect(snapshot.rendererUrl).toBe("http://localhost:5174");
+    expect(snapshot.deepLinkScheme).toBeNull();
   });
 
   it("treats blank packaged values as missing configuration", () => {
