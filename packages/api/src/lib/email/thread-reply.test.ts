@@ -126,7 +126,7 @@ describe("sendThreadReplyEmail", () => {
       tenantId: TENANT_ID,
       threadId: THREAD_ID,
       agentId: AGENT_ID,
-      body: "Here is your answer.",
+      body: "Here is **your** answer.",
     });
 
     expect(result).toEqual({ sent: true, sesMessageId: "ses-out-123" });
@@ -151,7 +151,25 @@ describe("sendThreadReplyEmail", () => {
     expect(rawMessage).toContain("In-Reply-To: <orig-1@thinkwork.ai>");
     expect(rawMessage).toContain("References: <orig-1@thinkwork.ai>");
     expect(rawMessage).toContain("X-Thinkwork-Reply-Token: ");
-    expect(rawMessage).toContain("Here is your answer.");
+
+    // multipart/alternative structure
+    expect(rawMessage).toMatch(
+      /Content-Type: multipart\/alternative; boundary="tw-boundary-[0-9a-f]{32}"/,
+    );
+    // both parts present
+    expect(rawMessage).toContain("Content-Type: text/plain; charset=UTF-8");
+    expect(rawMessage).toContain("Content-Type: text/html; charset=UTF-8");
+    expect(rawMessage).toContain(
+      "Content-Transfer-Encoding: quoted-printable",
+    );
+    // raw markdown body shows up in the text part (verbatim per R5)
+    expect(rawMessage).toContain("Here is **your** answer.");
+    // rendered HTML body shows up in the html part. Quoted-printable passes
+    // printable ASCII (including `<` and `>`) through unchanged; only `=` is
+    // encoded as `=3D`. Soft line breaks (`=\r\n`) may appear at 76-col
+    // boundaries, so collapse them before checking.
+    const collapsed = rawMessage.replace(/=\r\n/g, "");
+    expect(collapsed).toContain("<strong>your</strong>");
 
     expect(insertedTokens).toHaveLength(1);
     expect(insertedTokens[0]).toMatchObject({
@@ -162,6 +180,97 @@ describe("sendThreadReplyEmail", () => {
       recipient_email: "eric@thinkwork.ai",
       ses_message_id: "ses-out-123",
     });
+  });
+
+  it("strips CRLF from interpolated header values (prevents header injection)", async () => {
+    queueRows.push(
+      [
+        {
+          id: THREAD_ID,
+          space_id: "space-1",
+          metadata: {
+            emailColdContact: { senderEmail: "eric@thinkwork.ai" },
+          },
+        },
+      ],
+      [
+        {
+          metadata: {
+            source: "email_cold_contact",
+            senderEmail: "eric@thinkwork.ai",
+            // Attacker-crafted Subject + Message-ID with CRLF injection.
+            subject: "Test\r\nBcc: attacker@evil.com\r\nX-Pwned: yes",
+            originalMessageId: "<orig\r\nBcc: another@evil.com@x.com>",
+          },
+        },
+      ],
+      [{ spaceSlug: "default", tenantSlug: "sleek-squirrel-230" }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "ok",
+    });
+
+    expect(result).toEqual({ sent: true, sesMessageId: "ses-out-123" });
+    const rawMessage = Buffer.from(
+      mockSesSend.mock.calls[0][0].input.RawMessage.Data,
+    ).toString("utf8");
+
+    // No injected Bcc header anywhere in the headers section.
+    const headerSection = rawMessage.split("\r\n\r\n")[0];
+    expect(headerSection).not.toMatch(/^Bcc:/im);
+    expect(headerSection).not.toMatch(/^X-Pwned:/im);
+    // The Subject line collapses CRLFs into a single line of literal text.
+    expect(headerSection).toMatch(
+      /^Subject: Re: TestBcc: attacker@evil\.comX-Pwned: yes$/m,
+    );
+    // In-Reply-To stays on a single line.
+    expect(headerSection).toMatch(
+      /^In-Reply-To: <origBcc: another@evil\.com@x\.com>$/m,
+    );
+  });
+
+  it("encodes non-ASCII agent output as quoted-printable round-trip", async () => {
+    queueRows.push(
+      [
+        {
+          id: THREAD_ID,
+          space_id: "space-1",
+          metadata: {
+            emailColdContact: { senderEmail: "eric@thinkwork.ai" },
+          },
+        },
+      ],
+      [
+        {
+          metadata: {
+            source: "email_cold_contact",
+            senderEmail: "eric@thinkwork.ai",
+            subject: "Hello",
+            originalMessageId: "<orig-3@thinkwork.ai>",
+          },
+        },
+      ],
+      [{ spaceSlug: "default", tenantSlug: "sleek-squirrel-230" }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "Café résumé 🚀",
+    });
+
+    expect(result).toEqual({ sent: true, sesMessageId: "ses-out-123" });
+    const rawMessage = Buffer.from(
+      mockSesSend.mock.calls[0][0].input.RawMessage.Data,
+    ).toString("utf8");
+
+    // é = 0xC3 0xA9 in UTF-8 → =C3=A9 ; 🚀 = 0xF0 0x9F 0x9A 0x80 → =F0=9F=9A=80
+    expect(rawMessage).toContain("Caf=C3=A9 r=C3=A9sum=C3=A9 =F0=9F=9A=80");
   });
 
   it("skips when the thread has no emailColdContact metadata", async () => {

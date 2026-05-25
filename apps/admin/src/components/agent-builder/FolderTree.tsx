@@ -19,6 +19,11 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   FileTree,
   FileTreeActions,
   FileTreeFile,
@@ -26,19 +31,13 @@ import {
 } from "@/components/ai-elements/file-tree";
 import { InheritanceIndicator } from "./InheritanceIndicator";
 import type { ComposeSource } from "@/lib/agent-builder-api";
-import type { RoutingRow } from "./routing-table";
 
 export type TreeNode = {
   name: string;
   path: string;
   isFolder: boolean;
   children: TreeNode[];
-  synthetic?: boolean;
-  missing?: boolean;
 };
-
-const SUB_AGENTS_NODE_PATH = "__synthetic__/sub-agents";
-const RESERVED_ROUTING_FOLDERS = new Set(["memory", "skills"]);
 
 // Reserved root folders that should render in the tree even when empty.
 // Keep skills/ visible as a stable place to add workspace skills. Do not
@@ -48,7 +47,6 @@ const RESERVED_ROOT_FOLDERS = ["skills"] as const;
 
 export function buildWorkspaceTree(
   files: string[],
-  routingRows: Pick<RoutingRow, "goTo">[] = [],
   options: { reservedRootFolders?: readonly string[] } = {},
 ): TreeNode[] {
   const root: TreeNode[] = [];
@@ -96,51 +94,7 @@ export function buildWorkspaceTree(
     }
   }
 
-  const routedPaths = routedFolderPaths(routingRows);
-  const routedTopFolders = new Set(
-    routedPaths
-      .filter((path) => !path.includes("/"))
-      .map((path) => path.replace(/\/$/, "")),
-  );
-  const subAgentChildren: TreeNode[] = [];
-  const remainingRoot: TreeNode[] = [];
-
-  for (const node of root) {
-    if (node.isFolder && routedTopFolders.has(node.path)) {
-      subAgentChildren.push(node);
-    } else {
-      remainingRoot.push(node);
-    }
-  }
-
-  const existingSubAgentPaths = new Set(
-    subAgentChildren.map((node) => node.path),
-  );
-  for (const path of routedPaths) {
-    if (existingSubAgentPaths.has(path)) continue;
-    subAgentChildren.push({
-      name: path,
-      path,
-      isFolder: true,
-      children: [],
-      missing: true,
-    });
-  }
-
-  return [
-    ...(subAgentChildren.length > 0
-      ? [
-          {
-            name: "agents",
-            path: SUB_AGENTS_NODE_PATH,
-            isFolder: true,
-            children: sortNodes(subAgentChildren),
-            synthetic: true,
-          },
-        ]
-      : []),
-    ...sortNodes(remainingRoot),
-  ];
+  return sortNodes(root);
 }
 
 function sortNodes(nodes: TreeNode[]) {
@@ -155,25 +109,21 @@ function sortNodes(nodes: TreeNode[]) {
 }
 
 export function isSkillInstallFolder(
-  node: Pick<TreeNode, "name" | "isFolder" | "synthetic" | "missing">,
+  node: Pick<TreeNode, "name" | "path" | "isFolder">,
   addSkillAvailable: boolean,
 ): boolean {
   return (
     addSkillAvailable &&
     node.isFolder &&
     node.name === "skills" &&
-    !node.synthetic &&
-    !node.missing
+    node.path === "skills"
   );
 }
 
 export function installedSkillSlugForNode(
-  node: Pick<
-    TreeNode,
-    "path" | "isFolder" | "children" | "synthetic" | "missing"
-  >,
+  node: Pick<TreeNode, "path" | "isFolder" | "children">,
 ): string | null {
-  if (!node.isFolder || node.synthetic || node.missing) return null;
+  if (!node.isFolder) return null;
   const match = /^skills\/([^/]+)$/.exec(node.path);
   if (!match) return null;
   const hasCatalogRef = node.children.some(
@@ -182,10 +132,22 @@ export function installedSkillSlugForNode(
   return hasCatalogRef ? match[1] : null;
 }
 
+export function folderContextMenuTargets(node: Pick<TreeNode, "path">) {
+  return {
+    createParentPath: node.path,
+    pasteTargetPath: node.path,
+    renamePath: node.path,
+    cutPath: node.path,
+    deletePath: node.path,
+  };
+}
+
 export interface ClipboardItem {
   path: string;
   kind: "file" | "folder";
 }
+
+export type SkillDriftStatus = "stale" | "orphan";
 
 export interface FolderTreeProps {
   nodes: TreeNode[];
@@ -197,6 +159,7 @@ export interface FolderTreeProps {
    * global — other tree interactions stay responsive.
    */
   mutatingPaths?: Set<string>;
+  skillDriftByPath?: Record<string, SkillDriftStatus>;
   /**
    * Single item currently cut. The matching node renders with a dashed
    * border + reduced opacity, and folder/root context menus offer
@@ -211,13 +174,9 @@ export interface FolderTreeProps {
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
-  onDeleteSyntheticGroup?: (
-    groupPath: string,
-    label: string,
-    folderPaths: string[],
-  ) => void;
   onAddSkill?: (skillsFolderPath: string) => void;
   onRemoveSkill?: (skillsFolderPath: string, slug: string) => void;
+  onReinstallSkill?: (skillsFolderPath: string, slug: string) => void;
   onRename?: (path: string, kind: "file" | "folder") => void;
   onRegenerateMap?: (path: string) => void;
   onGenerateFolderStructure?: (path: string) => void;
@@ -479,6 +438,7 @@ function FolderTreeItem(
     selectedPath,
     expandedFolders,
     mutatingPaths,
+    skillDriftByPath,
     clipboardItem,
     sourceFor,
     updateAvailableFor,
@@ -486,9 +446,9 @@ function FolderTreeItem(
     onNewFile,
     onNewFolder,
     onDelete,
-    onDeleteSyntheticGroup,
     onAddSkill,
     onRemoveSkill,
+    onReinstallSkill,
     onRename,
     onRegenerateMap,
     onGenerateFolderStructure,
@@ -504,23 +464,14 @@ function FolderTreeItem(
     inlineEdit?.mode === "rename" && inlineEdit.path === node.path;
 
   if (node.isFolder) {
-    // Synthetic agents/ group is a virtual UI grouping, not a real folder —
-    // its path is __synthetic__/sub-agents which can't host files. Treat
-    // creates from its context menu as workspace-root creates. Deleting it
-    // deletes the real routed folders beneath it.
-    const contextParent = node.synthetic ? "" : node.path;
-    const canMutate = !node.synthetic && !node.missing;
-    const syntheticFolderPaths = node.synthetic
-      ? node.children
-          .filter((child) => child.isFolder && !child.missing)
-          .map((child) => child.path)
-      : [];
-    const canDeleteSyntheticGroup =
-      node.synthetic &&
-      syntheticFolderPaths.length > 0 &&
-      onDeleteSyntheticGroup;
+    const menuTargets = folderContextMenuTargets(node);
     const canAddSkill = isSkillInstallFolder(node, Boolean(onAddSkill));
     const installedSkillSlug = installedSkillSlugForNode(node);
+    const canReinstallSkill = Boolean(
+      installedSkillSlug &&
+      skillDriftByPath?.[node.path] === "stale" &&
+      onReinstallSkill,
+    );
 
     const hasPendingNewItem =
       (inlineEdit?.mode === "new-file" || inlineEdit?.mode === "new-folder") &&
@@ -531,7 +482,7 @@ function FolderTreeItem(
         <ContextMenuTrigger asChild>
           <FileTreeFolder
             path={node.path}
-            name={renderFolderLabel(node)}
+            name={renderFolderLabel(node, skillDriftByPath?.[node.path])}
             editingName={
               isRenaming ? <InlineNameInput {...props} /> : undefined
             }
@@ -545,6 +496,7 @@ function FolderTreeItem(
                 selectedPath={selectedPath}
                 expandedFolders={expandedFolders}
                 mutatingPaths={mutatingPaths}
+                skillDriftByPath={skillDriftByPath}
                 clipboardItem={clipboardItem}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
@@ -554,9 +506,9 @@ function FolderTreeItem(
                 onNewFile={onNewFile}
                 onNewFolder={onNewFolder}
                 onDelete={onDelete}
-                onDeleteSyntheticGroup={onDeleteSyntheticGroup}
                 onAddSkill={onAddSkill}
                 onRemoveSkill={onRemoveSkill}
+                onReinstallSkill={onReinstallSkill}
                 onRename={onRename}
                 onRegenerateMap={onRegenerateMap}
                 onGenerateFolderStructure={onGenerateFolderStructure}
@@ -578,11 +530,7 @@ function FolderTreeItem(
             inlineEdit.parentPath === node.path ? (
               <PendingInlineFile {...props} />
             ) : null}
-            {node.synthetic && node.children.length === 0 ? (
-              <div className="px-2 py-2 text-xs text-muted-foreground">
-                Route specialist folders from AGENTS.md.
-              </div>
-            ) : node.children.length === 0 && !hasPendingNewItem ? (
+            {node.children.length === 0 && !hasPendingNewItem ? (
               <div className="px-2 py-1 text-xs italic text-muted-foreground">
                 Empty folder
               </div>
@@ -598,8 +546,20 @@ function FolderTreeItem(
               <ContextMenuSeparator />
             </>
           ) : null}
+          {canReinstallSkill ? (
+            <ContextMenuItem
+              onSelect={() => {
+                if (installedSkillSlug) {
+                  onReinstallSkill?.(node.path, installedSkillSlug);
+                }
+              }}
+            >
+              Reinstall Skill
+            </ContextMenuItem>
+          ) : null}
           {installedSkillSlug && onRemoveSkill ? (
             <>
+              {canReinstallSkill ? <ContextMenuSeparator /> : null}
               <ContextMenuItem
                 variant="destructive"
                 onSelect={() => onRemoveSkill(node.path, installedSkillSlug)}
@@ -609,29 +569,39 @@ function FolderTreeItem(
               <ContextMenuSeparator />
             </>
           ) : null}
-          <ContextMenuItem onSelect={() => onNewFile(contextParent)}>
+          <ContextMenuItem
+            onSelect={() => onNewFile(menuTargets.createParentPath)}
+          >
             New File
           </ContextMenuItem>
-          <ContextMenuItem onSelect={() => onNewFolder(contextParent)}>
+          <ContextMenuItem
+            onSelect={() => onNewFolder(menuTargets.createParentPath)}
+          >
             New Folder
           </ContextMenuItem>
-          {canMutate && (onRename || onCut) ? (
+          {onRename || onCut ? (
             <>
               <ContextMenuSeparator />
               {onRename ? (
-                <ContextMenuItem onSelect={() => onRename(node.path, "folder")}>
+                <ContextMenuItem
+                  onSelect={() => onRename(menuTargets.renamePath, "folder")}
+                >
                   Rename
                 </ContextMenuItem>
               ) : null}
               {onCut ? (
-                <ContextMenuItem onSelect={() => onCut(node.path, "folder")}>
+                <ContextMenuItem
+                  onSelect={() => onCut(menuTargets.cutPath, "folder")}
+                >
                   Cut
                 </ContextMenuItem>
               ) : null}
             </>
           ) : null}
-          {clipboardActive && onPaste && !node.synthetic ? (
-            <ContextMenuItem onSelect={() => onPaste(node.path)}>
+          {clipboardActive && onPaste ? (
+            <ContextMenuItem
+              onSelect={() => onPaste(menuTargets.pasteTargetPath)}
+            >
               Paste
             </ContextMenuItem>
           ) : null}
@@ -640,34 +610,13 @@ function FolderTreeItem(
               Clear clipboard
             </ContextMenuItem>
           ) : null}
-          {canMutate ? (
-            <>
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                variant="destructive"
-                onSelect={() => onDelete(node.path, true)}
-              >
-                Delete
-              </ContextMenuItem>
-            </>
-          ) : null}
-          {canDeleteSyntheticGroup ? (
-            <>
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                variant="destructive"
-                onSelect={() =>
-                  onDeleteSyntheticGroup?.(
-                    node.path,
-                    node.name,
-                    syntheticFolderPaths,
-                  )
-                }
-              >
-                Delete
-              </ContextMenuItem>
-            </>
-          ) : null}
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            onSelect={() => onDelete(menuTargets.deletePath, true)}
+          >
+            Delete
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
     );
@@ -857,16 +806,28 @@ function InlineNameInput({
   );
 }
 
-function renderFolderLabel(node: TreeNode) {
-  if (node.missing) {
-    return (
-      <>
-        {node.name}
-        <span className="ml-1 text-[10px] text-amber-500">no files</span>
-      </>
-    );
-  }
-  return node.name;
+function renderFolderLabel(node: TreeNode, drift?: SkillDriftStatus) {
+  if (!drift) return node.name;
+
+  const label = drift === "orphan" ? "orphan" : "stale";
+  const tooltip =
+    drift === "orphan"
+      ? "Catalog skill no longer exists. Use Remove Skill to clean up this installation."
+      : "Catalog has updated since this skill was installed. Right-click to refresh when reinstall is available.";
+
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{node.name}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="shrink-0 rounded border border-amber-400/40 bg-amber-500/10 px-1 py-0 text-[10px] font-medium leading-4 text-amber-600 dark:text-amber-400">
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </span>
+  );
 }
 
 function FileGlyph({ isMutating = false }: { isMutating?: boolean }) {
@@ -911,29 +872,4 @@ function collectFolderPaths(nodes: TreeNode[]): Set<string> {
   };
   walk(nodes);
   return out;
-}
-
-export function subAgentsNodePath(): string {
-  return SUB_AGENTS_NODE_PATH;
-}
-
-function routedFolderPaths(routingRows: Pick<RoutingRow, "goTo">[]): string[] {
-  const out = new Set<string>();
-  for (const row of routingRows) {
-    const path = normalizeRoutingPath(row.goTo);
-    if (!path) continue;
-    const first = path.split("/")[0];
-    if (!first || RESERVED_ROUTING_FOLDERS.has(first)) continue;
-    out.add(path);
-  }
-  return Array.from(out).sort((a, b) => a.localeCompare(b));
-}
-
-function normalizeRoutingPath(goTo: string): string | null {
-  const clean = goTo.trim().replace(/^`|`$/g, "");
-  if (!clean || clean === "." || clean === "./") return null;
-  if (clean.startsWith("/") || clean.includes("..") || clean.includes("\\")) {
-    return null;
-  }
-  return clean.replace(/^\.\//, "").replace(/\/+$/, "");
 }

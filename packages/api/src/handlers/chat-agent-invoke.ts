@@ -142,6 +142,8 @@ export interface RenderWorkspaceTupleForInvokeResult {
     isDefault: boolean;
   };
   effectivePolicy?: EffectiveWorkspacePolicy;
+  errorCode?: string;
+  statusCode?: number;
   reason?: string;
 }
 
@@ -190,12 +192,19 @@ export async function renderWorkspaceTupleForInvoke(
 
   const parsed = JSON.parse(rawPayload) as Record<string, unknown>;
   if (parsed.ok !== true || typeof parsed.renderedPrefix !== "string") {
+    const errorPayload =
+      typeof parsed.error === "object" && parsed.error
+        ? (parsed.error as Record<string, unknown>)
+        : null;
     return {
       rendered: false,
-      reason:
-        typeof parsed.error === "object" && parsed.error
-          ? JSON.stringify(parsed.error)
-          : "workspace_renderer_failed",
+      errorCode:
+        typeof errorPayload?.code === "string" ? errorPayload.code : undefined,
+      statusCode:
+        typeof parsed.statusCode === "number" ? parsed.statusCode : undefined,
+      reason: errorPayload
+        ? JSON.stringify(errorPayload)
+        : "workspace_renderer_failed",
     };
   }
 
@@ -611,8 +620,48 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           console.log(
             `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedWorkspace.reason}`,
           );
+          if (renderedWorkspace.errorCode === "SpaceAccessDenied") {
+            throw new Error(
+              `workspace_renderer_access_denied:${renderedWorkspace.reason ?? "SpaceAccessDenied"}`,
+            );
+          }
         }
       } catch (err) {
+        if (
+          err instanceof Error &&
+          err.message.startsWith("workspace_renderer_access_denied:")
+        ) {
+          console.error(
+            `[chat-agent-invoke] rendered workspace tuple denied; aborting turn:`,
+            err,
+          );
+          if (turnId) {
+            try {
+              await db
+                .update(threadTurns)
+                .set({
+                  status: "failed",
+                  finished_at: new Date(),
+                  error: err.message,
+                })
+                .where(eq(threadTurns.id, turnId));
+              await notifyThreadTurnUpdate({
+                runId: turnId,
+                tenantId,
+                threadId,
+                agentId,
+                status: "failed",
+                triggerName: "Chat",
+              });
+            } catch (turnErr) {
+              console.error(
+                `[chat-agent-invoke] Failed to mark denied render turn as failed:`,
+                turnErr,
+              );
+            }
+          }
+          return;
+        }
         console.error(
           `[chat-agent-invoke] rendered workspace tuple failed; falling back to legacy workspace sync:`,
           err,
@@ -688,7 +737,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // Unit 7 tightened `_ensure_workspace_ready` to early-return when
       // `workspace_tenant_id` is empty. chat-agent-invoke was never updated
       // to send it — so the container skipped the composer fetch entirely,
-      // `/tmp/workspace` stayed empty, IDENTITY.md/USER.md never loaded, and
+      // `/tmp/workspace` stayed empty, AGENTS.md/USER.md never loaded, and
       // the agent answered from stale default workspace content + a hallucinated identity.
       // Matches agentcore-invoke.ts:237 and eval-runner.ts:276.
       workspace_tenant_id: tenantId,

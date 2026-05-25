@@ -2,7 +2,7 @@
  * Shared GraphQL field-selection strings.
  *
  * These originally mirrored
- * packages/skill-catalog/thinkwork-admin/scripts/operations/reads.py,
+ * legacy thinkwork-admin skill read helpers,
  * but the Python selections had drifted from the live GraphQL schema.
  * Any further drift surfaces as "Cannot query field X on type Y" at
  * runtime. When it does, the fix is to check

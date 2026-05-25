@@ -46,7 +46,7 @@ Tolerances (both sides):
     - Italics / bold / backticks stripped before validation
     - Trailing empty rows skipped
     - Rows with invalid go_to paths skipped + WARN-logged (not raised)
-    - Rows with reserved go_to names ("memory", "skills") skipped + WARN-logged
+    - Rows with reserved go_to names ("memory", "skills", "workspaces") skipped + WARN-logged
 
 Hard errors (both sides):
     - Routing table present but no `Go to` column → raise ValueError
@@ -75,7 +75,7 @@ logger = logging.getLogger(__name__)
 # `inline-helpers-vs-shared-package-for-cross-surface-code` learning.
 # Add to both sides + refresh the shared
 # `fixtures/agents-md-sample.md` if you change the set.
-RESERVED_FOLDER_NAMES: frozenset[str] = frozenset({"memory", "skills"})
+RESERVED_FOLDER_NAMES: frozenset[str] = frozenset({"memory", "skills", "workspaces"})
 
 _HEADING_RE = re.compile(r"^##\s+Routing(\s+Table)?\s*$", re.IGNORECASE)
 _NEXT_H2_RE = re.compile(r"^##\s+")
@@ -147,8 +147,7 @@ def _locate_routing_table(markdown: str) -> tuple[str, list[str]] | None:
     if len(tables) == 1:
         return tables[0]
     raise ValueError(
-        "AGENTS.md has multiple tables but no '## Routing' heading — "
-        "add a heading to disambiguate."
+        "AGENTS.md has multiple tables but no '## Routing' heading — add a heading to disambiguate."
     )
 
 
@@ -254,15 +253,11 @@ def _parse_routing_block(
         if go_to_folder in RESERVED_FOLDER_NAMES:
             logger.warning(
                 "[agents_md_parser] Skipping row — go_to %r is a reserved folder name "
-                "(memory/skills).",
+                "(memory/skills/workspaces).",
                 go_to,
             )
-            warnings.append(
-                f"row {row_index} skipped — go_to {go_to!r} is reserved"
-            )
-            skipped_rows.append(
-                {"row_index": row_index, "go_to": go_to, "reason": "reserved"}
-            )
+            warnings.append(f"row {row_index} skipped — go_to {go_to!r} is reserved")
+            skipped_rows.append({"row_index": row_index, "go_to": go_to, "reason": "reserved"})
             row_index += 1
             continue
         if not _is_valid_folder_path(go_to):
@@ -270,12 +265,8 @@ def _parse_routing_block(
                 "[agents_md_parser] Skipping row — go_to %r is not a valid folder path.",
                 raw_go_to,
             )
-            warnings.append(
-                f"row {row_index} skipped — go_to {go_to!r} is not a valid folder path"
-            )
-            skipped_rows.append(
-                {"row_index": row_index, "go_to": go_to, "reason": "invalid_path"}
-            )
+            warnings.append(f"row {row_index} skipped — go_to {go_to!r} is not a valid folder path")
+            skipped_rows.append({"row_index": row_index, "go_to": go_to, "reason": "invalid_path"})
             row_index += 1
             continue
 

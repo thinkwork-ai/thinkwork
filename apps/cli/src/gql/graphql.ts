@@ -1053,11 +1053,6 @@ export type DisableWorkflowInput = {
   slug: Scalars['String']['input'];
 };
 
-export type EnableSkillInput = {
-  agentId: Scalars['ID']['input'];
-  skillId: Scalars['String']['input'];
-};
-
 export type EnableWorkflowInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
@@ -1267,17 +1262,6 @@ export type InboxItemStatusEvent = {
   tenantId: Scalars['ID']['output'];
   title?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type InstallSkillInput = {
-  skillId: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  /**
-   * Optional version pin. When omitted, the resolver reads the current
-   * version from `skill_catalog`. Re-installing an already-installed
-   * skill is an idempotent upsert (used by `skill upgrade` too).
-   */
-  version?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type InviteMemberInput = {
@@ -1755,17 +1739,9 @@ export type Mutation = {
   disableSkill: Scalars['Boolean']['output'];
   disableWorkflow: Scalars['Boolean']['output'];
   editTenantEntityFact: TenantEntitySection;
-  enableSkill: AgentSkill;
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
   importN8nRoutine: Routine;
-  /**
-   * Install a catalog skill into a tenant (upsert into `tenant_skills`).
-   * Idempotent: re-running with the same slug bumps the row's
-   * `version` + `updated_at`. Used by both `skill install` and `skill
-   * upgrade` on the CLI.
-   */
-  installSkill: TenantSkill;
   inviteMember: TenantMember;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
@@ -1837,12 +1813,6 @@ export type Mutation = {
    */
   testWebhook: WebhookDelivery;
   triggerRoutineRun: RoutineExecution;
-  /**
-   * Uninstall a skill from a tenant (delete the `tenant_skills` row).
-   * Returns true when a row was deleted, false when no matching install
-   * existed (idempotent no-op).
-   */
-  uninstallSkill: Scalars['Boolean']['output'];
   uninstallSlackWorkspace: SlackWorkspace;
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
@@ -2207,11 +2177,6 @@ export type MutationEditTenantEntityFactArgs = {
 };
 
 
-export type MutationEnableSkillArgs = {
-  input: EnableSkillInput;
-};
-
-
 export type MutationEnableWorkflowArgs = {
   input: EnableWorkflowInput;
 };
@@ -2224,11 +2189,6 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationImportN8nRoutineArgs = {
   input: ImportN8nRoutineInput;
-};
-
-
-export type MutationInstallSkillArgs = {
-  input: InstallSkillInput;
 };
 
 
@@ -2578,12 +2538,6 @@ export type MutationTestWebhookArgs = {
 export type MutationTriggerRoutineRunArgs = {
   input?: InputMaybe<Scalars['AWSJSON']['input']>;
   routineId: Scalars['ID']['input'];
-};
-
-
-export type MutationUninstallSkillArgs = {
-  skillId: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -3214,7 +3168,6 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
-  skillCatalog: Array<SkillCatalogItem>;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
@@ -4465,19 +4418,6 @@ export type SetSpaceToolsInput = {
   tenantId: Scalars['ID']['input'];
 };
 
-export type SkillCatalogItem = {
-  __typename?: 'SkillCatalogItem';
-  category?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  displayName: Scalars['String']['output'];
-  enabled: Scalars['Boolean']['output'];
-  icon?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  skillId: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-};
-
 export type SkillRun = {
   __typename?: 'SkillRun';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -4997,25 +4937,6 @@ export type TenantSettings = {
   maxAgents?: Maybe<Scalars['Int']['output']>;
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-/**
- * Tenant-scoped skill installation row (mirrors the `tenant_skills`
- * table). Distinct from `SkillCatalogItem` which is the
- * display-projection used by the Customize UI — this type carries the
- * version + source metadata operators need from the CLI.
- */
-export type TenantSkill = {
-  __typename?: 'TenantSkill';
-  catalogVersion?: Maybe<Scalars['String']['output']>;
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  installedAt: Scalars['AWSDateTime']['output'];
-  skillId: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  version?: Maybe<Scalars['String']['output']>;
 };
 
 export type TenantToolInventory = {
@@ -6664,33 +6585,6 @@ export type CliSchedJobTenantBySlugQueryVariables = Exact<{
 
 export type CliSchedJobTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string } | null };
 
-export type CliSkillCatalogQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type CliSkillCatalogQuery = { __typename?: 'Query', skillCatalog: Array<{ __typename?: 'SkillCatalogItem', id: string, skillId: string, displayName: string, description?: string | null, category?: string | null, icon?: string | null, source: string, enabled: boolean }> };
-
-export type CliSkillTenantBySlugQueryVariables = Exact<{
-  slug: Scalars['String']['input'];
-}>;
-
-
-export type CliSkillTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string } | null };
-
-export type CliInstallSkillMutationVariables = Exact<{
-  input: InstallSkillInput;
-}>;
-
-
-export type CliInstallSkillMutation = { __typename?: 'Mutation', installSkill: { __typename?: 'TenantSkill', id: string, tenantId: string, skillId: string, source: string, version?: string | null, catalogVersion?: string | null, enabled: boolean, installedAt: any, updatedAt: any } };
-
-export type CliUninstallSkillMutationVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  skillId: Scalars['String']['input'];
-}>;
-
-
-export type CliUninstallSkillMutation = { __typename?: 'Mutation', uninstallSkill: boolean };
-
 export type CliCreateTenantMutationVariables = Exact<{
   input: CreateTenantInput;
 }>;
@@ -7140,10 +7034,6 @@ export const CliDeleteScheduledJobDocument = {"kind":"Document","definitions":[{
 export const CliRunScheduledJobDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliRunScheduledJob"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runScheduledJob"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"dispatched"}},{"kind":"Field","name":{"kind":"Name","value":"statusCode"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]}}]} as unknown as DocumentNode<CliRunScheduledJobMutation, CliRunScheduledJobMutationVariables>;
 export const CliUpdateScheduledJobDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateScheduledJob"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateScheduledJobInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateScheduledJob"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"scheduleType"}},{"kind":"Field","name":{"kind":"Name","value":"scheduleExpression"}},{"kind":"Field","name":{"kind":"Name","value":"timezone"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliUpdateScheduledJobMutation, CliUpdateScheduledJobMutationVariables>;
 export const CliSchedJobTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliSchedJobTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<CliSchedJobTenantBySlugQuery, CliSchedJobTenantBySlugQueryVariables>;
-export const CliSkillCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliSkillCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<CliSkillCatalogQuery, CliSkillCatalogQueryVariables>;
-export const CliSkillTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliSkillTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<CliSkillTenantBySlugQuery, CliSkillTenantBySlugQueryVariables>;
-export const CliInstallSkillDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliInstallSkill"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InstallSkillInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"installSkill"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"catalogVersion"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"installedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliInstallSkillMutation, CliInstallSkillMutationVariables>;
-export const CliUninstallSkillDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUninstallSkill"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skillId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uninstallSkill"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"skillId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skillId"}}}]}]}}]} as unknown as DocumentNode<CliUninstallSkillMutation, CliUninstallSkillMutationVariables>;
 export const CliCreateTenantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCreateTenant"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateTenantInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createTenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"plan"}},{"kind":"Field","name":{"kind":"Name","value":"issuePrefix"}}]}}]}}]} as unknown as DocumentNode<CliCreateTenantMutation, CliCreateTenantMutationVariables>;
 export const CliUpdateTenantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateTenant"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTenantInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"plan"}},{"kind":"Field","name":{"kind":"Name","value":"issuePrefix"}}]}}]}}]} as unknown as DocumentNode<CliUpdateTenantMutation, CliUpdateTenantMutationVariables>;
 export const CliTenantSettingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTenantSettings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"settings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"defaultModel"}},{"kind":"Field","name":{"kind":"Name","value":"budgetMonthlyCents"}},{"kind":"Field","name":{"kind":"Name","value":"autoCloseThreadMinutes"}},{"kind":"Field","name":{"kind":"Name","value":"maxAgents"}},{"kind":"Field","name":{"kind":"Name","value":"features"}}]}}]}}]}}]} as unknown as DocumentNode<CliTenantSettingsQuery, CliTenantSettingsQueryVariables>;

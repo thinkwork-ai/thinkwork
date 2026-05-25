@@ -5,12 +5,13 @@
  * parser, and the bundle importer all reject the same folder names
  * without redeclaring the list. These tests lock in the canonical set,
  * its consumption pattern, and the AE7 acceptance behaviour (`memory/`
- * and `skills/` cannot be addressed as sub-agents at any depth).
+ * `skills/`, and `workspaces/` cannot be addressed as sub-agents at
+ * any depth).
  */
 
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -18,15 +19,17 @@ import {
   isReservedFolderSegment,
 } from "../lib/reserved-folder-names.js";
 import { parseAgentsMd } from "../lib/agents-md-parser.js";
+import { buildWorkspaceAncestorPaths } from "../lib/workspace-overlay.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 describe("RESERVED_FOLDER_NAMES — canonical set", () => {
-  it("locks the v1 set to memory + skills", () => {
+  it("locks the canonical set to memory + skills + workspaces", () => {
     expect(Array.from(RESERVED_FOLDER_NAMES).sort()).toEqual([
       "memory",
       "skills",
+      "workspaces",
     ]);
   });
 
@@ -43,6 +46,7 @@ describe("isReservedFolderSegment", () => {
   it("matches each canonical name with no trailing slash", () => {
     expect(isReservedFolderSegment("memory")).toBe(true);
     expect(isReservedFolderSegment("skills")).toBe(true);
+    expect(isReservedFolderSegment("workspaces")).toBe(true);
   });
 
   it("does not match arbitrary folder names", () => {
@@ -63,6 +67,7 @@ describe("isReservedFolderSegment", () => {
     // unstripped value must not accidentally pass.
     expect(isReservedFolderSegment("memory/")).toBe(false);
     expect(isReservedFolderSegment("skills/")).toBe(false);
+    expect(isReservedFolderSegment("workspaces/")).toBe(false);
   });
 
   it("is case-sensitive — uppercase variants are not reserved", () => {
@@ -71,6 +76,7 @@ describe("isReservedFolderSegment", () => {
     // a stem and should not be silently dropped.
     expect(isReservedFolderSegment("Memory")).toBe(false);
     expect(isReservedFolderSegment("SKILLS")).toBe(false);
+    expect(isReservedFolderSegment("Workspaces")).toBe(false);
   });
 });
 
@@ -125,17 +131,42 @@ describe("parseAgentsMd integration with reserved names", () => {
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
+
+  it("rejects root 'workspaces/' as a sub-agent goTo while allowing nested workspace folders", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const md = `## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Hidden parent | workspaces/ | workspaces/CONTEXT.md | x |
+| Real | workspaces/expenses/ | workspaces/expenses/CONTEXT.md | x |
+`;
+    const result = parseAgentsMd(md);
+    expect(result.routing).toHaveLength(1);
+    expect(result.routing[0].goTo).toBe("workspaces/expenses/");
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
 });
 
 describe("constant centralisation invariant", () => {
-  it("workspace-overlay imports from the shared module", () => {
+  it("workspace-overlay keeps pin inheritance boundaries narrower than reserved sub-agent names", () => {
+    expect(
+      buildWorkspaceAncestorPaths("workspaces/expenses/GUARDRAILS.md"),
+    ).toEqual([
+      "workspaces/expenses/GUARDRAILS.md",
+      "workspaces/GUARDRAILS.md",
+      "GUARDRAILS.md",
+    ]);
+    expect(buildWorkspaceAncestorPaths("memory/GUARDRAILS.md")).toEqual([
+      "memory/GUARDRAILS.md",
+    ]);
+
     const file = readFileSync(
       resolve(__dirname, "../lib/workspace-overlay.ts"),
       "utf8",
     );
-    expect(file).toContain('from "./reserved-folder-names.js"');
-    // The U5-era inlined literal must be gone — composer enumeration
-    // uses the imported helper now.
+    expect(file).not.toContain('from "./reserved-folder-names.js"');
     expect(file).not.toMatch(/const\s+RESERVED_FOLDER_NAMES\s*=/);
   });
 

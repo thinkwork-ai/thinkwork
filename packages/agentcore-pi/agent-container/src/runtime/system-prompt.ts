@@ -6,6 +6,8 @@ export interface PiInvocationPayload {
   system_prompt?: unknown;
   tenant_slug?: unknown;
   instance_id?: unknown;
+  user_id?: unknown;
+  eval_mode?: unknown;
 }
 
 // System-prompt composition order. LLM attention is strongest at the start
@@ -13,37 +15,26 @@ export interface PiInvocationPayload {
 //
 //   1. AGENTS.md — Layer-1 routing map. The model needs to know the
 //      territory (who-I-am-as-router, subagent table) before anything else.
-//   2. GUARDRAILS.md — safety floor; must apply everywhere.
-//   3. SOUL.md / IDENTITY.md — personality and surface identity.
-//   4. USER.md — who I'm talking to right now (materialized per-user at
+//   2. CONTEXT.md — current per-thread / per-space context.
+//   3. GUARDRAILS.md — safety floor; must apply everywhere.
+//   4. SPACE.md — active Space context when a tuple renderer supplied one.
+//   5. USER.md — who I'm talking to right now (materialized per-user at
 //      assignment time by user-md-writer.ts).
-//   5. CONTEXT.md — current per-thread / per-space context.
-//   6. PLATFORM.md — platform-level rules (tool response, escalation,
-//      date, Slack). Less hot; lives toward the back where the model still
-//      re-reads but doesn't anchor on it.
-//   7. MEMORY_GUIDE.md — how to use memory tools.
-//   8. TOOLS.md — static tool-usage policy (the dynamic tool-availability
-//      block sits at the very top, right after the date line).
 //
-// CAPABILITIES.md was dropped from this loader on 2026-05-24 — its content
-// was duplicate-platform-rules + conditional tool guidance better handled
-// by PLATFORM.md and the dynamic runtime tool policy block. The file may
-// still exist in agent workspaces and the workspace-defaults package; the
-// runtime simply no longer reads it.
+// SOUL.md, IDENTITY.md, PLATFORM.md, CAPABILITIES.md, MEMORY_GUIDE.md, and
+// TOOLS.md may still exist during the migration window; their content has
+// moved into AGENTS.md sections or dynamic runtime policy, so this loader no
+// longer reads them.
 //
 // Strands' `_build_system_prompt` in
 // packages/agentcore-strands/agent-container/container-sources/server.py
 // mirrors this order — keep them in sync when editing.
 const PROMPT_FILES = [
   "AGENTS.md",
-  "GUARDRAILS.md",
-  "SOUL.md",
-  "IDENTITY.md",
-  "USER.md",
   "CONTEXT.md",
-  "PLATFORM.md",
-  "MEMORY_GUIDE.md",
-  "TOOLS.md",
+  "GUARDRAILS.md",
+  "SPACE.md",
+  "USER.md",
 ] as const;
 
 export type WorkspaceFileReader = (filePath: string) => Promise<string | null>;
@@ -141,9 +132,9 @@ function buildRuntimeToolPolicy(toolNames: string[] | undefined): string {
 /**
  * Build the agent's system prompt by reading workspace files from disk.
  *
- * Mirrors Strands' `_build_system_prompt`: date prefix → system files
- * (PLATFORM/CAPABILITIES/GUARDRAILS/MEMORY_GUIDE) → workspace files
- * (SOUL/IDENTITY/USER/AGENTS/CONTEXT/TOOLS) → workspace skills block.
+ * Mirrors Strands' `_build_system_prompt`: date prefix → runtime policy →
+ * workspace files (AGENTS/CONTEXT/GUARDRAILS/SPACE/USER) → workspace skills
+ * block.
  *
  * Falls back to `payload.system_prompt` (or a short default) only when
  * none of the workspace files exist — necessary for unit tests that
@@ -158,7 +149,11 @@ export async function composeSystemPrompt(
   parts.push(buildRuntimeToolPolicy(args.availableToolNames));
 
   let filesLoaded = 0;
+  const includeUserMd =
+    typeof args.payload.user_id === "string" &&
+    args.payload.user_id.trim().length > 0;
   for (const filename of PROMPT_FILES) {
+    if (filename === "USER.md" && !includeUserMd) continue;
     const content = await reader(path.join(args.workspaceDir, filename));
     if (content) {
       parts.push(content);

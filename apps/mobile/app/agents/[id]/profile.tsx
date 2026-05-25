@@ -10,10 +10,8 @@ import { useAgent } from "@/lib/hooks/use-agents";
 import { listWorkspaceFiles } from "@/lib/workspace-api";
 
 const WORKSPACE_FILE_DESCRIPTIONS: Record<string, string> = {
-  "SOUL.md": "Core personality, values, and behavioral guidelines",
   "USER.md": "What the assistant knows about you",
-  "IDENTITY.md": "Name, role, and persona definition",
-  "AGENTS.md": "Multi-agent collaboration rules",
+  "AGENTS.md": "Identity, personality, routing, and collaboration rules",
   "TOOLS.md": "Tool usage preferences and instructions",
 };
 

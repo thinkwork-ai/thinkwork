@@ -46,17 +46,12 @@ export async function disableSkill(
     if (agentId && agentId !== agent.id) {
       throw new GraphQLError(
         "agentId does not match the tenant platform agent",
-        {
-          extensions: { code: "CUSTOMIZE_AGENT_MISMATCH" },
-        },
+        { extensions: { code: "CUSTOMIZE_AGENT_MISMATCH" } },
       );
     }
     resolvedAgentId = agent.id;
   } catch (err) {
-    if (err instanceof PlatformAgentNotFoundError) {
-      // Disable is idempotent — no agent means nothing to disable.
-      return true;
-    }
+    if (err instanceof PlatformAgentNotFoundError) return true;
     throw err;
   }
 

@@ -30,7 +30,7 @@ interface TenantMember {
 
 // Inline raw GraphQL query — bypasses codegen for this one-off use.
 // Mirrors the agent-side `_fetch_tenant_members` query in
-// packages/skill-catalog/agent-thread-management/scripts/threads.py.
+// legacy agent-thread-management skill helper.
 const TenantUsersQuery = gql`
   query TenantUsersForFormPicker($tenantId: ID!) {
     tenantMembers(tenantId: $tenantId) {

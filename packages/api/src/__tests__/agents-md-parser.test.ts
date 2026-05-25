@@ -114,7 +114,7 @@ describe("parseAgentsMd — tolerance and skipping", () => {
     warn.mockRestore();
   });
 
-  it("rejects 'memory' and 'skills' as goTo values (reserved folder names)", () => {
+  it("rejects reserved folder names as goTo values", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const md = `## Routing
 
@@ -122,12 +122,13 @@ describe("parseAgentsMd — tolerance and skipping", () => {
 | --- | --- | --- | --- |
 | Hidden mem | memory | memory/CONTEXT.md | x |
 | Hidden skill | skills/ | skills/CONTEXT.md | x |
+| Hidden workspaces | workspaces/ | workspaces/CONTEXT.md | x |
 | Real | expenses/ | expenses/CONTEXT.md | x |
 `;
     const result = parseAgentsMd(md);
     expect(result.routing).toHaveLength(1);
     expect(result.routing[0].goTo).toBe("expenses/");
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(3);
     warn.mockRestore();
   });
 

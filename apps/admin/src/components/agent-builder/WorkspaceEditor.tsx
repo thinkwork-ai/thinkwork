@@ -29,6 +29,7 @@ import {
   type ComposeSource,
   type MoveResult,
   type Target,
+  type WorkspaceFileMeta,
 } from "@/lib/agent-builder-api";
 import { cn } from "@/lib/utils";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -38,6 +39,7 @@ import {
   FolderTree,
   buildWorkspaceTree,
   type InlineEditState,
+  type SkillDriftStatus,
 } from "./FolderTree";
 import { AddSkillDialog } from "./AddSkillDialog";
 import {
@@ -49,11 +51,6 @@ import {
   shouldEmitDetachToast,
   validateInlineBasename,
 } from "@/lib/workspace-tree-actions";
-import {
-  parseRoutingTable,
-  replaceRoutingTable,
-  type RoutingRow,
-} from "./routing-table";
 
 export interface ClipboardItem {
   path: string;
@@ -62,13 +59,13 @@ export interface ClipboardItem {
 
 type DeleteConfirmTarget =
   | { kind: "path"; path: string; isFolder: boolean }
-  | { kind: "skill"; path: string; slug: string }
-  | {
-      kind: "synthetic-group";
-      path: string;
-      label: string;
-      folderPaths: string[];
-    };
+  | { kind: "skill"; path: string; slug: string };
+
+export interface InstalledSkillRefForDrift {
+  folderPath: string;
+  slug: string;
+  sourceSha256: string | null;
+}
 
 export type WorkspaceEditorMode =
   | "agent"
@@ -124,6 +121,67 @@ export function workspaceEditorTargetKey(target: Target): string {
   if ("userId" in target) return `user:${target.userId}`;
   if ("catalog" in target) return "catalog";
   return "defaults";
+}
+
+export function collectInstalledSkillRefPaths(files: string[]): Array<{
+  folderPath: string;
+  slug: string;
+  refPath: string;
+}> {
+  return files
+    .filter((path) => /^skills\/[^/]+\/\.catalog-ref\.json$/.test(path))
+    .map((refPath) => {
+      const slug = refPath.split("/")[1] ?? "";
+      return {
+        folderPath: `skills/${slug}`,
+        slug,
+        refPath,
+      };
+    })
+    .filter((ref) => ref.slug.length > 0);
+}
+
+export function parseCatalogRefSourceSha(
+  content: string | null,
+): string | null {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content) as { source_sha256?: unknown };
+    return typeof parsed.source_sha256 === "string"
+      ? parsed.source_sha256
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function catalogShaBySlug(
+  files: Pick<WorkspaceFileMeta, "path" | "sha256">[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const file of files) {
+    const [slug] = file.path.split("/");
+    if (!slug || !file.sha256 || out.has(slug)) continue;
+    out.set(slug, file.sha256);
+  }
+  return out;
+}
+
+export function computeSkillDriftByPath(
+  installedRefs: InstalledSkillRefForDrift[],
+  catalogHashes: Map<string, string>,
+): Record<string, SkillDriftStatus> {
+  const out: Record<string, SkillDriftStatus> = {};
+  for (const ref of installedRefs) {
+    if (!ref.sourceSha256) continue;
+    const catalogSha = catalogHashes.get(ref.slug);
+    if (!catalogSha) {
+      out[ref.folderPath] = "orphan";
+    } else if (catalogSha !== ref.sourceSha256) {
+      out[ref.folderPath] = "stale";
+    }
+  }
+  return out;
 }
 
 export function WorkspaceEditor({
@@ -188,10 +246,12 @@ export function WorkspaceEditor({
   const [deleteConfirmTarget, setDeleteConfirmTarget] =
     useState<DeleteConfirmTarget | null>(null);
   const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false);
+  const [skillDriftByPath, setSkillDriftByPath] = useState<
+    Record<string, SkillDriftStatus>
+  >({});
   const [pendingFileSwitchPath, setPendingFileSwitchPath] = useState<
     string | null
   >(null);
-  const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
   const loadRequestId = useRef(0);
   const fileListRequestId = useRef(0);
   const openFileRef = useRef<string | null>(null);
@@ -243,34 +303,54 @@ export function WorkspaceEditor({
     void fetchFiles({ showLoading: false });
   }, [fetchFiles]);
 
-  const skillInstallTarget =
-    "agentId" in stableTarget || "spaceId" in stableTarget
-      ? stableTarget
-      : null;
+  const skillInstallTarget = "agentId" in stableTarget ? stableTarget : null;
   const skillLifecycleTarget = skillInstallTarget;
+  const installedSkillRefPaths = useMemo(
+    () => collectInstalledSkillRefPaths(files),
+    [files],
+  );
 
   useEffect(() => {
-    if (!files.includes("AGENTS.md")) {
-      setRoutingRows([]);
+    if (!skillLifecycleTarget || installedSkillRefPaths.length === 0) {
+      setSkillDriftByPath({});
       return;
     }
+
     let cancelled = false;
-    agentBuilderApi
-      .getFile(stableTarget, "AGENTS.md")
-      .then((data) => {
+    async function refreshSkillDrift() {
+      try {
+        const [catalog, refResults] = await Promise.all([
+          agentBuilderApi.listCatalogFiles(),
+          Promise.all(
+            installedSkillRefPaths.map(async (ref) => {
+              const data = await agentBuilderApi.getFile(
+                stableTarget,
+                ref.refPath,
+              );
+              return {
+                folderPath: ref.folderPath,
+                slug: ref.slug,
+                sourceSha256: parseCatalogRefSourceSha(data.content),
+              };
+            }),
+          ),
+        ]);
         if (cancelled) return;
-        const parsed = parseRoutingTable(data.content ?? "");
-        setRoutingRows(parsed.warning ? [] : parsed.rows);
-      })
-      .catch((err) => {
+        setSkillDriftByPath(
+          computeSkillDriftByPath(refResults, catalogShaBySlug(catalog.files)),
+        );
+      } catch (err) {
         if (cancelled) return;
-        console.error("Failed to parse AGENTS.md routing rows:", err);
-        setRoutingRows([]);
-      });
+        console.error("Failed to compute skill drift:", err);
+        setSkillDriftByPath({});
+      }
+    }
+
+    void refreshSkillDrift();
     return () => {
       cancelled = true;
     };
-  }, [files, stableTarget]);
+  }, [installedSkillRefPaths, skillLifecycleTarget, stableTarget]);
 
   useEffect(() => {
     loadRequestId.current += 1;
@@ -285,8 +365,8 @@ export function WorkspaceEditor({
     setLoadingContent(false);
     setLoadingFiles(true);
     setLoadedFilesOnce(false);
-    setRoutingRows([]);
     setInlineEdit(null);
+    setSkillDriftByPath({});
   }, [key]);
 
   useEffect(() => {
@@ -295,10 +375,10 @@ export function WorkspaceEditor({
 
   const tree = useMemo(
     () =>
-      buildWorkspaceTree(files, routingRows, {
+      buildWorkspaceTree(files, {
         reservedRootFolders: workspaceEditorReservedRootFolders(mode),
       }),
-    [files, mode, routingRows],
+    [files, mode],
   );
   const emptyStateLabel =
     mode === "context"
@@ -306,6 +386,7 @@ export function WorkspaceEditor({
       : mode === "catalog"
         ? "catalog skill"
         : "workspace";
+  const skillDriftCount = Object.keys(skillDriftByPath).length;
 
   const openWorkspaceFile = useCallback(
     async (filePath: string) => {
@@ -783,79 +864,28 @@ export function WorkspaceEditor({
     }
   };
 
-  const handleDeleteSyntheticGroup = async (
-    groupPath: string,
-    folderPaths: string[],
-  ) => {
-    const uniqueFolders = [...new Set(folderPaths)];
-    const paths = files.filter((file) =>
-      uniqueFolders.some(
-        (folderPath) =>
-          file === folderPath || file.startsWith(`${folderPath}/`),
-      ),
-    );
-    if (paths.length === 0) return;
+  const handleReinstallSkill = async (path: string, slug: string) => {
+    if (!skillLifecycleTarget) return;
 
-    beginMutation(groupPath);
+    beginMutation(path);
     try {
-      for (const filePath of paths) {
-        await agentBuilderApi.deleteFile(stableTarget, filePath);
+      const result = await agentBuilderApi.reinstallSkill(
+        skillLifecycleTarget,
+        slug,
+      );
+      await fetchFiles({ showLoading: false });
+      if (openFile && (openFile === path || openFile.startsWith(`${path}/`))) {
+        void openWorkspaceFile(openFile);
       }
-      setFiles((current) => current.filter((file) => !paths.includes(file)));
-      setFileSources((current) => {
-        const next = { ...current };
-        for (const file of paths) delete next[file];
-        return next;
-      });
-      if (openFile && paths.includes(openFile)) {
-        setOpenFile(null);
-        setContent("");
-        setEditValue("");
-      }
-      if (
-        clipboardItem &&
-        uniqueFolders.some(
-          (folderPath) =>
-            clipboardItem.path === folderPath ||
-            clipboardItem.path.startsWith(`${folderPath}/`),
-        )
-      ) {
-        setClipboardItem(null);
-      }
-      await removeSyntheticRoutingRows(uniqueFolders);
-      refreshFilesInBackground();
+      toast.success(
+        result.noop ? "Skill is already up to date." : "Skill reinstalled.",
+      );
     } catch (err) {
-      console.error("Failed to delete workspace group:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to reinstall skill:", err);
+      toast.error(`Reinstall skill failed: ${message}`);
     } finally {
-      endMutation(groupPath);
-    }
-  };
-
-  const removeSyntheticRoutingRows = async (folderPaths: string[]) => {
-    if (!("agentId" in stableTarget)) return;
-    const foldersToRemove = new Set(
-      folderPaths.map(normalizeRoutingFolderPath).filter(Boolean),
-    );
-    if (foldersToRemove.size === 0) return;
-
-    const agentsMd =
-      openFileRef.current === "AGENTS.md"
-        ? editValue
-        : ((await agentBuilderApi.getFile(stableTarget, "AGENTS.md")).content ??
-          "");
-    const parsed = parseRoutingTable(agentsMd);
-    const nextRows = parsed.rows.filter((row) => {
-      const goTo = normalizeRoutingFolderPath(row.goTo);
-      return !goTo || !foldersToRemove.has(goTo);
-    });
-    if (nextRows.length === parsed.rows.length) return;
-
-    const nextAgentsMd = replaceRoutingTable(agentsMd, nextRows);
-    await agentBuilderApi.putFile(stableTarget, "AGENTS.md", nextAgentsMd);
-    setRoutingRows(nextRows);
-    if (openFileRef.current === "AGENTS.md") {
-      setContent(nextAgentsMd);
-      setEditValue(nextAgentsMd);
+      endMutation(path);
     }
   };
 
@@ -1007,7 +1037,14 @@ export function WorkspaceEditor({
         >
           <div className="flex w-64 shrink-0 flex-col border-r">
             <div className="flex h-9 items-center justify-between border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
-              <span>{files.length} files</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <span>{files.length} files</span>
+                {skillDriftCount > 0 ? (
+                  <span className="shrink-0 rounded border border-amber-400/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-600 dark:text-amber-400">
+                    {skillDriftCount} stale
+                  </span>
+                ) : null}
+              </div>
               <div className="flex items-center gap-1.5">{addMenu}</div>
             </div>
             <div
@@ -1021,6 +1058,7 @@ export function WorkspaceEditor({
                 expandedFolders={expandedFolders}
                 mutatingPaths={mutatingPaths}
                 clipboardItem={clipboardItem}
+                skillDriftByPath={skillDriftByPath}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
                 onSelect={requestOpenWorkspaceFile}
@@ -1038,14 +1076,6 @@ export function WorkspaceEditor({
                       : { kind: "path", path, isFolder };
                   })
                 }
-                onDeleteSyntheticGroup={(path, label, folderPaths) =>
-                  setDeleteConfirmTarget({
-                    kind: "synthetic-group",
-                    path,
-                    label,
-                    folderPaths,
-                  })
-                }
                 onAddSkill={
                   skillLifecycleTarget
                     ? (path) => {
@@ -1059,6 +1089,14 @@ export function WorkspaceEditor({
                     ? (path, slug) => {
                         setFocusedTreePath(path);
                         setDeleteConfirmTarget({ kind: "skill", path, slug });
+                      }
+                    : undefined
+                }
+                onReinstallSkill={
+                  skillLifecycleTarget
+                    ? (path, slug) => {
+                        setFocusedTreePath(path);
+                        void handleReinstallSkill(path, slug);
                       }
                     : undefined
                 }
@@ -1118,9 +1156,7 @@ export function WorkspaceEditor({
           if (!deleteConfirmTarget) return;
           const target = deleteConfirmTarget;
           setDeleteConfirmTarget(null);
-          if (target.kind === "synthetic-group") {
-            void handleDeleteSyntheticGroup(target.path, target.folderPaths);
-          } else if (target.kind === "skill") {
+          if (target.kind === "skill") {
             void handleRemoveSkill(target.path, target.slug);
           } else {
             void handleDeletePath(target.path, target.isFolder);
@@ -1178,14 +1214,6 @@ function collectFolderPathsFromFiles(files: string[]): Set<string> {
     }
   }
   return out;
-}
-
-function normalizeRoutingFolderPath(path: string): string {
-  return path
-    .trim()
-    .replace(/^`|`$/g, "")
-    .replace(/^\.\//, "")
-    .replace(/\/$/, "");
 }
 
 function PendingChangesDialog({
@@ -1253,16 +1281,6 @@ function DeleteConfirmDialog({
           (file) => file === target.path || file.startsWith(`${target.path}/`),
         ).length
       : 0;
-  const groupFileCount =
-    target?.kind === "synthetic-group"
-      ? files.filter((file) =>
-          target.folderPaths.some(
-            (folderPath) =>
-              file === folderPath || file.startsWith(`${folderPath}/`),
-          ),
-        ).length
-      : 0;
-
   return (
     <AlertDialog
       open={open}
@@ -1273,22 +1291,14 @@ function DeleteConfirmDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {target?.kind === "synthetic-group"
-              ? "Delete agents group?"
-              : target?.kind === "skill"
-                ? "Remove skill?"
-                : target?.kind === "path" && target.isFolder
-                  ? "Delete folder?"
-                  : "Delete file?"}
+            {target?.kind === "skill"
+              ? "Remove skill?"
+              : target?.kind === "path" && target.isFolder
+                ? "Delete folder?"
+                : "Delete file?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {target?.kind === "synthetic-group" ? (
-              <>
-                Delete <code className="font-mono">{target.label}/</code> and
-                all {groupFileCount} file{groupFileCount === 1 ? "" : "s"} in
-                its routed folders. This cannot be undone.
-              </>
-            ) : target?.kind === "skill" ? (
+            {target?.kind === "skill" ? (
               <>
                 Remove <code className="font-mono">{target.slug}</code>, delete{" "}
                 {skillFileCount} installed file

@@ -48,7 +48,12 @@ class DispatchRunSkillHappyPathTests(unittest.IsolatedAsyncioTestCase):
             "agentSlug": "ada",
             "agentName": "Ada",
             "templateModel": "us.anthropic.claude-sonnet-4-6",
-            "skillsConfig": [{"skillId": "sales-prep", "s3Key": "skills/catalog/sales-prep"}],
+            "skillsConfig": [
+                {
+                    "skillId": "sales-prep",
+                    "s3Key": "tenants/acme/skill-catalog/sales-prep",
+                }
+            ],
             "mcpConfigs": [],
             "guardrailConfig": None,
             "knowledgeBasesConfig": None,

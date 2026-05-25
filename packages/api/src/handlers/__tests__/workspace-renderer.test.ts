@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createWorkspaceRendererHandler } from "../workspace-renderer.js";
+import type { SpaceMembershipRepository } from "../../lib/workspace-renderer/space-membership-check.js";
 import type {
   ResolvedWorkspaceRenderTuple,
   WorkspaceObjectMetadata,
@@ -17,6 +18,7 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceSlug: "default",
   spaceName: "Default",
   spaceKind: "custom",
+  spaceAccessMode: "public",
   spacePrompt: null,
   spaceToolPolicy: { blockedTools: ["send_email"] },
   spaceMcpPolicy: { blockedServers: ["prod-db"] },
@@ -26,8 +28,16 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
 };
 
 class FakeRepository implements WorkspaceTupleRepository {
+  constructor(private readonly tuple: ResolvedWorkspaceRenderTuple = TUPLE) {}
+
   async resolve(): Promise<ResolvedWorkspaceRenderTuple> {
-    return TUPLE;
+    return this.tuple;
+  }
+}
+
+class FakeMembershipRepository implements SpaceMembershipRepository {
+  async isSpaceMember(): Promise<boolean> {
+    return false;
   }
 }
 
@@ -82,9 +92,37 @@ describe("workspace-renderer handler", () => {
       renderedPrefix: "tenants/acme/rendered/agent/default/anon/",
       cacheStatus: "miss",
       effectivePolicy: {
-        blockedTools: ["browser_automation", "send_email"],
-        mcpBlockedServers: ["prod-db"],
+        blockedTools: ["browser_automation"],
+        mcpBlockedServers: [],
       },
+    });
+  });
+
+  it("returns 403 when a private Space render is denied", async () => {
+    const handler = createWorkspaceRendererHandler({
+      bucket: "workspace",
+      repository: new FakeRepository({
+        ...TUPLE,
+        spaceSlug: "finance",
+        spaceName: "Finance",
+        spaceKind: "custom",
+        spaceAccessMode: "private",
+        userId: "user-2",
+      }),
+      objectStore: new FakeStore(),
+      spaceMembershipRepository: new FakeMembershipRepository(),
+    });
+
+    await expect(
+      handler({
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      statusCode: 403,
+      error: { code: "SpaceAccessDenied" },
     });
   });
 

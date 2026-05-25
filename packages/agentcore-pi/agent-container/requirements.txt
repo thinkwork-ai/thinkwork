@@ -1,9 +1,9 @@
 # Plan §005 U5 — Python skill-bridge runtime deps.
 #
 # The skill-bridge harness (skill-bridge/run_skill.py) uses stdlib only.
-# The deps below are for the script-skills it imports at runtime.
-# Sized by greping `^import\|^from` across packages/skill-catalog/*/scripts/*.py:
-# stdlib + boto3 covers every third-party import as of 2026-05-03.
+# The deps below are for the script-skills it imports at runtime. Stdlib +
+# boto3 covers every third-party import used by the current workspace skill
+# corpus as of 2026-05-03.
 #
 # When a new skill adds a third-party import, append it here. Pin
 # matches the agentcore-strands runtime so cross-runtime skill behavior

@@ -377,6 +377,16 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
 from external_task_context import format_external_task_context
 from workflow_skill_context import format_workflow_skill_context
 
+RETIRED_PROMPT_FILES = {
+    "SOUL.md",
+    "IDENTITY.md",
+    "PLATFORM.md",
+    "CAPABILITIES.md",
+    "MEMORY_GUIDE.md",
+    "TOOLS.md",
+}
+CANONICAL_PROMPT_FILES = ("AGENTS.md", "CONTEXT.md", "GUARDRAILS.md", "SPACE.md", "USER.md")
+
 
 def _build_system_prompt(
     skills_config: list | None = None,
@@ -390,13 +400,24 @@ def _build_system_prompt(
     Otherwise, fall back to loading all known workspace files (backward compatible).
     """
     parts = []
+    prompt_file_count = 0
+    user_file_position = None
 
     if profile:
         # Profile-aware: load only files specified by the resolved profile
         from router_parser import expand_file_list
 
-        file_paths = expand_file_list(WORKSPACE_DIR, profile.load)
+        profile_paths = expand_file_list(WORKSPACE_DIR, profile.load)
+        file_paths = []
+        seen_paths = set()
+        for rel_path in [*CANONICAL_PROMPT_FILES, *profile_paths]:
+            if rel_path in seen_paths:
+                continue
+            seen_paths.add(rel_path)
+            file_paths.append(rel_path)
         for rel_path in file_paths:
+            if rel_path in RETIRED_PROMPT_FILES:
+                continue
             if suppress_user_md and os.path.basename(rel_path) == "USER.md":
                 continue
             filepath = os.path.join(WORKSPACE_DIR, rel_path)
@@ -404,32 +425,22 @@ def _build_system_prompt(
                 with open(filepath) as f:
                     content = f.read().strip()
                 if content:
+                    if os.path.basename(rel_path) == "USER.md":
+                        user_file_position = len(parts)
                     parts.append(content)
+                    prompt_file_count += 1
             except Exception as e:
                 logger.warning("Failed to read %s: %s", rel_path, e)
         logger.info("Profile-aware prompt: loaded %d workspace files", len(parts))
     else:
-        # Legacy: load all known prompt files in a single deliberate order.
+        # Load the canonical prompt files in a single deliberate order.
         # See packages/agentcore-pi/agent-container/src/runtime/system-prompt.ts
         # for the rationale (LLM attention is strongest at start + end; the
-        # navigation map and safety floor go up front; PLATFORM and
-        # MEMORY_GUIDE sit toward the back where the model still reads them
-        # but doesn't anchor on them). Pi and Strands MUST stay in sync.
-        #
-        # CAPABILITIES.md was dropped from this loader on 2026-05-24 — its
-        # content was duplicate-platform-rules + conditional tool guidance
-        # better handled by PLATFORM.md and the dynamic runtime tool policy.
-        from install_skills import SYSTEM_WORKSPACE_DIR
+        # navigation map, active context, safety floor, Space context, and
+        # requester context stay in a pinned order). Pi and Strands MUST stay
+        # in sync.
         prompt_files = [
-            ("AGENTS.md", WORKSPACE_DIR),
-            ("GUARDRAILS.md", SYSTEM_WORKSPACE_DIR),
-            ("SOUL.md", WORKSPACE_DIR),
-            ("IDENTITY.md", WORKSPACE_DIR),
-            ("USER.md", WORKSPACE_DIR),
-            ("CONTEXT.md", WORKSPACE_DIR),
-            ("PLATFORM.md", SYSTEM_WORKSPACE_DIR),
-            ("MEMORY_GUIDE.md", SYSTEM_WORKSPACE_DIR),
-            ("TOOLS.md", WORKSPACE_DIR),
+            (filename, WORKSPACE_DIR) for filename in CANONICAL_PROMPT_FILES
         ]
         for filename, base_dir in prompt_files:
             if suppress_user_md and filename == "USER.md":
@@ -440,7 +451,10 @@ def _build_system_prompt(
                     with open(filepath) as f:
                         content = f.read().strip()
                     if content:
+                        if filename == "USER.md":
+                            user_file_position = len(parts)
                         parts.append(content)
+                        prompt_file_count += 1
                 except Exception as e:
                     logger.warning("Failed to read %s: %s", filepath, e)
 
@@ -487,15 +501,17 @@ def _build_system_prompt(
     now = datetime.now(ZoneInfo("America/Chicago"))
     parts.insert(0, f"Current date: {now.strftime('%A, %B %d, %Y')} ({now.strftime('%Z')})")
 
-    # System workspace files (PLATFORM / GUARDRAILS / MEMORY_GUIDE) are now
-    # interleaved into the main prompt_files list above in their intended
-    # positions, not prepended as a contiguous block. CAPABILITIES.md was
-    # retired from the loader on 2026-05-24.
+    # Retired prompt files (SOUL / IDENTITY / PLATFORM / CAPABILITIES /
+    # MEMORY_GUIDE / TOOLS) may still exist during the migration window, but
+    # their content has moved into AGENTS.md sections or dynamic runtime
+    # policy, so the runtime no longer reads them.
 
+    user_context_was_inserted = False
     if _USER_CONTEXT_CACHE and _USER_CONTEXT_CACHE.body.strip():
         # User-context block goes right after the date line (index 0).
         insert_at = 1
         parts.insert(insert_at, _USER_CONTEXT_CACHE.body.strip())
+        user_context_was_inserted = True
         user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
         tenant_id = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
         token_count = max(1, len(_USER_CONTEXT_CACHE.body) // 4)
@@ -516,8 +532,11 @@ def _build_system_prompt(
         )
 
     if _PACK_CACHE and _PACK_CACHE.body.strip():
-        insert_at = 1 + len(system_parts)
-        if _USER_CONTEXT_CACHE and _USER_CONTEXT_CACHE.body.strip():
+        if user_file_position is None:
+            insert_at = 1 + prompt_file_count
+        else:
+            insert_at = 1 + user_file_position
+        if user_context_was_inserted:
             insert_at += 1
         parts.insert(insert_at, _PACK_CACHE.body.strip())
         user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
@@ -1084,13 +1103,6 @@ def _call_strands_agent(
 
         memory_tools.set_turn_memory_context(
             user_id=os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", ""),
-            active_space_id=os.environ.get("ACTIVE_SPACE_ID", ""),
-            active_space_slug=os.environ.get("ACTIVE_SPACE_SLUG", ""),
-            active_space_is_default=(
-                os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "").lower()
-                in ("1", "true", "yes")
-                or os.environ.get("ACTIVE_SPACE_SLUG", "") == "default"
-            ),
         )
         tools.extend([memory_tools.remember, memory_tools.recall, memory_tools.forget])
         logger.info("Managed memory tools registered: remember, recall, forget")
@@ -1481,22 +1493,10 @@ def _call_strands_agent(
             hs_endpoint = os.environ.get("HINDSIGHT_ENDPOINT", "")
             hs_user = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
             hs_space_id = os.environ.get("ACTIVE_SPACE_ID", "")
-            hs_space_slug = os.environ.get("ACTIVE_SPACE_SLUG", "")
-            hs_space_is_default = (
-                os.environ.get("ACTIVE_SPACE_IS_DEFAULT", "").lower()
-                in ("1", "true", "yes")
-                or hs_space_slug == "default"
-            )
             hs_read_banks = []
             if hs_user:
                 hs_read_banks.append(f"user_{hs_user}")
-            if hs_space_id and not hs_space_is_default:
-                hs_read_banks.append(f"space_{hs_space_id}")
-            hs_bank = (
-                f"space_{hs_space_id}"
-                if hs_space_id and not hs_space_is_default
-                else (f"user_{hs_user}" if hs_user else "")
-            )
+            hs_bank = f"user_{hs_user}" if hs_user else ""
             hs_tenant = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
             hs_assistant = os.environ.get("_ASSISTANT_ID", "")
             hs_stage = os.environ.get("STAGE", "") or "unknown"
@@ -1665,11 +1665,9 @@ def _call_strands_agent(
         now = datetime.now(ZoneInfo("America/Chicago"))
         prompt_parts.append(f"Current date: {now.strftime('%A, %B %d, %Y')} ({now.strftime('%Z')})")
 
-        # System guardrails (same as parent)
-        from install_skills import SYSTEM_WORKSPACE_DIR
-
-        for sysfile in ["PLATFORM.md", "GUARDRAILS.md"]:
-            syspath = os.path.join(SYSTEM_WORKSPACE_DIR, sysfile)
+        # Workspace guardrails (same safety floor as parent).
+        for sysfile in ["GUARDRAILS.md"]:
+            syspath = os.path.join(WORKSPACE_DIR, sysfile)
             if os.path.isfile(syspath):
                 try:
                     with open(syspath) as f:
@@ -2764,6 +2762,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     browser_automation_enabled = bool(payload.get("browser_automation_enabled"))
     tenant_id_for_audit = payload.get("sessionId") or payload.get("tenant_id") or "unknown"
     ticket_id = payload.get("thread_id") or payload.get("ticket_id") or ""
+    user_id = payload.get("user_id") or ""
     # U3 of the finance pilot — message_attachments rides directly on
     # the payload dict (NOT through apply_invocation_env; that helper is
     # an os.environ string-setter, not an array-of-records carrier).
@@ -2893,7 +2892,10 @@ def _execute_agent_turn(payload: dict) -> dict:
         requester_context_overlay = payload.get("requester_context") or payload.get(
             "requesterContext"
         )
-        suppress_user_md = bool(is_computer_thread_turn and computer_scope == "shared")
+        suppress_user_md = bool(
+            (is_computer_thread_turn and computer_scope == "shared")
+            or not str(user_id).strip()
+        )
         system_prompt = _build_system_prompt(
             effective_skills,
             parent_kb_config,

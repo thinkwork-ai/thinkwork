@@ -8,7 +8,6 @@
  * of the document.
  *
  * Used by:
- *   - `derive-agent-skills.ts` (U11) to recompute `agent_skills` on save
  *   - admin builder routing-row editor (U18) for structured editing
  *   - folder-bundle-importer (U15) to enumerate sub-agents from imports
  *
@@ -50,7 +49,7 @@
  *   - Italics / bold / backticks stripped before validation
  *   - Trailing empty rows skipped
  *   - Rows with invalid goTo paths skipped + WARN-logged (not thrown)
- *   - Rows with reserved goTo names (`memory`, `skills`) skipped + WARN-logged
+ *   - Rows with reserved goTo names (`memory`, `skills`, `workspaces`) skipped + WARN-logged
  *
  * Hard errors (both sides):
  *   - Routing table present but no `Go to` column → throw
@@ -239,7 +238,7 @@ function parseRoutingBlock(block: TableBlock): ParsedRoutingBlock {
     const goToFolder = goTo.replace(/\/$/, "");
     if (RESERVED_FOLDER_NAMES.has(goToFolder)) {
       console.warn(
-        `[agents-md-parser] Skipping row — goTo "${goTo}" is a reserved folder name (memory/skills).`,
+        `[agents-md-parser] Skipping row — goTo "${goTo}" is a reserved folder name (memory/skills/workspaces).`,
       );
       warnings.push(`row ${rowIndex} skipped — go_to '${goTo}' is reserved`);
       skippedRows.push({ rowIndex, goTo, reason: "reserved" });

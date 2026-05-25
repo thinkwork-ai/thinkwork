@@ -5,6 +5,7 @@ import {
   moveWorkspaceFile,
   normalizeWorkspaceMap,
   regenerateWorkspaceMap,
+  reinstallWorkspaceSkill,
   renameWorkspacePath,
   uninstallWorkspaceSkill,
 } from "../workspace-files-api";
@@ -241,5 +242,26 @@ describe("moveWorkspaceFile (client wrapper for /api/workspaces/files)", () => {
       slug: "finance-audit-xls",
     });
     expect(result.context_md_strip).toBe("removed");
+  });
+
+  it("posts action=reinstall-skill with the selected slug", async () => {
+    mockOk({
+      reinstalled_paths: ["skills/finance-audit-xls/SKILL.md"],
+      source_sha256: "b".repeat(64),
+    });
+
+    const result = await reinstallWorkspaceSkill(
+      { agentId: "agent-abc" },
+      "finance-audit-xls",
+    );
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: "reinstall-skill",
+      agentId: "agent-abc",
+      slug: "finance-audit-xls",
+    });
+    expect(result.source_sha256).toBe("b".repeat(64));
   });
 });

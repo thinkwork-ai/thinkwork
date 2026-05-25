@@ -25,6 +25,9 @@ vi.mock("../graphql/utils.js", () => ({
   db: {
     select: () => ({
       from: () => ({
+        innerJoin: () => ({
+          where: () => Promise.resolve(nextRows()),
+        }),
         where: () => Promise.resolve(nextRows()),
       }),
     }),
@@ -36,6 +39,11 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
+  agentSkills: {
+    agent_id: "agent_skills.agent_id",
+    skill_id: "agent_skills.skill_id",
+    enabled: "agent_skills.enabled",
+  },
   agents: {
     id: "agents.id",
     name: "agents.name",
@@ -65,12 +73,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tools: "tenant_mcp_servers.tools",
     tenant_id: "tenant_mcp_servers.tenant_id",
     enabled: "tenant_mcp_servers.enabled",
-  },
-  tenantSkills: {
-    id: "tenant_skills.id",
-    skill_id: "tenant_skills.skill_id",
-    tenant_id: "tenant_skills.tenant_id",
-    enabled: "tenant_skills.enabled",
+    status: "tenant_mcp_servers.status",
   },
 }));
 
@@ -148,7 +151,11 @@ describe("tenantToolInventory", () => {
         },
       ],
       [{ id: "builtin-1", tool_slug: "web_search", provider: "exa" }],
-      [{ id: "skill-1", skill_id: "deep-research" }],
+      [
+        { skill_id: "deep-research" },
+        { skill_id: "deep-research" },
+        { skill_id: "finance-audit-xls" },
+      ],
       [],
     );
     const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
@@ -179,7 +186,12 @@ describe("tenantToolInventory", () => {
       ]),
     );
     expect(out.skills).toEqual([
-      { id: "skill-1", slug: "deep-research", description: null },
+      { id: "deep-research", slug: "deep-research", description: null },
+      {
+        id: "finance-audit-xls",
+        slug: "finance-audit-xls",
+        description: null,
+      },
     ]);
   });
 

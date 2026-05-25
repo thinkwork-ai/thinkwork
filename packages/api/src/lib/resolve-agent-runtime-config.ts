@@ -16,7 +16,7 @@
  *   - agent + tenant metadata (name, slug, model, blocked tools, sandbox config)
  *   - guardrail (agent-assigned, else tenant default)
  *   - `skillsConfig`: the full skill list the container should register,
- *     including catalog defaults (agent-thread-management, artifacts,
+ *     including tenant catalog defaults (agent-thread-management, artifacts,
  *     workspace-memory), tenant-configured built-in tools, and
  *     per-skill env overrides (OAuth-resolved tokens, CURRENT_USER_EMAIL when
  *     a human invoker is known) with the template blocked-tools filter
@@ -37,13 +37,17 @@
  */
 
 import { eq, and } from "drizzle-orm";
+import {
+  GetObjectCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
   agentCapabilities,
   agentSkills,
   tenants,
-  tenantSkills,
   users,
   agentKnowledgeBases,
   knowledgeBases,
@@ -75,12 +79,15 @@ import {
   applyRuntimeOverrides,
   type SpaceRuntimeOverrides,
 } from "./workspace-renderer/runtime-overrides-applier.js";
+import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
+import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 
 export interface SkillConfig {
   skillId: string;
   s3Key: string;
   secretRef?: string;
   envOverrides?: Record<string, string>;
+  mcpServer?: string;
 }
 
 export interface KnowledgeBaseConfig {
@@ -194,16 +201,21 @@ export interface ResolveAgentRuntimeConfigOptions {
   appsyncApiKey?: string;
 }
 
-const DEFAULT_SKILLS: ReadonlyArray<{ skillId: string; s3Key: string }> = [
-  {
-    skillId: "agent-thread-management",
-    s3Key: "skills/catalog/agent-thread-management",
-  },
-  { skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
-  { skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
+const DEFAULT_SKILLS: ReadonlyArray<{ skillId: string }> = [
+  { skillId: "agent-thread-management" },
+  { skillId: "artifacts" },
+  { skillId: "workspace-memory" },
 ];
 
+function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
+  return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
+}
+
 const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
+const s3 = new S3Client({
+  region:
+    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+});
 
 export async function resolveAgentRuntimeConfig(
   opts: ResolveAgentRuntimeConfigOptions,
@@ -389,55 +401,21 @@ export async function resolveAgentRuntimeConfig(
   }
 
   // --- Skills --------------------------------------------------------------
-  // Per-agent installs first, then default skills the container always needs,
-  // then tenant-configured built-in tools (web-search etc.), then the
+  // Workspace skill folders first, then default skills the container always
+  // needs, then tenant-configured built-in tools (web-search etc.), then the
   // template's blocked-tools filter.
 
-  const skillRows = await db
-    .select({
-      skill_id: agentSkills.skill_id,
-      config: agentSkills.config,
-      source: tenantSkills.source,
-    })
-    .from(agentSkills)
-    .leftJoin(
-      tenantSkills,
-      and(
-        eq(tenantSkills.tenant_id, opts.tenantId),
-        eq(tenantSkills.skill_id, agentSkills.skill_id),
-      ),
-    )
-    .where(eq(agentSkills.agent_id, opts.agentId));
-
-  let skillsConfig: SkillConfig[] = await Promise.all(
-    skillRows.map(
-      async (s: {
-        skill_id: string;
-        config: unknown;
-        source: string | null;
-      }): Promise<SkillConfig> => {
-        const config = (s.config as Record<string, unknown>) || {};
-        const envOverrides = await buildSkillEnvOverrides(
-          config,
-          opts.tenantId,
-        ).catch((err) => {
-          console.warn(
-            `${logPrefix} envOverrides failed for skill ${s.skill_id}:`,
-            err,
-          );
-          return null;
-        });
-        const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${s.skill_id}`;
-        const merged = envOverrides ? { ...envOverrides } : {};
-        return {
-          skillId: s.skill_id,
-          s3Key,
-          secretRef: (config.secretRef as string) || undefined,
-          envOverrides: Object.keys(merged).length > 0 ? merged : undefined,
-        };
-      },
-    ),
-  );
+  let skillsConfig: SkillConfig[] = await loadWorkspaceSkillConfigs({
+    tenantSlug,
+    agentSlug,
+    logPrefix,
+  });
+  skillsConfig = await applyAgentSkillMetadata({
+    skillsConfig,
+    agentId: opts.agentId,
+    tenantId: opts.tenantId,
+    logPrefix,
+  });
 
   // Other default skills (always-on script skills).
   for (const ds of DEFAULT_SKILLS) {
@@ -451,6 +429,7 @@ export async function resolveAgentRuntimeConfig(
     if (currentUserEmail) env.CURRENT_USER_EMAIL = currentUserEmail;
     skillsConfig.push({
       ...ds,
+      s3Key: tenantCatalogSkillS3Key(tenantSlug, ds.skillId),
       secretRef: undefined,
       envOverrides: env,
     });
@@ -477,7 +456,7 @@ export async function resolveAgentRuntimeConfig(
       }
       skillsConfig.push({
         skillId: bt.toolSlug,
-        s3Key: `skills/catalog/${bt.toolSlug}`,
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, bt.toolSlug),
         secretRef: undefined,
         envOverrides: bt.envOverrides,
       });
@@ -634,6 +613,110 @@ export async function resolveAgentRuntimeConfig(
   });
 
   return applyRuntimeOverrides(resolvedConfig, overrides);
+}
+
+export async function loadWorkspaceSkillConfigs(input: {
+  tenantSlug: string;
+  agentSlug: string;
+  logPrefix: string;
+}): Promise<SkillConfig[]> {
+  const bucket = process.env.WORKSPACE_BUCKET || "";
+  if (!bucket || !input.tenantSlug || !input.agentSlug) return [];
+
+  const prefix = `tenants/${input.tenantSlug}/agents/${input.agentSlug}/workspace/`;
+  const paths: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const response = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const item of response.Contents ?? []) {
+      if (!item.Key?.startsWith(prefix)) continue;
+      const relPath = item.Key.slice(prefix.length);
+      if (relPath) paths.push(relPath);
+    }
+    continuationToken = response.IsTruncated
+      ? response.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  const skills = await discoverWorkspaceSkillsFromPaths(paths, async (path) => {
+    try {
+      const response = await s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: prefix + path }),
+      );
+      return (await response.Body?.transformToString("utf-8")) ?? "";
+    } catch (err) {
+      console.warn(
+        `${input.logPrefix} Failed to read workspace skill marker ${path}:`,
+        err,
+      );
+      return null;
+    }
+  });
+
+  return skills
+    .filter((skill) => !isBuiltinToolSlug(skill.slug))
+    .map((skill) => ({
+      skillId: skill.slug,
+      s3Key: `${prefix}${skill.skillPath.replace(/\/SKILL\.md$/, "")}`,
+    }));
+}
+
+export async function applyAgentSkillMetadata(input: {
+  skillsConfig: SkillConfig[];
+  agentId: string;
+  tenantId: string;
+  logPrefix: string;
+}): Promise<SkillConfig[]> {
+  if (input.skillsConfig.length === 0) return input.skillsConfig;
+
+  const db = getDb();
+  const skillRows = await db
+    .select({
+      skill_id: agentSkills.skill_id,
+      config: agentSkills.config,
+    })
+    .from(agentSkills)
+    .where(eq(agentSkills.agent_id, input.agentId));
+
+  if (skillRows.length === 0) return input.skillsConfig;
+
+  const bySkillId = new Map(
+    input.skillsConfig.map((skill) => [skill.skillId, { ...skill }]),
+  );
+
+  for (const row of skillRows) {
+    const skill = bySkillId.get(row.skill_id);
+    if (!skill) continue;
+    const config = (row.config as Record<string, unknown>) || {};
+    const envOverrides = await buildSkillEnvOverrides(
+      config,
+      input.tenantId,
+    ).catch((err) => {
+      console.warn(
+        `${input.logPrefix} envOverrides failed for skill ${row.skill_id}:`,
+        err,
+      );
+      return null;
+    });
+    if (config.secretRef) skill.secretRef = config.secretRef as string;
+    if (config.mcpServer) skill.mcpServer = config.mcpServer as string;
+    if (envOverrides && Object.keys(envOverrides).length > 0) {
+      skill.envOverrides = {
+        ...(skill.envOverrides || {}),
+        ...envOverrides,
+      };
+    }
+  }
+
+  return input.skillsConfig.map(
+    (skill) => bySkillId.get(skill.skillId) ?? skill,
+  );
 }
 
 async function resolveSpaceRuntimeOverrides(input: {

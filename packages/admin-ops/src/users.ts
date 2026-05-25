@@ -1,6 +1,6 @@
 /**
  * User + tenant-member reads. Mirrors the me/get_user/list_tenant_members
- * functions in packages/skill-catalog/thinkwork-admin/scripts/operations/reads.py.
+ * legacy thinkwork-admin skill read helpers.
  */
 
 import type { AdminOpsClient } from "./client.js";

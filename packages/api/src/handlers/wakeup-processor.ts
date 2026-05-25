@@ -21,8 +21,6 @@ import {
   threads,
   agents,
   agentTemplates,
-  agentSkills,
-  tenantSkills,
   agentKnowledgeBases,
   knowledgeBases,
   guardrails,
@@ -39,10 +37,6 @@ import {
   checkBudgetAndPause,
   notifyCostRecorded,
 } from "../lib/cost-recording.js";
-import {
-  buildSkillEnvOverrides,
-  resolveOAuthToken,
-} from "../lib/oauth-token.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
 import {
@@ -77,6 +71,10 @@ import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
+import {
+  applyAgentSkillMetadata,
+  loadWorkspaceSkillConfigs,
+} from "../lib/resolve-agent-runtime-config.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
@@ -90,6 +88,18 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+
+function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
+  return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
+}
+
+function tenantCatalogSkillFileS3Key(
+  tenantSlug: string,
+  skillId: string,
+  relativePath: string,
+): string {
+  return `${tenantCatalogSkillS3Key(tenantSlug, skillId)}/${relativePath}`;
+}
 // Stage namespace for the sandbox Secrets Manager paths.
 const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 const BATCH_SIZE = 10;
@@ -413,50 +423,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     );
   }
 
-  // Look up agent's installed skills. Runtime activation is now
-  // workspace-copy based, so every agent skill points at the agent workspace.
-  const skillRows = await db
-    .select({
-      skill_id: agentSkills.skill_id,
-      config: agentSkills.config,
-      source: tenantSkills.source,
-    })
-    .from(agentSkills)
-    .leftJoin(
-      tenantSkills,
-      and(
-        eq(tenantSkills.tenant_id, wakeup.tenant_id),
-        eq(tenantSkills.skill_id, agentSkills.skill_id),
-      ),
-    )
-    .where(eq(agentSkills.agent_id, wakeup.agent_id));
-
-  let skillsConfig = await Promise.all(
-    skillRows.map(async (s) => {
-      const config = (s.config as Record<string, unknown>) || {};
-      const envOverrides = await buildSkillEnvOverrides(
-        config,
-        wakeup.tenant_id,
-      ).catch((err) => {
-        console.warn(
-          `[wakeup-processor] envOverrides failed for skill ${s.skill_id}:`,
-          err,
-        );
-        return null;
-      });
-      const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${s.skill_id}`;
-      const merged: Record<string, string> = envOverrides
-        ? { ...envOverrides }
-        : {};
-      return {
-        skillId: s.skill_id,
-        s3Key,
-        secretRef: (config.secretRef as string) || undefined,
-        envOverrides: Object.keys(merged).length > 0 ? merged : undefined,
-        mcpServer: (config.mcpServer as string) || undefined,
-      };
-    }),
-  );
+  let skillsConfig = await loadWorkspaceSkillConfigs({
+    tenantSlug,
+    agentSlug,
+    logPrefix: "[wakeup-processor]",
+  });
+  skillsConfig = await applyAgentSkillMetadata({
+    skillsConfig,
+    agentId: wakeup.agent_id,
+    tenantId: wakeup.tenant_id,
+    logPrefix: "[wakeup-processor]",
+  });
 
   const payload = wakeup.payload as Record<string, unknown> | null;
   const workspacePayload =
@@ -475,12 +452,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // Default skills: always available for all agents (parity with chat-agent-invoke).
   // web-search is NOT in this list — it's opt-in via tenant_builtin_tools below.
   const defaultSkills = [
-    {
-      skillId: "agent-thread-management",
-      s3Key: "skills/catalog/agent-thread-management",
-    },
-    { skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
-    { skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
+    { skillId: "agent-thread-management" },
+    { skillId: "artifacts" },
+    { skillId: "workspace-memory" },
   ];
   for (const ds of defaultSkills) {
     if (!skillsConfig.some((s) => s.skillId === ds.skillId)) {
@@ -492,6 +466,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       };
       skillsConfig.push({
         ...ds,
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, ds.skillId),
         secretRef: undefined,
         envOverrides: env,
         mcpServer: undefined,
@@ -522,7 +497,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
       skillsConfig.push({
         skillId: bt.toolSlug,
-        s3Key: `skills/catalog/${bt.toolSlug}`,
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, bt.toolSlug),
         secretRef: undefined,
         envOverrides: bt.envOverrides,
         mcpServer: undefined,
@@ -783,7 +758,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     if (!hasThreadSkill) {
       skillsConfig.push({
         skillId: "agent-thread-management",
-        s3Key: "skills/catalog/agent-thread-management",
+        s3Key: tenantCatalogSkillS3Key(tenantSlug, "agent-thread-management"),
         secretRef: undefined,
         mcpServer: undefined,
         envOverrides: {
@@ -798,45 +773,42 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   }
 
   // PRD-22: Process template materialization
-  // On first wakeup for a process-enabled skill, materialize the template into sub-threads.
+  // On first wakeup for a skill with PROCESS.md, materialize the template into sub-threads.
   if (runThreadId) {
-    const processSkill = skillsConfig.find((s) => {
-      const cfg = skillRows.find((r) => r.skill_id === s.skillId)?.config as
-        | Record<string, unknown>
-        | undefined;
-      return cfg?.process === true;
-    });
+    // Check if already materialized (has children = not first wakeup)
+    const [childCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(threads)
+      .where(eq(threads.parent_id, runThreadId));
 
-    if (processSkill) {
-      // Check if already materialized (has children = not first wakeup)
-      const [childCount] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(threads)
-        .where(eq(threads.parent_id, runThreadId));
+    if ((childCount?.count || 0) === 0) {
+      try {
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
-      if ((childCount?.count || 0) === 0) {
-        try {
-          const { parseProcessTemplate } =
-            await import("../lib/orchestration/process-parser.js");
-          const { materializeProcess } =
-            await import("../lib/orchestration/process-materializer.js");
-          const { S3Client, GetObjectCommand } =
-            await import("@aws-sdk/client-s3");
+        const s3 = new S3Client({});
+        let processSkill: (typeof skillsConfig)[number] | null = null;
+        let processMarkdown: string | null = null;
 
-          const s3 = new S3Client({});
-          const skillCfg = skillRows.find(
-            (r) => r.skill_id === processSkill.skillId,
-          )?.config as Record<string, unknown> | undefined;
-          const triggerChannel = skillCfg?.trigger_channel as
-            | string
-            | undefined;
-
-          // Try tenant override first, then catalog default
-          let processMarkdown: string | null = null;
-          const s3Paths = [
-            `tenants/${tenantSlug}/skills/${processSkill.skillId}/PROCESS.md`,
-            `skills/catalog/${processSkill.skillId}/PROCESS.md`,
-          ];
+        for (const skill of skillsConfig) {
+          const s3Paths = Array.from(
+            new Set(
+              [
+                skill.s3Key
+                  ? `${skill.s3Key.replace(/\/$/, "")}/PROCESS.md`
+                  : "",
+                tenantCatalogSkillFileS3Key(
+                  tenantSlug,
+                  skill.skillId,
+                  "PROCESS.md",
+                ),
+              ].filter(Boolean),
+            ),
+          );
 
           for (const s3Path of s3Paths) {
             try {
@@ -847,34 +819,35 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 }),
               );
               processMarkdown = (await resp.Body?.transformToString()) || null;
-              if (processMarkdown) break;
+              if (processMarkdown) {
+                processSkill = skill;
+                break;
+              }
             } catch {
               /* try next path */
             }
           }
 
-          if (processMarkdown) {
-            const template = parseProcessTemplate(processMarkdown);
-            await materializeProcess({
-              template,
-              parentThreadId: runThreadId,
-              agentId: wakeup.agent_id,
-              tenantId: wakeup.tenant_id,
-            });
-            console.log(
-              `[wakeup-processor] Process template materialized for thread ${runThreadId}`,
-            );
-          } else {
-            console.warn(
-              `[wakeup-processor] No PROCESS.md found for skill ${processSkill.skillId}`,
-            );
-          }
-        } catch (err) {
-          console.error(
-            `[wakeup-processor] Process materialization failed:`,
-            err,
+          if (processMarkdown) break;
+        }
+
+        if (processMarkdown && processSkill) {
+          const template = parseProcessTemplate(processMarkdown);
+          await materializeProcess({
+            template,
+            parentThreadId: runThreadId,
+            agentId: wakeup.agent_id,
+            tenantId: wakeup.tenant_id,
+          });
+          console.log(
+            `[wakeup-processor] Process template materialized for thread ${runThreadId} from skill ${processSkill.skillId}`,
           );
         }
+      } catch (err) {
+        console.error(
+          `[wakeup-processor] Process materialization failed:`,
+          err,
+        );
       }
     }
   }

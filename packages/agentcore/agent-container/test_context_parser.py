@@ -1,4 +1,5 @@
 """Tests for context_parser.py — workspace CONTEXT.md parsing and discovery."""
+
 import os
 import tempfile
 import pytest
@@ -145,6 +146,30 @@ class TestDiscoverWorkspaces:
         slugs = [c.slug for c in configs]
         assert "personal-assistant" in slugs
         assert "research" in slugs
+
+    def test_discovers_workspaces_parent_layout(self, tmp_path):
+        (tmp_path / "workspaces").mkdir()
+        (tmp_path / "workspaces" / "sql").mkdir()
+        (tmp_path / "workspaces" / "sql" / "CONTEXT.md").write_text(SIMPLE_CONTEXT)
+
+        configs = discover_workspaces(str(tmp_path))
+
+        assert len(configs) == 1
+        assert configs[0].slug == "sql"
+        assert configs[0].folder.endswith("workspaces/sql")
+
+    def test_prefers_workspaces_parent_layout_over_legacy_flat(self, tmp_path):
+        (tmp_path / "sql").mkdir()
+        (tmp_path / "sql" / "CONTEXT.md").write_text("# Legacy SQL")
+        (tmp_path / "workspaces").mkdir()
+        (tmp_path / "workspaces" / "sql").mkdir()
+        (tmp_path / "workspaces" / "sql" / "CONTEXT.md").write_text("# Current SQL")
+
+        configs = discover_workspaces(str(tmp_path))
+
+        assert len(configs) == 1
+        assert configs[0].slug == "sql"
+        assert configs[0].name == "Current SQL"
 
     def test_skips_hidden_dirs(self, tmp_path):
         (tmp_path / ".hidden").mkdir()

@@ -48,14 +48,7 @@ async function scenarioRouterNoLegacySkills(): Promise<SmokeResult> {
 }
 
 async function scenarioCanonicalFilesPresent(): Promise<SmokeResult> {
-  const keys = [
-    "AGENTS.md",
-    "CONTEXT.md",
-    "GUARDRAILS.md",
-    "PLATFORM.md",
-    "CAPABILITIES.md",
-    "ROUTER.md",
-  ];
+  const keys = ["AGENTS.md", "CONTEXT.md", "GUARDRAILS.md", "ROUTER.md"];
   const missing: string[] = [];
   for (const key of keys) {
     try {

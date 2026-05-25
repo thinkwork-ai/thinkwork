@@ -1,7 +1,7 @@
 /**
  * Reserved folder names — Plan §008 U8.
  *
- * `memory/` and `skills/` are reserved at any depth in a Fat folder tree.
+ * `memory/`, `skills/`, and `workspaces/` are reserved at any depth in a Fat folder tree.
  * They are not sub-agent folders even if an `AGENTS.md` routing row points
  * at them: `memory/` is the per-folder write-memory scope, `skills/` is
  * the local skill-package scope. Both are consumed by the runtime through
@@ -27,10 +27,11 @@
 export const RESERVED_FOLDER_NAMES: ReadonlySet<string> = new Set([
   "memory",
   "skills",
+  "workspaces",
 ]);
 
 /** Type-level enumeration mirroring the runtime set, useful for narrowing. */
-export type ReservedFolderName = "memory" | "skills";
+export type ReservedFolderName = "memory" | "skills" | "workspaces";
 
 /**
  * True when `segment` (with any trailing slash already stripped) names a

@@ -11,7 +11,7 @@
  *   - tenant_mcp_servers  (each server.tools[] entry → one tool row,
  *                          source: "mcp")
  *   - tenant_builtin_tools (one row per enabled, source: "builtin")
- *   - tenant_skills       (one row per installed)
+ *   - agent_skills        (workspace-backed skills assigned to tenant agents)
  *   - routines            (only engine='step_functions'; visibility per R21)
  *
  * Visibility (R21): agent-stamped routines (agent_id IS NOT NULL) are
@@ -24,11 +24,11 @@
 
 import { and, eq, ne } from "drizzle-orm";
 import {
+  agentSkills,
   agents,
   routines,
   tenantBuiltinTools,
   tenantMcpServers,
-  tenantSkills,
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
@@ -138,14 +138,15 @@ export async function tenantToolInventory(
         ),
       db
         .select({
-          id: tenantSkills.id,
-          skill_id: tenantSkills.skill_id,
+          skill_id: agentSkills.skill_id,
         })
-        .from(tenantSkills)
+        .from(agentSkills)
+        .innerJoin(agents, eq(agentSkills.agent_id, agents.id))
         .where(
           and(
-            eq(tenantSkills.tenant_id, args.tenantId),
-            eq(tenantSkills.enabled, true),
+            eq(agents.tenant_id, args.tenantId),
+            ne(agents.status, "archived"),
+            eq(agentSkills.enabled, true),
           ),
         ),
       // Only step_functions routines are inventory-eligible. Legacy Python
@@ -210,9 +211,11 @@ export async function tenantToolInventory(
     });
   }
 
-  const skillInventory: ToolInventorySkill[] = skillRows.map((r) => ({
-    id: r.id,
-    slug: r.skill_id,
+  const skillInventory: ToolInventorySkill[] = Array.from(
+    new Set(skillRows.map((r) => r.skill_id)),
+  ).map((slug) => ({
+    id: slug,
+    slug,
     description: null,
   }));
 

@@ -2,11 +2,11 @@
  * Tests for writeIdentityMdForAgent — name-line surgery.
  *
  * Contract:
- *   - If an agent-override IDENTITY.md exists at the agent's prefix,
+ *   - If an agent-override AGENTS.md exists at the agent's prefix,
  *     replace ONLY the Name line and PUT the mutated bytes back.
  *     Everything else in the file survives intact (agent-owned prose).
  *   - If no override exists, seed the agent prefix with the template
- *     IDENTITY.md with `{{AGENT_NAME}}` substituted.
+ *     AGENTS.md with `{{AGENT_NAME}}` substituted.
  *   - Matches both the new `- **Name:** <x>` bullet shape and the
  *     legacy `Your name is **<x>**.` prose shape.
  *   - Transient S3 PUT failure retries once, then bubbles.
@@ -128,7 +128,7 @@ function queueBase(overrides: Record<string, unknown> = {}) {
   pushDbRows([tenantRow()]);
 }
 
-const AGENT_IDENTITY_KEY = "tenants/acme/agents/marco/workspace/IDENTITY.md";
+const AGENT_IDENTITY_KEY = "tenants/acme/agents/marco/workspace/AGENTS.md";
 
 beforeEach(() => {
   s3Mock.reset();
@@ -141,7 +141,7 @@ describe("writeIdentityMdForAgent — new-shape anchor", () => {
   it("rewrites ONLY the Name bullet line, preserving the rest verbatim", async () => {
     queueBase();
     const existing = [
-      "# IDENTITY.md - Who Am I?",
+      "# AGENTS.md - Who Am I?",
       "",
       "- **Name:** OldName",
       "- **Creature:** wise old fox",
@@ -215,7 +215,7 @@ describe("writeIdentityMdForAgent — legacy-shape anchor", () => {
 // ─── No existing override → seed from template ───────────────────────────────
 
 describe("writeIdentityMdForAgent — no existing override", () => {
-  it("seeds the agent prefix with the template IDENTITY.md substituted", async () => {
+  it("seeds the agent prefix with the template AGENTS.md substituted", async () => {
     queueBase();
     s3Mock
       .on(GetObjectCommand, { Key: AGENT_IDENTITY_KEY })
@@ -229,7 +229,7 @@ describe("writeIdentityMdForAgent — no existing override", () => {
     expect(puts[0].args[0].input.Key).toBe(AGENT_IDENTITY_KEY);
     const rendered = String(puts[0].args[0].input.Body);
     expect(rendered).toContain("- **Name:** Marco");
-    expect(rendered).toContain("# IDENTITY.md - Who Am I?");
+    expect(rendered).toContain("# AGENTS.md");
     expect(rendered).not.toContain("{{AGENT_NAME}}");
   });
 });
@@ -237,13 +237,21 @@ describe("writeIdentityMdForAgent — no existing override", () => {
 // ─── No anchor matches (edge case) ───────────────────────────────────────────
 
 describe("writeIdentityMdForAgent — no anchor matches", () => {
-  it("falls through to a full template rewrite when neither anchor is found", async () => {
+  it("inserts the Name line into AGENTS.md without rewriting the whole map", async () => {
     queueBase();
     // Agent has hand-edited the file into free prose with no Name anchor.
     const existing = [
-      "# I am who I am",
+      "# AGENTS.md",
       "",
-      "I am a creature of the night and a friend to all who seek counsel.",
+      "## What This Is",
+      "Keep this map.",
+      "",
+      "## Identity",
+      "- **Creature:** wise old fox",
+      "Agent-authored identity prose.",
+      "",
+      "## Platform Behavior",
+      "Keep this too.",
       "",
     ].join("\n");
     s3Mock
@@ -256,9 +264,12 @@ describe("writeIdentityMdForAgent — no anchor matches", () => {
     const puts = s3Mock.commandCalls(PutObjectCommand);
     expect(puts.length).toBe(1);
     const rendered = String(puts[0].args[0].input.Body);
-    // Full rewrite: template content with substituted name.
-    expect(rendered).toContain("- **Name:** Marco");
-    expect(rendered).toContain("# IDENTITY.md - Who Am I?");
+    expect(rendered).toContain(
+      "## Identity\n- **Name:** Marco\n- **Creature:** wise old fox",
+    );
+    expect(rendered).toContain("Keep this map.");
+    expect(rendered).toContain("Agent-authored identity prose.");
+    expect(rendered).toContain("## Platform Behavior\nKeep this too.");
   });
 });
 

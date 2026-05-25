@@ -3,24 +3,27 @@ title: Skill Packs
 description: Write a SKILL.md file, upload it to your S3 skill catalog, and make it available to managed agents at invoke time.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 ThinkWork implements the [Agent Skills specification](https://agentskills.io/specification) — an open standard for portable, agent-readable skill definitions. A skill pack is a directory containing a `SKILL.md` file (with optional `scripts/`, `references/`, and `assets/` directories) that defines tools, instructions, and context for managed agents.
 
 Skill packs are stored in S3 and loaded by AgentCore at invoke time. You don't need to rebuild or redeploy the AgentCore Lambda to add new skills — upload a skill pack and assign it to an agent.
 
 <Aside type="tip">
-  The [Agent Skills spec](https://agentskills.io/specification) defines the `SKILL.md` format, naming conventions, and directory structure. ThinkWork follows this standard, so skills you write are portable across any platform that implements the spec.
+  The [Agent Skills spec](https://agentskills.io/specification) defines the
+  `SKILL.md` format, naming conventions, and directory structure. ThinkWork
+  follows this standard, so skills you write are portable across any platform
+  that implements the spec.
 </Aside>
 
 ## How it works
 
 ```
-1. Author SKILL.md
-2. Upload to S3: skills/catalog/<skill-name>.md
-3. Assign skill to agent (admin app or GraphQL API)
-4. At invoke time: AgentCore downloads SKILL.md, parses it, injects tools + instructions
-5. Agent can now call the tool during the Strands agent loop
+1. Author a skill folder with `SKILL.md`
+2. Upload the folder to S3: `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`
+3. Install the skill from the admin Skills tab
+4. The install copies the folder into the target workspace at `skills/<skill-slug>/`
+5. At invoke time: AgentCore syncs the workspace, parses `SKILL.md`, and registers the skill
 ```
 
 ## Directory structure
@@ -165,15 +168,18 @@ Common JQL fields: project, status, assignee, reporter, priority, labels, create
 
 ### Section reference
 
-| Section | Required | Purpose |
-|---------|----------|---------|
-| `# <name>` + description | Yes | Skill name and one-line description. The name is used as the skill ID. |
-| `## Instructions` | No | Text injected into the system prompt for this skill. Keep it concise — this is added to every turn. |
-| `## Tools` | No | Python code block defining functions. Each `def` with a docstring becomes a tool. |
-| `## Context` | No | Static text injected into the context window on every turn. Good for reference tables, enum values, and constants. |
+| Section                  | Required | Purpose                                                                                                            |
+| ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `# <name>` + description | Yes      | Skill name and one-line description. The name is used as the skill ID.                                             |
+| `## Instructions`        | No       | Text injected into the system prompt for this skill. Keep it concise — this is added to every turn.                |
+| `## Tools`               | No       | Python code block defining functions. Each `def` with a docstring becomes a tool.                                  |
+| `## Context`             | No       | Static text injected into the context window on every turn. Good for reference tables, enum values, and constants. |
 
 <Aside type="note">
-The `## Tools` section must be a fenced Python code block (` ```python ... ``` `). Functions without docstrings are treated as helpers and are not exposed to the agent as tools. Type hints in the function signature are used to generate the tool schema.
+  The `## Tools` section must be a fenced Python code block (` ```python ... ```
+  `). Functions without docstrings are treated as helpers and are not exposed to
+  the agent as tools. Type hints in the function signature are used to generate
+  the tool schema.
 </Aside>
 
 ## Environment variables in tools
@@ -218,71 +224,54 @@ def _get_jira_secret():
 ## Uploading a skill pack
 
 ```bash
-# Get your skill catalog bucket name
-BUCKET=$(thinkwork outputs -s dev --key s3_skill_bucket)
+# Get the workspace bucket name
+BUCKET=$(thinkwork outputs -s dev --key bucket_name)
 
-# Upload
-aws s3 cp jira.md "s3://$BUCKET/skills/catalog/jira.md"
+# Upload a complete skill folder for one tenant
+aws s3 sync ./jira/ "s3://$BUCKET/tenants/acme/skill-catalog/jira/"
 ```
 
-The skill is immediately available to assign to agents — no Lambda redeployment needed.
+The skill is immediately available in that tenant's admin Skills catalog — no Lambda redeployment needed. A user-facing zip upload is not required for the current catalog path; operators upload or edit the folder contents in the tenant catalog, then install from the Skills tab.
 
 ## Assigning skills to agents
 
-```graphql
-mutation AddSkill {
-  updateAgent(id: "agent-support", input: {
-    skillPackIds: ["jira", "confluence", "slack"]
-  }) {
-    id
-    skillPackIds
-  }
-}
-```
+Open the admin Agent page, switch to **Skills**, and run **Add Skill** for the catalog folder. Installation copies the catalog folder into the target workspace as `skills/<skill-slug>/` and writes `.catalog-ref.json` so stale/orphan status can be detected later.
 
-Skill IDs correspond to the filename without `.md`: `skills/catalog/jira.md` → skill ID `jira`.
+Skill IDs correspond to the tenant catalog folder name: `tenants/acme/skill-catalog/jira/` → skill ID `jira`.
 
 ## Listing available skills
 
-```graphql
-query ListSkillPacks {
-  listSkillPacks {
-    id         # e.g. "jira"
-    name       # From the # heading in SKILL.md
-    description
-    toolCount
-    uploadedAt
-  }
-}
-```
+Use the admin Agent **Skills** tab to browse tenant catalog folders and installed workspace folders. The catalog view maps directly to `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; the workspace view maps to installed `skills/<skill-slug>/` folders.
 
 ## Skill loading at invoke time
 
-When AgentCore receives a message for an agent with skill packs assigned:
+When AgentCore receives a message for an agent with installed skill packs:
 
-1. Downloads each `SKILL.md` from S3 in parallel (cached in Lambda `/tmp` for the container lifetime)
-2. Parses tool definitions using the Python AST
-3. Registers tools with the Strands agent loop
-4. Appends instructions to the system prompt
-5. Appends context to the turn's context block
+1. Syncs the agent workspace from S3 into `/tmp/workspace`
+2. Discovers installed skill folders under `skills/<slug>/`
+3. Parses each `SKILL.md`
+4. Registers tools with the Strands agent loop
+5. Appends skill guidance through the AgentSkills progressive-disclosure plugin
 
-The total latency for skill loading on a warm container is ~20ms (cache hit). On a cold start, it depends on the number and size of skill files, but typically 100–500ms.
+The total latency depends on the number and size of installed workspace skill folders and the workspace sync cache state.
 
 <Aside type="tip">
-Keep skill files small. The S3 download and parse happens in the Lambda hot path. If a skill's Python code is complex, consider splitting it into multiple focused skills rather than one large file.
+  Keep skill files small. The S3 download and parse happens in the Lambda hot
+  path. If a skill's Python code is complex, consider splitting it into multiple
+  focused skills rather than one large file.
 </Aside>
 
 ## Example skill pack library
 
 The `examples/skill-pack/` directory in the ThinkWork repo contains ready-to-use skill packs:
 
-| Skill | Description |
-|-------|-------------|
-| `github.md` | Search issues, PRs, and code. Create issues and comments. |
-| `jira.md` | Search and create Jira issues. Transition issue status. |
-| `confluence.md` | Search Confluence pages. Create and update pages. |
-| `slack.md` | Post messages and look up channel history. |
-| `sql.md` | Run read-only SQL queries against the Aurora database. |
-| `calculator.md` | Math and unit conversion tools. |
-| `datetime.md` | Date parsing, formatting, and timezone conversion. |
-| `http.md` | Make HTTP requests to external APIs. |
+| Skill           | Description                                               |
+| --------------- | --------------------------------------------------------- |
+| `github.md`     | Search issues, PRs, and code. Create issues and comments. |
+| `jira.md`       | Search and create Jira issues. Transition issue status.   |
+| `confluence.md` | Search Confluence pages. Create and update pages.         |
+| `slack.md`      | Post messages and look up channel history.                |
+| `sql.md`        | Run read-only SQL queries against the Aurora database.    |
+| `calculator.md` | Math and unit conversion tools.                           |
+| `datetime.md`   | Date parsing, formatting, and timezone conversion.        |
+| `http.md`       | Make HTTP requests to external APIs.                      |

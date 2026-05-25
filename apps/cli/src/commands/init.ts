@@ -576,7 +576,7 @@ output "agentcore_memory_id" {
           `    ${chalk.cyan("2.")} thinkwork deploy -s ${stage}       ${chalk.dim("# Deploy to AWS (~5 min)")}`,
         );
         console.log(
-          `    ${chalk.cyan("3.")} thinkwork bootstrap -s ${stage}    ${chalk.dim("# Seed workspace files + skills")}`,
+          `    ${chalk.cyan("3.")} thinkwork bootstrap -s ${stage}    ${chalk.dim("# Seed workspace files")}`,
         );
         console.log(
           `    ${chalk.cyan("4.")} thinkwork outputs -s ${stage}      ${chalk.dim("# Show API URL, Cognito IDs, etc.")}`,

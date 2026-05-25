@@ -265,6 +265,45 @@ describe("stub registration (taxonomy smoke test)", () => {
     vi.restoreAllMocks();
   });
 
+  it("retired skill catalog tenant verbs point users to the admin Skills tab", async () => {
+    const program = new Command();
+    registerSkillCommand(program);
+
+    const errSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+
+    program.exitOverride();
+
+    const invocations = [
+      ["skill", "catalog"],
+      ["skill", "list"],
+      ["skill", "install", "finance-audit-xls"],
+      ["skill", "upgrade", "finance-audit-xls"],
+      ["skill", "delete", "finance-audit-xls", "--yes"],
+    ];
+
+    for (const args of invocations) {
+      await program
+        .parseAsync(["node", "thinkwork", ...args])
+        .catch(() => undefined);
+    }
+
+    expect(exitSpy).toHaveBeenCalledTimes(invocations.length);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+    const combinedError = [...errSpy.mock.calls, ...logSpy.mock.calls]
+      .map((c) => c.map(String).join(" "))
+      .join("\n");
+    expect(combinedError).toContain("retired");
+    expect(combinedError).toContain("admin agent Skills tab");
+
+    vi.restoreAllMocks();
+  });
+
   it("covers 22 domain groups after retiring template + team commands", () => {
     // Guards against accidental drops when someone deletes a register() import.
     expect(DOMAINS.length).toBe(22);

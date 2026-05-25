@@ -9,7 +9,7 @@ an AgentCore Code Interpreter session, parse the JSON it prints.
 
 Every skill-with-scripts ships this shape on disk:
 
-    packages/skill-catalog/<slug>/
+    <workspace>/skills/<slug>/
       SKILL.md           # canonical metadata + prose body
       scripts/
         entrypoint.py    # module-level `def run(**kwargs) -> dict:`
@@ -40,8 +40,9 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Protocol
 
 from skill_session_pool import PoolKey, SessionHandle, SkillSessionPool
 
@@ -137,7 +138,7 @@ class TurnCounters:
     # Kept so tests can see what the dispatcher saw, even when limits trip.
     history: list[str] = field(default_factory=list)
 
-    def child(self) -> "TurnCounters":
+    def child(self) -> TurnCounters:
         """Return a counter view for a nested Skill() call.
 
         ``depth`` rises for the child; ``total`` is shared so sequential

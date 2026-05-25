@@ -124,6 +124,7 @@ def test_rejects_reserved_go_to_names(caplog: pytest.LogCaptureFixture) -> None:
 | --- | --- | --- | --- |
 | Hidden mem | memory | memory/CONTEXT.md | x |
 | Hidden skill | skills/ | skills/CONTEXT.md | x |
+| Hidden workspaces | workspaces/ | workspaces/CONTEXT.md | x |
 | Real | expenses/ | expenses/CONTEXT.md | x |
 """
     with caplog.at_level("WARNING"):
@@ -131,7 +132,21 @@ def test_rejects_reserved_go_to_names(caplog: pytest.LogCaptureFixture) -> None:
     assert len(result.routing) == 1
     assert result.routing[0].go_to == "expenses/"
     reserved_warns = [r for r in caplog.records if "reserved folder name" in r.message]
-    assert len(reserved_warns) == 2
+    assert len(reserved_warns) == 3
+
+
+def test_accepts_nested_workspaces_go_to() -> None:
+    md = """## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Expense receipts | workspaces/expenses/ | workspaces/expenses/CONTEXT.md | approve-receipt |
+"""
+    result = parse_agents_md(md)
+    assert len(result.routing) == 1
+    assert result.routing[0].go_to == "workspaces/expenses/"
+    assert result.routing[0].reads == ["workspaces/expenses/CONTEXT.md"]
+    assert result.routing[0].skills == ["approve-receipt"]
 
 
 # ─── Skipped-row surfacing (Plan 2026-04-25-004 U4) ───────────────────
@@ -345,10 +360,7 @@ def test_seeded_workspace_defaults_AGENTS_md_parses_cleanly() -> None:
     parsed rows = 0 after skip.
     """
     seeded = (
-        pathlib.Path(__file__).parent.parent.parent
-        / "workspace-defaults"
-        / "files"
-        / "AGENTS.md"
+        pathlib.Path(__file__).parent.parent.parent / "workspace-defaults" / "files" / "AGENTS.md"
     ).read_text()
     result = parse_agents_md(seeded)
     assert result.routing == []

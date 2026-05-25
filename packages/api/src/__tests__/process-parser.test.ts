@@ -7,25 +7,49 @@
 
 import { describe, it, expect } from "vitest";
 import { parseProcessTemplate } from "../lib/orchestration/process-parser.js";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 
 // ── Helper: load the real example template ───────────────────────────────────
 
-import { existsSync } from "fs";
+const EXAMPLE_TEMPLATE = `# Customer Onboarding Process
 
-const PROCESS_PATH = resolve(
-  process.cwd(),
-  "packages/skill-catalog/customer-onboarding/PROCESS.md",
-);
-const EXAMPLE_TEMPLATE = existsSync(PROCESS_PATH)
-  ? readFileSync(PROCESS_PATH, "utf-8")
-  : null;
+## Config
+- trigger_channel: onboarding
+- max_concurrent_steps: 3
+
+## Steps
+
+### step-1: Send Welcome Email
+- assignee: {{current_agent}}
+- instructions: |
+    Draft and send a personalized welcome email.
+    Mark this thread DONE when the message is sent.
+
+### step-2: Create CRM Record
+- instructions: |
+    Create the customer record.
+
+### step-3: Collect Intake Form
+- depends_on: [step-1]
+- gate: human
+- gate_poll_interval: 24h
+- instructions: |
+    Ask the customer to complete the intake form.
+
+### step-4: Reconcile Intake
+- depends_on: [step-3]
+- instructions: |
+    Reconcile the completed intake.
+
+### step-5: Schedule Kickoff Call
+- depends_on: [step-2, step-3]
+- instructions: |
+    Schedule the kickoff call.
+`;
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("parseProcessTemplate", () => {
-  describe.skipIf(!EXAMPLE_TEMPLATE)("valid templates", () => {
+  describe("valid templates", () => {
     it("parses the customer-onboarding example template", () => {
       const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 

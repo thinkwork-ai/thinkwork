@@ -73,7 +73,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     principal_id: "tenantMembers.principal_id",
     role: "tenantMembers.role",
   },
-  tenantSkills: {},
 }));
 
 vi.mock("drizzle-orm", () => ({

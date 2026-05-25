@@ -25,6 +25,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { computeCatalogSkillSha } from "../lib/catalog-skill-sha.js";
 
 // ─── Hoisted DB mock ─────────────────────────────────────────────────────────
 
@@ -166,8 +167,7 @@ vi.mock("../lib/workspace-bootstrap.js", () => ({
   bootstrapAgentWorkspace: bootstrapAgentWorkspaceMock,
 }));
 
-// ─── Mock deriveAgentSkills (U11) so handler tests don't need full composer
-// playback. Targeted derive-vs-no-derive tests below override the impl.
+// ─── Mock deriveAgentSkills compatibility sync for workspace skill edits.
 
 const { deriveMockImpl } = vi.hoisted(() => ({
   deriveMockImpl: vi.fn(),
@@ -193,10 +193,6 @@ const { generateContextFolderStructureForSpaceMock } = vi.hoisted(() => ({
   generateContextFolderStructureForSpaceMock: vi.fn(),
 }));
 
-const { seedTenantSkillCatalogMock } = vi.hoisted(() => ({
-  seedTenantSkillCatalogMock: vi.fn(),
-}));
-
 vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../lib/workspace-map-generator.js")>();
@@ -209,10 +205,6 @@ vi.mock("../lib/workspace-map-generator.js", async (importOriginal) => {
     regenerateAgentsMdDerivedSections: refreshAgentsMdSectionsMock,
   };
 });
-
-vi.mock("../lib/catalog-seed.js", () => ({
-  seedTenantSkillCatalog: seedTenantSkillCatalogMock,
-}));
 
 // ─── Mock emitAuditEvent (U5) so the workspace-files-handler tests
 // don't need a working compliance.audit_outbox connection. The
@@ -406,12 +398,6 @@ beforeEach(() => {
   generateContextFolderStructureMock.mockResolvedValue(undefined);
   generateContextFolderStructureForSpaceMock.mockReset();
   generateContextFolderStructureForSpaceMock.mockResolvedValue(undefined);
-  seedTenantSkillCatalogMock.mockReset();
-  seedTenantSkillCatalogMock.mockResolvedValue({
-    ok: true,
-    imported_slugs: ["finance-audit-xls"],
-    skipped_slugs: ["web-search"],
-  });
 });
 
 afterEach(() => {
@@ -1047,7 +1033,15 @@ describe("tenant skill catalog target", () => {
       .on(GetObjectCommand, {
         Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
       })
-      .resolves(body("# Finance Audit XLS\n"));
+      .resolves(body("# Finance Audit XLS\n"))
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
+      })
+      .resolves(body("## Wiring\n"));
+    const financeSha = computeCatalogSkillSha([
+      { relativePath: "SKILL.md", content: "# Finance Audit XLS\n" },
+      { relativePath: "WIRING.md", content: "## Wiring\n" },
+    ]);
 
     const listRes = await parse(
       await handler(event({ action: "list", catalog: true })),
@@ -1058,13 +1052,13 @@ describe("tenant skill catalog target", () => {
       {
         path: "finance-audit-xls/SKILL.md",
         source: "catalog",
-        sha256: "",
+        sha256: financeSha,
         overridden: false,
       },
       {
         path: "finance-audit-xls/WIRING.md",
         source: "catalog",
-        sha256: "",
+        sha256: financeSha,
         overridden: false,
       },
     ]);
@@ -1088,35 +1082,19 @@ describe("tenant skill catalog target", () => {
     });
   });
 
-  it("bootstraps an empty tenant catalog from the bundled skill catalog before listing", async () => {
+  it("returns an empty list for an empty tenant skill catalog without seeding", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminCatalogTargetRows();
-    s3Mock
-      .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/skill-catalog/",
-      })
-      .resolvesOnce({ Contents: [] })
-      .resolvesOnce({
-        Contents: [
-          { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
-          { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
-        ],
-      });
+    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
 
     const res = await parse(
       await handler(event({ action: "list", catalog: true })),
     );
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.files.map((file: { path: string }) => file.path)).toEqual([
-      "finance-audit-xls/SKILL.md",
-      "finance-audit-xls/WIRING.md",
-    ]);
-    expect(seedTenantSkillCatalogMock).toHaveBeenCalledWith({
-      s3: expect.any(S3Client),
-      bucket: "test-bucket",
-      tenantSlug: "acme",
-    });
+    expect(res.body.files).toEqual([]);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
   });
 
   it("writes and deletes catalog files under the tenant skill-catalog prefix", async () => {
@@ -1231,7 +1209,7 @@ describe("tenant skill catalog target", () => {
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("runs catalog-seed through the catalog target and tenant admin gate", async () => {
+  it("rejects retired catalog-seed after tenant catalogs are S3-owned", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminCatalogTargetRows();
 
@@ -1239,17 +1217,8 @@ describe("tenant skill catalog target", () => {
       await handler(event({ action: "catalog-seed", catalog: true })),
     );
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual({
-      ok: true,
-      imported_slugs: ["finance-audit-xls"],
-      skipped_slugs: ["web-search"],
-    });
-    expect(seedTenantSkillCatalogMock).toHaveBeenCalledWith({
-      s3: expect.any(S3Client),
-      bucket: "test-bucket",
-      tenantSlug: "acme",
-    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain("not supported");
   });
 });
 
@@ -1345,10 +1314,6 @@ describe("agent install-skill action", () => {
     expect(String(contextPut?.args[0].input.Body)).toContain(
       "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |",
     );
-    expect(deriveMockImpl).toHaveBeenCalledWith(
-      { tenantId: TENANT_A },
-      AGENT_ID,
-    );
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
@@ -1373,10 +1338,9 @@ describe("agent install-skill action", () => {
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("installs into a Space source scope without refreshing agent state", async () => {
+  it("rejects Space skill installs because capabilities belong in agent workspaces", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
-    mockCatalogInstallS3("tenants/acme/spaces/engineering/source/");
 
     const res = await parse(
       await handler(
@@ -1389,30 +1353,11 @@ describe("agent install-skill action", () => {
       ),
     );
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body.installed_paths).toContain(
-      "skills/finance-audit-xls/SKILL.md",
-    );
-    expect(
-      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
-    ).toEqual([
-      expect.objectContaining({
-        Key: "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/SKILL.md",
-      }),
-      expect.objectContaining({
-        Key: "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/WIRING.md",
-      }),
-    ]);
-    const contextPut = s3Mock
-      .commandCalls(PutObjectCommand)
-      .find(
-        (call) =>
-          call.args[0].input.Key ===
-          "tenants/acme/spaces/engineering/source/CONTEXT.md",
-      );
-    expect(String(contextPut?.args[0].input.Body)).toContain(
-      "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |",
-    );
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
@@ -1521,10 +1466,6 @@ describe("agent uninstall-skill action", () => {
       "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
       "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
     ]);
-    expect(deriveMockImpl).toHaveBeenCalledWith(
-      { tenantId: TENANT_A },
-      AGENT_ID,
-    );
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
@@ -1569,6 +1510,197 @@ describe("agent uninstall-skill action", () => {
       await handler(
         event({
           action: "uninstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+  });
+});
+
+// ─── 4e. Catalog skill reinstall action ─────────────────────────────────────
+
+function mockCatalogReinstallS3(
+  targetPrefix = "tenants/acme/agents/marco/workspace/",
+): void {
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}skills/finance-audit-xls/.catalog-ref.json`,
+    })
+    .resolves(
+      body(
+        JSON.stringify({
+          slug: "finance-audit-xls",
+          source_sha256: "a".repeat(64),
+          installed_at: "2026-05-24T16:00:00.000Z",
+          wiring_choice: "stage-3-gate",
+          snippet: "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |\n",
+        }),
+      ),
+    );
+  s3Mock
+    .on(ListObjectsV2Command, {
+      Prefix: "tenants/acme/skill-catalog/finance-audit-xls/",
+    })
+    .resolves({
+      Contents: [
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
+        { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
+      ],
+    });
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+    })
+    .resolves(body("# Finance Audit v2\n"));
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
+    })
+    .resolves(body("## Wiring\n"));
+  s3Mock
+    .on(ListObjectsV2Command, {
+      Prefix: `${targetPrefix}skills/finance-audit-xls/`,
+    })
+    .resolves({
+      Contents: [
+        { Key: `${targetPrefix}skills/finance-audit-xls/.catalog-ref.json` },
+        { Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` },
+        { Key: `${targetPrefix}skills/finance-audit-xls/old.txt` },
+      ],
+    });
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md`,
+    })
+    .resolves(body("# Locally edited\n"));
+  s3Mock
+    .on(GetObjectCommand, {
+      Key: `${targetPrefix}skills/finance-audit-xls/old.txt`,
+    })
+    .resolves(body("old extra file\n"));
+  s3Mock.on(DeleteObjectCommand).resolves({});
+  s3Mock.on(CopyObjectCommand).resolves({});
+  s3Mock.on(PutObjectCommand).resolves({});
+}
+
+describe("agent reinstall-skill action", () => {
+  it("refreshes a stale catalog skill in the agent workspace and refreshes agent state", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    mockCatalogReinstallS3();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      reinstalled_paths: [
+        "skills/finance-audit-xls/.catalog-ref.json",
+        "skills/finance-audit-xls/SKILL.md",
+        "skills/finance-audit-xls/WIRING.md",
+      ],
+      source_sha256: computeCatalogSkillSha([
+        { relativePath: "SKILL.md", content: "# Finance Audit v2\n" },
+        { relativePath: "WIRING.md", content: "## Wiring\n" },
+      ]),
+    });
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toEqual([
+      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/old.txt",
+    ]);
+    expect(
+      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
+    ).toEqual([
+      expect.objectContaining({
+        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+      }),
+      expect.objectContaining({
+        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+      }),
+    ]);
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .some((call) => String(call.args[0].input.Key).endsWith("CONTEXT.md")),
+    ).toBe(false);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
+  it("rejects Space skill reinstalls because capabilities belong in agent workspaces", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
+          spaceId: SPACE_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(deriveMockImpl).not.toHaveBeenCalled();
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces reinstall worker errors with typed codes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    mockCatalogReinstallS3();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/finance-audit-xls/",
+      })
+      .resolves({ Contents: [] });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
+          agentId: AGENT_ID,
+          slug: "finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body.code).toBe("catalog_skill_not_found");
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("requires tenant admin before reinstalling a skill", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "reinstall-skill",
           agentId: AGENT_ID,
           slug: "finance-audit-xls",
         }),
@@ -1954,6 +2086,62 @@ describe("pinned-file write guard", () => {
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
+  it.each(["skills/finance-audit-xls/SKILL.md", "TOOLS.md", "MCP.md"])(
+    "PUT to Space capability path %s returns typed 403",
+    async (path) => {
+      authMockImpl.mockResolvedValue(authOk());
+      queueAdminSpaceTargetRows();
+
+      const res = await parse(
+        await handler(
+          event({
+            action: "put",
+            spaceId: SPACE_ID,
+            path,
+            content: "nope",
+          }),
+        ),
+      );
+
+      expect(res.statusCode).toBe(403);
+      expect(res.body.code).toBe("space_capability_file_rejected");
+      expect(res.body.error).toMatch(/master\/workspaces/);
+      expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    },
+  );
+
+  it("allows Space knowledge and SPACE.md writes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const knowledgeRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "knowledge/cap-table.md",
+          content: "# Cap table\n",
+        }),
+      ),
+    );
+    expect(knowledgeRes.statusCode).toBe(200);
+
+    queueAdminSpaceTargetRows();
+    const spaceMdRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "SPACE.md",
+          content: "# Engineering\n",
+        }),
+      ),
+    );
+    expect(spaceMdRes.statusCode).toBe(200);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(2);
+  });
+
   it.each([
     "work/inbox/foo.md",
     "review/run_123.needs-human.md",
@@ -2031,6 +2219,54 @@ describe("pinned-file write guard", () => {
 });
 
 // ─── 7. DELETE ───────────────────────────────────────────────────────────────
+
+describe("Space capability-file write guard", () => {
+  it("rejects moving a file into the Space skills folder before S3 mutation", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          spaceId: SPACE_ID,
+          fromPath: "knowledge/notes.md",
+          toFolder: "skills/finance-audit-xls",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("rejects renaming a Space file to TOOLS.md before S3 mutation", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "rename",
+          spaceId: SPACE_ID,
+          fromPath: "knowledge/tools-notes.md",
+          toPath: "TOOLS.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("space_capability_file_rejected");
+    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+});
 
 describe("agent MOVE (Unit 1: single-file)", () => {
   function adminAgentRows() {
@@ -2270,7 +2506,7 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
   });
 
-  it("triggers deriveAgentSkills when moving root AGENTS.md", async () => {
+  it("refreshes AGENTS.md sections when moving root AGENTS.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     s3Mock
@@ -2298,14 +2534,10 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
-    expect(deriveMockImpl).toHaveBeenCalledWith(
-      { tenantId: TENANT_A },
-      AGENT_ID,
-    );
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
-  it("triggers deriveAgentSkills when moving a sub-agent SKILL.md", async () => {
+  it("refreshes AGENTS.md sections when moving a sub-agent SKILL.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     s3Mock
@@ -2333,10 +2565,10 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
-  it("does NOT trigger deriveAgentSkills for plain-file moves", async () => {
+  it("does not resync agent_skills for plain-file moves", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     s3Mock
@@ -2599,7 +2831,7 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     );
   });
 
-  it("triggers deriveAgentSkills exactly once when a moved folder contains AGENTS.md", async () => {
+  it("refreshes AGENTS.md sections when a moved folder contains AGENTS.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     s3Mock
@@ -2633,10 +2865,10 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
-  it("triggers deriveAgentSkills exactly once even when many SKILL.md files move", async () => {
+  it("refreshes AGENTS.md sections when many SKILL.md files move", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     s3Mock
@@ -2677,10 +2909,10 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
-  it("does NOT trigger deriveAgentSkills when no moved file is AGENTS.md or SKILL.md", async () => {
+  it("does not resync agent_skills when no moved file is AGENTS.md or SKILL.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     s3Mock
@@ -3056,7 +3288,7 @@ describe("agent RENAME", () => {
     expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
   });
 
-  it("triggers deriveAgentSkills when renaming AGENTS.md", async () => {
+  it("refreshes AGENTS.md sections when renaming AGENTS.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     adminAgentRows();
     destinationMissing();
@@ -3085,7 +3317,7 @@ describe("agent RENAME", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
 });
@@ -3140,15 +3372,11 @@ describe("agent create-sub-agent", () => {
     expect(res.statusCode).toBe(200);
     const puts = s3Mock.commandCalls(PutObjectCommand);
     expect(puts.map((call) => call.args[0].input.Key)).toEqual([
-      "tenants/acme/agents/marco/workspace/support/CONTEXT.md",
+      "tenants/acme/agents/marco/workspace/workspaces/support/CONTEXT.md",
       "tenants/acme/agents/marco/workspace/AGENTS.md",
     ]);
     expect(String(puts[1].args[0].input.Body)).toContain(
-      "| support specialist | support/ | support/CONTEXT.md |  |",
-    );
-    expect(deriveMockImpl).toHaveBeenCalledWith(
-      { tenantId: TENANT_A },
-      AGENT_ID,
+      "| support specialist | workspaces/support/ | workspaces/support/CONTEXT.md |  |",
     );
   });
 
@@ -3175,6 +3403,29 @@ describe("agent create-sub-agent", () => {
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
+  it("rejects workspaces as a reserved sub-agent slug before writing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "create-sub-agent",
+          agentId: AGENT_ID,
+          slug: "workspaces",
+          contextContent: "# Workspaces\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/reserved folder name/);
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
   it("returns 409 when the sub-agent slug collides with an existing top folder", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
@@ -3191,7 +3442,7 @@ describe("agent create-sub-agent", () => {
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/expenses/CONTEXT.md",
+            Key: "tenants/acme/agents/marco/workspace/workspaces/expenses/CONTEXT.md",
           },
         ],
       });
@@ -3528,6 +3779,155 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
+  it("update-identity-field rewrites the AGENTS.md identity line", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .resolves(
+        body(
+          [
+            "# AGENTS.md",
+            "",
+            "## Identity",
+            "",
+            "- **Name:** Marco",
+            "- **Creature:** old creature",
+            "- **Vibe:** focused",
+            "- **Emoji:** 🤖",
+            "- **Avatar:** none",
+            "",
+          ].join("\n"),
+        ),
+      );
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: "axolotl\nwith injection",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const put = s3Mock.commandCalls(PutObjectCommand)[0]?.args[0].input;
+    expect(put?.Key).toBe("tenants/acme/agents/marco/workspace/AGENTS.md");
+    expect(String(put?.Body)).toContain(
+      "- **Creature:** axolotl with injection",
+    );
+  });
+
+  it("update-identity-field rejects unknown fields before writing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "name",
+          value: "Nova",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain("Unknown identity field");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("update-identity-field rejects non-string values before writing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: 42,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain("value must be a string");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("update-identity-field returns 422 when AGENTS.md is missing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .rejects(noSuchKey());
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: "axolotl",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body.error).toContain("AGENTS.md is missing the Creature");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("update-identity-field returns 422 when the requested AGENTS.md anchor is missing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .resolves(body("# AGENTS.md\n\n## Identity\n- **Name:** Marco\n"));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: "axolotl",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body.error).toContain("AGENTS.md is missing the Creature");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
   it("GET by a member-role caller still succeeds (reads stay open)", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // resolveCallerFromAuth
@@ -3540,23 +3940,23 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
 
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/IDENTITY.md",
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
       })
       .rejects(noSuchKey());
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/IDENTITY.md",
+        Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/AGENTS.md",
       })
       .rejects(noSuchKey());
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/defaults/workspace/IDENTITY.md",
+        Key: "tenants/acme/agents/_catalog/defaults/workspace/AGENTS.md",
       })
       .resolves(body("Your name is {{AGENT_NAME}}."));
 
     const res = await parse(
       await handler(
-        event({ action: "get", agentId: AGENT_ID, path: "IDENTITY.md" }),
+        event({ action: "get", agentId: AGENT_ID, path: "AGENTS.md" }),
       ),
     );
     expect(res.statusCode).toBe(200);
@@ -3635,25 +4035,62 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     );
     expect(res.statusCode).toBe(200);
   });
-});
 
-// ─── 9. workspace skill marker derive wiring ────────────────────────────────
-
-describe("workspace skills → derive-agent-skills wiring", () => {
-  it("PUT on root skills/<slug>/SKILL.md triggers deriveAgentSkills", async () => {
+  it("PUT on retired PLATFORM.md does NOT require acceptTemplateUpdate", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
     pushDbRows([tenantRow()]);
     pushDbRows([{ role: "admin" }]);
     s3Mock.on(PutObjectCommand).resolves({});
-    deriveMockImpl.mockResolvedValue({
-      changed: true,
-      addedSlugs: ["approve-receipt"],
-      removedSlugs: [],
-      agentsMdPathsScanned: ["skills/approve-receipt/SKILL.md"],
-      warnings: [],
-    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "PLATFORM.md",
+          content: "override",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("PUT on retired CAPABILITIES.md does NOT require acceptTemplateUpdate", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "CAPABILITIES.md",
+          content: "override",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+// ─── 9. workspace skill marker AGENTS.md refresh wiring ─────────────────────
+
+describe("workspace skills → AGENTS.md refresh wiring", () => {
+  it("PUT on root skills/<slug>/SKILL.md refreshes AGENTS.md derived sections", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
 
     const res = await parse(
       await handler(
@@ -3668,14 +4105,14 @@ describe("workspace skills → derive-agent-skills wiring", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
     expect(deriveMockImpl).toHaveBeenCalledWith(
       { tenantId: TENANT_A },
       AGENT_ID,
     );
   });
 
-  it("PUT on a sub-agent skill marker triggers derive", async () => {
+  it("PUT on a sub-agent skill marker refreshes AGENTS.md derived sections", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -3695,10 +4132,14 @@ describe("workspace skills → derive-agent-skills wiring", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+    expect(deriveMockImpl).toHaveBeenCalledWith(
+      { tenantId: TENANT_A },
+      AGENT_ID,
+    );
   });
 
-  it("PUT on CONTEXT.md does NOT trigger derive (path filter)", async () => {
+  it("PUT on CONTEXT.md refreshes AGENTS.md derived sections without deriving DB rows", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -3718,10 +4159,11 @@ describe("workspace skills → derive-agent-skills wiring", () => {
     );
 
     expect(res.statusCode).toBe(200);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
     expect(deriveMockImpl).not.toHaveBeenCalled();
   });
 
-  it("PUT on expenses/CONTEXT.md does NOT trigger derive", async () => {
+  it("PUT on expenses/CONTEXT.md refreshes AGENTS.md derived sections without deriving DB rows", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -3741,17 +4183,20 @@ describe("workspace skills → derive-agent-skills wiring", () => {
     );
 
     expect(res.statusCode).toBe(200);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
     expect(deriveMockImpl).not.toHaveBeenCalled();
   });
 
-  it("derive failure → 500 with error message; S3 put already happened", async () => {
+  it("AGENTS.md refresh failure → 500 with error message; S3 put already happened", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
     pushDbRows([tenantRow()]);
     pushDbRows([{ role: "admin" }]);
     s3Mock.on(PutObjectCommand).resolves({});
-    deriveMockImpl.mockRejectedValue(new Error("database unavailable"));
+    refreshAgentsMdSectionsMock.mockRejectedValue(
+      new Error("workspace map unavailable"),
+    );
 
     const res = await parse(
       await handler(
@@ -3765,12 +4210,12 @@ describe("workspace skills → derive-agent-skills wiring", () => {
     );
 
     expect(res.statusCode).toBe(500);
-    expect(res.body.error).toMatch(/agent_skills derive failed/);
-    expect(res.body.error).toMatch(/database unavailable/);
+    expect(res.body.error).toMatch(/AGENTS.md section refresh failed/);
+    expect(res.body.error).toMatch(/workspace map unavailable/);
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(1);
   });
 
-  it("DELETE on a skill marker triggers derive", async () => {
+  it("DELETE on a skill marker refreshes AGENTS.md derived sections", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -3789,10 +4234,14 @@ describe("workspace skills → derive-agent-skills wiring", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+    expect(deriveMockImpl).toHaveBeenCalledWith(
+      { tenantId: TENANT_A },
+      AGENT_ID,
+    );
   });
 
-  it("PUT on template skill marker does NOT trigger derive (agent branch only)", async () => {
+  it("PUT on template skill marker does not refresh agent AGENTS.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([templateRowTenantA()]);
@@ -3813,36 +4262,6 @@ describe("workspace skills → derive-agent-skills wiring", () => {
 
     expect(res.statusCode).toBe(200);
     expect(deriveMockImpl).not.toHaveBeenCalled();
-  });
-
-  it("forwards derive warnings to the success response when derive emits them", async () => {
-    authMockImpl.mockResolvedValue(authOk());
-    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
-    pushDbRows([agentRow()]);
-    pushDbRows([tenantRow()]);
-    pushDbRows([{ role: "admin" }]);
-    s3Mock.on(PutObjectCommand).resolves({});
-    deriveMockImpl.mockResolvedValue({
-      changed: false,
-      addedSlugs: [],
-      removedSlugs: [],
-      agentsMdPathsScanned: ["skills/approve-receipt/SKILL.md"],
-      warnings: ["workspace skill warning"],
-    });
-
-    const res = await parse(
-      await handler(
-        event({
-          action: "put",
-          agentId: AGENT_ID,
-          path: "skills/approve-receipt/SKILL.md",
-          content: "# Approve receipt\n",
-        }),
-      ),
-    );
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body.deriveWarnings).toBeDefined();
-    expect(res.body.deriveWarnings.length).toBe(1);
+    expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
 });

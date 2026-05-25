@@ -1,6 +1,5 @@
 /**
- * Artifact reads — mirrors the artifact functions in
- * packages/skill-catalog/thinkwork-admin/scripts/operations/reads.py.
+ * Artifact reads — mirrors the legacy thinkwork-admin skill artifact helpers.
  */
 
 import type { AdminOpsClient } from "./client.js";

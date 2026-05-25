@@ -6,7 +6,7 @@
  * the bearer path is gone — every caller sends a Cognito ID token.
  *
  * Request shape (Unit 5):
- *   { action: "get" | "list" | "put" | "delete" | "catalog-seed" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
+ *   { action: "get" | "list" | "put" | "delete" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
  *     agentId?: string, templateId?: string, spaceId?: string, userId?: string, defaults?: true, catalog?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
@@ -22,7 +22,7 @@
  *   list → { ok: true, files: Array<{ path, source, sha256, overridden }> }
  *   put  → { ok: true }
  *   delete → { ok: true }
- *   install-skill / uninstall-skill → { ok: true, ... }
+ *   install-skill / uninstall-skill / reinstall-skill → { ok: true, ... }
  *   generate-folder-structure → { ok: true }
  *   regenerate-map → { ok: true } (optional path scopes refresh to that AGENTS.md)
  *   normalize-map → { ok: true }
@@ -67,7 +67,10 @@ import {
 } from "./src/lib/pinned-versions.js";
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
 import { bootstrapAgentWorkspace } from "./src/lib/workspace-bootstrap.js";
-import { deriveAgentSkills } from "./src/lib/derive-agent-skills.js";
+import {
+  deriveAgentSkills,
+  type DeriveResult,
+} from "./src/lib/derive-agent-skills.js";
 import {
   isBuiltinToolSlug,
   isBuiltinToolWorkspacePath,
@@ -83,15 +86,24 @@ import {
   tenants,
 } from "./src/graphql/utils.js";
 import { emitAuditEvent } from "./src/lib/compliance/emit.js";
-import { seedTenantSkillCatalog } from "./src/lib/catalog-seed.js";
 import {
   CatalogInstallError,
   installCatalogSkill,
 } from "./src/lib/catalog-install.js";
 import {
+  CatalogReinstallError,
+  reinstallCatalogSkill,
+} from "./src/lib/catalog-reinstall.js";
+import {
   CatalogUninstallError,
   uninstallCatalogSkill,
 } from "./src/lib/catalog-uninstall.js";
+import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
+import {
+  identityFieldLabel,
+  isAgentIdentityField,
+  replaceAgentsMdIdentityField,
+} from "./src/lib/agents-md-persona-surgery.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -451,8 +463,8 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "install-skill",
+  "reinstall-skill",
   "uninstall-skill",
-  "catalog-seed",
   "generate-folder-structure",
   "regenerate-map",
   "normalize-map",
@@ -539,17 +551,7 @@ async function handleList(
   // Operational artifacts (manifest.json, _defaults_version) are
   // filtered so callers don't accidentally treat them as workspace
   // files.
-  let paths = await listPrefix(target.prefix);
-  if (target.kind === "catalog" && paths.length === 0) {
-    const seedResult = await seedTenantSkillCatalog({
-      s3,
-      bucket: bucket(),
-      tenantSlug: target.tenantSlug,
-    });
-    if (seedResult.imported_slugs.length > 0) {
-      paths = await listPrefix(target.prefix);
-    }
-  }
+  const paths = await listPrefix(target.prefix);
   const visiblePaths = paths.filter(
     (p) =>
       p !== "manifest.json" &&
@@ -558,6 +560,10 @@ async function handleList(
       (target.kind !== "catalog" || isAllowedCatalogPath(p)) &&
       !isBuiltinToolWorkspacePath(p),
   );
+
+  if (target.kind === "catalog") {
+    return await handleCatalogList(target, visiblePaths, includeContent);
+  }
 
   if (!includeContent) {
     return json(200, {
@@ -608,6 +614,44 @@ async function handleList(
   return json(200, { ok: true, files });
 }
 
+async function handleCatalogList(
+  target: CatalogTarget,
+  visiblePaths: string[],
+  includeContent: boolean,
+): Promise<APIGatewayProxyResult> {
+  // TODO: replace per-list content reads with a catalog sha index file if
+  // tenant catalogs grow large enough for this to become visible latency.
+  const filesWithContent = await Promise.all(
+    visiblePaths.map(async (path) => {
+      try {
+        const resp = await s3.send(
+          new GetObjectCommand({ Bucket: bucket(), Key: target.key(path) }),
+        );
+        const content = (await resp.Body?.transformToString("utf-8")) ?? "";
+        return { path, content };
+      } catch (err) {
+        if (isNoSuchKey(err)) return { path, content: "" };
+        throw err;
+      }
+    }),
+  );
+  const shaBySlug = computeCatalogSkillShaBySlug(filesWithContent);
+
+  return json(200, {
+    ok: true,
+    files: filesWithContent.map((file) => {
+      const slug = catalogPathSlug(file.path);
+      const base = {
+        path: file.path,
+        source: target.kind,
+        sha256: shaBySlug.get(slug) ?? "",
+        overridden: false,
+      };
+      return includeContent ? { ...base, content: file.content } : base;
+    }),
+  });
+}
+
 function isVisibleUserContextPath(path: string): boolean {
   const clean = path.replace(/^\/+/, "");
   if (clean === "USER.md") return true;
@@ -634,14 +678,55 @@ function isSkillMarkerPath(path: string): boolean {
   return /(?:^|\/)skills\/[^/]+\/SKILL\.md$/.test(path);
 }
 
+function summarizeDerivedAgentSkills(
+  target: AgentTarget,
+  result: DeriveResult,
+): string {
+  return (
+    `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
+    `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
+    `removed=${result.removedSlugs.join(",") || "-"}`
+  );
+}
+
+async function syncDerivedAgentSkills(
+  target: AgentTarget,
+  tenantId: string,
+  action: string,
+  failureContext: string,
+): Promise<
+  | { ok: true; result: DeriveResult }
+  | { ok: false; response: APIGatewayProxyResult }
+> {
+  try {
+    const result = await deriveAgentSkills({ tenantId }, target.agentId);
+    console.log(
+      `[derive-agent-skills] ${action} ${summarizeDerivedAgentSkills(
+        target,
+        result,
+      )}`,
+    );
+    return { ok: true, result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[derive-agent-skills] ${action} failed: ${message}`);
+    return {
+      ok: false,
+      response: json(500, {
+        ok: false,
+        error: `${failureContext}: ${message}`,
+      }),
+    };
+  }
+}
+
 /**
  * Top-level governance / identity / capability files that, when
  * edited, materially change agent behavior. Edits to these files emit
  * `workspace.governance_file_edited` audit rows. SKILL.md is included
- * because SKILL.md edits change effective agent capabilities (they
- * trigger derive-agent-skills); auditing the underlying file write
- * captures the action even if the post-derive `agent.skills_changed`
- * emit drops (telemetry-tier).
+ * because SKILL.md edits change effective runtime capabilities. Auditing
+ * the underlying file write captures the change at the filesystem source
+ * of truth.
  *
  * Implementer note: this list mirrors the top-level files shipped in
  * `packages/system-workspace/`. Add new governance files here when
@@ -650,8 +735,6 @@ function isSkillMarkerPath(path: string): boolean {
 const GOVERNANCE_FILE_BASENAMES: ReadonlySet<string> = new Set([
   "AGENTS.md",
   "GUARDRAILS.md",
-  "CAPABILITIES.md",
-  "PLATFORM.md",
   "MEMORY_GUIDE.md",
   "USER.md",
 ]);
@@ -675,6 +758,28 @@ function isProtectedOrchestrationWritePath(path: string): boolean {
   );
 }
 
+function isSpaceCapabilityWritePath(path: string): boolean {
+  return (
+    path === "skills" ||
+    path.startsWith("skills/") ||
+    path === "TOOLS.md" ||
+    path === "MCP.md"
+  );
+}
+
+function rejectSpaceCapabilityWrite(
+  path: string,
+): APIGatewayProxyResult | null {
+  if (!isSpaceCapabilityWritePath(path)) return null;
+  return json(403, {
+    ok: false,
+    code: "space_capability_file_rejected",
+    error:
+      `Spaces cannot contain capability files such as ${path}. ` +
+      "Put skills, TOOLS.md, and MCP.md under master/workspaces/ instead.",
+  });
+}
+
 async function handlePut(
   deps: HandlerDeps,
   path: string,
@@ -690,6 +795,11 @@ async function handlePut(
       ok: false,
       error: err instanceof Error ? err.message : "Invalid workspace path",
     });
+  }
+
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(cleanPath);
+    if (rejection) return rejection;
   }
 
   if (isBuiltinToolWorkspacePath(cleanPath)) {
@@ -818,81 +928,23 @@ async function handlePut(
 
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-    // Skills are activated by first-class workspace folders. After a
-    // successful SKILL.md marker write we re-derive the agent_skills table
-    // from the workspace tree. The S3 put has already landed by this point —
-    // if derive fails we return 500 so the caller knows the DB is stale; the
-    // next skill marker save retries the derive.
     if (isSkillMarkerPath(cleanPath)) {
-      try {
-        const result = await deriveAgentSkills({ tenantId }, target.agentId);
-        const summary =
-          `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
-          `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
-          `removed=${result.removedSlugs.join(",") || "-"}`;
-        console.log(`[derive-agent-skills] ${summary}`);
-
-        // Emit `agent.skills_changed` (telemetry tier) when the
-        // derived membership actually changed. The wrapping tx
-        // covers ONLY the audit row — derive's own writes already
-        // committed, so an emit failure does not roll back the
-        // skill-state mutation. The underlying SKILL.md edit is
-        // separately audited as `workspace.governance_file_edited`
-        // above, so an emit-miss here does not lose evidence of the
-        // capability change.
-        if (result.changed) {
-          try {
-            await db.transaction(async (tx) => {
-              await emitAuditEvent(tx, {
-                tenantId,
-                actorId: auditActor.actorId,
-                actorType: auditActor.actorType,
-                eventType: "agent.skills_changed",
-                source: "lambda",
-                payload: {
-                  agentId: target.agentId,
-                  addedSkills: result.addedSlugs,
-                  removedSkills: result.removedSlugs,
-                  reason: "workspace_skill_marker_change",
-                },
-                resourceType: "agent",
-                resourceId: target.agentId,
-                action: "update",
-                outcome: "success",
-              });
-            });
-          } catch (emitErr) {
-            console.error(
-              `[agent.skills_changed] audit emit failed (telemetry-tier; not blocking): ${
-                emitErr instanceof Error ? emitErr.message : String(emitErr)
-              }`,
-            );
-          }
-        }
-
-        if (result.warnings.length > 0) {
-          const refreshError = await refreshAgentAgentsMdSections(
-            target,
-            "PUT",
-          );
-          if (refreshError) return refreshError;
-          return json(200, {
-            ok: true,
-            deriveWarnings: result.warnings,
-          });
-        }
-        const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
-        if (refreshError) return refreshError;
-        return json(200, { ok: true });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[derive-agent-skills] failed: ${message}`);
-        return json(500, {
-          ok: false,
-          error:
-            "Skill file persisted but agent_skills derive failed: " + message,
+      const derive = await syncDerivedAgentSkills(
+        target,
+        tenantId,
+        "PUT",
+        "Skill file persisted but agent_skills derive failed",
+      );
+      if (!derive.ok) return derive.response;
+      const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
+      if (refreshError) return refreshError;
+      if (derive.result.warnings.length > 0) {
+        return json(200, {
+          ok: true,
+          deriveWarnings: derive.result.warnings,
         });
       }
+      return json(200, { ok: true });
     }
 
     const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
@@ -1011,7 +1063,12 @@ async function handleCreateSubAgent(
       .map((path) => path.split("/")[0])
       .filter((segment): segment is string => Boolean(segment)),
   );
-  if (existingTopFolders.has(cleanSlug)) {
+  const subAgentFolderExists = existingPaths.some(
+    (path) =>
+      path.startsWith(`${cleanSlug}/`) ||
+      path.startsWith(`workspaces/${cleanSlug}/`),
+  );
+  if (existingTopFolders.has(cleanSlug) || subAgentFolderExists) {
     return json(409, {
       ok: false,
       error: `A folder named \`${cleanSlug}\` already exists at this agent's root.`,
@@ -1033,15 +1090,15 @@ async function handleCreateSubAgent(
 
   const nextAgentsMd = appendRoutingRowIfMissing(agentsMd, {
     task: `${cleanSlug} specialist`,
-    goTo: `${cleanSlug}/`,
-    read: `${cleanSlug}/CONTEXT.md`,
+    goTo: `workspaces/${cleanSlug}/`,
+    read: `workspaces/${cleanSlug}/CONTEXT.md`,
     skills: [],
   });
 
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket(),
-      Key: target.key(`${cleanSlug}/CONTEXT.md`),
+      Key: target.key(`workspaces/${cleanSlug}/CONTEXT.md`),
       Body: contextContent,
       ContentType: "text/plain; charset=utf-8",
     }),
@@ -1057,33 +1114,25 @@ async function handleCreateSubAgent(
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-  try {
-    const result = await deriveAgentSkills({ tenantId }, target.agentId);
-    if (result.warnings.length > 0) {
-      const refreshError = await refreshAgentAgentsMdSections(
-        target,
-        "create-sub-agent",
-      );
-      if (refreshError) return refreshError;
-      return json(200, {
-        ok: true,
-        deriveWarnings: result.warnings,
-      });
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[derive-agent-skills] failed: ${message}`);
-    return json(500, {
-      ok: false,
-      error: "AGENTS.md persisted but agent_skills derive failed: " + message,
-    });
-  }
+  const derive = await syncDerivedAgentSkills(
+    target,
+    tenantId,
+    "create-sub-agent",
+    "AGENTS.md persisted but agent_skills derive failed",
+  );
+  if (!derive.ok) return derive.response;
 
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "create-sub-agent",
   );
   if (refreshError) return refreshError;
+  if (derive.result.warnings.length > 0) {
+    return json(200, {
+      ok: true,
+      deriveWarnings: derive.result.warnings,
+    });
+  }
   return json(200, { ok: true });
 }
 
@@ -1104,22 +1153,13 @@ async function handleDelete(
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
     if (isSkillMarkerPath(path)) {
-      try {
-        const result = await deriveAgentSkills({ tenantId }, target.agentId);
-        const summary =
-          `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
-          `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
-          `removed=${result.removedSlugs.join(",") || "-"}`;
-        console.log(`[derive-agent-skills] ${summary}`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[derive-agent-skills] failed: ${message}`);
-        return json(500, {
-          ok: false,
-          error:
-            "Skill file deleted but agent_skills derive failed: " + message,
-        });
-      }
+      const derive = await syncDerivedAgentSkills(
+        target,
+        tenantId,
+        "DELETE",
+        "Skill file deleted but agent_skills derive failed",
+      );
+      if (!derive.ok) return derive.response;
     }
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
@@ -1128,35 +1168,19 @@ async function handleDelete(
   return json(200, { ok: true });
 }
 
-async function handleCatalogSeed(
-  deps: HandlerDeps,
-): Promise<APIGatewayProxyResult> {
-  const { target } = deps;
-  if (target.kind !== "catalog") {
-    return json(400, {
-      ok: false,
-      error: "catalog-seed requires catalog: true",
-    });
-  }
-
-  const result = await seedTenantSkillCatalog({
-    s3,
-    bucket: bucket(),
-    tenantSlug: target.tenantSlug,
-  });
-  return json(200, result);
-}
-
 async function handleInstallSkill(
   deps: HandlerDeps,
   slug: string,
   wiringChoice: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind !== "agent" && target.kind !== "space") {
+  if (target.kind === "space") {
+    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
+  }
+  if (target.kind !== "agent") {
     return json(400, {
       ok: false,
-      error: "install-skill requires an agent or space target",
+      error: "install-skill requires an agent target",
       code: "unsupported_target",
     });
   }
@@ -1187,32 +1211,24 @@ async function handleInstallSkill(
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  try {
-    const deriveResult = await deriveAgentSkills({ tenantId }, target.agentId);
-    const summary =
-      `agent=${target.agentId} skill_paths=${deriveResult.agentsMdPathsScanned.length} ` +
-      `changed=${deriveResult.changed} added=${deriveResult.addedSlugs.join(",") || "-"} ` +
-      `removed=${deriveResult.removedSlugs.join(",") || "-"}`;
-    console.log(`[derive-agent-skills] install-skill ${summary}`);
-    const refreshError = await refreshAgentAgentsMdSections(
-      target,
-      "install-skill",
-    );
-    if (refreshError) return refreshError;
-    return json(200, {
-      ...result,
-      ...(deriveResult.warnings.length > 0
-        ? { deriveWarnings: deriveResult.warnings }
-        : {}),
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[derive-agent-skills] install-skill failed: ${message}`);
-    return json(500, {
-      ok: false,
-      error: "Skill installed but agent_skills derive failed: " + message,
-    });
-  }
+  const derive = await syncDerivedAgentSkills(
+    target,
+    tenantId,
+    "install-skill",
+    "Skill installed but agent_skills derive failed",
+  );
+  if (!derive.ok) return derive.response;
+  const refreshError = await refreshAgentAgentsMdSections(
+    target,
+    "install-skill",
+  );
+  if (refreshError) return refreshError;
+  return json(200, {
+    ...result,
+    ...(derive.result.warnings.length > 0
+      ? { deriveWarnings: derive.result.warnings }
+      : {}),
+  });
 }
 
 async function handleUninstallSkill(
@@ -1252,32 +1268,85 @@ async function handleUninstallSkill(
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  try {
-    const deriveResult = await deriveAgentSkills({ tenantId }, target.agentId);
-    const summary =
-      `agent=${target.agentId} skill_paths=${deriveResult.agentsMdPathsScanned.length} ` +
-      `changed=${deriveResult.changed} added=${deriveResult.addedSlugs.join(",") || "-"} ` +
-      `removed=${deriveResult.removedSlugs.join(",") || "-"}`;
-    console.log(`[derive-agent-skills] uninstall-skill ${summary}`);
-    const refreshError = await refreshAgentAgentsMdSections(
-      target,
-      "uninstall-skill",
-    );
-    if (refreshError) return refreshError;
-    return json(200, {
-      ...result,
-      ...(deriveResult.warnings.length > 0
-        ? { deriveWarnings: deriveResult.warnings }
-        : {}),
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[derive-agent-skills] uninstall-skill failed: ${message}`);
-    return json(500, {
+  const derive = await syncDerivedAgentSkills(
+    target,
+    tenantId,
+    "uninstall-skill",
+    "Skill uninstalled but agent_skills derive failed",
+  );
+  if (!derive.ok) return derive.response;
+  const refreshError = await refreshAgentAgentsMdSections(
+    target,
+    "uninstall-skill",
+  );
+  if (refreshError) return refreshError;
+  return json(200, {
+    ...result,
+    ...(derive.result.warnings.length > 0
+      ? { deriveWarnings: derive.result.warnings }
+      : {}),
+  });
+}
+
+async function handleReinstallSkill(
+  deps: HandlerDeps,
+  slug: string,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind === "space") {
+    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
+  }
+  if (target.kind !== "agent") {
+    return json(400, {
       ok: false,
-      error: "Skill uninstalled but agent_skills derive failed: " + message,
+      error: "reinstall-skill requires an agent target",
+      code: "unsupported_target",
     });
   }
+
+  let result;
+  try {
+    result = await reinstallCatalogSkill({
+      s3,
+      bucket: bucket(),
+      tenantSlug: target.tenantSlug,
+      targetPrefix: target.prefix,
+      slug,
+    });
+  } catch (err) {
+    if (err instanceof CatalogReinstallError) {
+      return json(err.status, {
+        ok: false,
+        error: err.message,
+        code: err.code,
+      });
+    }
+    throw err;
+  }
+
+  if (target.kind !== "agent") {
+    return json(200, result);
+  }
+
+  await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+  const derive = await syncDerivedAgentSkills(
+    target,
+    tenantId,
+    "reinstall-skill",
+    "Skill reinstalled but agent_skills derive failed",
+  );
+  if (!derive.ok) return derive.response;
+  const refreshError = await refreshAgentAgentsMdSections(
+    target,
+    "reinstall-skill",
+  );
+  if (refreshError) return refreshError;
+  return json(200, {
+    ...result,
+    ...(derive.result.warnings.length > 0
+      ? { deriveWarnings: derive.result.warnings }
+      : {}),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1399,6 +1468,11 @@ async function handleMove(
       error: "User context path is not editable from this surface.",
     });
   }
+  if (target.kind === "space") {
+    const desiredDest = joinFolderPath(cleanToFolder, pathBasename(cleanFrom));
+    const rejection = rejectSpaceCapabilityWrite(desiredDest);
+    if (rejection) return rejection;
+  }
   if (isBuiltinToolWorkspacePath(cleanFrom)) {
     return json(403, {
       ok: false,
@@ -1438,7 +1512,7 @@ async function handleSingleFileMove(
   cleanFrom: string,
   cleanToFolder: string,
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
+  const { target } = deps;
 
   // Compute destination with collision-resolved name.
   const fromBase = pathBasename(cleanFrom);
@@ -1448,6 +1522,10 @@ async function handleSingleFileMove(
       ok: false,
       error: "Source and destination are identical",
     });
+  }
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(desiredDest);
+    if (rejection) return rejection;
   }
 
   const occupiedSiblings = await listImmediateChildren(
@@ -1509,22 +1587,15 @@ async function handleSingleFileMove(
     const fromIsSkillMd = isSkillMarkerPath(cleanFrom);
     const destIsSkillMd = isSkillMarkerPath(finalDest);
     if (fromIsAgentsMd || destIsAgentsMd || fromIsSkillMd || destIsSkillMd) {
-      try {
-        const result = await deriveAgentSkills({ tenantId }, target.agentId);
-        const summary =
-          `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
-          `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
-          `removed=${result.removedSlugs.join(",") || "-"}`;
-        console.log(`[derive-agent-skills] move ${summary}`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[derive-agent-skills] move derive failed: ${message}`);
-        return json(500, {
-          ok: false,
-          error: "Move succeeded but agent_skills derive failed: " + message,
-        });
-      }
+      const derive = await syncDerivedAgentSkills(
+        target,
+        deps.tenantId,
+        "move",
+        "Move succeeded but agent_skills derive failed",
+      );
+      if (!derive.ok) return derive.response;
     }
+
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
   }
@@ -1544,7 +1615,7 @@ async function handleFolderMove(
   cleanToFolder: string,
   folderListing: string[],
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
+  const { target } = deps;
 
   // Compute the destination folder name with collision resolution
   // against folder siblings at the destination level.
@@ -1555,6 +1626,10 @@ async function handleFolderMove(
       ok: false,
       error: "Source and destination are identical",
     });
+  }
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(desiredDest);
+    if (rejection) return rejection;
   }
 
   const occupied = await listImmediateChildren(
@@ -1601,8 +1676,7 @@ async function handleFolderMove(
   // can retry without partial data loss.
   //
   // Pinned-file accounting note: `isPinnedWorkspacePath` only matches
-  // the three root-level PINNED_FILES (GUARDRAILS.md, PLATFORM.md,
-  // CAPABILITIES.md). Folder moves therefore always report
+  // root-level PINNED_FILES (currently GUARDRAILS.md). Folder moves therefore always report
   // `detachedPinnedCount: 0` in practice — those root files cannot be
   // inside any subfolder being moved. The field stays in the response
   // for shape parity with single-file moves; a richer
@@ -1672,24 +1746,15 @@ async function handleFolderMove(
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
     if (touchesAgentsMd || touchesSkillMd) {
-      try {
-        const result = await deriveAgentSkills({ tenantId }, target.agentId);
-        const summary =
-          `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
-          `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
-          `removed=${result.removedSlugs.join(",") || "-"}`;
-        console.log(`[derive-agent-skills] folder-move ${summary}`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(
-          `[derive-agent-skills] folder-move derive failed: ${message}`,
-        );
-        return json(500, {
-          ok: false,
-          error: "Move succeeded but agent_skills derive failed: " + message,
-        });
-      }
+      const derive = await syncDerivedAgentSkills(
+        target,
+        deps.tenantId,
+        "folder-move",
+        "Move succeeded but agent_skills derive failed",
+      );
+      if (!derive.ok) return derive.response;
     }
+
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
   }
@@ -1801,6 +1866,10 @@ function validateRenamePaths(
       ok: false,
       error: "use orchestration writer",
     });
+  }
+  if (target.kind === "space") {
+    const rejection = rejectSpaceCapabilityWrite(cleanTo);
+    if (rejection) return rejection;
   }
   return null;
 }
@@ -1976,59 +2045,34 @@ async function finalizeRenameSideEffects(
     touchesSkillMd: boolean;
   },
 ): Promise<APIGatewayProxyResult | null> {
-  const { target, tenantId } = deps;
+  const { target } = deps;
   if (target.kind !== "agent") return null;
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-  if (!input.touchesAgentsMd && !input.touchesSkillMd) {
-    return await refreshAgentAgentsMdSections(target, "rename");
-  }
-  try {
-    const result = await deriveAgentSkills({ tenantId }, target.agentId);
-    const summary =
-      `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
-      `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
-      `removed=${result.removedSlugs.join(",") || "-"}`;
-    console.log(`[derive-agent-skills] rename ${summary}`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[derive-agent-skills] rename derive failed: ${message}`);
-    return json(500, {
-      ok: false,
-      error: "Rename succeeded but agent_skills derive failed: " + message,
-    });
+  if (input.touchesAgentsMd || input.touchesSkillMd) {
+    const derive = await syncDerivedAgentSkills(
+      target,
+      deps.tenantId,
+      "rename",
+      "Rename succeeded but agent_skills derive failed",
+    );
+    if (!derive.ok) return derive.response;
   }
 
   return await refreshAgentAgentsMdSections(target, "rename");
 }
 
-// Line-surgery anchors for IDENTITY.md personality fields. Only these 4
+// Line-surgery anchors for AGENTS.md identity personality fields. Only these 4
 // lines are editable via `update-identity-field`; the Name line is
 // reserved for `update_agent_name` (which goes through the updateAgent
 // mutation + writeIdentityMdForAgent). Never exposing Name here is a
 // narrow-scope guarantee — the tool's Literal type is backed by this
 // server-side whitelist.
-const IDENTITY_FIELD_ANCHORS: Record<
-  "creature" | "vibe" | "emoji" | "avatar",
-  RegExp
-> = {
-  creature: /^- \*\*Creature:\*\*.*$/m,
-  vibe: /^- \*\*Vibe:\*\*.*$/m,
-  emoji: /^- \*\*Emoji:\*\*.*$/m,
-  avatar: /^- \*\*Avatar:\*\*.*$/m,
-};
-
-function identityFieldLabel(
-  field: keyof typeof IDENTITY_FIELD_ANCHORS,
-): string {
-  return field.charAt(0).toUpperCase() + field.slice(1);
-}
-
 async function handleUpdateIdentityField(
   deps: HandlerDeps,
   field: string,
-  value: string,
+  value: unknown,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
   if (target.kind !== "agent") {
@@ -2040,7 +2084,7 @@ async function handleUpdateIdentityField(
   // Service-auth (apikey) callers must present x-agent-id matching the
   // target agent. Mirrors the updateAgent mutation's authz guard —
   // without this, any apikey holder in the tenant can edit another
-  // agent's IDENTITY.md personality fields.
+  // agent's AGENTS.md identity personality fields.
   if (deps.auth.authType === "apikey") {
     if (!deps.auth.agentId || deps.auth.agentId !== target.agentId) {
       return json(403, {
@@ -2050,7 +2094,7 @@ async function handleUpdateIdentityField(
       });
     }
   }
-  if (!Object.prototype.hasOwnProperty.call(IDENTITY_FIELD_ANCHORS, field)) {
+  if (!isAgentIdentityField(field)) {
     return json(400, {
       ok: false,
       error: `Unknown identity field '${field}'. Allowed: creature, vibe, emoji, avatar.`,
@@ -2059,23 +2103,13 @@ async function handleUpdateIdentityField(
   if (typeof value !== "string") {
     return json(400, { ok: false, error: "value must be a string" });
   }
-  // Defensive sanitization — mirror writeIdentityMdForAgent's name-line
-  // treatment. Newlines collapsed to spaces so a value can't inject
-  // extra markdown bullets; the regex replacer function form prevents
-  // `$&`, `$'`, `` $` ``, `$1` from expanding as backreferences.
-  // Includes U+2028 LINE SEPARATOR + U+2029 PARAGRAPH SEPARATOR — these
-  // are treated as line breaks by some Markdown renderers and can
-  // otherwise inject a forged bullet past the \r\n guard.
-  const safeValue = value.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
-  const typedField = field as keyof typeof IDENTITY_FIELD_ANCHORS;
-  const anchor = IDENTITY_FIELD_ANCHORS[typedField];
-  const label = identityFieldLabel(typedField);
+  const label = identityFieldLabel(field);
 
-  const identityKey = target.key("IDENTITY.md");
+  const agentsMdKey = target.key("AGENTS.md");
   let existing: string | null = null;
   try {
     const resp = await s3.send(
-      new GetObjectCommand({ Bucket: bucket(), Key: identityKey }),
+      new GetObjectCommand({ Bucket: bucket(), Key: agentsMdKey }),
     );
     existing = (await resp.Body?.transformToString("utf-8")) ?? "";
   } catch (err) {
@@ -2090,22 +2124,25 @@ async function handleUpdateIdentityField(
     if (!isNotFound) throw err;
   }
 
-  if (!existing || !anchor.test(existing)) {
+  if (!existing) {
     return json(422, {
       ok: false,
-      error: `IDENTITY.md is missing the ${label} line anchor; have your human rerun the template migration.`,
+      error: `AGENTS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
     });
   }
 
-  const rendered = existing.replace(
-    anchor,
-    () => `- **${label}:** ${safeValue}`,
-  );
+  const rendered = replaceAgentsMdIdentityField(existing, field, value);
+  if (rendered === null) {
+    return json(422, {
+      ok: false,
+      error: `AGENTS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
+    });
+  }
 
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket(),
-      Key: identityKey,
+      Key: agentsMdKey,
       Body: rendered,
       ContentType: "text/plain; charset=utf-8",
     }),
@@ -2382,7 +2419,7 @@ export async function handler(
 
   if (
     target.kind === "catalog" &&
-    !["get", "list", "put", "delete", "catalog-seed"].includes(action)
+    !["get", "list", "put", "delete"].includes(action)
   ) {
     return json(400, {
       ok: false,
@@ -2440,13 +2477,20 @@ export async function handler(
         }
         return await handleUninstallSkill(deps, body.slug);
       }
+      case "reinstall-skill": {
+        if (!body.slug) {
+          return json(400, {
+            ok: false,
+            error: "slug is required for reinstall-skill",
+          });
+        }
+        return await handleReinstallSkill(deps, body.slug);
+      }
       case "delete": {
         if (!body.path)
           return json(400, { ok: false, error: "path is required for delete" });
         return await handleDelete(deps, body.path);
       }
-      case "catalog-seed":
-        return await handleCatalogSeed(deps);
       case "move": {
         if (typeof body.fromPath !== "string" || body.fromPath === "") {
           return json(400, {
@@ -2508,7 +2552,7 @@ export async function handler(
         return await handleUpdateIdentityField(
           deps,
           String(body.field),
-          String(body.value),
+          body.value,
         );
       }
       default:

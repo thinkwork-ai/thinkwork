@@ -55,7 +55,6 @@ vi.mock("@thinkwork/database-pg", () => ({
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   agentSkills: {},
-  skillCatalog: {},
   skillRuns: {
     id: "skill_runs.id",
     tenant_id: "skill_runs.tenant_id",
@@ -64,7 +63,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     resolved_inputs_hash: "skill_runs.resolved_inputs_hash",
     status: "skill_runs.status",
   },
-  tenantSkills: {},
   tenantMcpServers: {},
   agentMcpServers: {},
   agentTemplateMcpServers: {},

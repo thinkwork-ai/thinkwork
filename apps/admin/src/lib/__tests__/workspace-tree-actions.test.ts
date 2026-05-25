@@ -137,9 +137,16 @@ describe("workspace tree actions", () => {
     expect(validateSubAgentSlug("memory", []).error).toBe(
       "`memory` is a reserved folder name.",
     );
+    expect(validateSubAgentSlug("workspaces", []).error).toBe(
+      "`workspaces` is a reserved folder name.",
+    );
     expect(validateSubAgentSlug("Sales", []).error).toMatch(/lowercase letter/);
     expect(
       validateSubAgentSlug("expenses", ["expenses/CONTEXT.md"]).error,
+    ).toBe("A folder named `expenses` already exists at this agent's root.");
+    expect(
+      validateSubAgentSlug("expenses", ["workspaces/expenses/CONTEXT.md"])
+        .error,
     ).toBe("A folder named `expenses` already exists at this agent's root.");
   });
 });

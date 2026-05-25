@@ -11,6 +11,7 @@
  * caller so a SES blip never breaks the agent's in-app message.
  */
 
+import { randomBytes } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -20,6 +21,7 @@ import {
   tenants,
   threads,
 } from "@thinkwork/database-pg/schema";
+import { renderForEmail } from "../channel-rendering/index.js";
 import { generateReplyToken } from "../email-tokens.js";
 import { deriveSpaceAddress } from "./space-address.js";
 
@@ -137,28 +139,57 @@ export async function sendThreadReplyEmail(
   });
 
   const messageId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@${routing.tenantSlug}.thinkwork.ai>`;
+  const boundary = `tw-boundary-${randomBytes(16).toString("hex")}`;
+
+  // Strip CRLF from every interpolated header value to close a pre-existing
+  // header-injection gap (a crafted inbound Subject could inject Bcc: headers).
+  const safeFrom = stripCRLF(fromAddress);
+  const safeSender = stripCRLF(senderEmail);
+  const safeSubject = stripCRLF(subject);
+  const safeMessageId = stripCRLF(messageId);
+  const safeToken = stripCRLF(token);
+
   const rawHeaders = [
-    `From: ${fromAddress}`,
-    `To: ${senderEmail}`,
-    `Reply-To: ${fromAddress}`,
-    `Subject: ${subject}`,
-    `Message-ID: ${messageId}`,
+    `From: ${safeFrom}`,
+    `To: ${safeSender}`,
+    `Reply-To: ${safeFrom}`,
+    `Subject: ${safeSubject}`,
+    `Message-ID: ${safeMessageId}`,
     `MIME-Version: 1.0`,
-    `X-Thinkwork-Reply-Token: ${token}`,
+    `X-Thinkwork-Reply-Token: ${safeToken}`,
   ];
   if (originalMessageId) {
-    const normalized = originalMessageId.includes("<")
-      ? originalMessageId
-      : `<${originalMessageId}>`;
+    const normalized = stripCRLF(
+      originalMessageId.includes("<")
+        ? originalMessageId
+        : `<${originalMessageId}>`,
+    );
     rawHeaders.push(`In-Reply-To: ${normalized}`);
     rawHeaders.push(`References: ${normalized}`);
   }
   rawHeaders.push(
-    `Content-Type: text/plain; charset=UTF-8`,
-    `Content-Transfer-Encoding: 7bit`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
   );
 
-  const rawMessage = [...rawHeaders, "", body].join("\r\n");
+  const { html, text } = renderForEmail(body);
+
+  const partLines = [
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=UTF-8`,
+    `Content-Transfer-Encoding: quoted-printable`,
+    ``,
+    encodeQuotedPrintable(text),
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: quoted-printable`,
+    ``,
+    encodeQuotedPrintable(html),
+    ``,
+    `--${boundary}--`,
+  ];
+
+  const rawMessage = [...rawHeaders, "", ...partLines].join("\r\n");
 
   const { SESClient, SendRawEmailCommand } =
     await import("@aws-sdk/client-ses");
@@ -194,4 +225,70 @@ function formatReplySubject(original: string): string {
   const trimmed = original?.trim() || "";
   if (!trimmed) return "Re: Your message";
   return /^re:\s/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
+}
+
+/**
+ * Remove CR, LF, and CRLF sequences from any string interpolated into a raw
+ * MIME header value. Prevents header injection via crafted Subject/sender/
+ * Message-ID metadata derived from untrusted inbound email.
+ */
+function stripCRLF(value: string): string {
+  return value.replace(/[\r\n]+/g, "");
+}
+
+/**
+ * Quoted-printable encode per RFC 2045. Encodes non-ASCII octets and `=` as
+ * `=XX` hex, escapes trailing whitespace on each line, and inserts soft line
+ * breaks so no encoded line exceeds 76 characters.
+ */
+function encodeQuotedPrintable(input: string): string {
+  const buf = Buffer.from(input, "utf8");
+  const tokens: string[] = [];
+  for (let i = 0; i < buf.length; i++) {
+    const byte = buf[i];
+    if (byte === 0x0d /* CR */) {
+      // Pass through; pair with LF below if present.
+      tokens.push("\r");
+    } else if (byte === 0x0a /* LF */) {
+      tokens.push("\n");
+    } else if (byte === 0x3d /* = */) {
+      tokens.push("=3D");
+    } else if (byte === 0x20 /* space */ || byte === 0x09 /* tab */) {
+      // Defer trailing-whitespace handling to the line-wrap pass below.
+      tokens.push(String.fromCharCode(byte));
+    } else if (byte >= 0x21 && byte <= 0x7e) {
+      tokens.push(String.fromCharCode(byte));
+    } else {
+      tokens.push(`=${byte.toString(16).toUpperCase().padStart(2, "0")}`);
+    }
+  }
+  const encoded = tokens.join("");
+
+  // Normalize line breaks to LF for splitting, then wrap each line to 76 cols
+  // with soft line breaks (`=` at end). Escape trailing space/tab.
+  const lines = encoded.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const wrapped: string[] = [];
+  for (const line of lines) {
+    let remaining = escapeTrailingWhitespace(line);
+    while (remaining.length > 76) {
+      // Find a safe break point that doesn't split a `=XX` sequence.
+      let cut = 75;
+      if (remaining[cut - 1] === "=") cut -= 1;
+      else if (remaining[cut - 2] === "=") cut -= 2;
+      wrapped.push(`${remaining.slice(0, cut)}=`);
+      remaining = remaining.slice(cut);
+    }
+    wrapped.push(remaining);
+  }
+  return wrapped.join("\r\n");
+}
+
+function escapeTrailingWhitespace(line: string): string {
+  const match = line.match(/[ \t]+$/);
+  if (!match) return line;
+  const head = line.slice(0, line.length - match[0].length);
+  const escaped = Array.from(match[0])
+    .map((c) => (c === " " ? "=20" : "=09"))
+    .join("");
+  return head + escaped;
 }
