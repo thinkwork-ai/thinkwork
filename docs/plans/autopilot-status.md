@@ -1561,7 +1561,7 @@ None.
 | U15 Retire customize skill GraphQL surface      | `codex/pi-skill-catalog-u15-retire-customize-skills` | [#1663](https://github.com/thinkwork-ai/thinkwork/pull/1663) | Merged | Squash merged as `d72a5883`; remote and local branch removed. Removed the deprecated `skillCatalog`, `installSkill`, `uninstallSkill`, and `enableSkill` GraphQL fields/resolvers, retiring old CLI skill verbs while keeping `skill push`. |
 | U16a Retire table consumers                     | `codex/pi-skill-catalog-u16a-retire-table-consumers` | [#1672](https://github.com/thinkwork-ai/thinkwork/pull/1672) | Merged | Squash merged as `ad451739`; remote and local branch removed. Removed remaining live consumers of `skill_catalog`/`tenant_skills`; main deploy `26374704891` passed before starting destructive U16.                                        |
 | U16 Drop retired DB tables                      | `codex/pi-skill-catalog-u16-drop-tables`             | [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676) | Merged | Squash merged as `92bcb825`; remote and local branch/worktree removed. Removed retired Drizzle schema exports and added hand-rolled drop migration; user authorized dev apply and scoped drift reports both retired tables dropped.         |
-| U17 Delete repo skill-catalog package           | `codex/pi-skill-catalog-u17-delete-package`          | Pending                                                      | Active | Deletes `packages/skill-catalog`, retires local catalog-seed/bundle/bootstrap paths, and keeps the tenant S3 skill catalog as source of truth. Both active dev tenants have 19 S3 catalog skill folders.                                    |
+| U17 Delete repo skill-catalog package           | `codex/pi-skill-catalog-u17-delete-package`          | [#1681](https://github.com/thinkwork-ai/thinkwork/pull/1681) | In CI  | Deletes `packages/skill-catalog`, retires local catalog-seed/bundle/bootstrap paths, and keeps the tenant S3 skill catalog as source of truth. Both active dev tenants have 19 S3 catalog skill folders.                                    |
 
 ## Verification Log
 
@@ -1737,6 +1737,7 @@ None.
 - [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676) CI failed `Migration Drift Precheck (dev)` because `public.tenant_skills` and `public.skill_catalog` are still present in dev. The PR intentionally has not manually applied the destructive drop migration.
 - User authorized running the destructive dev migration; applied it and verified the scoped drift reporter reports both drop markers as `DROPPED`.
 - Squash merged [#1676](https://github.com/thinkwork-ai/thinkwork/pull/1676) as `92bcb825c9c2b24d00c62905a0fb6d2d2156b8c5`; remote branch was deleted and the local branch/worktree were removed.
+- Opened [#1681](https://github.com/thinkwork-ai/thinkwork/pull/1681).
 
 ## Blockers
 
