@@ -1,8 +1,10 @@
-# Linked tasks are ThinkWork-side mirrors of checklist work whose system of
-# record remains an external task provider such as LastMile Tasks.
+# Linked tasks are ThinkWork-side checklist rows. They can mirror an external
+# task provider such as LastMile Tasks, or represent ThinkWork-owned native
+# checklist work.
 
 enum LinkedTaskProvider {
   LASTMILE
+  THINKWORK
 }
 
 enum LinkedTaskStatus {
@@ -12,6 +14,7 @@ enum LinkedTaskStatus {
   COMPLETED
   BLOCKED
   CANCELLED
+  NOT_APPLICABLE
 }
 
 enum LinkedTaskSyncStatus {
@@ -23,6 +26,7 @@ enum LinkedTaskSyncStatus {
 
 enum LinkedTaskEventType {
   CREATED
+  STATUS_CHANGED
   COMPLETED
   BLOCKED
   REASSIGNED
@@ -72,6 +76,19 @@ type LinkedTaskEvent {
   createdAt: AWSDateTime!
 }
 
+input UpdateLinkedTaskInput {
+  tenantId: ID!
+  threadId: ID!
+  linkedTaskId: ID!
+  status: LinkedTaskStatus!
+  note: String
+  metadata: AWSJSON
+}
+
 extend type Query {
   threadLinkedTasks(tenantId: ID!, threadId: ID!): [LinkedTask!]!
+}
+
+extend type Mutation {
+  updateLinkedTask(input: UpdateLinkedTaskInput!): LinkedTask!
 }

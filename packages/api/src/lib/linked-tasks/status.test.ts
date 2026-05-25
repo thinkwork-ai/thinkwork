@@ -40,11 +40,30 @@ describe("linked task status helpers", () => {
     });
   });
 
+  it("normalizes not-applicable checklist statuses", () => {
+    expect(normalizeExternalTaskStatus("not applicable")).toEqual({
+      status: "not_applicable",
+      blocked: false,
+      syncStatus: "synced",
+    });
+    expect(normalizeExternalTaskStatus("n/a")).toEqual({
+      status: "not_applicable",
+      blocked: false,
+      syncStatus: "synced",
+    });
+  });
+
   it("only requires required tasks for completion detection", () => {
     expect(
       requiredTasksComplete([
         { required: true, status: "completed" },
-        { required: false, status: "todo" },
+        { required: false, status: "not_applicable" },
+      ]),
+    ).toBe(true);
+    expect(
+      requiredTasksComplete([
+        { required: true, status: "completed" },
+        { required: true, status: "not_applicable" },
       ]),
     ).toBe(true);
     expect(
@@ -63,7 +82,8 @@ describe("linked task status helpers", () => {
       countRequiredTasks([
         { required: true, status: "completed" },
         { required: true, status: "todo" },
-        { required: false, status: "completed" },
+        { required: false, status: "not_applicable" },
+        { required: true, status: "not_applicable" },
       ]),
     ).toEqual({ required: 2, completed: 1 });
   });

@@ -1,9 +1,9 @@
 /**
  * Linked task mirror tables.
  *
- * ThinkWork mirrors the checklist/task state needed for collaborative Threads,
- * while external task providers such as LastMile Tasks remain the source of
- * truth for task ownership and workflow updates.
+ * ThinkWork mirrors checklist/task state needed for collaborative Threads.
+ * Rows can mirror external task providers such as LastMile Tasks, or represent
+ * ThinkWork-owned native checklist items for Space workflows.
  */
 
 import {
@@ -74,11 +74,11 @@ export const linkedTasks = pgTable(
     index("idx_linked_tasks_space").on(table.tenant_id, table.space_id),
     check(
       "linked_tasks_provider_allowed",
-      sql`${table.provider} IN ('lastmile')`,
+      sql`${table.provider} IN ('lastmile','thinkwork')`,
     ),
     check(
       "linked_tasks_status_allowed",
-      sql`${table.status} IN ('unknown','todo','in_progress','completed','blocked','cancelled')`,
+      sql`${table.status} IN ('unknown','todo','in_progress','completed','blocked','cancelled','not_applicable')`,
     ),
     check(
       "linked_tasks_sync_status_allowed",
@@ -127,19 +127,19 @@ export const linkedTaskEvents = pgTable(
     index("idx_linked_task_events_thread").on(table.tenant_id, table.thread_id),
     check(
       "linked_task_events_provider_allowed",
-      sql`${table.provider} IN ('lastmile')`,
+      sql`${table.provider} IN ('lastmile','thinkwork')`,
     ),
     check(
       "linked_task_events_type_allowed",
-      sql`${table.event_type} IN ('created','completed','blocked','reassigned','due_date_changed','sync_failed','writeback_posted')`,
+      sql`${table.event_type} IN ('created','status_changed','completed','blocked','reassigned','due_date_changed','sync_failed','writeback_posted')`,
     ),
     check(
       "linked_task_events_previous_status_allowed",
-      sql`${table.previous_status} IS NULL OR ${table.previous_status} IN ('unknown','todo','in_progress','completed','blocked','cancelled')`,
+      sql`${table.previous_status} IS NULL OR ${table.previous_status} IN ('unknown','todo','in_progress','completed','blocked','cancelled','not_applicable')`,
     ),
     check(
       "linked_task_events_new_status_allowed",
-      sql`${table.new_status} IS NULL OR ${table.new_status} IN ('unknown','todo','in_progress','completed','blocked','cancelled')`,
+      sql`${table.new_status} IS NULL OR ${table.new_status} IN ('unknown','todo','in_progress','completed','blocked','cancelled','not_applicable')`,
     ),
   ],
 );

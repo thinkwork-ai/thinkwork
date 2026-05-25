@@ -12,6 +12,10 @@ const migration0107 = readFileSync(
   join(HERE, "..", "drizzle", "0107_linked_task_mirror.sql"),
   "utf-8",
 );
+const migration0135 = readFileSync(
+  join(HERE, "..", "drizzle", "0135_native_checklist_linked_tasks.sql"),
+  "utf-8",
+);
 
 describe("Linked task mirror schema", () => {
   it("models the current external task mirror state for a Space Thread", () => {
@@ -73,5 +77,30 @@ describe("Linked task mirror schema", () => {
     expect(migration0107).toMatch(
       /CHECK \(new_status IS NULL OR new_status IN \('unknown', 'todo', 'in_progress', 'completed', 'blocked', 'cancelled'\)\)/,
     );
+  });
+
+  it("allows ThinkWork-native checklist rows and not-applicable statuses", () => {
+    for (const source of [
+      migration0135,
+      readFileSync(
+        join(HERE, "..", "src", "schema", "linked-tasks.ts"),
+        "utf-8",
+      ),
+    ]) {
+      expect(source).toContain("'thinkwork'");
+      expect(source).toContain("'not_applicable'");
+      expect(source).toContain("'status_changed'");
+    }
+
+    for (const marker of [
+      "creates-constraint: public.linked_tasks.linked_tasks_provider_allowed",
+      "creates-constraint: public.linked_tasks.linked_tasks_status_allowed",
+      "creates-constraint: public.linked_task_events.linked_task_events_provider_allowed",
+      "creates-constraint: public.linked_task_events.linked_task_events_type_allowed",
+      "creates-constraint: public.linked_task_events.linked_task_events_previous_status_allowed",
+      "creates-constraint: public.linked_task_events.linked_task_events_new_status_allowed",
+    ]) {
+      expect(migration0135).toContain(`-- ${marker}`);
+    }
   });
 });
