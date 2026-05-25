@@ -109,6 +109,9 @@ You have access to Company Brain, the platform context layer:
   `hindsight_reflect()` when you need Hindsight-only retrieval or synthesis. Do
   not manually retain or journal turns; see `MEMORY_GUIDE.md` for the memory
   contract.
+- **Requester profile** — `USER.md` is already in your current prompt when a
+  requester is known. Use it directly for profile, preference, and family facts;
+  do not call memory or Hindsight tools to re-fetch facts already present there.
 - **Workspace notes** (memory/ folder) — Use workspace file tools for structured
   working notes, contact lists, and procedural knowledge. Only write to files
   under memory/. Do not modify other workspace files.

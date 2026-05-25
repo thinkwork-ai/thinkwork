@@ -46,6 +46,7 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Hash,
   Lock,
   MoreHorizontal,
   SlidersHorizontal,
@@ -120,6 +121,20 @@ function userDisplayName(thread: {
     thread.user?.name ||
     thread.user?.email ||
     (thread.userId ? "Unknown User" : "User")
+  );
+}
+
+function spaceDisplayName(thread: {
+  readonly spaceId?: string | null;
+  readonly space?: {
+    readonly name?: string | null;
+    readonly slug?: string | null;
+  } | null;
+}): string {
+  return (
+    thread.space?.name ||
+    thread.space?.slug ||
+    (thread.spaceId ? "Unknown Space" : "—")
   );
 }
 
@@ -690,8 +705,14 @@ interface ThreadPropertiesProps {
     readonly assigneeType?: string | null;
     readonly assigneeId?: string | null;
     readonly computerId?: string | null;
+    readonly spaceId?: string | null;
     readonly userId?: string | null;
     readonly computer?: {
+      readonly id: string;
+      readonly name?: string | null;
+      readonly slug?: string | null;
+    } | null;
+    readonly space?: {
       readonly id: string;
       readonly name?: string | null;
       readonly slug?: string | null;
@@ -775,6 +796,21 @@ function ThreadProperties({
 
       <PropRow label="Trigger">
         <span className="text-xs">{triggerLabel(thread.channel)}</span>
+      </PropRow>
+
+      <PropRow label="Space">
+        {thread.spaceId || thread.space ? (
+          <Badge
+            variant="outline"
+            className="max-w-40 gap-1 px-1.5 text-xs font-normal text-muted-foreground"
+            title={`Space: ${spaceDisplayName(thread)}`}
+          >
+            <Hash className="h-3 w-3 shrink-0" />
+            <span className="truncate">{spaceDisplayName(thread)}</span>
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </PropRow>
 
       <PropRow label="System prompt">

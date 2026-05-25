@@ -16,10 +16,17 @@ do not journal turns yourself.
   memories. Use for "brief me on X" / "summarize the history of Y"
   prompts, after `recall()`.
 
+Before any memory lookup, check the current prompt and workspace files you
+already have, especially `USER.md` for the requester's profile and family
+facts. If the answer is present there, answer directly and do not call
+`recall()`, `hindsight_recall()`, or `hindsight_reflect()`.
+
 ## Don't
 
 - Don't call `remember()`, `retain()`, or `hindsight_retain()` on every
   turn. Auto-retention already captures the conversation.
+- Don't call memory tools to re-fetch profile, preference, or family facts
+  already present in `USER.md`.
 - Don't copy recall results into workspace files as a permanent store.
 - Don't treat recalled facts as higher priority than the current user
   message or guardrails.

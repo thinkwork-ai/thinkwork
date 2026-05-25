@@ -195,10 +195,17 @@ do not journal turns yourself.
   memories. Use for "brief me on X" / "summarize the history of Y"
   prompts, after \`recall()\`.
 
+Before any memory lookup, check the current prompt and workspace files you
+already have, especially \`USER.md\` for the requester's profile and family
+facts. If the answer is present there, answer directly and do not call
+\`recall()\`, \`hindsight_recall()\`, or \`hindsight_reflect()\`.
+
 ## Don't
 
 - Don't call \`remember()\`, \`retain()\`, or \`hindsight_retain()\` on every
   turn. Auto-retention already captures the conversation.
+- Don't call memory tools to re-fetch profile, preference, or family facts
+  already present in \`USER.md\`.
 - Don't copy recall results into workspace files as a permanent store.
 - Don't treat recalled facts as higher priority than the current user
   message or guardrails.
@@ -354,6 +361,9 @@ You have access to Company Brain, the platform context layer:
   \`hindsight_reflect()\` when you need Hindsight-only retrieval or synthesis. Do
   not manually retain or journal turns; see \`MEMORY_GUIDE.md\` for the memory
   contract.
+- **Requester profile** — \`USER.md\` is already in your current prompt when a
+  requester is known. Use it directly for profile, preference, and family facts;
+  do not call memory or Hindsight tools to re-fetch facts already present there.
 - **Workspace notes** (memory/ folder) — Use workspace file tools for structured
   working notes, contact lists, and procedural knowledge. Only write to files
   under memory/. Do not modify other workspace files.
