@@ -34,7 +34,9 @@ afterEach(() => {
 
 const VALID_INTERPRETER_ID = "thinkwork_dev_0015953e_pub-5rETNEk2Vt";
 
-function payload(overrides: Partial<PiInvocationPayload> = {}): PiInvocationPayload {
+function payload(
+  overrides: Partial<PiInvocationPayload> = {},
+): PiInvocationPayload {
   return {
     sandbox_interpreter_id: VALID_INTERPRETER_ID,
     ...overrides,
@@ -98,7 +100,9 @@ describe("resolveSandboxFactory — fail-closed validation (contract violation u
   it("throws when sandbox_interpreter_id is an empty string", () => {
     const client = new BedrockAgentCoreClient({ region: "us-east-1" });
     expect(() =>
-      resolveSandboxFactory(payload({ sandbox_interpreter_id: "" }), { client }),
+      resolveSandboxFactory(payload({ sandbox_interpreter_id: "" }), {
+        client,
+      }),
     ).toThrow(SandboxFactoryError);
   });
 
@@ -143,10 +147,9 @@ describe("SandboxFactoryError", () => {
   it("error message references sandbox-preflight (the upstream contract)", () => {
     const client = new BedrockAgentCoreClient({ region: "us-east-1" });
     try {
-      resolveSandboxFactory(
-        payload({ sandbox_interpreter_id: "" }),
-        { client },
-      );
+      resolveSandboxFactory(payload({ sandbox_interpreter_id: "" }), {
+        client,
+      });
       throw new Error("should have thrown");
     } catch (err) {
       expect(err).toBeInstanceOf(SandboxFactoryError);

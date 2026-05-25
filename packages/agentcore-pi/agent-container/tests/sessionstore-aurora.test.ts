@@ -23,8 +23,10 @@ const TENANT_B = "22222222-2222-2222-2222-222222222222";
 const AGENT_X = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const AGENT_Y = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const THREAD_S = "33333333-3333-3333-3333-333333333333";
-const CLUSTER_ARN = "arn:aws:rds:us-east-1:000000000000:cluster:thinkwork-test-db";
-const SECRET_ARN = "arn:aws:secretsmanager:us-east-1:000000000000:secret:thinkwork-test-db";
+const CLUSTER_ARN =
+  "arn:aws:rds:us-east-1:000000000000:cluster:thinkwork-test-db";
+const SECRET_ARN =
+  "arn:aws:secretsmanager:us-east-1:000000000000:secret:thinkwork-test-db";
 
 function sampleData(overrides: Partial<SessionData> = {}): SessionData {
   return {
@@ -60,14 +62,18 @@ describe("AuroraSessionStore.save → load (happy path)", () => {
 
     RDS.on(ExecuteStatementCommand).callsFake((input) => {
       const sql = (input as { sql?: string }).sql ?? "";
-      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+      const params = ((input as { parameters?: unknown[] }).parameters ??
+        []) as Array<{
         name?: string;
         value?: { stringValue?: string };
       }>;
       const get = (name: string) =>
         params.find((p) => p.name === name)?.value?.stringValue ?? null;
 
-      if (sql.startsWith("UPDATE threads") && sql.includes("SET session_data")) {
+      if (
+        sql.startsWith("UPDATE threads") &&
+        sql.includes("SET session_data")
+      ) {
         const data = JSON.parse(get("session_data") ?? "null") as SessionData;
         stored.push(data);
         return { numberOfRecordsUpdated: 1 };
@@ -101,7 +107,8 @@ describe("AuroraSessionStore.save → load (happy path)", () => {
     const updates: SessionData[] = [];
     RDS.on(ExecuteStatementCommand).callsFake((input) => {
       const sql = (input as { sql?: string }).sql ?? "";
-      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+      const params = ((input as { parameters?: unknown[] }).parameters ??
+        []) as Array<{
         name?: string;
         value?: { stringValue?: string };
       }>;
@@ -114,7 +121,9 @@ describe("AuroraSessionStore.save → load (happy path)", () => {
       if (sql.startsWith("SELECT session_data")) {
         const last = updates[updates.length - 1];
         return {
-          records: last ? [[{ stringValue: JSON.stringify(last) }]] : [[{ isNull: true }]],
+          records: last
+            ? [[{ stringValue: JSON.stringify(last) }]]
+            : [[{ isNull: true }]],
         };
       }
       throw new Error(`unmocked SQL: ${sql}`);
@@ -129,7 +138,13 @@ describe("AuroraSessionStore.save → load (happy path)", () => {
 
     const first = sampleData({
       entries: [
-        { type: "message", id: "e1", parentId: null, timestamp: "t1", message: { role: "user", content: "first" } as never },
+        {
+          type: "message",
+          id: "e1",
+          parentId: null,
+          timestamp: "t1",
+          message: { role: "user", content: "first" } as never,
+        },
       ],
       leafId: "e1",
     });
@@ -139,8 +154,20 @@ describe("AuroraSessionStore.save → load (happy path)", () => {
       ...first,
       entries: [
         ...first.entries,
-        { type: "message", id: "e2", parentId: "e1", timestamp: "t2", message: { role: "assistant", content: "ack" } as never },
-        { type: "message", id: "e3", parentId: "e2", timestamp: "t3", message: { role: "user", content: "third" } as never },
+        {
+          type: "message",
+          id: "e2",
+          parentId: "e1",
+          timestamp: "t2",
+          message: { role: "assistant", content: "ack" } as never,
+        },
+        {
+          type: "message",
+          id: "e3",
+          parentId: "e2",
+          timestamp: "t3",
+          message: { role: "user", content: "third" } as never,
+        },
       ],
       leafId: "e3",
       updatedAt: "t3",
@@ -207,7 +234,7 @@ describe("AuroraSessionStore — fail-closed missing tenantId", () => {
       () =>
         new AuroraSessionStore({
           tenantId: TENANT_A,
-      agentId: AGENT_X,
+          agentId: AGENT_X,
           clusterArn: "",
           secretArn: SECRET_ARN,
         }),
@@ -219,7 +246,7 @@ describe("AuroraSessionStore — fail-closed missing tenantId", () => {
       () =>
         new AuroraSessionStore({
           tenantId: TENANT_A,
-      agentId: AGENT_X,
+          agentId: AGENT_X,
           clusterArn: CLUSTER_ARN,
           secretArn: "",
         }),
@@ -234,7 +261,8 @@ describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
     // `tenant_id = TENANT_A`, which filters out TENANT_B's row.
     RDS.on(ExecuteStatementCommand).callsFake((input) => {
       const sql = (input as { sql?: string }).sql ?? "";
-      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+      const params = ((input as { parameters?: unknown[] }).parameters ??
+        []) as Array<{
         name?: string;
         value?: { stringValue?: string };
       }>;
@@ -245,7 +273,13 @@ describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
         if (tenantId === TENANT_B) {
           return {
             records: [
-              [{ stringValue: JSON.stringify(sampleData({ leafId: "tenantB-leaf" })) }],
+              [
+                {
+                  stringValue: JSON.stringify(
+                    sampleData({ leafId: "tenantB-leaf" }),
+                  ),
+                },
+              ],
             ],
           };
         }
@@ -276,10 +310,14 @@ describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
   });
 
   it("save() includes tenant_id in the WHERE predicate so cross-tenant writes are no-ops", async () => {
-    let lastUpdate: { tenant_id: string | null; thread_id: string | null } | null = null;
+    let lastUpdate: {
+      tenant_id: string | null;
+      thread_id: string | null;
+    } | null = null;
     RDS.on(ExecuteStatementCommand).callsFake((input) => {
       const sql = (input as { sql?: string }).sql ?? "";
-      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+      const params = ((input as { parameters?: unknown[] }).parameters ??
+        []) as Array<{
         name?: string;
         value?: { stringValue?: string };
       }>;
@@ -307,8 +345,13 @@ describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
 
     // Save attempt from TENANT_A's store — UPDATE matches zero rows
     // (the row is owned by TENANT_B in this fixture), so save() throws.
-    await expect(storeA.save(THREAD_S, sampleData())).rejects.toThrow(/no thread/i);
-    expect(lastUpdate).toMatchObject({ tenant_id: TENANT_A, thread_id: THREAD_S });
+    await expect(storeA.save(THREAD_S, sampleData())).rejects.toThrow(
+      /no thread/i,
+    );
+    expect(lastUpdate).toMatchObject({
+      tenant_id: TENANT_A,
+      thread_id: THREAD_S,
+    });
   });
 });
 
@@ -320,7 +363,8 @@ describe("AuroraSessionStore — agent reassignment isolation (adv-001)", () => 
     // the row.
     RDS.on(ExecuteStatementCommand).callsFake((input) => {
       const sql = (input as { sql?: string }).sql ?? "";
-      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+      const params = ((input as { parameters?: unknown[] }).parameters ??
+        []) as Array<{
         name?: string;
         value?: { stringValue?: string };
       }>;
@@ -330,7 +374,13 @@ describe("AuroraSessionStore — agent reassignment isolation (adv-001)", () => 
         if (get("agent_id") === AGENT_Y) {
           return {
             records: [
-              [{ stringValue: JSON.stringify(sampleData({ leafId: "agentY-leaf" })) }],
+              [
+                {
+                  stringValue: JSON.stringify(
+                    sampleData({ leafId: "agentY-leaf" }),
+                  ),
+                },
+              ],
             ],
           };
         }
@@ -358,10 +408,15 @@ describe("AuroraSessionStore — agent reassignment isolation (adv-001)", () => 
   });
 
   it("save() throws when the thread has been reassigned to a different agent mid-flight", async () => {
-    let lastUpdate: { tenant_id: string | null; agent_id: string | null; thread_id: string | null } | null = null;
+    let lastUpdate: {
+      tenant_id: string | null;
+      agent_id: string | null;
+      thread_id: string | null;
+    } | null = null;
     RDS.on(ExecuteStatementCommand).callsFake((input) => {
       const sql = (input as { sql?: string }).sql ?? "";
-      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+      const params = ((input as { parameters?: unknown[] }).parameters ??
+        []) as Array<{
         name?: string;
         value?: { stringValue?: string };
       }>;
@@ -386,7 +441,9 @@ describe("AuroraSessionStore — agent reassignment isolation (adv-001)", () => 
       secretArn: SECRET_ARN,
     });
 
-    await expect(storeX.save(THREAD_S, sampleData())).rejects.toThrow(/different agent/i);
+    await expect(storeX.save(THREAD_S, sampleData())).rejects.toThrow(
+      /different agent/i,
+    );
     expect(lastUpdate).toMatchObject({
       tenant_id: TENANT_A,
       agent_id: AGENT_X,
@@ -471,7 +528,8 @@ describe("AuroraSessionStore.delete", () => {
     let lastTenantParam: string | null = null;
     RDS.on(ExecuteStatementCommand).callsFake((input) => {
       lastSql = (input as { sql?: string }).sql ?? "";
-      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+      const params = ((input as { parameters?: unknown[] }).parameters ??
+        []) as Array<{
         name?: string;
         value?: { stringValue?: string };
       }>;
@@ -491,14 +549,18 @@ describe("AuroraSessionStore.delete", () => {
     // A future refactor that drops the predicate would erase another
     // tenant's session_data — this assertion locks the predicate in
     // place even if the surrounding SQL changes.
-    expect(lastSql).toMatch(/WHERE\s+id\s*=\s*CAST\(:thread_id\s+AS\s+uuid\)\s+AND\s+tenant_id\s*=\s*CAST\(:tenant_id\s+AS\s+uuid\)/);
+    expect(lastSql).toMatch(
+      /WHERE\s+id\s*=\s*CAST\(:thread_id\s+AS\s+uuid\)\s+AND\s+tenant_id\s*=\s*CAST\(:tenant_id\s+AS\s+uuid\)/,
+    );
     expect(lastTenantParam).toBe(TENANT_A);
   });
 });
 
 describe("AuroraSessionStore — error path", () => {
   it("surfaces RDS Data API errors as a typed Aurora session error", async () => {
-    RDS.on(ExecuteStatementCommand).rejects(new Error("BadRequestException: cluster paused"));
+    RDS.on(ExecuteStatementCommand).rejects(
+      new Error("BadRequestException: cluster paused"),
+    );
 
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,

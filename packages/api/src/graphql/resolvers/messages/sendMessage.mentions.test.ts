@@ -25,8 +25,6 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("dispatchDefaultAgentTurn");
     expect(source).toContain("parsedMentions.length === 0");
     expect(source).toContain("hasAgentMentions");
-    expect(source).toContain("thread.computer_id &&");
-    expect(source).toContain("parsedMentions.length === 0");
   });
 
   it("publishes user messages to collaborative thread subscribers", () => {
@@ -36,13 +34,8 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("senderId");
   });
 
-  it("checks thread visibility while preserving legacy Computer thread claiming", () => {
+  it("checks thread visibility against the caller's participation", () => {
     expect(source).toContain("callerVisibleThreadPredicate");
-    expect(source).toContain("isClaimingLegacyComputerThread");
-    expect(source).toContain("!isClaimingLegacyComputerThread");
-    expect(source.indexOf("await resolveThreadComputer")).toBeLessThan(
-      source.indexOf("const isClaimingLegacyComputerThread"),
-    );
   });
 
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
@@ -52,15 +45,11 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("Agent sender is not available in this tenant");
   });
 
-  it("refreshes activity for non-Computer Space collaboration user messages", () => {
+  it("refreshes activity for Space collaboration user messages", () => {
     expect(source).toContain("const messageActivityAt = new Date()");
     expect(source).toContain("created_at: messageActivityAt");
     expect(source).toContain("readAt: messageActivityAt");
     expect(source).toContain("updated_at: messageActivityAt");
-    expect(source).toContain("!isUserMessage || !thread.computer_id");
-    expect(source).toContain(
-      "collaboration without a Computer needs human messages",
-    );
     expect(source).toContain("notifyThreadUpdate");
   });
 });

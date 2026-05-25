@@ -29,7 +29,9 @@ export interface ResolveTenantOptions {
    * the already-configured client; kept as a callback so this helper stays
    * decoupled from the gql client factory.
    */
-  listTenants?: () => Promise<Array<{ id: string; slug: string; name: string }>>;
+  listTenants?: () => Promise<
+    Array<{ id: string; slug: string; name: string }>
+  >;
 }
 
 export interface ResolvedTenant {
@@ -38,7 +40,9 @@ export interface ResolvedTenant {
   id?: string;
 }
 
-export async function resolveTenant(opts: ResolveTenantOptions): Promise<ResolvedTenant> {
+export async function resolveTenant(
+  opts: ResolveTenantOptions,
+): Promise<ResolvedTenant> {
   // 1. Flag, 2. env — no network required.
   const override = opts.flag ?? process.env.THINKWORK_TENANT;
   if (override) {
@@ -96,5 +100,9 @@ function cacheTenant(
 ): void {
   const session = loadStageSession(stage);
   if (!session) return;
-  saveStageSession(stage, { ...session, tenantId: tenant.id, tenantSlug: tenant.slug });
+  saveStageSession(stage, {
+    ...session,
+    tenantId: tenant.id,
+    tenantSlug: tenant.slug,
+  });
 }

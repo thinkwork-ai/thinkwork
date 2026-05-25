@@ -35,13 +35,13 @@ export type PlanId = "open" | "business" | "enterprise";
 export type PlanCtaKind = "oss" | "stripe" | "sales";
 
 export interface Plan {
-	readonly id: PlanId;
-	readonly name: string;
-	readonly tagline: string;
-	readonly summary: string;
-	readonly features: readonly string[];
-	readonly cta: string;
-	readonly ctaHref?: string;
-	readonly kind: PlanCtaKind;
-	readonly highlighted: boolean;
+  readonly id: PlanId;
+  readonly name: string;
+  readonly tagline: string;
+  readonly summary: string;
+  readonly features: readonly string[];
+  readonly cta: string;
+  readonly ctaHref?: string;
+  readonly kind: PlanCtaKind;
+  readonly highlighted: boolean;
 }

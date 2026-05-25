@@ -49,8 +49,7 @@ const textVariants = cva("", {
 });
 
 export interface TextProps
-  extends RNTextProps,
-    VariantProps<typeof textVariants> {
+  extends RNTextProps, VariantProps<typeof textVariants> {
   className?: string;
 }
 
@@ -58,69 +57,76 @@ const Text = React.forwardRef<RNText, TextProps>(
   ({ className, variant, size, weight, leading, ...props }, ref) => (
     <RNText
       ref={ref}
-      className={cn(textVariants({ variant, size, weight, leading }), className)}
+      className={cn(
+        textVariants({ variant, size, weight, leading }),
+        className,
+      )}
       {...props}
     />
-  )
+  ),
 );
 Text.displayName = "Text";
 
 // Card/Section Title - matches CardTitle from packages/admin
-const H1 = React.forwardRef<RNText, Omit<TextProps, "size" | "weight" | "leading">>(
-  ({ className, ...props }, ref) => (
-    <Text
-      ref={ref}
-      size="4xl"
-      weight="bold"
-      leading="tight"
-      className={cn("tracking-tight", className)}
-      {...props}
-    />
-  )
-);
+const H1 = React.forwardRef<
+  RNText,
+  Omit<TextProps, "size" | "weight" | "leading">
+>(({ className, ...props }, ref) => (
+  <Text
+    ref={ref}
+    size="4xl"
+    weight="bold"
+    leading="tight"
+    className={cn("tracking-tight", className)}
+    {...props}
+  />
+));
 H1.displayName = "H1";
 
-const H2 = React.forwardRef<RNText, Omit<TextProps, "size" | "weight" | "leading">>(
-  ({ className, ...props }, ref) => (
-    <Text
-      ref={ref}
-      size="3xl"
-      weight="semibold"
-      leading="tight"
-      className={cn("tracking-tight", className)}
-      {...props}
-    />
-  )
-);
+const H2 = React.forwardRef<
+  RNText,
+  Omit<TextProps, "size" | "weight" | "leading">
+>(({ className, ...props }, ref) => (
+  <Text
+    ref={ref}
+    size="3xl"
+    weight="semibold"
+    leading="tight"
+    className={cn("tracking-tight", className)}
+    {...props}
+  />
+));
 H2.displayName = "H2";
 
-const H3 = React.forwardRef<RNText, Omit<TextProps, "size" | "weight" | "leading">>(
-  ({ className, ...props }, ref) => (
-    <Text
-      ref={ref}
-      size="2xl"
-      weight="semibold"
-      leading="tight"
-      className={cn("tracking-tight", className)}
-      {...props}
-    />
-  )
-);
+const H3 = React.forwardRef<
+  RNText,
+  Omit<TextProps, "size" | "weight" | "leading">
+>(({ className, ...props }, ref) => (
+  <Text
+    ref={ref}
+    size="2xl"
+    weight="semibold"
+    leading="tight"
+    className={cn("tracking-tight", className)}
+    {...props}
+  />
+));
 H3.displayName = "H3";
 
 // Matches packages/admin's CardTitle styling
-const H4 = React.forwardRef<RNText, Omit<TextProps, "size" | "weight" | "leading">>(
-  ({ className, ...props }, ref) => (
-    <Text
-      ref={ref}
-      size="base"
-      weight="medium"
-      leading="snug"
-      className={className}
-      {...props}
-    />
-  )
-);
+const H4 = React.forwardRef<
+  RNText,
+  Omit<TextProps, "size" | "weight" | "leading">
+>(({ className, ...props }, ref) => (
+  <Text
+    ref={ref}
+    size="base"
+    weight="medium"
+    leading="snug"
+    className={className}
+    {...props}
+  />
+));
 H4.displayName = "H4";
 
 // Large muted text for descriptions
@@ -133,7 +139,7 @@ const Lead = React.forwardRef<RNText, Omit<TextProps, "size" | "variant">>(
       className={className}
       {...props}
     />
-  )
+  ),
 );
 Lead.displayName = "Lead";
 
@@ -147,23 +153,24 @@ const Muted = React.forwardRef<RNText, Omit<TextProps, "variant" | "size">>(
       className={className}
       {...props}
     />
-  )
+  ),
 );
 Muted.displayName = "Muted";
 
 // Small medium text
-const Small = React.forwardRef<RNText, Omit<TextProps, "size" | "weight" | "leading">>(
-  ({ className, ...props }, ref) => (
-    <Text
-      ref={ref}
-      size="sm"
-      weight="medium"
-      leading="none"
-      className={className}
-      {...props}
-    />
-  )
-);
+const Small = React.forwardRef<
+  RNText,
+  Omit<TextProps, "size" | "weight" | "leading">
+>(({ className, ...props }, ref) => (
+  <Text
+    ref={ref}
+    size="sm"
+    weight="medium"
+    leading="none"
+    className={className}
+    {...props}
+  />
+));
 Small.displayName = "Small";
 
 export { Text, textVariants, H1, H2, H3, H4, Lead, Muted, Small };

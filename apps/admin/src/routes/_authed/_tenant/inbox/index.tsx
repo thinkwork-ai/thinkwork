@@ -15,7 +15,11 @@ import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { InboxItemsListQuery } from "@/lib/graphql-queries";
-import { typeLabel, typeIcon, defaultTypeIcon } from "@/components/inbox/InboxItemPayload";
+import {
+  typeLabel,
+  typeIcon,
+  defaultTypeIcon,
+} from "@/components/inbox/InboxItemPayload";
 import { relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_tenant/inbox/")({
@@ -35,10 +39,18 @@ type InboxItemRow = {
 
 function statusIcon(status: string) {
   const s = status.toLowerCase();
-  if (s === "approved") return <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />;
-  if (s === "rejected") return <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />;
-  if (s === "revision_requested") return <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />;
-  if (s === "pending") return <Clock className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />;
+  if (s === "approved")
+    return (
+      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+    );
+  if (s === "rejected")
+    return <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />;
+  if (s === "revision_requested")
+    return <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />;
+  if (s === "pending")
+    return (
+      <Clock className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
+    );
   return null;
 }
 
@@ -78,11 +90,17 @@ function InboxPage() {
   );
 
   const pending = useMemo(
-    () => rows.filter((r) => r.status === "PENDING" || r.status === "REVISION_REQUESTED"),
+    () =>
+      rows.filter(
+        (r) => r.status === "PENDING" || r.status === "REVISION_REQUESTED",
+      ),
     [rows],
   );
   const resolved = useMemo(
-    () => rows.filter((r) => r.status !== "PENDING" && r.status !== "REVISION_REQUESTED"),
+    () =>
+      rows.filter(
+        (r) => r.status !== "PENDING" && r.status !== "REVISION_REQUESTED",
+      ),
     [rows],
   );
 
@@ -123,7 +141,9 @@ function InboxPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5">
           {statusIcon(row.original.status)}
-          <span className="text-xs capitalize">{statusLabel(row.original.status)}</span>
+          <span className="text-xs capitalize">
+            {statusLabel(row.original.status)}
+          </span>
         </div>
       ),
       size: 140,
@@ -167,11 +187,19 @@ function InboxPage() {
                 className="pl-9"
               />
             </div>
-            <ToggleGroup type="single" value={tab} onValueChange={(v) => v && setTab(v)} variant="outline">
+            <ToggleGroup
+              type="single"
+              value={tab}
+              onValueChange={(v) => v && setTab(v)}
+              variant="outline"
+            >
               <ToggleGroupItem value="pending" className="px-4">
                 Pending
                 {pending.length > 0 && (
-                  <Badge variant="secondary" className="ml-1.5 h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums bg-yellow-500/20 text-yellow-500">
+                  <Badge
+                    variant="secondary"
+                    className="ml-1.5 h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums bg-yellow-500/20 text-yellow-500"
+                  >
                     {pending.length}
                   </Badge>
                 )}
@@ -179,7 +207,10 @@ function InboxPage() {
               <ToggleGroupItem value="resolved" className="px-4">
                 Resolved
                 {resolved.length > 0 && (
-                  <Badge variant="secondary" className="ml-1.5 h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums">
+                  <Badge
+                    variant="secondary"
+                    className="ml-1.5 h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums"
+                  >
                     {resolved.length}
                   </Badge>
                 )}
@@ -189,7 +220,9 @@ function InboxPage() {
 
           {tab === "pending" ? (
             pending.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">No pending items.</p>
+              <p className="text-sm text-muted-foreground py-4">
+                No pending items.
+              </p>
             ) : (
               <DataTable
                 columns={columns}
@@ -197,22 +230,32 @@ function InboxPage() {
                 filterValue={search}
                 filterColumn="title"
                 scrollable
-                onRowClick={(row) => navigate({ to: "/inbox/$inboxItemId", params: { inboxItemId: row.id } })}
+                onRowClick={(row) =>
+                  navigate({
+                    to: "/inbox/$inboxItemId",
+                    params: { inboxItemId: row.id },
+                  })
+                }
               />
             )
+          ) : resolved.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              No resolved items.
+            </p>
           ) : (
-            resolved.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">No resolved items.</p>
-            ) : (
-              <DataTable
-                columns={columns}
-                data={resolved}
-                filterValue={search}
-                scrollable
-                filterColumn="title"
-                onRowClick={(row) => navigate({ to: "/inbox/$inboxItemId", params: { inboxItemId: row.id } })}
-              />
-            )
+            <DataTable
+              columns={columns}
+              data={resolved}
+              filterValue={search}
+              scrollable
+              filterColumn="title"
+              onRowClick={(row) =>
+                navigate({
+                  to: "/inbox/$inboxItemId",
+                  params: { inboxItemId: row.id },
+                })
+              }
+            />
           )}
         </div>
       )}

@@ -71,11 +71,14 @@ export default function SignUpScreen() {
 
       // Navigate to verification screen (pass credentials along)
       router.replace(
-        `/onboarding/verify-code?email=${encodeURIComponent(email.trim())}&password=${encodeURIComponent(password)}&name=${encodeURIComponent(name.trim())}&plan=${plan || "basic"}`
+        `/onboarding/verify-code?email=${encodeURIComponent(email.trim())}&password=${encodeURIComponent(password)}&name=${encodeURIComponent(name.trim())}&plan=${plan || "basic"}`,
       );
     } catch (err: unknown) {
       console.error("Sign up error:", err);
-      const message = err instanceof Error ? err.message : "Unable to create account. Please try again.";
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to create account. Please try again.";
       setError(message);
       setLoading(false);
     }
@@ -108,7 +111,9 @@ export default function SignUpScreen() {
                 />
               </View>
               <CardTitle>
-                <H2 className="tracking-wider uppercase text-center">Create Account</H2>
+                <H2 className="tracking-wider uppercase text-center">
+                  Create Account
+                </H2>
               </CardTitle>
               <CardDescription>
                 <Muted className="text-center">
@@ -190,7 +195,12 @@ export default function SignUpScreen() {
                 </View>
               )}
 
-              <Button onPress={handleSubmit} loading={loading} size="lg" className="mt-2">
+              <Button
+                onPress={handleSubmit}
+                loading={loading}
+                size="lg"
+                className="mt-2"
+              >
                 Continue
               </Button>
 

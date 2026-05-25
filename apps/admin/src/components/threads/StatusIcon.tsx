@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 
 // ---------------------------------------------------------------------------
@@ -19,7 +23,15 @@ const statusRingColor: Record<string, string> = {
 
 const defaultRingColor = "border-gray-400 text-gray-400";
 
-const allStatuses = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled", "blocked"];
+const allStatuses = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+  "cancelled",
+  "blocked",
+];
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -32,7 +44,12 @@ interface StatusIconProps {
   showLabel?: boolean;
 }
 
-export function StatusIcon({ status, onChange, className, showLabel }: StatusIconProps) {
+export function StatusIcon({
+  status,
+  onChange,
+  className,
+  showLabel,
+}: StatusIconProps) {
   const [open, setOpen] = useState(false);
   const colorClass = statusRingColor[status] ?? defaultRingColor;
   const isDone = status === "done";
@@ -81,7 +98,10 @@ export function StatusIcon({ status, onChange, className, showLabel }: StatusIco
             key={s}
             variant="ghost"
             size="sm"
-            className={cn("w-full justify-start gap-2 text-xs", s === status && "bg-accent")}
+            className={cn(
+              "w-full justify-start gap-2 text-xs",
+              s === status && "bg-accent",
+            )}
             onClick={() => {
               onChange(s);
               setOpen(false);

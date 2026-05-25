@@ -25,17 +25,13 @@ interface DataTableProps<T> {
   className?: string;
 }
 
-function TableHeaderCell({
-  column,
-}: {
-  column: Column<any>;
-}) {
+function TableHeaderCell({ column }: { column: Column<any> }) {
   return (
     <View
       className={cn(
         "h-10 justify-center px-3",
         column.align === "right" && "items-end",
-        column.align === "center" && "items-center"
+        column.align === "center" && "items-center",
       )}
       style={{
         flex: column.flex ?? 1,
@@ -62,14 +58,17 @@ function TableRow<T>({
   onPress?: () => void;
 }) {
   const content = (
-    <View className="flex-row items-center border-b border-neutral-200 dark:border-neutral-800" style={{ height: 45 }}>
+    <View
+      className="flex-row items-center border-b border-neutral-200 dark:border-neutral-800"
+      style={{ height: 45 }}
+    >
       {columns.map((col) => (
         <View
           key={col.key}
           className={cn(
             "justify-center px-3",
             col.align === "right" && "items-end",
-            col.align === "center" && "items-center"
+            col.align === "center" && "items-center",
           )}
           style={{
             flex: col.flex ?? 1,
@@ -112,7 +111,10 @@ function LoadingSkeleton() {
   return (
     <View className="p-4 gap-2">
       {[1, 2, 3].map((i) => (
-        <View key={i} className="h-10 rounded-md bg-neutral-200 dark:bg-neutral-800 animate-pulse" />
+        <View
+          key={i}
+          className="h-10 rounded-md bg-neutral-200 dark:bg-neutral-800 animate-pulse"
+        />
       ))}
     </View>
   );
@@ -137,12 +139,17 @@ export function DataTable<T>({
         onPress={onRowPress ? () => onRowPress(item, index) : undefined}
       />
     ),
-    [columns, onRowPress]
+    [columns, onRowPress],
   );
 
   if (isLoading) {
     return (
-      <View className={cn("rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden", className)}>
+      <View
+        className={cn(
+          "rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden",
+          className,
+        )}
+      >
         <LoadingSkeleton />
       </View>
     );
@@ -150,7 +157,12 @@ export function DataTable<T>({
 
   if (data.length === 0) {
     return (
-      <View className={cn("rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden", className)}>
+      <View
+        className={cn(
+          "rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden",
+          className,
+        )}
+      >
         <View className="py-12 items-center">
           <Muted>{emptyMessage}</Muted>
         </View>
@@ -159,11 +171,13 @@ export function DataTable<T>({
   }
 
   return (
-    <View className={cn(
-      "rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden",
-      "bg-white dark:bg-neutral-900",
-      className
-    )}>
+    <View
+      className={cn(
+        "rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden",
+        "bg-white dark:bg-neutral-900",
+        className,
+      )}
+    >
       {/* Header */}
       <View className="flex-row border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50">
         {columns.map((col) => (
@@ -211,7 +225,9 @@ export function SimpleTable<T extends Record<string, any>>({
     <DataTable
       data={data}
       columns={columns}
-      keyExtractor={(item, index) => (item as any)._id ?? (item as any).id ?? String(index)}
+      keyExtractor={(item, index) =>
+        (item as any)._id ?? (item as any).id ?? String(index)
+      }
       onRowPress={onRowPress}
       isLoading={isLoading}
       emptyMessage={emptyMessage}

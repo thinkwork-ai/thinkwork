@@ -61,12 +61,8 @@ describe("agent detail tools tabs", () => {
   });
 
   it("mounts the tool tabs under agent routes", () => {
-    expect(builtinToolsSource).toContain(
-      '"/_authed/_tenant/agent/tools"',
-    );
-    expect(mcpServersSource).toContain(
-      '"/_authed/_tenant/agent/mcp-servers"',
-    );
+    expect(builtinToolsSource).toContain('"/_authed/_tenant/agent/tools"');
+    expect(mcpServersSource).toContain('"/_authed/_tenant/agent/mcp-servers"');
     expect(builtinToolsSource).toContain("Agent access");
     expect(builtinToolsSource).toContain("tenant platform agent used by chat");
     expect(mcpServersSource).toContain(

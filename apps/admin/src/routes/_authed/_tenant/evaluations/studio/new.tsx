@@ -6,9 +6,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { EvalTestCaseForm } from "@/components/evaluations/EvalTestCaseForm";
 
-export const Route = createFileRoute("/_authed/_tenant/evaluations/studio/new")({
-  component: NewEvalTestCasePage,
-});
+export const Route = createFileRoute("/_authed/_tenant/evaluations/studio/new")(
+  {
+    component: NewEvalTestCasePage,
+  },
+);
 
 function NewEvalTestCasePage() {
   useBreadcrumbs([

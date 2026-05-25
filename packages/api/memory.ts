@@ -16,7 +16,12 @@ interface APIGatewayProxyResult {
   body: string;
 }
 
-type MemoryAction = "listSession" | "listAssistant" | "listByStrategy" | "delete" | "update";
+type MemoryAction =
+  | "listSession"
+  | "listAssistant"
+  | "listByStrategy"
+  | "delete"
+  | "update";
 
 type MemoryRequest = {
   action?: MemoryAction;
@@ -38,10 +43,15 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResult {
 function authToken(headers?: Record<string, string | undefined>) {
   const auth = headers?.authorization || headers?.Authorization;
   if (!auth) return null;
-  return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
+  return auth.startsWith("Bearer ")
+    ? auth.slice("Bearer ".length).trim()
+    : null;
 }
 
-async function queryHindsightDB(sqlText: string, params: any[]): Promise<any[]> {
+async function queryHindsightDB(
+  sqlText: string,
+  params: any[],
+): Promise<any[]> {
   const { getDb } = await import("@thinkwork/database-pg");
   const db = getDb();
   const { sql } = await import("drizzle-orm");
@@ -49,7 +59,9 @@ async function queryHindsightDB(sqlText: string, params: any[]): Promise<any[]> 
   return result.rows ?? [];
 }
 
-export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+export async function handler(
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> {
   const expectedSecret = process.env.API_AUTH_SECRET;
   const token = authToken(event.headers);
   if (!expectedSecret || !token || token !== expectedSecret) {
@@ -65,12 +77,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   const { action, assistantId } = body;
   if (!action || !assistantId) {
-    return json(400, { ok: false, error: "action and assistantId are required" });
+    return json(400, {
+      ok: false,
+      error: "action and assistantId are required",
+    });
   }
 
   try {
     // List memories for an agent (bank_id = assistantId/slug)
-    if (action === "listSession" || action === "listAssistant" || action === "listByStrategy") {
+    if (
+      action === "listSession" ||
+      action === "listAssistant" ||
+      action === "listByStrategy"
+    ) {
       const rows = await queryHindsightDB(
         `SELECT id, text, context, created_at, updated_at, metadata
          FROM hindsight.memory_units
@@ -93,7 +112,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (action === "delete") {
       if (!body.recordId) {
-        return json(400, { ok: false, error: "recordId is required for delete" });
+        return json(400, {
+          ok: false,
+          error: "recordId is required for delete",
+        });
       }
       await queryHindsightDB(
         `DELETE FROM hindsight.memory_units WHERE id = :id::uuid`,
@@ -104,7 +126,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (action === "update") {
       if (!body.recordId || body.content === undefined) {
-        return json(400, { ok: false, error: "recordId and content are required for update" });
+        return json(400, {
+          ok: false,
+          error: "recordId and content are required for update",
+        });
       }
       await queryHindsightDB(
         `UPDATE hindsight.memory_units SET text = :txt, updated_at = NOW() WHERE id = :id::uuid`,
@@ -119,6 +144,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return json(400, { ok: false, error: "Unsupported action" });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return json(500, { ok: false, error: `Memory operation failed: ${message}` });
+    return json(500, {
+      ok: false,
+      error: `Memory operation failed: ${message}`,
+    });
   }
 }

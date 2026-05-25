@@ -81,9 +81,7 @@ export function buildEnterpriseGitHubBootstrapPlan(options: {
   };
 }
 
-export class GhCliEnterpriseBootstrapClient
-  implements EnterpriseGitHubBootstrapClient
-{
+export class GhCliEnterpriseBootstrapClient implements EnterpriseGitHubBootstrapClient {
   constructor(private readonly repository: GitHubRepository) {}
 
   async ensureEnvironment(

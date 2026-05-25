@@ -53,7 +53,9 @@ describe("kb command registration", () => {
     const kb = program.commands.find((c) => c.name() === "kb")!;
     for (const name of ["attach", "detach"]) {
       const cmd = kb.commands.find((c) => c.name() === name)!;
-      expect(cmd.helpInformation(), `${name} carries --agent`).toMatch(/--agent/);
+      expect(cmd.helpInformation(), `${name} carries --agent`).toMatch(
+        /--agent/,
+      );
     }
   });
 

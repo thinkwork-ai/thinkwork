@@ -52,9 +52,6 @@ const TenantContext = createContext<TenantContextValue | null>(null);
 // ---------------------------------------------------------------------------
 
 const API_URL = import.meta.env.VITE_API_URL || "";
-const GRAPHQL_HTTP_URL =
-  import.meta.env.VITE_GRAPHQL_HTTP_URL || `${API_URL}/graphql`;
-const GRAPHQL_API_KEY = import.meta.env.VITE_GRAPHQL_API_KEY || "";
 
 /**
  * Tenant-discovery fallback for Google-federated users. Cognito JWTs from
@@ -72,38 +69,6 @@ async function discoverTenantViaAuthMe(): Promise<string | null> {
     return data.tenantId ?? null;
   } catch (err) {
     if (err instanceof NotReadyError) throw err;
-    return null;
-  }
-}
-
-/**
- * Legacy fallback for older deployments where `/api/auth/me` may not yet carry
- * tenant membership. This is intentionally secondary: no assigned Computer
- * should not mean no tenant now that Spaces/Agents are the primary model.
- */
-async function discoverTenantViaAssignedComputers(
-  token: string,
-): Promise<string | null> {
-  if (!GRAPHQL_HTTP_URL) return null;
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Authorization: token,
-    };
-    if (GRAPHQL_API_KEY) headers["x-api-key"] = GRAPHQL_API_KEY;
-    const res = await fetch(GRAPHQL_HTTP_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        query: `query { assignedComputers { id tenantId } }`,
-      }),
-    });
-    if (!res.ok) return null;
-    const body = (await res.json()) as {
-      data?: { assignedComputers?: { id?: string; tenantId?: string }[] };
-    };
-    return body.data?.assignedComputers?.[0]?.tenantId ?? null;
-  } catch {
     return null;
   }
 }
@@ -181,10 +146,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setTimeout(() => setAuthRetryTick((n) => n + 1), 100);
       return;
     }
-    let found = await discoverTenantViaAuthMe();
-    if (!found) {
-      found = await discoverTenantViaAssignedComputers(token);
-    }
+    const found = await discoverTenantViaAuthMe();
     if (found) {
       setDiscoveredTenantId(found);
       setNoTenantAssigned(false);

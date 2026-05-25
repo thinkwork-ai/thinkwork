@@ -6,13 +6,25 @@ const SHIMMER_WINDOW = 3;
 const CHAR_DURATION = 120;
 const TOTAL_STEPS = SHIMMER_TEXT.length + SHIMMER_WINDOW;
 
-function AnimatedChar({ char, index, step }: { char: string; index: number; step: Animated.Value }) {
+function AnimatedChar({
+  char,
+  index,
+  step,
+}: {
+  char: string;
+  index: number;
+  step: Animated.Value;
+}) {
   const color = step.interpolate({
     inputRange: [index, index + SHIMMER_WINDOW / 2, index + SHIMMER_WINDOW],
     outputRange: ["#6b7280", "#d1d5db", "#6b7280"],
     extrapolate: "clamp",
   });
-  return <Animated.Text style={{ color, fontSize: 14, lineHeight: 18 }}>{char}</Animated.Text>;
+  return (
+    <Animated.Text style={{ color, fontSize: 14, lineHeight: 18 }}>
+      {char}
+    </Animated.Text>
+  );
 }
 
 export function TypingIndicator({ inline }: { inline?: boolean }) {
@@ -42,9 +54,5 @@ export function TypingIndicator({ inline }: { inline?: boolean }) {
 
   if (inline) return content;
 
-  return (
-    <View className="mb-3 px-4 items-start">
-      {content}
-    </View>
-  );
+  return <View className="mb-3 px-4 items-start">{content}</View>;
 }

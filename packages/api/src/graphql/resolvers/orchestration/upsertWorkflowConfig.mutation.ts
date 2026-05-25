@@ -1,39 +1,44 @@
 import type { GraphQLContext } from "../../context.js";
-import {
-	db, sql,
-	workflowConfigToCamel,
-} from "../../utils.js";
+import { db, sql, workflowConfigToCamel } from "../../utils.js";
 
-export const upsertWorkflowConfig = async (_parent: any, args: any, ctx: GraphQLContext) => {
-	const i = args.input;
-	const values: Record<string, unknown> = {
-		tenant_id: args.tenantId,
-		team_id: i.teamId || null,
-		updated_at: new Date(),
-	};
-	const parseJsonField = (v: unknown) => {
-		if (v === null || v === undefined) return null;
-		if (typeof v === "object") return v;
-		if (typeof v === "string") return JSON.parse(v);
-		return v;
-	};
-	if (i.dispatch !== undefined) values.dispatch = parseJsonField(i.dispatch);
-	if (i.concurrency !== undefined) values.concurrency = parseJsonField(i.concurrency);
-	if (i.retry !== undefined) values.retry = parseJsonField(i.retry);
-	if (i.turnLoop !== undefined) values.turn_loop = parseJsonField(i.turnLoop);
-	if (i.workspace !== undefined) values.workspace = parseJsonField(i.workspace);
-	if (i.stallDetection !== undefined) values.stall_detection = parseJsonField(i.stallDetection);
-	if (i.orchestration !== undefined) values.orchestration = parseJsonField(i.orchestration);
-	if (i.sessionCompaction !== undefined) values.session_compaction = parseJsonField(i.sessionCompaction);
-	if (i.promptTemplate !== undefined) values.prompt_template = i.promptTemplate;
-	if (i.source !== undefined) values.source = i.source;
-	if (i.sourceRef !== undefined) values.source_ref = i.sourceRef;
+export const upsertWorkflowConfig = async (
+  _parent: any,
+  args: any,
+  ctx: GraphQLContext,
+) => {
+  const i = args.input;
+  const values: Record<string, unknown> = {
+    tenant_id: args.tenantId,
+    team_id: i.teamId || null,
+    updated_at: new Date(),
+  };
+  const parseJsonField = (v: unknown) => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "object") return v;
+    if (typeof v === "string") return JSON.parse(v);
+    return v;
+  };
+  if (i.dispatch !== undefined) values.dispatch = parseJsonField(i.dispatch);
+  if (i.concurrency !== undefined)
+    values.concurrency = parseJsonField(i.concurrency);
+  if (i.retry !== undefined) values.retry = parseJsonField(i.retry);
+  if (i.turnLoop !== undefined) values.turn_loop = parseJsonField(i.turnLoop);
+  if (i.workspace !== undefined) values.workspace = parseJsonField(i.workspace);
+  if (i.stallDetection !== undefined)
+    values.stall_detection = parseJsonField(i.stallDetection);
+  if (i.orchestration !== undefined)
+    values.orchestration = parseJsonField(i.orchestration);
+  if (i.sessionCompaction !== undefined)
+    values.session_compaction = parseJsonField(i.sessionCompaction);
+  if (i.promptTemplate !== undefined) values.prompt_template = i.promptTemplate;
+  if (i.source !== undefined) values.source = i.source;
+  if (i.sourceRef !== undefined) values.source_ref = i.sourceRef;
 
-	const teamId = i.teamId || null;
-	const onConflict = teamId
-		? sql`(tenant_id, team_id) WHERE team_id IS NOT NULL`
-		: sql`(tenant_id) WHERE team_id IS NULL`;
-	const result = await db.execute(sql`
+  const teamId = i.teamId || null;
+  const onConflict = teamId
+    ? sql`(tenant_id, team_id) WHERE team_id IS NOT NULL`
+    : sql`(tenant_id) WHERE team_id IS NULL`;
+  const result = await db.execute(sql`
 		INSERT INTO workflow_configs (tenant_id, team_id, dispatch, concurrency, retry, turn_loop, workspace, stall_detection, orchestration, session_compaction, prompt_template, source, source_ref)
 		VALUES (
 			${args.tenantId}::uuid,
@@ -67,7 +72,7 @@ export const upsertWorkflowConfig = async (_parent: any, args: any, ctx: GraphQL
 			updated_at = now()
 		RETURNING *
 	`);
-	const row = (result.rows || [])[0] as Record<string, unknown>;
-	if (!row) throw new Error("Failed to upsert workflow config");
-	return workflowConfigToCamel(row);
+  const row = (result.rows || [])[0] as Record<string, unknown>;
+  if (!row) throw new Error("Failed to upsert workflow config");
+  return workflowConfigToCamel(row);
 };

@@ -15,7 +15,11 @@
 
 export type WikiPageType = "ENTITY" | "TOPIC" | "DECISION";
 
-export const PAGE_TYPES: readonly WikiPageType[] = ["ENTITY", "TOPIC", "DECISION"];
+export const PAGE_TYPES: readonly WikiPageType[] = [
+  "ENTITY",
+  "TOPIC",
+  "DECISION",
+];
 
 export const PAGE_TYPE_LABELS: Record<WikiPageType, string> = {
   ENTITY: "Entity",

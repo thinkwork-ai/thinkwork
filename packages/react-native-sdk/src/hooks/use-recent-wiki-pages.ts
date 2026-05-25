@@ -28,7 +28,11 @@ type ServerResponse = {
  * Memories-tab's default feed so the user sees fresh pages before
  * they search. Paused until userId is present.
  */
-export function useRecentWikiPages({ userId, agentId, limit }: UseRecentWikiPagesArgs) {
+export function useRecentWikiPages({
+  userId,
+  agentId,
+  limit,
+}: UseRecentWikiPagesArgs) {
   const scopeUserId = userId ?? agentId;
   const [{ data, fetching, error }, refetch] = useQuery<ServerResponse>({
     query: RecentWikiPagesQuery,

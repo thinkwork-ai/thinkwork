@@ -27,17 +27,16 @@ export function getAwsIdentity(): AwsIdentity | null {
 
     // Region from env or AWS config
     let region =
-      process.env.AWS_REGION ||
-      process.env.AWS_DEFAULT_REGION ||
-      "unknown";
+      process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "unknown";
 
     if (region === "unknown") {
       try {
-        region = execSync("aws configure get region", {
-          encoding: "utf-8",
-          timeout: 5_000,
-          stdio: ["pipe", "pipe", "pipe"],
-        }).trim() || "unknown";
+        region =
+          execSync("aws configure get region", {
+            encoding: "utf-8",
+            timeout: 5_000,
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim() || "unknown";
       } catch {
         // No default region configured — that's fine
       }

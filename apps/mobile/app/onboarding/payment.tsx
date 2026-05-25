@@ -100,11 +100,7 @@ export default function PaymentScreen() {
           </CardHeader>
 
           <CardContent className="gap-4">
-            <View
-              className={
-                isWide ? "flex-row gap-4 items-stretch" : "gap-4"
-              }
-            >
+            <View className={isWide ? "flex-row gap-4 items-stretch" : "gap-4"}>
               {/*
                 The Open tier (`plan.kind === "oss"`) is intentionally
                 filtered out of the mobile pricing screen. The OSS path is
@@ -117,92 +113,91 @@ export default function PaymentScreen() {
                 tiers; users seeking the open Agent Harness are directed
                 to thinkwork.ai / GitHub on the web.
               */}
-              {plans.filter((plan) => plan.kind !== "oss").map((plan) => {
-                const isPending = pendingPlanId === plan.id;
-                const isDisabled =
-                  pendingPlanId !== null && pendingPlanId !== plan.id;
-                return (
-                  <Pressable
-                    key={plan.id}
-                    onPress={() => handlePlanPress(plan)}
-                    disabled={isDisabled || isPending}
-                    style={isWide ? { flex: 1 } : undefined}
-                  >
-                    <View
-                      className={`rounded-xl border-2 p-4 ${isWide ? "flex-1 " : ""}${
-                        plan.highlighted
-                          ? "border-primary bg-primary/5"
-                          : "border-neutral-200 dark:border-neutral-700"
-                      }${isDisabled ? " opacity-40" : ""}`}
+              {plans
+                .filter((plan) => plan.kind !== "oss")
+                .map((plan) => {
+                  const isPending = pendingPlanId === plan.id;
+                  const isDisabled =
+                    pendingPlanId !== null && pendingPlanId !== plan.id;
+                  return (
+                    <Pressable
+                      key={plan.id}
+                      onPress={() => handlePlanPress(plan)}
+                      disabled={isDisabled || isPending}
+                      style={isWide ? { flex: 1 } : undefined}
                     >
-                      <View className="flex-row items-center justify-between mb-3">
-                        <View className="flex-row items-center">
-                          <Text className="font-bold text-lg">
-                            {plan.name}
-                          </Text>
-                        </View>
-                        {plan.highlighted && (
-                          <View className="bg-primary px-3 py-1.5 rounded-full flex-row items-center gap-1">
-                            <Star size={12} color={colors.background} />
-                            <Text className="text-white text-xs font-semibold">
-                              RECOMMENDED
+                      <View
+                        className={`rounded-xl border-2 p-4 ${isWide ? "flex-1 " : ""}${
+                          plan.highlighted
+                            ? "border-primary bg-primary/5"
+                            : "border-neutral-200 dark:border-neutral-700"
+                        }${isDisabled ? " opacity-40" : ""}`}
+                      >
+                        <View className="flex-row items-center justify-between mb-3">
+                          <View className="flex-row items-center">
+                            <Text className="font-bold text-lg">
+                              {plan.name}
                             </Text>
                           </View>
-                        )}
-                      </View>
-
-                      <Text
-                        size="sm"
-                        variant="muted"
-                        className="font-semibold uppercase tracking-wider mb-3"
-                      >
-                        {plan.tagline}
-                      </Text>
-                      <Text size="sm" className="mb-4">
-                        {plan.summary}
-                      </Text>
-
-                      <View className="gap-2 mb-4">
-                        {plan.features.map((feature) => (
-                          <View
-                            key={feature}
-                            className="flex-row items-start"
-                          >
-                            <View style={{ minWidth: 16, marginTop: 2 }}>
-                              <CheckCircle
-                                size={16}
-                                color={colors.primary}
-                              />
+                          {plan.highlighted && (
+                            <View className="bg-primary px-3 py-1.5 rounded-full flex-row items-center gap-1">
+                              <Star size={12} color={colors.background} />
+                              <Text className="text-white text-xs font-semibold">
+                                RECOMMENDED
+                              </Text>
                             </View>
-                            <Text className="ml-2 text-sm flex-1">
-                              {feature}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
+                          )}
+                        </View>
 
-                      <Button
-                        size="default"
-                        variant={plan.highlighted ? "default" : "outline"}
-                        onPress={() => handlePlanPress(plan)}
-                        disabled={isDisabled || isPending}
-                      >
-                        {isPending ? (
-                          <View className="flex-row items-center gap-2">
-                            <ActivityIndicator
-                              size="small"
-                              color={colors.background}
-                            />
-                            <Text>Opening checkout…</Text>
-                          </View>
-                        ) : (
-                          <Text>{plan.cta}</Text>
-                        )}
-                      </Button>
-                    </View>
-                  </Pressable>
-                );
-              })}
+                        <Text
+                          size="sm"
+                          variant="muted"
+                          className="font-semibold uppercase tracking-wider mb-3"
+                        >
+                          {plan.tagline}
+                        </Text>
+                        <Text size="sm" className="mb-4">
+                          {plan.summary}
+                        </Text>
+
+                        <View className="gap-2 mb-4">
+                          {plan.features.map((feature) => (
+                            <View
+                              key={feature}
+                              className="flex-row items-start"
+                            >
+                              <View style={{ minWidth: 16, marginTop: 2 }}>
+                                <CheckCircle size={16} color={colors.primary} />
+                              </View>
+                              <Text className="ml-2 text-sm flex-1">
+                                {feature}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+
+                        <Button
+                          size="default"
+                          variant={plan.highlighted ? "default" : "outline"}
+                          onPress={() => handlePlanPress(plan)}
+                          disabled={isDisabled || isPending}
+                        >
+                          {isPending ? (
+                            <View className="flex-row items-center gap-2">
+                              <ActivityIndicator
+                                size="small"
+                                color={colors.background}
+                              />
+                              <Text>Opening checkout…</Text>
+                            </View>
+                          ) : (
+                            <Text>{plan.cta}</Text>
+                          )}
+                        </Button>
+                      </View>
+                    </Pressable>
+                  );
+                })}
             </View>
 
             {errorMessage && (
@@ -210,11 +205,7 @@ export default function PaymentScreen() {
                 <Text size="sm" className="text-red-300 text-center">
                   {errorMessage}
                 </Text>
-                <Text
-                  size="xs"
-                  variant="muted"
-                  className="text-center mt-1"
-                >
+                <Text size="xs" variant="muted" className="text-center mt-1">
                   Tap a plan to retry, or email hello@thinkwork.ai.
                 </Text>
               </View>
@@ -226,8 +217,8 @@ export default function PaymentScreen() {
                 variant="muted"
                 className="text-center leading-5 px-2 mt-2"
               >
-                Every plan deploys into your AWS account. Prices are in
-                USD, billed monthly. Cancel anytime.
+                Every plan deploys into your AWS account. Prices are in USD,
+                billed monthly. Cancel anytime.
               </Text>
 
               <Pressable

@@ -43,7 +43,10 @@ const BEARER_FIXTURES = {
 
 const ALL_BEARERS = Object.values(BEARER_FIXTURES);
 
-function makeFakeTool(name: string, headers: Record<string, string>): AgentTool<any> {
+function makeFakeTool(
+  name: string,
+  headers: Record<string, string>,
+): AgentTool<any> {
   return {
     name: `mcp_${name}`,
     label: `mcp_${name}`,
@@ -65,9 +68,11 @@ function makeFakeTool(name: string, headers: Record<string, string>): AgentTool<
   };
 }
 
-function captureFakeConnect(
-  capture: { url?: string; headers?: Record<string, string>; transport?: string },
-): ConnectMcpServerFn {
+function captureFakeConnect(capture: {
+  url?: string;
+  headers?: Record<string, string>;
+  transport?: string;
+}): ConnectMcpServerFn {
   return async (args) => {
     capture.url = args.url;
     capture.headers = { ...args.headers };
@@ -156,7 +161,9 @@ describe("HandleStore — defensive validation", () => {
 
   it("mint rejects a non-string bearer", () => {
     const store = new HandleStore();
-    expect(() => store.mint(null as unknown as string)).toThrow(HandleStoreError);
+    expect(() => store.mint(null as unknown as string)).toThrow(
+      HandleStoreError,
+    );
     expect(() => store.mint(undefined as unknown as string)).toThrow(
       HandleStoreError,
     );
@@ -350,7 +357,9 @@ describe("buildMcpTools — bearer-leak contract", () => {
     const tools = await buildMcpTools({
       mcpConfigs: configs,
       handleStore: store,
-      connectMcpServer: async (args) => [makeFakeTool("captured", args.headers)],
+      connectMcpServer: async (args) => [
+        makeFakeTool("captured", args.headers),
+      ],
     });
 
     const serialized = JSON.stringify(tools);
@@ -423,7 +432,9 @@ describe("buildMcpTools — multi-server", () => {
       if (args.url.includes("broken")) {
         throw new Error("MCP server unavailable");
       }
-      return [makeFakeTool(args.url.includes("a.example") ? "a" : "b", args.headers)];
+      return [
+        makeFakeTool(args.url.includes("a.example") ? "a" : "b", args.headers),
+      ];
     };
     const tools = await buildMcpTools({
       mcpConfigs: [
@@ -528,7 +539,11 @@ describe("buildMcpTools — fail-closed validation", () => {
     };
     const tools = await buildMcpTools({
       mcpConfigs: [
-        { serverName: "", url: "https://no-name.example/mcp", bearer: BEARER_FIXTURES.jwt },
+        {
+          serverName: "",
+          url: "https://no-name.example/mcp",
+          bearer: BEARER_FIXTURES.jwt,
+        },
         { serverName: "no-url", url: "", bearer: BEARER_FIXTURES.jwt },
         {
           serverName: "valid",
@@ -620,7 +635,10 @@ describe("buildMcpTools — McpToolRegistry population (Plan §006 U4)", () => {
     const registry = new McpToolRegistry();
     const seen: Array<{ server: string; hasRegistry: boolean }> = [];
     const connect: ConnectMcpServerFn = async (args) => {
-      seen.push({ server: args.serverName, hasRegistry: Boolean(args.registry) });
+      seen.push({
+        server: args.serverName,
+        hasRegistry: Boolean(args.registry),
+      });
       // Simulate the production factory: a fake "tools/list" plus
       // registry population (matches the contract in mcp-connect.ts).
       args.registry?.register(args.serverName, {

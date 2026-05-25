@@ -46,12 +46,12 @@ describe("deriveNodes", () => {
       },
     );
 
-    expect(nodes.map((node) => [node.nodeId, node.latestEvent?.status])).toEqual(
-      [
-        ["FetchAustinWeather", "succeeded"],
-        ["EmailAustinWeather", "succeeded"],
-      ],
-    );
+    expect(
+      nodes.map((node) => [node.nodeId, node.latestEvent?.status]),
+    ).toEqual([
+      ["FetchAustinWeather", "succeeded"],
+      ["EmailAustinWeather", "succeeded"],
+    ]);
     expect(nodes[1].latestEvent?.id).toBe("inferred:EmailAustinWeather");
     expect(nodes[1].latestEvent?.recipeType).toBe("email_send");
   });

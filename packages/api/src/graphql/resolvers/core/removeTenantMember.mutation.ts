@@ -1,9 +1,6 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import {
-	db, eq, and,
-	tenantMembers,
-} from "../../utils.js";
+import { db, eq, and, tenantMembers } from "../../utils.js";
 import { resolveCaller } from "./resolve-auth-user.js";
 import { requireTenantAdmin } from "./authz.js";
 
@@ -20,44 +17,51 @@ import { requireTenantAdmin } from "./authz.js";
  * admin actions cannot both observe owner_count > 1 and each delete their
  * target, leaving the tenant with zero owners.
  */
-export const removeTenantMember = async (_parent: any, args: any, ctx: GraphQLContext) => {
-	const { userId: callerUserId } = await resolveCaller(ctx);
+export const removeTenantMember = async (
+  _parent: any,
+  args: any,
+  ctx: GraphQLContext,
+) => {
+  const { userId: callerUserId } = await resolveCaller(ctx);
 
-	return db.transaction(async (tx) => {
-		const [target] = await tx
-			.select()
-			.from(tenantMembers)
-			.where(eq(tenantMembers.id, args.id))
-			.for("update");
-		if (!target) return false;
+  return db.transaction(async (tx) => {
+    const [target] = await tx
+      .select()
+      .from(tenantMembers)
+      .where(eq(tenantMembers.id, args.id))
+      .for("update");
+    if (!target) return false;
 
-		await requireTenantAdmin(ctx, target.tenant_id, tx);
+    await requireTenantAdmin(ctx, target.tenant_id, tx);
 
-		if (callerUserId && callerUserId === target.principal_id) {
-			throw new GraphQLError("Cannot remove yourself", {
-				extensions: { code: "FORBIDDEN" },
-			});
-		}
+    if (callerUserId && callerUserId === target.principal_id) {
+      throw new GraphQLError("Cannot remove yourself", {
+        extensions: { code: "FORBIDDEN" },
+      });
+    }
 
-		if (target.role === "owner") {
-			const owners = await tx
-				.select({ id: tenantMembers.id })
-				.from(tenantMembers)
-				.where(
-					and(
-						eq(tenantMembers.tenant_id, target.tenant_id),
-						eq(tenantMembers.role, "owner"),
-					),
-				)
-				.for("update");
-			if (owners.length <= 1) {
-				throw new GraphQLError("Cannot remove the last owner of a tenant", {
-					extensions: { code: "LAST_OWNER" },
-				});
-			}
-		}
+    if (target.role === "owner") {
+      const owners = await tx
+        .select({ id: tenantMembers.id })
+        .from(tenantMembers)
+        .where(
+          and(
+            eq(tenantMembers.tenant_id, target.tenant_id),
+            eq(tenantMembers.role, "owner"),
+          ),
+        )
+        .for("update");
+      if (owners.length <= 1) {
+        throw new GraphQLError("Cannot remove the last owner of a tenant", {
+          extensions: { code: "LAST_OWNER" },
+        });
+      }
+    }
 
-		const [row] = await tx.delete(tenantMembers).where(eq(tenantMembers.id, args.id)).returning();
-		return !!row;
-	});
+    const [row] = await tx
+      .delete(tenantMembers)
+      .where(eq(tenantMembers.id, args.id))
+      .returning();
+    return !!row;
+  });
 };

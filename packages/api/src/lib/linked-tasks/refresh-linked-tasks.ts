@@ -127,9 +127,7 @@ export async function refreshLinkedTasks(
   return result;
 }
 
-class DrizzleLinkedTaskRefreshRepository
-  implements LinkedTaskRefreshRepository
-{
+class DrizzleLinkedTaskRefreshRepository implements LinkedTaskRefreshRepository {
   private readonly db = getDb();
 
   async listCandidates(input: {

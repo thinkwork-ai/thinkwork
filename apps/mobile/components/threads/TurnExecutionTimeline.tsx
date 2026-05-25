@@ -113,7 +113,11 @@ function buildTimelineFromUsage(
       type: "llm",
       timestamp: "",
       branch: "parent",
-      modelId: model ? String(model).replace(/^us\.anthropic\./, "").replace(/-v\d+:\d+$/, "") : "LLM",
+      modelId: model
+        ? String(model)
+            .replace(/^us\.anthropic\./, "")
+            .replace(/-v\d+:\d+$/, "")
+        : "LLM",
       inputTokens: inputTokens || 0,
       outputTokens: outputTokens || 0,
       costUsd: totalCost || 0,
@@ -126,7 +130,10 @@ function buildTimelineFromUsage(
     events.push({
       type: "tool_call",
       timestamp: "",
-      branch: ti.type === "sub_agent" ? `sub-agent:${String(toolName).toLowerCase()}` : "parent",
+      branch:
+        ti.type === "sub_agent"
+          ? `sub-agent:${String(toolName).toLowerCase()}`
+          : "parent",
       toolName,
       toolType: ti.type || "tool",
       toolInput: ti.input_preview || "",
@@ -146,7 +153,11 @@ function buildTimelineFromUsage(
   return events;
 }
 
-function buildTimeline(invocations: any[], toolInvocations: any[], responseText: string): TimelineEvent[] {
+function buildTimeline(
+  invocations: any[],
+  toolInvocations: any[],
+  responseText: string,
+): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
   for (const inv of invocations) {
@@ -169,10 +180,13 @@ function buildTimeline(invocations: any[], toolInvocations: any[], responseText:
 
     if (inv.toolUses?.length > 0) {
       for (const toolName of inv.toolUses) {
-        const matchingTool = toolInvocations.find((ti: any) => ti.tool_name === toolName);
-        const toolBranch = matchingTool?.type === "sub_agent"
-          ? `sub-agent:${toolName.toLowerCase()}`
-          : branch;
+        const matchingTool = toolInvocations.find(
+          (ti: any) => ti.tool_name === toolName,
+        );
+        const toolBranch =
+          matchingTool?.type === "sub_agent"
+            ? `sub-agent:${toolName.toLowerCase()}`
+            : branch;
         events.push({
           type: "tool_call",
           timestamp: inv.timestamp,
@@ -187,7 +201,12 @@ function buildTimeline(invocations: any[], toolInvocations: any[], responseText:
   }
 
   if (responseText) {
-    events.push({ type: "response", timestamp: "", branch: "parent", responseText });
+    events.push({
+      type: "response",
+      timestamp: "",
+      branch: "parent",
+      responseText,
+    });
   }
 
   reparentSubAgentEvents(events);
@@ -266,13 +285,17 @@ function buildBranches(events: TimelineEvent[]): BranchSpan[] {
   return branches;
 }
 
-function getBranchForEvent(eventIdx: number, branches: BranchSpan[]): BranchSpan | null {
+function getBranchForEvent(
+  eventIdx: number,
+  branches: BranchSpan[],
+): BranchSpan | null {
   return branches.find((b) => b.eventIndices.includes(eventIdx)) ?? null;
 }
 
 function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
   if (event.type === "llm") return <Cpu size={15} color={color} />;
-  if (event.type === "response") return <Bot size={15} color={RESPONSE_COLOR} />;
+  if (event.type === "response")
+    return <Bot size={15} color={RESPONSE_COLOR} />;
   if (event.toolType === "sub_agent") return <Bot size={15} color={color} />;
   return <Zap size={15} color="#facc15" />;
 }
@@ -297,14 +320,21 @@ export function TurnExecutionTimeline({
   colors: (typeof COLORS)["dark"];
   agentName?: string | null;
 }) {
-  const [detail, setDetail] = useState<{ title: string; content: string } | null>(null);
+  const [detail, setDetail] = useState<{
+    title: string;
+    content: string;
+  } | null>(null);
   const usage = useMemo(() => parseJsonField(turn.usageJson), [turn.usageJson]);
-  const responseText = useMemo(() => parseResponseText(turn.resultJson), [turn.resultJson]);
+  const responseText = useMemo(
+    () => parseResponseText(turn.resultJson),
+    [turn.resultJson],
+  );
   const toolInvocations = useMemo(() => {
     const tools = usage?.tool_invocations;
     if (Array.isArray(tools)) return tools;
     const called = usage?.tools_called;
-    if (Array.isArray(called)) return called.map((name) => ({ tool_name: String(name), type: "tool" }));
+    if (Array.isArray(called))
+      return called.map((name) => ({ tool_name: String(name), type: "tool" }));
     return [];
   }, [usage]);
 
@@ -315,39 +345,60 @@ export function TurnExecutionTimeline({
   });
 
   const invocations = (data?.turnInvocationLogs ?? []) as any[];
-  const events = invocations.length > 0
-    ? buildTimeline(invocations, toolInvocations, responseText)
-    : buildTimelineFromUsage(
-      toolInvocations,
-      responseText,
-      String(usage?.model || ""),
-      Number(usage?.input_tokens || usage?.inputTokens || 0),
-      Number(usage?.output_tokens || usage?.outputTokens || 0),
-      turn.totalCost || 0,
-    );
+  const events =
+    invocations.length > 0
+      ? buildTimeline(invocations, toolInvocations, responseText)
+      : buildTimelineFromUsage(
+          toolInvocations,
+          responseText,
+          String(usage?.model || ""),
+          Number(usage?.input_tokens || usage?.inputTokens || 0),
+          Number(usage?.output_tokens || usage?.outputTokens || 0),
+          turn.totalCost || 0,
+        );
 
   if (events.length === 0) {
-    return fetching ? <Muted className="text-xs">Loading execution...</Muted> : null;
+    return fetching ? (
+      <Muted className="text-xs">Loading execution...</Muted>
+    ) : null;
   }
 
-  const totalCost = invocations.length > 0
-    ? invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0)
-    : turn.totalCost || 0;
-  const totalInputTokens = invocations.length > 0
-    ? invocations.reduce((sum: number, inv: any) => sum + (inv.inputTokenCount || 0), 0)
-    : Number(usage?.input_tokens || usage?.inputTokens || 0);
-  const totalOutputTokens = invocations.length > 0
-    ? invocations.reduce((sum: number, inv: any) => sum + (inv.outputTokenCount || 0), 0)
-    : Number(usage?.output_tokens || usage?.outputTokens || 0);
+  const totalCost =
+    invocations.length > 0
+      ? invocations.reduce(
+          (sum: number, inv: any) => sum + (inv.costUsd || 0),
+          0,
+        )
+      : turn.totalCost || 0;
+  const totalInputTokens =
+    invocations.length > 0
+      ? invocations.reduce(
+          (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
+          0,
+        )
+      : Number(usage?.input_tokens || usage?.inputTokens || 0);
+  const totalOutputTokens =
+    invocations.length > 0
+      ? invocations.reduce(
+          (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
+          0,
+        )
+      : Number(usage?.output_tokens || usage?.outputTokens || 0);
 
   const branches = buildBranches(events);
   const hasBranches = branches.length > 0;
-  const maxLane = hasBranches ? Math.max(...branches.map((b) => b.laneIndex)) : -1;
+  const maxLane = hasBranches
+    ? Math.max(...branches.map((b) => b.laneIndex))
+    : -1;
   const svgWidth = hasBranches ? laneX(maxLane) + 14 : 24;
   const contentPadding = hasBranches ? laneX(maxLane) + 20 : 30;
   const svgHeight = Math.max(events.length * ROW_H, ROW_H);
-  const firstFork = hasBranches ? Math.min(...branches.map((b) => b.forkIdx)) : -1;
-  const lastMerge = hasBranches ? Math.max(...branches.map((b) => b.mergeIdx)) : -1;
+  const firstFork = hasBranches
+    ? Math.min(...branches.map((b) => b.forkIdx))
+    : -1;
+  const lastMerge = hasBranches
+    ? Math.max(...branches.map((b) => b.mergeIdx))
+    : -1;
   let lastParentBeforeFork = 0;
   if (hasBranches) {
     for (let i = firstFork - 1; i >= 0; i--) {
@@ -361,33 +412,97 @@ export function TurnExecutionTimeline({
   return (
     <View className="gap-2">
       <Muted className="text-[10px] uppercase tracking-wider">
-        Execution ({events.length} steps) · {formatTokens(totalInputTokens)} in + {formatTokens(totalOutputTokens)} out · {formatCost(totalCost)}
+        Execution ({events.length} steps) · {formatTokens(totalInputTokens)} in
+        + {formatTokens(totalOutputTokens)} out · {formatCost(totalCost)}
       </Muted>
 
       <View style={{ position: "relative", paddingLeft: contentPadding }}>
-        <Svg width={svgWidth} height={svgHeight} style={{ position: "absolute", left: 0, top: 0 }}>
+        <Svg
+          width={svgWidth}
+          height={svgHeight}
+          style={{ position: "absolute", left: 0, top: 0 }}
+        >
           {!hasBranches ? (
-            <Line x1={MAIN_X} y1={ROW_H / 2} x2={MAIN_X} y2={svgHeight - ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} opacity={0.5} />
+            <Line
+              x1={MAIN_X}
+              y1={ROW_H / 2}
+              x2={MAIN_X}
+              y2={svgHeight - ROW_H / 2}
+              stroke={MAIN_COLOR}
+              strokeWidth={2.5}
+              opacity={0.5}
+            />
           ) : (
             <>
-              <Line x1={MAIN_X} y1={ROW_H / 2} x2={MAIN_X} y2={firstFork * ROW_H + ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} opacity={0.5} />
-              <Line x1={MAIN_X} y1={firstFork * ROW_H + ROW_H / 2} x2={MAIN_X} y2={lastMerge * ROW_H + ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} opacity={0.3} />
-              <Line x1={MAIN_X} y1={lastMerge * ROW_H + ROW_H / 2} x2={MAIN_X} y2={svgHeight - ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} opacity={0.5} />
+              <Line
+                x1={MAIN_X}
+                y1={ROW_H / 2}
+                x2={MAIN_X}
+                y2={firstFork * ROW_H + ROW_H / 2}
+                stroke={MAIN_COLOR}
+                strokeWidth={2.5}
+                opacity={0.5}
+              />
+              <Line
+                x1={MAIN_X}
+                y1={firstFork * ROW_H + ROW_H / 2}
+                x2={MAIN_X}
+                y2={lastMerge * ROW_H + ROW_H / 2}
+                stroke={MAIN_COLOR}
+                strokeWidth={2.5}
+                opacity={0.3}
+              />
+              <Line
+                x1={MAIN_X}
+                y1={lastMerge * ROW_H + ROW_H / 2}
+                x2={MAIN_X}
+                y2={svgHeight - ROW_H / 2}
+                stroke={MAIN_COLOR}
+                strokeWidth={2.5}
+                opacity={0.5}
+              />
               {branches.map((branch) => {
                 const bx = laneX(branch.laneIndex);
                 const departY = lastParentBeforeFork * ROW_H + ROW_H / 2;
                 const mergeY = branch.mergeIdx * ROW_H + ROW_H / 2;
                 const forkEndY = departY + ROW_H;
                 const mergeStartY = mergeY - ROW_H;
-                const lineTopY = Math.min(forkEndY, branch.forkIdx * ROW_H + ROW_H / 2);
-                const lineBottomY = Math.max(mergeStartY, branch.eventIndices[branch.eventIndices.length - 1] * ROW_H + ROW_H / 2);
+                const lineTopY = Math.min(
+                  forkEndY,
+                  branch.forkIdx * ROW_H + ROW_H / 2,
+                );
+                const lineBottomY = Math.max(
+                  mergeStartY,
+                  branch.eventIndices[branch.eventIndices.length - 1] * ROW_H +
+                    ROW_H / 2,
+                );
                 return (
                   <React.Fragment key={branch.name}>
-                    <Path d={`M ${MAIN_X} ${departY} C ${MAIN_X} ${departY + ROW_H * 0.6} ${bx} ${forkEndY - ROW_H * 0.4} ${bx} ${forkEndY}`} fill="none" stroke={branch.color} strokeWidth={2.5} opacity={0.55} />
+                    <Path
+                      d={`M ${MAIN_X} ${departY} C ${MAIN_X} ${departY + ROW_H * 0.6} ${bx} ${forkEndY - ROW_H * 0.4} ${bx} ${forkEndY}`}
+                      fill="none"
+                      stroke={branch.color}
+                      strokeWidth={2.5}
+                      opacity={0.55}
+                    />
                     {lineTopY < lineBottomY && (
-                      <Line x1={bx} y1={lineTopY} x2={bx} y2={lineBottomY} stroke={branch.color} strokeWidth={2.5} opacity={0.55} />
+                      <Line
+                        x1={bx}
+                        y1={lineTopY}
+                        x2={bx}
+                        y2={lineBottomY}
+                        stroke={branch.color}
+                        strokeWidth={2.5}
+                        opacity={0.55}
+                      />
                     )}
-                    <Path d={`M ${bx} ${mergeStartY} C ${bx} ${mergeStartY + ROW_H * 0.6} ${MAIN_X} ${mergeY - ROW_H * 0.4} ${MAIN_X} ${mergeY}`} fill="none" stroke={branch.color} strokeWidth={2.5} opacity={0.55} />
+                    <Path
+                      d={`M ${bx} ${mergeStartY} C ${bx} ${mergeStartY + ROW_H * 0.6} ${MAIN_X} ${mergeY - ROW_H * 0.4} ${MAIN_X} ${mergeY}`}
+                      fill="none"
+                      stroke={branch.color}
+                      strokeWidth={2.5}
+                      opacity={0.55}
+                    />
                   </React.Fragment>
                 );
               })}
@@ -396,34 +511,52 @@ export function TurnExecutionTimeline({
           {events.map((event, index) => {
             const branch = getBranchForEvent(index, branches);
             const cx = branch ? laneX(branch.laneIndex) : MAIN_X;
-            return <Circle key={`${event.type}-${index}`} cx={cx} cy={index * ROW_H + ROW_H / 2} r={NODE_R} fill={branch ? branch.color : MAIN_COLOR} />;
+            return (
+              <Circle
+                key={`${event.type}-${index}`}
+                cx={cx}
+                cy={index * ROW_H + ROW_H / 2}
+                r={NODE_R}
+                fill={branch ? branch.color : MAIN_COLOR}
+              />
+            );
           })}
         </Svg>
 
         {events.map((event, index) => {
           const branch = getBranchForEvent(index, branches);
-          const color = branch?.color || (event.type === "response" ? RESPONSE_COLOR : MAIN_COLOR);
-          const label = event.type === "llm"
-            ? event.modelId || "LLM"
-            : event.type === "response"
-              ? agentName || "Agent"
-              : event.toolName || "tool";
-          const right = event.type === "llm"
-            ? `${formatTokens(event.inputTokens || 0)}→${formatTokens(event.outputTokens || 0)} ${formatCost(event.costUsd || 0)}`
-            : event.type === "response"
-              ? (event.responseText || "").slice(0, 36)
-              : event.toolType === "sub_agent"
-                ? "sub-agent"
-                : "tool";
+          const color =
+            branch?.color ||
+            (event.type === "response" ? RESPONSE_COLOR : MAIN_COLOR);
+          const label =
+            event.type === "llm"
+              ? event.modelId || "LLM"
+              : event.type === "response"
+                ? agentName || "Agent"
+                : event.toolName || "tool";
+          const right =
+            event.type === "llm"
+              ? `${formatTokens(event.inputTokens || 0)}→${formatTokens(event.outputTokens || 0)} ${formatCost(event.costUsd || 0)}`
+              : event.type === "response"
+                ? (event.responseText || "").slice(0, 36)
+                : event.toolType === "sub_agent"
+                  ? "sub-agent"
+                  : "tool";
           const detailParts: string[] = [];
           if (event.type === "llm") {
             detailParts.push(`Request: ${event.requestId || "unknown"}`);
-            if (event.inputPreview) detailParts.push(`INPUT\n\n${event.inputPreview}`);
-            if (event.outputPreview) detailParts.push(`OUTPUT\n\n${event.outputPreview}`);
+            if (event.inputPreview)
+              detailParts.push(`INPUT\n\n${event.inputPreview}`);
+            if (event.outputPreview)
+              detailParts.push(`OUTPUT\n\n${event.outputPreview}`);
           } else if (event.type === "tool_call") {
-            detailParts.push(`${event.toolType === "sub_agent" ? "Sub-agent" : "Tool"}: ${event.toolName || "tool"}`);
-            if (event.toolInput) detailParts.push(`INPUT\n\n${event.toolInput}`);
-            if (event.toolOutput) detailParts.push(`OUTPUT\n\n${event.toolOutput}`);
+            detailParts.push(
+              `${event.toolType === "sub_agent" ? "Sub-agent" : "Tool"}: ${event.toolName || "tool"}`,
+            );
+            if (event.toolInput)
+              detailParts.push(`INPUT\n\n${event.toolInput}`);
+            if (event.toolOutput)
+              detailParts.push(`OUTPUT\n\n${event.toolOutput}`);
           } else {
             detailParts.push(event.responseText || "");
           }
@@ -432,32 +565,58 @@ export function TurnExecutionTimeline({
           return (
             <Pressable
               key={`${event.type}-${index}`}
-              onPress={() => hasDetail && setDetail({ title: label, content: detailParts.join("\n\n") })}
+              onPress={() =>
+                hasDetail &&
+                setDetail({ title: label, content: detailParts.join("\n\n") })
+              }
               className="flex-row items-center gap-2 rounded-md active:opacity-70"
               style={{ minHeight: ROW_H }}
             >
               <EventIcon event={event} color={color} />
-              <Text className="flex-1 text-sm font-medium" numberOfLines={1}>{label}</Text>
-              <Muted className="text-[11px]" numberOfLines={1}>{right}</Muted>
-              {hasDetail && <ChevronRight size={14} color={colors.mutedForeground} />}
+              <Text className="flex-1 text-sm font-medium" numberOfLines={1}>
+                {label}
+              </Text>
+              <Muted className="text-[11px]" numberOfLines={1}>
+                {right}
+              </Muted>
+              {hasDetail && (
+                <ChevronRight size={14} color={colors.mutedForeground} />
+              )}
             </Pressable>
           );
         })}
       </View>
 
-      <Modal visible={!!detail} transparent animationType="fade" onRequestClose={() => setDetail(null)}>
+      <Modal
+        visible={!!detail}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetail(null)}
+      >
         <View className="flex-1 justify-end bg-black/60">
-          <View className="max-h-[80%] rounded-t-2xl border px-4 pb-6 pt-4" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <View
+            className="max-h-[80%] rounded-t-2xl border px-4 pb-6 pt-4"
+            style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          >
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-base font-semibold" numberOfLines={1}>{detail?.title}</Text>
-              <Pressable onPress={() => setDetail(null)} className="p-1 rounded-full active:opacity-70">
+              <Text className="text-base font-semibold" numberOfLines={1}>
+                {detail?.title}
+              </Text>
+              <Pressable
+                onPress={() => setDetail(null)}
+                className="p-1 rounded-full active:opacity-70"
+              >
                 <X size={18} color={colors.mutedForeground} />
               </Pressable>
             </View>
             <ScrollView>
               <Text
                 className="text-xs"
-                style={{ fontFamily: "Menlo", color: isDark ? "#d4d4d4" : "#404040", lineHeight: 18 }}
+                style={{
+                  fontFamily: "Menlo",
+                  color: isDark ? "#d4d4d4" : "#404040",
+                  lineHeight: 18,
+                }}
               >
                 {detail?.content}
               </Text>

@@ -24,7 +24,9 @@ export function useThread(threadId: string | null | undefined) {
 }
 
 export function useCreateThread() {
-  const [, createThread] = useMutation<{ createThread: Thread }>(CreateThreadMutation);
+  const [, createThread] = useMutation<{ createThread: Thread }>(
+    CreateThreadMutation,
+  );
   return useCallback(
     async (input: CreateThreadInput): Promise<Thread> => {
       const result = await createThread({ input });
@@ -42,7 +44,9 @@ export function useCreateThread() {
 // any specific threadId so callers can update threads that were just created,
 // marked-read inline, archived, etc. without the hook-then-rerender dance.
 export function useUpdateThread() {
-  const [, updateThread] = useMutation<{ updateThread: Thread }>(UpdateThreadMutation);
+  const [, updateThread] = useMutation<{ updateThread: Thread }>(
+    UpdateThreadMutation,
+  );
   return useCallback(
     async (threadId: string, input: UpdateThreadInput): Promise<Thread> => {
       if (!threadId) throw new Error("useUpdateThread: threadId is required");

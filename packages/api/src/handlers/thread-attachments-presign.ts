@@ -38,8 +38,8 @@
  */
 
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
 
@@ -51,11 +51,11 @@ import { db } from "../lib/db.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 import {
-	error,
-	handleCors,
-	json,
-	notFound,
-	unauthorized,
+  error,
+  handleCors,
+  json,
+  notFound,
+  unauthorized,
 } from "../lib/response.js";
 import { threads } from "@thinkwork/database-pg/schema";
 import { sanitizeAttachmentFilename } from "../lib/attachments/filename-sanitization.js";
@@ -66,144 +66,145 @@ const PRESIGN_EXPIRES_SECONDS = 300;
 const MAX_DECLARED_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB initial pilot cap
 
 const ALLOWED_DECLARED_MIME_TYPES = new Set([
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-	"application/vnd.ms-excel", // .xls
-	"text/csv",
-	"text/markdown",
-	"text/plain",
-	"application/pdf",
-	"application/csv", // some browsers
-	"application/octet-stream", // tolerated — magic-byte sniff at finalize is the real gate
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel", // .xls
+  "text/csv",
+  "text/markdown",
+  "text/plain",
+  "application/pdf",
+  "application/csv", // some browsers
+  "application/octet-stream", // tolerated — magic-byte sniff at finalize is the real gate
 ]);
 
 function workspaceBucket(): string {
-	return process.env.WORKSPACE_BUCKET || "";
+  return process.env.WORKSPACE_BUCKET || "";
 }
 
 export function attachmentStagingKey(
-	tenantId: string,
-	threadId: string,
-	attachmentId: string,
-	safeFilename: string,
+  tenantId: string,
+  threadId: string,
+  attachmentId: string,
+  safeFilename: string,
 ): string {
-	return `tenants/${tenantId}/attachments/${threadId}/${attachmentId}/${safeFilename}`;
+  return `tenants/${tenantId}/attachments/${threadId}/${attachmentId}/${safeFilename}`;
 }
 
 export function attachmentStagingPrefix(
-	tenantId: string,
-	threadId: string,
+  tenantId: string,
+  threadId: string,
 ): string {
-	return `tenants/${tenantId}/attachments/${threadId}/`;
+  return `tenants/${tenantId}/attachments/${threadId}/`;
 }
 
 export async function handler(
-	event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const cors = handleCors(event);
-	if (cors) return cors;
+  const cors = handleCors(event);
+  if (cors) return cors;
 
-	if (event.requestContext.http.method !== "POST") {
-		return error(`Method ${event.requestContext.http.method} not allowed`, 405);
-	}
+  if (event.requestContext.http.method !== "POST") {
+    return error(`Method ${event.requestContext.http.method} not allowed`, 405);
+  }
 
-	if (!workspaceBucket()) {
-		return error("WORKSPACE_BUCKET env is not configured", 500);
-	}
+  if (!workspaceBucket()) {
+    return error("WORKSPACE_BUCKET env is not configured", 500);
+  }
 
-	// Path: /api/threads/{threadId}/attachments/presign
-	const match = event.rawPath.match(
-		/^\/api\/threads\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/attachments\/presign$/i,
-	);
-	if (!match) {
-		return notFound(`Route POST ${event.rawPath} not found`);
-	}
-	const threadId = match[1]!.toLowerCase();
+  // Path: /api/threads/{threadId}/attachments/presign
+  const match = event.rawPath.match(
+    /^\/api\/threads\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/attachments\/presign$/i,
+  );
+  if (!match) {
+    return notFound(`Route POST ${event.rawPath} not found`);
+  }
+  const threadId = match[1]!.toLowerCase();
 
-	const auth = await authenticate(
-		event.headers as Record<string, string | undefined>,
-	);
-	if (!auth) return unauthorized();
+  const auth = await authenticate(
+    event.headers as Record<string, string | undefined>,
+  );
+  if (!auth) return unauthorized();
 
-	const { tenantId } = await resolveCallerFromAuth(auth);
-	if (!tenantId) {
-		return error("authentication carried no tenant_id", 401);
-	}
+  const { tenantId } = await resolveCallerFromAuth(auth);
+  if (!tenantId) {
+    return error("authentication carried no tenant_id", 401);
+  }
 
-	const body = parseBody(event.body);
-	const filenameResult = sanitizeAttachmentFilename(body.name);
-	if (!filenameResult.ok) {
-		return error(`filename: ${filenameResult.reason}`, 400);
-	}
-	const safeFilename = filenameResult.sanitized;
+  const body = parseBody(event.body);
+  const filenameResult = sanitizeAttachmentFilename(body.name);
+  if (!filenameResult.ok) {
+    return error(`filename: ${filenameResult.reason}`, 400);
+  }
+  const safeFilename = filenameResult.sanitized;
 
-	const declaredMimeType = typeof body.mimeType === "string" ? body.mimeType : "";
-	if (!ALLOWED_DECLARED_MIME_TYPES.has(declaredMimeType)) {
-		return error(`mimeType not in allowlist: ${declaredMimeType}`, 415);
-	}
+  const declaredMimeType =
+    typeof body.mimeType === "string" ? body.mimeType : "";
+  if (!ALLOWED_DECLARED_MIME_TYPES.has(declaredMimeType)) {
+    return error(`mimeType not in allowlist: ${declaredMimeType}`, 415);
+  }
 
-	const declaredSizeBytes =
-		typeof body.sizeBytes === "number" ? body.sizeBytes : -1;
-	if (
-		!Number.isFinite(declaredSizeBytes) ||
-		declaredSizeBytes <= 0 ||
-		declaredSizeBytes > MAX_DECLARED_SIZE_BYTES
-	) {
-		return error(
-			`sizeBytes out of range (1..${MAX_DECLARED_SIZE_BYTES}): ${declaredSizeBytes}`,
-			413,
-		);
-	}
+  const declaredSizeBytes =
+    typeof body.sizeBytes === "number" ? body.sizeBytes : -1;
+  if (
+    !Number.isFinite(declaredSizeBytes) ||
+    declaredSizeBytes <= 0 ||
+    declaredSizeBytes > MAX_DECLARED_SIZE_BYTES
+  ) {
+    return error(
+      `sizeBytes out of range (1..${MAX_DECLARED_SIZE_BYTES}): ${declaredSizeBytes}`,
+      413,
+    );
+  }
 
-	// Tenant-pin the thread lookup. Return 404 for both "thread does not
-	// exist" and "thread exists in another tenant" to eliminate the
-	// UUID-enumeration oracle (mirrors the U9-resolver-patch posture).
-	const [thread] = await db
-		.select({ id: threads.id, tenant_id: threads.tenant_id })
-		.from(threads)
-		.where(and(eq(threads.id, threadId), eq(threads.tenant_id, tenantId)));
-	if (!thread) {
-		return notFound("thread not found");
-	}
+  // Tenant-pin the thread lookup. Return 404 for both "thread does not
+  // exist" and "thread exists in another tenant" to eliminate the
+  // UUID-enumeration oracle (mirrors the U9-resolver-patch posture).
+  const [thread] = await db
+    .select({ id: threads.id, tenant_id: threads.tenant_id })
+    .from(threads)
+    .where(and(eq(threads.id, threadId), eq(threads.tenant_id, tenantId)));
+  if (!thread) {
+    return notFound("thread not found");
+  }
 
-	const attachmentId = randomUUID();
-	const stagingKey = attachmentStagingKey(
-		tenantId,
-		threadId,
-		attachmentId,
-		safeFilename,
-	);
+  const attachmentId = randomUUID();
+  const stagingKey = attachmentStagingKey(
+    tenantId,
+    threadId,
+    attachmentId,
+    safeFilename,
+  );
 
-	const command = new PutObjectCommand({
-		Bucket: workspaceBucket(),
-		Key: stagingKey,
-		ContentType: declaredMimeType,
-	});
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const signedPutUrl = await getSignedUrl(s3 as any, command as any, {
-		expiresIn: PRESIGN_EXPIRES_SECONDS,
-	});
+  const command = new PutObjectCommand({
+    Bucket: workspaceBucket(),
+    Key: stagingKey,
+    ContentType: declaredMimeType,
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const signedPutUrl = await getSignedUrl(s3 as any, command as any, {
+    expiresIn: PRESIGN_EXPIRES_SECONDS,
+  });
 
-	const expiresAt = new Date(
-		Date.now() + PRESIGN_EXPIRES_SECONDS * 1000,
-	).toISOString();
+  const expiresAt = new Date(
+    Date.now() + PRESIGN_EXPIRES_SECONDS * 1000,
+  ).toISOString();
 
-	return json({
-		signedPutUrl,
-		stagingKey,
-		attachmentId,
-		name: safeFilename,
-		expiresAt,
-	});
+  return json({
+    signedPutUrl,
+    stagingKey,
+    attachmentId,
+    name: safeFilename,
+    expiresAt,
+  });
 }
 
 function parseBody(raw: string | undefined): Record<string, unknown> {
-	if (!raw) return {};
-	try {
-		const parsed = JSON.parse(raw);
-		return typeof parsed === "object" && parsed !== null
-			? (parsed as Record<string, unknown>)
-			: {};
-	} catch {
-		return {};
-	}
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }

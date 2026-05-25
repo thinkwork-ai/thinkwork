@@ -98,10 +98,7 @@ function FavoritesSectionView({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarGroupContent>
-            <SidebarMenu
-              className="gap-0.5"
-              data-testid="sidebar-pinned-list"
-            >
+            <SidebarMenu className="gap-0.5" data-testid="sidebar-pinned-list">
               {sortedFavorites.map((favorite) => (
                 <PinnedSidebarRow
                   key={favorite.id}

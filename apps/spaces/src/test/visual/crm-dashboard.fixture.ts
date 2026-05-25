@@ -6,7 +6,8 @@ export const crmDashboardVisualFixtures = {
     data.refreshNote = "Some supporting context was unavailable.";
   }),
   failedCrm: cloneData((data) => {
-    data.refreshNote = "CRM refresh failed; prior dashboard values remain visible.";
+    data.refreshNote =
+      "CRM refresh failed; prior dashboard values remain visible.";
   }),
   denseProducts: cloneData((data) => {
     data.productExposure.push(

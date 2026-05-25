@@ -160,7 +160,8 @@ export async function readArtifactPayloadFromS3({
     }),
   );
   const body = await response.Body?.transformToString();
-  if (body === undefined) throw new Error("Artifact payload S3 object is missing");
+  if (body === undefined)
+    throw new Error("Artifact payload S3 object is missing");
   return body;
 }
 

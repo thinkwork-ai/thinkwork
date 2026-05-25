@@ -47,18 +47,29 @@ export function useBiometricAuth() {
         // Get biometric type
         let biometricType: BiometricType = "none";
         if (isSupported) {
-          const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-          if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+          const types =
+            await LocalAuthentication.supportedAuthenticationTypesAsync();
+          if (
+            types.includes(
+              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+            )
+          ) {
             biometricType = "facial";
-          } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+          } else if (
+            types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
+          ) {
             biometricType = "fingerprint";
-          } else if (types.includes(LocalAuthentication.AuthenticationType.IRIS)) {
+          } else if (
+            types.includes(LocalAuthentication.AuthenticationType.IRIS)
+          ) {
             biometricType = "iris";
           }
         }
 
         // Check if user has enabled biometric auth
-        const enabledStr = await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY);
+        const enabledStr = await SecureStore.getItemAsync(
+          BIOMETRIC_ENABLED_KEY,
+        );
         const isEnabled = enabledStr === "true";
 
         // Check if we have stored credentials
@@ -82,36 +93,43 @@ export function useBiometricAuth() {
   }, []);
 
   // Enable biometric auth and store credentials
-  const enableBiometric = useCallback(async (email?: string, password?: string): Promise<boolean> => {
-    if (!state.isSupported) return false;
+  const enableBiometric = useCallback(
+    async (email?: string, password?: string): Promise<boolean> => {
+      if (!state.isSupported) return false;
 
-    try {
-      // Verify with biometric first
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Verify your identity",
-        fallbackLabel: "Use passcode",
-        disableDeviceFallback: false,
-      });
+      try {
+        // Verify with biometric first
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: "Verify your identity",
+          fallbackLabel: "Use passcode",
+          disableDeviceFallback: false,
+        });
 
-      if (result.success) {
-        await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "true");
-        
-        // Store credentials if provided
-        if (email && password) {
-          await SecureStore.setItemAsync(STORED_EMAIL_KEY, email);
-          await SecureStore.setItemAsync(STORED_PASSWORD_KEY, password);
-          setState((s) => ({ ...s, isEnabled: true, hasStoredCredentials: true }));
-        } else {
-          setState((s) => ({ ...s, isEnabled: true }));
+        if (result.success) {
+          await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "true");
+
+          // Store credentials if provided
+          if (email && password) {
+            await SecureStore.setItemAsync(STORED_EMAIL_KEY, email);
+            await SecureStore.setItemAsync(STORED_PASSWORD_KEY, password);
+            setState((s) => ({
+              ...s,
+              isEnabled: true,
+              hasStoredCredentials: true,
+            }));
+          } else {
+            setState((s) => ({ ...s, isEnabled: true }));
+          }
+          return true;
         }
-        return true;
+        return false;
+      } catch (error) {
+        console.error("Error enabling biometric:", error);
+        return false;
       }
-      return false;
-    } catch (error) {
-      console.error("Error enabling biometric:", error);
-      return false;
-    }
-  }, [state.isSupported]);
+    },
+    [state.isSupported],
+  );
 
   // Disable biometric auth and clear stored credentials
   const disableBiometric = useCallback(async () => {
@@ -119,7 +137,11 @@ export function useBiometricAuth() {
       await SecureStore.deleteItemAsync(BIOMETRIC_ENABLED_KEY);
       await SecureStore.deleteItemAsync(STORED_EMAIL_KEY);
       await SecureStore.deleteItemAsync(STORED_PASSWORD_KEY);
-      setState((s) => ({ ...s, isEnabled: false, hasStoredCredentials: false }));
+      setState((s) => ({
+        ...s,
+        isEnabled: false,
+        hasStoredCredentials: false,
+      }));
     } catch (error) {
       console.error("Error disabling biometric:", error);
     }
@@ -144,7 +166,10 @@ export function useBiometricAuth() {
   }, [state.isSupported, state.biometricType]);
 
   // Get stored credentials after biometric auth (for login)
-  const getStoredCredentials = useCallback(async (): Promise<{ email: string; password: string } | null> => {
+  const getStoredCredentials = useCallback(async (): Promise<{
+    email: string;
+    password: string;
+  } | null> => {
     if (!state.isSupported || !state.hasStoredCredentials) return null;
 
     try {
@@ -158,7 +183,7 @@ export function useBiometricAuth() {
       if (result.success) {
         const email = await SecureStore.getItemAsync(STORED_EMAIL_KEY);
         const password = await SecureStore.getItemAsync(STORED_PASSWORD_KEY);
-        
+
         if (email && password) {
           return { email, password };
         }
@@ -180,11 +205,14 @@ export function useBiometricAuth() {
 
   // Store credentials without enabling biometric (called during sign-in,
   // before the enable prompt shows in _layout after navigation)
-  const storeCredentials = useCallback(async (email: string, password: string) => {
-    await SecureStore.setItemAsync(STORED_EMAIL_KEY, email);
-    await SecureStore.setItemAsync(STORED_PASSWORD_KEY, password);
-    setState((s) => ({ ...s, hasStoredCredentials: true }));
-  }, []);
+  const storeCredentials = useCallback(
+    async (email: string, password: string) => {
+      await SecureStore.setItemAsync(STORED_EMAIL_KEY, email);
+      await SecureStore.setItemAsync(STORED_PASSWORD_KEY, password);
+      setState((s) => ({ ...s, hasStoredCredentials: true }));
+    },
+    [],
+  );
 
   // Just flip the enabled flag (credentials already stored by storeCredentials)
   const enableBiometricFlag = useCallback(async () => {

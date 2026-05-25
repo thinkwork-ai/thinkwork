@@ -27,7 +27,11 @@ export const updateOntologyChangeSetMutation = async (
   args: UpdateOntologyChangeSetArgs,
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "update_ontology_change_set");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.input.tenantId,
+    "update_ontology_change_set",
+  );
   const actorUserId = await resolveCallerUserId(ctx);
   return updateOntologyChangeSet({
     actorUserId,

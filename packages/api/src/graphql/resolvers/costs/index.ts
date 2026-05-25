@@ -9,5 +9,17 @@ import { upsertBudgetPolicy } from "./upsertBudgetPolicy.mutation.js";
 import { deleteBudgetPolicy } from "./deleteBudgetPolicy.mutation.js";
 import { unpauseAgent } from "./unpauseAgent.mutation.js";
 
-export const costQueries = { costSummary, costByAgent, costByModel, costTimeSeries, budgetPolicies, budgetStatus, agentBudgetStatus };
-export const costMutations = { upsertBudgetPolicy, deleteBudgetPolicy, unpauseAgent };
+export const costQueries = {
+  costSummary,
+  costByAgent,
+  costByModel,
+  costTimeSeries,
+  budgetPolicies,
+  budgetStatus,
+  agentBudgetStatus,
+};
+export const costMutations = {
+  upsertBudgetPolicy,
+  deleteBudgetPolicy,
+  unpauseAgent,
+};

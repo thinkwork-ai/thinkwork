@@ -30,7 +30,6 @@ import {
 import { verifyReplyToken, hashToken } from "../lib/email-tokens.js";
 import { createColdContactThread } from "../lib/email/cold-contact-trigger.js";
 import { parseSpaceRecipient } from "../lib/email/space-address.js";
-import { enqueueComputerThreadTurn } from "../lib/computers/thread-cutover.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 
 const WORKSPACE_BUCKET =
@@ -367,7 +366,6 @@ async function appendReplyToThread(input: {
   const [thread] = await db
     .select({
       tenant_id: threads.tenant_id,
-      computer_id: threads.computer_id,
       space_id: threads.space_id,
     })
     .from(threads)
@@ -380,7 +378,6 @@ async function appendReplyToThread(input: {
     );
     return true;
   }
-  if (!thread.computer_id) return false;
 
   const createdAt = new Date();
   const [message] = await db
@@ -410,18 +407,8 @@ async function appendReplyToThread(input: {
     .set({ updated_at: createdAt })
     .where(eq(threads.id, input.threadId));
 
-  await enqueueComputerThreadTurn({
-    tenantId: thread.tenant_id,
-    computerId: thread.computer_id,
-    threadId: input.threadId,
-    messageId: message.id,
-    source: "email_reply",
-    actorType: "external_email",
-    actorId: null,
-  });
-
   console.log(
-    `[email-inbound] reply_thread_turn_enqueued thread=${input.threadId} sender=${input.senderEmail} subject="${input.subject}"`,
+    `[email-inbound] reply_thread_recorded thread=${input.threadId} sender=${input.senderEmail} subject="${input.subject}"`,
   );
   return true;
 }

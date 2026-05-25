@@ -15,10 +15,21 @@ interface DetailLayoutProps {
   headerRight?: React.ReactNode;
   showSidebar?: boolean;
   /** If provided, tapping the title area calls this instead of router.back() */
-  onTitlePress?: (anchor: { x: number; y: number; width: number; height: number }) => void;
+  onTitlePress?: (anchor: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
 }
 
-export function DetailLayout({ title, children, headerRight, showSidebar = true, onTitlePress }: DetailLayoutProps) {
+export function DetailLayout({
+  title,
+  children,
+  headerRight,
+  showSidebar = true,
+  onTitlePress,
+}: DetailLayoutProps) {
   const router = useRouter();
   const { isWide } = useMediaQuery();
   const { colorScheme } = useColorScheme();
@@ -40,7 +51,10 @@ export function DetailLayout({ title, children, headerRight, showSidebar = true,
           // Pop all detail screens in one gesture. Useful when drilling
           // many hops deep through the wiki graph and the user wants to
           // bail back to the tab root.
-          if (typeof (router as { dismissAll?: () => void }).dismissAll === "function") {
+          if (
+            typeof (router as { dismissAll?: () => void }).dismissAll ===
+            "function"
+          ) {
             (router as { dismissAll: () => void }).dismissAll();
           } else {
             router.replace("/(tabs)");
@@ -96,8 +110,8 @@ export function DetailLayout({ title, children, headerRight, showSidebar = true,
 
   // Narrow screens: SafeAreaView for top/bottom
   return (
-    <SafeAreaView 
-      className="flex-1 bg-white dark:bg-neutral-950" 
+    <SafeAreaView
+      className="flex-1 bg-white dark:bg-neutral-950"
       edges={["top", "bottom"]}
       style={{ backgroundColor: colors.background }}
     >

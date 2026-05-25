@@ -15,8 +15,17 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
-import { isJsonMode, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const ScheduledJobsDoc = graphql(`
   query CliScheduledJobs(
@@ -146,17 +155,23 @@ async function resolveSchedContext(opts: SchedCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, SchedJobTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, SchedJobTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, SchedJobTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    const data = await gqlQuery(client, SchedJobTenantBySlugDoc, {
+      slug: ctxSlug,
+    });
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -243,7 +258,9 @@ async function runSchedGet(id: string, opts: SchedCliOptions): Promise<void> {
   ]);
   if (j.prompt) {
     console.log("\n  Prompt:");
-    console.log(`  ${j.prompt.slice(0, 300)}${j.prompt.length > 300 ? "…" : ""}`);
+    console.log(
+      `  ${j.prompt.slice(0, 300)}${j.prompt.length > 300 ? "…" : ""}`,
+    );
   }
 }
 
@@ -272,7 +289,9 @@ async function runSchedCreate(
   }
 
   if (!opts.schedule) {
-    printError("--schedule <expr> is required (e.g. \"cron(0 9 * * ? *)\" or \"rate(1 hour)\").");
+    printError(
+      '--schedule <expr> is required (e.g. "cron(0 9 * * ? *)" or "rate(1 hour)").',
+    );
     process.exit(1);
   }
 
@@ -349,9 +368,7 @@ async function runSchedDelete(id: string, opts: DeleteOptions): Promise<void> {
   if (data.deleteScheduledJob.ok) {
     printSuccess(`Deleted scheduled job ${data.deleteScheduledJob.id}.`);
   } else {
-    console.log(
-      `  Scheduled job ${id} was already deleted (no row matched).`,
-    );
+    console.log(`  Scheduled job ${id} was already deleted (no row matched).`);
   }
 }
 
@@ -366,10 +383,7 @@ interface UpdateOptions extends SchedCliOptions {
   prompt?: string;
 }
 
-async function runSchedUpdate(
-  id: string,
-  opts: UpdateOptions,
-): Promise<void> {
+async function runSchedUpdate(id: string, opts: UpdateOptions): Promise<void> {
   const ctx = await resolveSchedContext(opts);
   const input: Record<string, unknown> = {};
   if (opts.name !== undefined) input.name = opts.name;
@@ -461,7 +475,9 @@ export function registerScheduledJobCommand(program: Command): void {
   const job = program
     .command("scheduled-job")
     .alias("cron")
-    .description("Manage AWS-Scheduler-backed recurring agent jobs (wakeups on a cadence).");
+    .description(
+      "Manage AWS-Scheduler-backed recurring agent jobs (wakeups on a cadence).",
+    );
 
   job
     .command("list")
@@ -483,15 +499,23 @@ export function registerScheduledJobCommand(program: Command): void {
 
   job
     .command("create [name]")
-    .description("Create a new scheduled job. Supports cron() or rate() schedules.")
+    .description(
+      "Create a new scheduled job. Supports cron() or rate() schedules.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--agent <id>", "Agent to wake up")
     .option("--routine <id>", "Or: routine to trigger")
     .option("--schedule <expr>", "EventBridge schedule (cron(…) or rate(…))")
     .option("--timezone <tz>", "IANA timezone (default: UTC)", "UTC")
-    .option("--payload <json>", "Payload to pass to the agent/routine (becomes the job's config)")
-    .option("--disabled", "Create in disabled state (currently honored at the resolver level only)")
+    .option(
+      "--payload <json>",
+      "Payload to pass to the agent/routine (becomes the job's config)",
+    )
+    .option(
+      "--disabled",
+      "Create in disabled state (currently honored at the resolver level only)",
+    )
     .addHelpText(
       "after",
       `

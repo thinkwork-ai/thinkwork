@@ -101,9 +101,7 @@ export function useForceSimulation(
     // agitate the pre-seeded layout. Users can still restart() later.
     const preseeded =
       nodes.length > 0 &&
-      nodes.every(
-        (n) => typeof n.x === "number" && typeof n.y === "number",
-      );
+      nodes.every((n) => typeof n.x === "number" && typeof n.y === "number");
 
     setSettled(preseeded);
     // Tuned for dense agent graphs (~50–150 pages). Goals:

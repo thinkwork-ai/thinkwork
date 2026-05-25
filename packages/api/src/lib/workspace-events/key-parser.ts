@@ -17,7 +17,13 @@ export interface ParsedWorkspaceEventKey {
   fileName: string;
 }
 
-const EVENTFUL_ROOTS = new Set(["work", "memory", "review", "errors", "events"]);
+const EVENTFUL_ROOTS = new Set([
+  "work",
+  "memory",
+  "review",
+  "errors",
+  "events",
+]);
 
 export function parseWorkspaceEventKey(
   objectKey: string,

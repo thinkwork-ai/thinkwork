@@ -4,7 +4,13 @@ import {
   intersectPermissions,
 } from "./permissions-subset.js";
 
-const MANIFEST = ["me", "get_tenant", "list_agents", "create_agent", "invite_member"];
+const MANIFEST = [
+  "me",
+  "get_tenant",
+  "list_agents",
+  "create_agent",
+  "invite_member",
+];
 
 describe("validateAgentSkillPermissions", () => {
   describe("inheritance", () => {

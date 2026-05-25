@@ -66,7 +66,9 @@ describe("resolveAuth", () => {
     const exitSpy = vi
       .spyOn(process, "exit")
       .mockImplementation(() => undefined as never);
-    await resolveAuth({ stage: "prod", requireCognito: true }).catch(() => undefined);
+    await resolveAuth({ stage: "prod", requireCognito: true }).catch(
+      () => undefined,
+    );
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });

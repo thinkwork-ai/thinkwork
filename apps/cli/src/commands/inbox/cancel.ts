@@ -4,7 +4,10 @@ import { printSuccess } from "../../ui.js";
 import { CancelInboxItemDoc } from "./gql.js";
 import { resolveInboxContext, type InboxCliOptions } from "./helpers.js";
 
-export async function runInboxCancel(id: string, opts: InboxCliOptions): Promise<void> {
+export async function runInboxCancel(
+  id: string,
+  opts: InboxCliOptions,
+): Promise<void> {
   const ctx = await resolveInboxContext(opts);
 
   const data = await gqlMutate(ctx.client, CancelInboxItemDoc, { id });

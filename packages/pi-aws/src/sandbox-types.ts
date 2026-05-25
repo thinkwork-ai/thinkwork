@@ -13,18 +13,18 @@
 
 /** Result of a shell command execution. */
 export interface ShellResult {
-	stdout: string;
-	stderr: string;
-	exitCode: number;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
 }
 
 /** File metadata returned from `stat`. */
 export interface FileStat {
-	isFile: boolean;
-	isDirectory: boolean;
-	isSymbolicLink: boolean;
-	size: number;
-	mtime: Date;
+  isFile: boolean;
+  isDirectory: boolean;
+  isSymbolicLink: boolean;
+  size: number;
+  mtime: Date;
 }
 
 /**
@@ -34,40 +34,46 @@ export interface FileStat {
  * runtime-available) — see `makeSessionEnv` in agentcore-codeinterpreter.ts.
  */
 export interface SandboxApi {
-	readFile(path: string): Promise<string>;
-	readFileBuffer(path: string): Promise<Uint8Array>;
-	writeFile(path: string, content: string | Uint8Array): Promise<void>;
-	stat(path: string): Promise<FileStat>;
-	readdir(path: string): Promise<string[]>;
-	exists(path: string): Promise<boolean>;
-	mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
-	rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
-	exec(
-		command: string,
-		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-	): Promise<ShellResult>;
+  readFile(path: string): Promise<string>;
+  readFileBuffer(path: string): Promise<Uint8Array>;
+  writeFile(path: string, content: string | Uint8Array): Promise<void>;
+  stat(path: string): Promise<FileStat>;
+  readdir(path: string): Promise<string[]>;
+  exists(path: string): Promise<boolean>;
+  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  rm(
+    path: string,
+    options?: { recursive?: boolean; force?: boolean },
+  ): Promise<void>;
+  exec(
+    command: string,
+    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+  ): Promise<ShellResult>;
 }
 
 /** Universal session environment Pi runtime consumes. */
 export interface SessionEnv {
-	exec(
-		command: string,
-		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-	): Promise<ShellResult>;
-	readFile(path: string): Promise<string>;
-	readFileBuffer(path: string): Promise<Uint8Array>;
-	writeFile(path: string, content: string | Uint8Array): Promise<void>;
-	stat(path: string): Promise<FileStat>;
-	readdir(path: string): Promise<string[]>;
-	exists(path: string): Promise<boolean>;
-	mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
-	rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
-	cwd: string;
-	resolvePath(base: string, path: string): string;
-	cleanup?(): Promise<void>;
+  exec(
+    command: string,
+    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+  ): Promise<ShellResult>;
+  readFile(path: string): Promise<string>;
+  readFileBuffer(path: string): Promise<Uint8Array>;
+  writeFile(path: string, content: string | Uint8Array): Promise<void>;
+  stat(path: string): Promise<FileStat>;
+  readdir(path: string): Promise<string[]>;
+  exists(path: string): Promise<boolean>;
+  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  rm(
+    path: string,
+    options?: { recursive?: boolean; force?: boolean },
+  ): Promise<void>;
+  cwd: string;
+  resolvePath(base: string, path: string): string;
+  cleanup?(): Promise<void>;
 }
 
 /** Connector entry point — Pi calls `createSessionEnv` per invocation. */
 export interface SandboxFactory {
-	createSessionEnv(options: { id: string; cwd?: string }): Promise<SessionEnv>;
+  createSessionEnv(options: { id: string; cwd?: string }): Promise<SessionEnv>;
 }

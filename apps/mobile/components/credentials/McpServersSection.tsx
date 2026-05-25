@@ -22,7 +22,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
 
-const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
+const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
+  /\/graphql$/,
+  "",
+);
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 type McpServerRow = {
@@ -116,13 +119,15 @@ export function McpServersSection({ refreshSignal }: Props) {
         <View className="items-center py-8 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
           <Cable size={32} color={colors.mutedForeground} />
           <Muted className="mt-3 text-center px-6">
-            No MCP servers assigned to your agents yet. Ask your admin to set up MCP tool connectors.
+            No MCP servers assigned to your agents yet. Ask your admin to set up
+            MCP tool connectors.
           </Muted>
         </View>
       ) : (
         <View className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
           {allServers.map((server, idx) => {
-            const isActive = server.authType !== "oauth" || server.authStatus === "active";
+            const isActive =
+              server.authType !== "oauth" || server.authStatus === "active";
             const isExpired = server.authStatus === "expired";
             const badgeLabel = isActive
               ? "Active"
@@ -141,7 +146,12 @@ export function McpServersSection({ refreshSignal }: Props) {
             return (
               <Pressable
                 key={server.id}
-                onPress={() => router.push({ pathname: "/settings/mcp-server-detail", params: { id: server.id } })}
+                onPress={() =>
+                  router.push({
+                    pathname: "/settings/mcp-server-detail",
+                    params: { id: server.id },
+                  })
+                }
                 className={`flex-row items-start px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < allServers.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
               >
                 <View className="flex-1">

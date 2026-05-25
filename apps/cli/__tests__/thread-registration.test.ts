@@ -91,7 +91,10 @@ describe("parseIdOrNumber helper", () => {
   });
 
   it("treats alphanumeric input as a thread ID", () => {
-    expect(parseIdOrNumber("thr-abc123")).toEqual({ kind: "id", id: "thr-abc123" });
+    expect(parseIdOrNumber("thr-abc123")).toEqual({
+      kind: "id",
+      id: "thr-abc123",
+    });
   });
 
   it("treats UUID input as a thread ID", () => {

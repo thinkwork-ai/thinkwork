@@ -13,43 +13,43 @@
  */
 
 export interface ComplianceEventCursor {
-	/** Raw Postgres timestamptz text with microsecond precision intact. */
-	occurredAt: string;
-	/** event_id UUIDv7 string. */
-	eventId: string;
+  /** Raw Postgres timestamptz text with microsecond precision intact. */
+  occurredAt: string;
+  /** event_id UUIDv7 string. */
+  eventId: string;
 }
 
 export function encodeCursor(cursor: ComplianceEventCursor): string {
-	const json = JSON.stringify(cursor);
-	return Buffer.from(json, "utf-8").toString("base64url");
+  const json = JSON.stringify(cursor);
+  return Buffer.from(json, "utf-8").toString("base64url");
 }
 
 export function decodeCursor(encoded: string): ComplianceEventCursor {
-	let json: string;
-	try {
-		json = Buffer.from(encoded, "base64url").toString("utf-8");
-	} catch (err) {
-		throw new Error(
-			`compliance/cursor: invalid base64url cursor — ${
-				err instanceof Error ? err.message : String(err)
-			}`,
-		);
-	}
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(json);
-	} catch {
-		throw new Error("compliance/cursor: cursor JSON is malformed");
-	}
-	if (
-		typeof parsed !== "object" ||
-		parsed === null ||
-		typeof (parsed as { occurredAt?: unknown }).occurredAt !== "string" ||
-		typeof (parsed as { eventId?: unknown }).eventId !== "string"
-	) {
-		throw new Error(
-			"compliance/cursor: cursor must contain {occurredAt: string, eventId: string}",
-		);
-	}
-	return parsed as ComplianceEventCursor;
+  let json: string;
+  try {
+    json = Buffer.from(encoded, "base64url").toString("utf-8");
+  } catch (err) {
+    throw new Error(
+      `compliance/cursor: invalid base64url cursor — ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error("compliance/cursor: cursor JSON is malformed");
+  }
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    typeof (parsed as { occurredAt?: unknown }).occurredAt !== "string" ||
+    typeof (parsed as { eventId?: unknown }).eventId !== "string"
+  ) {
+    throw new Error(
+      "compliance/cursor: cursor must contain {occurredAt: string, eventId: string}",
+    );
+  }
+  return parsed as ComplianceEventCursor;
 }

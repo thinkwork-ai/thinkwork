@@ -57,7 +57,12 @@ describe("Space thread participants schema", () => {
 
   it("declares the access backfill migration for owners and mentioned users", () => {
     const migration0116 = readFileSync(
-      join(HERE, "..", "drizzle", "0116_backfill_thread_participants_access.sql"),
+      join(
+        HERE,
+        "..",
+        "drizzle",
+        "0116_backfill_thread_participants_access.sql",
+      ),
       "utf-8",
     );
 

@@ -6,14 +6,22 @@
 
 import { useQuery } from "urql";
 import { ExternalLink } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ThreadTracesQuery } from "@/lib/graphql-queries";
 import { formatUsd, relativeTime } from "@/lib/utils";
 
 // NOTE: region is hardcoded to us-east-1. Pre-existing; a regional-constants
 // sweep will replace this with a stage-aware value.
-const CW_CONSOLE_BASE = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1";
+const CW_CONSOLE_BASE =
+  "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1";
 
 export function xrayTraceUrl(traceId: string): string {
   return `${CW_CONSOLE_BASE}#xray:traces/${traceId}`;
@@ -99,16 +107,29 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
                   {formatRuntime(trace.runtimeType)}
                 </Badge>
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground truncate" title={trace.model || ""}>
+              <TableCell
+                className="text-xs text-muted-foreground truncate"
+                title={trace.model || ""}
+              >
                 {shortenModel(trace.model ?? null)}
                 {trace.estimated && (
-                  <Badge variant="outline" className="ml-1 text-[10px] px-1">est</Badge>
+                  <Badge variant="outline" className="ml-1 text-[10px] px-1">
+                    est
+                  </Badge>
                 )}
               </TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatTokens(trace.inputTokens ?? null)}</TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatTokens(trace.outputTokens ?? null)}</TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatDuration(trace.durationMs ?? null)}</TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatUsd(trace.costUsd ?? 0)}</TableCell>
+              <TableCell className="text-right text-xs tabular-nums">
+                {formatTokens(trace.inputTokens ?? null)}
+              </TableCell>
+              <TableCell className="text-right text-xs tabular-nums">
+                {formatTokens(trace.outputTokens ?? null)}
+              </TableCell>
+              <TableCell className="text-right text-xs tabular-nums">
+                {formatDuration(trace.durationMs ?? null)}
+              </TableCell>
+              <TableCell className="text-right text-xs tabular-nums">
+                {formatUsd(trace.costUsd ?? 0)}
+              </TableCell>
               <TableCell className="text-right">
                 {trace.traceId ? (
                   <a
@@ -119,7 +140,9 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
                   >
                     <ExternalLink className="h-3.5 w-3.5 inline" />
                   </a>
-                ) : "--"}
+                ) : (
+                  "--"
+                )}
               </TableCell>
             </TableRow>
           ))}

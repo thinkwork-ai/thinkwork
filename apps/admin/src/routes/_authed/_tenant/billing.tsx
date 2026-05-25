@@ -225,9 +225,8 @@ function BillingPage() {
             <div className="text-sm">
               <div className="font-medium">Owner access only</div>
               <div className="text-muted-foreground mt-1">
-                Billing is managed by the workspace owner. Ask them to
-                open this page, or reach out to hello@thinkwork.ai if
-                you need help.
+                Billing is managed by the workspace owner. Ask them to open this
+                page, or reach out to hello@thinkwork.ai if you need help.
               </div>
             </div>
           </CardContent>
@@ -283,9 +282,7 @@ function BillingPage() {
             )}
             {state?.currentPeriodEnd && (
               <Row
-                label={
-                  state.cancelAtPeriodEnd ? "Cancels on" : "Renews on"
-                }
+                label={state.cancelAtPeriodEnd ? "Cancels on" : "Renews on"}
                 value={formatDate(state.currentPeriodEnd)}
               />
             )}
@@ -333,9 +330,8 @@ function BillingPage() {
           <DialogHeader>
             <DialogTitle>Choose a plan</DialogTitle>
             <DialogDescription>
-              Payment redirects to Stripe Checkout. The subscription
-              attaches to your current workspace on success — no data
-              migration needed.
+              Payment redirects to Stripe Checkout. The subscription attaches to
+              your current workspace on success — no data migration needed.
             </DialogDescription>
           </DialogHeader>
           <DialogBody>

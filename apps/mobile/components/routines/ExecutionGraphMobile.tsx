@@ -184,7 +184,9 @@ export function ExecutionGraphMobile({
             key={node.nodeId}
             onPress={() => onSelectNode?.(node.nodeId)}
             className={`flex-row items-start px-4 py-3 ${
-              isLast ? "" : "border-b border-neutral-100 dark:border-neutral-800"
+              isLast
+                ? ""
+                : "border-b border-neutral-100 dark:border-neutral-800"
             } ${isSelected ? "bg-neutral-50 dark:bg-neutral-800" : "active:bg-neutral-50 dark:active:bg-neutral-800"}`}
           >
             <View style={{ marginTop: 2 }}>

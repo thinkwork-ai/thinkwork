@@ -1,5 +1,13 @@
 import { useRef, useEffect, useCallback } from "react";
-import { View, Pressable, Modal, StyleSheet, Animated, ScrollView, ActivityIndicator } from "react-native";
+import {
+  View,
+  Pressable,
+  Modal,
+  StyleSheet,
+  Animated,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Inbox, X } from "lucide-react-native";
@@ -8,7 +16,10 @@ import { COLORS } from "@/lib/theme";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "urql";
 import { InboxItemsQuery } from "@/lib/graphql-queries";
-import { useDecideInboxItem, useInboxStatusSubscription } from "@/lib/hooks/use-inbox";
+import {
+  useDecideInboxItem,
+  useInboxStatusSubscription,
+} from "@/lib/hooks/use-inbox";
 import { visibleMobileInboxItems } from "@/lib/mobile-inbox";
 import { InboxItemCard } from "./InboxItemCard";
 
@@ -18,7 +29,11 @@ interface InboxSheetProps {
   onThreadPress?: (threadId: string) => void;
 }
 
-export function InboxSheet({ visible, onClose, onThreadPress }: InboxSheetProps) {
+export function InboxSheet({
+  visible,
+  onClose,
+  onThreadPress,
+}: InboxSheetProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -49,8 +64,17 @@ export function InboxSheet({ visible, onClose, onThreadPress }: InboxSheetProps)
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-        Animated.spring(slideAnim, { toValue: 1, damping: 20, stiffness: 200, useNativeDriver: true }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 1,
+          damping: 20,
+          stiffness: 200,
+          useNativeDriver: true,
+        }),
       ]).start();
     } else {
       slideAnim.setValue(0);
@@ -60,33 +84,69 @@ export function InboxSheet({ visible, onClose, onThreadPress }: InboxSheetProps)
 
   const handleClose = useCallback(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
     ]).start(() => onClose());
   }, [onClose]);
 
-  const handleApprove = useCallback(async (id: string, comment?: string) => {
-    await executeDecide({ id, input: { status: "APPROVED" as any, comment } });
-    reexecute({ requestPolicy: "network-only" });
-  }, [executeDecide, reexecute]);
+  const handleApprove = useCallback(
+    async (id: string, comment?: string) => {
+      await executeDecide({
+        id,
+        input: { status: "APPROVED" as any, comment },
+      });
+      reexecute({ requestPolicy: "network-only" });
+    },
+    [executeDecide, reexecute],
+  );
 
-  const handleReject = useCallback(async (id: string, comment?: string) => {
-    await executeDecide({ id, input: { status: "REJECTED" as any, comment } });
-    reexecute({ requestPolicy: "network-only" });
-  }, [executeDecide, reexecute]);
+  const handleReject = useCallback(
+    async (id: string, comment?: string) => {
+      await executeDecide({
+        id,
+        input: { status: "REJECTED" as any, comment },
+      });
+      reexecute({ requestPolicy: "network-only" });
+    },
+    [executeDecide, reexecute],
+  );
 
-  const handleRequestRevision = useCallback(async (id: string, comment: string) => {
-    await executeDecide({ id, input: { status: "REVISION_REQUESTED" as any, comment } });
-    reexecute({ requestPolicy: "network-only" });
-  }, [executeDecide, reexecute]);
+  const handleRequestRevision = useCallback(
+    async (id: string, comment: string) => {
+      await executeDecide({
+        id,
+        input: { status: "REVISION_REQUESTED" as any, comment },
+      });
+      reexecute({ requestPolicy: "network-only" });
+    },
+    [executeDecide, reexecute],
+  );
 
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={handleClose}
+    >
       <View style={StyleSheet.absoluteFill}>
         {/* Backdrop */}
-        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.4)", opacity: fadeAnim }]}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: "rgba(0,0,0,0.4)", opacity: fadeAnim },
+          ]}
+        >
           <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
         </Animated.View>
 
@@ -100,12 +160,14 @@ export function InboxSheet({ visible, onClose, onThreadPress }: InboxSheetProps)
               borderTopLeftRadius: 16,
               borderTopRightRadius: 16,
               maxHeight: "70%",
-              transform: [{
-                translateY: slideAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [600, 0],
-                }),
-              }],
+              transform: [
+                {
+                  translateY: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [600, 0],
+                  }),
+                },
+              ],
             },
           ]}
         >
@@ -121,7 +183,9 @@ export function InboxSheet({ visible, onClose, onThreadPress }: InboxSheetProps)
               <Text className="text-lg font-semibold">Inbox</Text>
               {items.length > 0 && (
                 <View className="bg-amber-500 rounded-full px-2 py-0.5 min-w-[22px] items-center">
-                  <Text className="text-xs font-bold text-white">{items.length}</Text>
+                  <Text className="text-xs font-bold text-white">
+                    {items.length}
+                  </Text>
                 </View>
               )}
             </View>
@@ -131,7 +195,10 @@ export function InboxSheet({ visible, onClose, onThreadPress }: InboxSheetProps)
           </View>
 
           {/* Content */}
-          <ScrollView className="flex-1 px-4 py-3" contentContainerStyle={{ gap: 8 }}>
+          <ScrollView
+            className="flex-1 px-4 py-3"
+            contentContainerStyle={{ gap: 8 }}
+          >
             {fetching && items.length === 0 ? (
               <View className="items-center py-8">
                 <ActivityIndicator color={colors.primary} />

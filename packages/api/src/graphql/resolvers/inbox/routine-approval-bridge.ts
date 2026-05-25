@@ -30,10 +30,7 @@
  */
 
 import { eq } from "drizzle-orm";
-import {
-  InvokeCommand,
-  LambdaClient,
-} from "@aws-sdk/client-lambda";
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { routineApprovalTokens } from "@thinkwork/database-pg/schema";
 import { and, db } from "../../utils.js";
 

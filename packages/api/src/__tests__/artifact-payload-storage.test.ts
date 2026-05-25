@@ -1,4 +1,8 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -80,7 +84,10 @@ describe("artifact payload S3 storage", () => {
       ),
     ).toThrow(/outside the tenant prefix/);
     expect(
-      isArtifactPayloadS3Key("tenant-A", "tenants/tenant-A/applets/app/source.tsx"),
+      isArtifactPayloadS3Key(
+        "tenant-A",
+        "tenants/tenant-A/applets/app/source.tsx",
+      ),
     ).toBe(false);
   });
 
@@ -98,7 +105,9 @@ describe("artifact payload S3 storage", () => {
       contentType: "text/markdown; charset=utf-8",
     });
 
-    expect(s3Mock.commandCalls(PutObjectCommand)[0].args[0].input).toMatchObject({
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
       Bucket: "workspace-bucket",
       Key: key,
       Body: "# Report",
@@ -129,7 +138,9 @@ describe("artifact payload S3 storage", () => {
       value: { range: "quarter" },
     });
 
-    expect(s3Mock.commandCalls(PutObjectCommand)[0].args[0].input).toMatchObject({
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
       ContentType: "application/json",
       Body: JSON.stringify({ range: "quarter" }),
     });

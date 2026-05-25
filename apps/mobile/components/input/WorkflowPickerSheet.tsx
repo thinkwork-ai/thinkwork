@@ -1,9 +1,20 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState, useEffect } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+} from "react";
 import { View, Pressable, Dimensions, ActivityIndicator } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X, Check, ListChecks } from "lucide-react-native";
-import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from "@gorhom/bottom-sheet";
+import BottomSheet, {
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+} from "@gorhom/bottom-sheet";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 
@@ -32,8 +43,23 @@ interface WorkflowPickerSheetProps {
   onReconnect?: () => void;
 }
 
-export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPickerSheetProps>(
-  ({ workflows, loading, error, needsReconnect, selectedId, onSelect, onRefresh, onReconnect }, ref) => {
+export const WorkflowPickerSheet = forwardRef<
+  WorkflowPickerSheetRef,
+  WorkflowPickerSheetProps
+>(
+  (
+    {
+      workflows,
+      loading,
+      error,
+      needsReconnect,
+      selectedId,
+      onSelect,
+      onRefresh,
+      onReconnect,
+    },
+    ref,
+  ) => {
     const bottomSheetRef = useRef<BottomSheet>(null);
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
@@ -51,7 +77,12 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
 
     const renderBackdrop = useCallback(
       (props: any) => (
-        <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />
+        <BottomSheetBackdrop
+          {...props}
+          appearsOnIndex={0}
+          disappearsOnIndex={-1}
+          pressBehavior="close"
+        />
       ),
       [],
     );
@@ -75,19 +106,29 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
           borderTopRightRadius: 16,
         }}
         handleIndicatorStyle={{
-          backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)",
+          backgroundColor: isDark
+            ? "rgba(255,255,255,0.2)"
+            : "rgba(0,0,0,0.15)",
           width: 36,
         }}
       >
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 pb-3">
           <Text className="text-base font-semibold">Task type</Text>
-          <Pressable onPress={() => bottomSheetRef.current?.close()} className="p-1 active:opacity-70">
+          <Pressable
+            onPress={() => bottomSheetRef.current?.close()}
+            className="p-1 active:opacity-70"
+          >
             <X size={20} color={colors.mutedForeground} />
           </Pressable>
         </View>
 
-        <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 16 }}>
+        <BottomSheetScrollView
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
           {loading && (
             <View className="py-8 items-center">
               <ActivityIndicator size="small" color={colors.primary} />
@@ -97,14 +138,19 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
 
           {error && !loading && (
             <View className="py-8 items-center px-4">
-              <Muted className="text-sm text-red-400 text-center">{error}</Muted>
+              <Muted className="text-sm text-red-400 text-center">
+                {error}
+              </Muted>
               {needsReconnect && onReconnect && (
                 <Pressable
                   onPress={onReconnect}
                   className="mt-4 px-4 py-2 rounded-lg active:opacity-70"
                   style={{ backgroundColor: colors.primary }}
                 >
-                  <Text className="text-sm font-medium" style={{ color: "#ffffff" }}>
+                  <Text
+                    className="text-sm font-medium"
+                    style={{ color: "#ffffff" }}
+                  >
                     Reconnect Provider
                   </Text>
                 </Pressable>
@@ -118,39 +164,56 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
             </View>
           )}
 
-          {!loading && activeWorkflows.map((wf, i) => (
-            <Pressable
-              key={wf.id}
-              onPress={() => {
-                onSelect(wf);
-                bottomSheetRef.current?.close();
-              }}
-              className="flex-row items-center py-3 active:opacity-70"
-              style={i < activeWorkflows.length - 1 ? {
-                borderBottomWidth: 0.5,
-                borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-              } : undefined}
-            >
-              <View
-                style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  backgroundColor: isDark ? "rgba(96,165,250,0.15)" : "rgba(37,99,235,0.08)",
-                  alignItems: "center", justifyContent: "center",
+          {!loading &&
+            activeWorkflows.map((wf, i) => (
+              <Pressable
+                key={wf.id}
+                onPress={() => {
+                  onSelect(wf);
+                  bottomSheetRef.current?.close();
                 }}
+                className="flex-row items-center py-3 active:opacity-70"
+                style={
+                  i < activeWorkflows.length - 1
+                    ? {
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.06)",
+                      }
+                    : undefined
+                }
               >
-                <ListChecks size={16} color={isDark ? "#60a5fa" : "#2563eb"} />
-              </View>
-              <View className="flex-1 ml-3">
-                <Text className="text-sm font-medium">{wf.name}</Text>
-                {wf.description ? (
-                  <Muted className="text-xs mt-0.5" numberOfLines={1}>{wf.description}</Muted>
-                ) : null}
-              </View>
-              {selectedId === wf.id && (
-                <Check size={18} color={colors.primary} />
-              )}
-            </Pressable>
-          ))}
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    backgroundColor: isDark
+                      ? "rgba(96,165,250,0.15)"
+                      : "rgba(37,99,235,0.08)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <ListChecks
+                    size={16}
+                    color={isDark ? "#60a5fa" : "#2563eb"}
+                  />
+                </View>
+                <View className="flex-1 ml-3">
+                  <Text className="text-sm font-medium">{wf.name}</Text>
+                  {wf.description ? (
+                    <Muted className="text-xs mt-0.5" numberOfLines={1}>
+                      {wf.description}
+                    </Muted>
+                  ) : null}
+                </View>
+                {selectedId === wf.id && (
+                  <Check size={18} color={colors.primary} />
+                )}
+              </Pressable>
+            ))}
         </BottomSheetScrollView>
       </BottomSheet>
     );

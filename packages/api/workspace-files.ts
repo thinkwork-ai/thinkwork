@@ -7,10 +7,10 @@
  *
  * Request shape (Unit 5):
  *   { action: "get" | "list" | "put" | "delete" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
- *     agentId?: string, templateId?: string, spaceId?: string, computerId?: string, userId?: string, defaults?: true, catalog?: true,
+ *     agentId?: string, templateId?: string, spaceId?: string, userId?: string, defaults?: true, catalog?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
- *   Exactly one of agentId / templateId / spaceId / computerId / userId / defaults:true / catalog:true
+ *   Exactly one of agentId / templateId / spaceId / userId / defaults:true / catalog:true
  *   identifies the target surface. Tenant identity is derived from the
  *   caller's JWT via `resolveCallerFromAuth` — the handler NEVER trusts a
  *   tenantSlug body field. Requests that still include one are rejected
@@ -49,7 +49,6 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { authenticate, type AuthResult } from "./src/lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
 import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
@@ -80,8 +79,6 @@ import {
   agents,
   agentTemplates,
   and,
-  computerTasks,
-  computers,
   db,
   eq,
   spaces,
@@ -89,10 +86,6 @@ import {
   tenants,
 } from "./src/graphql/utils.js";
 import { emitAuditEvent } from "./src/lib/compliance/emit.js";
-import {
-  enqueueComputerTask,
-  type ComputerTaskType,
-} from "./src/lib/computers/tasks.js";
 import {
   CatalogInstallError,
   installCatalogSkill,
@@ -280,12 +273,6 @@ interface DefaultsTarget {
   key: (path: string) => string;
 }
 
-interface ComputerTarget {
-  kind: "computer";
-  computerId: string;
-  tenantId: string;
-}
-
 interface UserContextTarget {
   kind: "user";
   tenantId: string;
@@ -306,7 +293,6 @@ type Target =
   | TemplateTarget
   | SpaceTarget
   | DefaultsTarget
-  | ComputerTarget
   | UserContextTarget
   | CatalogTarget;
 
@@ -423,25 +409,6 @@ async function resolveDefaultsTarget(
   };
 }
 
-async function resolveComputerTarget(
-  tenantId: string,
-  computerId: string,
-): Promise<ComputerTarget | null> {
-  const [computer] = await db
-    .select({
-      id: computers.id,
-      tenant_id: computers.tenant_id,
-    })
-    .from(computers)
-    .where(eq(computers.id, computerId));
-  if (!computer || computer.tenant_id !== tenantId) return null;
-  return {
-    kind: "computer",
-    computerId: computer.id,
-    tenantId: computer.tenant_id,
-  };
-}
-
 async function resolveUserContextTarget(
   tenantId: string,
   userId: string,
@@ -538,10 +505,7 @@ async function handleGet(
   deps: HandlerDeps,
   path: string,
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
-  if (target.kind === "computer") {
-    return await handleComputerGet(target, path);
-  }
+  const { target } = deps;
   if (target.kind === "user" && !isVisibleUserContextPath(path)) {
     return json(403, {
       ok: false,
@@ -580,10 +544,7 @@ async function handleList(
   deps: HandlerDeps,
   includeContent: boolean,
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
-  if (target.kind === "computer") {
-    return await handleComputerList(target, includeContent);
-  }
+  const { target } = deps;
   // Per docs/plans/2026-04-27-003: every S3 tier reads its own prefix
   // directly. The agent prefix IS the agent's workspace — no overlay,
   // no fallback, no `agent-override` vs `template` source labels.
@@ -691,102 +652,6 @@ async function handleCatalogList(
   });
 }
 
-// Computer list/get bypass the computer_tasks queue and read EFS directly
-// via the workspace-files-efs sidecar Lambda. This keeps the admin
-// Workspace tab independent of the Computer runtime's heartbeat / write-
-// queue backlog — operators see files even when the runtime is hung or
-// restarting. Writes (handleComputerPut / handleComputerDelete) stay on
-// the queue path because they have ordering semantics with the runtime's
-// in-process state.
-async function handleComputerList(
-  target: ComputerTarget,
-  includeContent: boolean,
-): Promise<APIGatewayProxyResult> {
-  const result = await invokeWorkspaceFilesEfs({
-    action: "list",
-    tenantId: target.tenantId,
-    computerId: target.computerId,
-    includeContent,
-  });
-  if (!result.ok) {
-    return json(result.status, { ok: false, error: result.error });
-  }
-  return json(200, {
-    ok: true,
-    files: result.files.filter((file) => !isComputerUserMdPath(file.path)),
-  });
-}
-
-async function handleComputerGet(
-  target: ComputerTarget,
-  path: string,
-): Promise<APIGatewayProxyResult> {
-  if (isComputerUserMdPath(path)) {
-    return json(200, {
-      ok: true,
-      content: null,
-      source: "computer",
-      sha256: "",
-    });
-  }
-
-  const result = await invokeWorkspaceFilesEfs({
-    action: "get",
-    tenantId: target.tenantId,
-    computerId: target.computerId,
-    path,
-  });
-  if (!result.ok) {
-    return json(result.status, { ok: false, error: result.error });
-  }
-  return json(200, {
-    ok: true,
-    content: result.content,
-    source: "computer",
-    sha256: "",
-  });
-}
-
-async function handleComputerPut(
-  target: ComputerTarget,
-  path: string,
-  content: string,
-): Promise<APIGatewayProxyResult> {
-  if (isComputerUserMdPath(path)) {
-    return json(403, {
-      ok: false,
-      error:
-        "USER.md is user context now. Edit it from Knowledge > User instead of the Computer workspace.",
-    });
-  }
-
-  await runComputerWorkspaceTask(target, "workspace_file_write", {
-    path,
-    content,
-  });
-  return json(200, { ok: true });
-}
-
-async function handleComputerDelete(
-  target: ComputerTarget,
-  path: string,
-): Promise<APIGatewayProxyResult> {
-  if (isComputerUserMdPath(path)) {
-    return json(403, {
-      ok: false,
-      error:
-        "USER.md is user context now. Edit it from Knowledge > User instead of the Computer workspace.",
-    });
-  }
-
-  await runComputerWorkspaceTask(target, "workspace_file_delete", { path });
-  return json(200, { ok: true });
-}
-
-function isComputerUserMdPath(path: string): boolean {
-  return path.replace(/^\/+/, "") === "USER.md";
-}
-
 function isVisibleUserContextPath(path: string): boolean {
   const clean = path.replace(/^\/+/, "");
   if (clean === "USER.md") return true;
@@ -807,212 +672,6 @@ function isBuiltinToolCatalogPath(path: string): boolean {
 
 function isAllowedCatalogPath(path: string): boolean {
   return !isBuiltinToolCatalogPath(path);
-}
-
-const COMPUTER_WORKSPACE_TASK_TIMEOUT_MS = 12_000;
-const COMPUTER_WORKSPACE_TASK_POLL_MS = 300;
-
-async function runComputerWorkspaceTask(
-  target: ComputerTarget,
-  taskType: ComputerTaskType,
-  taskInput?: unknown,
-): Promise<unknown> {
-  const task = await enqueueComputerTask({
-    tenantId: target.tenantId,
-    computerId: target.computerId,
-    taskType,
-    taskInput,
-    idempotencyKey: null,
-  });
-  const taskId = task.id;
-  const deadline = Date.now() + COMPUTER_WORKSPACE_TASK_TIMEOUT_MS;
-
-  while (Date.now() < deadline) {
-    const [row] = await db
-      .select({
-        status: computerTasks.status,
-        output: computerTasks.output,
-        error: computerTasks.error,
-      })
-      .from(computerTasks)
-      .where(
-        and(
-          eq(computerTasks.tenant_id, target.tenantId),
-          eq(computerTasks.computer_id, target.computerId),
-          eq(computerTasks.id, taskId),
-        ),
-      )
-      .limit(1);
-
-    if (row?.status === "completed") return row.output;
-    if (row?.status === "failed") {
-      throw new Error(
-        `Computer workspace task failed: ${JSON.stringify(row.error ?? {})}`,
-      );
-    }
-    await delay(COMPUTER_WORKSPACE_TASK_POLL_MS);
-  }
-
-  throw new Error(
-    "Computer runtime did not complete the workspace operation in time",
-  );
-}
-
-function asWorkspaceListOutput(output: unknown): {
-  files: Array<{ path: string }>;
-} {
-  const files = (output as { files?: unknown })?.files;
-  if (!Array.isArray(files)) return { files: [] };
-  return {
-    files: files
-      .map((file) => ({
-        path: String((file as { path?: unknown }).path ?? ""),
-      }))
-      .filter((file) => file.path),
-  };
-}
-
-function asWorkspaceReadOutput(output: unknown): { content: string | null } {
-  const content = (output as { content?: unknown })?.content;
-  return { content: typeof content === "string" ? content : null };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// ---------------------------------------------------------------------------
-// workspace-files-efs sidecar invoker
-// ---------------------------------------------------------------------------
-
-type WorkspaceFilesEfsListPayload = {
-  action: "list";
-  tenantId: string;
-  computerId: string;
-  includeContent: boolean;
-};
-
-type WorkspaceFilesEfsGetPayload = {
-  action: "get";
-  tenantId: string;
-  computerId: string;
-  path: string;
-};
-
-type WorkspaceFilesEfsPayload =
-  | WorkspaceFilesEfsListPayload
-  | WorkspaceFilesEfsGetPayload;
-
-type WorkspaceFilesEfsResponse =
-  | {
-      ok: true;
-      files: Array<{
-        path: string;
-        source: "computer";
-        sha256: string;
-        overridden: false;
-        content?: string;
-      }>;
-    }
-  | {
-      ok: true;
-      content: string | null;
-      source: "computer";
-      sha256: string;
-    }
-  | { ok: false; status: number; error: string };
-
-let lambdaClient: LambdaClient | null = null;
-
-function getLambdaClient(): LambdaClient {
-  if (!lambdaClient) lambdaClient = new LambdaClient({});
-  return lambdaClient;
-}
-
-/**
- * Lambda → Lambda RequestResponse invoke of the workspace-files-efs
- * sidecar. The sidecar mounts the shared EFS at /mnt/efs and reads the
- * per-Computer subpath directly, bypassing the computer_tasks queue.
- *
- * Caller has already validated tenant + Computer existence + permission;
- * the sidecar only enforces path-safety (UUID-shaped ids + no traversal).
- *
- * Failure modes mapped to admin-facing error payloads:
- *   - missing env var → 500 (deployment misconfig)
- *   - InvocationException → 502 (sidecar crashed or VPC unreachable)
- *   - non-ok body → pass through the sidecar's {status,error}
- */
-async function invokeWorkspaceFilesEfs(
-  payload: WorkspaceFilesEfsListPayload,
-): Promise<
-  | {
-      ok: true;
-      files: Array<{
-        path: string;
-        source: "computer";
-        sha256: string;
-        overridden: false;
-        content?: string;
-      }>;
-    }
-  | { ok: false; status: number; error: string }
->;
-async function invokeWorkspaceFilesEfs(
-  payload: WorkspaceFilesEfsGetPayload,
-): Promise<
-  | { ok: true; content: string | null; source: "computer"; sha256: string }
-  | { ok: false; status: number; error: string }
->;
-async function invokeWorkspaceFilesEfs(
-  payload: WorkspaceFilesEfsPayload,
-): Promise<WorkspaceFilesEfsResponse> {
-  const fnArn = process.env.WORKSPACE_FILES_EFS_FN_ARN;
-  if (!fnArn) {
-    return {
-      ok: false,
-      status: 500,
-      error:
-        "WORKSPACE_FILES_EFS_FN_ARN is not configured on the workspace-files Lambda",
-    };
-  }
-  let result;
-  try {
-    result = await getLambdaClient().send(
-      new InvokeCommand({
-        FunctionName: fnArn,
-        InvocationType: "RequestResponse",
-        Payload: new TextEncoder().encode(JSON.stringify(payload)),
-      }),
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      status: 502,
-      error: `workspace-files-efs invoke failed: ${message}`,
-    };
-  }
-  if (result.FunctionError) {
-    const message = result.Payload
-      ? new TextDecoder().decode(result.Payload)
-      : result.FunctionError;
-    return {
-      ok: false,
-      status: 502,
-      error: `workspace-files-efs returned an error: ${message}`,
-    };
-  }
-  if (!result.Payload) {
-    return {
-      ok: false,
-      status: 502,
-      error: "workspace-files-efs returned an empty payload",
-    };
-  }
-  const body = JSON.parse(
-    new TextDecoder().decode(result.Payload),
-  ) as WorkspaceFilesEfsResponse;
-  return body;
 }
 
 function isSkillMarkerPath(path: string): boolean {
@@ -1149,10 +808,6 @@ async function handlePut(
       error:
         "Built-in tools are configured through the Built-in Tools API, not workspace skill files.",
     });
-  }
-
-  if (target.kind === "computer") {
-    return await handleComputerPut(target, cleanPath, content);
   }
 
   if (target.kind === "user") {
@@ -1486,9 +1141,6 @@ async function handleDelete(
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind === "computer") {
-    return await handleComputerDelete(target, path);
-  }
   if (target.kind === "user" && !isVisibleUserContextPath(path)) {
     return json(403, {
       ok: false,
@@ -1786,7 +1438,7 @@ interface MoveSuccessPayload {
 // Move helpers operate on non-Computer targets (rejected upstream by
 // `handleMove`). This narrowed alias removes the need to repeatedly
 // pass `.prefix` and `.key` separately to the helpers.
-type WritableMoveTarget = Exclude<Target, ComputerTarget>;
+type WritableMoveTarget = Target;
 interface MoveHandlerDeps extends HandlerDeps {
   target: WritableMoveTarget;
 }
@@ -1797,13 +1449,6 @@ async function handleMove(
   toFolder: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
-
-  if (target.kind === "computer") {
-    return json(400, {
-      ok: false,
-      error: "move not supported for computer targets",
-    });
-  }
 
   let cleanFrom: string;
   let cleanToFolder: string;
@@ -2129,13 +1774,6 @@ async function handleRename(
   toPath: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
-
-  if (target.kind === "computer") {
-    return json(400, {
-      ok: false,
-      error: "rename not supported for computer targets",
-    });
-  }
 
   let cleanFrom: string;
   let cleanTo: string;
@@ -2640,7 +2278,6 @@ interface RequestBody {
   agentId?: string;
   templateId?: string;
   spaceId?: string;
-  computerId?: string;
   userId?: string;
   defaults?: boolean;
   catalog?: boolean;
@@ -2709,7 +2346,7 @@ export async function handler(
     return json(400, {
       ok: false,
       error:
-        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, spaceId, computerId, userId, defaults: true, or catalog: true. Tenant is derived from the caller's token.",
+        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, spaceId, userId, defaults: true, or catalog: true. Tenant is derived from the caller's token.",
     });
   }
 
@@ -2727,7 +2364,6 @@ export async function handler(
     (body.agentId ? 1 : 0) +
     (body.templateId ? 1 : 0) +
     (body.spaceId ? 1 : 0) +
-    (body.computerId ? 1 : 0) +
     (body.userId ? 1 : 0) +
     (body.defaults ? 1 : 0) +
     (body.catalog ? 1 : 0);
@@ -2735,7 +2371,7 @@ export async function handler(
     return json(400, {
       ok: false,
       error:
-        "Exactly one of agentId, templateId, spaceId, computerId, userId, defaults, catalog is required",
+        "Exactly one of agentId, templateId, spaceId, userId, defaults, catalog is required",
     });
   }
 
@@ -2746,8 +2382,6 @@ export async function handler(
     target = await resolveTemplateTarget(tenantId, body.templateId);
   } else if (body.spaceId) {
     target = await resolveSpaceTarget(tenantId, body.spaceId);
-  } else if (body.computerId) {
-    target = await resolveComputerTarget(tenantId, body.computerId);
   } else if (body.userId) {
     target = await resolveUserContextTarget(tenantId, body.userId);
   } else if (body.defaults) {

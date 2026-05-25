@@ -61,7 +61,9 @@ describe("memory-strategy", () => {
     });
 
     it("preserves leading text before the first topic tag", () => {
-      const sections = parseMemoryTopics('preface\n<topic name="A">body</topic>');
+      const sections = parseMemoryTopics(
+        'preface\n<topic name="A">body</topic>',
+      );
       expect(sections[0]).toEqual({ topic: "", content: "preface" });
       expect(sections[1]).toEqual({ topic: "A", content: "body" });
     });
@@ -69,7 +71,9 @@ describe("memory-strategy", () => {
 
   describe("stripTopicTags", () => {
     it("removes <topic> open and close tags", () => {
-      expect(stripTopicTags('<topic name="X">hello</topic> world')).toBe("hello world");
+      expect(stripTopicTags('<topic name="X">hello</topic> world')).toBe(
+        "hello world",
+      );
     });
 
     it("collapses runs of whitespace", () => {

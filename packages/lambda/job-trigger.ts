@@ -13,15 +13,10 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { getDb, ensureThreadForWork } from "@thinkwork/database-pg";
+import { getDb } from "@thinkwork/database-pg";
 import {
-  agents,
   agentSkills,
-  computers,
-  computerEvents,
-  computerTasks,
   evalRuns,
-  messages,
   routineExecutions,
   routines,
   scheduledJobs,
@@ -56,12 +51,6 @@ interface JobTriggerEvent {
   scheduleName?: string;
   oneTime?: boolean;
 }
-
-type ScheduledComputerTarget = {
-  id: string;
-  ownerUserId: string | null;
-  migratedAgentId: string | null;
-};
 
 const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
 
@@ -199,9 +188,8 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -260,104 +248,7 @@ async function invokeAgentcoreRunSkill(payload: {
 
 const SCHEDULE_GROUP = "thinkwork-jobs";
 
-async function resolveComputerForAgentSchedule(input: {
-  tenantId: string;
-  agentId: string;
-}): Promise<ScheduledComputerTarget | null> {
-  const db = getDb();
-  const [computer] = await db
-    .select({
-      id: computers.id,
-      ownerUserId: computers.owner_user_id,
-      migratedAgentId: computers.migrated_from_agent_id,
-    })
-    .from(computers)
-    .where(
-      and(
-        eq(computers.tenant_id, input.tenantId),
-        eq(computers.migrated_from_agent_id, input.agentId),
-        sql`${computers.status} <> 'archived'`,
-      ),
-    )
-    .limit(1);
-
-  return computer ?? null;
-}
-
-async function enqueueScheduledComputerThreadTurn(input: {
-  tenantId: string;
-  computerId: string;
-  threadId: string;
-  messageId: string;
-  triggerId: string;
-  triggerType: string;
-  scheduleName?: string;
-  actorType: "user" | "system";
-  actorId?: string | null;
-}) {
-  const db = getDb();
-  const idempotencyKey = [
-    "scheduled-thread-turn",
-    input.triggerId,
-    input.messageId,
-  ].join(":");
-  const taskInput = {
-    threadId: input.threadId,
-    messageId: input.messageId,
-    source: "schedule",
-    actorType: input.actorType,
-    actorId: input.actorId ?? null,
-    requesterUserId:
-      input.actorType === "user" ? (input.actorId ?? null) : null,
-    contextClass:
-      input.actorType === "user" && input.actorId ? "user" : "system",
-    triggerId: input.triggerId,
-    triggerType: input.triggerType,
-    scheduleName: input.scheduleName ?? null,
-  };
-
-  const [task] = await db
-    .insert(computerTasks)
-    .values({
-      tenant_id: input.tenantId,
-      computer_id: input.computerId,
-      task_type: "thread_turn",
-      status: "pending",
-      input: taskInput,
-      idempotency_key: idempotencyKey,
-      created_by_user_id: input.actorType === "user" ? input.actorId : null,
-    })
-    .onConflictDoNothing({
-      target: [
-        computerTasks.tenant_id,
-        computerTasks.computer_id,
-        computerTasks.idempotency_key,
-      ],
-      where: sql`${computerTasks.idempotency_key} IS NOT NULL`,
-    })
-    .returning({ id: computerTasks.id });
-
-  if (task) {
-    await db.insert(computerEvents).values({
-      tenant_id: input.tenantId,
-      computer_id: input.computerId,
-      task_id: task.id,
-      event_type: "scheduled_thread_turn_enqueued",
-      level: "info",
-      payload: {
-        threadId: input.threadId,
-        messageId: input.messageId,
-        triggerId: input.triggerId,
-        triggerType: input.triggerType,
-        scheduleName: input.scheduleName ?? null,
-        requesterUserId:
-          input.actorType === "user" ? (input.actorId ?? null) : null,
-      },
-    });
-  }
-
-  return task ?? null;
-}
+// Computer scheduling removed (refactor/kill-computer).
 
 function parseThreadIdleMemoryLearningConfig(
   config: unknown,
@@ -396,9 +287,8 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -625,111 +515,20 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         }
       }
     } else if (isAgentJob && agentId) {
-      const jobTitle = job?.name || `Scheduled job ${triggerId.slice(0, 8)}`;
-      const isUserScheduled =
-        job?.created_by_type === "user" && !!job?.created_by_id;
-      const computer = await resolveComputerForAgentSchedule({
-        tenantId,
-        agentId,
-      });
-
-      if (computer) {
-        const requesterUserId = isUserScheduled ? job!.created_by_id : null;
-        if (!requesterUserId) {
-          console.warn(
-            `[job-trigger] Computer ${computer.id} scheduled job ${triggerId} has no requester user; skipping requester-scoped scheduled turn`,
-          );
-          await db.insert(computerEvents).values({
-            tenant_id: tenantId,
-            computer_id: computer.id,
-            event_type: "scheduled_thread_turn_skipped",
-            level: "warn",
-            payload: {
-              triggerId,
-              triggerType,
-              scheduleName: scheduleName ?? null,
-              reason: "requester_user_required",
-            },
-          });
-          return;
-        }
-
-        const result = await ensureThreadForWork({
-          tenantId,
-          computerId: computer.id,
-          spaceId: jobSpaceId ?? undefined,
-          userId: requesterUserId,
-          title: jobTitle,
-          channel: "schedule",
-        });
-        const threadId = result.threadId;
-        const messageContent =
-          prompt?.trim() ||
-          `Scheduled job fired: ${jobTitle}. Handle the scheduled work for this Computer.`;
-        const [message] = await db
-          .insert(messages)
-          .values({
-            thread_id: threadId,
-            tenant_id: tenantId,
-            role: "user",
-            content: messageContent,
-            sender_type: "user",
-            sender_id: requesterUserId,
-            metadata: {
-              source: "scheduled_job",
-              triggerId,
-              triggerType,
-              scheduleName: scheduleName ?? null,
-              requesterUserId,
-              spaceId: jobSpaceId,
-            },
-          })
-          .returning({ id: messages.id });
-        await enqueueScheduledComputerThreadTurn({
-          tenantId,
-          computerId: computer.id,
-          threadId,
-          messageId: message.id,
-          triggerId,
-          triggerType,
-          scheduleName,
-          actorType: "user",
-          actorId: requesterUserId,
-        });
-
-        // Keep the migrated Agent heartbeat fresh because it remains the
-        // managed execution substrate behind this Computer.
-        await db
-          .update(agents)
-          .set({ last_heartbeat_at: new Date() })
-          .where(eq(agents.id, agentId));
-
-        console.log(
-          `[job-trigger] Computer thread_turn queued for computer ${computer.id} from scheduled agent ${agentId}`,
-        );
-      } else {
-        console.log(
-          `[job-trigger] No Computer found for scheduled agent ${agentId}; legacy Agent wakeup disabled`,
-        );
-      }
+      console.log(
+        `[job-trigger] Agent scheduling routed through Computer is disabled; ignoring trigger ${triggerId} for agent ${agentId}`,
+      );
     } else if (triggerType === "eval_scheduled") {
       // Eval-scheduled jobs: insert a pending eval_runs row + fire the
-      // eval-runner Lambda async. Evals now run directly against a
-      // platform-managed AgentCore agent. Computer evals are intentionally out
-      // of this slice.
+      // eval-runner Lambda async. Evals run against a platform-managed
+      // AgentCore agent.
       const cfg = (job?.config ?? {}) as {
         agentId?: string;
-        computerId?: string;
         model?: string;
         categories?: string[];
       };
       let targetAgentId: string | null = null;
       try {
-        if (cfg.computerId) {
-          throw new Error(
-            "Scheduled eval Computer targets are no longer supported",
-          );
-        }
         if (cfg.model && cfg.model !== DEFAULT_EVAL_MODEL_ID) {
           throw new Error(
             `Scheduled eval model overrides are no longer supported; use ${DEFAULT_EVAL_MODEL_ID}`,
@@ -765,7 +564,6 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         .values({
           tenant_id: tenantId,
           agent_id: targetAgentId,
-          computer_id: null,
           scheduled_job_id: triggerId,
           status: "pending",
           model: DEFAULT_EVAL_MODEL_ID,
@@ -777,9 +575,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -1126,9 +923,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } = await import(
-          "@aws-sdk/client-scheduler"
-        );
+        const { SchedulerClient, DeleteScheduleCommand } =
+          await import("@aws-sdk/client-scheduler");
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({

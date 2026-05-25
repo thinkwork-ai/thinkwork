@@ -11,7 +11,11 @@ import {
   CognitoUserSession,
   CognitoUserAttribute,
 } from "amazon-cognito-identity-js";
-import { CognitoSecureStorage, waitForStorageReady, isStorageReady } from "./cognito-storage";
+import {
+  CognitoSecureStorage,
+  waitForStorageReady,
+  isStorageReady,
+} from "./cognito-storage";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -165,15 +169,13 @@ export function getCurrentSession(): Promise<CognitoUserSession | null> {
       return;
     }
 
-    user.getSession(
-      (err: Error | null, session: CognitoUserSession | null) => {
-        if (err || !session || !session.isValid()) {
-          resolve(null);
-          return;
-        }
-        resolve(session);
-      },
-    );
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session || !session.isValid()) {
+        resolve(null);
+        return;
+      }
+      resolve(session);
+    });
   });
 }
 
@@ -331,14 +333,24 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
  */
 export function storeOAuthTokens(tokens: OAuthTokens): AuthUser {
   const payload = decodeJwtPayload(tokens.id_token);
-  const username = (payload["sub"] as string) ?? (payload["cognito:username"] as string) ?? "";
+  const username =
+    (payload["sub"] as string) ?? (payload["cognito:username"] as string) ?? "";
 
   // Write tokens into CognitoSecureStorage using Cognito SDK key format
   const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
   CognitoSecureStorage.setItem(`${prefix}.LastAuthUser`, username);
-  CognitoSecureStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
-  CognitoSecureStorage.setItem(`${prefix}.${username}.accessToken`, tokens.access_token);
-  CognitoSecureStorage.setItem(`${prefix}.${username}.refreshToken`, tokens.refresh_token);
+  CognitoSecureStorage.setItem(
+    `${prefix}.${username}.idToken`,
+    tokens.id_token,
+  );
+  CognitoSecureStorage.setItem(
+    `${prefix}.${username}.accessToken`,
+    tokens.access_token,
+  );
+  CognitoSecureStorage.setItem(
+    `${prefix}.${username}.refreshToken`,
+    tokens.refresh_token,
+  );
   CognitoSecureStorage.setItem(`${prefix}.${username}.clockDrift`, "0");
 
   return {
@@ -455,8 +467,14 @@ export async function refreshOAuthTokens(): Promise<string | null> {
       const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
       const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
       if (!username) return null;
-      CognitoSecureStorage.setItem(`${prefix}.${username}.idToken`, body.id_token);
-      CognitoSecureStorage.setItem(`${prefix}.${username}.accessToken`, body.access_token);
+      CognitoSecureStorage.setItem(
+        `${prefix}.${username}.idToken`,
+        body.id_token,
+      );
+      CognitoSecureStorage.setItem(
+        `${prefix}.${username}.accessToken`,
+        body.access_token,
+      );
       return body.id_token;
     } catch (e) {
       console.warn("[auth] refreshOAuthTokens failed:", e);

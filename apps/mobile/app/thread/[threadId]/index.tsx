@@ -176,9 +176,7 @@ function ThreadHitlPrompt({
 
   // ---- Draft-page review state (U4) ----
   const draftPayload = isBrainEnrichmentDraft
-    ? (reviewPayload as ReturnType<
-        typeof reviewPayloadFor
-      > & {
+    ? (reviewPayload as ReturnType<typeof reviewPayloadFor> & {
         proposedBodyMd: string;
         snapshotMd: string;
         regions: Array<{

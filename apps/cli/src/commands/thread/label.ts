@@ -40,6 +40,8 @@ export async function runThreadLabel(
   if (data.removeThreadLabel) {
     printSuccess(`Removed label ${labelId} from thread ${threadId}`);
   } else {
-    printError(`Server reported not-removed for label ${labelId} on thread ${threadId}.`);
+    printError(
+      `Server reported not-removed for label ${labelId} on thread ${threadId}.`,
+    );
   }
 }

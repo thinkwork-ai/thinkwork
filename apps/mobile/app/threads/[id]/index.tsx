@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { View, Text, ScrollView, Pressable, Modal, ActivityIndicator, Alert } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  Modal,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { DetailLayout } from "@/components/layout/detail-layout";
-import {
-  useAgents,
-  useMessages,
-  useThread,
-} from "@thinkwork/react-native-sdk";
+import { useAgents, useMessages, useThread } from "@thinkwork/react-native-sdk";
 import { useMe } from "@/lib/hooks/use-users";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,9 +80,13 @@ function InfoRow({
         isLast ? "" : "border-b border-neutral-100 dark:border-neutral-800"
       }`}
     >
-      <Text className="text-base text-neutral-500 dark:text-neutral-400">{label}</Text>
+      <Text className="text-base text-neutral-500 dark:text-neutral-400">
+        {label}
+      </Text>
       {valueComponent || (
-        <Text className="text-base text-neutral-900 dark:text-neutral-100">{value}</Text>
+        <Text className="text-base text-neutral-900 dark:text-neutral-100">
+          {value}
+        </Text>
       )}
     </View>
   );
@@ -105,10 +113,14 @@ function NavRow({
       }`}
     >
       <View className="w-6 items-center mr-3">{icon}</View>
-      <Text className="flex-1 text-base text-neutral-900 dark:text-neutral-100">{label}</Text>
+      <Text className="flex-1 text-base text-neutral-900 dark:text-neutral-100">
+        {label}
+      </Text>
       {badge !== undefined && badge > 0 && (
         <View className="bg-neutral-200 dark:bg-neutral-700 rounded-full px-2 py-0.5 mr-2">
-          <Text className="text-xs text-neutral-600 dark:text-neutral-300 font-medium">{badge}</Text>
+          <Text className="text-xs text-neutral-600 dark:text-neutral-300 font-medium">
+            {badge}
+          </Text>
         </View>
       )}
       <ChevronRight size={16} color="#a3a3a3" />
@@ -162,18 +174,28 @@ export default function ThreadDetailScreen() {
     );
   }
 
-  const lifecycleStatus = (thread as any).lifecycleStatus as string | null | undefined;
-  const lifecycleLabel = lifecycleStatus ? (LIFECYCLE_LABELS[lifecycleStatus] ?? "Idle") : "—";
+  const lifecycleStatus = (thread as any).lifecycleStatus as
+    | string
+    | null
+    | undefined;
+  const lifecycleLabel = lifecycleStatus
+    ? (LIFECYCLE_LABELS[lifecycleStatus] ?? "Idle")
+    : "—";
 
   const getAgentName = (agentId?: any) => {
     if (!agentId) return "None";
     return agents?.find((a: any) => a.id === agentId)?.name ?? "Unknown";
   };
 
-  const hasMeta = (thread as any).metadata != null && typeof (thread as any).metadata === "object" && Object.keys((thread as any).metadata).length > 0;
+  const hasMeta =
+    (thread as any).metadata != null &&
+    typeof (thread as any).metadata === "object" &&
+    Object.keys((thread as any).metadata).length > 0;
 
   return (
-    <DetailLayout showSidebar={false} title={thread.title ?? "Thread"}
+    <DetailLayout
+      showSidebar={false}
+      title={thread.title ?? "Thread"}
       headerRight={
         <HeaderContextMenu
           items={[
@@ -189,66 +211,69 @@ export default function ThreadDetailScreen() {
     >
       <ScrollView className="flex-1" contentContainerClassName="pb-8">
         <View className="w-full px-4" style={{ maxWidth: 768 }}>
-
-        {/* Summary Card */}
-        <View className="mt-4 bg-white dark:bg-neutral-900 rounded-xl overflow-hidden border border-neutral-100 dark:border-neutral-800">
-          <InfoRow label="Status" value={lifecycleLabel} />
-          <InfoRow label="Trigger" value={triggerLabel((thread as any).channel)} />
-          <InfoRow
-            label="Agent"
-            value={getAgentName(thread.agentId)}
-          />
-          {thread.number && (
-            <InfoRow
-              label="Number"
-              value={`#${thread.number}`}
-            />
-          )}
-          <InfoRow label="Created" value={formatDate(new Date(thread.createdAt).getTime())} />
-          {(thread as any).labels && (thread as any).labels.length > 0 && (
-            <InfoRow
-              label="Labels"
-              valueComponent={
-                <View className="flex-row flex-wrap gap-1 justify-end">
-                  {(thread as any).labels.map((label: string) => (
-                    <Badge key={label} variant="outline">
-                      <Text className="text-xs">{label}</Text>
-                    </Badge>
-                  ))}
-                </View>
-              }
-            />
-          )}
-          <Pressable
-            onPress={() => router.push(`/threads/${id}/conversation`)}
-            className="flex-row items-center justify-between px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800"
-          >
-            <Text className="text-base text-neutral-500 dark:text-neutral-400">Conversation</Text>
-            <View className="flex-row items-center gap-2">
-              {(messages?.length ?? 0) > 0 && (
-                <View style={{ backgroundColor: "#0ea5e9" }} className="rounded-full px-2 py-0.5">
-                  <Text className="text-xs text-white font-medium">
-                    {messages?.length}
-                  </Text>
-                </View>
-              )}
-              <ChevronRight size={16} color="#a3a3a3" />
-            </View>
-          </Pressable>
-        </View>
-
-        {/* Navigation Rows */}
-        {hasMeta && (
+          {/* Summary Card */}
           <View className="mt-4 bg-white dark:bg-neutral-900 rounded-xl overflow-hidden border border-neutral-100 dark:border-neutral-800">
-            <NavRow
-              icon={<FileText size={18} color="#8b5cf6" />}
-              label="Details"
-              onPress={() => router.push(`/threads/${id}/details`)}
-              isLast
+            <InfoRow label="Status" value={lifecycleLabel} />
+            <InfoRow
+              label="Trigger"
+              value={triggerLabel((thread as any).channel)}
             />
+            <InfoRow label="Agent" value={getAgentName(thread.agentId)} />
+            {thread.number && (
+              <InfoRow label="Number" value={`#${thread.number}`} />
+            )}
+            <InfoRow
+              label="Created"
+              value={formatDate(new Date(thread.createdAt).getTime())}
+            />
+            {(thread as any).labels && (thread as any).labels.length > 0 && (
+              <InfoRow
+                label="Labels"
+                valueComponent={
+                  <View className="flex-row flex-wrap gap-1 justify-end">
+                    {(thread as any).labels.map((label: string) => (
+                      <Badge key={label} variant="outline">
+                        <Text className="text-xs">{label}</Text>
+                      </Badge>
+                    ))}
+                  </View>
+                }
+              />
+            )}
+            <Pressable
+              onPress={() => router.push(`/threads/${id}/conversation`)}
+              className="flex-row items-center justify-between px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800"
+            >
+              <Text className="text-base text-neutral-500 dark:text-neutral-400">
+                Conversation
+              </Text>
+              <View className="flex-row items-center gap-2">
+                {(messages?.length ?? 0) > 0 && (
+                  <View
+                    style={{ backgroundColor: "#0ea5e9" }}
+                    className="rounded-full px-2 py-0.5"
+                  >
+                    <Text className="text-xs text-white font-medium">
+                      {messages?.length}
+                    </Text>
+                  </View>
+                )}
+                <ChevronRight size={16} color="#a3a3a3" />
+              </View>
+            </Pressable>
           </View>
-        )}
 
+          {/* Navigation Rows */}
+          {hasMeta && (
+            <View className="mt-4 bg-white dark:bg-neutral-900 rounded-xl overflow-hidden border border-neutral-100 dark:border-neutral-800">
+              <NavRow
+                icon={<FileText size={18} color="#8b5cf6" />}
+                label="Details"
+                onPress={() => router.push(`/threads/${id}/details`)}
+                isLast
+              />
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -274,8 +299,8 @@ export default function ThreadDetailScreen() {
               Delete Thread?
             </Text>
             <Text className="text-sm text-center text-neutral-600 dark:text-neutral-400 mb-4">
-              This will permanently delete this thread and all its messages. This action cannot be
-              undone.
+              This will permanently delete this thread and all its messages.
+              This action cannot be undone.
             </Text>
             <Pressable
               onPress={async () => {
@@ -303,7 +328,9 @@ export default function ThreadDetailScreen() {
               {deleting ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+                <Text
+                  style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}
+                >
                   Delete Thread
                 </Text>
               )}
@@ -311,9 +338,15 @@ export default function ThreadDetailScreen() {
             <Pressable
               onPress={() => setShowDeleteModal(false)}
               disabled={deleting}
-              style={{ paddingVertical: 12, alignItems: "center", marginTop: 8 }}
+              style={{
+                paddingVertical: 12,
+                alignItems: "center",
+                marginTop: 8,
+              }}
             >
-              <Text className="font-medium text-neutral-500 dark:text-neutral-400">Cancel</Text>
+              <Text className="font-medium text-neutral-500 dark:text-neutral-400">
+                Cancel
+              </Text>
             </Pressable>
           </View>
         </View>

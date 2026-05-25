@@ -81,7 +81,9 @@ export default function ProfileScreen() {
               Your profile information is shared with your team team and agents.
             </Muted>
 
-            <View className={`gap-4 ${isLargeScreen ? "rounded-lg border border-neutral-200 dark:border-neutral-800 p-4" : ""}`}>
+            <View
+              className={`gap-4 ${isLargeScreen ? "rounded-lg border border-neutral-200 dark:border-neutral-800 p-4" : ""}`}
+            >
               <Input
                 compact={isLargeScreen}
                 label="Display Name"
@@ -146,12 +148,16 @@ export default function ProfileScreen() {
 
             {error && (
               <View className="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3">
-                <Text className="text-sm text-red-600 dark:text-red-400">{error}</Text>
+                <Text className="text-sm text-red-600 dark:text-red-400">
+                  {error}
+                </Text>
               </View>
             )}
             {success && (
               <View className="mt-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 px-4 py-3">
-                <Text className="text-sm text-green-600 dark:text-green-400">{success}</Text>
+                <Text className="text-sm text-green-600 dark:text-green-400">
+                  {success}
+                </Text>
               </View>
             )}
 
@@ -165,10 +171,14 @@ export default function ProfileScreen() {
                 {submitting ? (
                   <>
                     <ActivityIndicator size="small" color="#fff" />
-                    <Text className="ml-2 text-white font-semibold text-sm">Saving...</Text>
+                    <Text className="ml-2 text-white font-semibold text-sm">
+                      Saving...
+                    </Text>
                   </>
                 ) : (
-                  <Text className="text-white font-semibold text-sm">Save Profile</Text>
+                  <Text className="text-white font-semibold text-sm">
+                    Save Profile
+                  </Text>
                 )}
               </Pressable>
             </View>

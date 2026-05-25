@@ -37,6 +37,9 @@ interface ListDocumentsResponse {
 }
 
 export async function listDocuments(kbId: string): Promise<KbDocument[]> {
-  const data = await kbFilesApi<ListDocumentsResponse>({ action: "list", kbId });
+  const data = await kbFilesApi<ListDocumentsResponse>({
+    action: "list",
+    kbId,
+  });
   return data.files ?? [];
 }

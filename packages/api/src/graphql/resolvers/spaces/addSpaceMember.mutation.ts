@@ -22,10 +22,9 @@ export async function addSpaceMember(
   await requireTenantAdmin(ctx, space.tenant_id);
 
   if (space.access_mode !== "private") {
-    throw new GraphQLError(
-      "Members can only be managed on private Spaces",
-      { extensions: { code: "SPACE_NOT_PRIVATE" } },
-    );
+    throw new GraphQLError("Members can only be managed on private Spaces", {
+      extensions: { code: "SPACE_NOT_PRIVATE" },
+    });
   }
 
   const [user] = await db

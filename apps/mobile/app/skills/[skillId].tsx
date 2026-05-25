@@ -21,7 +21,12 @@ import { ArrowLeft, ChevronRight, X } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import { useAgents } from "@/lib/hooks/use-agents";
 
-type EnvField = { key: string; label: string; secret: boolean; defaultValue?: string };
+type EnvField = {
+  key: string;
+  label: string;
+  secret: boolean;
+  defaultValue?: string;
+};
 
 const SKILL_ENV_DEFAULTS: Record<string, Record<string, string>> = {};
 
@@ -46,11 +51,16 @@ export default function SkillDetailScreen() {
     id: string;
     name: string;
   } | null>(null);
-  const [envFormValues, setEnvFormValues] = useState<Record<string, string>>({});
+  const [envFormValues, setEnvFormValues] = useState<Record<string, string>>(
+    {},
+  );
   const [installing, setInstalling] = useState(false);
 
-  const skillBindings = allBindings?.filter((b: any) => b.skillId === skillId) ?? [];
-  const installedAgentIds = new Set(skillBindings.map((b: any) => String(b.agentId)));
+  const skillBindings =
+    allBindings?.filter((b: any) => b.skillId === skillId) ?? [];
+  const installedAgentIds = new Set(
+    skillBindings.map((b: any) => String(b.agentId)),
+  );
 
   // Unified list: all agents sorted alphabetically, each with configured status
   const agentRows = useMemo(() => {
@@ -69,15 +79,20 @@ export default function SkillDetailScreen() {
       const skillDefaults = SKILL_ENV_DEFAULTS[skill.skillId] ?? {};
       const initial: Record<string, string> = {};
       for (const field of skill.requiresEnv) {
-        initial[field.key] = field.defaultValue ?? skillDefaults[field.key] ?? "";
+        initial[field.key] =
+          field.defaultValue ?? skillDefaults[field.key] ?? "";
       }
       setEnvFormValues(initial);
       setConfigAgent({ id: agentId, name: agentName });
     },
-    [skill]
+    [skill],
   );
 
-  const handleRowPress = (agentId: string, name: string, configured: boolean) => {
+  const handleRowPress = (
+    agentId: string,
+    name: string,
+    configured: boolean,
+  ) => {
     if (configured) {
       router.push({
         pathname: "/skills/configure",
@@ -89,8 +104,10 @@ export default function SkillDetailScreen() {
   };
 
   const isFormComplete = useMemo(
-    () => skill?.requiresEnv.every((f: EnvField) => envFormValues[f.key]?.trim()) ?? true,
-    [skill, envFormValues]
+    () =>
+      skill?.requiresEnv.every((f: EnvField) => envFormValues[f.key]?.trim()) ??
+      true,
+    [skill, envFormValues],
   );
 
   const handleInstall = async () => {
@@ -122,13 +139,21 @@ export default function SkillDetailScreen() {
           className="flex-row items-center px-4 py-3 gap-3 active:opacity-70"
         >
           <ArrowLeft size={20} color={colors.foreground} />
-          <Text size="lg" weight="semibold" className="flex-1" numberOfLines={1}>
+          <Text
+            size="lg"
+            weight="semibold"
+            className="flex-1"
+            numberOfLines={1}
+          >
             {skill?.name ?? skillId}
           </Text>
         </Pressable>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
         <WebContent>
           {/* Skill description */}
           {skill?.description ? (
@@ -154,7 +179,10 @@ export default function SkillDetailScreen() {
                     handleRowPress(agent.id, agent.name, agent.configured)
                   }
                   line1Left={
-                    <Text weight="medium" className="text-neutral-900 dark:text-neutral-100">
+                    <Text
+                      weight="medium"
+                      className="text-neutral-900 dark:text-neutral-100"
+                    >
                       {agent.name}
                     </Text>
                   }
@@ -205,7 +233,10 @@ export default function SkillDetailScreen() {
             <View className="px-4 py-4">
               <Muted className="mb-4">
                 Installing on{" "}
-                <Text weight="semibold" className="text-neutral-900 dark:text-neutral-100">
+                <Text
+                  weight="semibold"
+                  className="text-neutral-900 dark:text-neutral-100"
+                >
                   {configAgent?.name}
                 </Text>
               </Muted>
@@ -218,7 +249,10 @@ export default function SkillDetailScreen() {
                   <TextInput
                     value={envFormValues[field.key] ?? ""}
                     onChangeText={(text) =>
-                      setEnvFormValues((prev) => ({ ...prev, [field.key]: text }))
+                      setEnvFormValues((prev) => ({
+                        ...prev,
+                        [field.key]: text,
+                      }))
                     }
                     secureTextEntry={field.secret}
                     placeholder={field.label}
@@ -240,13 +274,17 @@ export default function SkillDetailScreen() {
                 onPress={handleInstall}
                 disabled={!isFormComplete || installing}
                 className={`rounded-lg py-3 items-center mt-2 ${
-                  isFormComplete ? "bg-sky-500" : "bg-neutral-300 dark:bg-neutral-700"
+                  isFormComplete
+                    ? "bg-sky-500"
+                    : "bg-neutral-300 dark:bg-neutral-700"
                 }`}
               >
                 {installing ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text className="text-white font-semibold text-base">Install Skill</Text>
+                  <Text className="text-white font-semibold text-base">
+                    Install Skill
+                  </Text>
                 )}
               </Pressable>
             </View>

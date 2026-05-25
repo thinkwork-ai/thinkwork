@@ -1,0 +1,20 @@
+-- 0131_drop_computer_tables_rollback.sql
+-- Best-effort rollback for 0131_drop_computer_tables.sql.
+--
+-- The Computer feature was killed end-to-end in the same PR that
+-- shipped this migration. Recreating the tables requires also
+-- restoring the resolver code, Lambda handlers, Terraform modules,
+-- and GraphQL schema fields — all of which live elsewhere in the same
+-- commit. To roll back: `git revert <pr-merge-commit>`, redeploy, then
+-- re-apply prior migrations to restore schema. There is no automatic
+-- DDL rollback here because the table column lists evolved across
+-- 0001 → 0130 (foreign-key chains, partial indices, CHECK constraints)
+-- and reconstructing them inline would silently drift from the
+-- pre-deletion shape.
+--
+-- If you genuinely need to recreate the tables without the original
+-- code: restore from a pre-merge snapshot of the schema (see
+-- packages/database-pg/drizzle/meta/_journal.json history for the
+-- canonical pre-0131 state).
+
+-- intentionally empty

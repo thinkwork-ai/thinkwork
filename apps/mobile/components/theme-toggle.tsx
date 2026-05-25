@@ -17,7 +17,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       className={cn(
         "w-9 h-9 items-center justify-center rounded-md",
         "bg-secondary active:bg-secondary/80",
-        className
+        className,
       )}
     >
       {isDark ? (

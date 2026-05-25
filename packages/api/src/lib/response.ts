@@ -1,68 +1,74 @@
-import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import type {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
+} from "aws-lambda";
 
 const CORS_HEADERS = {
-	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-	"Access-Control-Allow-Headers": "Content-Type, Authorization, x-tenant-id, x-api-key",
-	"Access-Control-Max-Age": "3600",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, x-tenant-id, x-api-key",
+  "Access-Control-Max-Age": "3600",
 };
 
 /** Returns true + sends 204 if this is an OPTIONS preflight. Use at top of handler. */
-export function handleCors(event: APIGatewayProxyEventV2): APIGatewayProxyStructuredResultV2 | null {
-	if (event.requestContext.http.method === "OPTIONS") {
-		return cors();
-	}
-	return null;
+export function handleCors(
+  event: APIGatewayProxyEventV2,
+): APIGatewayProxyStructuredResultV2 | null {
+  if (event.requestContext.http.method === "OPTIONS") {
+    return cors();
+  }
+  return null;
 }
 
 export function cors(): APIGatewayProxyStructuredResultV2 {
-	return {
-		statusCode: 204,
-		headers: CORS_HEADERS,
-		body: "",
-	};
+  return {
+    statusCode: 204,
+    headers: CORS_HEADERS,
+    body: "",
+  };
 }
 
 export function json(
-	body: unknown,
-	statusCode = 200,
+  body: unknown,
+  statusCode = 200,
 ): APIGatewayProxyStructuredResultV2 {
-	return {
-		statusCode,
-		headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-		body: JSON.stringify(body),
-	};
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+    body: JSON.stringify(body),
+  };
 }
 
 export function error(
-	message: string,
-	statusCode = 400,
+  message: string,
+  statusCode = 400,
 ): APIGatewayProxyStructuredResultV2 {
-	return json({ error: message }, statusCode);
+  return json({ error: message }, statusCode);
 }
 
 export function notFound(
-	message = "Not found",
+  message = "Not found",
 ): APIGatewayProxyStructuredResultV2 {
-	return error(message, 404);
+  return error(message, 404);
 }
 
 export function unauthorized(
-	message = "Unauthorized",
+  message = "Unauthorized",
 ): APIGatewayProxyStructuredResultV2 {
-	return error(message, 401);
+  return error(message, 401);
 }
 
 export function forbidden(
-	message = "Forbidden",
+  message = "Forbidden",
 ): APIGatewayProxyStructuredResultV2 {
-	return error(message, 403);
+  return error(message, 403);
 }
 
 export function paginated<T>(
-	items: T[],
-	cursor: string | null,
-	hasMore: boolean,
+  items: T[],
+  cursor: string | null,
+  hasMore: boolean,
 ): APIGatewayProxyStructuredResultV2 {
-	return json({ items, cursor, hasMore });
+  return json({ items, cursor, hasMore });
 }

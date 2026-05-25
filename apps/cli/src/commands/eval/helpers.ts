@@ -20,16 +20,27 @@ export interface EvalCliContext {
   tenantSlug: string;
 }
 
-export async function resolveEvalContext(opts: EvalCliOptions): Promise<EvalCliContext> {
+export async function resolveEvalContext(
+  opts: EvalCliOptions,
+): Promise<EvalCliContext> {
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
-  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({ stage, region });
+  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({
+    stage,
+    region,
+  });
 
   const flagOrEnv = opts.tenant ?? process.env.THINKWORK_TENANT;
   if (flagOrEnv) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
-      return { stage, region, client, tenantId: session.tenantId, tenantSlug: flagOrEnv };
+      return {
+        stage,
+        region,
+        client,
+        tenantId: session.tenantId,
+        tenantSlug: flagOrEnv,
+      };
     }
     const data = await gqlQuery(client, TenantBySlugDoc, { slug: flagOrEnv });
     if (!data.tenantBySlug) {
@@ -56,7 +67,9 @@ export async function resolveEvalContext(opts: EvalCliOptions): Promise<EvalCliC
   }
 
   if (ctxTenantSlug) {
-    const data = await gqlQuery(client, TenantBySlugDoc, { slug: ctxTenantSlug });
+    const data = await gqlQuery(client, TenantBySlugDoc, {
+      slug: ctxTenantSlug,
+    });
     if (data.tenantBySlug) {
       return {
         stage,
@@ -94,5 +107,7 @@ export function fmtStatus(status: string | null | undefined): string {
 }
 
 export function isTerminalStatus(status: string | null | undefined): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
+  return (
+    status === "completed" || status === "failed" || status === "cancelled"
+  );
 }

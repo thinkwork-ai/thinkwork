@@ -79,7 +79,11 @@ describe("updateScheduledJob", () => {
     mocks.selectFirst.mockResolvedValue([]);
 
     await expect(
-      updateScheduledJob(null, { id: "sj-x", input: { enabled: false } }, ctx()),
+      updateScheduledJob(
+        null,
+        { id: "sj-x", input: { enabled: false } },
+        ctx(),
+      ),
     ).rejects.toThrow(/not found/);
 
     expect(mocks.requireAdminOrServiceCaller).not.toHaveBeenCalled();
@@ -97,7 +101,11 @@ describe("updateScheduledJob", () => {
     );
 
     await expect(
-      updateScheduledJob(null, { id: "sj-1", input: { enabled: false } }, ctx()),
+      updateScheduledJob(
+        null,
+        { id: "sj-1", input: { enabled: false } },
+        ctx(),
+      ),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
 
     expect(mocks.requireAdminOrServiceCaller).toHaveBeenCalledWith(

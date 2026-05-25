@@ -52,7 +52,11 @@ export function CopyableRow({ label, value, url, onClick }: CopyableRowProps) {
           onClick={handleCopy}
           className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
         >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied ? (
+            <Check className="size-3.5" />
+          ) : (
+            <Copy className="size-3.5" />
+          )}
         </button>
       </div>
     </div>

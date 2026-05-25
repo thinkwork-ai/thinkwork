@@ -13,10 +13,11 @@ type WorkflowCatalogItem {
   enabled: Boolean!
 }
 
-# IDs of currently-bound items per kind for the caller's Computer.
-# Frontend merges these with the catalog lists to derive `connected: true`.
+# IDs of currently-bound items per kind for the caller's tenant
+# platform agent. Frontend merges these with the catalog lists to derive
+# `connected: true`.
 type CustomizeBindings {
-  computerId: ID!
+  agentId: ID!
   connectedSkillIds: [String!]!
   connectedWorkflowSlugs: [String!]!
 }
@@ -29,7 +30,6 @@ type WorkflowBinding {
   id: ID!
   tenantId: ID!
   agentId: ID!
-  computerId: ID!
   catalogSlug: String!
   status: String!
   enabled: Boolean!
@@ -37,17 +37,17 @@ type WorkflowBinding {
 }
 
 input DisableSkillInput {
-  computerId: ID!
+  agentId: ID!
   skillId: String!
 }
 
 input EnableWorkflowInput {
-  computerId: ID!
+  agentId: ID!
   slug: String!
 }
 
 input DisableWorkflowInput {
-  computerId: ID!
+  agentId: ID!
   slug: String!
 }
 

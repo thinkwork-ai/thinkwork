@@ -53,7 +53,9 @@ function StatusBadge({ status }: { status: string }) {
     failed: "bg-red-500/20 text-red-400",
   };
   return (
-    <Badge className={`${colors[status] ?? "bg-muted text-muted-foreground"} font-normal text-xs`}>
+    <Badge
+      className={`${colors[status] ?? "bg-muted text-muted-foreground"} font-normal text-xs`}
+    >
       {status}
     </Badge>
   );
@@ -81,7 +83,9 @@ function KbDetailPage() {
       .then(setDocs)
       .catch((err) => {
         console.error("[KB detail] listDocuments failed:", err);
-        setDocsError("Documents are unavailable. Ask your operator if this persists.");
+        setDocsError(
+          "Documents are unavailable. Ask your operator if this persists.",
+        );
       })
       .finally(() => setLoadingDocs(false));
   }, [kbId]);
@@ -160,7 +164,9 @@ function KbDetailPage() {
               Chunk Overlap
             </p>
             <p className="mt-0.5">
-              {kb.chunkOverlapPercent != null ? `${kb.chunkOverlapPercent}%` : "—"}
+              {kb.chunkOverlapPercent != null
+                ? `${kb.chunkOverlapPercent}%`
+                : "—"}
             </p>
           </div>
           <div>
@@ -226,7 +232,8 @@ function KbDetailPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Knowledge bases are managed by your operator. Ask them to add or remove documents.
+        Knowledge bases are managed by your operator. Ask them to add or remove
+        documents.
       </p>
     </div>
   );

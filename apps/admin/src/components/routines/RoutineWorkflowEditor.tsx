@@ -1,10 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  PanelRight,
-  Workflow,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, PanelRight, Workflow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -126,13 +121,9 @@ export function RoutineWorkflowEditor({
       selectedNodeId={selectedNodeId}
       onSelectNode={setSelectedNodeId}
       onAddStepAfter={openAddStep}
-      className={
-        workspace ? "h-full min-h-0 rounded-none border-0" : undefined
-      }
+      className={workspace ? "h-full min-h-0 rounded-none border-0" : undefined}
       emptyLabel={
-        catalogLoading
-          ? "Loading routine recipes..."
-          : "No workflow steps yet"
+        catalogLoading ? "Loading routine recipes..." : "No workflow steps yet"
       }
     />
   );

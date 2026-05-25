@@ -56,7 +56,7 @@ export default function EditRoutineScreen() {
   const sendToSession = async (_args: any) => {};
 
   // Resolve tenant for repo context
-  const [{ data: tenantData }] = useTenant(tenantId ?? '');
+  const [{ data: tenantData }] = useTenant(tenantId ?? "");
   const tenant = tenantData?.tenant ?? undefined;
   const tenantSlug = (tenant as any)?.slug ?? "";
   const tenantRepo = tenantSlug ? `thinkwork-ai/tenant-${tenantSlug}` : "";
@@ -117,7 +117,16 @@ export default function EditRoutineScreen() {
       setPhase("form");
       Alert.alert("Error", err?.message || "Failed to update routine");
     }
-  }, [canSave, phase, chatAgentId, tenantRepo, description, tenantSlug, routineId, editSlug]);
+  }, [
+    canSave,
+    phase,
+    chatAgentId,
+    tenantRepo,
+    description,
+    tenantSlug,
+    routineId,
+    editSlug,
+  ]);
 
   const inputBg = colorScheme === "dark" ? "#171717" : "#f5f5f5";
   const inputBorder = colorScheme === "dark" ? "#262626" : "#e5e5e5";
@@ -131,9 +140,7 @@ export default function EditRoutineScreen() {
       <DetailLayout title="Edit Routine">
         <View className="flex-1 items-center justify-center px-8">
           <ActivityIndicator size="large" color="#0ea5e9" />
-          <Muted className="mt-4 text-center">
-            Updating your routine...
-          </Muted>
+          <Muted className="mt-4 text-center">Updating your routine...</Muted>
         </View>
       </DetailLayout>
     );
@@ -156,7 +163,10 @@ export default function EditRoutineScreen() {
             </Muted>
 
             <View className="gap-1.5">
-              <Text weight="medium" className="text-sm text-neutral-700 dark:text-neutral-300">
+              <Text
+                weight="medium"
+                className="text-sm text-neutral-700 dark:text-neutral-300"
+              >
                 What do you want to change?
               </Text>
               <TextInput

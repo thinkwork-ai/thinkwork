@@ -8,7 +8,10 @@ interface RejectOptions extends InboxCliOptions {
   notes?: string;
 }
 
-export async function runInboxReject(id: string, opts: RejectOptions): Promise<void> {
+export async function runInboxReject(
+  id: string,
+  opts: RejectOptions,
+): Promise<void> {
   const ctx = await resolveInboxContext(opts);
 
   const data = await gqlMutate(ctx.client, RejectInboxItemDoc, {

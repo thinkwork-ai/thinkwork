@@ -10,12 +10,26 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
-import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  isJsonMode,
+  logStderr,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const MemoryRecordsDoc = graphql(`
   query CliMemoryRecords($tenantId: ID, $assistantId: ID, $namespace: String!) {
-    memoryRecords(tenantId: $tenantId, assistantId: $assistantId, namespace: $namespace) {
+    memoryRecords(
+      tenantId: $tenantId
+      assistantId: $assistantId
+      namespace: $namespace
+    ) {
       memoryRecordId
       namespace
       content {
@@ -29,8 +43,20 @@ const MemoryRecordsDoc = graphql(`
 `);
 
 const MemorySearchDoc = graphql(`
-  query CliMemorySearch($tenantId: ID, $assistantId: ID, $query: String!, $strategy: MemoryStrategy, $limit: Int) {
-    memorySearch(tenantId: $tenantId, assistantId: $assistantId, query: $query, strategy: $strategy, limit: $limit) {
+  query CliMemorySearch(
+    $tenantId: ID
+    $assistantId: ID
+    $query: String!
+    $strategy: MemoryStrategy
+    $limit: Int
+  ) {
+    memorySearch(
+      tenantId: $tenantId
+      assistantId: $assistantId
+      query: $query
+      strategy: $strategy
+      limit: $limit
+    ) {
       records {
         memoryRecordId
         namespace
@@ -46,21 +72,47 @@ const MemorySearchDoc = graphql(`
 const MemoryGraphDoc = graphql(`
   query CliMemoryGraph($tenantId: ID, $assistantId: ID) {
     memoryGraph(tenantId: $tenantId, assistantId: $assistantId) {
-      nodes { id label type }
-      edges { source target type }
+      nodes {
+        id
+        label
+        type
+      }
+      edges {
+        source
+        target
+        type
+      }
     }
   }
 `);
 
 const UpdateMemoryRecordDoc = graphql(`
-  mutation CliUpdateMemoryRecord($tenantId: ID, $assistantId: ID, $memoryRecordId: ID!, $content: String!) {
-    updateMemoryRecord(tenantId: $tenantId, assistantId: $assistantId, memoryRecordId: $memoryRecordId, content: $content)
+  mutation CliUpdateMemoryRecord(
+    $tenantId: ID
+    $assistantId: ID
+    $memoryRecordId: ID!
+    $content: String!
+  ) {
+    updateMemoryRecord(
+      tenantId: $tenantId
+      assistantId: $assistantId
+      memoryRecordId: $memoryRecordId
+      content: $content
+    )
   }
 `);
 
 const DeleteMemoryRecordDoc = graphql(`
-  mutation CliDeleteMemoryRecord($tenantId: ID, $assistantId: ID, $memoryRecordId: ID!) {
-    deleteMemoryRecord(tenantId: $tenantId, assistantId: $assistantId, memoryRecordId: $memoryRecordId)
+  mutation CliDeleteMemoryRecord(
+    $tenantId: ID
+    $assistantId: ID
+    $memoryRecordId: ID!
+  ) {
+    deleteMemoryRecord(
+      tenantId: $tenantId
+      assistantId: $assistantId
+      memoryRecordId: $memoryRecordId
+    )
   }
 `);
 
@@ -88,17 +140,23 @@ async function resolveMemoryContext(opts: MemoryCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, MemoryTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, MemoryTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, MemoryTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    const data = await gqlQuery(client, MemoryTenantBySlugDoc, {
+      slug: ctxSlug,
+    });
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -157,7 +215,7 @@ async function runMemorySearch(opts: SearchOptions): Promise<void> {
     process.exit(1);
   }
   const strategy = opts.strategy
-    ? STRATEGY_BY_NAME[opts.strategy.toUpperCase()] ?? null
+    ? (STRATEGY_BY_NAME[opts.strategy.toUpperCase()] ?? null)
     : null;
   const data = await gqlQuery(ctx.client, MemorySearchDoc, {
     tenantId: ctx.tenantId,
@@ -199,7 +257,9 @@ async function runMemoryGet(recordId: string, opts: GetOptions): Promise<void> {
     assistantId: opts.agent ?? null,
     namespace: opts.namespace ?? "semantic",
   });
-  const rec = (data.memoryRecords ?? []).find((r) => r.memoryRecordId === recordId);
+  const rec = (data.memoryRecords ?? []).find(
+    (r) => r.memoryRecordId === recordId,
+  );
   if (!rec) {
     printError(
       `Memory record ${recordId} not found in namespace "${opts.namespace ?? "semantic"}". ` +
@@ -227,7 +287,10 @@ interface UpdateOptions extends MemoryCliOptions {
   content?: string;
 }
 
-async function runMemoryUpdate(recordId: string, opts: UpdateOptions): Promise<void> {
+async function runMemoryUpdate(
+  recordId: string,
+  opts: UpdateOptions,
+): Promise<void> {
   const ctx = await resolveMemoryContext(opts);
   if (!opts.content) {
     printError("--content <text> is required.");
@@ -243,7 +306,8 @@ async function runMemoryUpdate(recordId: string, opts: UpdateOptions): Promise<v
     printJson({ updated: data.updateMemoryRecord });
     return;
   }
-  if (data.updateMemoryRecord) printSuccess(`Updated memory record ${recordId}.`);
+  if (data.updateMemoryRecord)
+    printSuccess(`Updated memory record ${recordId}.`);
   else printError(`Server reported not-updated for ${recordId}.`);
 }
 
@@ -252,11 +316,16 @@ interface DeleteOptions extends MemoryCliOptions {
   yes?: boolean;
 }
 
-async function runMemoryDelete(recordId: string, opts: DeleteOptions): Promise<void> {
+async function runMemoryDelete(
+  recordId: string,
+  opts: DeleteOptions,
+): Promise<void> {
   const ctx = await resolveMemoryContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to delete without --yes in a non-interactive session.");
+      printError(
+        "Refusing to delete without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
@@ -277,7 +346,8 @@ async function runMemoryDelete(recordId: string, opts: DeleteOptions): Promise<v
     printJson({ deleted: data.deleteMemoryRecord });
     return;
   }
-  if (data.deleteMemoryRecord) printSuccess(`Deleted memory record ${recordId}.`);
+  if (data.deleteMemoryRecord)
+    printSuccess(`Deleted memory record ${recordId}.`);
   else printError(`Server reported not-deleted for ${recordId}.`);
 }
 
@@ -320,7 +390,9 @@ async function runMemoryGraph(opts: GraphOptions): Promise<void> {
 export function registerMemoryCommand(program: Command): void {
   const memory = program
     .command("memory")
-    .description("Inspect, search, and edit an agent's memory records and graph.");
+    .description(
+      "Inspect, search, and edit an agent's memory records and graph.",
+    );
 
   memory
     .command("list")
@@ -376,7 +448,9 @@ export function registerMemoryCommand(program: Command): void {
 
   memory
     .command("graph")
-    .description("Print the agent's memory graph (summary in human mode; full JSON with --json).")
+    .description(
+      "Print the agent's memory graph (summary in human mode; full JSON with --json).",
+    )
     .option("--agent <id>", "Agent (assistant) ID")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")

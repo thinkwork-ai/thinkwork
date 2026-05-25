@@ -10,7 +10,9 @@ export function getAuthToken(): string | null {
   return cachedToken;
 }
 
-export function onAuthTokenChange(listener: (token: string | null) => void): () => void {
+export function onAuthTokenChange(
+  listener: (token: string | null) => void,
+): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);

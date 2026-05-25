@@ -19,37 +19,44 @@ import { toGraphQLPage } from "../wiki/mappers.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 export const recentWikiPages = async (
-	_parent: unknown,
-	args: { tenantId?: string; userId?: string; agentId?: string; limit?: number },
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: {
+    tenantId?: string;
+    userId?: string;
+    agentId?: string;
+    limit?: number;
+  },
+  ctx: GraphQLContext,
 ) => {
-	const { tenantId, userId } = await requireMemoryUserScope(ctx, {
-		...args,
-		allowTenantAdmin: true,
-	});
+  const { tenantId, userId } = await requireMemoryUserScope(ctx, {
+    ...args,
+    allowTenantAdmin: true,
+  });
 
-	const query = db
-		.select()
-		.from(wikiPages)
-		.where(
-			and(
-				eq(wikiPages.tenant_id, tenantId),
-				eq(wikiPages.owner_id, userId as string),
-				eq(wikiPages.status, "active"),
-			),
-		)
-		.orderBy(
-			desc(sql`COALESCE(${wikiPages.last_compiled_at}, ${wikiPages.updated_at})`),
-		)
-		.$dynamic();
+  const query = db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, tenantId),
+        eq(wikiPages.owner_id, userId as string),
+        eq(wikiPages.status, "active"),
+      ),
+    )
+    .orderBy(
+      desc(
+        sql`COALESCE(${wikiPages.last_compiled_at}, ${wikiPages.updated_at})`,
+      ),
+    )
+    .$dynamic();
 
-	const rows =
-		typeof args.limit === "number"
-			? await query.limit(Math.max(1, Math.floor(args.limit)))
-			: await query;
+  const rows =
+    typeof args.limit === "number"
+      ? await query.limit(Math.max(1, Math.floor(args.limit)))
+      : await query;
 
-	// recentWikiPages is a listing surface — sections/aliases aren't
-	// needed in the mobile card; fetch the single page via
-	// `wikiPage(slug)` when the user taps in.
-	return rows.map((r) => toGraphQLPage(r, { sections: [], aliases: [] }));
+  // recentWikiPages is a listing surface — sections/aliases aren't
+  // needed in the mobile card; fetch the single page via
+  // `wikiPage(slug)` when the user taps in.
+  return rows.map((r) => toGraphQLPage(r, { sections: [], aliases: [] }));
 };

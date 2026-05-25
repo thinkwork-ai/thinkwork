@@ -5,7 +5,9 @@ import { resolveEvalContext, type EvalCliOptions } from "./helpers.js";
 
 export async function runEvalCategories(opts: EvalCliOptions): Promise<void> {
   const ctx = await resolveEvalContext(opts);
-  const data = await gqlQuery(ctx.client, EvalTestCasesDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, EvalTestCasesDoc, {
+    tenantId: ctx.tenantId,
+  });
 
   const counts = new Map<string, { total: number; enabled: number }>();
   for (const tc of data.evalTestCases ?? []) {

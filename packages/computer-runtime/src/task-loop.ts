@@ -327,9 +327,9 @@ function requiredString(value: unknown, name: string): string {
 function isCancelledOutput(value: unknown): value is { cancelled: true } {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      (value as Record<string, unknown>).cancelled === true,
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).cancelled === true,
   );
 }
 

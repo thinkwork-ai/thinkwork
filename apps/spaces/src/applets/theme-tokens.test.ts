@@ -38,10 +38,7 @@ describe("shadcn applet theme tokens", () => {
 
   it("does not read theme tokens from artifact metadata", () => {
     expect(
-      parseShadcnThemeCss(
-        ":root { --background: oklch(1 0 0); }",
-        "light",
-      ),
+      parseShadcnThemeCss(":root { --background: oklch(1 0 0); }", "light"),
     ).toEqual({ "--background": "oklch(1 0 0)" });
   });
 });

@@ -1,6 +1,10 @@
 import { input } from "@inquirer/prompts";
 import { gqlMutate, gqlQuery } from "../../lib/gql-client.js";
-import { isInteractive, promptOrExit, requireTty } from "../../lib/interactive.js";
+import {
+  isInteractive,
+  promptOrExit,
+  requireTty,
+} from "../../lib/interactive.js";
 import { isJsonMode, printJson } from "../../lib/output.js";
 import { printError, printSuccess } from "../../ui.js";
 import {
@@ -26,7 +30,9 @@ export async function runThreadCreate(
   let resolvedTitle = title;
   if (!resolvedTitle) {
     if (!interactive) {
-      printError("Title is required in non-interactive mode. Pass it as the first argument.");
+      printError(
+        "Title is required in non-interactive mode. Pass it as the first argument.",
+      );
       process.exit(1);
     }
     requireTty("Thread title");
@@ -90,7 +96,9 @@ export async function runThreadCreate(
     printJson({ thread, labelIds });
     return;
   }
-  printSuccess(`Created thread ${thread.id} (#${thread.number}) — ${thread.title}`);
+  printSuccess(
+    `Created thread ${thread.id} (#${thread.number}) — ${thread.title}`,
+  );
   if (labelIds.length > 0) {
     console.log(`  Labels attached: ${labelIds.join(", ")}`);
   }

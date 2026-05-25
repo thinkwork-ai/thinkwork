@@ -22,7 +22,11 @@ export const updateOntologyEntityTypeMutation = async (
   args: UpdateOntologyEntityTypeArgs,
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "update_ontology_entity_type");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.input.tenantId,
+    "update_ontology_entity_type",
+  );
   const actorUserId = await resolveCallerUserId(ctx);
   return updateOntologyEntityType({
     actorUserId,

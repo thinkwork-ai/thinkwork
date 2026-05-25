@@ -47,8 +47,10 @@ function runScript(args: string[]): RunResult {
       status?: number;
     };
     return {
-      stdout: typeof e.stdout === "string" ? e.stdout : (e.stdout?.toString() ?? ""),
-      stderr: typeof e.stderr === "string" ? e.stderr : (e.stderr?.toString() ?? ""),
+      stdout:
+        typeof e.stdout === "string" ? e.stdout : (e.stdout?.toString() ?? ""),
+      stderr:
+        typeof e.stderr === "string" ? e.stderr : (e.stderr?.toString() ?? ""),
       exitCode: e.status ?? 1,
     };
   }
@@ -58,15 +60,9 @@ describe("verify-supply-chain.sh", () => {
   beforeAll(() => {
     // The script lives in the repo and the lockfile + baseline must exist
     // for these tests to mean anything. Fail loud if any are missing.
-    expect(() =>
-      readFileSync(SCRIPT_PATH, "utf8"),
-    ).not.toThrow();
-    expect(() =>
-      readFileSync(BASELINE_PATH, "utf8"),
-    ).not.toThrow();
-    expect(() =>
-      readFileSync(LOCKFILE_PATH, "utf8"),
-    ).not.toThrow();
+    expect(() => readFileSync(SCRIPT_PATH, "utf8")).not.toThrow();
+    expect(() => readFileSync(BASELINE_PATH, "utf8")).not.toThrow();
+    expect(() => readFileSync(LOCKFILE_PATH, "utf8")).not.toThrow();
   });
 
   it("happy path: real baseline + real lockfile exits 0 with a verified summary", () => {
@@ -142,9 +138,7 @@ describe("verify-supply-chain.sh", () => {
     const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
     const tmpBaseline = path.join(tmpDir, "baseline.txt");
     const real = readFileSync(BASELINE_PATH, "utf8");
-    const firstReal = real
-      .split("\n")
-      .find((line) => line.startsWith("@"))!;
+    const firstReal = real.split("\n").find((line) => line.startsWith("@"))!;
     // Append a third token that should NOT be silently dropped.
     writeFileSync(tmpBaseline, `${firstReal} suspicious-third-column\n`);
     const result = runScript([tmpBaseline]);
@@ -172,9 +166,7 @@ describe("verify-supply-chain.sh", () => {
     const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
     const tmpBaseline = path.join(tmpDir, "baseline.txt");
     const real = readFileSync(BASELINE_PATH, "utf8");
-    const firstReal = real
-      .split("\n")
-      .find((line) => line.startsWith("@"))!;
+    const firstReal = real.split("\n").find((line) => line.startsWith("@"))!;
     writeFileSync(tmpBaseline, `${firstReal}\r\n`);
     const result = runScript([tmpBaseline]);
     expect(result.exitCode).toBe(0);
@@ -199,9 +191,7 @@ describe("verify-supply-chain.sh", () => {
     // Pull one real entry from the actual baseline so this test rides on
     // truth, not on a hard-coded hash that drifts when we bump versions.
     const real = readFileSync(BASELINE_PATH, "utf8");
-    const firstReal = real
-      .split("\n")
-      .find((line) => line.startsWith("@"))!;
+    const firstReal = real.split("\n").find((line) => line.startsWith("@"))!;
     writeFileSync(
       tmpBaseline,
       [

@@ -11,30 +11,30 @@
  */
 
 export {
-	EMPTY_TREE_ROOT,
-	buildMerkleTree,
-	computeLeafHash,
-	verifyProofPath,
-	type ProofStep,
+  EMPTY_TREE_ROOT,
+  buildMerkleTree,
+  computeLeafHash,
+  verifyProofPath,
+  type ProofStep,
 } from "./merkle";
 
 export {
-	AnchorSchemaV1,
-	SliceSchemaV1,
-	SchemaVersionUnsupportedError,
-	parseAnchor,
-	parseSlice,
-	type AnchorV1,
-	type SliceV1,
+  AnchorSchemaV1,
+  SliceSchemaV1,
+  SchemaVersionUnsupportedError,
+  parseAnchor,
+  parseSlice,
+  type AnchorV1,
+  type SliceV1,
 } from "./schema";
 
 export {
-	verifyBucket,
-	type VerifyOptions,
-	type VerificationReport,
-	type MerkleMismatch,
-	type ParseFailure,
-	type SchemaDrift,
+  verifyBucket,
+  type VerifyOptions,
+  type VerificationReport,
+  type MerkleMismatch,
+  type ParseFailure,
+  type SchemaDrift,
 } from "./verify";
 
 export type { RetentionFailure } from "./retention";

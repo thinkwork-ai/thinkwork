@@ -2,10 +2,8 @@ import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
   and,
-  computers,
   db,
   eq,
-  ne,
   routines,
   sql,
   tenantWorkflowCatalog,
@@ -13,36 +11,32 @@ import {
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
 import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
+import {
+  PlatformAgentNotFoundError,
+  resolveTenantPlatformAgent,
+} from "../../../lib/agents/tenant-platform-agent.js";
 
 export interface EnableWorkflowArgs {
-  input: { computerId: string; slug: string };
+  input: { agentId: string; slug: string };
 }
 
-/**
- * Enable a workflow for the caller's Computer. Looks up the catalog row
- * by `(tenant_id, slug)` in `tenant_workflow_catalog`, resolves the
- * Computer's primary agent, and upserts a `routines` row keyed by the
- * partial unique index `uq_routines_catalog_slug_per_agent (agent_id,
- * catalog_slug)`.
- *
- * Idempotent — re-enabling an already-active workflow flips status back
- * to 'active' on the existing row (no duplicate insert). Re-enabling
- * after disable revives the same row, preserving last_run_at /
- * next_run_at / any associated trigger run history.
- *
- * Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md U6-2.
- */
 function readScheduleFromConfig(config: unknown): string | null {
   if (typeof config !== "object" || config === null) return null;
   const candidate = (config as { schedule?: unknown }).schedule;
   return typeof candidate === "string" ? candidate : null;
 }
+
+/**
+ * Enable a workflow on the caller's tenant platform agent. Looks up the
+ * catalog row by `(tenant_id, slug)` and upserts a `routines` row keyed
+ * by the partial unique index `uq_routines_catalog_slug_per_agent`.
+ */
 export async function enableWorkflow(
   _parent: unknown,
   args: EnableWorkflowArgs,
   ctx: GraphQLContext,
 ) {
-  const { computerId, slug } = args.input;
+  const { agentId, slug } = args.input;
   const caller = await resolveCaller(ctx);
   if (!caller.userId || !caller.tenantId) {
     throw new GraphQLError("Authentication required", {
@@ -50,37 +44,28 @@ export async function enableWorkflow(
     });
   }
 
-  const [computer] = await db
-    .select({
-      id: computers.id,
-      tenant_id: computers.tenant_id,
-      owner_user_id: computers.owner_user_id,
-      primary_agent_id: computers.primary_agent_id,
-      migrated_from_agent_id: computers.migrated_from_agent_id,
-    })
-    .from(computers)
-    .where(
-      and(
-        eq(computers.id, computerId),
-        eq(computers.owner_user_id, caller.userId),
-        ne(computers.status, "archived"),
-      ),
-    );
-  if (!computer) {
-    throw new GraphQLError("Computer not found or not accessible", {
-      extensions: { code: "COMPUTER_NOT_FOUND" },
-    });
-  }
+  await requireTenantMember(ctx, caller.tenantId);
 
-  await requireTenantMember(ctx, computer.tenant_id);
-
-  const agentId =
-    computer.primary_agent_id ?? computer.migrated_from_agent_id ?? null;
-  if (!agentId) {
-    throw new GraphQLError(
-      "This Computer has no primary agent — open the workbench once to provision one.",
-      { extensions: { code: "CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND" } },
-    );
+  let resolvedAgentId: string;
+  try {
+    const agent = await resolveTenantPlatformAgent(caller.tenantId);
+    if (agentId && agentId !== agent.id) {
+      throw new GraphQLError(
+        "agentId does not match the tenant platform agent",
+        {
+          extensions: { code: "CUSTOMIZE_AGENT_MISMATCH" },
+        },
+      );
+    }
+    resolvedAgentId = agent.id;
+  } catch (err) {
+    if (err instanceof PlatformAgentNotFoundError) {
+      throw new GraphQLError(
+        "Tenant has no platform agent — bootstrap your workspace first.",
+        { extensions: { code: "CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND" } },
+      );
+    }
+    throw err;
   }
 
   const [catalog] = await db
@@ -88,7 +73,7 @@ export async function enableWorkflow(
     .from(tenantWorkflowCatalog)
     .where(
       and(
-        eq(tenantWorkflowCatalog.tenant_id, computer.tenant_id),
+        eq(tenantWorkflowCatalog.tenant_id, caller.tenantId),
         eq(tenantWorkflowCatalog.slug, slug),
       ),
     );
@@ -99,22 +84,14 @@ export async function enableWorkflow(
     );
   }
 
-  // Schedule precedence: the typed `default_schedule` column wins.
-  // Some legacy seed rows historically embedded the cron string under
-  // `default_config.schedule`, so fall back to that path when the typed
-  // column is null.
   const schedule =
     catalog.default_schedule ?? readScheduleFromConfig(catalog.default_config);
 
-  // Upsert keyed by the partial unique index on
-  // (agent_id, catalog_slug) WHERE both non-null. ON CONFLICT flips the
-  // existing row's status back to 'active' so re-enabling after a
-  // disable revives history rather than duplicating.
   const [row] = await db
     .insert(routines)
     .values({
-      tenant_id: computer.tenant_id,
-      agent_id: agentId,
+      tenant_id: caller.tenantId,
+      agent_id: resolvedAgentId,
       name: catalog.display_name,
       description: catalog.description ?? null,
       type: "scheduled",
@@ -126,10 +103,7 @@ export async function enableWorkflow(
     .onConflictDoUpdate({
       target: [routines.agent_id, routines.catalog_slug],
       targetWhere: sql`${routines.agent_id} IS NOT NULL AND ${routines.catalog_slug} IS NOT NULL`,
-      set: {
-        status: "active",
-        updated_at: sql`now()`,
-      },
+      set: { status: "active", updated_at: sql`now()` },
     })
     .returning();
 
@@ -139,13 +113,12 @@ export async function enableWorkflow(
     });
   }
 
-  await renderWorkspaceAfterCustomize("enableWorkflow", agentId, computer.id);
+  await renderWorkspaceAfterCustomize("enableWorkflow", resolvedAgentId);
 
   return {
     id: row.id,
     tenantId: row.tenant_id,
-    agentId: row.agent_id ?? agentId,
-    computerId: computer.id,
+    agentId: row.agent_id ?? resolvedAgentId,
     catalogSlug: row.catalog_slug ?? slug,
     status: row.status,
     enabled: row.status === "active",

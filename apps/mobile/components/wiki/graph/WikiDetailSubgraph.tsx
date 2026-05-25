@@ -9,10 +9,7 @@ import {
 } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
 import { KnowledgeGraph } from "./KnowledgeGraph";
-import {
-  NodeDetailModal,
-  type NodeDetailModalTarget,
-} from "./NodeDetailModal";
+import { NodeDetailModal, type NodeDetailModalTarget } from "./NodeDetailModal";
 import { oneHopNeighborhood } from "./layout/neighborhood";
 import type {
   WikiGraphEdge,
@@ -96,8 +93,8 @@ export function WikiDetailSubgraph({
     return (
       <View style={styles.fallback}>
         <Text style={styles.fallbackText}>
-          No connected pages yet — once compile links this page to another,
-          the neighborhood appears here.
+          No connected pages yet — once compile links this page to another, the
+          neighborhood appears here.
         </Text>
       </View>
     );
@@ -130,7 +127,9 @@ export function WikiDetailSubgraph({
 
 function toInternalSubgraph(payload: WikiGraphPayload): WikiSubgraph {
   const NOW = new Date().toISOString();
-  const nodes: WikiGraphNode[] = payload.nodes.map((n) => nodeFromPayload(n, NOW));
+  const nodes: WikiGraphNode[] = payload.nodes.map((n) =>
+    nodeFromPayload(n, NOW),
+  );
   const edges: WikiGraphEdge[] = payload.edges.map((e, idx) =>
     edgeFromPayload(e, idx, NOW),
   );
@@ -144,7 +143,10 @@ function toInternalSubgraph(payload: WikiGraphPayload): WikiSubgraph {
   };
 }
 
-function nodeFromPayload(p: WikiGraphNodeFromServer, now: string): WikiGraphNode {
+function nodeFromPayload(
+  p: WikiGraphNodeFromServer,
+  now: string,
+): WikiGraphNode {
   return {
     id: p.id,
     slug: p.slug,

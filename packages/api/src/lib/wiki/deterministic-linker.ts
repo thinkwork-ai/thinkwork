@@ -13,8 +13,8 @@
 
 import type { WikiPageRow, WikiPageType, WikiPlaceRow } from "./repository.js";
 import type {
-	DerivedParentCandidate,
-	ParentCandidateReason,
+  DerivedParentCandidate,
+  ParentCandidateReason,
 } from "./parent-expander.js";
 
 /** Leaf types we link from. Only entity pages get auto-parented; topic /
@@ -25,30 +25,30 @@ const LINKABLE_LEAF_TYPES: ReadonlySet<WikiPageType> = new Set(["entity"]);
  * topic (e.g. `Café de Flore` → `Paris`) or, less commonly, another entity
  * hub. Decisions are intentionally excluded. */
 const ALLOWED_PARENT_TYPES: ReadonlySet<WikiPageType> = new Set([
-	"topic",
-	"entity",
+  "topic",
+  "entity",
 ]);
 
 export interface AffectedPage {
-	id: string;
-	type: WikiPageType;
-	slug: string;
-	title: string;
-	/** Record ids from this batch that source sections on this page. Used to
-	 * match against `candidate.sourceRecordIds` so we don't link pages that
-	 * happened to be touched for an unrelated reason. */
-	sourceRecordIds: string[];
-	/** Optional pointer into wiki_places. When set, the place-hierarchy
-	 * emitter walks parent_place_id to emit one reference edge per page to
-	 * its immediate parent's backing page. Null / undefined pages are
-	 * skipped by that emitter. */
-	placeId?: string | null;
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  /** Record ids from this batch that source sections on this page. Used to
+   * match against `candidate.sourceRecordIds` so we don't link pages that
+   * happened to be touched for an unrelated reason. */
+  sourceRecordIds: string[];
+  /** Optional pointer into wiki_places. When set, the place-hierarchy
+   * emitter walks parent_place_id to emit one reference edge per page to
+   * its immediate parent's backing page. Null / undefined pages are
+   * skipped by that emitter. */
+  placeId?: string | null;
 }
 
 export interface ParentPageLookupArgs {
-	tenantId: string;
-	ownerId: string;
-	title: string;
+  tenantId: string;
+  ownerId: string;
+  title: string;
 }
 
 /** Same shape as `ParentPageLookup` but with a similarity score attached.
@@ -56,59 +56,59 @@ export interface ParentPageLookupArgs {
  * higher-recall path for cases like candidate `"Portland"` resolving to
  * existing page `"Portland, Oregon"`. */
 export interface ParentPageFuzzyResult {
-	id: string;
-	type: WikiPageType;
-	slug: string;
-	title: string;
-	similarity: number;
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  similarity: number;
 }
 
 export type ParentPageFuzzyLookup = (
-	args: ParentPageLookupArgs,
+  args: ParentPageLookupArgs,
 ) => Promise<ParentPageFuzzyResult[]>;
 
 export type ParentPageLookup = (
-	args: ParentPageLookupArgs,
+  args: ParentPageLookupArgs,
 ) => Promise<
-	Array<{ id: string; type: WikiPageType; slug: string; title: string }>
+  Array<{ id: string; type: WikiPageType; slug: string; title: string }>
 >;
 
 export interface WriteLinkArgs {
-	fromPageId: string;
-	toPageId: string;
-	context: string;
+  fromPageId: string;
+  toPageId: string;
+  context: string;
 }
 
 export interface EmitDeterministicParentLinksArgs {
-	scope: { tenantId: string; ownerId: string };
-	candidates: DerivedParentCandidate[];
-	affectedPages: AffectedPage[];
-	/** Scope-wide leaf pool for summary-kind candidates. Unlike
-	 * `affectedPages` (which is batch-scoped), `scopePages` holds every
-	 * scope page whose summary the page-summary expander scanned — these
-	 * pages may not have been touched in this batch. Required for
-	 * summary-kind candidates to resolve leaves; ignored for record-kind
-	 * ones. Omit when no summary-kind candidates are in the list (tests,
-	 * backfill-without-summaries paths). */
-	scopePages?: AffectedPage[];
-	lookupParentPages: ParentPageLookup;
-	/** Optional trigram-fallback lookup. Only invoked when
-	 * `lookupParentPages` returned no hits for a candidate. Callers that
-	 * want exact-only behavior (tests, isolated backfill runs) can omit
-	 * this. Recall gains come from titles like `"Portland"` resolving to
-	 * existing page `"Portland, Oregon"` at similarity ≥ 0.85. */
-	lookupParentPagesFuzzy?: ParentPageFuzzyLookup;
-	writeLink: (args: WriteLinkArgs) => Promise<void>;
+  scope: { tenantId: string; ownerId: string };
+  candidates: DerivedParentCandidate[];
+  affectedPages: AffectedPage[];
+  /** Scope-wide leaf pool for summary-kind candidates. Unlike
+   * `affectedPages` (which is batch-scoped), `scopePages` holds every
+   * scope page whose summary the page-summary expander scanned — these
+   * pages may not have been touched in this batch. Required for
+   * summary-kind candidates to resolve leaves; ignored for record-kind
+   * ones. Omit when no summary-kind candidates are in the list (tests,
+   * backfill-without-summaries paths). */
+  scopePages?: AffectedPage[];
+  lookupParentPages: ParentPageLookup;
+  /** Optional trigram-fallback lookup. Only invoked when
+   * `lookupParentPages` returned no hits for a candidate. Callers that
+   * want exact-only behavior (tests, isolated backfill runs) can omit
+   * this. Recall gains come from titles like `"Portland"` resolving to
+   * existing page `"Portland, Oregon"` at similarity ≥ 0.85. */
+  lookupParentPagesFuzzy?: ParentPageFuzzyLookup;
+  writeLink: (args: WriteLinkArgs) => Promise<void>;
 }
 
 export interface EmitDeterministicParentLinksResult {
-	linksWritten: number;
-	emissions: Array<{
-		fromPageId: string;
-		toPageId: string;
-		reason: ParentCandidateReason;
-		parentSlug: string;
-	}>;
+  linksWritten: number;
+  emissions: Array<{
+    fromPageId: string;
+    toPageId: string;
+    reason: ParentCandidateReason;
+    parentSlug: string;
+  }>;
 }
 
 /** Per-memory directed-edge cap (plan Unit 3). A 4-page co-mention already
@@ -119,37 +119,37 @@ export interface EmitDeterministicParentLinksResult {
 export const CO_MENTION_DIRECTED_EDGE_CAP = 10;
 
 export interface CoMentionSource {
-	memory_unit_id: string;
-	page_id: string;
-	page_type: WikiPageType;
-	slug: string;
-	title: string;
+  memory_unit_id: string;
+  page_id: string;
+  page_type: WikiPageType;
+  slug: string;
+  title: string;
 }
 
 export interface LookupMemorySourcesArgs {
-	tenantId: string;
-	ownerId: string;
-	memoryUnitIds: string[];
+  tenantId: string;
+  ownerId: string;
+  memoryUnitIds: string[];
 }
 
 export type LookupMemorySources = (
-	args: LookupMemorySourcesArgs,
+  args: LookupMemorySourcesArgs,
 ) => Promise<CoMentionSource[]>;
 
 export interface EmitCoMentionLinksArgs {
-	scope: { tenantId: string; ownerId: string };
-	memoryUnitIds: string[];
-	lookupMemorySources: LookupMemorySources;
-	writeLink: (args: WriteLinkArgs) => Promise<void>;
+  scope: { tenantId: string; ownerId: string };
+  memoryUnitIds: string[];
+  lookupMemorySources: LookupMemorySources;
+  writeLink: (args: WriteLinkArgs) => Promise<void>;
 }
 
 export interface EmitCoMentionLinksResult {
-	linksWritten: number;
-	emissions: Array<{
-		fromPageId: string;
-		toPageId: string;
-		memoryUnitId: string;
-	}>;
+  linksWritten: number;
+  emissions: Array<{
+    fromPageId: string;
+    toPageId: string;
+    memoryUnitId: string;
+  }>;
 }
 
 /**
@@ -161,77 +161,77 @@ export interface EmitCoMentionLinksResult {
  * call, not co-mention evidence.
  */
 export async function emitCoMentionLinks(
-	args: EmitCoMentionLinksArgs,
+  args: EmitCoMentionLinksArgs,
 ): Promise<EmitCoMentionLinksResult> {
-	const { scope, memoryUnitIds, lookupMemorySources, writeLink } = args;
-	const result: EmitCoMentionLinksResult = {
-		linksWritten: 0,
-		emissions: [],
-	};
-	if (memoryUnitIds.length === 0) return result;
+  const { scope, memoryUnitIds, lookupMemorySources, writeLink } = args;
+  const result: EmitCoMentionLinksResult = {
+    linksWritten: 0,
+    emissions: [],
+  };
+  if (memoryUnitIds.length === 0) return result;
 
-	const rows = await lookupMemorySources({
-		tenantId: scope.tenantId,
-		ownerId: scope.ownerId,
-		memoryUnitIds,
-	});
+  const rows = await lookupMemorySources({
+    tenantId: scope.tenantId,
+    ownerId: scope.ownerId,
+    memoryUnitIds,
+  });
 
-	// Group entity-type sources by memory_unit, dedup'd by page_id.
-	const byMemory = new Map<string, Map<string, CoMentionSource>>();
-	for (const row of rows) {
-		if (!LINKABLE_LEAF_TYPES.has(row.page_type)) continue;
-		let pages = byMemory.get(row.memory_unit_id);
-		if (!pages) {
-			pages = new Map();
-			byMemory.set(row.memory_unit_id, pages);
-		}
-		if (!pages.has(row.page_id)) pages.set(row.page_id, row);
-	}
+  // Group entity-type sources by memory_unit, dedup'd by page_id.
+  const byMemory = new Map<string, Map<string, CoMentionSource>>();
+  for (const row of rows) {
+    if (!LINKABLE_LEAF_TYPES.has(row.page_type)) continue;
+    let pages = byMemory.get(row.memory_unit_id);
+    if (!pages) {
+      pages = new Map();
+      byMemory.set(row.memory_unit_id, pages);
+    }
+    if (!pages.has(row.page_id)) pages.set(row.page_id, row);
+  }
 
-	for (const [memoryUnitId, pageMap] of byMemory) {
-		if (pageMap.size < 2) continue;
+  for (const [memoryUnitId, pageMap] of byMemory) {
+    if (pageMap.size < 2) continue;
 
-		// Deterministic slug-asc ordering — so truncation to
-		// CO_MENTION_DIRECTED_EDGE_CAP picks the same edges whether we're
-		// running live or backfilling.
-		const pages = Array.from(pageMap.values()).sort((a, b) =>
-			a.slug.localeCompare(b.slug),
-		);
+    // Deterministic slug-asc ordering — so truncation to
+    // CO_MENTION_DIRECTED_EDGE_CAP picks the same edges whether we're
+    // running live or backfilling.
+    const pages = Array.from(pageMap.values()).sort((a, b) =>
+      a.slug.localeCompare(b.slug),
+    );
 
-		const pairs: Array<[CoMentionSource, CoMentionSource]> = [];
-		outer: for (let i = 0; i < pages.length; i++) {
-			for (let j = 0; j < pages.length; j++) {
-				if (i === j) continue;
-				pairs.push([pages[i]!, pages[j]!]);
-				if (pairs.length >= CO_MENTION_DIRECTED_EDGE_CAP) break outer;
-			}
-		}
+    const pairs: Array<[CoMentionSource, CoMentionSource]> = [];
+    outer: for (let i = 0; i < pages.length; i++) {
+      for (let j = 0; j < pages.length; j++) {
+        if (i === j) continue;
+        pairs.push([pages[i]!, pages[j]!]);
+        if (pairs.length >= CO_MENTION_DIRECTED_EDGE_CAP) break outer;
+      }
+    }
 
-		const context = `co_mention:${memoryUnitId}`;
-		for (const [from, to] of pairs) {
-			try {
-				await writeLink({
-					fromPageId: from.page_id,
-					toPageId: to.page_id,
-					context,
-				});
-				result.linksWritten += 1;
-				result.emissions.push({
-					fromPageId: from.page_id,
-					toPageId: to.page_id,
-					memoryUnitId,
-				});
-			} catch (err) {
-				const msg = (err as Error)?.message || String(err);
-				console.warn(
-					`[co-mention-linker] writeLink failed from=${from.page_id} `
-						+ `to=${to.page_id} mem=${memoryUnitId}: ${msg}`,
-				);
-			}
-		}
-	}
+    const context = `co_mention:${memoryUnitId}`;
+    for (const [from, to] of pairs) {
+      try {
+        await writeLink({
+          fromPageId: from.page_id,
+          toPageId: to.page_id,
+          context,
+        });
+        result.linksWritten += 1;
+        result.emissions.push({
+          fromPageId: from.page_id,
+          toPageId: to.page_id,
+          memoryUnitId,
+        });
+      } catch (err) {
+        const msg = (err as Error)?.message || String(err);
+        console.warn(
+          `[co-mention-linker] writeLink failed from=${from.page_id} ` +
+            `to=${to.page_id} mem=${memoryUnitId}: ${msg}`,
+        );
+      }
+    }
+  }
 
-	return result;
+  return result;
 }
 
 /**
@@ -247,173 +247,173 @@ export async function emitCoMentionLinks(
  * matrix directly — less brittle than faking similarity rows.
  */
 export function isGeoQualifiedExtension(
-	candidate: string,
-	target: string,
+  candidate: string,
+  target: string,
 ): boolean {
-	if (!candidate || !target) return false;
-	const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const prefixRe = new RegExp(`^${escaped}\\b`, "iu");
-	if (!prefixRe.test(target)) return false;
-	// Require a comma-delimited region suffix ("City, ST", "City, Country").
-	return /,\s+\S/.test(target);
+  if (!candidate || !target) return false;
+  const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const prefixRe = new RegExp(`^${escaped}\\b`, "iu");
+  if (!prefixRe.test(target)) return false;
+  // Require a comma-delimited region suffix ("City, ST", "City, Country").
+  return /,\s+\S/.test(target);
 }
 
 export async function emitDeterministicParentLinks(
-	args: EmitDeterministicParentLinksArgs,
+  args: EmitDeterministicParentLinksArgs,
 ): Promise<EmitDeterministicParentLinksResult> {
-	const { scope, candidates, affectedPages, lookupParentPages, writeLink } =
-		args;
+  const { scope, candidates, affectedPages, lookupParentPages, writeLink } =
+    args;
 
-	const result: EmitDeterministicParentLinksResult = {
-		linksWritten: 0,
-		emissions: [],
-	};
+  const result: EmitDeterministicParentLinksResult = {
+    linksWritten: 0,
+    emissions: [],
+  };
 
-	// Precompute leaf pages eligible for linking (entity type) keyed by
-	// source record id → pages, so a record-kind candidate can cheaply find
-	// the leaves whose records motivated it.
-	const leavesByRecord = new Map<string, AffectedPage[]>();
-	for (const page of affectedPages) {
-		if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
-		for (const recordId of page.sourceRecordIds) {
-			const bucket = leavesByRecord.get(recordId) ?? [];
-			bucket.push(page);
-			leavesByRecord.set(recordId, bucket);
-		}
-	}
+  // Precompute leaf pages eligible for linking (entity type) keyed by
+  // source record id → pages, so a record-kind candidate can cheaply find
+  // the leaves whose records motivated it.
+  const leavesByRecord = new Map<string, AffectedPage[]>();
+  for (const page of affectedPages) {
+    if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
+    for (const recordId of page.sourceRecordIds) {
+      const bucket = leavesByRecord.get(recordId) ?? [];
+      bucket.push(page);
+      leavesByRecord.set(recordId, bucket);
+    }
+  }
 
-	// Summary-kind leaf index: keyed by page id. Consults both
-	// affectedPages (batch-touched) and scopePages (scope-wide pool) so
-	// summary-kind candidates can resolve leaves that weren't touched this
-	// batch. Deduplicated on page id — affectedPages wins on collision
-	// since its sourceRecordIds field is populated.
-	const leavesById = new Map<string, AffectedPage>();
-	for (const page of args.scopePages ?? []) {
-		if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
-		leavesById.set(page.id, page);
-	}
-	for (const page of affectedPages) {
-		if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
-		leavesById.set(page.id, page);
-	}
+  // Summary-kind leaf index: keyed by page id. Consults both
+  // affectedPages (batch-touched) and scopePages (scope-wide pool) so
+  // summary-kind candidates can resolve leaves that weren't touched this
+  // batch. Deduplicated on page id — affectedPages wins on collision
+  // since its sourceRecordIds field is populated.
+  const leavesById = new Map<string, AffectedPage>();
+  for (const page of args.scopePages ?? []) {
+    if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
+    leavesById.set(page.id, page);
+  }
+  for (const page of affectedPages) {
+    if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
+    leavesById.set(page.id, page);
+  }
 
-	const { lookupParentPagesFuzzy } = args;
+  const { lookupParentPagesFuzzy } = args;
 
-	for (const candidate of candidates) {
-		const matches = await lookupParentPages({
-			tenantId: scope.tenantId,
-			ownerId: scope.ownerId,
-			title: candidate.parentTitle,
-		});
-		let parent:
-			| { id: string; type: WikiPageType; slug: string; title: string }
-			| undefined;
-		if (matches.length > 0) {
-			if (matches.length > 1) {
-				console.warn(
-					`[deterministic-linker] title collision for "${candidate.parentTitle}"`
-						+ ` in (tenant=${scope.tenantId}, owner=${scope.ownerId}): ${matches
-							.map((m) => m.id)
-							.join(", ")} — picking first`,
-				);
-			}
-			parent = matches[0];
-		} else if (lookupParentPagesFuzzy) {
-			// Trigram fallback — closes the "Austin" candidate vs existing
-			// "Austin, Texas" page gap surfaced on Marco recompile. A
-			// geo-suffix gate (`isGeoQualifiedExtension`) filters out
-			// similarly-scoring non-geographic hits like "Austin Reggae Fest"
-			// or "Toronto Life" — without it, the lower threshold (0.50 vs
-			// alias-dedupe 0.85) would emit false positives on entity pages
-			// that happen to start with a city token. Same-type gate below
-			// still applies.
-			const fuzzy = await lookupParentPagesFuzzy({
-				tenantId: scope.tenantId,
-				ownerId: scope.ownerId,
-				title: candidate.parentTitle,
-			});
-			const best = fuzzy.find((row) =>
-				isGeoQualifiedExtension(candidate.parentTitle, row.title),
-			);
-			if (best) {
-				console.log(
-					`[deterministic-linker] fuzzy parent match: "${candidate.parentTitle}" ` +
-						`≈ "${best.title}" (sim=${best.similarity.toFixed(3)}) → ` +
-						`page ${best.id}`,
-				);
-				parent = {
-					id: best.id,
-					type: best.type,
-					slug: best.slug,
-					title: best.title,
-				};
-			} else if (fuzzy.length > 0) {
-				// Useful when tuning: the lookup returned hits but none had a
-				// "City, Region" shape — surfaces the precision gate filtering.
-				const top = fuzzy[0]!;
-				console.log(
-					`[deterministic-linker] fuzzy parent rejected (no geo suffix): ` +
-						`"${candidate.parentTitle}" ≈ "${top.title}" ` +
-						`(sim=${top.similarity.toFixed(3)})`,
-				);
-			}
-		}
-		if (!parent) continue;
-		if (!ALLOWED_PARENT_TYPES.has(parent.type)) continue;
+  for (const candidate of candidates) {
+    const matches = await lookupParentPages({
+      tenantId: scope.tenantId,
+      ownerId: scope.ownerId,
+      title: candidate.parentTitle,
+    });
+    let parent:
+      | { id: string; type: WikiPageType; slug: string; title: string }
+      | undefined;
+    if (matches.length > 0) {
+      if (matches.length > 1) {
+        console.warn(
+          `[deterministic-linker] title collision for "${candidate.parentTitle}"` +
+            ` in (tenant=${scope.tenantId}, owner=${scope.ownerId}): ${matches
+              .map((m) => m.id)
+              .join(", ")} — picking first`,
+        );
+      }
+      parent = matches[0];
+    } else if (lookupParentPagesFuzzy) {
+      // Trigram fallback — closes the "Austin" candidate vs existing
+      // "Austin, Texas" page gap surfaced on Marco recompile. A
+      // geo-suffix gate (`isGeoQualifiedExtension`) filters out
+      // similarly-scoring non-geographic hits like "Austin Reggae Fest"
+      // or "Toronto Life" — without it, the lower threshold (0.50 vs
+      // alias-dedupe 0.85) would emit false positives on entity pages
+      // that happen to start with a city token. Same-type gate below
+      // still applies.
+      const fuzzy = await lookupParentPagesFuzzy({
+        tenantId: scope.tenantId,
+        ownerId: scope.ownerId,
+        title: candidate.parentTitle,
+      });
+      const best = fuzzy.find((row) =>
+        isGeoQualifiedExtension(candidate.parentTitle, row.title),
+      );
+      if (best) {
+        console.log(
+          `[deterministic-linker] fuzzy parent match: "${candidate.parentTitle}" ` +
+            `≈ "${best.title}" (sim=${best.similarity.toFixed(3)}) → ` +
+            `page ${best.id}`,
+        );
+        parent = {
+          id: best.id,
+          type: best.type,
+          slug: best.slug,
+          title: best.title,
+        };
+      } else if (fuzzy.length > 0) {
+        // Useful when tuning: the lookup returned hits but none had a
+        // "City, Region" shape — surfaces the precision gate filtering.
+        const top = fuzzy[0]!;
+        console.log(
+          `[deterministic-linker] fuzzy parent rejected (no geo suffix): ` +
+            `"${candidate.parentTitle}" ≈ "${top.title}" ` +
+            `(sim=${top.similarity.toFixed(3)})`,
+        );
+      }
+    }
+    if (!parent) continue;
+    if (!ALLOWED_PARENT_TYPES.has(parent.type)) continue;
 
-		// Resolve leaf pages based on candidate kind. Record-kind candidates
-		// carry memory-record ids, summary-kind candidates carry page ids
-		// directly — see `ParentCandidateSourceKind`.
-		const candidateLeaves: AffectedPage[] = [];
-		const seenCandidateLeafIds = new Set<string>();
-		const kind = candidate.sourceKind ?? "record";
-		if (kind === "summary") {
-			for (const pageId of candidate.sourceRecordIds) {
-				if (seenCandidateLeafIds.has(pageId)) continue;
-				seenCandidateLeafIds.add(pageId);
-				const leaf = leavesById.get(pageId);
-				if (leaf) candidateLeaves.push(leaf);
-			}
-		} else {
-			for (const recordId of candidate.sourceRecordIds) {
-				const leaves = leavesByRecord.get(recordId);
-				if (!leaves) continue;
-				for (const leaf of leaves) {
-					if (seenCandidateLeafIds.has(leaf.id)) continue;
-					seenCandidateLeafIds.add(leaf.id);
-					candidateLeaves.push(leaf);
-				}
-			}
-		}
+    // Resolve leaf pages based on candidate kind. Record-kind candidates
+    // carry memory-record ids, summary-kind candidates carry page ids
+    // directly — see `ParentCandidateSourceKind`.
+    const candidateLeaves: AffectedPage[] = [];
+    const seenCandidateLeafIds = new Set<string>();
+    const kind = candidate.sourceKind ?? "record";
+    if (kind === "summary") {
+      for (const pageId of candidate.sourceRecordIds) {
+        if (seenCandidateLeafIds.has(pageId)) continue;
+        seenCandidateLeafIds.add(pageId);
+        const leaf = leavesById.get(pageId);
+        if (leaf) candidateLeaves.push(leaf);
+      }
+    } else {
+      for (const recordId of candidate.sourceRecordIds) {
+        const leaves = leavesByRecord.get(recordId);
+        if (!leaves) continue;
+        for (const leaf of leaves) {
+          if (seenCandidateLeafIds.has(leaf.id)) continue;
+          seenCandidateLeafIds.add(leaf.id);
+          candidateLeaves.push(leaf);
+        }
+      }
+    }
 
-		for (const leaf of candidateLeaves) {
-			if (leaf.id === parent.id) continue; // no self-links
+    for (const leaf of candidateLeaves) {
+      if (leaf.id === parent.id) continue; // no self-links
 
-			const context = `deterministic:${candidate.reason}:${candidate.parentSlug}`;
-			try {
-				await writeLink({
-					fromPageId: leaf.id,
-					toPageId: parent.id,
-					context,
-				});
-				result.linksWritten += 1;
-				result.emissions.push({
-					fromPageId: leaf.id,
-					toPageId: parent.id,
-					reason: candidate.reason,
-					parentSlug: candidate.parentSlug,
-				});
-			} catch (err) {
-				const msg = (err as Error)?.message || String(err);
-				console.warn(
-					`[deterministic-linker] writeLink failed leaf=${leaf.id} `
-						+ `parent=${parent.id}: ${msg}`,
-				);
-			}
-		}
-	}
+      const context = `deterministic:${candidate.reason}:${candidate.parentSlug}`;
+      try {
+        await writeLink({
+          fromPageId: leaf.id,
+          toPageId: parent.id,
+          context,
+        });
+        result.linksWritten += 1;
+        result.emissions.push({
+          fromPageId: leaf.id,
+          toPageId: parent.id,
+          reason: candidate.reason,
+          parentSlug: candidate.parentSlug,
+        });
+      } catch (err) {
+        const msg = (err as Error)?.message || String(err);
+        console.warn(
+          `[deterministic-linker] writeLink failed leaf=${leaf.id} ` +
+            `parent=${parent.id}: ${msg}`,
+        );
+      }
+    }
+  }
 
-	return result;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,141 +431,139 @@ export async function emitDeterministicParentLinks(
 // ---------------------------------------------------------------------------
 
 export interface PageWithPlace {
-	id: string;
-	tenant_id: string;
-	owner_id: string;
-	place_id: string | null;
+  id: string;
+  tenant_id: string;
+  owner_id: string;
+  place_id: string | null;
 }
 
 export interface FindPlaceById {
-	(args: {
-		tenantId: string;
-		ownerId: string;
-		id: string;
-	}): Promise<WikiPlaceRow | null>;
+  (args: {
+    tenantId: string;
+    ownerId: string;
+    id: string;
+  }): Promise<WikiPlaceRow | null>;
 }
 
 export interface FindPageByPlaceId {
-	(args: {
-		tenantId: string;
-		ownerId: string;
-		placeId: string;
-	}): Promise<WikiPageRow | null>;
+  (args: {
+    tenantId: string;
+    ownerId: string;
+    placeId: string;
+  }): Promise<WikiPageRow | null>;
 }
 
 export interface EmitPlaceHierarchyLinksArgs {
-	scope: { tenantId: string; ownerId: string };
-	affectedPages: PageWithPlace[];
-	findPlaceById: FindPlaceById;
-	findPageByPlaceId: FindPageByPlaceId;
-	/** Returns `true` when a new row was inserted, `false` when the
-	 * ON CONFLICT DO NOTHING path fired (re-run of an already-emitted
-	 * edge). The metric only counts new inserts; otherwise re-runs would
-	 * double-count. */
-	writeLink: (
-		args: WriteLinkArgs & { kind: "reference" },
-	) => Promise<boolean>;
+  scope: { tenantId: string; ownerId: string };
+  affectedPages: PageWithPlace[];
+  findPlaceById: FindPlaceById;
+  findPageByPlaceId: FindPageByPlaceId;
+  /** Returns `true` when a new row was inserted, `false` when the
+   * ON CONFLICT DO NOTHING path fired (re-run of an already-emitted
+   * edge). The metric only counts new inserts; otherwise re-runs would
+   * double-count. */
+  writeLink: (args: WriteLinkArgs & { kind: "reference" }) => Promise<boolean>;
 }
 
 export interface EmitPlaceHierarchyLinksResult {
-	linksWritten: number;
-	emissions: Array<{
-		fromPageId: string;
-		toPageId: string;
-		parentPlaceId: string;
-	}>;
-	skipped: Array<{
-		pageId: string;
-		reason: "no_place_id" | "top_of_hierarchy" | "parent_page_missing";
-	}>;
+  linksWritten: number;
+  emissions: Array<{
+    fromPageId: string;
+    toPageId: string;
+    parentPlaceId: string;
+  }>;
+  skipped: Array<{
+    pageId: string;
+    reason: "no_place_id" | "top_of_hierarchy" | "parent_page_missing";
+  }>;
 }
 
 export async function emitPlaceHierarchyLinks(
-	args: EmitPlaceHierarchyLinksArgs,
+  args: EmitPlaceHierarchyLinksArgs,
 ): Promise<EmitPlaceHierarchyLinksResult> {
-	const result: EmitPlaceHierarchyLinksResult = {
-		linksWritten: 0,
-		emissions: [],
-		skipped: [],
-	};
+  const result: EmitPlaceHierarchyLinksResult = {
+    linksWritten: 0,
+    emissions: [],
+    skipped: [],
+  };
 
-	for (const page of args.affectedPages) {
-		if (!page.place_id) {
-			result.skipped.push({ pageId: page.id, reason: "no_place_id" });
-			continue;
-		}
+  for (const page of args.affectedPages) {
+    if (!page.place_id) {
+      result.skipped.push({ pageId: page.id, reason: "no_place_id" });
+      continue;
+    }
 
-		let place: WikiPlaceRow | null;
-		try {
-			place = await args.findPlaceById({
-				tenantId: args.scope.tenantId,
-				ownerId: args.scope.ownerId,
-				id: page.place_id,
-			});
-		} catch (err) {
-			console.warn(
-				`[place-hierarchy-linker] findPlaceById failed page=${page.id}: ${(err as Error)?.message ?? err}`,
-			);
-			continue;
-		}
+    let place: WikiPlaceRow | null;
+    try {
+      place = await args.findPlaceById({
+        tenantId: args.scope.tenantId,
+        ownerId: args.scope.ownerId,
+        id: page.place_id,
+      });
+    } catch (err) {
+      console.warn(
+        `[place-hierarchy-linker] findPlaceById failed page=${page.id}: ${(err as Error)?.message ?? err}`,
+      );
+      continue;
+    }
 
-		if (!place?.parent_place_id) {
-			result.skipped.push({ pageId: page.id, reason: "top_of_hierarchy" });
-			continue;
-		}
+    if (!place?.parent_place_id) {
+      result.skipped.push({ pageId: page.id, reason: "top_of_hierarchy" });
+      continue;
+    }
 
-		let parentPage: WikiPageRow | null;
-		try {
-			parentPage = await args.findPageByPlaceId({
-				tenantId: args.scope.tenantId,
-				ownerId: args.scope.ownerId,
-				placeId: place.parent_place_id,
-			});
-		} catch (err) {
-			console.warn(
-				`[place-hierarchy-linker] findPageByPlaceId failed page=${page.id} parent_place=${place.parent_place_id}: ${(err as Error)?.message ?? err}`,
-			);
-			continue;
-		}
+    let parentPage: WikiPageRow | null;
+    try {
+      parentPage = await args.findPageByPlaceId({
+        tenantId: args.scope.tenantId,
+        ownerId: args.scope.ownerId,
+        placeId: place.parent_place_id,
+      });
+    } catch (err) {
+      console.warn(
+        `[place-hierarchy-linker] findPageByPlaceId failed page=${page.id} parent_place=${place.parent_place_id}: ${(err as Error)?.message ?? err}`,
+      );
+      continue;
+    }
 
-		if (!parentPage) {
-			// The place has a parent_place_id but no page in scope backs
-			// that parent. Shouldn't happen post-Unit-5 (places-service
-			// auto-creates backing pages) — log so the gap is visible.
-			console.warn(
-				`[place-hierarchy-linker] parent_page_missing page=${page.id} parent_place=${place.parent_place_id}`,
-			);
-			result.skipped.push({
-				pageId: page.id,
-				reason: "parent_page_missing",
-			});
-			continue;
-		}
+    if (!parentPage) {
+      // The place has a parent_place_id but no page in scope backs
+      // that parent. Shouldn't happen post-Unit-5 (places-service
+      // auto-creates backing pages) — log so the gap is visible.
+      console.warn(
+        `[place-hierarchy-linker] parent_page_missing page=${page.id} parent_place=${place.parent_place_id}`,
+      );
+      result.skipped.push({
+        pageId: page.id,
+        reason: "parent_page_missing",
+      });
+      continue;
+    }
 
-		if (parentPage.id === page.id) continue; // degenerate; shouldn't happen
+    if (parentPage.id === page.id) continue; // degenerate; shouldn't happen
 
-		const context = `deterministic:place:${place.parent_place_id}`;
-		try {
-			const inserted = await args.writeLink({
-				fromPageId: page.id,
-				toPageId: parentPage.id,
-				context,
-				kind: "reference",
-			});
-			if (inserted) {
-				result.linksWritten += 1;
-				result.emissions.push({
-					fromPageId: page.id,
-					toPageId: parentPage.id,
-					parentPlaceId: place.parent_place_id,
-				});
-			}
-		} catch (err) {
-			console.warn(
-				`[place-hierarchy-linker] writeLink failed page=${page.id} parent=${parentPage.id}: ${(err as Error)?.message ?? err}`,
-			);
-		}
-	}
+    const context = `deterministic:place:${place.parent_place_id}`;
+    try {
+      const inserted = await args.writeLink({
+        fromPageId: page.id,
+        toPageId: parentPage.id,
+        context,
+        kind: "reference",
+      });
+      if (inserted) {
+        result.linksWritten += 1;
+        result.emissions.push({
+          fromPageId: page.id,
+          toPageId: parentPage.id,
+          parentPlaceId: place.parent_place_id,
+        });
+      }
+    } catch (err) {
+      console.warn(
+        `[place-hierarchy-linker] writeLink failed page=${page.id} parent=${parentPage.id}: ${(err as Error)?.message ?? err}`,
+      );
+    }
+  }
 
-	return result;
+  return result;
 }

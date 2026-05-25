@@ -22,7 +22,16 @@ interface BudgetFormProps {
   colors: { primary: string };
 }
 
-function BudgetForm({ limit, setLimit, hardStop, setHardStop, enabled, setEnabled, onSave, colors }: BudgetFormProps) {
+function BudgetForm({
+  limit,
+  setLimit,
+  hardStop,
+  setHardStop,
+  enabled,
+  setEnabled,
+  onSave,
+  colors,
+}: BudgetFormProps) {
   return (
     <View className="gap-4">
       {/* Monthly limit */}
@@ -38,7 +47,9 @@ function BudgetForm({ limit, setLimit, hardStop, setHardStop, enabled, setEnable
       <View className="flex-row items-center justify-between">
         <View>
           <Text className="font-medium">Hard stop</Text>
-          <Muted className="text-xs">Block requests when limit is reached</Muted>
+          <Muted className="text-xs">
+            Block requests when limit is reached
+          </Muted>
         </View>
         <Switch value={hardStop} onValueChange={setHardStop} />
       </View>
@@ -146,7 +157,9 @@ export default function AgentUsageScreen() {
         {
           label: refreshing ? "Syncing..." : "Sync now",
           icon: RefreshCw,
-          onPress: () => { void doRefresh(); },
+          onPress: () => {
+            void doRefresh();
+          },
         },
       ]}
     />
@@ -158,7 +171,11 @@ export default function AgentUsageScreen() {
     <DetailLayout title="Usage" headerRight={overflowButton}>
       <ScrollView
         className="flex-1 w-full"
-        contentContainerStyle={{ padding: 16, paddingBottom: 32, maxWidth: 768 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: 32,
+          maxWidth: 768,
+        }}
       >
         {/* Budget card */}
         {enforcement && policy ? (
@@ -189,14 +206,20 @@ export default function AgentUsageScreen() {
             </View>
 
             <View className="flex-row justify-between mb-3">
-              <Muted className="text-sm">{formatCurrency(enforcement.used)} spent</Muted>
-              <Muted className="text-sm">{formatCurrency(enforcement.limit)} limit</Muted>
+              <Muted className="text-sm">
+                {formatCurrency(enforcement.used)} spent
+              </Muted>
+              <Muted className="text-sm">
+                {formatCurrency(enforcement.limit)} limit
+              </Muted>
             </View>
 
             <View className="flex-row gap-6">
               <View>
                 <Muted className="text-xs mb-0.5">Remaining</Muted>
-                <Text className="font-semibold">{formatCurrency(enforcement.remaining)}</Text>
+                <Text className="font-semibold">
+                  {formatCurrency(enforcement.remaining)}
+                </Text>
               </View>
               <View>
                 <Muted className="text-xs mb-0.5">% Used</Muted>
@@ -204,12 +227,16 @@ export default function AgentUsageScreen() {
               </View>
               <View>
                 <Muted className="text-xs mb-0.5">Hard stop</Muted>
-                <Text className="font-semibold">{policy.hardStop ? "On" : "Off"}</Text>
+                <Text className="font-semibold">
+                  {policy.hardStop ? "On" : "Off"}
+                </Text>
               </View>
             </View>
 
             {policy.syncError ? (
-              <Muted className="text-xs text-red-500 mt-2">{policy.syncError}</Muted>
+              <Muted className="text-xs text-red-500 mt-2">
+                {policy.syncError}
+              </Muted>
             ) : null}
           </View>
         ) : status !== undefined && !policy ? (
@@ -259,7 +286,9 @@ export default function AgentUsageScreen() {
                       </Text>
                     </View>
                   </View>
-                  <Muted className="text-sm">{summary.recordCount} requests this period</Muted>
+                  <Muted className="text-sm">
+                    {summary.recordCount} requests this period
+                  </Muted>
                 </View>
               )}
             </View>
@@ -291,21 +320,23 @@ export default function AgentUsageScreen() {
                   <Muted>No usage data yet.</Muted>
                 </View>
               ) : (
-                summary.byModel.map((m: { model: string; tokens: number }, i: number) => (
-                  <View
-                    key={m.model}
-                    className={`flex-row justify-between items-center px-4 py-3 ${
-                      i < summary.byModel.length - 1
-                        ? "border-b border-neutral-200 dark:border-neutral-800"
-                        : ""
-                    }`}
-                  >
-                    <Text numberOfLines={1} className="flex-1 mr-2">
-                      {m.model}
-                    </Text>
-                    <Muted>{formatNumber(m.tokens)} tokens</Muted>
-                  </View>
-                ))
+                summary.byModel.map(
+                  (m: { model: string; tokens: number }, i: number) => (
+                    <View
+                      key={m.model}
+                      className={`flex-row justify-between items-center px-4 py-3 ${
+                        i < summary.byModel.length - 1
+                          ? "border-b border-neutral-200 dark:border-neutral-800"
+                          : ""
+                      }`}
+                    >
+                      <Text numberOfLines={1} className="flex-1 mr-2">
+                        {m.model}
+                      </Text>
+                      <Muted>{formatNumber(m.tokens)} tokens</Muted>
+                    </View>
+                  ),
+                )
               )}
             </View>
           )}
@@ -339,16 +370,25 @@ export default function AgentUsageScreen() {
                 <View className="flex-row items-center justify-between mb-5">
                   <Text className="text-lg font-bold">Edit Budget</Text>
                   <Pressable onPress={() => setShowBudgetModal(false)}>
-                    <Text style={{ color: colors.primary }} className="font-semibold">
+                    <Text
+                      style={{ color: colors.primary }}
+                      className="font-semibold"
+                    >
                       Cancel
                     </Text>
                   </Pressable>
                 </View>
                 <BudgetForm
-                  limit={limit} setLimit={setLimit}
-                  hardStop={hardStop} setHardStop={setHardStop}
-                  enabled={enabled} setEnabled={setEnabled}
-                  onSave={async () => { await doSave(); setShowBudgetModal(false); }}
+                  limit={limit}
+                  setLimit={setLimit}
+                  hardStop={hardStop}
+                  setHardStop={setHardStop}
+                  enabled={enabled}
+                  setEnabled={setEnabled}
+                  onSave={async () => {
+                    await doSave();
+                    setShowBudgetModal(false);
+                  }}
                   colors={colors}
                 />
               </View>
@@ -363,21 +403,34 @@ export default function AgentUsageScreen() {
             />
             <View
               className="rounded-t-2xl px-4 pt-4 pb-10"
-              style={{ backgroundColor: colors.card, borderTopColor: colors.border, borderTopWidth: 1 }}
+              style={{
+                backgroundColor: colors.card,
+                borderTopColor: colors.border,
+                borderTopWidth: 1,
+              }}
             >
               <View className="flex-row items-center justify-between mb-5">
                 <Text className="text-lg font-bold">Edit Budget</Text>
                 <Pressable onPress={() => setShowBudgetModal(false)}>
-                  <Text style={{ color: colors.primary }} className="font-semibold">
+                  <Text
+                    style={{ color: colors.primary }}
+                    className="font-semibold"
+                  >
                     Cancel
                   </Text>
                 </Pressable>
               </View>
               <BudgetForm
-                limit={limit} setLimit={setLimit}
-                hardStop={hardStop} setHardStop={setHardStop}
-                enabled={enabled} setEnabled={setEnabled}
-                onSave={async () => { await doSave(); setShowBudgetModal(false); }}
+                limit={limit}
+                setLimit={setLimit}
+                hardStop={hardStop}
+                setHardStop={setHardStop}
+                enabled={enabled}
+                setEnabled={setEnabled}
+                onSave={async () => {
+                  await doSave();
+                  setShowBudgetModal(false);
+                }}
                 colors={colors}
               />
             </View>

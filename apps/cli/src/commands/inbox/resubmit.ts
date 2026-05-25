@@ -8,7 +8,10 @@ interface ResubmitOptions extends InboxCliOptions {
   notes?: string;
 }
 
-export async function runInboxResubmit(id: string, opts: ResubmitOptions): Promise<void> {
+export async function runInboxResubmit(
+  id: string,
+  opts: ResubmitOptions,
+): Promise<void> {
   const ctx = await resolveInboxContext(opts);
 
   // ResubmitInboxItemInput supports {title, description, config}. The CLI
@@ -25,5 +28,7 @@ export async function runInboxResubmit(id: string, opts: ResubmitOptions): Promi
     printJson(item);
     return;
   }
-  printSuccess(`Resubmitted inbox item ${item.id} (revision #${item.revision})`);
+  printSuccess(
+    `Resubmitted inbox item ${item.id} (revision #${item.revision})`,
+  );
 }

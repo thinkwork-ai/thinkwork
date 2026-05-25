@@ -1,12 +1,24 @@
 import { useState, useCallback } from "react";
-import { View, ScrollView, Pressable, ActivityIndicator, TextInput, Alert, Platform } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  TextInput,
+  Alert,
+  Platform,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { Trash2, Check, X, RefreshCw } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
-import { useMemoryRecords, useDeleteMemoryRecord, useUpdateMemoryRecord } from "@/lib/hooks/use-memory";
+import {
+  useMemoryRecords,
+  useDeleteMemoryRecord,
+  useUpdateMemoryRecord,
+} from "@/lib/hooks/use-memory";
 import { useMe } from "@/lib/hooks/use-users";
 
 type WikiPageChip = {
@@ -61,7 +73,8 @@ function timeUntil(iso?: string | null): string | null {
 const STRATEGY_META: Record<string, { title: string; emptyMessage: string }> = {
   semantic: {
     title: "Memory",
-    emptyMessage: "No memory records yet. Facts are extracted over time from conversations across all threads.",
+    emptyMessage:
+      "No memory records yet. Facts are extracted over time from conversations across all threads.",
   },
 };
 
@@ -140,8 +153,17 @@ function MemoryCard({
             the wiki page. Only rendered when not editing so the chips don't
             fight for vertical space with the edit controls. */}
         {!editing && record.wikiPages && record.wikiPages.length > 0 ? (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-            <Muted style={{ fontSize: 11, marginRight: 2 }}>Contributes to:</Muted>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 6,
+              marginTop: 8,
+            }}
+          >
+            <Muted style={{ fontSize: 11, marginRight: 2 }}>
+              Contributes to:
+            </Muted>
             {record.wikiPages.map((page) => (
               <Pressable
                 key={page.id}
@@ -198,7 +220,11 @@ function MemoryCard({
 }
 
 export default function MemoryListScreen() {
-  const { strategy, userId: userIdParam, sessionId } = useLocalSearchParams<{
+  const {
+    strategy,
+    userId: userIdParam,
+    sessionId,
+  } = useLocalSearchParams<{
     strategy: "semantic" | "summary";
     userId?: string;
     sessionId?: string;
@@ -209,11 +235,17 @@ export default function MemoryListScreen() {
   const currentUserId = meData?.me?.id;
 
   const userId = userIdParam ? decodeURIComponent(userIdParam) : currentUserId;
-  const namespace = strategy === "summary"
-    ? (sessionId ? `session_${sessionId}` : undefined)
-    : "all";
+  const namespace =
+    strategy === "summary"
+      ? sessionId
+        ? `session_${sessionId}`
+        : undefined
+      : "all";
 
-  const [{ data, fetching, error }, reexecute] = useMemoryRecords(userId, namespace);
+  const [{ data, fetching, error }, reexecute] = useMemoryRecords(
+    userId,
+    namespace,
+  );
   const [, executeDelete] = useDeleteMemoryRecord();
   const [, executeUpdate] = useUpdateMemoryRecord();
 
@@ -223,9 +255,14 @@ export default function MemoryListScreen() {
 
   const records: MemoryRecord[] = (data?.memoryRecords ?? [])
     .filter((r) => !deletedIds.has(r.memoryRecordId))
-    .map((r) => localUpdates[r.memoryRecordId]
-      ? { ...r, content: { text: localUpdates[r.memoryRecordId] }, updatedAt: new Date().toISOString() }
-      : r,
+    .map((r) =>
+      localUpdates[r.memoryRecordId]
+        ? {
+            ...r,
+            content: { text: localUpdates[r.memoryRecordId] },
+            updatedAt: new Date().toISOString(),
+          }
+        : r,
     )
     .sort((a, b) => {
       const da = a.updatedAt || a.createdAt || "";
@@ -248,11 +285,19 @@ export default function MemoryListScreen() {
       const result = await executeDelete({ userId, memoryRecordId: recordId });
       if (result.error) {
         console.warn("Failed to delete memory record:", result.error);
-        setDeletedIds((prev) => { const next = new Set(prev); next.delete(recordId); return next; });
+        setDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(recordId);
+          return next;
+        });
       }
     } catch (e) {
       console.warn("Failed to delete memory record:", e);
-      setDeletedIds((prev) => { const next = new Set(prev); next.delete(recordId); return next; });
+      setDeletedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(recordId);
+        return next;
+      });
     }
   };
 
@@ -260,14 +305,24 @@ export default function MemoryListScreen() {
     if (!userId) return;
     setLocalUpdates((prev) => ({ ...prev, [recordId]: content }));
     try {
-      const result = await executeUpdate({ userId, memoryRecordId: recordId, content });
+      const result = await executeUpdate({
+        userId,
+        memoryRecordId: recordId,
+        content,
+      });
       if (result.error) {
         console.warn("Failed to update memory record:", result.error);
-        setLocalUpdates((prev) => { const { [recordId]: _, ...rest } = prev; return rest; });
+        setLocalUpdates((prev) => {
+          const { [recordId]: _, ...rest } = prev;
+          return rest;
+        });
       }
     } catch (e) {
       console.warn("Failed to update memory record:", e);
-      setLocalUpdates((prev) => { const { [recordId]: _, ...rest } = prev; return rest; });
+      setLocalUpdates((prev) => {
+        const { [recordId]: _, ...rest } = prev;
+        return rest;
+      });
     }
   };
 
@@ -277,7 +332,10 @@ export default function MemoryListScreen() {
       disabled={fetching}
       className="p-2 active:opacity-70"
     >
-      <RefreshCw size={18} color={fetching ? colors.mutedForeground : "#0ea5e9"} />
+      <RefreshCw
+        size={18}
+        color={fetching ? colors.mutedForeground : "#0ea5e9"}
+      />
     </Pressable>
   );
 
@@ -306,7 +364,9 @@ export default function MemoryListScreen() {
               record={record}
               userId={userId}
               onDelete={() => handleDelete(record.memoryRecordId)}
-              onUpdate={(content) => handleUpdate(record.memoryRecordId, content)}
+              onUpdate={(content) =>
+                handleUpdate(record.memoryRecordId, content)
+              }
               colors={colors}
             />
           ))}

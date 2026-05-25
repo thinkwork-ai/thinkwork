@@ -5,7 +5,11 @@ import { apiFetch, ApiError } from "@/lib/api-fetch";
 // surfaces the best-effort error body; we just re-throw as a plain Error.
 async function request<T>(
   path: string,
-  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+  options: {
+    method?: string;
+    body?: string;
+    extraHeaders?: Record<string, string>;
+  } = {},
 ): Promise<T> {
   try {
     return await apiFetch<T>(path, options);
@@ -128,7 +132,10 @@ export function updateGuardrail(
   });
 }
 
-export function deleteGuardrail(tenantId: string, id: string): Promise<{ deleted: boolean }> {
+export function deleteGuardrail(
+  tenantId: string,
+  id: string,
+): Promise<{ deleted: boolean }> {
   return request(`/api/guardrails/${id}`, {
     method: "DELETE",
     extraHeaders: tenantHeaders(tenantId),

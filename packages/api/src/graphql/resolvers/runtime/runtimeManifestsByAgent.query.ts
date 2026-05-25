@@ -33,7 +33,11 @@ export async function runtimeManifestsByAgent(
   const tenantId = await resolveCallerTenantId(ctx);
   if (!tenantId) return [];
 
-  await requireAdminOrServiceCaller(ctx, tenantId, "runtime_manifests_by_agent");
+  await requireAdminOrServiceCaller(
+    ctx,
+    tenantId,
+    "runtime_manifests_by_agent",
+  );
 
   // Confirm the agent belongs to this tenant — prevents a cross-tenant
   // admin from probing for another tenant's agent ids.

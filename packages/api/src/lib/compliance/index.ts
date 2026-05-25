@@ -15,12 +15,12 @@
  */
 
 export {
-	emitAuditEvent,
-	COMPLIANCE_SOURCES,
-	type AuditTx,
-	type ComplianceSource,
-	type EmitAuditEventInput,
-	type EmitAuditEventResult,
+  emitAuditEvent,
+  COMPLIANCE_SOURCES,
+  type AuditTx,
+  type ComplianceSource,
+  type EmitAuditEventInput,
+  type EmitAuditEventResult,
 } from "./emit";
 
 export { redactPayload, sanitizeStringField } from "./redaction";
@@ -35,8 +35,8 @@ export type { RedactionSchema } from "./event-schemas";
 // Re-exports from the schema package so consumers don't need a separate
 // import for the type union.
 export {
-	COMPLIANCE_EVENT_TYPES,
-	COMPLIANCE_ACTOR_TYPES,
-	type ComplianceEventType,
-	type ComplianceActorType,
+  COMPLIANCE_EVENT_TYPES,
+  COMPLIANCE_ACTOR_TYPES,
+  type ComplianceEventType,
+  type ComplianceActorType,
 } from "@thinkwork/database-pg/schema";

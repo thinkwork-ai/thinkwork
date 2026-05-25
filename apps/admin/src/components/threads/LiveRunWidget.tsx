@@ -67,10 +67,7 @@ export function LiveRunWidget({ threadId, tenantId }: LiveRunWidgetProps) {
             <section key={run.id} className="px-4 py-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <Link
-                    to="/agent"
-                    className="inline-flex hover:underline"
-                  >
+                  <Link to="/agent" className="inline-flex hover:underline">
                     <Identity
                       name={run.agentName ?? run.agentId.slice(0, 8)}
                       size="sm"

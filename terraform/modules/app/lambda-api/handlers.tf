@@ -89,31 +89,6 @@ locals {
     STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
   }
 
-  # Computer runtime control handlers only need database access, service-auth,
-  # the API callback URL, and ECS/EFS runtime wiring. Using the full common_env
-  # pushes computer-manager over Lambda's 4KB environment-variable limit in dev.
-  computer_runtime_control_base_env = {
-    STAGE             = var.stage
-    DATABASE_URL      = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    API_AUTH_SECRET   = var.api_auth_secret
-    THINKWORK_API_URL = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
-    NODE_OPTIONS      = "--enable-source-maps"
-  }
-
-  computer_runtime_control_env = {
-    COMPUTER_RUNTIME_CLUSTER_NAME       = var.computer_runtime_cluster_name
-    COMPUTER_RUNTIME_EFS_FILE_SYSTEM_ID = var.computer_runtime_efs_file_system_id
-    COMPUTER_RUNTIME_SUBNET_IDS         = join(",", var.computer_runtime_subnet_ids)
-    COMPUTER_RUNTIME_ASSIGN_PUBLIC_IP   = var.computer_runtime_assign_public_ip
-    COMPUTER_RUNTIME_TASK_SG_ID         = var.computer_runtime_task_sg_id
-    COMPUTER_RUNTIME_EXECUTION_ROLE_ARN = var.computer_runtime_execution_role_arn
-    COMPUTER_RUNTIME_TASK_ROLE_ARN      = var.computer_runtime_task_role_arn
-    COMPUTER_RUNTIME_LOG_GROUP_NAME     = var.computer_runtime_log_group_name
-    COMPUTER_RUNTIME_REPOSITORY_URL     = var.computer_runtime_repository_url
-    COMPUTER_RUNTIME_DEFAULT_CPU        = tostring(var.computer_runtime_default_cpu)
-    COMPUTER_RUNTIME_DEFAULT_MEMORY     = tostring(var.computer_runtime_default_memory)
-  }
-
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
   # introduce a self-referential dependency inside the handler for_each.
@@ -152,37 +127,12 @@ locals {
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
     }
-    # workspace-files invokes the workspace-files-efs sidecar (Request
-    # Response) for Computer-target list/get to bypass the computer_tasks
-    # queue. ARN constructed from the naming pattern to avoid a self-
-    # referential dependency on the standalone Lambda resource defined at
-    # the bottom of this file.
-    "workspace-files" = {
-      WORKSPACE_FILES_EFS_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs"
-    }
     "oauth-authorize"     = local.slack_handler_env
     "oauth-callback"      = local.slack_handler_env
     "slack-events"        = local.slack_handler_env
     "slack-slash-command" = local.slack_handler_env
     "slack-interactivity" = local.slack_handler_env
     "slack-oauth-install" = local.slack_handler_env
-    "slack-dispatch"      = local.slack_handler_env
-    # computer-terminal-start needs the cluster name to scope its
-    # ECS ListTasks / DescribeTasks / ExecuteCommand calls.
-    "computer-terminal-start" = {
-      COMPUTER_RUNTIME_CLUSTER_NAME = var.computer_runtime_cluster_name
-    }
-    # computer-manager and computer-runtime-reconciler consume ECS/EFS task
-    # config from packages/api/src/lib/computers/runtime-control.ts.
-    # Scoping the COMPUTER_RUNTIME_* variables here (instead of in
-    # local.common_env_vars) keeps the per-Lambda env-var payload under
-    # the AWS 4KB hard limit — they were previously dumped into every
-    # handler and pushed ~70 Lambdas over quota.
-    "computer-manager"            = local.computer_runtime_control_env
-    "computer-runtime-reconciler" = local.computer_runtime_control_env
-    "computer-runtime" = {
-      REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
-    }
     "thread-attachments-finalize" = {
       REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
     }
@@ -347,7 +297,6 @@ resource "aws_lambda_function" "handler" {
     "slack-slash-command",
     "slack-interactivity",
     "slack-oauth-install",
-    "slack-dispatch",
     "github-app",
     "memory",
     "memory-retain",
@@ -361,16 +310,6 @@ resource "aws_lambda_function" "handler" {
     "recipe-refresh",
     "agent-skills-list",
     "bootstrap-workspaces",
-    "migrate-agents-to-computers",
-    "computer-runtime",
-    "computer-manager",
-    "computer-runtime-reconciler",
-    # Admin Terminal tab — POST /api/computers/{computerId}/terminal/start.
-    # Returns the SSM Session Manager session envelope (sessionId,
-    # streamUrl, tokenValue) so the browser can open a direct WebSocket
-    # to ssmmessages. Plan:
-    # docs/plans/2026-05-13-004-feat-computer-terminal-ecs-exec-plan.md.
-    "computer-terminal-start",
     "eval-runner",
     "eval-worker",
     "eval-runs-reconciler",
@@ -538,7 +477,7 @@ resource "aws_lambda_function" "handler" {
 
   environment {
     variables = merge(
-      contains(["computer-manager", "computer-runtime-reconciler"], each.key) ? local.computer_runtime_control_base_env : local.common_env,
+      local.common_env,
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
@@ -934,11 +873,6 @@ locals {
     # Workspace files
     "ANY /api/workspaces/{proxy+}" = "workspace-files"
 
-    # Phase-one Computer migration. Service-auth only; operator tooling calls
-    # dry-run first and apply only after conflict review.
-    "POST /api/migrations/agents-to-computers"    = "migrate-agents-to-computers"
-    "OPTIONS /api/migrations/agents-to-computers" = "migrate-agents-to-computers"
-
     # Knowledge bases
     "ANY /api/knowledge-bases/{proxy+}" = "knowledge-base-files"
 
@@ -998,22 +932,6 @@ locals {
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"
-
-    # ThinkWork Computer runtime callback API. ECS tasks call outbound with
-    # Bearer API_AUTH_SECRET to fetch config, heartbeat, claim one task, append
-    # product/audit events, and complete/fail tasks.
-    "ANY /api/computers/runtime/{proxy+}" = "computer-runtime"
-
-    # Admin Terminal tab — opens an ECS Exec session into the running
-    # Computer task and returns {sessionId, streamUrl, tokenValue} to the
-    # browser, which then connects WebSocket directly to ssmmessages.
-    "POST /api/computers/{computerId}/terminal/start"    = "computer-terminal-start"
-    "OPTIONS /api/computers/{computerId}/terminal/start" = "computer-terminal-start"
-
-    # ThinkWork Computer manager API. Internal service-auth endpoint used by
-    # admin operations to reconcile per-Computer ECS service desired state.
-    "POST /api/computers/manager"    = "computer-manager"
-    "OPTIONS /api/computers/manager" = "computer-manager"
 
     # Admin-Ops MCP server — single JSON-RPC endpoint. Strands agents
     # (and anyone else) POST with Bearer <tenant-scoped token> issued by
@@ -1307,49 +1225,6 @@ resource "aws_scheduler_schedule" "stall_monitor" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# ThinkWork Computer runtime reconciler — keeps active Computers aligned with
-# desired_runtime_status by provisioning/starting/stopping ECS services in
-# bounded batches. The handler is conservative and records per-Computer events
-# for every attempted action.
-# ---------------------------------------------------------------------------
-
-resource "aws_scheduler_schedule" "computer_runtime_reconciler" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-computer-runtime-reconciler"
-  group_name          = "default"
-  schedule_expression = "rate(5 minutes)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["computer-runtime-reconciler"].arn
-    role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-resource "aws_scheduler_schedule" "slack_dispatch" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-slack-dispatch"
-  group_name          = "default"
-  schedule_expression = "rate(1 minute)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["slack-dispatch"].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ limit = 25 })
-  }
-}
 
 # ---------------------------------------------------------------------------
 # Compounding Memory — nightly hygiene + export
@@ -1965,77 +1840,3 @@ resource "aws_cloudwatch_metric_alarm" "compliance_exports_dlq_depth" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# workspace-files-efs — STANDALONE Lambda that reads any Computer's workspace
-# files directly off the shared EFS file system. Bypasses the
-# computer_tasks queue for list/get operations so the admin Computer
-# Workspace tab is independent of runtime liveness or write-queue backlog.
-#
-# Plan: docs/plans/2026-05-13-XXX-feat-admin-computer-efs-listing-plan.md
-#
-# The Lambda mounts the `workspace_admin` access point at /mnt/efs. That
-# access point is rooted at /tenants on the shared EFS, so the handler
-# can address any Computer's workspace as
-#   /mnt/efs/<tenantId>/computers/<computerId>/<path...>
-# (matches the layout written by `computerWorkspacePath` in
-# packages/api/src/lib/computers/runtime-control.ts:40).
-#
-# VPC config: same subnet set the Computer ECS tasks use (so the mount
-# targets are reachable). Dedicated security group with an EFS-SG ingress
-# rule defined as a sibling of the task-SG rule in the computer-runtime
-# module — keeps Lambda traffic auditable separately.
-#
-# Writes intentionally stay on the existing computer_tasks queue path.
-# Mutations have ordering semantics with the runtime's in-process state;
-# changing them is out of scope for this PR.
-# ---------------------------------------------------------------------------
-
-resource "aws_lambda_function" "workspace_files_efs" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  function_name = "thinkwork-${var.stage}-api-workspace-files-efs"
-  role          = aws_iam_role.lambda.arn
-  handler       = "index.handler"
-  runtime       = local.runtime
-  timeout       = 30
-  memory_size   = 512
-
-  filename         = local.use_local_zips ? "${var.lambda_zips_dir}/workspace-files-efs.zip" : null
-  source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/workspace-files-efs.zip") : null
-  s3_bucket        = local.use_remote_lambda_artifacts ? var.lambda_artifact_bucket : null
-  s3_key           = local.use_remote_lambda_artifacts ? "${local.lambda_artifact_prefix}/workspace-files-efs.zip" : null
-
-  vpc_config {
-    subnet_ids         = var.computer_runtime_subnet_ids
-    security_group_ids = [var.workspace_admin_lambda_sg_id]
-  }
-
-  file_system_config {
-    arn              = var.workspace_admin_efs_access_point_arn
-    local_mount_path = "/mnt/efs"
-  }
-
-  environment {
-    variables = {
-      STAGE                               = var.stage
-      AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
-      WORKSPACE_EFS_ROOT                  = "/mnt/efs"
-    }
-  }
-
-  tags = {
-    Name    = "thinkwork-${var.stage}-api-workspace-files-efs"
-    Handler = "workspace-files-efs"
-  }
-}
-
-# VPC-attached Lambdas need permission to manage ENIs. The shared lambda
-# role doesn't grant this by default because most handlers run outside a
-# VPC. AWSLambdaVPCAccessExecutionRole gives Create/Describe/DeleteNetwork
-# Interface — minimum scope for VPC Lambdas.
-resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}

@@ -26,13 +26,20 @@ function formatCost(cost: number): string {
 function formatDate(dateStr: string): string {
   const [year, month, day] = dateStr.split("-").map(Number);
   const d = new Date(year, month - 1, day);
-  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function BarSegment({ pct, total }: { pct: number; total: number }) {
   const width = Math.max(2, Math.round(pct));
   return (
-    <View className="h-2 rounded-full bg-sky-500 dark:bg-sky-400" style={{ flex: pct / 100, minWidth: 2, maxWidth: `${width}%` }} />
+    <View
+      className="h-2 rounded-full bg-sky-500 dark:bg-sky-400"
+      style={{ flex: pct / 100, minWidth: 2, maxWidth: `${width}%` }}
+    />
   );
 }
 
@@ -48,9 +55,14 @@ function ModelRow({ model, tokens, totalTokens, cost, isLast }: ModelRowProps) {
   const pct = totalTokens > 0 ? (tokens / totalTokens) * 100 : 0;
   const displayModel = model.split("/").pop() ?? model; // strip provider prefix
   return (
-    <View className={`py-3 ${isLast ? "" : "border-b border-neutral-200 dark:border-neutral-800"}`}>
+    <View
+      className={`py-3 ${isLast ? "" : "border-b border-neutral-200 dark:border-neutral-800"}`}
+    >
       <View className="flex-row justify-between items-center mb-1.5">
-        <Text className="text-sm font-medium text-neutral-800 dark:text-neutral-200 flex-1 mr-4" numberOfLines={1}>
+        <Text
+          className="text-sm font-medium text-neutral-800 dark:text-neutral-200 flex-1 mr-4"
+          numberOfLines={1}
+        >
           {displayModel}
         </Text>
         <Text className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -82,9 +94,13 @@ interface DayRowProps {
 function DayRow({ date, tokens, maxTokens, isLast }: DayRowProps) {
   const pct = maxTokens > 0 ? (tokens / maxTokens) * 100 : 0;
   return (
-    <View className={`py-3 ${isLast ? "" : "border-b border-neutral-200 dark:border-neutral-800"}`}>
+    <View
+      className={`py-3 ${isLast ? "" : "border-b border-neutral-200 dark:border-neutral-800"}`}
+    >
       <View className="flex-row justify-between items-center mb-1.5">
-        <Text className="text-sm text-neutral-600 dark:text-neutral-400">{formatDate(date)}</Text>
+        <Text className="text-sm text-neutral-600 dark:text-neutral-400">
+          {formatDate(date)}
+        </Text>
         <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
           {formatNumber(tokens)}
         </Text>
@@ -254,9 +270,12 @@ export default function UsageScreen() {
               {summary.totalTokens === 0 && (
                 <View className="items-center py-8">
                   <Text className="text-4xl mb-3">📊</Text>
-                  <Text className="text-neutral-700 dark:text-neutral-300 font-medium">No usage yet</Text>
+                  <Text className="text-neutral-700 dark:text-neutral-300 font-medium">
+                    No usage yet
+                  </Text>
                   <Muted className="text-sm text-center mt-1 max-w-xs">
-                    Token usage will appear here after your first AI interaction.
+                    Token usage will appear here after your first AI
+                    interaction.
                   </Muted>
                 </View>
               )}
@@ -276,7 +295,9 @@ export default function UsageScreen() {
             {
               label: syncing ? "Syncing…" : "Sync now",
               icon: RefreshCw,
-              onPress: () => { void handleSync(); },
+              onPress: () => {
+                void handleSync();
+              },
             },
           ]}
         />

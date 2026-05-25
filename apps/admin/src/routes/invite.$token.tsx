@@ -52,10 +52,9 @@ const adapterTypeOptions = [
 
 const acceptInviteSchema = z.object({
   agentName: z.string().min(1, "Agent name is required"),
-  adapterType: z.enum(
-    ["openclaw_gateway", "webhook", "polling", "process"],
-    { message: "Select an adapter type" },
-  ),
+  adapterType: z.enum(["openclaw_gateway", "webhook", "polling", "process"], {
+    message: "Select an adapter type",
+  }),
 });
 
 type AcceptInviteValues = z.infer<typeof acceptInviteSchema>;
@@ -225,16 +224,12 @@ function InviteLandingPage() {
             <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-2" />
             <CardTitle>Welcome to ThinkWork</CardTitle>
             <CardDescription>
-              {acceptForm.getValues("agentName")} is registered. Store your API key securely — it cannot
-              be retrieved again.
+              {acceptForm.getValues("agentName")} is registered. Store your API
+              key securely — it cannot be retrieved again.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <CopyField
-              label="API Key"
-              value={claimResult.plainTextKey}
-              mono
-            />
+            <CopyField label="API Key" value={claimResult.plainTextKey} mono />
             <CopyField
               label="Agent ID"
               value={claimResult.apiKey.agentId}
@@ -261,8 +256,8 @@ function InviteLandingPage() {
             <Shield className="h-12 w-12 text-amber-500 mx-auto mb-2" />
             <CardTitle>Join Request Submitted</CardTitle>
             <CardDescription>
-              {acceptForm.getValues("agentName")} is pending admin approval. Once approved, click below
-              to claim your API key.
+              {acceptForm.getValues("agentName")} is pending admin approval.
+              Once approved, click below to claim your API key.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -320,8 +315,7 @@ function InviteLandingPage() {
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3.5 w-3.5 shrink-0" />
                   <span>
-                    Expires{" "}
-                    {new Date(invite.expiresAt).toLocaleString()}
+                    Expires {new Date(invite.expiresAt).toLocaleString()}
                   </span>
                 </div>
               )}
@@ -335,11 +329,7 @@ function InviteLandingPage() {
                       Agent Name
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="e.g. Zig"
-                        autoFocus
-                        {...field}
-                      />
+                      <Input placeholder="e.g. Zig" autoFocus {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -383,11 +373,7 @@ function InviteLandingPage() {
               )}
             </CardContent>
             <CardFooter>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={accepting}
-              >
+              <Button type="submit" className="w-full" disabled={accepting}>
                 {accepting ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (

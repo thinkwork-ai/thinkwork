@@ -26,7 +26,9 @@ function ComplianceListPage() {
   useEffect(() => {
     if (search.invalid && !invalidShown.current) {
       invalidShown.current = true;
-      toast.error("One or more URL filters were invalid and have been cleared.");
+      toast.error(
+        "One or more URL filters were invalid and have been cleared.",
+      );
       navigate({
         to: "/compliance",
         search: (prev) => {

@@ -254,9 +254,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-      !showStreamingBuffer &&
-      !showProcessingShimmer,
+    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+    !showStreamingBuffer &&
+    !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,

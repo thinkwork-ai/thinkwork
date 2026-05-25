@@ -193,7 +193,7 @@ describe("enterprise destroy routing", () => {
     );
 
     expect(promptConfirm).toHaveBeenCalledWith(
-      expect.stringContaining("permanently remove the \"dev\" stage stack"),
+      expect.stringContaining('permanently remove the "dev" stage stack'),
     );
     expect(promptConfirm).toHaveBeenCalledWith(
       expect.stringContaining("Customer-wide bootstrap resources"),

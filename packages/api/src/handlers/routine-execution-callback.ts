@@ -55,7 +55,12 @@ const ALLOWED_STATUSES = new Set([
  * after the execution already succeeded/failed. The literal SQL
  * fragment below is built from this Set so a future addition (e.g.,
  * `expired`) flows into both the in-process check and the WHERE clause. */
-const TERMINAL_STATUSES = ["succeeded", "failed", "cancelled", "timed_out"] as const;
+const TERMINAL_STATUSES = [
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+] as const;
 const TERMINAL_STATUS_SET: ReadonlySet<string> = new Set(TERMINAL_STATUSES);
 const TERMINAL_STATUSES_SQL_LIST = sql.raw(
   TERMINAL_STATUSES.map((s) => `'${s}'`).join(","),

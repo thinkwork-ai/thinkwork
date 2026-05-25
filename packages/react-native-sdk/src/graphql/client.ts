@@ -1,4 +1,9 @@
-import { Client, cacheExchange, fetchExchange, subscriptionExchange } from "urql";
+import {
+  Client,
+  cacheExchange,
+  fetchExchange,
+  subscriptionExchange,
+} from "urql";
 import { createAppSyncSubscriptionTransport } from "./appsync-ws";
 import { getAuthToken } from "./token";
 import type { ThinkworkConfig } from "../types";
@@ -8,7 +13,9 @@ export interface ThinkworkGraphqlClient {
   reconnectSubscriptions: () => void;
 }
 
-export function createThinkworkClient(config: ThinkworkConfig): ThinkworkGraphqlClient {
+export function createThinkworkClient(
+  config: ThinkworkConfig,
+): ThinkworkGraphqlClient {
   const transport = config.graphqlWsUrl
     ? createAppSyncSubscriptionTransport(config)
     : null;
@@ -33,7 +40,8 @@ export function createThinkworkClient(config: ThinkworkConfig): ThinkworkGraphql
       const headers: Record<string, string> = {};
       const token = getAuthToken();
       if (token) headers.Authorization = token;
-      else if (config.graphqlApiKey) headers["x-api-key"] = config.graphqlApiKey;
+      else if (config.graphqlApiKey)
+        headers["x-api-key"] = config.graphqlApiKey;
       return { headers };
     },
   });

@@ -18,12 +18,12 @@ interface MobileRowProps extends Omit<PressableProps, "children"> {
 
 /**
  * Standardized mobile row component for list items.
- * 
+ *
  * Structure:
  * - Two lines, each with left and right content
  * - All content on a line is vertically centered
  * - Left content is left justified, right content is right justified
- * 
+ *
  * Usage:
  * ```tsx
  * <MobileRow

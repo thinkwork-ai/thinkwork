@@ -36,7 +36,9 @@ function MemoryContent({ text }: { text: string }) {
               {s.topic}
             </p>
           )}
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{s.content}</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+            {s.content}
+          </p>
         </div>
       ))}
     </div>
@@ -73,10 +75,14 @@ export function MemoryGraphNodeSheet({
           {isMemory ? "Memory" : node.label}
           <Badge
             className={`font-normal text-xs ${
-              isMemory ? "bg-pink-500/20 text-pink-400" : "bg-sky-500/20 text-sky-400"
+              isMemory
+                ? "bg-pink-500/20 text-pink-400"
+                : "bg-sky-500/20 text-sky-400"
             }`}
           >
-            {isMemory ? node.strategy ?? "memory" : node.entityType ?? "entity"}
+            {isMemory
+              ? (node.strategy ?? "memory")
+              : (node.entityType ?? "entity")}
           </Badge>
         </SheetTitle>
         <SheetDescription>
@@ -125,7 +131,11 @@ export function MemoryGraphNodeSheet({
                     <p className="font-medium text-foreground truncate">
                       {stripTopicTags(edge.targetLabel)}
                     </p>
-                    {edge.label && <p className="text-xs text-muted-foreground">{edge.label}</p>}
+                    {edge.label && (
+                      <p className="text-xs text-muted-foreground">
+                        {edge.label}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -134,7 +144,9 @@ export function MemoryGraphNodeSheet({
         )}
 
         {edges.length === 0 && (
-          <p className="text-sm text-muted-foreground">No connections found for this node.</p>
+          <p className="text-sm text-muted-foreground">
+            No connections found for this node.
+          </p>
         )}
       </div>
     </SheetContent>

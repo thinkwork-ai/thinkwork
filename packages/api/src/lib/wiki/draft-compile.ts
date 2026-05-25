@@ -27,18 +27,18 @@
 import { invokeClaudeWithRetry } from "./bedrock.js";
 import { slugifyTitle } from "./aliases.js";
 import {
-	claimCompileJobById,
-	completeCompileJob,
-	getCompileJob,
-	type WikiCompileJobRow,
+  claimCompileJobById,
+  completeCompileJob,
+  getCompileJob,
+  type WikiCompileJobRow,
 } from "./repository.js";
 import {
-	writeDraftReviewFailure,
-	writeDraftReviewNoOp,
-	writeDraftReviewSuccess,
-	type DraftWritebackContext,
-	type DraftWritebackIO,
-	type DraftWritebackResult,
+  writeDraftReviewFailure,
+  writeDraftReviewNoOp,
+  writeDraftReviewSuccess,
+  type DraftWritebackContext,
+  type DraftWritebackIO,
+  type DraftWritebackResult,
 } from "../brain/draft-review-writeback.js";
 
 // ---------------------------------------------------------------------------
@@ -52,32 +52,32 @@ export type DraftCompileRegionFamily = DraftCompileSourceFamily | "MIXED";
 export type DraftCompilePageTable = "wiki_pages" | "tenant_entity_pages";
 
 export interface DraftCompileCitation {
-	uri?: string | null;
-	label?: string | null;
+  uri?: string | null;
+  label?: string | null;
 }
 
 export interface DraftCompileCandidate {
-	id: string;
-	title: string;
-	summary: string;
-	sourceFamily: DraftCompileSourceFamily;
-	providerId?: string;
-	citation?: DraftCompileCitation | null;
+  id: string;
+  title: string;
+  summary: string;
+  sourceFamily: DraftCompileSourceFamily;
+  providerId?: string;
+  citation?: DraftCompileCitation | null;
 }
 
 export interface DraftCompileInput {
-	pageId: string;
-	pageTable: DraftCompilePageTable;
-	pageTitle: string;
-	currentBodyMd: string;
-	candidates: DraftCompileCandidate[];
-	/**
-	 * Optional: the agent the user was viewing when they triggered enrichment.
-	 * The writeback prefers this agent so the resulting thread lands in the
-	 * user's current view. When absent (legacy callers / fallback), the
-	 * writeback falls back to the user's paired agent or any tenant agent.
-	 */
-	requestingAgentId?: string | null;
+  pageId: string;
+  pageTable: DraftCompilePageTable;
+  pageTitle: string;
+  currentBodyMd: string;
+  candidates: DraftCompileCandidate[];
+  /**
+   * Optional: the agent the user was viewing when they triggered enrichment.
+   * The writeback prefers this agent so the resulting thread lands in the
+   * user's current view. When absent (legacy callers / fallback), the
+   * writeback falls back to the user's paired agent or any tenant agent.
+   */
+  requestingAgentId?: string | null;
 }
 
 /**
@@ -88,23 +88,23 @@ export interface DraftCompileInput {
  * sections, `afterMd` is empty.
  */
 export interface DraftCompileRegion {
-	id: string;
-	sectionSlug: string;
-	sectionHeading: string;
-	sourceFamily: DraftCompileRegionFamily;
-	citation: DraftCompileCitation | null;
-	beforeMd: string;
-	afterMd: string;
-	contributingCandidateIds: string[];
+  id: string;
+  sectionSlug: string;
+  sectionHeading: string;
+  sourceFamily: DraftCompileRegionFamily;
+  citation: DraftCompileCitation | null;
+  beforeMd: string;
+  afterMd: string;
+  contributingCandidateIds: string[];
 }
 
 export interface DraftCompileResult {
-	proposedBodyMd: string;
-	snapshotMd: string;
-	regions: DraftCompileRegion[];
-	modelId: string;
-	inputTokens: number;
-	outputTokens: number;
+  proposedBodyMd: string;
+  snapshotMd: string;
+  regions: DraftCompileRegion[];
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 /**
@@ -113,17 +113,17 @@ export interface DraftCompileResult {
  * falls through to `invokeClaudeWithRetry`.
  */
 export interface DraftCompileSeam {
-	invokeModel: (args: {
-		system: string;
-		user: string;
-		modelId?: string;
-		signal?: AbortSignal;
-	}) => Promise<{
-		text: string;
-		inputTokens: number;
-		outputTokens: number;
-		modelId: string;
-	}>;
+  invokeModel: (args: {
+    system: string;
+    user: string;
+    modelId?: string;
+    signal?: AbortSignal;
+  }) => Promise<{
+    text: string;
+    inputTokens: number;
+    outputTokens: number;
+    modelId: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,41 +175,41 @@ If the page already covers all candidate facts, return the existing sections ver
  * fake seam returning a deterministic JSON payload.
  */
 export async function runDraftCompile(
-	input: DraftCompileInput,
-	seam?: DraftCompileSeam,
+  input: DraftCompileInput,
+  seam?: DraftCompileSeam,
 ): Promise<DraftCompileResult> {
-	const snapshotMd = input.currentBodyMd;
-	const existingSections = parseSections(snapshotMd);
+  const snapshotMd = input.currentBodyMd;
+  const existingSections = parseSections(snapshotMd);
 
-	const userPrompt = buildUserPrompt({
-		pageTitle: input.pageTitle,
-		existingSections,
-		candidates: input.candidates,
-	});
+  const userPrompt = buildUserPrompt({
+    pageTitle: input.pageTitle,
+    existingSections,
+    candidates: input.candidates,
+  });
 
-	const invoke = seam?.invokeModel ?? defaultInvokeModel;
-	const resp = await invoke({
-		system: DRAFT_COMPILE_SYSTEM,
-		user: userPrompt,
-	});
+  const invoke = seam?.invokeModel ?? defaultInvokeModel;
+  const resp = await invoke({
+    system: DRAFT_COMPILE_SYSTEM,
+    user: userPrompt,
+  });
 
-	const parsed = parseModelResponse(resp.text);
+  const parsed = parseModelResponse(resp.text);
 
-	const proposedBodyMd = composeBodyFromSections(parsed.sections);
-	const regions = computeRegions({
-		existingSections,
-		proposedSections: parsed.sections,
-		candidates: input.candidates,
-	});
+  const proposedBodyMd = composeBodyFromSections(parsed.sections);
+  const regions = computeRegions({
+    existingSections,
+    proposedSections: parsed.sections,
+    candidates: input.candidates,
+  });
 
-	return {
-		proposedBodyMd,
-		snapshotMd,
-		regions,
-		modelId: resp.modelId,
-		inputTokens: resp.inputTokens,
-		outputTokens: resp.outputTokens,
-	};
+  return {
+    proposedBodyMd,
+    snapshotMd,
+    regions,
+    modelId: resp.modelId,
+    inputTokens: resp.inputTokens,
+    outputTokens: resp.outputTokens,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -217,9 +217,9 @@ export async function runDraftCompile(
 // ---------------------------------------------------------------------------
 
 export interface ParsedSection {
-	slug: string;
-	heading: string;
-	bodyMd: string;
+  slug: string;
+  heading: string;
+  bodyMd: string;
 }
 
 /**
@@ -230,54 +230,54 @@ export interface ParsedSection {
  * H2 headings only — H1/H3+ stay inside their parent section's bodyMd.
  */
 export function parseSections(bodyMd: string): ParsedSection[] {
-	const trimmed = bodyMd.trimEnd();
-	if (!trimmed) return [];
+  const trimmed = bodyMd.trimEnd();
+  if (!trimmed) return [];
 
-	const lines = trimmed.split("\n");
-	const sections: ParsedSection[] = [];
-	let preambleLines: string[] = [];
-	let current: { heading: string; slug: string; lines: string[] } | null = null;
+  const lines = trimmed.split("\n");
+  const sections: ParsedSection[] = [];
+  let preambleLines: string[] = [];
+  let current: { heading: string; slug: string; lines: string[] } | null = null;
 
-	const pushCurrent = () => {
-		if (current) {
-			sections.push({
-				slug: current.slug,
-				heading: current.heading,
-				bodyMd: current.lines.join("\n").trim(),
-			});
-		}
-	};
+  const pushCurrent = () => {
+    if (current) {
+      sections.push({
+        slug: current.slug,
+        heading: current.heading,
+        bodyMd: current.lines.join("\n").trim(),
+      });
+    }
+  };
 
-	for (const line of lines) {
-		const h2Match = /^##\s+(.+?)\s*$/.exec(line);
-		if (h2Match) {
-			pushCurrent();
-			const heading = h2Match[1]!.trim();
-			current = {
-				heading,
-				slug: slugifyTitle(heading) || "section",
-				lines: [],
-			};
-			continue;
-		}
-		if (current) {
-			current.lines.push(line);
-		} else {
-			preambleLines.push(line);
-		}
-	}
-	pushCurrent();
+  for (const line of lines) {
+    const h2Match = /^##\s+(.+?)\s*$/.exec(line);
+    if (h2Match) {
+      pushCurrent();
+      const heading = h2Match[1]!.trim();
+      current = {
+        heading,
+        slug: slugifyTitle(heading) || "section",
+        lines: [],
+      };
+      continue;
+    }
+    if (current) {
+      current.lines.push(line);
+    } else {
+      preambleLines.push(line);
+    }
+  }
+  pushCurrent();
 
-	const preamble = preambleLines.join("\n").trim();
-	if (preamble) {
-		sections.unshift({
-			slug: "_preamble",
-			heading: "",
-			bodyMd: preamble,
-		});
-	}
+  const preamble = preambleLines.join("\n").trim();
+  if (preamble) {
+    sections.unshift({
+      slug: "_preamble",
+      heading: "",
+      bodyMd: preamble,
+    });
+  }
 
-	return sections;
+  return sections;
 }
 
 /**
@@ -286,18 +286,23 @@ export function parseSections(bodyMd: string): ParsedSection[] {
  * emit `## <heading>\n\n<body>`.
  */
 export function composeBodyFromSections(
-	sections: Array<{ slug: string; heading: string; afterMd?: string; bodyMd?: string }>,
+  sections: Array<{
+    slug: string;
+    heading: string;
+    afterMd?: string;
+    bodyMd?: string;
+  }>,
 ): string {
-	const parts: string[] = [];
-	for (const section of sections) {
-		const body = (section.afterMd ?? section.bodyMd ?? "").trim();
-		if (!section.heading || section.slug === "_preamble") {
-			if (body) parts.push(body);
-			continue;
-		}
-		parts.push(`## ${section.heading}\n\n${body}`.trimEnd());
-	}
-	return parts.join("\n\n").trim();
+  const parts: string[] = [];
+  for (const section of sections) {
+    const body = (section.afterMd ?? section.bodyMd ?? "").trim();
+    if (!section.heading || section.slug === "_preamble") {
+      if (body) parts.push(body);
+      continue;
+    }
+    parts.push(`## ${section.heading}\n\n${body}`.trimEnd());
+  }
+  return parts.join("\n\n").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -305,123 +310,122 @@ export function composeBodyFromSections(
 // ---------------------------------------------------------------------------
 
 interface ParsedModelSection {
-	slug: string;
-	heading: string;
-	afterMd: string;
-	contributingCandidateIds: string[];
-	sourceFamily: DraftCompileRegionFamily | null;
-	citation: DraftCompileCitation | null;
+  slug: string;
+  heading: string;
+  afterMd: string;
+  contributingCandidateIds: string[];
+  sourceFamily: DraftCompileRegionFamily | null;
+  citation: DraftCompileCitation | null;
 }
 
 interface ComputeRegionsArgs {
-	existingSections: ParsedSection[];
-	proposedSections: ParsedModelSection[];
-	candidates: DraftCompileCandidate[];
+  existingSections: ParsedSection[];
+  proposedSections: ParsedModelSection[];
+  candidates: DraftCompileCandidate[];
 }
 
 function computeRegions(args: ComputeRegionsArgs): DraftCompileRegion[] {
-	const candidateById = new Map(args.candidates.map((c) => [c.id, c]));
-	const existingBySlug = new Map(
-		args.existingSections.map((s) => [s.slug, s]),
-	);
-	const proposedSlugs = new Set(args.proposedSections.map((s) => s.slug));
+  const candidateById = new Map(args.candidates.map((c) => [c.id, c]));
+  const existingBySlug = new Map(args.existingSections.map((s) => [s.slug, s]));
+  const proposedSlugs = new Set(args.proposedSections.map((s) => s.slug));
 
-	const regions: DraftCompileRegion[] = [];
+  const regions: DraftCompileRegion[] = [];
 
-	for (const proposed of args.proposedSections) {
-		const existing = existingBySlug.get(proposed.slug);
-		const beforeMd = existing?.bodyMd ?? "";
-		const afterMd = proposed.afterMd.trim();
+  for (const proposed of args.proposedSections) {
+    const existing = existingBySlug.get(proposed.slug);
+    const beforeMd = existing?.bodyMd ?? "";
+    const afterMd = proposed.afterMd.trim();
 
-		const contributorsTouched = proposed.contributingCandidateIds.length > 0;
-		const textChanged = normalizeForCompare(beforeMd) !== normalizeForCompare(afterMd);
+    const contributorsTouched = proposed.contributingCandidateIds.length > 0;
+    const textChanged =
+      normalizeForCompare(beforeMd) !== normalizeForCompare(afterMd);
 
-		if (!contributorsTouched && !textChanged) continue;
+    if (!contributorsTouched && !textChanged) continue;
 
-		const sourceFamily = resolveSourceFamily({
-			declared: proposed.sourceFamily,
-			candidateIds: proposed.contributingCandidateIds,
-			candidateById,
-		});
+    const sourceFamily = resolveSourceFamily({
+      declared: proposed.sourceFamily,
+      candidateIds: proposed.contributingCandidateIds,
+      candidateById,
+    });
 
-		const citation = resolveCitation({
-			declared: proposed.citation,
-			candidateIds: proposed.contributingCandidateIds,
-			candidateById,
-		});
+    const citation = resolveCitation({
+      declared: proposed.citation,
+      candidateIds: proposed.contributingCandidateIds,
+      candidateById,
+    });
 
-		regions.push({
-			id: `region-${proposed.slug}`,
-			sectionSlug: proposed.slug,
-			sectionHeading: proposed.heading,
-			sourceFamily,
-			citation,
-			beforeMd,
-			afterMd,
-			contributingCandidateIds: proposed.contributingCandidateIds.slice(),
-		});
-	}
+    regions.push({
+      id: `region-${proposed.slug}`,
+      sectionSlug: proposed.slug,
+      sectionHeading: proposed.heading,
+      sourceFamily,
+      citation,
+      beforeMd,
+      afterMd,
+      contributingCandidateIds: proposed.contributingCandidateIds.slice(),
+    });
+  }
 
-	// Removed sections (existed in snapshot, dropped from proposed) become
-	// regions whose afterMd is empty, so the review surface can show "this
-	// section will be removed if you accept."
-	//
-	// Skip `_preamble` — it's a synthetic slug for prose before the first H2,
-	// and the merge path can't safely re-insert it at the end of the document
-	// without an H2 header (composeBodyFromSections only treats preamble as
-	// header-less when it appears first in the section list). If the model
-	// wants to preserve or update preamble it can emit a section with slug
-	// `_preamble`; otherwise we accept the model's drop silently.
-	for (const existing of args.existingSections) {
-		if (proposedSlugs.has(existing.slug)) continue;
-		if (existing.slug === "_preamble") continue;
-		regions.push({
-			id: `region-${existing.slug}`,
-			sectionSlug: existing.slug,
-			sectionHeading: existing.heading,
-			sourceFamily: "BRAIN",
-			citation: null,
-			beforeMd: existing.bodyMd,
-			afterMd: "",
-			contributingCandidateIds: [],
-		});
-	}
+  // Removed sections (existed in snapshot, dropped from proposed) become
+  // regions whose afterMd is empty, so the review surface can show "this
+  // section will be removed if you accept."
+  //
+  // Skip `_preamble` — it's a synthetic slug for prose before the first H2,
+  // and the merge path can't safely re-insert it at the end of the document
+  // without an H2 header (composeBodyFromSections only treats preamble as
+  // header-less when it appears first in the section list). If the model
+  // wants to preserve or update preamble it can emit a section with slug
+  // `_preamble`; otherwise we accept the model's drop silently.
+  for (const existing of args.existingSections) {
+    if (proposedSlugs.has(existing.slug)) continue;
+    if (existing.slug === "_preamble") continue;
+    regions.push({
+      id: `region-${existing.slug}`,
+      sectionSlug: existing.slug,
+      sectionHeading: existing.heading,
+      sourceFamily: "BRAIN",
+      citation: null,
+      beforeMd: existing.bodyMd,
+      afterMd: "",
+      contributingCandidateIds: [],
+    });
+  }
 
-	return regions;
+  return regions;
 }
 
 function resolveSourceFamily(args: {
-	declared: DraftCompileRegionFamily | null;
-	candidateIds: string[];
-	candidateById: Map<string, DraftCompileCandidate>;
+  declared: DraftCompileRegionFamily | null;
+  candidateIds: string[];
+  candidateById: Map<string, DraftCompileCandidate>;
 }): DraftCompileRegionFamily {
-	if (args.declared) return args.declared;
-	const families = new Set<DraftCompileSourceFamily>();
-	for (const id of args.candidateIds) {
-		const c = args.candidateById.get(id);
-		if (c) families.add(c.sourceFamily);
-	}
-	if (families.size === 0) return "BRAIN";
-	if (families.size > 1) return "MIXED";
-	return [...families][0]!;
+  if (args.declared) return args.declared;
+  const families = new Set<DraftCompileSourceFamily>();
+  for (const id of args.candidateIds) {
+    const c = args.candidateById.get(id);
+    if (c) families.add(c.sourceFamily);
+  }
+  if (families.size === 0) return "BRAIN";
+  if (families.size > 1) return "MIXED";
+  return [...families][0]!;
 }
 
 function resolveCitation(args: {
-	declared: DraftCompileCitation | null;
-	candidateIds: string[];
-	candidateById: Map<string, DraftCompileCandidate>;
+  declared: DraftCompileCitation | null;
+  candidateIds: string[];
+  candidateById: Map<string, DraftCompileCandidate>;
 }): DraftCompileCitation | null {
-	if (args.declared) return args.declared;
-	for (const id of args.candidateIds) {
-		const c = args.candidateById.get(id);
-		if (c?.citation?.uri || c?.citation?.label) {
-			return {
-				uri: c.citation.uri ?? null,
-				label: c.citation.label ?? null,
-			};
-		}
-	}
-	return null;
+  if (args.declared) return args.declared;
+  for (const id of args.candidateIds) {
+    const c = args.candidateById.get(id);
+    if (c?.citation?.uri || c?.citation?.label) {
+      return {
+        uri: c.citation.uri ?? null,
+        label: c.citation.label ?? null,
+      };
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +433,7 @@ function resolveCitation(args: {
 // ---------------------------------------------------------------------------
 
 interface ParsedModelResponse {
-	sections: ParsedModelSection[];
+  sections: ParsedModelSection[];
 }
 
 /**
@@ -438,82 +442,88 @@ interface ParsedModelResponse {
  * silently producing a broken draft.
  */
 export function parseModelResponse(text: string): ParsedModelResponse {
-	const cleaned = stripFences(text.trim());
-	let raw: unknown;
-	try {
-		raw = JSON.parse(cleaned);
-	} catch (err) {
-		throw new Error(
-			`draft-compile: model response is not valid JSON: ${(err as Error).message}`,
-		);
-	}
-	if (!raw || typeof raw !== "object" || !Array.isArray((raw as { sections?: unknown }).sections)) {
-		throw new Error("draft-compile: model response missing `sections` array");
-	}
+  const cleaned = stripFences(text.trim());
+  let raw: unknown;
+  try {
+    raw = JSON.parse(cleaned);
+  } catch (err) {
+    throw new Error(
+      `draft-compile: model response is not valid JSON: ${(err as Error).message}`,
+    );
+  }
+  if (
+    !raw ||
+    typeof raw !== "object" ||
+    !Array.isArray((raw as { sections?: unknown }).sections)
+  ) {
+    throw new Error("draft-compile: model response missing `sections` array");
+  }
 
-	const sections: ParsedModelSection[] = [];
-	const seenSlugs = new Set<string>();
-	for (const item of (raw as { sections: unknown[] }).sections) {
-		if (!item || typeof item !== "object") continue;
-		const obj = item as Record<string, unknown>;
-		const slug = typeof obj.slug === "string" ? obj.slug.trim() : "";
-		const heading = typeof obj.heading === "string" ? obj.heading.trim() : "";
-		const afterMd = typeof obj.afterMd === "string" ? obj.afterMd : "";
-		if (!slug || !heading) {
-			throw new Error("draft-compile: section missing slug or heading");
-		}
-		// Reject duplicate slugs. The accept/reject envelope keys regions on
-		// `region-<slug>`; collapsing two sections under one id would make the
-		// user's per-region decision ambiguous and silently drop one section.
-		if (seenSlugs.has(slug)) {
-			throw new Error(
-				`draft-compile: duplicate section slug '${slug}' in model output`,
-			);
-		}
-		seenSlugs.add(slug);
-		const ids = Array.isArray(obj.contributingCandidateIds)
-			? obj.contributingCandidateIds.filter((v): v is string => typeof v === "string")
-			: [];
-		const sourceFamily = parseSourceFamily(obj.sourceFamily);
-		const citation = parseCitation(obj.citation);
-		sections.push({
-			slug,
-			heading,
-			afterMd,
-			contributingCandidateIds: ids,
-			sourceFamily,
-			citation,
-		});
-	}
-	return { sections };
+  const sections: ParsedModelSection[] = [];
+  const seenSlugs = new Set<string>();
+  for (const item of (raw as { sections: unknown[] }).sections) {
+    if (!item || typeof item !== "object") continue;
+    const obj = item as Record<string, unknown>;
+    const slug = typeof obj.slug === "string" ? obj.slug.trim() : "";
+    const heading = typeof obj.heading === "string" ? obj.heading.trim() : "";
+    const afterMd = typeof obj.afterMd === "string" ? obj.afterMd : "";
+    if (!slug || !heading) {
+      throw new Error("draft-compile: section missing slug or heading");
+    }
+    // Reject duplicate slugs. The accept/reject envelope keys regions on
+    // `region-<slug>`; collapsing two sections under one id would make the
+    // user's per-region decision ambiguous and silently drop one section.
+    if (seenSlugs.has(slug)) {
+      throw new Error(
+        `draft-compile: duplicate section slug '${slug}' in model output`,
+      );
+    }
+    seenSlugs.add(slug);
+    const ids = Array.isArray(obj.contributingCandidateIds)
+      ? obj.contributingCandidateIds.filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [];
+    const sourceFamily = parseSourceFamily(obj.sourceFamily);
+    const citation = parseCitation(obj.citation);
+    sections.push({
+      slug,
+      heading,
+      afterMd,
+      contributingCandidateIds: ids,
+      sourceFamily,
+      citation,
+    });
+  }
+  return { sections };
 }
 
 function parseSourceFamily(v: unknown): DraftCompileRegionFamily | null {
-	if (v === "BRAIN" || v === "KNOWLEDGE_BASE" || v === "WEB" || v === "MIXED") {
-		return v;
-	}
-	return null;
+  if (v === "BRAIN" || v === "KNOWLEDGE_BASE" || v === "WEB" || v === "MIXED") {
+    return v;
+  }
+  return null;
 }
 
 function parseCitation(v: unknown): DraftCompileCitation | null {
-	if (!v || typeof v !== "object") return null;
-	const obj = v as Record<string, unknown>;
-	const uri = typeof obj.uri === "string" ? obj.uri : null;
-	const label = typeof obj.label === "string" ? obj.label : null;
-	if (!uri && !label) return null;
-	return { uri, label };
+  if (!v || typeof v !== "object") return null;
+  const obj = v as Record<string, unknown>;
+  const uri = typeof obj.uri === "string" ? obj.uri : null;
+  const label = typeof obj.label === "string" ? obj.label : null;
+  if (!uri && !label) return null;
+  return { uri, label };
 }
 
 function stripFences(text: string): string {
-	if (text.startsWith("```")) {
-		const firstNewline = text.indexOf("\n");
-		if (firstNewline >= 0) {
-			const inner = text.slice(firstNewline + 1);
-			const closing = inner.lastIndexOf("```");
-			if (closing >= 0) return inner.slice(0, closing).trim();
-		}
-	}
-	return text;
+  if (text.startsWith("```")) {
+    const firstNewline = text.indexOf("\n");
+    if (firstNewline >= 0) {
+      const inner = text.slice(firstNewline + 1);
+      const closing = inner.lastIndexOf("```");
+      if (closing >= 0) return inner.slice(0, closing).trim();
+    }
+  }
+  return text;
 }
 
 // ---------------------------------------------------------------------------
@@ -521,43 +531,45 @@ function stripFences(text: string): string {
 // ---------------------------------------------------------------------------
 
 function buildUserPrompt(args: {
-	pageTitle: string;
-	existingSections: ParsedSection[];
-	candidates: DraftCompileCandidate[];
+  pageTitle: string;
+  existingSections: ParsedSection[];
+  candidates: DraftCompileCandidate[];
 }): string {
-	const existingBlock = args.existingSections.length === 0
-		? "_(empty page — no existing sections)_"
-		: args.existingSections
-			.map(
-				(s) =>
-					s.slug === "_preamble"
-						? `### Preamble (slug: _preamble)\n\n${s.bodyMd}`
-						: `### ${s.heading} (slug: ${s.slug})\n\n${s.bodyMd}`,
-			)
-			.join("\n\n");
+  const existingBlock =
+    args.existingSections.length === 0
+      ? "_(empty page — no existing sections)_"
+      : args.existingSections
+          .map((s) =>
+            s.slug === "_preamble"
+              ? `### Preamble (slug: _preamble)\n\n${s.bodyMd}`
+              : `### ${s.heading} (slug: ${s.slug})\n\n${s.bodyMd}`,
+          )
+          .join("\n\n");
 
-	const candidatesBlock = args.candidates.length === 0
-		? "_(no candidates — return existing sections verbatim)_"
-		: args.candidates
-			.map((c) => {
-				const cite = c.citation?.uri || c.citation?.label
-					? `\n  citation: ${c.citation.label ?? ""} ${c.citation.uri ? `<${c.citation.uri}>` : ""}`
-					: "";
-				return `- id: ${c.id}\n  source: ${c.sourceFamily}${cite}\n  title: ${c.title}\n  summary: ${c.summary}`;
-			})
-			.join("\n");
+  const candidatesBlock =
+    args.candidates.length === 0
+      ? "_(no candidates — return existing sections verbatim)_"
+      : args.candidates
+          .map((c) => {
+            const cite =
+              c.citation?.uri || c.citation?.label
+                ? `\n  citation: ${c.citation.label ?? ""} ${c.citation.uri ? `<${c.citation.uri}>` : ""}`
+                : "";
+            return `- id: ${c.id}\n  source: ${c.sourceFamily}${cite}\n  title: ${c.title}\n  summary: ${c.summary}`;
+          })
+          .join("\n");
 
-	return [
-		`Page: ${args.pageTitle}`,
-		"",
-		"## Existing sections",
-		existingBlock,
-		"",
-		"## Candidate facts",
-		candidatesBlock,
-		"",
-		"Return JSON per the system instructions.",
-	].join("\n");
+  return [
+    `Page: ${args.pageTitle}`,
+    "",
+    "## Existing sections",
+    existingBlock,
+    "",
+    "## Candidate facts",
+    candidatesBlock,
+    "",
+    "Return JSON per the system instructions.",
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -565,30 +577,30 @@ function buildUserPrompt(args: {
 // ---------------------------------------------------------------------------
 
 async function defaultInvokeModel(args: {
-	system: string;
-	user: string;
-	modelId?: string;
-	signal?: AbortSignal;
+  system: string;
+  user: string;
+  modelId?: string;
+  signal?: AbortSignal;
 }): Promise<{
-	text: string;
-	inputTokens: number;
-	outputTokens: number;
-	modelId: string;
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  modelId: string;
 }> {
-	const resp = await invokeClaudeWithRetry({
-		system: args.system,
-		user: args.user,
-		maxTokens: 4096,
-		temperature: 0,
-		modelId: args.modelId,
-		signal: args.signal,
-	});
-	return {
-		text: resp.text,
-		inputTokens: resp.inputTokens,
-		outputTokens: resp.outputTokens,
-		modelId: resp.modelId,
-	};
+  const resp = await invokeClaudeWithRetry({
+    system: args.system,
+    user: args.user,
+    maxTokens: 4096,
+    temperature: 0,
+    modelId: args.modelId,
+    signal: args.signal,
+  });
+  return {
+    text: resp.text,
+    inputTokens: resp.inputTokens,
+    outputTokens: resp.outputTokens,
+    modelId: resp.modelId,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -596,18 +608,18 @@ async function defaultInvokeModel(args: {
 // ---------------------------------------------------------------------------
 
 export interface DraftCompileJobResult {
-	ok: boolean;
-	jobId: string;
-	status: "succeeded" | "failed";
-	result?: DraftCompileResult;
-	writeback?: DraftWritebackResult;
-	error?: string;
+  ok: boolean;
+  jobId: string;
+  status: "succeeded" | "failed";
+  result?: DraftCompileResult;
+  writeback?: DraftWritebackResult;
+  error?: string;
 }
 
 export interface DraftCompileRunOpts {
-	modelId?: string;
-	seam?: DraftCompileSeam;
-	writebackIo?: DraftWritebackIO;
+  modelId?: string;
+  seam?: DraftCompileSeam;
+  writebackIo?: DraftWritebackIO;
 }
 
 /**
@@ -616,59 +628,59 @@ export interface DraftCompileRunOpts {
  * which the runner treats as a job failure.
  */
 export function parseDraftCompileInput(raw: unknown): DraftCompileInput {
-	if (!raw || typeof raw !== "object") {
-		throw new Error("draft-compile: job.input is missing or not an object");
-	}
-	const obj = raw as Record<string, unknown>;
-	const pageId = typeof obj.pageId === "string" ? obj.pageId : "";
-	const pageTable =
-		obj.pageTable === "wiki_pages" || obj.pageTable === "tenant_entity_pages"
-			? obj.pageTable
-			: "";
-	const pageTitle = typeof obj.pageTitle === "string" ? obj.pageTitle : "";
-	const currentBodyMd =
-		typeof obj.currentBodyMd === "string" ? obj.currentBodyMd : "";
-	const candidatesRaw = Array.isArray(obj.candidates) ? obj.candidates : null;
-	if (!pageId || !pageTable || !pageTitle || !candidatesRaw) {
-		throw new Error(
-			"draft-compile: job.input must include pageId, pageTable, pageTitle, candidates",
-		);
-	}
-	const candidates: DraftCompileCandidate[] = [];
-	for (const c of candidatesRaw) {
-		if (!c || typeof c !== "object") continue;
-		const co = c as Record<string, unknown>;
-		const id = typeof co.id === "string" ? co.id : "";
-		const title = typeof co.title === "string" ? co.title : "";
-		const summary = typeof co.summary === "string" ? co.summary : "";
-		const sourceFamily =
-			co.sourceFamily === "BRAIN" ||
-			co.sourceFamily === "KNOWLEDGE_BASE" ||
-			co.sourceFamily === "WEB"
-				? co.sourceFamily
-				: null;
-		if (!id || !sourceFamily) continue;
-		candidates.push({
-			id,
-			title,
-			summary,
-			sourceFamily,
-			providerId: typeof co.providerId === "string" ? co.providerId : undefined,
-			citation: parseCitation(co.citation),
-		});
-	}
-	const requestingAgentId =
-		typeof obj.requestingAgentId === "string" && obj.requestingAgentId
-			? obj.requestingAgentId
-			: null;
-	return {
-		pageId,
-		pageTable,
-		pageTitle,
-		currentBodyMd,
-		candidates,
-		...(requestingAgentId ? { requestingAgentId } : {}),
-	};
+  if (!raw || typeof raw !== "object") {
+    throw new Error("draft-compile: job.input is missing or not an object");
+  }
+  const obj = raw as Record<string, unknown>;
+  const pageId = typeof obj.pageId === "string" ? obj.pageId : "";
+  const pageTable =
+    obj.pageTable === "wiki_pages" || obj.pageTable === "tenant_entity_pages"
+      ? obj.pageTable
+      : "";
+  const pageTitle = typeof obj.pageTitle === "string" ? obj.pageTitle : "";
+  const currentBodyMd =
+    typeof obj.currentBodyMd === "string" ? obj.currentBodyMd : "";
+  const candidatesRaw = Array.isArray(obj.candidates) ? obj.candidates : null;
+  if (!pageId || !pageTable || !pageTitle || !candidatesRaw) {
+    throw new Error(
+      "draft-compile: job.input must include pageId, pageTable, pageTitle, candidates",
+    );
+  }
+  const candidates: DraftCompileCandidate[] = [];
+  for (const c of candidatesRaw) {
+    if (!c || typeof c !== "object") continue;
+    const co = c as Record<string, unknown>;
+    const id = typeof co.id === "string" ? co.id : "";
+    const title = typeof co.title === "string" ? co.title : "";
+    const summary = typeof co.summary === "string" ? co.summary : "";
+    const sourceFamily =
+      co.sourceFamily === "BRAIN" ||
+      co.sourceFamily === "KNOWLEDGE_BASE" ||
+      co.sourceFamily === "WEB"
+        ? co.sourceFamily
+        : null;
+    if (!id || !sourceFamily) continue;
+    candidates.push({
+      id,
+      title,
+      summary,
+      sourceFamily,
+      providerId: typeof co.providerId === "string" ? co.providerId : undefined,
+      citation: parseCitation(co.citation),
+    });
+  }
+  const requestingAgentId =
+    typeof obj.requestingAgentId === "string" && obj.requestingAgentId
+      ? obj.requestingAgentId
+      : null;
+  return {
+    pageId,
+    pageTable,
+    pageTitle,
+    currentBodyMd,
+    candidates,
+    ...(requestingAgentId ? { requestingAgentId } : {}),
+  };
 }
 
 /**
@@ -680,85 +692,85 @@ export function parseDraftCompileInput(raw: unknown): DraftCompileInput {
  * "succeeded" job ledger row whose user-visible artifacts never landed.
  */
 export async function runDraftCompileJob(
-	job: WikiCompileJobRow,
-	opts: DraftCompileRunOpts = {},
+  job: WikiCompileJobRow,
+  opts: DraftCompileRunOpts = {},
 ): Promise<DraftCompileJobResult> {
-	let parsedInput: DraftCompileInput | null = null;
-	try {
-		parsedInput = parseDraftCompileInput(job.input);
-		const ctx: DraftWritebackContext = {
-			job,
-			pageTable: parsedInput.pageTable,
-			pageId: parsedInput.pageId,
-			pageTitle: parsedInput.pageTitle,
-			candidates: parsedInput.candidates,
-			requestingAgentId: parsedInput.requestingAgentId ?? null,
-		};
-		const result = await runDraftCompile(parsedInput, opts.seam);
+  let parsedInput: DraftCompileInput | null = null;
+  try {
+    parsedInput = parseDraftCompileInput(job.input);
+    const ctx: DraftWritebackContext = {
+      job,
+      pageTable: parsedInput.pageTable,
+      pageId: parsedInput.pageId,
+      pageTitle: parsedInput.pageTitle,
+      candidates: parsedInput.candidates,
+      requestingAgentId: parsedInput.requestingAgentId ?? null,
+    };
+    const result = await runDraftCompile(parsedInput, opts.seam);
 
-		const writeback =
-			result.regions.length === 0
-				? await writeDraftReviewNoOp({ context: ctx, io: opts.writebackIo })
-				: await writeDraftReviewSuccess({
-						context: ctx,
-						result,
-						io: opts.writebackIo,
-					});
+    const writeback =
+      result.regions.length === 0
+        ? await writeDraftReviewNoOp({ context: ctx, io: opts.writebackIo })
+        : await writeDraftReviewSuccess({
+            context: ctx,
+            result,
+            io: opts.writebackIo,
+          });
 
-		await completeCompileJob({
-			jobId: job.id,
-			status: "succeeded",
-			metrics: {
-				model_id: result.modelId,
-				input_tokens: result.inputTokens,
-				output_tokens: result.outputTokens,
-				regions_count: result.regions.length,
-				proposed_body_chars: result.proposedBodyMd.length,
-				snapshot_chars: result.snapshotMd.length,
-				writeback_thread_id: writeback.threadId,
-				writeback_run_id: writeback.workspaceRunId,
-			},
-		});
-		return { ok: true, jobId: job.id, status: "succeeded", result, writeback };
-	} catch (err) {
-		const msg = (err as Error)?.message || String(err);
-		// Best-effort: surface failure in a thread so the user knows the run
-		// happened. If we couldn't even parse the input, there's no thread
-		// context to write — skip writeback and just mark the job failed.
-		let writeback: DraftWritebackResult | undefined;
-		if (parsedInput) {
-			const ctx: DraftWritebackContext = {
-				job,
-				pageTable: parsedInput.pageTable,
-				pageId: parsedInput.pageId,
-				pageTitle: parsedInput.pageTitle,
-				candidates: parsedInput.candidates,
-			};
-			try {
-				writeback = await writeDraftReviewFailure({
-					context: ctx,
-					error: msg,
-					io: opts.writebackIo,
-				});
-			} catch (wbErr) {
-				console.warn(
-					`[draft-compile] failure-path writeback errored: ${(wbErr as Error)?.message ?? wbErr}`,
-				);
-			}
-		}
-		await completeCompileJob({
-			jobId: job.id,
-			status: "failed",
-			error: msg,
-		});
-		return {
-			ok: false,
-			jobId: job.id,
-			status: "failed",
-			error: msg,
-			...(writeback ? { writeback } : {}),
-		};
-	}
+    await completeCompileJob({
+      jobId: job.id,
+      status: "succeeded",
+      metrics: {
+        model_id: result.modelId,
+        input_tokens: result.inputTokens,
+        output_tokens: result.outputTokens,
+        regions_count: result.regions.length,
+        proposed_body_chars: result.proposedBodyMd.length,
+        snapshot_chars: result.snapshotMd.length,
+        writeback_thread_id: writeback.threadId,
+        writeback_run_id: writeback.workspaceRunId,
+      },
+    });
+    return { ok: true, jobId: job.id, status: "succeeded", result, writeback };
+  } catch (err) {
+    const msg = (err as Error)?.message || String(err);
+    // Best-effort: surface failure in a thread so the user knows the run
+    // happened. If we couldn't even parse the input, there's no thread
+    // context to write — skip writeback and just mark the job failed.
+    let writeback: DraftWritebackResult | undefined;
+    if (parsedInput) {
+      const ctx: DraftWritebackContext = {
+        job,
+        pageTable: parsedInput.pageTable,
+        pageId: parsedInput.pageId,
+        pageTitle: parsedInput.pageTitle,
+        candidates: parsedInput.candidates,
+      };
+      try {
+        writeback = await writeDraftReviewFailure({
+          context: ctx,
+          error: msg,
+          io: opts.writebackIo,
+        });
+      } catch (wbErr) {
+        console.warn(
+          `[draft-compile] failure-path writeback errored: ${(wbErr as Error)?.message ?? wbErr}`,
+        );
+      }
+    }
+    await completeCompileJob({
+      jobId: job.id,
+      status: "failed",
+      error: msg,
+    });
+    return {
+      ok: false,
+      jobId: job.id,
+      status: "failed",
+      error: msg,
+      ...(writeback ? { writeback } : {}),
+    };
+  }
 }
 
 /**
@@ -766,52 +778,52 @@ export async function runDraftCompileJob(
  * jobId for an enrichment-draft job. Loads the row, then runs.
  */
 export async function runDraftCompileJobById(
-	jobId: string,
-	opts: DraftCompileRunOpts = {},
+  jobId: string,
+  opts: DraftCompileRunOpts = {},
 ): Promise<DraftCompileJobResult | null> {
-	const job = await getCompileJob(jobId);
-	if (!job) return null;
-	if (job.trigger !== "enrichment_draft") {
-		throw new Error(
-			`runDraftCompileJobById: job ${jobId} has trigger=${job.trigger}, expected enrichment_draft`,
-		);
-	}
-	// Terminal-state short-circuits. Cheap pre-check before the CAS — keeps
-	// the warm path fast and avoids touching the row when there's nothing
-	// to claim. The CAS below is the source of truth on contested races.
-	if (job.status === "succeeded" || job.status === "skipped") {
-		return { ok: true, jobId: job.id, status: "succeeded" };
-	}
-	if (job.status === "failed") {
-		return {
-			ok: false,
-			jobId: job.id,
-			status: "failed",
-			error: job.error ?? "previous attempt failed",
-		};
-	}
+  const job = await getCompileJob(jobId);
+  if (!job) return null;
+  if (job.trigger !== "enrichment_draft") {
+    throw new Error(
+      `runDraftCompileJobById: job ${jobId} has trigger=${job.trigger}, expected enrichment_draft`,
+    );
+  }
+  // Terminal-state short-circuits. Cheap pre-check before the CAS — keeps
+  // the warm path fast and avoids touching the row when there's nothing
+  // to claim. The CAS below is the source of truth on contested races.
+  if (job.status === "succeeded" || job.status === "skipped") {
+    return { ok: true, jobId: job.id, status: "succeeded" };
+  }
+  if (job.status === "failed") {
+    return {
+      ok: false,
+      jobId: job.id,
+      status: "failed",
+      error: job.error ?? "previous attempt failed",
+    };
+  }
 
-	// Atomic CAS claim. The previous status-check-then-call pattern was
-	// vulnerable to two concurrent Lambda invocations both reading
-	// status='pending' before either could mutate it — both would proceed
-	// into the agentic compile and both writebacks would create separate
-	// thread + workspace_run rows for the same logical run (observed live
-	// in dev — API-249 + API-250 for one Eric enrichment). The CAS narrows
-	// the window to the DB engine's row lock; only the first invoker gets
-	// a non-null result and proceeds. Subsequent invocations refuse.
-	const claimed = await claimCompileJobById(jobId);
-	if (!claimed) {
-		console.warn(
-			`[draft-compile] runDraftCompileJobById: failed to atomically claim job ${jobId} (concurrent redrive or no longer pending); refusing`,
-		);
-		return {
-			ok: false,
-			jobId: job.id,
-			status: "failed",
-			error: "job already claimed by concurrent invocation",
-		};
-	}
-	return runDraftCompileJob(claimed, opts);
+  // Atomic CAS claim. The previous status-check-then-call pattern was
+  // vulnerable to two concurrent Lambda invocations both reading
+  // status='pending' before either could mutate it — both would proceed
+  // into the agentic compile and both writebacks would create separate
+  // thread + workspace_run rows for the same logical run (observed live
+  // in dev — API-249 + API-250 for one Eric enrichment). The CAS narrows
+  // the window to the DB engine's row lock; only the first invoker gets
+  // a non-null result and proceeds. Subsequent invocations refuse.
+  const claimed = await claimCompileJobById(jobId);
+  if (!claimed) {
+    console.warn(
+      `[draft-compile] runDraftCompileJobById: failed to atomically claim job ${jobId} (concurrent redrive or no longer pending); refusing`,
+    );
+    return {
+      ok: false,
+      jobId: job.id,
+      status: "failed",
+      error: "job already claimed by concurrent invocation",
+    };
+  }
+  return runDraftCompileJob(claimed, opts);
 }
 
 // ---------------------------------------------------------------------------
@@ -819,5 +831,5 @@ export async function runDraftCompileJobById(
 // ---------------------------------------------------------------------------
 
 function normalizeForCompare(s: string): string {
-	return s.trim().replace(/\s+/g, " ");
+  return s.trim().replace(/\s+/g, " ");
 }

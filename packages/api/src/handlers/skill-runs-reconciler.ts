@@ -26,44 +26,44 @@ const STALE_AFTER_MINUTES = 15;
 const FAILURE_REASON = `reconciler: stale running row (no terminal writeback within ${STALE_AFTER_MINUTES} min)`;
 
 export async function handler(): Promise<{ reconciled: number }> {
-	const db = getDb();
-	const start = Date.now();
+  const db = getDb();
+  const start = Date.now();
 
-	const reconciled = await db
-		.update(skillRuns)
-		.set({
-			status: "failed",
-			failure_reason: FAILURE_REASON,
-			finished_at: new Date(),
-			updated_at: new Date(),
-		})
-		.where(
-			and(
-				eq(skillRuns.status, "running"),
-				lt(
-					skillRuns.started_at,
-					sql`now() - (${STALE_AFTER_MINUTES} || ' minutes')::interval`,
-				),
-			),
-		)
-		.returning({
-			id: skillRuns.id,
-			tenant_id: skillRuns.tenant_id,
-			skill_id: skillRuns.skill_id,
-			started_at: skillRuns.started_at,
-		});
+  const reconciled = await db
+    .update(skillRuns)
+    .set({
+      status: "failed",
+      failure_reason: FAILURE_REASON,
+      finished_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(skillRuns.status, "running"),
+        lt(
+          skillRuns.started_at,
+          sql`now() - (${STALE_AFTER_MINUTES} || ' minutes')::interval`,
+        ),
+      ),
+    )
+    .returning({
+      id: skillRuns.id,
+      tenant_id: skillRuns.tenant_id,
+      skill_id: skillRuns.skill_id,
+      started_at: skillRuns.started_at,
+    });
 
-	for (const row of reconciled) {
-		const ageMs = Date.now() - new Date(row.started_at).getTime();
-		console.log(
-			`[skill-runs-reconciler] row_reconciled run_id=${row.id} tenant_id=${row.tenant_id} skill_id=${row.skill_id} age_ms=${ageMs}`,
-		);
-	}
+  for (const row of reconciled) {
+    const ageMs = Date.now() - new Date(row.started_at).getTime();
+    console.log(
+      `[skill-runs-reconciler] row_reconciled run_id=${row.id} tenant_id=${row.tenant_id} skill_id=${row.skill_id} age_ms=${ageMs}`,
+    );
+  }
 
-	const duration = Date.now() - start;
-	console.log(
-		`[skill-runs-reconciler] reconciled=${reconciled.length} stale_after_min=${STALE_AFTER_MINUTES} duration_ms=${duration}`,
-	);
+  const duration = Date.now() - start;
+  console.log(
+    `[skill-runs-reconciler] reconciled=${reconciled.length} stale_after_min=${STALE_AFTER_MINUTES} duration_ms=${duration}`,
+  );
 
-	return { reconciled: reconciled.length };
+  return { reconciled: reconciled.length };
 }

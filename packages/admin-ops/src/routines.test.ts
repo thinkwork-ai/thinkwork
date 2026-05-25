@@ -119,7 +119,8 @@ describe("checkRoutineVisibility", () => {
 
 describe("createAgentRoutine", () => {
   it("submits intent-only createRoutine input so the API planner builds ASL artifacts", async () => {
-    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> =
+      [];
     const created = routine({
       name: "Check Austin Weather",
       description:
@@ -135,7 +136,8 @@ describe("createAgentRoutine", () => {
       agentId: AGENT_OWNER,
       name: "Check Austin Weather",
       description: "Daily weather check",
-      intent: "Fetch Austin weather and email the summary to ericodom37@gmail.com.",
+      intent:
+        "Fetch Austin weather and email the summary to ericodom37@gmail.com.",
       suggestedSteps: ["Fetch Austin weather", "Email the summary"],
     });
 
@@ -194,7 +196,8 @@ describe("createAgentRoutine", () => {
 
 describe("triggerRoutineRun", () => {
   it("serializes args as AWSJSON input", async () => {
-    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> =
+      [];
     const execution = {
       id: "execution-id",
       status: "running",

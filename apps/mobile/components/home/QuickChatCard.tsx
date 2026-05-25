@@ -6,13 +6,24 @@ import { COLORS } from "@/lib/theme";
 import { AgentPicker } from "@/components/chat/AgentPicker";
 
 interface QuickChatCardProps {
-  agents: Array<{ _id: string; id?: string; name: string; role?: string; connectionStatus?: string }>;
+  agents: Array<{
+    _id: string;
+    id?: string;
+    name: string;
+    role?: string;
+    connectionStatus?: string;
+  }>;
   selectedAgent: { _id: string; id?: string; name: string } | null;
   onSelectAgent: (agent: any) => void;
   onPress: () => void;
 }
 
-export function QuickChatCard({ agents, selectedAgent, onSelectAgent, onPress }: QuickChatCardProps) {
+export function QuickChatCard({
+  agents,
+  selectedAgent,
+  onSelectAgent,
+  onPress,
+}: QuickChatCardProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -46,7 +57,9 @@ export function QuickChatCard({ agents, selectedAgent, onSelectAgent, onPress }:
 
         {/* Input trigger */}
         <Pressable onPress={onPress} className="flex-1 active:opacity-70">
-          <Muted className="text-sm">Ask {selectedAgent?.name ?? "your agent"} anything...</Muted>
+          <Muted className="text-sm">
+            Ask {selectedAgent?.name ?? "your agent"} anything...
+          </Muted>
         </Pressable>
 
         <MessageCircle size={20} color={colors.primary} />

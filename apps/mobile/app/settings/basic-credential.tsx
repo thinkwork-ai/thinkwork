@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { View, ScrollView, Pressable, ActivityIndicator, Platform } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Input } from "@/components/ui/input";
@@ -12,7 +18,12 @@ export default function BasicCredentialScreen() {
   const router = useRouter();
 
   // TODO: implement createCredential via GraphQL mutation
-  const createCredential = async (_args: { name: string; type: string; username: string; password: string }) => {
+  const createCredential = async (_args: {
+    name: string;
+    type: string;
+    username: string;
+    password: string;
+  }) => {
     throw new Error("TODO: implement createCredential via GraphQL");
   };
 
@@ -22,7 +33,8 @@ export default function BasicCredentialScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSave = name.trim().length > 0 && username.trim().length > 0 && password.length > 0;
+  const canSave =
+    name.trim().length > 0 && username.trim().length > 0 && password.length > 0;
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -37,7 +49,9 @@ export default function BasicCredentialScreen() {
       });
       router.back();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save credential");
+      setError(
+        err instanceof Error ? err.message : "Failed to save credential",
+      );
     } finally {
       setSaving(false);
     }
@@ -47,7 +61,11 @@ export default function BasicCredentialScreen() {
     <DetailLayout title="Basic Credential" onBack={() => router.back()}>
       <ScrollView
         className="flex-1 bg-white dark:bg-neutral-950"
-        contentContainerStyle={{ paddingTop: 0, paddingBottom: 24, alignItems: Platform.OS === "web" ? "flex-start" : "center" }}
+        contentContainerStyle={{
+          paddingTop: 0,
+          paddingBottom: 24,
+          alignItems: Platform.OS === "web" ? "flex-start" : "center",
+        }}
         keyboardShouldPersistTaps="handled"
       >
         <View className="mt-4 px-4 gap-4 w-full" style={{ maxWidth: 768 }}>
@@ -76,7 +94,9 @@ export default function BasicCredentialScreen() {
 
           {error && (
             <View className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3">
-              <Text className="text-sm text-red-600 dark:text-red-400">{error}</Text>
+              <Text className="text-sm text-red-600 dark:text-red-400">
+                {error}
+              </Text>
             </View>
           )}
 
@@ -90,10 +110,14 @@ export default function BasicCredentialScreen() {
               {saving ? (
                 <>
                   <ActivityIndicator size="small" color="#fff" />
-                  <Text className="ml-2 text-white font-semibold text-sm">Saving...</Text>
+                  <Text className="ml-2 text-white font-semibold text-sm">
+                    Saving...
+                  </Text>
                 </>
               ) : (
-                <Text className="text-white font-semibold text-sm">Save Credential</Text>
+                <Text className="text-white font-semibold text-sm">
+                  Save Credential
+                </Text>
               )}
             </Pressable>
           </View>

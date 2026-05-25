@@ -54,8 +54,7 @@ const McpProxyParamsSchema = Type.Object(
       Type.Object(
         {
           server: Type.String({
-            description:
-              "MCP server slug to dispatch to (must be configured).",
+            description: "MCP server slug to dispatch to (must be configured).",
           }),
           tool: Type.String({
             description: "MCP tool name as returned by `tools/list`.",
@@ -93,7 +92,7 @@ const MCP_PROXY_DESCRIPTION = [
   "Gateway to every configured MCP tool. Use this instead of looking for individual MCP tools.",
   "Modes (provide exactly one):",
   "  - `list: true` -> returns the catalog of available MCP tools.",
-  "  - `search: \"query\"` -> substring match against tool name and description.",
+  '  - `search: "query"` -> substring match against tool name and description.',
   "  - `call: { server, tool, args }` -> dispatches the named tool.",
   "Pass `includeSchemas: true` on list/search to include each tool's input schema.",
 ].join("\n");
@@ -127,7 +126,7 @@ class McpProxyModeUnsupportedError extends Error {
   constructor(mode: string) {
     super(
       `MCP proxy mode "${mode}" is not implemented in Plan §006 U3 ` +
-        "(only \"inert\" is shipped in PR-1; \"live\" arrives in U5).",
+        '(only "inert" is shipped in PR-1; "live" arrives in U5).',
     );
     this.name = "McpProxyModeUnsupportedError";
   }

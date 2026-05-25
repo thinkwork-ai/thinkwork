@@ -3,10 +3,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import {
-  parseAppletMetadataV1,
-  type AppletMetadataV1,
-} from "./metadata.js";
+import { parseAppletMetadataV1, type AppletMetadataV1 } from "./metadata.js";
 
 let s3: S3Client | null = null;
 

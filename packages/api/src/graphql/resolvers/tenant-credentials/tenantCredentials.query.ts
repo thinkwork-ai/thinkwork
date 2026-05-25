@@ -8,7 +8,11 @@ export async function tenantCredentials_(
   args: { tenantId: string; status?: string | null },
   ctx: GraphQLContext,
 ): Promise<unknown[]> {
-  await requireAdminOrApiKeyCaller(ctx, args.tenantId, "read_tenant_credentials");
+  await requireAdminOrApiKeyCaller(
+    ctx,
+    args.tenantId,
+    "read_tenant_credentials",
+  );
 
   const conditions = [eq(tenantCredentials.tenant_id, args.tenantId)];
   if (args.status) {

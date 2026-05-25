@@ -17,10 +17,6 @@ import {
 import { notifyThreadUpdate } from "../../notify.js";
 import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
-import {
-  enqueueComputerThreadTurn,
-  resolveThreadComputer,
-} from "../../../lib/computers/thread-cutover.js";
 import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
 import { dispatchAgentMentions } from "../../../lib/mentions/dispatch-agent-mentions.js";
 import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-routing.js";
@@ -98,15 +94,8 @@ export const createThread = async (
       extensions: { code: "FORBIDDEN" },
     });
   }
-  const threadComputer = await resolveThreadComputer({
-    tenantId: i.tenantId,
-    ownerUserId: createdByType === "user" ? createdById : null,
-    requesterUserId: createdByType === "user" ? createdById : null,
-    requestedComputerId: i.computerId ?? null,
-  });
-  const threadAgentId = threadComputer
-    ? null
-    : (i.agentId ?? (await resolveDefaultThreadAgentId(i.tenantId)));
+  const threadAgentId =
+    i.agentId ?? (await resolveDefaultThreadAgentId(i.tenantId));
 
   // PRD-09 §9.4.4: Agent-created thread validation
   if (createdByType === "agent" && createdById) {
@@ -164,7 +153,6 @@ export const createThread = async (
       .values({
         tenant_id: i.tenantId,
         agent_id: threadAgentId ?? undefined,
-        computer_id: threadComputer?.id,
         space_id: threadSpace.id,
         user_id: createdByType === "user" ? createdById : undefined,
         number: nextNumber,
@@ -265,8 +253,7 @@ export const createThread = async (
     firstMessageId &&
     i.firstMessage &&
     createdByType === "user" &&
-    parsedOpeningMentions.length === 0 &&
-    !row.computer_id
+    parsedOpeningMentions.length === 0
   ) {
     try {
       await dispatchDefaultAgentTurn({
@@ -280,19 +267,6 @@ export const createThread = async (
     } catch (err) {
       console.warn("[createThread] default agent dispatch failed:", err);
     }
-  }
-
-  if (firstMessageId && row.computer_id && parsedOpeningMentions.length === 0) {
-    await enqueueComputerThreadTurn({
-      tenantId: row.tenant_id,
-      computerId: row.computer_id,
-      threadId: row.id,
-      messageId: firstMessageId,
-      source: "chat_message",
-      actorType: createdByType,
-      actorId: createdById,
-    });
-    return threadToCamel(row);
   }
 
   return threadToCamel(row);

@@ -26,11 +26,13 @@ export default function TabsLayout() {
         },
         headerStyle: {
           backgroundColor: colors.background,
-          ...(isWide ? {
-            height: 56,
-            borderBottomWidth: 1,
-            borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "#e5e5e5",
-          } : {}),
+          ...(isWide
+            ? {
+                height: 56,
+                borderBottomWidth: 1,
+                borderBottomColor: isDark ? "rgba(255,255,255,0.1)" : "#e5e5e5",
+              }
+            : {}),
         },
         headerTitleStyle: {
           color: colors.foreground,

@@ -1,4 +1,8 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { mockClient } from "aws-sdk-client-mock";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -64,7 +68,8 @@ describe("message artifact payload handler", () => {
         artifact_type: "text",
         name: "notes.md",
         content: "hello",
-        s3_key: "tenants/tenant-1/artifact-payloads/message-artifacts/other/content",
+        s3_key:
+          "tenants/tenant-1/artifact-payloads/message-artifacts/other/content",
       }),
     );
 
@@ -76,12 +81,16 @@ describe("message artifact payload handler", () => {
       ),
     });
     expect(insertedRows[0].s3_key).not.toContain("other");
-    expect(s3Mock.commandCalls(PutObjectCommand)[0].args[0].input).toMatchObject({
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
       Bucket: "workspace-bucket",
       Key: insertedRows[0].s3_key,
       Body: "hello",
     });
-    expect(JSON.parse(response.body ?? "{}")).toMatchObject({ content: "hello" });
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
+      content: "hello",
+    });
   });
 
   it("hydrates S3-backed message artifact content when listing", async () => {
@@ -100,7 +109,9 @@ describe("message artifact payload handler", () => {
       Body: { transformToString: async () => "from s3" } as any,
     });
 
-    const response = await handler(event("GET", "/api/messages/message-1/artifacts"));
+    const response = await handler(
+      event("GET", "/api/messages/message-1/artifacts"),
+    );
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body ?? "[]")[0]).toMatchObject({

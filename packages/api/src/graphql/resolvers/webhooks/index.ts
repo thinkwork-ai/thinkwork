@@ -8,14 +8,14 @@ import { regenerateWebhookToken } from "./regenerateWebhookToken.mutation.js";
 import { testWebhook } from "./testWebhook.mutation.js";
 
 export const webhookQueries = {
-	webhooks: webhooksList,
-	webhook,
-	webhookDeliveries: webhookDeliveriesList,
+  webhooks: webhooksList,
+  webhook,
+  webhookDeliveries: webhookDeliveriesList,
 };
 export const webhookMutations = {
-	createWebhook,
-	updateWebhook,
-	deleteWebhook,
-	regenerateWebhookToken,
-	testWebhook,
+  createWebhook,
+  updateWebhook,
+  deleteWebhook,
+  regenerateWebhookToken,
+  testWebhook,
 };

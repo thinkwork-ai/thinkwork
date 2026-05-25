@@ -9,18 +9,18 @@ import { bootstrapJournalImport } from "./bootstrapJournalImport.mutation.js";
 import { resetWikiCursor } from "./resetWikiCursor.mutation.js";
 
 export const wikiQueries = {
-	wikiPage,
-	wikiSearch,
-	wikiBacklinks,
-	wikiConnectedPages,
-	wikiCompileJobs,
-	wikiGraph,
+  wikiPage,
+  wikiSearch,
+  wikiBacklinks,
+  wikiConnectedPages,
+  wikiCompileJobs,
+  wikiGraph,
 };
 
 export const wikiMutations = {
-	compileWikiNow,
-	bootstrapJournalImport,
-	resetWikiCursor,
+  compileWikiNow,
+  bootstrapJournalImport,
+  resetWikiCursor,
 };
 
 export { wikiPageTypeResolvers } from "./fieldResolvers.js";

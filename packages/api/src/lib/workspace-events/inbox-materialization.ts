@@ -65,7 +65,10 @@ export interface MaterializeReviewInput {
   runId: string;
   agentId: string;
   targetPath: string;
-  classification: { kind: WorkspaceReviewKind; responsibleUserId: string | null };
+  classification: {
+    kind: WorkspaceReviewKind;
+    responsibleUserId: string | null;
+  };
   reviewObjectKey?: string | null;
   reviewEtag?: string | null;
   reason?: string | null;
@@ -223,9 +226,7 @@ export function createDrizzleWorkspaceReviewInboxStore(
         .from(agents)
         .where(eq(agents.id, agentId))
         .limit(1);
-      return agent
-        ? { name: agent.name, slug: agent.slug ?? null }
-        : null;
+      return agent ? { name: agent.name, slug: agent.slug ?? null } : null;
     },
     async findInboxItemForRun(tenantId, runId) {
       const [row] = await database

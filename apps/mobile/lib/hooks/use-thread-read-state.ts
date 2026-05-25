@@ -45,20 +45,29 @@ export function useThreadReadState() {
   const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
   useSyncExternalStore(_subscribe, _getVersion);
 
-  const markRead = useCallback((threadId: string) => {
-    _markLocal(threadId);
-    executeUpdateThread({
-      id: threadId,
-      input: { lastReadAt: new Date().toISOString() } as any,
-    }).catch(() => {});
-  }, [executeUpdateThread]);
+  const markRead = useCallback(
+    (threadId: string) => {
+      _markLocal(threadId);
+      executeUpdateThread({
+        id: threadId,
+        input: { lastReadAt: new Date().toISOString() } as any,
+      }).catch(() => {});
+    },
+    [executeUpdateThread],
+  );
 
   const isUnread = useCallback(
-    (threadId: string, lastTurnCompletedAt: string, lastReadAt?: string | null) => {
+    (
+      threadId: string,
+      lastTurnCompletedAt: string,
+      lastReadAt?: string | null,
+    ) => {
       if (_locallyRead.has(threadId)) return false;
       if (!lastTurnCompletedAt) return false;
       if (!lastReadAt) return true;
-      return new Date(lastTurnCompletedAt).getTime() > new Date(lastReadAt).getTime();
+      return (
+        new Date(lastTurnCompletedAt).getTime() > new Date(lastReadAt).getTime()
+      );
     },
     [],
   );

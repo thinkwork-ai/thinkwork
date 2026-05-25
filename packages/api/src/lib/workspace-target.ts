@@ -19,8 +19,7 @@ export type WorkspaceTargetResult =
         | "not_routable";
     };
 
-const TARGET_RE =
-  /^[a-z0-9][a-z0-9-]{0,63}(\/[a-z0-9][a-z0-9-]{0,63})*$/;
+const TARGET_RE = /^[a-z0-9][a-z0-9-]{0,63}(\/[a-z0-9][a-z0-9-]{0,63})*$/;
 const RESERVED_SEGMENTS = new Set(["memory", "skills"]);
 export const WORKSPACE_TARGET_DEPTH_CAP = 4;
 
@@ -52,14 +51,33 @@ export function parseWorkspaceTarget(
   if (trimmed.startsWith("/")) {
     return { valid: false, normalizedPath: null, depth: 0, reason: "absolute" };
   }
-  if (trimmed.includes("\\") || trimmed.includes("?") || trimmed.includes("#")) {
-    return { valid: false, normalizedPath: null, depth: 0, reason: "malformed" };
+  if (
+    trimmed.includes("\\") ||
+    trimmed.includes("?") ||
+    trimmed.includes("#")
+  ) {
+    return {
+      valid: false,
+      normalizedPath: null,
+      depth: 0,
+      reason: "malformed",
+    };
   }
   if (trimmed.includes("..")) {
-    return { valid: false, normalizedPath: null, depth: 0, reason: "traversal" };
+    return {
+      valid: false,
+      normalizedPath: null,
+      depth: 0,
+      reason: "traversal",
+    };
   }
   if (!TARGET_RE.test(trimmed)) {
-    return { valid: false, normalizedPath: null, depth: 0, reason: "malformed" };
+    return {
+      valid: false,
+      normalizedPath: null,
+      depth: 0,
+      reason: "malformed",
+    };
   }
 
   const segments = trimmed.split("/");
@@ -97,4 +115,3 @@ export function parseWorkspaceTarget(
 
   return { valid: true, normalizedPath: trimmed, depth, reason: null };
 }
-

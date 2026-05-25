@@ -32,10 +32,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type, type TSchema } from "typebox";
-import type {
-  ConnectMcpServerArgs,
-  ConnectMcpServerFn,
-} from "./mcp.js";
+import type { ConnectMcpServerArgs, ConnectMcpServerFn } from "./mcp.js";
 
 /** Default per-RPC timeout; matches the legacy pi-mono MCP implementation. */
 const DEFAULT_LIST_TOOLS_TIMEOUT_MS = 30_000;
@@ -105,7 +102,10 @@ function sanitizeName(value: string): string {
 }
 
 function exposedToolName(serverName: string, toolName: string): string {
-  return `mcp_${sanitizeName(serverName)}_${sanitizeName(toolName)}`.slice(0, 64);
+  return `mcp_${sanitizeName(serverName)}_${sanitizeName(toolName)}`.slice(
+    0,
+    64,
+  );
 }
 
 function paramsRecord(params: unknown): Record<string, unknown> {
@@ -160,8 +160,7 @@ export function createConnectMcpServer(
     options.listToolsTimeoutMs ?? DEFAULT_LIST_TOOLS_TIMEOUT_MS;
   const callToolTimeoutMs =
     options.callToolTimeoutMs ?? DEFAULT_CALL_TOOL_TIMEOUT_MS;
-  const transportFactory =
-    options.transportFactory ?? defaultTransportFactory;
+  const transportFactory = options.transportFactory ?? defaultTransportFactory;
   const clientFactory = options.clientFactory ?? defaultClientFactory;
   const customFetch = options.fetch;
 

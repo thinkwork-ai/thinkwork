@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 interface AnimatedEntryProps {
   animate?: boolean;
@@ -13,7 +13,7 @@ const keyframes = `@keyframes bubbleSlideUp {
 let stylesInjected = false;
 function injectStyles() {
   if (stylesInjected) return;
-  const style = document.createElement('style');
+  const style = document.createElement("style");
   style.textContent = keyframes;
   document.head.appendChild(style);
   stylesInjected = true;
@@ -27,11 +27,11 @@ export function AnimatedEntry({ animate, children }: AnimatedEntryProps) {
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'inherit',
-        alignSelf: 'stretch',
-        animation: 'bubbleSlideUp 220ms cubic-bezier(0.25, 0.1, 0.25, 1) both',
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "inherit",
+        alignSelf: "stretch",
+        animation: "bubbleSlideUp 220ms cubic-bezier(0.25, 0.1, 0.25, 1) both",
       }}
     >
       {children}

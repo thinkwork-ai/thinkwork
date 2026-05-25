@@ -20,7 +20,11 @@ export function useInboxItems(
 }
 
 export function useInboxItem(id: string | undefined) {
-  return useQuery({ query: InboxItemQuery, variables: { id: id! }, pause: !id });
+  return useQuery({
+    query: InboxItemQuery,
+    variables: { id: id! },
+    pause: !id,
+  });
 }
 
 export function useDecideInboxItem() {

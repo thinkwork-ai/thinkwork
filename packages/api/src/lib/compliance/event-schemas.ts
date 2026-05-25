@@ -18,14 +18,14 @@ import { type ComplianceEventType } from "@thinkwork/database-pg/schema";
 import { createHash } from "node:crypto";
 
 export interface RedactionSchema {
-	allowedFields: ReadonlySet<string>;
-	/**
-	 * Optional pre-redaction transform. Runs *before* allow-list filtering
-	 * so it can replace structurally-large fields (e.g., raw governance
-	 * file content) with hashed/truncated derivatives that the allow-list
-	 * then permits.
-	 */
-	preTransform?: (raw: Record<string, unknown>) => Record<string, unknown>;
+  allowedFields: ReadonlySet<string>;
+  /**
+   * Optional pre-redaction transform. Runs *before* allow-list filtering
+   * so it can replace structurally-large fields (e.g., raw governance
+   * file content) with hashed/truncated derivatives that the allow-list
+   * then permits.
+   */
+  preTransform?: (raw: Record<string, unknown>) => Record<string, unknown>;
 }
 
 const GOVERNANCE_PREVIEW_BYTES = 2048;
@@ -39,19 +39,19 @@ const GOVERNANCE_PREVIEW_BYTES = 2048;
  * byte-aware truncation is required.
  */
 function sliceByBytes(text: string, maxBytes: number): string {
-	if (Buffer.byteLength(text, "utf-8") <= maxBytes) return text;
-	let lo = 0;
-	let hi = text.length;
-	while (lo < hi) {
-		const mid = (lo + hi + 1) >>> 1;
-		const candidate = text.slice(0, mid);
-		if (Buffer.byteLength(candidate, "utf-8") <= maxBytes) {
-			lo = mid;
-		} else {
-			hi = mid - 1;
-		}
-	}
-	return text.slice(0, lo);
+  if (Buffer.byteLength(text, "utf-8") <= maxBytes) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    const candidate = text.slice(0, mid);
+    if (Buffer.byteLength(candidate, "utf-8") <= maxBytes) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return text.slice(0, lo);
 }
 
 /**
@@ -67,20 +67,20 @@ function sliceByBytes(text: string, maxBytes: number): string {
  * 12-char prefix tails.)
  */
 function governanceFileDiffTransform(
-	raw: Record<string, unknown>,
+  raw: Record<string, unknown>,
 ): Record<string, unknown> {
-	const content = typeof raw.content === "string" ? raw.content : "";
-	// Hash the original (pre-scrub) content so the audit anchor commits
-	// to what was actually edited, not the redacted preview.
-	const hash = createHash("sha256").update(content, "utf-8").digest("hex");
-	// Scrub before truncating so partial tokens can't survive at the boundary.
-	const scrubbed = scrubKnownSecretPatterns(content);
-	return {
-		file: raw.file,
-		workspaceId: raw.workspaceId,
-		content_sha256: hash,
-		preview: sliceByBytes(scrubbed, GOVERNANCE_PREVIEW_BYTES),
-	};
+  const content = typeof raw.content === "string" ? raw.content : "";
+  // Hash the original (pre-scrub) content so the audit anchor commits
+  // to what was actually edited, not the redacted preview.
+  const hash = createHash("sha256").update(content, "utf-8").digest("hex");
+  // Scrub before truncating so partial tokens can't survive at the boundary.
+  const scrubbed = scrubKnownSecretPatterns(content);
+  return {
+    file: raw.file,
+    workspaceId: raw.workspaceId,
+    content_sha256: hash,
+    preview: sliceByBytes(scrubbed, GOVERNANCE_PREVIEW_BYTES),
+  };
 }
 
 /**
@@ -92,14 +92,15 @@ function governanceFileDiffTransform(
 const REDACTED = "<REDACTED:scrubbed>";
 
 function scrubKnownSecretPatterns(text: string): string {
-	const AUTH_BEARER = /Authorization:\s*Bearer\s+([^\s"'<>]+)/gi;
-	const JWT = /\beyJ[A-Za-z0-9_-]{13,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
-	const PREFIXED_TOKEN =
-		/(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{40,}|sk-proj-[A-Za-z0-9_-]{40,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16})/g;
-	return text
-		.replace(AUTH_BEARER, `Authorization: Bearer ${REDACTED}`)
-		.replace(JWT, REDACTED)
-		.replace(PREFIXED_TOKEN, REDACTED);
+  const AUTH_BEARER = /Authorization:\s*Bearer\s+([^\s"'<>]+)/gi;
+  const JWT =
+    /\beyJ[A-Za-z0-9_-]{13,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
+  const PREFIXED_TOKEN =
+    /(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{40,}|sk-proj-[A-Za-z0-9_-]{40,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16})/g;
+  return text
+    .replace(AUTH_BEARER, `Authorization: Bearer ${REDACTED}`)
+    .replace(JWT, REDACTED)
+    .replace(PREFIXED_TOKEN, REDACTED);
 }
 
 /**
@@ -119,214 +120,214 @@ function scrubKnownSecretPatterns(text: string): string {
  * sanitization in `redactPayload` still runs against the string.
  */
 const CREDENTIAL_QUERY_PARAM_NAMES = [
-	"api_key",
-	"apikey",
-	"key",
-	"token",
-	"access_token",
-	"refresh_token",
-	"id_token",
-	"secret",
-	"client_secret",
-	"password",
-	"passwd",
-	"auth",
-	"signature",
-	"sig",
+  "api_key",
+  "apikey",
+  "key",
+  "token",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "secret",
+  "client_secret",
+  "password",
+  "passwd",
+  "auth",
+  "signature",
+  "sig",
 ];
 
 function stripUrlUserinfo(value: string): string {
-	try {
-		const u = new URL(value);
-		let mutated = false;
-		if (u.username || u.password) {
-			u.username = "";
-			u.password = "";
-			mutated = true;
-		}
-		// Walk searchParams looking for credential-shaped names. Build
-		// the replacement set first to avoid mutating during iteration.
-		const toRedact: string[] = [];
-		for (const name of u.searchParams.keys()) {
-			const lower = name.toLowerCase();
-			if (
-				CREDENTIAL_QUERY_PARAM_NAMES.some((cred) => lower.includes(cred))
-			) {
-				toRedact.push(name);
-			}
-		}
-		if (toRedact.length > 0) {
-			for (const name of toRedact) {
-				u.searchParams.set(name, REDACTED);
-			}
-			mutated = true;
-		}
-		if (mutated) return u.toString();
-	} catch {
-		// not a URL we can parse — leave untouched
-	}
-	return value;
+  try {
+    const u = new URL(value);
+    let mutated = false;
+    if (u.username || u.password) {
+      u.username = "";
+      u.password = "";
+      mutated = true;
+    }
+    // Walk searchParams looking for credential-shaped names. Build
+    // the replacement set first to avoid mutating during iteration.
+    const toRedact: string[] = [];
+    for (const name of u.searchParams.keys()) {
+      const lower = name.toLowerCase();
+      if (CREDENTIAL_QUERY_PARAM_NAMES.some((cred) => lower.includes(cred))) {
+        toRedact.push(name);
+      }
+    }
+    if (toRedact.length > 0) {
+      for (const name of toRedact) {
+        u.searchParams.set(name, REDACTED);
+      }
+      mutated = true;
+    }
+    if (mutated) return u.toString();
+  } catch {
+    // not a URL we can parse — leave untouched
+  }
+  return value;
 }
 
 function mcpUrlPreTransform(
-	raw: Record<string, unknown>,
+  raw: Record<string, unknown>,
 ): Record<string, unknown> {
-	const out: Record<string, unknown> = { ...raw };
-	if (typeof out.url === "string") {
-		out.url = stripUrlUserinfo(out.url);
-	}
-	return out;
+  const out: Record<string, unknown> = { ...raw };
+  if (typeof out.url === "string") {
+    out.url = stripUrlUserinfo(out.url);
+  }
+  return out;
 }
 
 /**
  * Allow-list registry. Keys are the 14 entries in `COMPLIANCE_EVENT_TYPES`
  * (10 Phase 3 starter + 5 Phase 6 reservations).
  */
-export const EVENT_PAYLOAD_SHAPES: Record<ComplianceEventType, RedactionSchema> =
-	{
-		// ── Phase 3 starter slate (R10) ───────────────────────────────
+export const EVENT_PAYLOAD_SHAPES: Record<
+  ComplianceEventType,
+  RedactionSchema
+> = {
+  // ── Phase 3 starter slate (R10) ───────────────────────────────
 
-		"auth.signin.success": {
-			allowedFields: new Set(["userId", "method", "ip", "userAgent"]),
-		},
-		"auth.signin.failure": {
-			// Deliberately exclude `password` / `token` even if a caller
-			// passes them — allow-list drops them. `reason` is a coarse
-			// enum like `invalid_credentials` / `mfa_required`, not free-text.
-			allowedFields: new Set(["email", "method", "reason", "ip"]),
-		},
-		"auth.signout": {
-			allowedFields: new Set(["userId", "sessionId"]),
-		},
+  "auth.signin.success": {
+    allowedFields: new Set(["userId", "method", "ip", "userAgent"]),
+  },
+  "auth.signin.failure": {
+    // Deliberately exclude `password` / `token` even if a caller
+    // passes them — allow-list drops them. `reason` is a coarse
+    // enum like `invalid_credentials` / `mfa_required`, not free-text.
+    allowedFields: new Set(["email", "method", "reason", "ip"]),
+  },
+  "auth.signout": {
+    allowedFields: new Set(["userId", "sessionId"]),
+  },
 
-		"user.invited": {
-			allowedFields: new Set(["email", "role", "invitedBy"]),
-		},
-		"user.created": {
-			allowedFields: new Set(["userId", "email", "role"]),
-		},
-		"user.disabled": {
-			allowedFields: new Set(["userId", "reason"]),
-		},
-		"user.deleted": {
-			allowedFields: new Set(["userId", "reason"]),
-		},
+  "user.invited": {
+    allowedFields: new Set(["email", "role", "invitedBy"]),
+  },
+  "user.created": {
+    allowedFields: new Set(["userId", "email", "role"]),
+  },
+  "user.disabled": {
+    allowedFields: new Set(["userId", "reason"]),
+  },
+  "user.deleted": {
+    allowedFields: new Set(["userId", "reason"]),
+  },
 
-		"agent.created": {
-			allowedFields: new Set(["agentId", "name", "templateId"]),
-		},
-		"agent.deleted": {
-			allowedFields: new Set(["agentId", "reason", "canonicalId"]),
-		},
-		"agent.migrated": {
-			allowedFields: new Set([
-				"agentId",
-				"reason",
-				"canonicalId",
-				"archivedAgentIds",
-			]),
-		},
-		"agent.skills_changed": {
-			// Direct evidence of effective-capability change (CC8.1).
-			// Delta shape: addedSkills / removedSkills are the slugs that
-			// changed; the absolute current/previous skill set can be
-			// reconstructed from prior `agent.skills_changed` rows in the
-			// chain. This avoids a round-trip to read absolute state at
-			// emit time.
-			allowedFields: new Set([
-				"agentId",
-				"addedSkills",
-				"removedSkills",
-				"reason",
-			]),
-		},
+  "agent.created": {
+    allowedFields: new Set(["agentId", "name", "templateId"]),
+  },
+  "agent.deleted": {
+    allowedFields: new Set(["agentId", "reason", "canonicalId"]),
+  },
+  "agent.migrated": {
+    allowedFields: new Set([
+      "agentId",
+      "reason",
+      "canonicalId",
+      "archivedAgentIds",
+    ]),
+  },
+  "agent.skills_changed": {
+    // Direct evidence of effective-capability change (CC8.1).
+    // Delta shape: addedSkills / removedSkills are the slugs that
+    // changed; the absolute current/previous skill set can be
+    // reconstructed from prior `agent.skills_changed` rows in the
+    // chain. This avoids a round-trip to read absolute state at
+    // emit time.
+    allowedFields: new Set([
+      "agentId",
+      "addedSkills",
+      "removedSkills",
+      "reason",
+    ]),
+  },
 
-		"mcp.added": {
-			allowedFields: new Set(["mcpId", "url", "scopes"]),
-			preTransform: mcpUrlPreTransform,
-		},
-		"mcp.removed": {
-			allowedFields: new Set(["mcpId", "url"]),
-			preTransform: mcpUrlPreTransform,
-		},
+  "mcp.added": {
+    allowedFields: new Set(["mcpId", "url", "scopes"]),
+    preTransform: mcpUrlPreTransform,
+  },
+  "mcp.removed": {
+    allowedFields: new Set(["mcpId", "url"]),
+    preTransform: mcpUrlPreTransform,
+  },
 
-		"workspace.governance_file_edited": {
-			// Pre-transform replaces raw `content` with `content_sha256` +
-			// 2 KB preview so we don't store full file bodies in the audit
-			// log. Allow-list then permits only the transformed shape.
-			allowedFields: new Set([
-				"file",
-				"content_sha256",
-				"preview",
-				"workspaceId",
-			]),
-			preTransform: governanceFileDiffTransform,
-		},
+  "workspace.governance_file_edited": {
+    // Pre-transform replaces raw `content` with `content_sha256` +
+    // 2 KB preview so we don't store full file bodies in the audit
+    // log. Allow-list then permits only the transformed shape.
+    allowedFields: new Set([
+      "file",
+      "content_sha256",
+      "preview",
+      "workspaceId",
+    ]),
+    preTransform: governanceFileDiffTransform,
+  },
 
-		"data.export_initiated": {
-			allowedFields: new Set([
-				"exportJobId",
-				"format",
-				"filterSummary",
-				"requestedBy",
-			]),
-		},
+  "data.export_initiated": {
+    allowedFields: new Set([
+      "exportJobId",
+      "format",
+      "filterSummary",
+      "requestedBy",
+    ]),
+  },
 
-		// ── Phase 6 reservations (R14) — declared, not emitted ────────
+  // ── Phase 6 reservations (R14) — declared, not emitted ────────
 
-		"policy.evaluated": { allowedFields: new Set() },
-		"policy.allowed": { allowedFields: new Set() },
-		"policy.blocked": { allowedFields: new Set() },
-		"policy.bypassed": { allowedFields: new Set() },
-		"approval.recorded": { allowedFields: new Set() },
+  "policy.evaluated": { allowedFields: new Set() },
+  "policy.allowed": { allowedFields: new Set() },
+  "policy.blocked": { allowedFields: new Set() },
+  "policy.bypassed": { allowedFields: new Set() },
+  "approval.recorded": { allowedFields: new Set() },
 
-		// ── Finance pilot (U6 of 2026-05-14-002 plan) ─────────────────
-		//
-		// Payloads intentionally reference operational ids (attachmentId,
-		// thread_id, message_id, artifact_id) — raw S3 keys / filenames /
-		// content stay OUT of the audit log. The same hardening discipline
-		// is mirrored at the GraphQL surface (ThreadAttachment.s3Key was
-		// removed in U9-resolver-patch); see plan §"Key Technical Decisions".
+  // ── Finance pilot (U6 of 2026-05-14-002 plan) ─────────────────
+  //
+  // Payloads intentionally reference operational ids (attachmentId,
+  // thread_id, message_id, artifact_id) — raw S3 keys / filenames /
+  // content stay OUT of the audit log. The same hardening discipline
+  // is mirrored at the GraphQL surface (ThreadAttachment.s3Key was
+  // removed in U9-resolver-patch); see plan §"Key Technical Decisions".
 
-		"attachment.received": {
-			// thread_id and message_id are envelope fields, but we mirror
-			// them in the payload so the auditor view does not need a join
-			// to render attachment context. message_id is optional because
-			// admin-initiated uploads (operator seeding files mid-thread)
-			// are not bound to a specific message.
-			allowedFields: new Set([
-				"attachmentId",
-				"thread_id",
-				"message_id",
-				"mime_type",
-				"size_bytes",
-			]),
-		},
-		"skill.activated": {
-			// outcome is a coarse enum ("allowed" | "denied"); denied_reason
-			// is a short label, not free-text. Per-turn dedup in the Strands
-			// side (U4) keeps cardinality bounded to one event per distinct
-			// skill slug per turn.
-			allowedFields: new Set([
-				"thread_id",
-				"agent_id",
-				"skill_slug",
-				"outcome",
-				"denied_reason",
-			]),
-		},
-		"output.artifact_produced": {
-			// artifact_type is the MessageArtifact.artifact_type discriminator;
-			// size_bytes is best-effort (some artifact bodies live in S3).
-			allowedFields: new Set([
-				"thread_id",
-				"message_id",
-				"artifact_id",
-				"artifact_type",
-				"size_bytes",
-			]),
-		},
-	};
+  "attachment.received": {
+    // thread_id and message_id are envelope fields, but we mirror
+    // them in the payload so the auditor view does not need a join
+    // to render attachment context. message_id is optional because
+    // admin-initiated uploads (operator seeding files mid-thread)
+    // are not bound to a specific message.
+    allowedFields: new Set([
+      "attachmentId",
+      "thread_id",
+      "message_id",
+      "mime_type",
+      "size_bytes",
+    ]),
+  },
+  "skill.activated": {
+    // outcome is a coarse enum ("allowed" | "denied"); denied_reason
+    // is a short label, not free-text. Per-turn dedup in the Strands
+    // side (U4) keeps cardinality bounded to one event per distinct
+    // skill slug per turn.
+    allowedFields: new Set([
+      "thread_id",
+      "agent_id",
+      "skill_slug",
+      "outcome",
+      "denied_reason",
+    ]),
+  },
+  "output.artifact_produced": {
+    // artifact_type is the MessageArtifact.artifact_type discriminator;
+    // size_bytes is best-effort (some artifact bodies live in S3).
+    allowedFields: new Set([
+      "thread_id",
+      "message_id",
+      "artifact_id",
+      "artifact_type",
+      "size_bytes",
+    ]),
+  },
+};
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,
 // RedactionSchema>` annotation on `EVENT_PAYLOAD_SHAPES` above is the

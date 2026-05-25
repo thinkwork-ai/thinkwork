@@ -6,12 +6,12 @@ const db = getDb();
 
 /** Resolve a tenant slug to its UUID. Returns null if no match. */
 export async function resolveTenantId(
-	tenantSlug: string,
+  tenantSlug: string,
 ): Promise<string | null> {
-	const [row] = await db
-		.select({ id: tenants.id })
-		.from(tenants)
-		.where(eq(tenants.slug, tenantSlug))
-		.limit(1);
-	return row?.id ?? null;
+  const [row] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.slug, tenantSlug))
+    .limit(1);
+  return row?.id ?? null;
 }

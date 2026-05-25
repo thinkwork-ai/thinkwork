@@ -68,7 +68,11 @@ function parsePermissions(raw: unknown): ParsedPermissions {
   }
 
   const v = value as Record<string, unknown>;
-  if (!("operations" in v) || v.operations === null || v.operations === undefined) {
+  if (
+    !("operations" in v) ||
+    v.operations === null ||
+    v.operations === undefined
+  ) {
     return { kind: "inherit" };
   }
   if (!Array.isArray(v.operations)) {
@@ -125,10 +129,11 @@ export function validateAgentSkillPermissions(
   if (template.kind === "invalid")
     return {
       ok: false,
-      error: `template permissions: ${template.error.replace(/^permissions/, "")}`.replace(
-        /^template permissions: : /,
-        "template permissions: ",
-      ),
+      error:
+        `template permissions: ${template.error.replace(/^permissions/, "")}`.replace(
+          /^template permissions: : /,
+          "template permissions: ",
+        ),
     };
   if (template.kind === "inherit") {
     return {

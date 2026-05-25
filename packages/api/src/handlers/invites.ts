@@ -13,21 +13,28 @@
  */
 
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { createHash, randomBytes } from "node:crypto";
 import { eq, and, desc, sql } from "drizzle-orm";
 import {
-	invites,
-	joinRequests,
-	agents,
-	agentApiKeys,
-	activityLog,
+  invites,
+  joinRequests,
+  agents,
+  agentApiKeys,
+  activityLog,
 } from "@thinkwork/database-pg/schema";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { db } from "../lib/db.js";
-import { handleCors, json, error, notFound, unauthorized, forbidden } from "../lib/response.js";
+import {
+  handleCors,
+  json,
+  error,
+  notFound,
+  unauthorized,
+  forbidden,
+} from "../lib/response.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { emitAuditEvent } from "../lib/compliance/emit.js";
 
@@ -41,20 +48,20 @@ const INVITE_TOKEN_SUFFIX_LENGTH = 8;
 const INVITE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function createInviteToken(): string {
-	const bytes = randomBytes(INVITE_TOKEN_SUFFIX_LENGTH);
-	let suffix = "";
-	for (let i = 0; i < INVITE_TOKEN_SUFFIX_LENGTH; i++) {
-		suffix += INVITE_TOKEN_ALPHABET[bytes[i]! % INVITE_TOKEN_ALPHABET.length];
-	}
-	return `${INVITE_TOKEN_PREFIX}${suffix}`;
+  const bytes = randomBytes(INVITE_TOKEN_SUFFIX_LENGTH);
+  let suffix = "";
+  for (let i = 0; i < INVITE_TOKEN_SUFFIX_LENGTH; i++) {
+    suffix += INVITE_TOKEN_ALPHABET[bytes[i]! % INVITE_TOKEN_ALPHABET.length];
+  }
+  return `${INVITE_TOKEN_PREFIX}${suffix}`;
 }
 
 function createClaimSecret(): string {
-	return `mf_claim_${randomBytes(24).toString("hex")}`;
+  return `mf_claim_${randomBytes(24).toString("hex")}`;
 }
 
 function hashToken(token: string): string {
-	return createHash("sha256").update(token).digest("hex");
+  return createHash("sha256").update(token).digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -62,141 +69,146 @@ function hashToken(token: string): string {
 // ---------------------------------------------------------------------------
 
 export async function handler(
-	event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const method = event.requestContext.http.method;
-	const path = event.rawPath;
+  const method = event.requestContext.http.method;
+  const path = event.rawPath;
 
-	try {
-		// --- Public endpoints (no auth) ---
+  try {
+    // --- Public endpoints (no auth) ---
 
-		// GET /api/invites/:token/onboarding.txt
-		const onboardingMatch = path.match(
-			/^\/api\/invites\/([^/]+)\/onboarding\.txt$/,
-		);
-		if (onboardingMatch && method === "GET") {
-			return getOnboardingTxt(onboardingMatch[1], event);
-		}
+    // GET /api/invites/:token/onboarding.txt
+    const onboardingMatch = path.match(
+      /^\/api\/invites\/([^/]+)\/onboarding\.txt$/,
+    );
+    if (onboardingMatch && method === "GET") {
+      return getOnboardingTxt(onboardingMatch[1], event);
+    }
 
-		// GET /api/invites/:token
-		const inviteSummaryMatch = path.match(/^\/api\/invites\/([^/]+)$/);
-		if (inviteSummaryMatch && method === "GET") {
-			return getInviteSummary(inviteSummaryMatch[1]);
-		}
+    // GET /api/invites/:token
+    const inviteSummaryMatch = path.match(/^\/api\/invites\/([^/]+)$/);
+    if (inviteSummaryMatch && method === "GET") {
+      return getInviteSummary(inviteSummaryMatch[1]);
+    }
 
-		// POST /api/invites/:token/accept
-		const acceptMatch = path.match(/^\/api\/invites\/([^/]+)\/accept$/);
-		if (acceptMatch && method === "POST") {
-			return acceptInvite(acceptMatch[1], event);
-		}
+    // POST /api/invites/:token/accept
+    const acceptMatch = path.match(/^\/api\/invites\/([^/]+)\/accept$/);
+    if (acceptMatch && method === "POST") {
+      return acceptInvite(acceptMatch[1], event);
+    }
 
-		// POST /api/join-requests/:id/claim-api-key
-		const claimMatch = path.match(
-			/^\/api\/join-requests\/([^/]+)\/claim-api-key$/,
-		);
-		if (claimMatch && method === "POST") {
-			return claimApiKey(claimMatch[1], event);
-		}
+    // POST /api/join-requests/:id/claim-api-key
+    const claimMatch = path.match(
+      /^\/api\/join-requests\/([^/]+)\/claim-api-key$/,
+    );
+    if (claimMatch && method === "POST") {
+      return claimApiKey(claimMatch[1], event);
+    }
 
-		// --- Authenticated endpoints ---
-		//
-		// All routes below require a valid caller + active tenant membership.
-		// Invite PII (email attribution, token metadata, join-request state)
-		// is admin-only; `requiredRoles: ["owner", "admin"]` on every gate.
-		if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
+    // --- Authenticated endpoints ---
+    //
+    // All routes below require a valid caller + active tenant membership.
+    // Invite PII (email attribution, token metadata, join-request state)
+    // is admin-only; `requiredRoles: ["owner", "admin"]` on every gate.
+    if (event.requestContext.http.method === "OPTIONS")
+      return {
+        statusCode: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "*",
+          "Access-Control-Allow-Headers": "*",
+        },
+        body: "",
+      };
 
-		// POST /api/tenants/:tenantId/invites
-		const createMatch = path.match(
-			/^\/api\/tenants\/([^/]+)\/invites$/,
-		);
-		if (createMatch && method === "POST") {
-			const verdict = await requireTenantMembership(event, createMatch[1]!, {
-				requiredRoles: ["owner", "admin"],
-			});
-			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return createInvite(verdict.tenantId, verdict.userId, event);
-		}
+    // POST /api/tenants/:tenantId/invites
+    const createMatch = path.match(/^\/api\/tenants\/([^/]+)\/invites$/);
+    if (createMatch && method === "POST") {
+      const verdict = await requireTenantMembership(event, createMatch[1]!, {
+        requiredRoles: ["owner", "admin"],
+      });
+      if (!verdict.ok) return error(verdict.reason, verdict.status);
+      return createInvite(verdict.tenantId, verdict.userId, event);
+    }
 
-		// GET /api/tenants/:tenantId/join-requests
-		const listJrMatch = path.match(
-			/^\/api\/tenants\/([^/]+)\/join-requests$/,
-		);
-		if (listJrMatch && method === "GET") {
-			const verdict = await requireTenantMembership(event, listJrMatch[1]!, {
-				requiredRoles: ["owner", "admin"],
-			});
-			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return listJoinRequests(verdict.tenantId, event);
-		}
+    // GET /api/tenants/:tenantId/join-requests
+    const listJrMatch = path.match(/^\/api\/tenants\/([^/]+)\/join-requests$/);
+    if (listJrMatch && method === "GET") {
+      const verdict = await requireTenantMembership(event, listJrMatch[1]!, {
+        requiredRoles: ["owner", "admin"],
+      });
+      if (!verdict.ok) return error(verdict.reason, verdict.status);
+      return listJoinRequests(verdict.tenantId, event);
+    }
 
-		// POST /api/tenants/:tenantId/join-requests/:id/approve
-		const approveMatch = path.match(
-			/^\/api\/tenants\/([^/]+)\/join-requests\/([^/]+)\/approve$/,
-		);
-		if (approveMatch && method === "POST") {
-			const verdict = await requireTenantMembership(event, approveMatch[1]!, {
-				requiredRoles: ["owner", "admin"],
-			});
-			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return approveJoinRequest(verdict.tenantId, approveMatch[2]!, event);
-		}
+    // POST /api/tenants/:tenantId/join-requests/:id/approve
+    const approveMatch = path.match(
+      /^\/api\/tenants\/([^/]+)\/join-requests\/([^/]+)\/approve$/,
+    );
+    if (approveMatch && method === "POST") {
+      const verdict = await requireTenantMembership(event, approveMatch[1]!, {
+        requiredRoles: ["owner", "admin"],
+      });
+      if (!verdict.ok) return error(verdict.reason, verdict.status);
+      return approveJoinRequest(verdict.tenantId, approveMatch[2]!, event);
+    }
 
-		// POST /api/tenants/:tenantId/join-requests/:id/reject
-		const rejectMatch = path.match(
-			/^\/api\/tenants\/([^/]+)\/join-requests\/([^/]+)\/reject$/,
-		);
-		if (rejectMatch && method === "POST") {
-			const verdict = await requireTenantMembership(event, rejectMatch[1]!, {
-				requiredRoles: ["owner", "admin"],
-			});
-			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return rejectJoinRequest(verdict.tenantId, rejectMatch[2]!, event);
-		}
+    // POST /api/tenants/:tenantId/join-requests/:id/reject
+    const rejectMatch = path.match(
+      /^\/api\/tenants\/([^/]+)\/join-requests\/([^/]+)\/reject$/,
+    );
+    if (rejectMatch && method === "POST") {
+      const verdict = await requireTenantMembership(event, rejectMatch[1]!, {
+        requiredRoles: ["owner", "admin"],
+      });
+      if (!verdict.ok) return error(verdict.reason, verdict.status);
+      return rejectJoinRequest(verdict.tenantId, rejectMatch[2]!, event);
+    }
 
-		// --- Legacy routes (invites list, revoke) ---
+    // --- Legacy routes (invites list, revoke) ---
 
-		// GET /api/invites — admin-only invite list (invites expose PII).
-		// Tenant id is taken from the x-tenant-id header only; the old
-		// query-string fallback is dropped so callers can't paper over a
-		// missing header by sprinkling ?tenantId=... on the URL.
-		if (path === "/api/invites" && method === "GET") {
-			const tenantId = event.headers["x-tenant-id"];
-			if (!tenantId) return error("tenantId is required");
-			const verdict = await requireTenantMembership(event, tenantId, {
-				requiredRoles: ["owner", "admin"],
-			});
-			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return listInvites(verdict.tenantId);
-		}
+    // GET /api/invites — admin-only invite list (invites expose PII).
+    // Tenant id is taken from the x-tenant-id header only; the old
+    // query-string fallback is dropped so callers can't paper over a
+    // missing header by sprinkling ?tenantId=... on the URL.
+    if (path === "/api/invites" && method === "GET") {
+      const tenantId = event.headers["x-tenant-id"];
+      if (!tenantId) return error("tenantId is required");
+      const verdict = await requireTenantMembership(event, tenantId, {
+        requiredRoles: ["owner", "admin"],
+      });
+      if (!verdict.ok) return error(verdict.reason, verdict.status);
+      return listInvites(verdict.tenantId);
+    }
 
-		// DELETE /api/invites/:id — invite revoke. The path carries the
-		// invite id, not a tenant id, so we look up the invite first and
-		// gate on its tenant_id. 404 for unknown ids matches the previous
-		// revokeInvite behavior; 403 if the caller isn't owner/admin of the
-		// owning tenant.
-		const deleteMatch = path.match(/^\/api\/invites\/([^/]+)$/);
-		if (deleteMatch && method === "DELETE") {
-			const inviteId = deleteMatch[1]!;
-			const [existing] = await db
-				.select({ tenant_id: invites.tenant_id })
-				.from(invites)
-				.where(eq(invites.id, inviteId));
-			if (!existing) return notFound("Invite not found");
-			const verdict = await requireTenantMembership(event, existing.tenant_id, {
-				requiredRoles: ["owner", "admin"],
-			});
-			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return revokeInvite(inviteId);
-		}
+    // DELETE /api/invites/:id — invite revoke. The path carries the
+    // invite id, not a tenant id, so we look up the invite first and
+    // gate on its tenant_id. 404 for unknown ids matches the previous
+    // revokeInvite behavior; 403 if the caller isn't owner/admin of the
+    // owning tenant.
+    const deleteMatch = path.match(/^\/api\/invites\/([^/]+)$/);
+    if (deleteMatch && method === "DELETE") {
+      const inviteId = deleteMatch[1]!;
+      const [existing] = await db
+        .select({ tenant_id: invites.tenant_id })
+        .from(invites)
+        .where(eq(invites.id, inviteId));
+      if (!existing) return notFound("Invite not found");
+      const verdict = await requireTenantMembership(event, existing.tenant_id, {
+        requiredRoles: ["owner", "admin"],
+      });
+      if (!verdict.ok) return error(verdict.reason, verdict.status);
+      return revokeInvite(inviteId);
+    }
 
-		// Any other authenticated route hit reaching here needs at least
-		// a valid caller — fail closed rather than silently 404'ing, so
-		// misrouted clients get a clear signal.
-		return notFound("Route not found");
-	} catch (err) {
-		console.error("Invites handler error:", err);
-		return error("Internal server error", 500);
-	}
+    // Any other authenticated route hit reaching here needs at least
+    // a valid caller — fail closed rather than silently 404'ing, so
+    // misrouted clients get a clear signal.
+    return notFound("Route not found");
+  } catch (err) {
+    console.error("Invites handler error:", err);
+    return error("Internal server error", 500);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -204,83 +216,86 @@ export async function handler(
 // ---------------------------------------------------------------------------
 
 async function createInvite(
-	tenantId: string,
-	verdictUserId: string | null,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  verdictUserId: string | null,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = JSON.parse(event.body || "{}");
-	const agentName = body.agentName || body.agent_name || "External Agent";
+  const body = JSON.parse(event.body || "{}");
+  const agentName = body.agentName || body.agent_name || "External Agent";
 
-	// `invited_by_user_id` is the legacy column for the existing UI
-	// flow, which still allows body-supplied user_id and the
-	// `x-principal-id` header. Audit `actorId`, by contrast, is
-	// branched by auth path and NEVER reads `x-principal-id` directly
-	// (per SEC-001 — that header is unverified on the apikey path).
-	const legacyInvitedBy =
-		body.userId || body.user_id || event.headers["x-principal-id"];
+  // `invited_by_user_id` is the legacy column for the existing UI
+  // flow, which still allows body-supplied user_id and the
+  // `x-principal-id` header. Audit `actorId`, by contrast, is
+  // branched by auth path and NEVER reads `x-principal-id` directly
+  // (per SEC-001 — that header is unverified on the apikey path).
+  const legacyInvitedBy =
+    body.userId || body.user_id || event.headers["x-principal-id"];
 
-	const plainToken = createInviteToken();
-	const tokenHash = hashToken(plainToken);
-	const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+  const plainToken = createInviteToken();
+  const tokenHash = hashToken(plainToken);
+  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
 
-	// Compliance audit actor branching:
-	//   apikey path → actorType: "system", actorId: "platform-credential"
-	//   cognito path → actorType: "user", actorId: verdictUserId
-	const auditActor: { actorId: string; actorType: "user" | "system" } =
-		verdictUserId
-			? { actorId: verdictUserId, actorType: "user" }
-			: { actorId: "platform-credential", actorType: "system" };
+  // Compliance audit actor branching:
+  //   apikey path → actorType: "system", actorId: "platform-credential"
+  //   cognito path → actorType: "user", actorId: verdictUserId
+  const auditActor: { actorId: string; actorType: "user" | "system" } =
+    verdictUserId
+      ? { actorId: verdictUserId, actorType: "user" }
+      : { actorId: "platform-credential", actorType: "system" };
 
-	// Wrap the invite insert + audit emit in a single transaction so
-	// audit-write failure rolls back the invite (control-evidence tier
-	// per master plan U5).
-	const [invite] = await db.transaction(async (tx) => {
-		const [inserted] = await tx
-			.insert(invites)
-			.values({
-				tenant_id: tenantId,
-				invite_type: "agent",
-				token_hash: tokenHash,
-				defaults_payload: { agentName },
-				max_uses: 1,
-				invited_by_user_id: legacyInvitedBy || undefined,
-				expires_at: expiresAt,
-			})
-			.returning();
+  // Wrap the invite insert + audit emit in a single transaction so
+  // audit-write failure rolls back the invite (control-evidence tier
+  // per master plan U5).
+  const [invite] = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(invites)
+      .values({
+        tenant_id: tenantId,
+        invite_type: "agent",
+        token_hash: tokenHash,
+        defaults_payload: { agentName },
+        max_uses: 1,
+        invited_by_user_id: legacyInvitedBy || undefined,
+        expires_at: expiresAt,
+      })
+      .returning();
 
-		await emitAuditEvent(tx, {
-			tenantId,
-			actorId: auditActor.actorId,
-			actorType: auditActor.actorType,
-			eventType: "user.invited",
-			source: "lambda",
-			payload: {
-				// `email` allow-listed for the registry but invite flow
-				// stores agent identifiers, not user emails. The audit
-				// row records the agent-name + invite role even though
-				// the field name is `email` for the canonical schema.
-				role: "agent",
-				invitedBy: auditActor.actorId,
-			},
-			resourceType: "invite",
-			resourceId: inserted.id,
-			action: "create",
-			outcome: "success",
-		});
+    await emitAuditEvent(tx, {
+      tenantId,
+      actorId: auditActor.actorId,
+      actorType: auditActor.actorType,
+      eventType: "user.invited",
+      source: "lambda",
+      payload: {
+        // `email` allow-listed for the registry but invite flow
+        // stores agent identifiers, not user emails. The audit
+        // row records the agent-name + invite role even though
+        // the field name is `email` for the canonical schema.
+        role: "agent",
+        invitedBy: auditActor.actorId,
+      },
+      resourceType: "invite",
+      resourceId: inserted.id,
+      action: "create",
+      outcome: "success",
+    });
 
-		return [inserted];
-	});
+    return [inserted];
+  });
 
-	const apiUrl = process.env.API_URL || `https://${event.headers.host}`;
+  const apiUrl = process.env.API_URL || `https://${event.headers.host}`;
 
-	return json({
-		id: invite.id,
-		token: plainToken,
-		inviteType: invite.invite_type,
-		expiresAt: invite.expires_at.toISOString(),
-		onboardingUrl: `${apiUrl}/api/invites/${plainToken}/onboarding.txt`,
-		acceptUrl: `${apiUrl}/api/invites/${plainToken}/accept`,
-	}, 201);
+  return json(
+    {
+      id: invite.id,
+      token: plainToken,
+      inviteType: invite.invite_type,
+      expiresAt: invite.expires_at.toISOString(),
+      onboardingUrl: `${apiUrl}/api/invites/${plainToken}/onboarding.txt`,
+      acceptUrl: `${apiUrl}/api/invites/${plainToken}/accept`,
+    },
+    201,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -288,28 +303,28 @@ async function createInvite(
 // ---------------------------------------------------------------------------
 
 async function getInviteSummary(
-	token: string,
+  token: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tokenHash = hashToken(token.trim());
-	const [invite] = await db
-		.select()
-		.from(invites)
-		.where(eq(invites.token_hash, tokenHash));
+  const tokenHash = hashToken(token.trim());
+  const [invite] = await db
+    .select()
+    .from(invites)
+    .where(eq(invites.token_hash, tokenHash));
 
-	if (!invite || invite.revoked_at || invite.expires_at < new Date()) {
-		return notFound("Invite not found or expired");
-	}
+  if (!invite || invite.revoked_at || invite.expires_at < new Date()) {
+    return notFound("Invite not found or expired");
+  }
 
-	const defaults = invite.defaults_payload as Record<string, unknown> | null;
+  const defaults = invite.defaults_payload as Record<string, unknown> | null;
 
-	return json({
-		id: invite.id,
-		inviteType: invite.invite_type,
-		agentName: defaults?.agentName ?? null,
-		expiresAt: invite.expires_at.toISOString(),
-		usedCount: invite.used_count,
-		maxUses: invite.max_uses,
-	});
+  return json({
+    id: invite.id,
+    inviteType: invite.invite_type,
+    agentName: defaults?.agentName ?? null,
+    expiresAt: invite.expires_at.toISOString(),
+    usedCount: invite.used_count,
+    maxUses: invite.max_uses,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -317,24 +332,24 @@ async function getInviteSummary(
 // ---------------------------------------------------------------------------
 
 async function getOnboardingTxt(
-	token: string,
-	event: APIGatewayProxyEventV2,
+  token: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tokenHash = hashToken(token.trim());
-	const [invite] = await db
-		.select()
-		.from(invites)
-		.where(eq(invites.token_hash, tokenHash));
+  const tokenHash = hashToken(token.trim());
+  const [invite] = await db
+    .select()
+    .from(invites)
+    .where(eq(invites.token_hash, tokenHash));
 
-	if (!invite || invite.revoked_at || invite.expires_at < new Date()) {
-		return notFound("Invite not found or expired");
-	}
+  if (!invite || invite.revoked_at || invite.expires_at < new Date()) {
+    return notFound("Invite not found or expired");
+  }
 
-	const apiUrl = process.env.API_URL || `https://${event.headers.host}`;
-	const defaults = invite.defaults_payload as Record<string, unknown> | null;
-	const agentName = (defaults?.agentName as string) ?? "Your Agent";
+  const apiUrl = process.env.API_URL || `https://${event.headers.host}`;
+  const defaults = invite.defaults_payload as Record<string, unknown> | null;
+  const agentName = (defaults?.agentName as string) ?? "Your Agent";
 
-	const text = `# Thinkwork Agent Onboarding
+  const text = `# Thinkwork Agent Onboarding
 #
 # This document is readable by both humans and agents.
 
@@ -395,11 +410,11 @@ Use it as a Bearer token for authenticated API calls.
 ${apiUrl}
 `;
 
-	return {
-		statusCode: 200,
-		headers: { "Content-Type": "text/plain; charset=utf-8" },
-		body: text,
-	};
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    body: text,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -407,68 +422,68 @@ ${apiUrl}
 // ---------------------------------------------------------------------------
 
 async function acceptInvite(
-	token: string,
-	event: APIGatewayProxyEventV2,
+  token: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = JSON.parse(event.body || "{}");
-	const tokenHash = hashToken(token.trim());
+  const body = JSON.parse(event.body || "{}");
+  const tokenHash = hashToken(token.trim());
 
-	const [invite] = await db
-		.select()
-		.from(invites)
-		.where(eq(invites.token_hash, tokenHash));
+  const [invite] = await db
+    .select()
+    .from(invites)
+    .where(eq(invites.token_hash, tokenHash));
 
-	if (!invite || invite.revoked_at || invite.expires_at < new Date()) {
-		return notFound("Invite not found or expired");
-	}
-	if (invite.used_count >= invite.max_uses) {
-		return error("Invite usage limit reached", 409);
-	}
+  if (!invite || invite.revoked_at || invite.expires_at < new Date()) {
+    return notFound("Invite not found or expired");
+  }
+  if (invite.used_count >= invite.max_uses) {
+    return error("Invite usage limit reached", 409);
+  }
 
-	const agentName = body.agentName || body.agent_name;
-	if (!agentName) return error("agentName is required");
+  const agentName = body.agentName || body.agent_name;
+  if (!agentName) return error("agentName is required");
 
-	const adapterType = body.adapterType || body.adapter_type || "process";
-	const capabilities = body.capabilities ?? [];
-	const adapterConfig = body.adapterConfig || body.adapter_config || null;
+  const adapterType = body.adapterType || body.adapter_type || "process";
+  const capabilities = body.capabilities ?? [];
+  const adapterConfig = body.adapterConfig || body.adapter_config || null;
 
-	const plainClaimSecret = createClaimSecret();
-	const claimSecretHash = hashToken(plainClaimSecret);
-	const claimExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const plainClaimSecret = createClaimSecret();
+  const claimSecretHash = hashToken(plainClaimSecret);
+  const claimExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-	const [jr] = await db
-		.insert(joinRequests)
-		.values({
-			tenant_id: invite.tenant_id,
-			invite_id: invite.id,
-			request_type: "agent",
-			agent_name: agentName,
-			adapter_type: adapterType,
-			capabilities: capabilities,
-			adapter_config: adapterConfig,
-			claim_secret_hash: claimSecretHash,
-			claim_expires_at: claimExpiresAt,
-			status: "pending_approval",
-		})
-		.returning();
+  const [jr] = await db
+    .insert(joinRequests)
+    .values({
+      tenant_id: invite.tenant_id,
+      invite_id: invite.id,
+      request_type: "agent",
+      agent_name: agentName,
+      adapter_type: adapterType,
+      capabilities: capabilities,
+      adapter_config: adapterConfig,
+      claim_secret_hash: claimSecretHash,
+      claim_expires_at: claimExpiresAt,
+      status: "pending_approval",
+    })
+    .returning();
 
-	// Mark invite as accepted and bump used_count
-	await db
-		.update(invites)
-		.set({
-			accepted_at: invite.accepted_at ?? new Date(),
-			used_count: sql`${invites.used_count} + 1`,
-		})
-		.where(eq(invites.id, invite.id));
+  // Mark invite as accepted and bump used_count
+  await db
+    .update(invites)
+    .set({
+      accepted_at: invite.accepted_at ?? new Date(),
+      used_count: sql`${invites.used_count} + 1`,
+    })
+    .where(eq(invites.id, invite.id));
 
-	return json(
-		{
-			joinRequestId: jr.id,
-			claimSecret: plainClaimSecret,
-			status: "pending_approval",
-		},
-		202,
-	);
+  return json(
+    {
+      joinRequestId: jr.id,
+      claimSecret: plainClaimSecret,
+      status: "pending_approval",
+    },
+    202,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -476,20 +491,20 @@ async function acceptInvite(
 // ---------------------------------------------------------------------------
 
 async function listJoinRequests(
-	tenantId: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const statusFilter = event.queryStringParameters?.status;
-	const conditions = [eq(joinRequests.tenant_id, tenantId)];
-	if (statusFilter) conditions.push(eq(joinRequests.status, statusFilter));
+  const statusFilter = event.queryStringParameters?.status;
+  const conditions = [eq(joinRequests.tenant_id, tenantId)];
+  if (statusFilter) conditions.push(eq(joinRequests.status, statusFilter));
 
-	const rows = await db
-		.select()
-		.from(joinRequests)
-		.where(and(...conditions))
-		.orderBy(desc(joinRequests.created_at));
+  const rows = await db
+    .select()
+    .from(joinRequests)
+    .where(and(...conditions))
+    .orderBy(desc(joinRequests.created_at));
 
-	return json(rows.map(sanitizeJoinRequest));
+  return json(rows.map(sanitizeJoinRequest));
 }
 
 // ---------------------------------------------------------------------------
@@ -497,92 +512,100 @@ async function listJoinRequests(
 // ---------------------------------------------------------------------------
 
 async function approveJoinRequest(
-	tenantId: string,
-	requestId: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  requestId: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = JSON.parse(event.body || "{}");
-	const rawUserId = body.userId || body.user_id || event.headers["x-principal-id"];
-	// approved_by_user_id is a UUID FK — only set if valid
-	const userId = rawUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId)
-		? rawUserId
-		: undefined;
+  const body = JSON.parse(event.body || "{}");
+  const rawUserId =
+    body.userId || body.user_id || event.headers["x-principal-id"];
+  // approved_by_user_id is a UUID FK — only set if valid
+  const userId =
+    rawUserId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      rawUserId,
+    )
+      ? rawUserId
+      : undefined;
 
-	const [jr] = await db
-		.select()
-		.from(joinRequests)
-		.where(
-			and(
-				eq(joinRequests.id, requestId),
-				eq(joinRequests.tenant_id, tenantId),
-			),
-		);
+  const [jr] = await db
+    .select()
+    .from(joinRequests)
+    .where(
+      and(eq(joinRequests.id, requestId), eq(joinRequests.tenant_id, tenantId)),
+    );
 
-	if (!jr) return notFound("Join request not found");
-	if (jr.status !== "pending_approval") {
-		return error("Join request is not pending", 409);
-	}
+  if (!jr) return notFound("Join request not found");
+  if (jr.status !== "pending_approval") {
+    return error("Join request is not pending", 409);
+  }
 
-	// Find the CEO / root agent to set as reportsTo
-	const existingAgents = await db
-		.select({ id: agents.id, reports_to: agents.reports_to, status: agents.status, template_id: agents.template_id })
-		.from(agents)
-		.where(eq(agents.tenant_id, tenantId));
+  // Find the CEO / root agent to set as reportsTo
+  const existingAgents = await db
+    .select({
+      id: agents.id,
+      reports_to: agents.reports_to,
+      status: agents.status,
+      template_id: agents.template_id,
+    })
+    .from(agents)
+    .where(eq(agents.tenant_id, tenantId));
 
-	// CEO = an active agent with no reportsTo, or first active agent
-	const ceoAgent = existingAgents.find((a) => !a.reports_to) ?? existingAgents[0] ?? null;
+  // CEO = an active agent with no reportsTo, or first active agent
+  const ceoAgent =
+    existingAgents.find((a) => !a.reports_to) ?? existingAgents[0] ?? null;
 
-	// Create the agent
-	const [agent] = await db
-		.insert(agents)
-		.values({
-			tenant_id: tenantId,
-			name: jr.agent_name,
-			slug: generateSlug(),
-			template_id: (jr as any).template_id || ceoAgent?.template_id,
-			type: "agent",
-			status: "idle",
-			adapter_type: jr.adapter_type,
-			adapter_config: jr.adapter_config as any,
-			reports_to: ceoAgent?.id ?? undefined,
-		})
-		.returning();
+  // Create the agent
+  const [agent] = await db
+    .insert(agents)
+    .values({
+      tenant_id: tenantId,
+      name: jr.agent_name,
+      slug: generateSlug(),
+      template_id: (jr as any).template_id || ceoAgent?.template_id,
+      type: "agent",
+      status: "idle",
+      adapter_type: jr.adapter_type,
+      adapter_config: jr.adapter_config as any,
+      reports_to: ceoAgent?.id ?? undefined,
+    })
+    .returning();
 
-	// Update join request
-	await db
-		.update(joinRequests)
-		.set({
-			status: "approved",
-			created_agent_id: agent.id,
-			approved_by_user_id: userId,
-			resolved_at: new Date(),
-			updated_at: new Date(),
-		})
-		.where(eq(joinRequests.id, requestId));
+  // Update join request
+  await db
+    .update(joinRequests)
+    .set({
+      status: "approved",
+      created_agent_id: agent.id,
+      approved_by_user_id: userId,
+      resolved_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where(eq(joinRequests.id, requestId));
 
-	// Increment invite usedCount (if not already done at accept time for legacy)
-	if (jr.invite_id) {
-		// Already incremented at accept time, but keep activity log
-	}
+  // Increment invite usedCount (if not already done at accept time for legacy)
+  if (jr.invite_id) {
+    // Already incremented at accept time, but keep activity log
+  }
 
-	// Log activity (actor_id is UUID NOT NULL — use nil UUID as fallback for system actions)
-	await db.insert(activityLog).values({
-		tenant_id: tenantId,
-		actor_type: userId ? "user" : "system",
-		actor_id: userId ?? "00000000-0000-0000-0000-000000000000",
-		action: "agent_registered",
-		entity_type: "agent",
-		entity_id: agent.id,
-		changes: { joinRequestId: jr.id, source: "byob" },
-	});
+  // Log activity (actor_id is UUID NOT NULL — use nil UUID as fallback for system actions)
+  await db.insert(activityLog).values({
+    tenant_id: tenantId,
+    actor_type: userId ? "user" : "system",
+    actor_id: userId ?? "00000000-0000-0000-0000-000000000000",
+    action: "agent_registered",
+    entity_type: "agent",
+    entity_id: agent.id,
+    changes: { joinRequestId: jr.id, source: "byob" },
+  });
 
-	// Re-fetch updated join request
-	const [updated] = await db
-		.select()
-		.from(joinRequests)
-		.where(eq(joinRequests.id, requestId));
+  // Re-fetch updated join request
+  const [updated] = await db
+    .select()
+    .from(joinRequests)
+    .where(eq(joinRequests.id, requestId));
 
-	return json(sanitizeJoinRequest(updated));
+  return json(sanitizeJoinRequest(updated));
 }
 
 // ---------------------------------------------------------------------------
@@ -590,45 +613,47 @@ async function approveJoinRequest(
 // ---------------------------------------------------------------------------
 
 async function rejectJoinRequest(
-	tenantId: string,
-	requestId: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  requestId: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = JSON.parse(event.body || "{}");
-	const rawUserId = body.userId || body.user_id || event.headers["x-principal-id"];
-	const userId = rawUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId)
-		? rawUserId
-		: undefined;
-	const reason = body.reason || null;
+  const body = JSON.parse(event.body || "{}");
+  const rawUserId =
+    body.userId || body.user_id || event.headers["x-principal-id"];
+  const userId =
+    rawUserId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      rawUserId,
+    )
+      ? rawUserId
+      : undefined;
+  const reason = body.reason || null;
 
-	const [jr] = await db
-		.select()
-		.from(joinRequests)
-		.where(
-			and(
-				eq(joinRequests.id, requestId),
-				eq(joinRequests.tenant_id, tenantId),
-			),
-		);
+  const [jr] = await db
+    .select()
+    .from(joinRequests)
+    .where(
+      and(eq(joinRequests.id, requestId), eq(joinRequests.tenant_id, tenantId)),
+    );
 
-	if (!jr) return notFound("Join request not found");
-	if (jr.status !== "pending_approval") {
-		return error("Join request is not pending", 409);
-	}
+  if (!jr) return notFound("Join request not found");
+  if (jr.status !== "pending_approval") {
+    return error("Join request is not pending", 409);
+  }
 
-	const [updated] = await db
-		.update(joinRequests)
-		.set({
-			status: "rejected",
-			rejected_by_user_id: userId,
-			rejection_reason: reason,
-			resolved_at: new Date(),
-			updated_at: new Date(),
-		})
-		.where(eq(joinRequests.id, requestId))
-		.returning();
+  const [updated] = await db
+    .update(joinRequests)
+    .set({
+      status: "rejected",
+      rejected_by_user_id: userId,
+      rejection_reason: reason,
+      resolved_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where(eq(joinRequests.id, requestId))
+    .returning();
 
-	return json(sanitizeJoinRequest(updated));
+  return json(sanitizeJoinRequest(updated));
 }
 
 // ---------------------------------------------------------------------------
@@ -636,69 +661,71 @@ async function rejectJoinRequest(
 // ---------------------------------------------------------------------------
 
 async function claimApiKey(
-	requestId: string,
-	event: APIGatewayProxyEventV2,
+  requestId: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = JSON.parse(event.body || "{}");
-	const claimSecret = body.claimSecret || body.claim_secret;
-	if (!claimSecret) return error("claimSecret is required");
+  const body = JSON.parse(event.body || "{}");
+  const claimSecret = body.claimSecret || body.claim_secret;
+  if (!claimSecret) return error("claimSecret is required");
 
-	const claimSecretHash = hashToken(claimSecret);
+  const claimSecretHash = hashToken(claimSecret);
 
-	const [jr] = await db
-		.select()
-		.from(joinRequests)
-		.where(
-			and(
-				eq(joinRequests.id, requestId),
-				eq(joinRequests.claim_secret_hash, claimSecretHash),
-			),
-		);
+  const [jr] = await db
+    .select()
+    .from(joinRequests)
+    .where(
+      and(
+        eq(joinRequests.id, requestId),
+        eq(joinRequests.claim_secret_hash, claimSecretHash),
+      ),
+    );
 
-	if (!jr) return forbidden("Invalid claim");
-	if (jr.status !== "approved") return error("Join request not yet approved", 409);
-	if (!jr.created_agent_id) return error("No agent created for this request", 409);
-	if (jr.claim_expires_at && jr.claim_expires_at < new Date()) {
-		return error("Claim secret expired", 410);
-	}
-	if (jr.claim_consumed_at) return error("Claim already used", 409);
+  if (!jr) return forbidden("Invalid claim");
+  if (jr.status !== "approved")
+    return error("Join request not yet approved", 409);
+  if (!jr.created_agent_id)
+    return error("No agent created for this request", 409);
+  if (jr.claim_expires_at && jr.claim_expires_at < new Date()) {
+    return error("Claim secret expired", 410);
+  }
+  if (jr.claim_consumed_at) return error("Claim already used", 409);
 
-	// Generate API key
-	const plainApiKey = `mf_key_${randomBytes(48).toString("hex")}`;
-	const keyHash = hashToken(plainApiKey);
+  // Generate API key
+  const plainApiKey = `mf_key_${randomBytes(48).toString("hex")}`;
+  const keyHash = hashToken(plainApiKey);
 
-	const [apiKey] = await db
-		.insert(agentApiKeys)
-		.values({
-			tenant_id: jr.tenant_id,
-			agent_id: jr.created_agent_id,
-			key_hash: keyHash,
-			name: `Initial key for ${jr.agent_name}`,
-		})
-		.returning();
+  const [apiKey] = await db
+    .insert(agentApiKeys)
+    .values({
+      tenant_id: jr.tenant_id,
+      agent_id: jr.created_agent_id,
+      key_hash: keyHash,
+      name: `Initial key for ${jr.agent_name}`,
+    })
+    .returning();
 
-	// Mark claim as consumed
-	await db
-		.update(joinRequests)
-		.set({
-			status: "claimed",
-			claim_consumed_at: new Date(),
-			updated_at: new Date(),
-		})
-		.where(eq(joinRequests.id, requestId));
+  // Mark claim as consumed
+  await db
+    .update(joinRequests)
+    .set({
+      status: "claimed",
+      claim_consumed_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where(eq(joinRequests.id, requestId));
 
-	return json(
-		{
-			apiKey: {
-				id: apiKey.id,
-				agentId: apiKey.agent_id,
-				keyPrefix: plainApiKey.slice(0, 12) + "...",
-				createdAt: apiKey.created_at.toISOString(),
-			},
-			plainTextKey: plainApiKey,
-		},
-		201,
-	);
+  return json(
+    {
+      apiKey: {
+        id: apiKey.id,
+        agentId: apiKey.agent_id,
+        keyPrefix: plainApiKey.slice(0, 12) + "...",
+        createdAt: apiKey.created_at.toISOString(),
+      },
+      plainTextKey: plainApiKey,
+    },
+    201,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -706,30 +733,30 @@ async function claimApiKey(
 // ---------------------------------------------------------------------------
 
 async function listInvites(
-	tenantId: string,
+  tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const rows = await db
-		.select()
-		.from(invites)
-		.where(eq(invites.tenant_id, tenantId))
-		.orderBy(desc(invites.created_at));
+  const rows = await db
+    .select()
+    .from(invites)
+    .where(eq(invites.tenant_id, tenantId))
+    .orderBy(desc(invites.created_at));
 
-	return json(
-		rows.map((r) => ({
-			id: r.id,
-			tenantId: r.tenant_id,
-			inviteType: r.invite_type,
-			maxUses: r.max_uses,
-			usedCount: r.used_count,
-			expiresAt: r.expires_at.toISOString(),
-			revokedAt: r.revoked_at?.toISOString() ?? null,
-			createdAt: r.created_at.toISOString(),
-			expired: r.expires_at < new Date(),
-			agentName:
-				(r.defaults_payload as Record<string, unknown> | null)?.agentName ??
-				null,
-		})),
-	);
+  return json(
+    rows.map((r) => ({
+      id: r.id,
+      tenantId: r.tenant_id,
+      inviteType: r.invite_type,
+      maxUses: r.max_uses,
+      usedCount: r.used_count,
+      expiresAt: r.expires_at.toISOString(),
+      revokedAt: r.revoked_at?.toISOString() ?? null,
+      createdAt: r.created_at.toISOString(),
+      expired: r.expires_at < new Date(),
+      agentName:
+        (r.defaults_payload as Record<string, unknown> | null)?.agentName ??
+        null,
+    })),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -737,16 +764,16 @@ async function listInvites(
 // ---------------------------------------------------------------------------
 
 async function revokeInvite(
-	id: string,
+  id: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const [revoked] = await db
-		.update(invites)
-		.set({ revoked_at: new Date() })
-		.where(eq(invites.id, id))
-		.returning();
+  const [revoked] = await db
+    .update(invites)
+    .set({ revoked_at: new Date() })
+    .where(eq(invites.id, id))
+    .returning();
 
-	if (!revoked) return notFound("Invite not found");
-	return json({ id: revoked.id, revokedAt: revoked.revoked_at?.toISOString() });
+  if (!revoked) return notFound("Invite not found");
+  return json({ id: revoked.id, revokedAt: revoked.revoked_at?.toISOString() });
 }
 
 // ---------------------------------------------------------------------------
@@ -754,27 +781,27 @@ async function revokeInvite(
 // ---------------------------------------------------------------------------
 
 function sanitizeJoinRequest(
-	row: typeof joinRequests.$inferSelect,
+  row: typeof joinRequests.$inferSelect,
 ): Record<string, unknown> {
-	const { claim_secret_hash: _, ...safe } = row;
-	return {
-		id: safe.id,
-		tenantId: safe.tenant_id,
-		inviteId: safe.invite_id,
-		requestType: safe.request_type,
-		status: safe.status,
-		agentName: safe.agent_name,
-		adapterType: safe.adapter_type,
-		capabilities: safe.capabilities,
-		adapterConfig: safe.adapter_config,
-		claimExpiresAt: safe.claim_expires_at?.toISOString() ?? null,
-		claimConsumedAt: safe.claim_consumed_at?.toISOString() ?? null,
-		createdAgentId: safe.created_agent_id,
-		approvedByUserId: safe.approved_by_user_id,
-		rejectedByUserId: safe.rejected_by_user_id,
-		rejectionReason: safe.rejection_reason,
-		resolvedAt: safe.resolved_at?.toISOString() ?? null,
-		createdAt: safe.created_at.toISOString(),
-		updatedAt: safe.updated_at.toISOString(),
-	};
+  const { claim_secret_hash: _, ...safe } = row;
+  return {
+    id: safe.id,
+    tenantId: safe.tenant_id,
+    inviteId: safe.invite_id,
+    requestType: safe.request_type,
+    status: safe.status,
+    agentName: safe.agent_name,
+    adapterType: safe.adapter_type,
+    capabilities: safe.capabilities,
+    adapterConfig: safe.adapter_config,
+    claimExpiresAt: safe.claim_expires_at?.toISOString() ?? null,
+    claimConsumedAt: safe.claim_consumed_at?.toISOString() ?? null,
+    createdAgentId: safe.created_agent_id,
+    approvedByUserId: safe.approved_by_user_id,
+    rejectedByUserId: safe.rejected_by_user_id,
+    rejectionReason: safe.rejection_reason,
+    resolvedAt: safe.resolved_at?.toISOString() ?? null,
+    createdAt: safe.created_at.toISOString(),
+    updatedAt: safe.updated_at.toISOString(),
+  };
 }

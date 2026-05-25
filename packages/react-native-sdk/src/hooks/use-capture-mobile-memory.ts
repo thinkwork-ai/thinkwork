@@ -10,7 +10,8 @@ export function useCaptureMobileMemory() {
 
   return useCallback(
     async (input: CaptureMobileMemoryInput): Promise<MobileMemoryCapture> => {
-      if (!input.agentId) throw new Error("useCaptureMobileMemory: agentId is required");
+      if (!input.agentId)
+        throw new Error("useCaptureMobileMemory: agentId is required");
       if (!input.content || !input.content.trim()) {
         throw new Error("useCaptureMobileMemory: content is required");
       }

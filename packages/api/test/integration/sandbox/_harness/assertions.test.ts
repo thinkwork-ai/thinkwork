@@ -14,9 +14,7 @@ import { _testOnly, findTokenMatches } from "./assertions.js";
 describe("findTokenMatches", () => {
   it("matches Authorization Bearer header", () => {
     const hits = findTokenMatches(["Authorization: Bearer abc.def.ghi_jkl"]);
-    expect(hits.map((h) => h.pattern)).toContain(
-      "Authorization Bearer header",
-    );
+    expect(hits.map((h) => h.pattern)).toContain("Authorization Bearer header");
   });
 
   it("matches a github prefix", () => {

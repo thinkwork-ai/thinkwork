@@ -11,59 +11,59 @@
 import type { AdminOpsClient } from "./client.js";
 
 export interface AdminKeySummary {
-	id: string;
-	name: string;
-	created_at: string | null;
-	created_by_user_id: string | null;
-	last_used_at: string | null;
-	revoked_at: string | null;
+  id: string;
+  name: string;
+  created_at: string | null;
+  created_by_user_id: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
 }
 
 export interface AdminKeyCreateResponse {
-	id: string;
-	name: string;
-	/** Raw token. Shown ONCE. Never retrievable again. */
-	token: string;
-	created_at: string | null;
+  id: string;
+  name: string;
+  /** Raw token. Shown ONCE. Never retrievable again. */
+  token: string;
+  created_at: string | null;
 }
 
 export interface AdminKeyCreateInput {
-	name?: string;
-	/** Optional attribution — caller's user UUID when a human is creating. */
-	created_by_user_id?: string;
+  name?: string;
+  /** Optional attribution — caller's user UUID when a human is creating. */
+  created_by_user_id?: string;
 }
 
 export async function createAdminKey(
-	client: AdminOpsClient,
-	tenantIdOrSlug: string,
-	input: AdminKeyCreateInput = {},
+  client: AdminOpsClient,
+  tenantIdOrSlug: string,
+  input: AdminKeyCreateInput = {},
 ): Promise<AdminKeyCreateResponse> {
-	return client.fetch<AdminKeyCreateResponse>(
-		`/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-keys`,
-		{
-			method: "POST",
-			body: JSON.stringify(input),
-		},
-	);
+  return client.fetch<AdminKeyCreateResponse>(
+    `/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-keys`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export async function listAdminKeys(
-	client: AdminOpsClient,
-	tenantIdOrSlug: string,
+  client: AdminOpsClient,
+  tenantIdOrSlug: string,
 ): Promise<AdminKeySummary[]> {
-	const res = await client.fetch<{ keys: AdminKeySummary[] }>(
-		`/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-keys`,
-	);
-	return res.keys;
+  const res = await client.fetch<{ keys: AdminKeySummary[] }>(
+    `/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-keys`,
+  );
+  return res.keys;
 }
 
 export async function revokeAdminKey(
-	client: AdminOpsClient,
-	tenantIdOrSlug: string,
-	keyId: string,
+  client: AdminOpsClient,
+  tenantIdOrSlug: string,
+  keyId: string,
 ): Promise<void> {
-	await client.fetch<unknown>(
-		`/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-keys/${encodeURIComponent(keyId)}`,
-		{ method: "DELETE" },
-	);
+  await client.fetch<unknown>(
+    `/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-keys/${encodeURIComponent(keyId)}`,
+    { method: "DELETE" },
+  );
 }

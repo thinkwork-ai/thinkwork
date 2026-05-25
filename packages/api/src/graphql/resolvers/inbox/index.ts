@@ -13,4 +13,15 @@ import { addInboxItemLink } from "./addInboxItemLink.mutation.js";
 import { removeInboxItemLink } from "./removeInboxItemLink.mutation.js";
 
 export const inboxQueries = { inboxItems, inboxItem, activityLog };
-export const inboxMutations = { createInboxItem, decideInboxItem, approveInboxItem, rejectInboxItem, requestRevision, resubmitInboxItem, cancelInboxItem, addInboxItemComment, addInboxItemLink, removeInboxItemLink };
+export const inboxMutations = {
+  createInboxItem,
+  decideInboxItem,
+  approveInboxItem,
+  rejectInboxItem,
+  requestRevision,
+  resubmitInboxItem,
+  cancelInboxItem,
+  addInboxItemComment,
+  addInboxItemLink,
+  removeInboxItemLink,
+};

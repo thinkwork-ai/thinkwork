@@ -14,43 +14,43 @@ import { db, eq, users } from "../../utils.js";
  * linked by email — so we fall back to an email lookup.
  */
 export async function resolveCallerFromAuth(
-	auth: AuthResult,
+  auth: AuthResult,
 ): Promise<{ userId: string | null; tenantId: string | null }> {
-	// Service-secret callers — both `apikey` (declared identity, e.g. the
-	// thinkwork-admin skill) and `service` (bearer-only, e.g. the CLI or
-	// the agentcore-runtime container calling /api/workspaces/files
-	// during bootstrap Unit 7) — have no DB-verified user principal but
-	// DO carry an x-tenant-id header. The shared service secret is the
-	// trust boundary; anything holding it is trusted infrastructure.
-	// Honor the header-supplied tenantId so downstream DB queries scope
-	// correctly. principalId is null for service callers (the header was
-	// absent); apikey callers may have a header-asserted principalId
-	// here — note it is unverified.
-	if (auth.authType === "apikey" || auth.authType === "service") {
-		return { userId: auth.principalId, tenantId: auth.tenantId };
-	}
-	if (auth.authType !== "cognito") {
-		return { userId: null, tenantId: null };
-	}
-	const principalId = auth.principalId;
-	if (!principalId) return { userId: null, tenantId: null };
+  // Service-secret callers — both `apikey` (declared identity, e.g. the
+  // thinkwork-admin skill) and `service` (bearer-only, e.g. the CLI or
+  // the agentcore-runtime container calling /api/workspaces/files
+  // during bootstrap Unit 7) — have no DB-verified user principal but
+  // DO carry an x-tenant-id header. The shared service secret is the
+  // trust boundary; anything holding it is trusted infrastructure.
+  // Honor the header-supplied tenantId so downstream DB queries scope
+  // correctly. principalId is null for service callers (the header was
+  // absent); apikey callers may have a header-asserted principalId
+  // here — note it is unverified.
+  if (auth.authType === "apikey" || auth.authType === "service") {
+    return { userId: auth.principalId, tenantId: auth.tenantId };
+  }
+  if (auth.authType !== "cognito") {
+    return { userId: null, tenantId: null };
+  }
+  const principalId = auth.principalId;
+  if (!principalId) return { userId: null, tenantId: null };
 
-	const [byId] = await db
-		.select({ id: users.id, tenant_id: users.tenant_id })
-		.from(users)
-		.where(eq(users.id, principalId));
-	if (byId) return { userId: byId.id, tenantId: byId.tenant_id };
+  const [byId] = await db
+    .select({ id: users.id, tenant_id: users.tenant_id })
+    .from(users)
+    .where(eq(users.id, principalId));
+  if (byId) return { userId: byId.id, tenantId: byId.tenant_id };
 
-	const email = auth.email;
-	if (!email) return { userId: null, tenantId: null };
-	const [byEmail] = await db
-		.select({ id: users.id, tenant_id: users.tenant_id })
-		.from(users)
-		.where(eq(users.email, email));
-	return {
-		userId: byEmail?.id ?? null,
-		tenantId: byEmail?.tenant_id ?? null,
-	};
+  const email = auth.email;
+  if (!email) return { userId: null, tenantId: null };
+  const [byEmail] = await db
+    .select({ id: users.id, tenant_id: users.tenant_id })
+    .from(users)
+    .where(eq(users.email, email));
+  return {
+    userId: byEmail?.id ?? null,
+    tenantId: byEmail?.tenant_id ?? null,
+  };
 }
 
 /**
@@ -61,9 +61,9 @@ export async function resolveCallerFromAuth(
  * closed on null.
  */
 export async function resolveCaller(
-	ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ): Promise<{ userId: string | null; tenantId: string | null }> {
-	return resolveCallerFromAuth(ctx.auth);
+  return resolveCallerFromAuth(ctx.auth);
 }
 
 /**
@@ -71,10 +71,10 @@ export async function resolveCaller(
  * need the tenant id too — it's the same DB round-trip either way.
  */
 export async function resolveCallerUserId(
-	ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ): Promise<string | null> {
-	const { userId } = await resolveCaller(ctx);
-	return userId;
+  const { userId } = await resolveCaller(ctx);
+  return userId;
 }
 
 /**
@@ -82,8 +82,8 @@ export async function resolveCallerUserId(
  * need both fields.
  */
 export async function resolveCallerTenantId(
-	ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ): Promise<string | null> {
-	const { tenantId } = await resolveCaller(ctx);
-	return tenantId;
+  const { tenantId } = await resolveCaller(ctx);
+  return tenantId;
 }

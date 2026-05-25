@@ -21,56 +21,58 @@ import { deriveParentCandidates } from "../src/lib/wiki/parent-expander.js";
 import type { ThinkWorkMemoryRecord } from "../src/lib/memory/types.js";
 
 function parseArgs(argv: string[]): { bank: string | null } {
-	for (let i = 0; i < argv.length; i++) {
-		if (argv[i] === "--bank") return { bank: argv[++i] ?? null };
-	}
-	return { bank: null };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--bank") return { bank: argv[++i] ?? null };
+  }
+  return { bank: null };
 }
 
 async function main(): Promise<void> {
-	const { bank } = parseArgs(process.argv.slice(2));
-	if (!bank) {
-		console.error("error: --bank <slug> required");
-		process.exit(2);
-	}
+  const { bank } = parseArgs(process.argv.slice(2));
+  if (!bank) {
+    console.error("error: --bank <slug> required");
+    process.exit(2);
+  }
 
-	const result = await db.execute(sql`
+  const result = await db.execute(sql`
 		SELECT id, text, metadata
 		FROM hindsight.memory_units
 		WHERE bank_id = ${bank}
 		LIMIT 3000
 	`);
-	const rows =
-		(result as unknown as {
-			rows?: Array<{ id: string; text: string; metadata: unknown }>;
-		}).rows ?? [];
+  const rows =
+    (
+      result as unknown as {
+        rows?: Array<{ id: string; text: string; metadata: unknown }>;
+      }
+    ).rows ?? [];
 
-	// Minimal-shape records — the expander only reads `id` and `metadata`.
-	// Cast through unknown because reconstructing the full record type is
-	// pointless for a read-only probe.
-	const records = rows.map((r) => ({
-		id: r.id,
-		metadata: (r.metadata ?? {}) as Record<string, unknown>,
-	})) as unknown as ThinkWorkMemoryRecord[];
+  // Minimal-shape records — the expander only reads `id` and `metadata`.
+  // Cast through unknown because reconstructing the full record type is
+  // pointless for a read-only probe.
+  const records = rows.map((r) => ({
+    id: r.id,
+    metadata: (r.metadata ?? {}) as Record<string, unknown>,
+  })) as unknown as ThinkWorkMemoryRecord[];
 
-	console.log(`loaded ${records.length} records from bank=${bank}`);
-	const candidates = deriveParentCandidates(records);
-	console.log(
-		`derived ${candidates.length} candidates (min_cluster_size default = 2)\n`,
-	);
-	for (const c of candidates.slice(0, 30)) {
-		console.log(
-			`  ${c.reason.padEnd(11)} "${c.parentTitle}" (support=${c.supportingCount}, sectionSlug=${c.suggestedSectionSlug})`,
-		);
-	}
-	if (candidates.length > 30) {
-		console.log(`  … ${candidates.length - 30} more`);
-	}
+  console.log(`loaded ${records.length} records from bank=${bank}`);
+  const candidates = deriveParentCandidates(records);
+  console.log(
+    `derived ${candidates.length} candidates (min_cluster_size default = 2)\n`,
+  );
+  for (const c of candidates.slice(0, 30)) {
+    console.log(
+      `  ${c.reason.padEnd(11)} "${c.parentTitle}" (support=${c.supportingCount}, sectionSlug=${c.suggestedSectionSlug})`,
+    );
+  }
+  if (candidates.length > 30) {
+    console.log(`  … ${candidates.length - 30} more`);
+  }
 }
 
 main()
-	.then(() => process.exit(0))
-	.catch((err) => {
-		console.error(err);
-		process.exit(1);
-	});
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

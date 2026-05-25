@@ -1,10 +1,7 @@
 "use client";
 
 import { Button } from "@thinkwork/ui/button";
-import {
-  ScrollArea,
-  ScrollBar,
-} from "@thinkwork/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@thinkwork/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { ComponentProps } from "react";
 

@@ -34,7 +34,9 @@ export function useGraphQLChat(
   caller?: CallerIdentity,
 ) {
   // Track the active threadId — either passed in or auto-created
-  const [localThreadId, setLocalThreadId] = useState<string | undefined>(threadId);
+  const [localThreadId, setLocalThreadId] = useState<string | undefined>(
+    threadId,
+  );
   const activeThreadId = threadId || localThreadId;
 
   // Thread creation (SDK — imperative, supports atomic firstMessage)
@@ -56,7 +58,9 @@ export function useGraphQLChat(
   const [waitingForResponse, setWaitingForResponse] = useState(false);
 
   // Optimistic messages — shown immediately before API round-trip completes
-  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>(
+    [],
+  );
 
   // --- Build messages from query ---
   const queryMessages: ChatMessage[] = useMemo(() => {
@@ -67,25 +71,39 @@ export function useGraphQLChat(
       // Parse toolResults from AWSJSON string
       let toolResults: Array<Record<string, unknown>> | null = null;
       if (m.toolResults) {
-        console.log('[GenUI] Raw toolResults:', typeof m.toolResults, String(m.toolResults).slice(0, 200));
+        console.log(
+          "[GenUI] Raw toolResults:",
+          typeof m.toolResults,
+          String(m.toolResults).slice(0, 200),
+        );
         try {
-          const parsed = typeof m.toolResults === 'string' ? JSON.parse(m.toolResults) : m.toolResults;
+          const parsed =
+            typeof m.toolResults === "string"
+              ? JSON.parse(m.toolResults)
+              : m.toolResults;
           if (Array.isArray(parsed) && parsed.length > 0) {
             toolResults = parsed;
-            console.log('[GenUI] Parsed toolResults:', parsed.length, 'items, first _type:', parsed[0]?._type);
+            console.log(
+              "[GenUI] Parsed toolResults:",
+              parsed.length,
+              "items, first _type:",
+              parsed[0]?._type,
+            );
           }
         } catch (e) {
-          console.error('[GenUI] Failed to parse toolResults:', e);
+          console.error("[GenUI] Failed to parse toolResults:", e);
         }
       } else {
-        if (normalizedRole === 'assistant') {
-          console.log('[GenUI] No toolResults on assistant message:', m.id);
+        if (normalizedRole === "assistant") {
+          console.log("[GenUI] No toolResults on assistant message:", m.id);
         }
       }
 
       return {
         id: m.id,
-        role: (normalizedRole === "user" ? "user" : "assistant") as ChatMessage["role"],
+        role: (normalizedRole === "user"
+          ? "user"
+          : "assistant") as ChatMessage["role"],
         content: (m.content ?? "").trim(),
         durableArtifact: m.durableArtifact ?? null,
         toolResults,
@@ -114,7 +132,9 @@ export function useGraphQLChat(
 
     const newMsg: ChatMessage = {
       id: event.messageId,
-      role: ((event.role || "").toLowerCase() === "user" ? "user" : "assistant") as ChatMessage["role"],
+      role: ((event.role || "").toLowerCase() === "user"
+        ? "user"
+        : "assistant") as ChatMessage["role"],
       content: (event.content ?? "").trim(),
       timestamp: new Date(event.createdAt).getTime(),
       isStreaming: false,
@@ -182,7 +202,7 @@ export function useGraphQLChat(
   const replacementIdRef = useRef<string | null>(null);
 
   const displayMessages = useMemo(() => {
-    const hasStreaming = chatMessages.some(m => m.isStreaming);
+    const hasStreaming = chatMessages.some((m) => m.isStreaming);
     // Typing indicator disabled for now — can re-enable by removing the `false &&`
     const showTyping = false && waitingForResponse && !hasStreaming;
 
@@ -191,9 +211,9 @@ export function useGraphQLChat(
       replacementIdRef.current = null;
       return [
         {
-          id: '__typing__',
-          role: 'assistant' as const,
-          content: '',
+          id: "__typing__",
+          role: "assistant" as const,
+          content: "",
           timestamp: Date.now(),
           isStreaming: false,
           isTypingPlaceholder: true,
@@ -209,7 +229,10 @@ export function useGraphQLChat(
       wasWaitingRef.current = false;
       let newest: ChatMessage | null = null;
       for (const m of chatMessages) {
-        if (m.role === 'assistant' && (!newest || m.timestamp > newest.timestamp)) {
+        if (
+          m.role === "assistant" &&
+          (!newest || m.timestamp > newest.timestamp)
+        ) {
           newest = m;
         }
       }
@@ -221,11 +244,11 @@ export function useGraphQLChat(
     // Keep the replacement aliased as __typing__ so FlatList reuses the cell
     if (replacementIdRef.current) {
       const realId = replacementIdRef.current;
-      const replacement = chatMessages.find(m => m.id === realId);
+      const replacement = chatMessages.find((m) => m.id === realId);
       if (replacement) {
-        const rest = chatMessages.filter(m => m.id !== realId);
+        const rest = chatMessages.filter((m) => m.id !== realId);
         return [
-          { ...replacement, id: '__typing__', isTypingPlaceholder: false },
+          { ...replacement, id: "__typing__", isTypingPlaceholder: false },
           ...rest,
         ];
       }
@@ -239,9 +262,18 @@ export function useGraphQLChat(
   const sendMessage = useCallback(
     async (
       content: string,
-      mentions?: Array<{ id: string; name: string; type: "member" | "assistant" }>,
+      mentions?: Array<{
+        id: string;
+        name: string;
+        type: "member" | "assistant";
+      }>,
     ) => {
-      console.log("[GraphQLChat] sendMessage called:", content, "agentId:", agentId);
+      console.log(
+        "[GraphQLChat] sendMessage called:",
+        content,
+        "agentId:",
+        agentId,
+      );
 
       // Optimistic: show message + typing indicator immediately
       const optimisticMsg: ChatMessage = {
@@ -270,10 +302,15 @@ export function useGraphQLChat(
           if (agentId) input.agentId = agentId;
           const thread = await createThread(input);
           setLocalThreadId(thread.id);
-          console.log("[GraphQLChat] Auto-created thread with firstMessage:", thread.id);
+          console.log(
+            "[GraphQLChat] Auto-created thread with firstMessage:",
+            thread.id,
+          );
         } catch (e) {
           console.error("[GraphQLChat] Thread creation failed:", e);
-          setOptimisticMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+          setOptimisticMessages((prev) =>
+            prev.filter((m) => m.id !== optimisticMsg.id),
+          );
           setWaitingForResponse(false);
         } finally {
           creatingThread.current = false;
@@ -282,8 +319,12 @@ export function useGraphQLChat(
       }
 
       if (!activeThreadId) {
-        console.error("[GraphQLChat] No threadId available, cannot send message");
-        setOptimisticMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+        console.error(
+          "[GraphQLChat] No threadId available, cannot send message",
+        );
+        setOptimisticMessages((prev) =>
+          prev.filter((m) => m.id !== optimisticMsg.id),
+        );
         setWaitingForResponse(false);
         return;
       }
@@ -294,7 +335,9 @@ export function useGraphQLChat(
         console.log("[GraphQLChat] sendMessage succeeded");
       } catch (e) {
         console.error("[GraphQLChat] sendMessage FAILED:", e);
-        setOptimisticMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+        setOptimisticMessages((prev) =>
+          prev.filter((m) => m.id !== optimisticMsg.id),
+        );
         setWaitingForResponse(false);
       }
     },
@@ -306,7 +349,8 @@ export function useGraphQLChat(
     sendMessage,
     isConnected: true,
     isStreaming: waitingForResponse,
-    historyLoaded: !fetching || optimisticMessages.length > 0 || waitingForResponse,
+    historyLoaded:
+      !fetching || optimisticMessages.length > 0 || waitingForResponse,
     threadId: activeThreadId,
   };
 }

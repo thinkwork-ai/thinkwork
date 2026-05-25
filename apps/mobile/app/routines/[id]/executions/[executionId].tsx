@@ -129,7 +129,10 @@ export default function RoutineExecutionDetailScreen() {
   // version_arn) so each execution renders against its own manifest,
   // not the routine's current version. Falls back to events-only graph
   // rendering when versionArn is null (out-of-band SFN starts).
-  const stepManifest = useMemo<Record<string, { recipeType?: string }> | null>(() => {
+  const stepManifest = useMemo<Record<
+    string,
+    { recipeType?: string }
+  > | null>(() => {
     const manifestJson = (execution as any)?.aslVersion?.stepManifestJson;
     if (!manifestJson) return null;
     try {
@@ -179,8 +182,7 @@ export default function RoutineExecutionDetailScreen() {
       <DetailLayout title="Execution">
         <View className="flex-1 items-center justify-center px-8">
           <Muted className="text-center">
-            {queryResult.error?.message ??
-              "No execution row matches that id."}
+            {queryResult.error?.message ?? "No execution row matches that id."}
           </Muted>
         </View>
       </DetailLayout>
@@ -290,7 +292,10 @@ export default function RoutineExecutionDetailScreen() {
             />
             <Row
               label="Duration"
-              value={formatDurationMs(execution.startedAt, execution.finishedAt)}
+              value={formatDurationMs(
+                execution.startedAt,
+                execution.finishedAt,
+              )}
             />
             <Row
               label="LLM cost"

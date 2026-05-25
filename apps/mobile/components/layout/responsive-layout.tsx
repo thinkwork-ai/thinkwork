@@ -25,7 +25,11 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
   }
 
   // On narrow screens, just render children - the tab bar is handled by the tabs layout
-  return <View className="flex-1 bg-white dark:bg-neutral-950">{children ?? <Slot />}</View>;
+  return (
+    <View className="flex-1 bg-white dark:bg-neutral-950">
+      {children ?? <Slot />}
+    </View>
+  );
 }
 
 /**

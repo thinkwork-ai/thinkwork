@@ -35,7 +35,14 @@ describe("Phase 3 command registration", () => {
     const cmd = program.commands.find((c) => c.name() === "scheduled-job")!;
     expect(cmd).toBeTruthy();
     expect(cmd.commands.map((c) => c.name())).toEqual(
-      expect.arrayContaining(["list", "get", "create", "update", "delete", "run"]),
+      expect.arrayContaining([
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "run",
+      ]),
     );
   });
 
@@ -126,7 +133,9 @@ describe("Phase 3 command registration", () => {
       const p = program.commands.find((c) => c.name() === parent)!;
       for (const v of verbs) {
         const cmd = p.commands.find((c) => c.name() === v)!;
-        expect(cmd.helpInformation(), `${parent} ${v} has --yes`).toMatch(/--yes/);
+        expect(cmd.helpInformation(), `${parent} ${v} has --yes`).toMatch(
+          /--yes/,
+        );
       }
     }
   });

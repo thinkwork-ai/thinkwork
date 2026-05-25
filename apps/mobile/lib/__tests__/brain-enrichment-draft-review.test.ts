@@ -152,7 +152,9 @@ describe("parseDraftSections (mirrors server parseSections)", () => {
   });
   it("parses two H2 sections in order", () => {
     expect(
-      parseDraftSections(["## First", "", "first", "", "## Second", "", "second"].join("\n")),
+      parseDraftSections(
+        ["## First", "", "first", "", "## Second", "", "second"].join("\n"),
+      ),
     ).toEqual([
       { slug: "first", heading: "First", bodyMd: "first" },
       { slug: "second", heading: "Second", bodyMd: "second" },

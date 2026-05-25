@@ -28,7 +28,12 @@ export function TabHeader({ title, left, right }: TabHeaderProps) {
       >
         <View className="flex-row items-center gap-1">
           {left}
-          <Text size={isWide ? "lg" : "xl"} weight={isWide ? "semibold" : "bold"}>{title}</Text>
+          <Text
+            size={isWide ? "lg" : "xl"}
+            weight={isWide ? "semibold" : "bold"}
+          >
+            {title}
+          </Text>
         </View>
         {right}
       </View>

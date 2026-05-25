@@ -1,5 +1,10 @@
 import { useQuery, useMutation } from "urql";
-import { MeQuery, UserQuery, UpdateUserMutation, UpdateUserProfileMutation } from "@/lib/graphql-queries";
+import {
+  MeQuery,
+  UserQuery,
+  UpdateUserMutation,
+  UpdateUserProfileMutation,
+} from "@/lib/graphql-queries";
 import { useAuth } from "@/lib/auth-context";
 
 export function useMe() {
@@ -15,5 +20,9 @@ export function useMe() {
 export function useUser(id: string | undefined) {
   return useQuery({ query: UserQuery, variables: { id: id! }, pause: !id });
 }
-export function useUpdateUser() { return useMutation(UpdateUserMutation); }
-export function useUpdateUserProfile() { return useMutation(UpdateUserProfileMutation); }
+export function useUpdateUser() {
+  return useMutation(UpdateUserMutation);
+}
+export function useUpdateUserProfile() {
+  return useMutation(UpdateUserProfileMutation);
+}

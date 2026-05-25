@@ -45,7 +45,9 @@ export async function createTenantCredential(
   const displayName = input.displayName.trim();
   if (!displayName) throw new Error("displayName is required");
 
-  const slug = normalizeSlug(input.slug?.trim() || slugFromDisplayName(displayName));
+  const slug = normalizeSlug(
+    input.slug?.trim() || slugFromDisplayName(displayName),
+  );
   await assertSlugAvailable({ tenantId: input.tenantId, slug });
 
   const credentialId = randomUUID();
@@ -80,12 +82,14 @@ export async function createTenantCredential(
 
     return credentialToGraphql(row);
   } catch (err) {
-    await scheduleTenantCredentialSecretDeletion(secretRef).catch((cleanupErr) => {
-      console.error(
-        "[tenant-credentials] Failed to schedule orphaned secret cleanup",
-        cleanupErr,
-      );
-    });
+    await scheduleTenantCredentialSecretDeletion(secretRef).catch(
+      (cleanupErr) => {
+        console.error(
+          "[tenant-credentials] Failed to schedule orphaned secret cleanup",
+          cleanupErr,
+        );
+      },
+    );
     throw err;
   }
 }

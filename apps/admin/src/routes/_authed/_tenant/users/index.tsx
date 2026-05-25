@@ -59,7 +59,9 @@ const columns: ColumnDef<UserRow>[] = [
     accessorKey: "email",
     header: "Email",
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">{row.original.email}</span>
+      <span className="text-sm text-muted-foreground">
+        {row.original.email}
+      </span>
     ),
   },
   {
@@ -154,7 +156,11 @@ function UsersPage() {
                 className="pl-7 text-sm"
               />
             </div>
-            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setInviteOpen(true)}
+            >
               <Plus className="h-4 w-4 mr-1" />
               Invite Member
             </Button>
@@ -167,7 +173,10 @@ function UsersPage() {
           icon={Users}
           title="No team members yet"
           description="Invite team members to collaborate with your agents."
-          action={{ label: "Invite Member", onClick: () => setInviteOpen(true) }}
+          action={{
+            label: "Invite Member",
+            onClick: () => setInviteOpen(true),
+          }}
         />
       ) : (
         <DataTable

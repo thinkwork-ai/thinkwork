@@ -8,10 +8,7 @@ import {
   Image,
 } from "react-native";
 import { useRouter } from "expo-router";
-import {
-  CognitoUser,
-  CognitoUserPool,
-} from "amazon-cognito-identity-js";
+import { CognitoUser, CognitoUserPool } from "amazon-cognito-identity-js";
 import {
   Card,
   CardContent,
@@ -43,14 +40,24 @@ export default function ForgotPasswordScreen() {
     });
   };
 
-  const resetPasswordFn = async ({ email: e, code: c, newPassword: p }: { email: string; code: string; newPassword: string }) => {
-    return new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
-      const user = new CognitoUser({ Username: e, Pool: pool });
-      user.confirmPassword(c, p, {
-        onSuccess: () => resolve({ success: true }),
-        onFailure: (err) => resolve({ success: false, error: err.message }),
-      });
-    });
+  const resetPasswordFn = async ({
+    email: e,
+    code: c,
+    newPassword: p,
+  }: {
+    email: string;
+    code: string;
+    newPassword: string;
+  }) => {
+    return new Promise<{ success: boolean; error?: string }>(
+      (resolve, reject) => {
+        const user = new CognitoUser({ Username: e, Pool: pool });
+        user.confirmPassword(c, p, {
+          onSuccess: () => resolve({ success: true }),
+          onFailure: (err) => resolve({ success: false, error: err.message }),
+        });
+      },
+    );
   };
 
   const [step, setStep] = useState<Step>("email");
@@ -236,10 +243,7 @@ export default function ForgotPasswordScreen() {
               </>
             )}
 
-            <Pressable
-              className="py-3"
-              onPress={() => router.back()}
-            >
+            <Pressable className="py-3" onPress={() => router.back()}>
               <Text size="sm" variant="muted" className="text-center">
                 Back to sign in
               </Text>

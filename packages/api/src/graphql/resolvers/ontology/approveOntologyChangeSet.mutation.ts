@@ -8,7 +8,11 @@ export const approveOntologyChangeSetMutation = async (
   args: { input: { tenantId: string; changeSetId: string } },
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "approve_ontology_change_set");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.input.tenantId,
+    "approve_ontology_change_set",
+  );
   const actorUserId = await resolveCallerUserId(ctx);
   return approveOntologyChangeSet({
     tenantId: args.input.tenantId,

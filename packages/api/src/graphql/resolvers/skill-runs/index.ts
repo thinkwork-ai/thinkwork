@@ -10,14 +10,14 @@ import { deleteRun } from "./deleteRun.mutation.js";
 import { submitRunFeedback } from "./submitRunFeedback.mutation.js";
 
 export const skillRunsQueries = {
-	skillRun,
-	skillRuns,
-	compositionFeedbackSummary,
+  skillRun,
+  skillRuns,
+  compositionFeedbackSummary,
 };
 
 export const skillRunsMutations = {
-	startSkillRun,
-	cancelSkillRun,
-	deleteRun,
-	submitRunFeedback,
+  startSkillRun,
+  cancelSkillRun,
+  deleteRun,
+  submitRunFeedback,
 };

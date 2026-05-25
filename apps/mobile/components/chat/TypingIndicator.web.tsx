@@ -40,7 +40,15 @@ export function TypingIndicator({ inline }: { inline?: boolean }) {
   if (inline) return content;
 
   return (
-    <div style={{ marginBottom: 12, paddingLeft: 16, paddingRight: 16, display: "flex", justifyContent: "flex-start" }}>
+    <div
+      style={{
+        marginBottom: 12,
+        paddingLeft: 16,
+        paddingRight: 16,
+        display: "flex",
+        justifyContent: "flex-start",
+      }}
+    >
       {content}
     </div>
   );

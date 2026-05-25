@@ -35,7 +35,9 @@ const resetSchema = z
   .object({
     code: z.string().min(1, "Verification code is required"),
     newPassword: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z
+      .string()
+      .min(8, "Password must be at least 8 characters"),
   })
   .refine((v) => v.newPassword === v.confirmPassword, {
     path: ["confirmPassword"],
@@ -111,7 +113,8 @@ function ForgotPasswordPage() {
     }
   }
 
-  const title = step.phase === "email" ? "Reset your password" : "Enter reset code";
+  const title =
+    step.phase === "email" ? "Reset your password" : "Enter reset code";
   const description =
     step.phase === "email"
       ? "Enter your email and we'll send you a verification code."
@@ -121,8 +124,14 @@ function ForgotPasswordPage() {
     <div className="fixed inset-0 flex items-center justify-center bg-background">
       <div className="w-full max-w-sm px-4">
         <div className="mb-6 flex items-center justify-center gap-2">
-          <img src="/logo.png" alt="ThinkWork" className="h-8 w-10 object-contain" />
-          <span className="text-lg font-semibold tracking-tight">ThinkWork</span>
+          <img
+            src="/logo.png"
+            alt="ThinkWork"
+            className="h-8 w-10 object-contain"
+          />
+          <span className="text-lg font-semibold tracking-tight">
+            ThinkWork
+          </span>
         </div>
 
         <Card className="rounded-xl">
@@ -154,9 +163,7 @@ function ForgotPasswordPage() {
                     )}
                   />
 
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-3 pt-6">
@@ -235,9 +242,7 @@ function ForgotPasswordPage() {
                     )}
                   />
 
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-3 pt-6">

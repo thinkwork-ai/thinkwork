@@ -29,7 +29,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-
 // ---------------------------------------------------------------------------
 // Route definition
 // ---------------------------------------------------------------------------
@@ -67,7 +66,9 @@ type ConfirmValues = z.infer<typeof confirmSchema>;
 // ---------------------------------------------------------------------------
 type AuthMode = "sign-in" | "sign-up";
 type ConfirmState = { pending: true; email: string } | { pending: false };
-type NewPasswordState = { required: true; email: string; tempPassword: string } | { required: false };
+type NewPasswordState =
+  | { required: true; email: string; tempPassword: string }
+  | { required: false };
 
 const newPasswordSchema = z.object({
   newPassword: z.string().min(8, "Password must be at least 8 characters"),
@@ -118,7 +119,11 @@ function SignInPage() {
       navigate({ to: next, replace: true });
     } catch (err: any) {
       if (err.code === "NewPasswordRequired") {
-        setNewPw({ required: true, email: values.email.trim(), tempPassword: values.password });
+        setNewPw({
+          required: true,
+          email: values.email.trim(),
+          tempPassword: values.password,
+        });
       } else {
         setError(err instanceof Error ? err.message : "Authentication failed");
       }
@@ -137,7 +142,9 @@ function SignInPage() {
       await signIn(newPw.email, values.newPassword);
       navigate({ to: next, replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set new password");
+      setError(
+        err instanceof Error ? err.message : "Failed to set new password",
+      );
     } finally {
       setLoading(false);
     }
@@ -149,7 +156,11 @@ function SignInPage() {
     const h = 600;
     const left = window.screenX + (window.outerWidth - w) / 2;
     const top = window.screenY + (window.outerHeight - h) / 2;
-    const popup = window.open(url, "google-signin", `width=${w},height=${h},left=${left},top=${top}`);
+    const popup = window.open(
+      url,
+      "google-signin",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
     if (!popup) {
       // Popup blocked — fall back to redirect
       window.location.href = url;
@@ -235,7 +246,11 @@ function SignInPage() {
       <div className="w-full max-w-sm px-4">
         {/* Branding */}
         <div className="mb-6 flex items-center justify-center gap-2">
-          <img src="/logo.png" alt="ThinkWork" className="h-8 w-10 object-contain" />
+          <img
+            src="/logo.png"
+            alt="ThinkWork"
+            className="h-8 w-10 object-contain"
+          />
           <span className="text-lg font-semibold tracking-tight">
             ThinkWork
           </span>
@@ -271,17 +286,11 @@ function SignInPage() {
                     )}
                   />
 
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-3 pt-6">
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full"
-                  >
+                  <Button type="submit" disabled={loading} className="w-full">
                     {loading ? "Working..." : submitLabel}
                   </Button>
                 </CardFooter>
@@ -313,17 +322,11 @@ function SignInPage() {
                     )}
                   />
 
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-3 pt-6">
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full"
-                  >
+                  <Button type="submit" disabled={loading} className="w-full">
                     {loading ? "Working..." : submitLabel}
                   </Button>
                 </CardFooter>
@@ -368,7 +371,9 @@ function SignInPage() {
                       <span className="w-full border-t" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">or</span>
+                      <span className="bg-card px-2 text-muted-foreground">
+                        or
+                      </span>
                     </div>
                   </div>
 
@@ -417,17 +422,11 @@ function SignInPage() {
                     )}
                   />
 
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-3 pt-6">
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full"
-                  >
+                  <Button type="submit" disabled={loading} className="w-full">
                     {loading ? "Working..." : submitLabel}
                   </Button>
 
@@ -483,7 +482,9 @@ function SignInPage() {
                       <span className="w-full border-t" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">or</span>
+                      <span className="bg-card px-2 text-muted-foreground">
+                        or
+                      </span>
                     </div>
                   </div>
 
@@ -494,11 +495,7 @@ function SignInPage() {
                       <FormItem>
                         <FormLabel>Name</FormLabel>
                         <FormControl>
-                          <Input
-                            {...field}
-                            autoComplete="name"
-                            autoFocus
-                          />
+                          <Input {...field} autoComplete="name" autoFocus />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -512,11 +509,7 @@ function SignInPage() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input
-                            {...field}
-                            type="email"
-                            autoComplete="email"
-                          />
+                          <Input {...field} type="email" autoComplete="email" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -541,17 +534,11 @@ function SignInPage() {
                     )}
                   />
 
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-3 pt-6">
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full"
-                  >
+                  <Button type="submit" disabled={loading} className="w-full">
                     {loading ? "Working..." : submitLabel}
                   </Button>
 

@@ -5,11 +5,14 @@ const SYSTEM_INSTRUCTION_TAG = "[SYSTEM INSTRUCTION]";
 const INTERACTION_TAG = "[INTERACTION]";
 const END_SYSTEM_TAG = "[END SYSTEM]";
 
-export function isSystemMessage(message: Pick<ChatMessage, "content">): boolean {
+export function isSystemMessage(
+  message: Pick<ChatMessage, "content">,
+): boolean {
   const content = message.content?.trim() ?? "";
   return (
     content.startsWith(SYSTEM_CONTEXT_PREFIX) ||
-    (content.includes(SYSTEM_INSTRUCTION_TAG) && !content.includes(INTERACTION_TAG))
+    (content.includes(SYSTEM_INSTRUCTION_TAG) &&
+      !content.includes(INTERACTION_TAG))
   );
 }
 
@@ -17,11 +20,14 @@ export function getRenderableMessageContent(
   message: Pick<ChatMessage, "content">,
   showSystemMessages: boolean,
 ): string | null {
-  const content = message.content?.replace(/\[\[\s*reply_to[^\]]*\]\]\s*/g, "").trim() ?? "";
+  const content =
+    message.content?.replace(/\[\[\s*reply_to[^\]]*\]\]\s*/g, "").trim() ?? "";
 
   if (!content) return null;
 
-  const interactionMatch = content.match(/\[INTERACTION\](.*?)\[\/INTERACTION\]/s);
+  const interactionMatch = content.match(
+    /\[INTERACTION\](.*?)\[\/INTERACTION\]/s,
+  );
   const interactionText = interactionMatch?.[1]?.trim() ?? null;
 
   if (content.includes(SYSTEM_INSTRUCTION_TAG)) {
@@ -44,5 +50,8 @@ export function getRenderableMessageContent(
 }
 
 export function isInteractionOnlyMessage(content: string): boolean {
-  return content.includes(SYSTEM_INSTRUCTION_TAG) && content.includes(INTERACTION_TAG);
+  return (
+    content.includes(SYSTEM_INSTRUCTION_TAG) &&
+    content.includes(INTERACTION_TAG)
+  );
 }

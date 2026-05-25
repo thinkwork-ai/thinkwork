@@ -6,11 +6,18 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 // TODO: files.readFile action not yet available via GraphQL hooks
 
 export default function FileViewScreen() {
-  const { id, path, name } = useLocalSearchParams<{ id: string; path: string; name: string }>();
+  const { id, path, name } = useLocalSearchParams<{
+    id: string;
+    path: string;
+    name: string;
+  }>();
   const agentId = id!;
 
   // TODO: Replace with GraphQL file read hook when available
-  const readFile = async (_args: { agentId: string; path: string }): Promise<{ content?: string; error?: string }> => {
+  const readFile = async (_args: {
+    agentId: string;
+    path: string;
+  }): Promise<{ content?: string; error?: string }> => {
     return { error: "File reading not yet available via GraphQL" };
   };
   const [content, setContent] = useState("");

@@ -169,10 +169,6 @@ vi.mock("../lib/email/cold-contact-trigger.js", () => ({
   createColdContactThread,
 }));
 
-vi.mock("../lib/computers/thread-cutover.js", () => ({
-  enqueueComputerThreadTurn,
-}));
-
 import { handler } from "./email-inbound.js";
 
 describe("email-inbound routing", () => {
@@ -287,15 +283,6 @@ describe("email-inbound routing", () => {
         }),
       ]),
     );
-    expect(enqueueComputerThreadTurn).toHaveBeenCalledWith({
-      tenantId: "tenant-acme",
-      computerId: "computer-finance",
-      threadId: "thread-finance",
-      messageId: "message-email-1",
-      source: "email_reply",
-      actorType: "external_email",
-      actorId: null,
-    });
     expect(insertedRows).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({

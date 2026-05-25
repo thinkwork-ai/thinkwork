@@ -34,8 +34,14 @@ export default function CredentialsScreen() {
     <DetailLayout title="Credential Locker">
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 14,
+          paddingBottom: 24,
+        }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         <View style={{ maxWidth: 600, gap: 24 }}>
           <IntegrationsSection refreshSignal={refreshSignal} />

@@ -88,11 +88,6 @@ import {
   // Agent Templates
   agentTemplates,
   agentVersions,
-  computers,
-  computerAssignments,
-  computerTasks,
-  computerEvents,
-  computerSnapshots,
   // Skill Runs (composable-skills Unit 4)
   skillRuns,
   // Mutation idempotency (thinkwork-admin plan Unit 4)
@@ -189,11 +184,6 @@ export {
   recipes,
   agentTemplates,
   agentVersions,
-  computers,
-  computerAssignments,
-  computerTasks,
-  computerEvents,
-  computerSnapshots,
   skillRuns,
   mutationIdempotency,
   tenantPolicyEvents,

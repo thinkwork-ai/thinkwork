@@ -94,39 +94,44 @@ export function NodeDetailModal({
                 accessibilityLabel="Close"
                 hitSlop={8}
               >
-                <IconX size={20} color={COLORS.dark.foreground} strokeWidth={2} />
+                <IconX
+                  size={20}
+                  color={COLORS.dark.foreground}
+                  strokeWidth={2}
+                />
               </Pressable>
             </View>
           </View>
           <View style={styles.bodyWrap}>
-          <ScrollView
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {loading && !page ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color={COLORS.dark.mutedForeground} />
-              </View>
-            ) : null}
-            {page?.summary ? (
-              <Text style={styles.summary}>{page.summary}</Text>
-            ) : null}
-            {page?.sections?.map((section) => (
-              <View key={section.id} style={styles.section}>
-                <Text style={styles.sectionHeading}>{section.heading}</Text>
-                <Markdown style={markdownStyles}>{section.bodyMd}</Markdown>
-              </View>
-            ))}
-            {!loading && page && !page.summary && !page.sections?.length ? (
-              <Text style={styles.empty}>This page has no content yet.</Text>
-            ) : null}
-            {!loading && !page ? (
-              <Text style={styles.empty}>
-                Couldn't load this page. Tap the open-page icon for the full view.
-              </Text>
-            ) : null}
-          </ScrollView>
+            <ScrollView
+              style={styles.body}
+              contentContainerStyle={styles.bodyContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {loading && !page ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color={COLORS.dark.mutedForeground} />
+                </View>
+              ) : null}
+              {page?.summary ? (
+                <Text style={styles.summary}>{page.summary}</Text>
+              ) : null}
+              {page?.sections?.map((section) => (
+                <View key={section.id} style={styles.section}>
+                  <Text style={styles.sectionHeading}>{section.heading}</Text>
+                  <Markdown style={markdownStyles}>{section.bodyMd}</Markdown>
+                </View>
+              ))}
+              {!loading && page && !page.summary && !page.sections?.length ? (
+                <Text style={styles.empty}>This page has no content yet.</Text>
+              ) : null}
+              {!loading && !page ? (
+                <Text style={styles.empty}>
+                  Couldn't load this page. Tap the open-page icon for the full
+                  view.
+                </Text>
+              ) : null}
+            </ScrollView>
           </View>
         </View>
       </View>
@@ -201,9 +206,24 @@ const styles = StyleSheet.create({
 const markdownStyles = {
   body: { color: COLORS.dark.foreground, fontSize: 14, lineHeight: 20 },
   paragraph: { color: COLORS.dark.foreground, fontSize: 14, marginVertical: 4 },
-  heading1: { color: COLORS.dark.foreground, fontSize: 18, fontWeight: "700" as const, marginTop: 8 },
-  heading2: { color: COLORS.dark.foreground, fontSize: 16, fontWeight: "700" as const, marginTop: 8 },
-  heading3: { color: COLORS.dark.foreground, fontSize: 14, fontWeight: "600" as const, marginTop: 8 },
+  heading1: {
+    color: COLORS.dark.foreground,
+    fontSize: 18,
+    fontWeight: "700" as const,
+    marginTop: 8,
+  },
+  heading2: {
+    color: COLORS.dark.foreground,
+    fontSize: 16,
+    fontWeight: "700" as const,
+    marginTop: 8,
+  },
+  heading3: {
+    color: COLORS.dark.foreground,
+    fontSize: 14,
+    fontWeight: "600" as const,
+    marginTop: 8,
+  },
   link: { color: COLORS.dark.primary },
   code_inline: {
     color: COLORS.dark.foreground,

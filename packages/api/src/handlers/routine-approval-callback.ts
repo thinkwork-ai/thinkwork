@@ -153,10 +153,7 @@ export async function handler(
 
 async function resolveRoutineExecutionWithRetry(
   sfnExecutionArn: string,
-): Promise<
-  | { id: string; tenant_id: string; routine_id: string }
-  | undefined
-> {
+): Promise<{ id: string; tenant_id: string; routine_id: string } | undefined> {
   // 3 attempts at 100ms intervals — the resolver insert is sub-100ms
   // typically, so the worst-case race window is short. SFN's own task
   // retry is the next backstop if all attempts miss.

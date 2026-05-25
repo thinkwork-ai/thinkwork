@@ -28,7 +28,7 @@ ESBUILD_FLAGS=(
   --external:aws-sdk
 )
 
-# graphql-http, computer-runtime, memory-retain, mcp-user-memory,
+# graphql-http, memory-retain, mcp-user-memory,
 # mcp-context-engine, requester-memory-dreaming, eval-runner, eval-worker, wiki-compile, and ontology-scan use AWS Bedrock SDKs
 # (@aws-sdk/client-bedrock-agentcore for memory adapter commands;
 # @aws-sdk/client-bedrock-runtime for eval-runner's Converse judge and
@@ -74,7 +74,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "computer-runtime" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -271,15 +271,6 @@ build_handler "brain-agent-write" \
 build_handler "agents-runtime-config" \
   "$REPO_ROOT/packages/api/src/handlers/agents-runtime-config.ts"
 
-build_handler "computer-runtime" \
-  "$REPO_ROOT/packages/api/src/handlers/computer-runtime.ts"
-
-build_handler "computer-manager" \
-  "$REPO_ROOT/packages/api/src/handlers/computer-manager.ts"
-
-build_handler "computer-runtime-reconciler" \
-  "$REPO_ROOT/packages/api/src/handlers/computer-runtime-reconciler.ts"
-
 # Plugin upload handler (V1 agent-architecture plan §U10). Four routes:
 #   POST /api/plugins/presign    → presigned PUT URL for the zip
 #   POST /api/plugins/upload     → validator + three-phase install saga
@@ -396,8 +387,6 @@ build_handler "slack-interactivity" \
 build_handler "slack-oauth-install" \
   "$REPO_ROOT/packages/api/src/handlers/slack/oauth-install.ts"
 
-build_handler "slack-dispatch" \
-  "$REPO_ROOT/packages/lambda/slack-dispatch.ts"
 
 build_handler "webhooks" \
   "$REPO_ROOT/packages/api/src/handlers/webhooks.ts"
@@ -438,12 +427,6 @@ build_handler "knowledge-base-files" \
 build_handler "workspace-files" \
   "$REPO_ROOT/packages/api/workspace-files.ts"
 
-build_handler "workspace-files-efs" \
-  "$REPO_ROOT/packages/api/src/handlers/workspace-files-efs.ts"
-
-build_handler "computer-terminal-start" \
-  "$REPO_ROOT/packages/api/src/handlers/computer-terminal-start.ts"
-
 build_handler "agent-skills-list" \
   "$REPO_ROOT/packages/api/agent-skills-list.ts"
 
@@ -479,9 +462,6 @@ build_handler "recipe-refresh" \
 
 build_handler "bootstrap-workspaces" \
   "$REPO_ROOT/packages/api/src/handlers/bootstrap-workspaces.ts"
-
-build_handler "migrate-agents-to-computers" \
-  "$REPO_ROOT/packages/api/src/handlers/migrate-agents-to-computers.ts"
 
 build_handler "agentcore-admin" \
   "$REPO_ROOT/packages/lambda/agentcore-admin.ts"

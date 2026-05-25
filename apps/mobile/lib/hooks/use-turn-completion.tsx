@@ -1,4 +1,12 @@
-import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  createContext,
+  useContext,
+  type ReactNode,
+} from "react";
 import { useThreadTurnUpdatedSubscription } from "@thinkwork/react-native-sdk";
 
 type TurnStatus = "succeeded" | "failed";
@@ -27,7 +35,13 @@ const TurnCompletionContext = createContext<TurnCompletionState | null>(null);
 /**
  * Provider — mount at root layout so activity state is globally available.
  */
-export function TurnCompletionProvider({ tenantId, children }: { tenantId: string | undefined; children: ReactNode }) {
+export function TurnCompletionProvider({
+  tenantId,
+  children,
+}: {
+  tenantId: string | undefined;
+  children: ReactNode;
+}) {
   const value = useTurnCompletionInternal(tenantId);
   return (
     <TurnCompletionContext.Provider value={value}>
@@ -46,10 +60,16 @@ export function useTurnCompletion(_tenantId?: string | undefined) {
 }
 
 function useTurnCompletionInternal(tenantId: string | undefined) {
-  const [completions, setCompletions] = useState<Map<string, TurnCompletion>>(new Map());
+  const [completions, setCompletions] = useState<Map<string, TurnCompletion>>(
+    new Map(),
+  );
   const [activeTriggers, setActiveTriggers] = useState<Set<string>>(new Set());
-  const activeTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const activeTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   // Keep the subscription as a bonus — supplements the optimistic approach
   const [{ data: turnEvent }] = useThreadTurnUpdatedSubscription(tenantId);
@@ -109,7 +129,11 @@ function useTurnCompletionInternal(tenantId: string | undefined) {
 
     setCompletions((prev) => {
       const next = new Map(prev);
-      next.set(runId, { status: status as TurnStatus, timestamp: Date.now(), triggerId: triggerId ?? null });
+      next.set(runId, {
+        status: status as TurnStatus,
+        timestamp: Date.now(),
+        triggerId: triggerId ?? null,
+      });
       return next;
     });
 
@@ -129,13 +153,19 @@ function useTurnCompletionInternal(tenantId: string | undefined) {
         timersRef.current.delete(runId);
       }
     };
-  }, [turnEvent?.onThreadTurnUpdated?.runId, turnEvent?.onThreadTurnUpdated?.status]);
+  }, [
+    turnEvent?.onThreadTurnUpdated?.runId,
+    turnEvent?.onThreadTurnUpdated?.status,
+  ]);
 
   const hasNewCompletion = completions.size > 0;
 
-  const isThreadActive = useCallback((threadId: string): boolean => {
-    return activeTriggers.has(threadId);
-  }, [activeTriggers]);
+  const isThreadActive = useCallback(
+    (threadId: string): boolean => {
+      return activeTriggers.has(threadId);
+    },
+    [activeTriggers],
+  );
 
   const getLatestStatus = useCallback((): TurnStatus | null => {
     if (completions.size === 0) return null;
@@ -146,5 +176,13 @@ function useTurnCompletionInternal(tenantId: string | undefined) {
     return latest?.status ?? null;
   }, [completions]);
 
-  return { hasNewCompletion, getLatestStatus, completions, isThreadActive, activeTriggers, markThreadActive, clearThreadActive };
+  return {
+    hasNewCompletion,
+    getLatestStatus,
+    completions,
+    isThreadActive,
+    activeTriggers,
+    markThreadActive,
+    clearThreadActive,
+  };
 }

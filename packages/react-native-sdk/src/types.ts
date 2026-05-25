@@ -135,7 +135,11 @@ export interface UpdateThreadInput {
   lastReadAt?: string | null;
 }
 
-export type MobileCaptureFactType = "FACT" | "PREFERENCE" | "EXPERIENCE" | "OBSERVATION";
+export type MobileCaptureFactType =
+  | "FACT"
+  | "PREFERENCE"
+  | "EXPERIENCE"
+  | "OBSERVATION";
 
 export interface MobileMemoryCapture {
   id: string;

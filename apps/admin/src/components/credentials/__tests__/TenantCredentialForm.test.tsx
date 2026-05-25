@@ -46,6 +46,8 @@ describe("TenantCredentialForm helpers", () => {
       username: "",
       password: "",
     });
-    expect(emptySecretFields(TenantCredentialKind.Json)).toEqual({ json: "{}" });
+    expect(emptySecretFields(TenantCredentialKind.Json)).toEqual({
+      json: "{}",
+    });
   });
 });

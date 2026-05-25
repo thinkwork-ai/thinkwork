@@ -1,9 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Sheet } from "@thinkwork/ui";
-import {
-  ALL_CATEGORIES,
-  CustomizeToolbar,
-} from "./CustomizeToolbar";
+import { ALL_CATEGORIES, CustomizeToolbar } from "./CustomizeToolbar";
 import { CustomizeTable } from "./CustomizeTable";
 import { CustomizeDetailSheet } from "./CustomizeDetailSheet";
 import {
@@ -43,9 +40,9 @@ export function CustomizeTabBody({
   const categories = useMemo(() => uniqueCategories(items), [items]);
   const filtered = useMemo(
     () =>
-      filterCustomizeItems({ items, search, category }).slice().sort((a, b) =>
-        a.name.localeCompare(b.name),
-      ),
+      filterCustomizeItems({ items, search, category })
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [items, search, category],
   );
 

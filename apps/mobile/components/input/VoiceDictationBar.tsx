@@ -140,7 +140,8 @@ export function VoiceDictationBar({
     let cancelled = false;
 
     async function start() {
-      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      const { granted } =
+        await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!granted) {
         Alert.alert(
           "Microphone Access Required",
@@ -195,7 +196,10 @@ export function VoiceDictationBar({
       {/* Waveform + timer */}
       <View className="flex-row items-center gap-3">
         <WaveformBars isDark={isDark} />
-        <Text className="text-sm font-mono" style={{ color: colors.mutedForeground }}>
+        <Text
+          className="text-sm font-mono"
+          style={{ color: colors.mutedForeground }}
+        >
           {timerText}
         </Text>
       </View>

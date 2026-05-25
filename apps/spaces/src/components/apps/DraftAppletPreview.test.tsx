@@ -18,18 +18,8 @@ vi.mock("@/applets/mount", () => ({
   AppletFailure: ({ children }: { children: ReactNode }) => (
     <div data-testid="applet-failure">{children}</div>
   ),
-  AppletMount: ({
-    appId,
-    source,
-  }: {
-    appId: string;
-    source: string;
-  }) => (
-    <div
-      data-app-id={appId}
-      data-source={source}
-      data-testid="applet-mount"
-    />
+  AppletMount: ({ appId, source }: { appId: string; source: string }) => (
+    <div data-app-id={appId} data-source={source} data-testid="applet-mount" />
   ),
   useAppletInstanceId: (appId: string) => `instance-${appId}`,
 }));

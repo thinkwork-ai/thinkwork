@@ -11,87 +11,87 @@
  */
 
 import type {
-	ExportRequest,
-	InspectRequest,
-	MemoryCapabilities,
-	MemoryEngineType,
-	MemoryExportBundle,
-	RecallRequest,
-	RecallResult,
-	RetainRequest,
-	RetainResult,
-	RetainConversationRequest,
-	RetainDailyMemoryRequest,
-	RetainTurnRequest,
-	ThinkWorkMemoryRecord,
-	UpsertMarkdownMemoryDocumentRequest,
+  ExportRequest,
+  InspectRequest,
+  MemoryCapabilities,
+  MemoryEngineType,
+  MemoryExportBundle,
+  RecallRequest,
+  RecallResult,
+  RetainRequest,
+  RetainResult,
+  RetainConversationRequest,
+  RetainDailyMemoryRequest,
+  RetainTurnRequest,
+  ThinkWorkMemoryRecord,
+  UpsertMarkdownMemoryDocumentRequest,
 } from "./types.js";
 
 export interface MemoryAdapter {
-	readonly kind: MemoryEngineType;
+  readonly kind: MemoryEngineType;
 
-	capabilities(): Promise<MemoryCapabilities>;
+  capabilities(): Promise<MemoryCapabilities>;
 
-	recall(request: RecallRequest): Promise<RecallResult[]>;
+  recall(request: RecallRequest): Promise<RecallResult[]>;
 
-	retain(request: RetainRequest): Promise<RetainResult>;
+  retain(request: RetainRequest): Promise<RetainResult>;
 
-	/**
-	 * Ingest a conversational turn for background extraction. Engines
-	 * decide their own extraction strategy: AgentCore feeds the
-	 * background semantic/preferences/summaries/episodes pipelines via
-	 * CreateEvent; Hindsight feeds the conversation to its own
-	 * LLM-based fact extractor. Distinct from {@link retain}, which
-	 * stores a single pre-extracted fact.
-	 */
-	retainTurn(request: RetainTurnRequest): Promise<void>;
+  /**
+   * Ingest a conversational turn for background extraction. Engines
+   * decide their own extraction strategy: AgentCore feeds the
+   * background semantic/preferences/summaries/episodes pipelines via
+   * CreateEvent; Hindsight feeds the conversation to its own
+   * LLM-based fact extractor. Distinct from {@link retain}, which
+   * stores a single pre-extracted fact.
+   */
+  retainTurn(request: RetainTurnRequest): Promise<void>;
 
-	retainConversation?(request: RetainConversationRequest): Promise<void>;
+  retainConversation?(request: RetainConversationRequest): Promise<void>;
 
-	retainDailyMemory?(request: RetainDailyMemoryRequest): Promise<void>;
+  retainDailyMemory?(request: RetainDailyMemoryRequest): Promise<void>;
 
-	upsertMarkdownMemoryDocument?(
-		request: UpsertMarkdownMemoryDocumentRequest,
-	): Promise<void>;
+  upsertMarkdownMemoryDocument?(
+    request: UpsertMarkdownMemoryDocumentRequest,
+  ): Promise<void>;
 
-	inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
+  inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
 
-	export(request: ExportRequest): Promise<MemoryExportBundle>;
+  export(request: ExportRequest): Promise<MemoryExportBundle>;
 
-	forget?(recordId: string): Promise<void>;
+  forget?(recordId: string): Promise<void>;
 
-	update?(recordId: string, content: string): Promise<void>;
+  update?(recordId: string, content: string): Promise<void>;
 
-	reflect?(request: RecallRequest): Promise<RecallResult[]>;
+  reflect?(request: RecallRequest): Promise<RecallResult[]>;
 
-	compact?(request: InspectRequest): Promise<void>;
+  compact?(request: InspectRequest): Promise<void>;
 
-	/**
-	 * Cursor-based incremental read for the compiler pipeline. Returns records
-	 * whose `(updated_at, id)` is strictly greater than the supplied cursor,
-	 * ordered by `(updated_at, id)` ascending. The tiebreaker is required to
-	 * handle same-timestamp records without missing or double-reading.
-	 *
-	 * v1 is strictly user-scoped; `ownerId` is the user id and corresponds to
-	 * one user's Hindsight bank.
-	 * Engines that can't produce monotonic change records (AgentCore) should
-	 * throw a clear "not implemented" error so the compile enqueue path can
-	 * skip them explicitly.
-	 */
-	listRecordsUpdatedSince?(
-		request: ListRecordsUpdatedSinceRequest,
-	): Promise<ListRecordsUpdatedSinceResult>;
+  /**
+   * Cursor-based incremental read for the compiler pipeline. Returns records
+   * whose `(updated_at, id)` is strictly greater than the supplied cursor,
+   * ordered by `(updated_at, id)` ascending. The tiebreaker is required to
+   * handle same-timestamp records without missing or double-reading.
+   *
+   * v1 is strictly user-scoped; `ownerId` is the user id and corresponds to
+   * one user's Hindsight bank.
+   * Engines that can't produce monotonic change records (AgentCore) should
+   * throw a clear "not implemented" error so the compile enqueue path can
+   * skip them explicitly.
+   */
+  listRecordsUpdatedSince?(
+    request: ListRecordsUpdatedSinceRequest,
+  ): Promise<ListRecordsUpdatedSinceResult>;
 }
 
 export interface ListRecordsUpdatedSinceRequest {
-	tenantId: string;
-	ownerId: string;
-	sinceUpdatedAt?: Date;
-	sinceRecordId?: string;
-	limit: number;
+  tenantId: string;
+  ownerId: string;
+  sinceUpdatedAt?: Date;
+  sinceRecordId?: string;
+  limit: number;
 }
 
 export interface ListRecordsUpdatedSinceResult {
-	records: ThinkWorkMemoryRecord[];
-	nextCursor: { updatedAt: Date; recordId: string } | null;
+  records: ThinkWorkMemoryRecord[];
+  nextCursor: { updatedAt: Date; recordId: string } | null;
 }

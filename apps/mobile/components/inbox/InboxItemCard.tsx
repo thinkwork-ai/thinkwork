@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { View, Pressable, TextInput } from "react-native";
 import { useColorScheme } from "nativewind";
-import { Check, X, RotateCcw, ChevronDown, ChevronUp, MessageSquare } from "lucide-react-native";
+import {
+  Check,
+  X,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+} from "lucide-react-native";
 import { Text, Muted } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,10 +57,14 @@ function formatRelativeTime(dateStr: string): string {
 
 function typeLabel(type: string): string {
   switch (type) {
-    case "hire_agent": return "Hire Agent";
-    case "approve_ceo_strategy": return "Strategy";
-    case "action": return "Action";
-    default: return type.replace(/_/g, " ");
+    case "hire_agent":
+      return "Hire Agent";
+    case "approve_ceo_strategy":
+      return "Strategy";
+    case "action":
+      return "Action";
+    default:
+      return type.replace(/_/g, " ");
   }
 }
 
@@ -86,16 +97,19 @@ export function InboxItemCard({
             <Badge variant="outline">
               <Text className="text-xs">{typeLabel(item.type)}</Text>
             </Badge>
-            {agentName && (
-              <Muted className="text-xs">{agentName}</Muted>
-            )}
+            {agentName && <Muted className="text-xs">{agentName}</Muted>}
           </View>
-          <Text className="text-sm font-medium" numberOfLines={expanded ? undefined : 1}>
+          <Text
+            className="text-sm font-medium"
+            numberOfLines={expanded ? undefined : 1}
+          >
             {item.title || "Untitled request"}
           </Text>
         </View>
         <View className="flex-row items-center gap-2 ml-2">
-          <Muted className="text-xs">{formatRelativeTime(item.createdAt)}</Muted>
+          <Muted className="text-xs">
+            {formatRelativeTime(item.createdAt)}
+          </Muted>
           {expanded ? (
             <ChevronUp size={16} color={colors.mutedForeground} />
           ) : (
@@ -169,7 +183,9 @@ export function InboxItemCard({
               >
                 <View className="flex-row items-center gap-1.5">
                   <Check size={14} color="#ffffff" />
-                  <Text className="text-white text-sm font-medium">Approve</Text>
+                  <Text className="text-white text-sm font-medium">
+                    Approve
+                  </Text>
                 </View>
               </Button>
               <Button

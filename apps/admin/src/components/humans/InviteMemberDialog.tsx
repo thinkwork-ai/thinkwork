@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { InviteMemberMutation } from "@/lib/graphql-queries";
 
@@ -16,7 +20,12 @@ interface InviteMemberDialogProps {
   onInvited?: () => void;
 }
 
-export function InviteMemberDialog({ open, onOpenChange, tenantId, onInvited }: InviteMemberDialogProps) {
+export function InviteMemberDialog({
+  open,
+  onOpenChange,
+  tenantId,
+  onInvited,
+}: InviteMemberDialogProps) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -91,11 +100,17 @@ export function InviteMemberDialog({ open, onOpenChange, tenantId, onInvited }: 
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={submitting || !email.trim()}>
-              {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              {submitting ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : null}
               Send Invite
             </Button>
           </DialogFooter>

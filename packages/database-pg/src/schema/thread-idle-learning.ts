@@ -21,7 +21,6 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
 import { threads } from "./threads";
-import { computers } from "./computers";
 import { scheduledJobs } from "./scheduled-jobs";
 
 export const threadIdleLearningState = pgTable(
@@ -36,9 +35,7 @@ export const threadIdleLearningState = pgTable(
     thread_id: uuid("thread_id")
       .references(() => threads.id, { onDelete: "cascade" })
       .notNull(),
-    computer_id: uuid("computer_id").references(() => computers.id, {
-      onDelete: "set null",
-    }),
+    computer_id: uuid("computer_id"),
     requester_user_id: uuid("requester_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -96,9 +93,7 @@ export const threadIdleLearningRuns = pgTable(
     thread_id: uuid("thread_id")
       .references(() => threads.id, { onDelete: "cascade" })
       .notNull(),
-    computer_id: uuid("computer_id").references(() => computers.id, {
-      onDelete: "set null",
-    }),
+    computer_id: uuid("computer_id"),
     requester_user_id: uuid("requester_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -164,10 +159,6 @@ export const threadIdleLearningStateRelations = relations(
       fields: [threadIdleLearningState.thread_id],
       references: [threads.id],
     }),
-    computer: one(computers, {
-      fields: [threadIdleLearningState.computer_id],
-      references: [computers.id],
-    }),
     requester: one(users, {
       fields: [threadIdleLearningState.requester_user_id],
       references: [users.id],
@@ -190,10 +181,6 @@ export const threadIdleLearningRunsRelations = relations(
     thread: one(threads, {
       fields: [threadIdleLearningRuns.thread_id],
       references: [threads.id],
-    }),
-    computer: one(computers, {
-      fields: [threadIdleLearningRuns.computer_id],
-      references: [computers.id],
     }),
     requester: one(users, {
       fields: [threadIdleLearningRuns.requester_user_id],

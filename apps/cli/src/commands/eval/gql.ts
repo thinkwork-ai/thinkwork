@@ -109,17 +109,6 @@ export const EvalTestCaseDoc = graphql(`
   }
 `);
 
-export const ComputersForEvalDoc = graphql(`
-  query CliComputersForEval($tenantId: ID!) {
-    computers(tenantId: $tenantId) {
-      id
-      name
-      slug
-      runtimeStatus
-    }
-  }
-`);
-
 export const TenantBySlugDoc = graphql(`
   query CliTenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {

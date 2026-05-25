@@ -95,9 +95,8 @@ describe("applet GraphQL resolvers", () => {
   it(
     "saves a valid applet source and metadata before inserting the artifact row",
     async () => {
-      const { mutationResolvers } = await import(
-        "../graphql/resolvers/index.js"
-      );
+      const { mutationResolvers } =
+        await import("../graphql/resolvers/index.js");
       s3Mock.on(PutObjectCommand).resolves({});
 
       const result = await mutationResolvers.saveApplet(
@@ -166,9 +165,8 @@ describe("applet GraphQL resolvers", () => {
   it(
     "returns structured validation errors and does not persist invalid imports",
     async () => {
-      const { mutationResolvers } = await import(
-        "../graphql/resolvers/index.js"
-      );
+      const { mutationResolvers } =
+        await import("../graphql/resolvers/index.js");
 
       const result = await mutationResolvers.saveApplet(
         null,
@@ -200,9 +198,8 @@ describe("applet GraphQL resolvers", () => {
   it(
     "does not write metadata when the source write fails",
     async () => {
-      const { mutationResolvers } = await import(
-        "../graphql/resolvers/index.js"
-      );
+      const { mutationResolvers } =
+        await import("../graphql/resolvers/index.js");
       s3Mock.on(PutObjectCommand).rejectsOnce(new Error("source write failed"));
 
       const result = await mutationResolvers.saveApplet(
@@ -284,9 +281,8 @@ describe("applet GraphQL resolvers", () => {
   it(
     "promotes a verified draft preview through the applet save path",
     async () => {
-      const { mutationResolvers } = await import(
-        "../graphql/resolvers/index.js"
-      );
+      const { mutationResolvers } =
+        await import("../graphql/resolvers/index.js");
       s3Mock.on(PutObjectCommand).resolves({});
       const input = validPromoteInput();
 
@@ -531,9 +527,8 @@ describe("applet GraphQL resolvers", () => {
   });
 
   it("saves and loads applet state by appId, instanceId, and key", async () => {
-    const { mutationResolvers, queryResolvers } = await import(
-      "../graphql/resolvers/index.js"
-    );
+    const { mutationResolvers, queryResolvers } =
+      await import("../graphql/resolvers/index.js");
     const appId = "33333333-3333-4333-8333-333333333333";
     selectRows.push(appletRow({ id: appId, metadata: metadata({ appId }) }));
 

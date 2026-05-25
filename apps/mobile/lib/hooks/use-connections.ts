@@ -12,7 +12,10 @@ import { useMe } from "@/lib/hooks/use-users";
  * in any other screen reading the same data.
  */
 
-const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
+const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
+  /\/graphql$/,
+  "",
+);
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 export type ConnectionRow = {
@@ -177,7 +180,8 @@ export function useConnections() {
   );
 
   const connections = cache.connections;
-  const loading = cache.loading || (connections === null && !!tenantId && !!userId);
+  const loading =
+    cache.loading || (connections === null && !!tenantId && !!userId);
   const error = cache.error;
 
   return {

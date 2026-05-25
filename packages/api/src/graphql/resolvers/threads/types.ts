@@ -14,10 +14,8 @@ import {
   costEvents,
   threadTurns,
   threadDependencies,
-  computers,
   spaces,
   threadParticipants,
-  computerToCamel,
   messageToCamel,
   snakeToCamel,
 } from "../../utils.js";
@@ -58,17 +56,6 @@ export const threadTypeResolvers = {
     if (thread.agent && typeof thread.agent === "object") return thread.agent;
     const agentId = thread.agentId || thread.agent_id;
     return agentId ? ctx.loaders.agent.load(agentId) : null;
-  },
-  computer: async (thread: any) => {
-    if (thread.computer && typeof thread.computer === "object")
-      return thread.computer;
-    const computerId = thread.computerId || thread.computer_id;
-    if (!computerId) return null;
-    const [row] = await db
-      .select()
-      .from(computers)
-      .where(eq(computers.id, computerId));
-    return row ? computerToCamel(row) : null;
   },
   space: async (thread: any) => {
     if (thread.space && typeof thread.space === "object") return thread.space;

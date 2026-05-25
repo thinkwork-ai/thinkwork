@@ -14,55 +14,52 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import {
-	wikiPages,
-	wikiPageLinks,
-} from "@thinkwork/database-pg/schema";
+import { wikiPages, wikiPageLinks } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import { assertCanReadWikiScope } from "./auth.js";
 import { toGraphQLPage, type GraphQLWikiPage } from "./mappers.js";
 
 export const wikiConnectedPages = async (
-	_parent: unknown,
-	args: { pageId: string },
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: { pageId: string },
+  ctx: GraphQLContext,
 ): Promise<GraphQLWikiPage[]> => {
-	const [source] = await db
-		.select({
-			id: wikiPages.id,
-			tenant_id: wikiPages.tenant_id,
-			owner_id: wikiPages.owner_id,
-		})
-		.from(wikiPages)
-		.where(eq(wikiPages.id, args.pageId))
-		.limit(1);
-	if (!source) return [];
+  const [source] = await db
+    .select({
+      id: wikiPages.id,
+      tenant_id: wikiPages.tenant_id,
+      owner_id: wikiPages.owner_id,
+    })
+    .from(wikiPages)
+    .where(eq(wikiPages.id, args.pageId))
+    .limit(1);
+  if (!source) return [];
 
-	await assertCanReadWikiScope(ctx, {
-		tenantId: source.tenant_id,
-		userId: source.owner_id,
-	});
+  await assertCanReadWikiScope(ctx, {
+    tenantId: source.tenant_id,
+    userId: source.owner_id,
+  });
 
-	const rows = await db
-		.select()
-		.from(wikiPageLinks)
-		.innerJoin(wikiPages, eq(wikiPageLinks.to_page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPageLinks.from_page_id, args.pageId),
-				eq(wikiPages.status, "active"),
-			),
-		);
+  const rows = await db
+    .select()
+    .from(wikiPageLinks)
+    .innerJoin(wikiPages, eq(wikiPageLinks.to_page_id, wikiPages.id))
+    .where(
+      and(
+        eq(wikiPageLinks.from_page_id, args.pageId),
+        eq(wikiPages.status, "active"),
+      ),
+    );
 
-	// Dedup by target page id — the same (from, to) pair may appear with
-	// multiple `kind`s (reference + parent_of). We want one row per
-	// connected page regardless of link kind.
-	const byId = new Map<string, (typeof rows)[number]>();
-	for (const r of rows) {
-		byId.set(r.pages.id, r);
-	}
-	return Array.from(byId.values()).map((r) =>
-		toGraphQLPage(r.pages, { sections: [], aliases: [] }),
-	);
+  // Dedup by target page id — the same (from, to) pair may appear with
+  // multiple `kind`s (reference + parent_of). We want one row per
+  // connected page regardless of link kind.
+  const byId = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) {
+    byId.set(r.pages.id, r);
+  }
+  return Array.from(byId.values()).map((r) =>
+    toGraphQLPage(r.pages, { sections: [], aliases: [] }),
+  );
 };

@@ -13,20 +13,20 @@ import { threads } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 
 export async function handler() {
-	const db = getDb();
-	const now = new Date();
+  const db = getDb();
+  const now = new Date();
 
-	// Single UPDATE … FROM join: release threads whose checkout run is no
-	// longer running (finished, failed, cancelled, etc.) or whose run no
-	// longer exists at all.
-	const result = await db
-		.update(threads)
-		.set({
-			checkout_run_id: null,
-			updated_at: now,
-		})
-		.where(
-			sql`${threads.checkout_run_id} IS NOT NULL
+  // Single UPDATE … FROM join: release threads whose checkout run is no
+  // longer running (finished, failed, cancelled, etc.) or whose run no
+  // longer exists at all.
+  const result = await db
+    .update(threads)
+    .set({
+      checkout_run_id: null,
+      updated_at: now,
+    })
+    .where(
+      sql`${threads.checkout_run_id} IS NOT NULL
 				AND (
 					NOT EXISTS (
 						SELECT 1 FROM thread_turns
@@ -38,12 +38,12 @@ export async function handler() {
 						  AND thread_turns.status != 'running'
 					)
 				)`,
-		)
-		.returning({ id: threads.id });
+    )
+    .returning({ id: threads.id });
 
-	console.log(`Recovered ${result.length} stale thread checkouts`, {
-		threadIds: result.map((r) => r.id),
-	});
+  console.log(`Recovered ${result.length} stale thread checkouts`, {
+    threadIds: result.map((r) => r.id),
+  });
 
-	return { recovered: result.length };
+  return { recovered: result.length };
 }

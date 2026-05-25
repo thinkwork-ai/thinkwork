@@ -152,9 +152,7 @@ describe("readMcpJson", () => {
     });
 
     it("throws when a directTools entry omits server", async () => {
-      await writeMcpJson(
-        JSON.stringify({ directTools: [{ tool: "search" }] }),
-      );
+      await writeMcpJson(JSON.stringify({ directTools: [{ tool: "search" }] }));
       await expect(readMcpJson(workspaceDir)).rejects.toThrow(McpJsonError);
       await expect(readMcpJson(workspaceDir)).rejects.toThrow(
         /`directTools\[0\]\.server` is required/,
@@ -162,7 +160,9 @@ describe("readMcpJson", () => {
     });
 
     it("throws when a directTools entry omits tool", async () => {
-      await writeMcpJson(JSON.stringify({ directTools: [{ server: "slack" }] }));
+      await writeMcpJson(
+        JSON.stringify({ directTools: [{ server: "slack" }] }),
+      );
       await expect(readMcpJson(workspaceDir)).rejects.toThrow(McpJsonError);
       await expect(readMcpJson(workspaceDir)).rejects.toThrow(
         /`directTools\[0\]\.tool` is required/,

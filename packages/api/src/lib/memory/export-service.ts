@@ -11,19 +11,19 @@ import type { MemoryConfig } from "./config.js";
 import type { ExportRequest, MemoryExportBundle } from "./types.js";
 
 export type NormalizedExportService = {
-	export(request: ExportRequest): Promise<MemoryExportBundle>;
+  export(request: ExportRequest): Promise<MemoryExportBundle>;
 };
 
 export function createExportService(
-	config: MemoryConfig,
-	adapter: MemoryAdapter,
+  config: MemoryConfig,
+  adapter: MemoryAdapter,
 ): NormalizedExportService {
-	return {
-		async export(request: ExportRequest): Promise<MemoryExportBundle> {
-			if (!config.inspect.exportEnabled) {
-				throw new Error("Memory export is disabled in this deployment");
-			}
-			return adapter.export(request);
-		},
-	};
+  return {
+    async export(request: ExportRequest): Promise<MemoryExportBundle> {
+      if (!config.inspect.exportEnabled) {
+        throw new Error("Memory export is disabled in this deployment");
+      }
+      return adapter.export(request);
+    },
+  };
 }

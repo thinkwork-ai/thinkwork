@@ -111,110 +111,133 @@ export function ComplianceEventsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isFirstLoad
-            ? Array.from({ length: SKELETON_ROW_COUNT }).map((_, i) => (
-                <TableRow key={`skeleton-${i}`}>
-                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                </TableRow>
-              ))
-            : edges.length === 0 && !error ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-12">
-                    {hasActiveFilter
-                      ? "No audit events match the current filter."
-                      : "No audit events have been recorded yet."}
+          {isFirstLoad ? (
+            Array.from({ length: SKELETON_ROW_COUNT }).map((_, i) => (
+              <TableRow key={`skeleton-${i}`}>
+                <TableCell>
+                  <Skeleton className="h-4 w-32" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-40" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+              </TableRow>
+            ))
+          ) : edges.length === 0 && !error ? (
+            <TableRow>
+              <TableCell
+                colSpan={6}
+                className="text-center text-sm text-muted-foreground py-12"
+              >
+                {hasActiveFilter
+                  ? "No audit events match the current filter."
+                  : "No audit events have been recorded yet."}
+              </TableCell>
+            </TableRow>
+          ) : edges.length === 0 ? null : (
+            edges.map((edge) => {
+              const event = edge.node;
+              return (
+                <TableRow
+                  key={event.eventId}
+                  className="cursor-pointer hover:bg-muted/40"
+                >
+                  <TableCell className="align-top">
+                    <Link
+                      to="/compliance/events/$eventId"
+                      params={{ eventId: event.eventId }}
+                      search={(prev) => prev}
+                      className="block"
+                    >
+                      <div className="font-medium">
+                        {relativeTime(event.recordedAt)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatDateTime(event.recordedAt)}
+                      </div>
+                    </Link>
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <Link
+                      to="/compliance/events/$eventId"
+                      params={{ eventId: event.eventId }}
+                      search={(prev) => prev}
+                      className="block"
+                    >
+                      <Badge variant="secondary">
+                        {event.eventType.replace(/_/g, ".").toLowerCase()}
+                      </Badge>
+                    </Link>
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <Link
+                      to="/compliance/events/$eventId"
+                      params={{ eventId: event.eventId }}
+                      search={(prev) => prev}
+                      className="block"
+                    >
+                      <div className="truncate max-w-[18rem]">
+                        {event.actor}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {event.actorType.toLowerCase()}
+                      </div>
+                    </Link>
+                  </TableCell>
+                  <TableCell className="align-top text-xs text-muted-foreground">
+                    {event.source}
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <AnchorBadge state={event.anchorStatus.state} />
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <code className="text-xs font-mono">
+                      {shortHash(event.eventHash)}
+                    </code>
                   </TableCell>
                 </TableRow>
-              ) : edges.length === 0 ? null : (
-                edges.map((edge) => {
-                  const event = edge.node;
-                  return (
-                    <TableRow
-                      key={event.eventId}
-                      className="cursor-pointer hover:bg-muted/40"
-                    >
-                      <TableCell className="align-top">
-                        <Link
-                          to="/compliance/events/$eventId"
-                          params={{ eventId: event.eventId }}
-                          search={(prev) => prev}
-                          className="block"
-                        >
-                          <div className="font-medium">{relativeTime(event.recordedAt)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatDateTime(event.recordedAt)}
-                          </div>
-                        </Link>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Link
-                          to="/compliance/events/$eventId"
-                          params={{ eventId: event.eventId }}
-                          search={(prev) => prev}
-                          className="block"
-                        >
-                          <Badge variant="secondary">
-                            {event.eventType.replace(/_/g, ".").toLowerCase()}
-                          </Badge>
-                        </Link>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Link
-                          to="/compliance/events/$eventId"
-                          params={{ eventId: event.eventId }}
-                          search={(prev) => prev}
-                          className="block"
-                        >
-                          <div className="truncate max-w-[18rem]">{event.actor}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {event.actorType.toLowerCase()}
-                          </div>
-                        </Link>
-                      </TableCell>
-                      <TableCell className="align-top text-xs text-muted-foreground">
-                        {event.source}
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <AnchorBadge state={event.anchorStatus.state} />
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <code className="text-xs font-mono">{shortHash(event.eventHash)}</code>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
+              );
+            })
+          )}
         </TableBody>
       </Table>
 
-      {pageInfo?.hasNextPage && pageInfo.endCursor ? (() => {
-        const nextCursor = pageInfo.endCursor;
-        return (
-          <div className="flex justify-center pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={fetching}
-              onClick={() => onCursorAdvance(nextCursor)}
-            >
-              {fetching ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                "Load more"
-              )}
-            </Button>
-          </div>
-        );
-      })() : null}
+      {pageInfo?.hasNextPage && pageInfo.endCursor
+        ? (() => {
+            const nextCursor = pageInfo.endCursor;
+            return (
+              <div className="flex justify-center pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={fetching}
+                  onClick={() => onCursorAdvance(nextCursor)}
+                >
+                  {fetching ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load more"
+                  )}
+                </Button>
+              </div>
+            );
+          })()
+        : null}
     </div>
   );
 }
@@ -222,14 +245,22 @@ export function ComplianceEventsTable({
 function AnchorBadge({ state }: { state: ComplianceAnchorState }) {
   if (state === ComplianceAnchorState.Anchored) {
     return (
-      <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400")}>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400",
+        )}
+      >
         <CheckCircle className="size-3.5" />
         Anchored
       </span>
     );
   }
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400")}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400",
+      )}
+    >
       <Clock className="size-3.5" />
       Pending
     </span>

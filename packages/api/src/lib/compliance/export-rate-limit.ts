@@ -15,20 +15,17 @@
  */
 
 export interface ExportRateLimitResult {
-	allowed: boolean;
-	current: number;
-	limit: number;
-	windowSeconds: number;
+  allowed: boolean;
+  current: number;
+  limit: number;
+  windowSeconds: number;
 }
 
 export const EXPORT_RATE_LIMIT_PER_HOUR = 10;
 const WINDOW_SECONDS = 60 * 60;
 
 interface PgQueryClient {
-	query: (
-		sql: string,
-		values: unknown[],
-	) => Promise<{ rows: unknown[] }>;
+  query: (sql: string, values: unknown[]) => Promise<{ rows: unknown[] }>;
 }
 
 /**
@@ -41,22 +38,22 @@ interface PgQueryClient {
  * fail-fast jobs to bypass the cap.
  */
 export async function checkExportRateLimit(
-	client: PgQueryClient,
-	actorId: string,
+  client: PgQueryClient,
+  actorId: string,
 ): Promise<ExportRateLimitResult> {
-	const res = await client.query(
-		`SELECT count(*)::int AS n
+  const res = await client.query(
+    `SELECT count(*)::int AS n
 		   FROM compliance.export_jobs
 		  WHERE requested_by_actor_id = $1::uuid
 		    AND requested_at > now() - INTERVAL '1 hour'`,
-		[actorId],
-	);
-	const rows = res.rows as { n: number }[];
-	const current = rows[0]?.n ?? 0;
-	return {
-		allowed: current < EXPORT_RATE_LIMIT_PER_HOUR,
-		current,
-		limit: EXPORT_RATE_LIMIT_PER_HOUR,
-		windowSeconds: WINDOW_SECONDS,
-	};
+    [actorId],
+  );
+  const rows = res.rows as { n: number }[];
+  const current = rows[0]?.n ?? 0;
+  return {
+    allowed: current < EXPORT_RATE_LIMIT_PER_HOUR,
+    current,
+    limit: EXPORT_RATE_LIMIT_PER_HOUR,
+    windowSeconds: WINDOW_SECONDS,
+  };
 }

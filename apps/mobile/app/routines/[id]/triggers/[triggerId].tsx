@@ -58,13 +58,18 @@ function InfoRow({
         isLast ? "" : "border-b border-neutral-100 dark:border-neutral-800"
       }`}
     >
-      <Text className="text-base text-neutral-900 dark:text-neutral-100">{label}</Text>
+      <Text className="text-base text-neutral-900 dark:text-neutral-100">
+        {label}
+      </Text>
       <View className="flex-row items-center gap-2">{right}</View>
     </View>
   );
   if (onPress) {
     return (
-      <Pressable onPress={onPress} className="active:bg-neutral-50 dark:active:bg-neutral-800">
+      <Pressable
+        onPress={onPress}
+        className="active:bg-neutral-50 dark:active:bg-neutral-800"
+      >
         {inner}
       </Pressable>
     );
@@ -73,14 +78,19 @@ function InfoRow({
 }
 
 export default function TriggerDetailScreen() {
-  const { id, triggerId } = useLocalSearchParams<{ id: string; triggerId: string }>();
+  const { id, triggerId } = useLocalSearchParams<{
+    id: string;
+    triggerId: string;
+  }>();
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
   // Get trigger from routine detail
   const [{ data: routineData }] = useRoutine(id);
-  const trigger = routineData?.routine?.triggers?.find((t: any) => t.id === triggerId) as any;
+  const trigger = routineData?.routine?.triggers?.find(
+    (t: any) => t.id === triggerId,
+  ) as any;
 
   // TODO: Migrate api.routineTriggers.updateTrigger to GraphQL
   // TODO: Migrate api.routineTriggers.deleteTrigger to GraphQL
@@ -89,7 +99,10 @@ export default function TriggerDetailScreen() {
   const handleToggle = async (enabled: boolean) => {
     if (!trigger) return;
     // TODO: Migrate updateTrigger to GraphQL
-    Alert.alert("Not Implemented", "Trigger toggle not yet migrated to GraphQL.");
+    Alert.alert(
+      "Not Implemented",
+      "Trigger toggle not yet migrated to GraphQL.",
+    );
   };
 
   const handleDelete = () => {
@@ -103,7 +116,10 @@ export default function TriggerDetailScreen() {
           style: "destructive",
           onPress: async () => {
             // TODO: Migrate deleteTrigger / deleteScheduleWithBridge to GraphQL
-            Alert.alert("Not Implemented", "Trigger deletion not yet migrated to GraphQL.");
+            Alert.alert(
+              "Not Implemented",
+              "Trigger deletion not yet migrated to GraphQL.",
+            );
           },
         },
         { text: "Cancel", style: "cancel" },
@@ -142,18 +158,19 @@ export default function TriggerDetailScreen() {
   const isSchedule = triggerType === "schedule";
   const title = isSchedule ? "Schedule Trigger" : "Webhook Trigger";
 
-  const timezoneAbbr = isSchedule && trigger.timezone
-    ? new Intl.DateTimeFormat("en-US", {
-        timeZoneName: "short",
-        timeZone: trigger.timezone,
-      })
-        .formatToParts(new Date())
-        .find((p) => p.type === "timeZoneName")?.value ?? ""
-    : "";
+  const timezoneAbbr =
+    isSchedule && trigger.timezone
+      ? (new Intl.DateTimeFormat("en-US", {
+          timeZoneName: "short",
+          timeZone: trigger.timezone,
+        })
+          .formatToParts(new Date())
+          .find((p) => p.type === "timeZoneName")?.value ?? "")
+      : "";
 
   const scheduleLabel = trigger.scheduleLabel
     ? `${trigger.scheduleLabel}${timezoneAbbr ? ` ${timezoneAbbr}` : ""}`
-    : trigger.schedule ?? "Schedule";
+    : (trigger.schedule ?? "Schedule");
 
   const webhookUrl = trigger.webhookToken
     ? `${WEBHOOK_BASE_URL}/${trigger.webhookToken}`
@@ -177,7 +194,6 @@ export default function TriggerDetailScreen() {
     >
       <ScrollView className="flex-1 bg-neutral-50 dark:bg-neutral-950 pt-4">
         <WebContent>
-
           {/* Settings */}
           <SectionHeader title="Settings" />
           <View className="bg-white dark:bg-neutral-900 rounded-xl overflow-hidden mx-4 mb-3">
@@ -198,11 +214,16 @@ export default function TriggerDetailScreen() {
                 <InfoRow
                   label="How often"
                   onPress={() =>
-                    router.push(`/routines/${id}/triggers/add-schedule?triggerId=${trigger.id}`)
+                    router.push(
+                      `/routines/${id}/triggers/add-schedule?triggerId=${trigger.id}`,
+                    )
                   }
                   right={
                     <>
-                      <Text className="text-sm text-neutral-500 dark:text-neutral-400" numberOfLines={1}>
+                      <Text
+                        className="text-sm text-neutral-500 dark:text-neutral-400"
+                        numberOfLines={1}
+                      >
                         {scheduleLabel}
                       </Text>
                       <ChevronRight size={16} color={colors.mutedForeground} />
@@ -228,7 +249,8 @@ export default function TriggerDetailScreen() {
                       isLast
                       right={
                         <Text className="text-sm text-neutral-500 dark:text-neutral-400">
-                          {trigger.activeHoursStart}:00 \u2013 {trigger.activeHoursEnd}:00
+                          {trigger.activeHoursStart}:00 \u2013{" "}
+                          {trigger.activeHoursEnd}:00
                         </Text>
                       }
                     />
@@ -256,7 +278,10 @@ export default function TriggerDetailScreen() {
                   className="flex-row items-center justify-center gap-2 px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800"
                 >
                   <Copy size={14} color={colors.primary} />
-                  <Text style={{ color: colors.primary }} className="text-sm font-semibold">
+                  <Text
+                    style={{ color: colors.primary }}
+                    className="text-sm font-semibold"
+                  >
                     Copy URL
                   </Text>
                 </Pressable>

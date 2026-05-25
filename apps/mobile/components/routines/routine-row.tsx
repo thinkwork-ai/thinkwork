@@ -6,8 +6,17 @@ import { Text, Muted } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
 import { MobileRow } from "@/components/ui/mobile-row";
 
-export type RoutineListTriggerType = "manual" | "schedule" | "webhook" | "event";
-export type RoutineStatus = "active" | "inactive" | "running" | "draft" | "building";
+export type RoutineListTriggerType =
+  | "manual"
+  | "schedule"
+  | "webhook"
+  | "event";
+export type RoutineStatus =
+  | "active"
+  | "inactive"
+  | "running"
+  | "draft"
+  | "building";
 export type Routine = {
   id: string;
   name: string;
@@ -30,8 +39,13 @@ const TRIGGER_LABELS: Record<RoutineListTriggerType, string> = {
   event: "Event",
 };
 
-export function TriggerText({ triggerTypes }: { triggerTypes: RoutineListTriggerType[] }) {
-  if (triggerTypes.length === 0) return <Muted className="text-sm">No triggers</Muted>;
+export function TriggerText({
+  triggerTypes,
+}: {
+  triggerTypes: RoutineListTriggerType[];
+}) {
+  if (triggerTypes.length === 0)
+    return <Muted className="text-sm">No triggers</Muted>;
   return (
     <Muted className="text-sm">
       {triggerTypes.map((type) => TRIGGER_LABELS[type]).join(" + ")}
@@ -69,7 +83,10 @@ export function RoutineRow({
       onPress={onPress}
       line1Left={
         <View className="flex-row items-center gap-2 flex-1">
-          <Text weight="medium" className="text-neutral-900 dark:text-neutral-100">
+          <Text
+            weight="medium"
+            className="text-neutral-900 dark:text-neutral-100"
+          >
             {routine.name}
           </Text>
         </View>

@@ -1,7 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { View, ScrollView, Pressable, Switch, Alert, Clipboard, Platform, Animated, Easing } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  Switch,
+  Alert,
+  Clipboard,
+  Platform,
+  Animated,
+  Easing,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRoutine, useRoutineExecutions, useUpdateRoutine, useDeleteRoutine, useTriggerRoutineRun } from "@/lib/hooks/use-routines";
+import {
+  useRoutine,
+  useRoutineExecutions,
+  useUpdateRoutine,
+  useDeleteRoutine,
+  useTriggerRoutineRun,
+} from "@/lib/hooks/use-routines";
 import {
   Play,
   ChevronRight,
@@ -15,7 +31,11 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react-native";
-import { IconLoader2, IconCircleCheck, IconCircleX } from "@tabler/icons-react-native";
+import {
+  IconLoader2,
+  IconCircleCheck,
+  IconCircleX,
+} from "@tabler/icons-react-native";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
 import { Text, Muted } from "@/components/ui/typography";
@@ -68,17 +88,13 @@ function TriggerSelect({
       // On web we render a native <select> -- handled inline
       return;
     }
-    Alert.alert(
-      "Change Trigger",
-      undefined,
-      [
-        ...TRIGGER_OPTIONS.map((opt) => ({
-          text: opt.label + (opt.value === value ? " ✓" : ""),
-          onPress: () => onChange(opt.value),
-        })),
-        { text: "Cancel", style: "cancel" as const },
-      ]
-    );
+    Alert.alert("Change Trigger", undefined, [
+      ...TRIGGER_OPTIONS.map((opt) => ({
+        text: opt.label + (opt.value === value ? " ✓" : ""),
+        onPress: () => onChange(opt.value),
+      })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
   };
 
   if (Platform.OS === "web") {
@@ -169,15 +185,20 @@ function RunRow({
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
-  const startedAtMs = run.startedAt ? new Date(run.startedAt).getTime() : Date.now();
-  const finishedAtMs = run.finishedAt ? new Date(run.finishedAt).getTime() : undefined;
+  const startedAtMs = run.startedAt
+    ? new Date(run.startedAt).getTime()
+    : Date.now();
+  const finishedAtMs = run.finishedAt
+    ? new Date(run.finishedAt).getTime()
+    : undefined;
 
   const duration = finishedAtMs
     ? formatDuration(startedAtMs, finishedAtMs)
     : run.status === "running"
       ? "running..."
       : "\u2014";
-  const trigger = run.triggerSource === "manual" ? "Manual" : (run.triggerSource ?? "\u2014");
+  const trigger =
+    run.triggerSource === "manual" ? "Manual" : (run.triggerSource ?? "\u2014");
 
   return (
     <Pressable
@@ -194,7 +215,9 @@ function RunRow({
           <Text className="text-base text-neutral-900 dark:text-neutral-100">
             {formatTime(startedAtMs)}
           </Text>
-          <Text className="text-sm text-neutral-500 dark:text-neutral-400">{duration}</Text>
+          <Text className="text-sm text-neutral-500 dark:text-neutral-400">
+            {duration}
+          </Text>
         </View>
         <Muted className="text-xs mt-0.5">{trigger}</Muted>
       </View>
@@ -222,13 +245,18 @@ function InfoRow({
         isLast ? "" : "border-b border-neutral-100 dark:border-neutral-800"
       }`}
     >
-      <Text className="text-lg text-neutral-900 dark:text-neutral-100">{label}</Text>
+      <Text className="text-lg text-neutral-900 dark:text-neutral-100">
+        {label}
+      </Text>
       <View className="flex-row items-center gap-2">{right}</View>
     </View>
   );
   if (onPress) {
     return (
-      <Pressable onPress={onPress} className="active:bg-neutral-50 dark:active:bg-neutral-800">
+      <Pressable
+        onPress={onPress}
+        className="active:bg-neutral-50 dark:active:bg-neutral-800"
+      >
         {inner}
       </Pressable>
     );
@@ -236,7 +264,13 @@ function InfoRow({
   return inner;
 }
 
-function SpinningLoader({ size = 18, color = "#0ea5e9" }: { size?: number; color?: string }) {
+function SpinningLoader({
+  size = 18,
+  color = "#0ea5e9",
+}: {
+  size?: number;
+  color?: string;
+}) {
   const spinValue = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const animation = Animated.loop(
@@ -245,13 +279,16 @@ function SpinningLoader({ size = 18, color = "#0ea5e9" }: { size?: number; color
         duration: 1000,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
+      }),
     );
     animation.start();
     return () => animation.stop();
   }, [spinValue]);
 
-  const spin = spinValue.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
   return (
     <Animated.View style={{ transform: [{ rotate: spin }] }}>
       <IconLoader2 size={size} color={color} />
@@ -260,20 +297,37 @@ function SpinningLoader({ size = 18, color = "#0ea5e9" }: { size?: number; color
 }
 
 /** Parse `[step:N/M:status] message` format from progress messages */
-function parseStepMessage(content: string): { step: number; total: number; status: string; text: string } | null {
+function parseStepMessage(
+  content: string,
+): { step: number; total: number; status: string; text: string } | null {
   const match = content.match(/^\[step:(\d+)\/(\d+):(\w+)\]\s*(.*)$/);
   if (!match) return null;
-  return { step: parseInt(match[1]), total: parseInt(match[2]), status: match[3], text: match[4] };
+  return {
+    step: parseInt(match[1]),
+    total: parseInt(match[2]),
+    status: match[3],
+    text: match[4],
+  };
 }
 
-function BuildProgressRow({ content, isLatest }: { content: string; isLatest: boolean }) {
+function BuildProgressRow({
+  content,
+  isLatest,
+}: {
+  content: string;
+  isLatest: boolean;
+}) {
   const parsed = parseStepMessage(content);
 
   if (!parsed) {
     return (
       <View className="flex-row items-start gap-3 py-2">
         <View style={{ marginTop: 2 }}>
-          {isLatest ? <SpinningLoader size={16} /> : <IconCircleCheck size={16} color="#22c55e" />}
+          {isLatest ? (
+            <SpinningLoader size={16} />
+          ) : (
+            <IconCircleCheck size={16} color="#22c55e" />
+          )}
         </View>
         <Text className="text-sm text-neutral-500 dark:text-neutral-400 flex-1">
           {content}
@@ -293,15 +347,17 @@ function BuildProgressRow({ content, isLatest }: { content: string; isLatest: bo
         {showSpinner && <SpinningLoader size={16} />}
         {isFailed && <IconCircleX size={16} color="#ef4444" />}
         {isDone && <IconCircleCheck size={16} color="#22c55e" />}
-        {!showSpinner && !isFailed && !isDone && <IconCircleCheck size={16} color="#22c55e" />}
+        {!showSpinner && !isFailed && !isDone && (
+          <IconCircleCheck size={16} color="#22c55e" />
+        )}
       </View>
       <Text
         className={`text-sm flex-1 ${
           showSpinner
             ? "text-neutral-800 dark:text-neutral-200 font-medium"
             : isFailed
-            ? "text-red-500 dark:text-red-400"
-            : "text-neutral-500 dark:text-neutral-400"
+              ? "text-red-500 dark:text-red-400"
+              : "text-neutral-500 dark:text-neutral-400"
         }`}
       >
         {parsed.text}
@@ -314,7 +370,9 @@ function BuildProgressSection({ threadId }: { threadId: string }) {
   // TODO: chat session list-messages GraphQL operation not yet available.
   const messages = undefined as any[] | undefined; // Stub
 
-  const progressMessages = (messages ?? []).filter((m: any) => m.role === "assistant");
+  const progressMessages = (messages ?? []).filter(
+    (m: any) => m.role === "assistant",
+  );
 
   if (progressMessages.length === 0) {
     return (
@@ -334,7 +392,11 @@ function BuildProgressSection({ threadId }: { threadId: string }) {
   return (
     <View className="bg-white dark:bg-neutral-900 rounded-xl overflow-hidden mx-4 mb-4 px-4 py-1">
       {progressMessages.map((msg: any, idx: number) => (
-        <BuildProgressRow key={msg.id} content={msg.content} isLatest={idx === progressMessages.length - 1} />
+        <BuildProgressRow
+          key={msg.id}
+          content={msg.content}
+          isLatest={idx === progressMessages.length - 1}
+        />
       ))}
     </View>
   );
@@ -362,7 +424,9 @@ export default function RoutineDetailScreen() {
   const [, triggerRoutineRun] = useTriggerRoutineRun();
   const [, deleteRoutineMut] = useDeleteRoutine();
   const [running, setRunning] = useState(false);
-  const [enabledOptimistic, setEnabledOptimistic] = useState<boolean | null>(null);
+  const [enabledOptimistic, setEnabledOptimistic] = useState<boolean | null>(
+    null,
+  );
 
   useEffect(() => {
     if (routine) {
@@ -411,7 +475,10 @@ export default function RoutineDetailScreen() {
     const previous = enabledOptimistic;
     setEnabledOptimistic(enabled);
     try {
-      await updateRoutine({ id: routine.id, input: { status: enabled ? "active" : "inactive" } });
+      await updateRoutine({
+        id: routine.id,
+        input: { status: enabled ? "active" : "inactive" },
+      });
     } catch (err) {
       setEnabledOptimistic(previous);
       Alert.alert("Error", String(err));
@@ -439,7 +506,8 @@ export default function RoutineDetailScreen() {
   };
 
   const handleBuilder = () => {
-    const slug = (routine as any).slug ?? routine.name.toLowerCase().replace(/\s+/g, "-");
+    const slug =
+      (routine as any).slug ?? routine.name.toLowerCase().replace(/\s+/g, "-");
     router.push({
       pathname: "/routines/edit",
       params: {
@@ -452,7 +520,7 @@ export default function RoutineDetailScreen() {
   };
 
   const runCount = runs?.length ?? 0;
-  const currentEnabled = enabledOptimistic ?? (routine.status === "active");
+  const currentEnabled = enabledOptimistic ?? routine.status === "active";
 
   return (
     <DetailLayout
@@ -483,7 +551,10 @@ export default function RoutineDetailScreen() {
                           await deleteRoutineMut({ id: routine.id });
                           router.back();
                         } catch (e: any) {
-                          Alert.alert("Error", e.message || "Failed to delete routine");
+                          Alert.alert(
+                            "Error",
+                            e.message || "Failed to delete routine",
+                          );
                         }
                       },
                     },
@@ -497,7 +568,8 @@ export default function RoutineDetailScreen() {
     >
       <ScrollView className="flex-1 bg-neutral-50 dark:bg-neutral-950 pt-4">
         <WebContent>
-          {(routine as any).buildStatus === "building" && (routine as any).builderThreadId ? (
+          {(routine as any).buildStatus === "building" &&
+          (routine as any).builderThreadId ? (
             <>
               {/* Building -- only show build progress */}
               <View className="mx-4 mb-2">
@@ -505,7 +577,9 @@ export default function RoutineDetailScreen() {
                   Build Progress
                 </Text>
               </View>
-              <BuildProgressSection threadId={(routine as any).builderThreadId} />
+              <BuildProgressSection
+                threadId={(routine as any).builderThreadId}
+              />
             </>
           ) : (
             <>
@@ -524,8 +598,13 @@ export default function RoutineDetailScreen() {
                     <Switch
                       value={currentEnabled}
                       onValueChange={handleToggle}
-                      trackColor={{ false: colors.border, true: colors.primary }}
-                      thumbColor={Platform.OS === "android" ? "#ffffff" : undefined}
+                      trackColor={{
+                        false: colors.border,
+                        true: colors.primary,
+                      }}
+                      thumbColor={
+                        Platform.OS === "android" ? "#ffffff" : undefined
+                      }
                     />
                   }
                 />
@@ -539,15 +618,23 @@ export default function RoutineDetailScreen() {
                     <View className="flex-row items-center gap-2">
                       {triggerCount > 0 ? (
                         <View
-                          style={{ borderColor: colors.primary, borderWidth: 1.5 }}
+                          style={{
+                            borderColor: colors.primary,
+                            borderWidth: 1.5,
+                          }}
                           className="rounded-full px-1.5 py-0.5 min-w-[20px] items-center"
                         >
-                          <Text style={{ color: colors.primary }} className="text-xs font-bold">
+                          <Text
+                            style={{ color: colors.primary }}
+                            className="text-xs font-bold"
+                          >
                             {triggerCount}
                           </Text>
                         </View>
                       ) : (
-                        <Text className="text-sm text-neutral-500 dark:text-neutral-400">None</Text>
+                        <Text className="text-sm text-neutral-500 dark:text-neutral-400">
+                          None
+                        </Text>
                       )}
                       <ChevronRight size={16} color={colors.mutedForeground} />
                     </View>
@@ -562,7 +649,10 @@ export default function RoutineDetailScreen() {
                     isLast
                     right={
                       <View className="flex-row items-center gap-2">
-                        <Text className="text-sm text-neutral-500 max-w-[180px]" numberOfLines={1}>
+                        <Text
+                          className="text-sm text-neutral-500 max-w-[180px]"
+                          numberOfLines={1}
+                        >
                           {webhookUrl}
                         </Text>
                         <Copy size={14} color={colors.mutedForeground} />
@@ -577,9 +667,16 @@ export default function RoutineDetailScreen() {
                 <Text className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">
                   Runs {runCount > 0 ? `(${runCount})` : ""}
                 </Text>
-                <Pressable onPress={handleRun} disabled={running} className="flex-row items-center gap-1">
+                <Pressable
+                  onPress={handleRun}
+                  disabled={running}
+                  className="flex-row items-center gap-1"
+                >
                   <Play size={14} color={colors.primary} />
-                  <Text style={{ color: colors.primary }} className="text-sm font-semibold">
+                  <Text
+                    style={{ color: colors.primary }}
+                    className="text-sm font-semibold"
+                  >
                     {running ? "Running..." : "Run Now"}
                   </Text>
                 </Pressable>
@@ -626,7 +723,6 @@ export default function RoutineDetailScreen() {
           <View className="h-8" />
         </WebContent>
       </ScrollView>
-
     </DetailLayout>
   );
 }

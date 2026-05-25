@@ -12,77 +12,77 @@
  */
 
 import {
-	findPageById,
-	findPromotedFromSection,
-	countSourceMemoriesForPage,
-	listActiveChildPages,
-	listSectionChildPages,
-	listSourceMemoryIdsForPage,
+  findPageById,
+  findPromotedFromSection,
+  countSourceMemoriesForPage,
+  listActiveChildPages,
+  listSectionChildPages,
+  listSourceMemoryIdsForPage,
 } from "../../../lib/wiki/repository.js";
 import { toGraphQLPage, type GraphQLWikiPage } from "./mappers.js";
 
 export interface GraphQLWikiPromotedFromSection {
-	parentPage: GraphQLWikiPage;
-	sectionSlug: string;
-	sectionHeading: string;
+  parentPage: GraphQLWikiPage;
+  sectionSlug: string;
+  sectionHeading: string;
 }
 
 async function sourceMemoryCount(parent: GraphQLWikiPage): Promise<number> {
-	return countSourceMemoriesForPage(parent.id);
+  return countSourceMemoriesForPage(parent.id);
 }
 
 async function sourceMemoryIds(
-	parent: GraphQLWikiPage,
-	args: { limit?: number | null },
+  parent: GraphQLWikiPage,
+  args: { limit?: number | null },
 ): Promise<string[]> {
-	const limit = args.limit ?? 10;
-	return listSourceMemoryIdsForPage(parent.id, limit);
+  const limit = args.limit ?? 10;
+  return listSourceMemoryIdsForPage(parent.id, limit);
 }
 
 async function parent(
-	parent: GraphQLWikiPage,
+  parent: GraphQLWikiPage,
 ): Promise<GraphQLWikiPage | null> {
-	if (!parent._parentPageId) return null;
-	const row = await findPageById(parent._parentPageId);
-	if (!row || row.status !== "active") return null;
-	return toGraphQLPage(row, { sections: [], aliases: [] });
+  if (!parent._parentPageId) return null;
+  const row = await findPageById(parent._parentPageId);
+  if (!row || row.status !== "active") return null;
+  return toGraphQLPage(row, { sections: [], aliases: [] });
 }
 
 async function children(parent: GraphQLWikiPage): Promise<GraphQLWikiPage[]> {
-	const rows = await listActiveChildPages(parent.id);
-	return rows.map((r) => toGraphQLPage(r, { sections: [], aliases: [] }));
+  const rows = await listActiveChildPages(parent.id);
+  return rows.map((r) => toGraphQLPage(r, { sections: [], aliases: [] }));
 }
 
 async function promotedFromSection(
-	parent: GraphQLWikiPage,
+  parent: GraphQLWikiPage,
 ): Promise<GraphQLWikiPromotedFromSection | null> {
-	const hit = await findPromotedFromSection(parent.id);
-	if (!hit) return null;
-	const parentRow = await findPageById(hit.parentPageId);
-	if (!parentRow || parentRow.status !== "active") return null;
-	return {
-		parentPage: toGraphQLPage(parentRow, { sections: [], aliases: [] }),
-		sectionSlug: hit.sectionSlug,
-		sectionHeading: hit.sectionHeading,
-	};
+  const hit = await findPromotedFromSection(parent.id);
+  if (!hit) return null;
+  const parentRow = await findPageById(hit.parentPageId);
+  if (!parentRow || parentRow.status !== "active") return null;
+  return {
+    parentPage: toGraphQLPage(parentRow, { sections: [], aliases: [] }),
+    sectionSlug: hit.sectionSlug,
+    sectionHeading: hit.sectionHeading,
+  };
 }
 
 async function sectionChildren(
-	parent: GraphQLWikiPage,
-	args: { sectionSlug: string },
+  parent: GraphQLWikiPage,
+  args: { sectionSlug: string },
 ): Promise<GraphQLWikiPage[]> {
-	const rows = await listSectionChildPages({
-		pageId: parent.id,
-		sectionSlug: args.sectionSlug,
-	});
-	return rows.map((r) => toGraphQLPage(r, { sections: [], aliases: [] }));
+  const rows = await listSectionChildPages({
+    pageId: parent.id,
+    sectionSlug: args.sectionSlug,
+  });
+  return rows.map((r) => toGraphQLPage(r, { sections: [], aliases: [] }));
 }
 
 export const wikiPageTypeResolvers = {
-	sourceMemoryCount,
-	sourceMemoryIds,
-	parent,
-	children,
-	promotedFromSection,
-	sectionChildren,
+  sourceMemoryCount,
+  sourceMemoryIds,
+  parent,
+  children,
+  promotedFromSection,
+  sectionChildren,
 };

@@ -5,4 +5,9 @@ import { deleteQuickAction } from "./deleteQuickAction.mutation.js";
 import { reorderQuickActions } from "./reorderQuickActions.mutation.js";
 
 export const quickActionQueries = { userQuickActions };
-export const quickActionMutations = { createQuickAction, updateQuickAction, deleteQuickAction, reorderQuickActions };
+export const quickActionMutations = {
+  createQuickAction,
+  updateQuickAction,
+  deleteQuickAction,
+  reorderQuickActions,
+};

@@ -62,7 +62,9 @@ export function registerUpdateCommand(program: Command): void {
 
       const latest = getLatestVersion();
       if (!latest) {
-        console.log(chalk.yellow("  Could not check npm registry for updates."));
+        console.log(
+          chalk.yellow("  Could not check npm registry for updates."),
+        );
         return;
       }
 
@@ -82,18 +84,23 @@ export function registerUpdateCommand(program: Command): void {
       if (opts.check) {
         const method = detectInstallMethod();
         if (method === "homebrew") {
-          console.log(`  Run: ${chalk.cyan("brew upgrade thinkwork-ai/tap/thinkwork")}`);
+          console.log(
+            `  Run: ${chalk.cyan("brew upgrade thinkwork-ai/tap/thinkwork")}`,
+          );
         } else {
-          console.log(`  Run: ${chalk.cyan(`npm install -g thinkwork-cli@${latest}`)}`);
+          console.log(
+            `  Run: ${chalk.cyan(`npm install -g thinkwork-cli@${latest}`)}`,
+          );
         }
         console.log("");
         return;
       }
 
       const method = detectInstallMethod();
-      const cmd = method === "homebrew"
-        ? "brew upgrade thinkwork-ai/tap/thinkwork"
-        : `npm install -g thinkwork-cli@${latest}`;
+      const cmd =
+        method === "homebrew"
+          ? "brew upgrade thinkwork-ai/tap/thinkwork"
+          : `npm install -g thinkwork-cli@${latest}`;
 
       console.log(`  Installing via ${method}...`);
       console.log(chalk.dim(`  $ ${cmd}`));

@@ -8,17 +8,19 @@ import { getMemoryServices } from "../../../lib/memory/index.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 export const deleteMemoryRecord = async (
-	_parent: any,
-	args: any,
-	ctx: GraphQLContext,
+  _parent: any,
+  args: any,
+  ctx: GraphQLContext,
 ) => {
-	const { memoryRecordId } = args as { memoryRecordId: string };
-	await requireMemoryUserScope(ctx, args);
+  const { memoryRecordId } = args as { memoryRecordId: string };
+  await requireMemoryUserScope(ctx, args);
 
-	const { adapter, config } = getMemoryServices();
-	if (!adapter.forget) {
-		throw new Error(`Memory delete is not supported on engine "${config.engine}"`);
-	}
-	await adapter.forget(memoryRecordId);
-	return true;
+  const { adapter, config } = getMemoryServices();
+  if (!adapter.forget) {
+    throw new Error(
+      `Memory delete is not supported on engine "${config.engine}"`,
+    );
+  }
+  await adapter.forget(memoryRecordId);
+  return true;
 };

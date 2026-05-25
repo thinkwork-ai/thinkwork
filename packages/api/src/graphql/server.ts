@@ -14,7 +14,11 @@ import { join } from "node:path";
 import { GraphQLScalarType, Kind } from "graphql";
 import { isConnectionError } from "@thinkwork/database-pg";
 import { createContext, type GraphQLContext } from "./context.js";
-import { queryResolvers, mutationResolvers, typeResolvers } from "./resolvers/index.js";
+import {
+  queryResolvers,
+  mutationResolvers,
+  typeResolvers,
+} from "./resolvers/index.js";
 
 // ---------------------------------------------------------------------------
 // Schema loading — reuse the same .graphql files as AppSync and codegen
@@ -27,16 +31,16 @@ directive @aws_subscribe(mutations: [String!]!) on FIELD_DEFINITION
 `;
 
 function loadSchemaFiles(): string {
-	const graphqlDir = join(process.cwd(), "packages", "database-pg", "graphql");
-	const typesDir = join(graphqlDir, "types");
+  const graphqlDir = join(process.cwd(), "packages", "database-pg", "graphql");
+  const typesDir = join(graphqlDir, "types");
 
-	const baseSchema = readFileSync(join(graphqlDir, "schema.graphql"), "utf-8");
-	const typeFileContents = readdirSync(typesDir)
-		.filter((f) => f.endsWith(".graphql"))
-		.sort()
-		.map((f) => readFileSync(join(typesDir, f), "utf-8"));
+  const baseSchema = readFileSync(join(graphqlDir, "schema.graphql"), "utf-8");
+  const typeFileContents = readdirSync(typesDir)
+    .filter((f) => f.endsWith(".graphql"))
+    .sort()
+    .map((f) => readFileSync(join(typesDir, f), "utf-8"));
 
-	return [APPSYNC_DIRECTIVE_DEFS, baseSchema, ...typeFileContents].join("\n\n");
+  return [APPSYNC_DIRECTIVE_DEFS, baseSchema, ...typeFileContents].join("\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -44,37 +48,45 @@ function loadSchemaFiles(): string {
 // ---------------------------------------------------------------------------
 
 const AWSDateTime = new GraphQLScalarType({
-	name: "AWSDateTime",
-	description: "ISO 8601 date-time string (e.g. 2026-03-21T10:00:00.000Z)",
-	serialize: (value) => (value instanceof Date ? value.toISOString() : value),
-	parseValue: (value) => (typeof value === "string" ? value : String(value)),
-	parseLiteral: (ast) => (ast.kind === Kind.STRING ? ast.value : null),
+  name: "AWSDateTime",
+  description: "ISO 8601 date-time string (e.g. 2026-03-21T10:00:00.000Z)",
+  serialize: (value) => (value instanceof Date ? value.toISOString() : value),
+  parseValue: (value) => (typeof value === "string" ? value : String(value)),
+  parseLiteral: (ast) => (ast.kind === Kind.STRING ? ast.value : null),
 });
 
 const AWSJSON = new GraphQLScalarType({
-	name: "AWSJSON",
-	description: "Arbitrary JSON value",
-	serialize: (value) => {
-		if (typeof value === "string") {
-			try { return JSON.parse(value); } catch { return value; }
-		}
-		return value;
-	},
-	parseValue: (value) => value,
-	parseLiteral: (ast) => {
-		if (ast.kind === Kind.STRING) {
-			try { return JSON.parse(ast.value); } catch { return ast.value; }
-		}
-		return null;
-	},
+  name: "AWSJSON",
+  description: "Arbitrary JSON value",
+  serialize: (value) => {
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  },
+  parseValue: (value) => value,
+  parseLiteral: (ast) => {
+    if (ast.kind === Kind.STRING) {
+      try {
+        return JSON.parse(ast.value);
+      } catch {
+        return ast.value;
+      }
+    }
+    return null;
+  },
 });
 
 const AWSURL = new GraphQLScalarType({
-	name: "AWSURL",
-	description: "URL string",
-	serialize: (value) => value,
-	parseValue: (value) => value,
-	parseLiteral: (ast) => (ast.kind === Kind.STRING ? ast.value : null),
+  name: "AWSURL",
+  description: "URL string",
+  serialize: (value) => value,
+  parseValue: (value) => value,
+  parseLiteral: (ast) => (ast.kind === Kind.STRING ? ast.value : null),
 });
 
 // ---------------------------------------------------------------------------
@@ -84,15 +96,15 @@ const AWSURL = new GraphQLScalarType({
 const typeDefs = loadSchemaFiles();
 
 const resolvers = {
-	// Custom scalars
-	AWSDateTime,
-	AWSJSON,
-	AWSURL,
-	// Root resolvers
-	Query: queryResolvers,
-	Mutation: mutationResolvers,
-	// Type resolvers (Ticket sub-fields, etc.)
-	...typeResolvers,
+  // Custom scalars
+  AWSDateTime,
+  AWSJSON,
+  AWSURL,
+  // Root resolvers
+  Query: queryResolvers,
+  Mutation: mutationResolvers,
+  // Type resolvers (Ticket sub-fields, etc.)
+  ...typeResolvers,
 };
 
 export const schema = makeExecutableSchema({ typeDefs, resolvers });
@@ -104,36 +116,36 @@ export const schema = makeExecutableSchema({ typeDefs, resolvers });
 const IS_PROD = process.env.STAGE === "main";
 
 export const yoga = createYoga<GraphQLContext>({
-	schema,
-	context: createContext,
-	plugins: [
-		// Reject queries deeper than 7 levels
-		useDepthLimit({ maxDepth: 7 }),
-		// Disable introspection in production (prevents schema discovery)
-		...(IS_PROD ? [useDisableIntrospection()] : []),
-	],
-	// GraphiQL explorer in dev, disabled in prod
-	graphiql: !IS_PROD,
-	// Mask internal error details in production, but detect pg
-	// connection-class failures first and surface them as a coded GraphQL
-	// error so the UI can render a specific toast. Without this, a pool
-	// acquisition timeout bubbles up as a generic 500 and shows as
-	// "ERROR HTTP_ERROR" to the operator (issue #470).
-	maskedErrors: {
-		maskError(error: unknown, message: string, isDev?: boolean) {
-			const underlying =
-				error && typeof error === "object" && "originalError" in error
-					? (error as { originalError?: unknown }).originalError
-					: error;
-			if (isConnectionError(underlying) || isConnectionError(error)) {
-				return createGraphQLError(
-					"The database is temporarily unavailable. Please try again.",
-					{ extensions: { code: "SERVICE_UNAVAILABLE" } },
-				);
-			}
-			return maskError(error, message, isDev);
-		},
-	},
-	// Disable landing page in production
-	landingPage: !IS_PROD,
+  schema,
+  context: createContext,
+  plugins: [
+    // Reject queries deeper than 7 levels
+    useDepthLimit({ maxDepth: 7 }),
+    // Disable introspection in production (prevents schema discovery)
+    ...(IS_PROD ? [useDisableIntrospection()] : []),
+  ],
+  // GraphiQL explorer in dev, disabled in prod
+  graphiql: !IS_PROD,
+  // Mask internal error details in production, but detect pg
+  // connection-class failures first and surface them as a coded GraphQL
+  // error so the UI can render a specific toast. Without this, a pool
+  // acquisition timeout bubbles up as a generic 500 and shows as
+  // "ERROR HTTP_ERROR" to the operator (issue #470).
+  maskedErrors: {
+    maskError(error: unknown, message: string, isDev?: boolean) {
+      const underlying =
+        error && typeof error === "object" && "originalError" in error
+          ? (error as { originalError?: unknown }).originalError
+          : error;
+      if (isConnectionError(underlying) || isConnectionError(error)) {
+        return createGraphQLError(
+          "The database is temporarily unavailable. Please try again.",
+          { extensions: { code: "SERVICE_UNAVAILABLE" } },
+        );
+      }
+      return maskError(error, message, isDev);
+    },
+  },
+  // Disable landing page in production
+  landingPage: !IS_PROD,
 });

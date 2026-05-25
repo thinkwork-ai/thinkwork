@@ -7,24 +7,24 @@
  */
 
 export interface PromptTemplateContext {
-	tenant?: {
-		id?: string;
-		slug?: string;
-	};
-	agent?: {
-		id?: string;
-		slug?: string;
-		name?: string;
-	};
-	thread?: {
-		id?: string;
-		identifier?: string;
-		title?: string;
-		status?: string;
-		channel?: string;
-	};
-	source?: string;
-	[key: string]: unknown;
+  tenant?: {
+    id?: string;
+    slug?: string;
+  };
+  agent?: {
+    id?: string;
+    slug?: string;
+    name?: string;
+  };
+  thread?: {
+    id?: string;
+    identifier?: string;
+    title?: string;
+    status?: string;
+    channel?: string;
+  };
+  source?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -35,30 +35,34 @@ export interface PromptTemplateContext {
  * Unknown placeholders are left as-is (not stripped).
  */
 export function renderPromptTemplate(
-	template: string | null | undefined,
-	context: PromptTemplateContext,
+  template: string | null | undefined,
+  context: PromptTemplateContext,
 ): string | null {
-	if (!template) return null;
+  if (!template) return null;
 
-	return template.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_match, path: string) => {
-		const trimmed = path.trim();
-		const value = resolvePath(context, trimmed);
-		if (value === undefined || value === null) {
-			// Leave unknown placeholders as-is
-			return `{{${trimmed}}}`;
-		}
-		return String(value);
-	});
+  return template.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (_match, path: string) => {
+    const trimmed = path.trim();
+    const value = resolvePath(context, trimmed);
+    if (value === undefined || value === null) {
+      // Leave unknown placeholders as-is
+      return `{{${trimmed}}}`;
+    }
+    return String(value);
+  });
 }
 
 function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-	const parts = path.split(".");
-	let current: unknown = obj;
-	for (const part of parts) {
-		if (current === null || current === undefined || typeof current !== "object") {
-			return undefined;
-		}
-		current = (current as Record<string, unknown>)[part];
-	}
-	return current;
+  const parts = path.split(".");
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (
+      current === null ||
+      current === undefined ||
+      typeof current !== "object"
+    ) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }

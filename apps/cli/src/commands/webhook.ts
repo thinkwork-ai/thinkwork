@@ -15,12 +15,32 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
-import { isJsonMode, logStderr, printJson, printKeyValue, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  isJsonMode,
+  logStderr,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const WebhooksDoc = graphql(`
-  query CliWebhooks($tenantId: ID!, $targetType: String, $enabled: Boolean, $limit: Int) {
-    webhooks(tenantId: $tenantId, targetType: $targetType, enabled: $enabled, limit: $limit) {
+  query CliWebhooks(
+    $tenantId: ID!
+    $targetType: String
+    $enabled: Boolean
+    $limit: Int
+  ) {
+    webhooks(
+      tenantId: $tenantId
+      targetType: $targetType
+      enabled: $enabled
+      limit: $limit
+    ) {
       id
       name
       targetType
@@ -164,17 +184,23 @@ async function resolveWebhookContext(opts: WebhookCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, WebhookTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, WebhookTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, WebhookTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    const data = await gqlQuery(client, WebhookTenantBySlugDoc, {
+      slug: ctxSlug,
+    });
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -228,7 +254,10 @@ async function runWebhookList(opts: ListOptions): Promise<void> {
   );
 }
 
-async function runWebhookGet(id: string, opts: WebhookCliOptions): Promise<void> {
+async function runWebhookGet(
+  id: string,
+  opts: WebhookCliOptions,
+): Promise<void> {
   const ctx = await resolveWebhookContext(opts);
   const data = await gqlQuery(ctx.client, WebhookDoc, { id });
   const w = data.webhook;
@@ -256,7 +285,9 @@ async function runWebhookGet(id: string, opts: WebhookCliOptions): Promise<void>
   ]);
   if (w.prompt) {
     console.log("\n  Prompt:");
-    console.log(`  ${w.prompt.slice(0, 200)}${w.prompt.length > 200 ? "…" : ""}`);
+    console.log(
+      `  ${w.prompt.slice(0, 200)}${w.prompt.length > 200 ? "…" : ""}`,
+    );
   }
 }
 
@@ -279,7 +310,9 @@ async function runWebhookCreate(
       process.exit(1);
     }
     requireTty("Webhook name");
-    resolvedName = await promptOrExit(() => input({ message: "Webhook name:" }));
+    resolvedName = await promptOrExit(() =>
+      input({ message: "Webhook name:" }),
+    );
   }
   if (!opts.targetType) {
     printError("--target-type <AGENT|ROUTINE> is required.");
@@ -324,20 +357,27 @@ interface UpdateOptions extends WebhookCliOptions {
   disable?: boolean;
 }
 
-async function runWebhookUpdate(id: string, opts: UpdateOptions): Promise<void> {
+async function runWebhookUpdate(
+  id: string,
+  opts: UpdateOptions,
+): Promise<void> {
   const ctx = await resolveWebhookContext(opts);
   const input: Record<string, unknown> = {};
-  if (opts.targetType !== undefined) input.targetType = opts.targetType.toUpperCase();
+  if (opts.targetType !== undefined)
+    input.targetType = opts.targetType.toUpperCase();
   if (opts.targetId !== undefined) {
     const tt = (opts.targetType ?? "").toUpperCase();
     if (tt === "AGENT") input.agentId = opts.targetId;
     else if (tt === "ROUTINE") input.routineId = opts.targetId;
     else {
-      printError("--target-id requires --target-type <AGENT|ROUTINE> on the same call.");
+      printError(
+        "--target-id requires --target-type <AGENT|ROUTINE> on the same call.",
+      );
       process.exit(1);
     }
   }
-  if (opts.rateLimit !== undefined) input.rateLimit = Number.parseInt(opts.rateLimit, 10);
+  if (opts.rateLimit !== undefined)
+    input.rateLimit = Number.parseInt(opts.rateLimit, 10);
   if (opts.enable) input.enabled = true;
   if (opts.disable) input.enabled = false;
   if (Object.keys(input).length === 0) {
@@ -356,16 +396,24 @@ interface DeleteOptions extends WebhookCliOptions {
   yes?: boolean;
 }
 
-async function runWebhookDelete(id: string, opts: DeleteOptions): Promise<void> {
+async function runWebhookDelete(
+  id: string,
+  opts: DeleteOptions,
+): Promise<void> {
   const ctx = await resolveWebhookContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to delete without --yes in a non-interactive session.");
+      printError(
+        "Refusing to delete without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
     const go = await promptOrExit(() =>
-      confirm({ message: `Delete webhook ${id}? Its URL stops working immediately.`, default: false }),
+      confirm({
+        message: `Delete webhook ${id}? Its URL stops working immediately.`,
+        default: false,
+      }),
     );
     if (!go) {
       logStderr("Cancelled.");
@@ -381,11 +429,16 @@ async function runWebhookDelete(id: string, opts: DeleteOptions): Promise<void> 
   else printError(`Server reported not-deleted for ${id}.`);
 }
 
-async function runWebhookRotate(id: string, opts: DeleteOptions): Promise<void> {
+async function runWebhookRotate(
+  id: string,
+  opts: DeleteOptions,
+): Promise<void> {
   const ctx = await resolveWebhookContext(opts);
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to rotate without --yes in a non-interactive session.");
+      printError(
+        "Refusing to rotate without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
@@ -522,10 +575,11 @@ export function registerWebhookCommand(program: Command): void {
   const wh = program
     .command("webhook")
     .alias("webhooks")
-    .description("Manage inbound webhooks that dispatch to agents or routines.");
+    .description(
+      "Manage inbound webhooks that dispatch to agents or routines.",
+    );
 
-  wh
-    .command("list")
+  wh.command("list")
     .alias("ls")
     .description("List webhooks in the tenant.")
     .option("-s, --stage <name>", "Deployment stage")
@@ -534,22 +588,23 @@ export function registerWebhookCommand(program: Command): void {
     .option("--target-type <t>", "AGENT | ROUTINE")
     .action(runWebhookList);
 
-  wh
-    .command("get <id>")
+  wh.command("get <id>")
     .description("Fetch one webhook including its token prefix + rate limit.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runWebhookGet);
 
-  wh
-    .command("create [name]")
+  wh.command("create [name]")
     .description("Create a new webhook. The token is printed once.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--target-type <t>", "AGENT | ROUTINE")
     .option("--target-id <id>", "ID of the agent or routine")
     .option("--rate-limit <rpm>", "Max requests per minute")
-    .option("--allowed-ips <csv>", "Restrict to a CIDR list (not yet honored server-side)")
+    .option(
+      "--allowed-ips <csv>",
+      "Restrict to a CIDR list (not yet honored server-side)",
+    )
     .option("--disabled", "Create in disabled state")
     .addHelpText(
       "after",
@@ -560,8 +615,7 @@ Examples:
     )
     .action(runWebhookCreate);
 
-  wh
-    .command("update <id>")
+  wh.command("update <id>")
     .description("Update a webhook's target, rate limit, or enabled state.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
@@ -573,16 +627,14 @@ Examples:
     .option("--disable")
     .action(runWebhookUpdate);
 
-  wh
-    .command("delete <id>")
+  wh.command("delete <id>")
     .description("Delete a webhook (its URL stops working immediately).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
     .action(runWebhookDelete);
 
-  wh
-    .command("test <id>")
+  wh.command("test <id>")
     .description(
       "Record a synthetic test delivery row for the webhook (visible via `webhook deliveries`). Does NOT trigger downstream dispatch; prints a curl one-liner for end-to-end reachability against the public URL.",
     )
@@ -590,16 +642,14 @@ Examples:
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runWebhookTest);
 
-  wh
-    .command("rotate <id>")
+  wh.command("rotate <id>")
     .description("Generate a new token for an existing webhook.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
     .action(runWebhookRotate);
 
-  wh
-    .command("deliveries <id>")
+  wh.command("deliveries <id>")
     .description(
       "Show recent delivery attempts for a webhook (newest first). Default 25, max 500.",
     )

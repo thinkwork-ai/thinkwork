@@ -21,7 +21,7 @@ function Separator({
       className={cn(
         "bg-neutral-200 dark:bg-neutral-800 shrink-0",
         orientation === "horizontal" ? "h-px w-full" : "w-px self-stretch",
-        className
+        className,
       )}
       {...props}
     />

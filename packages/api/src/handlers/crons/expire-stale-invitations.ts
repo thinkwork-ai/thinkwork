@@ -12,22 +12,17 @@ import { invites } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 
 export async function handler() {
-	const db = getDb();
-	const now = new Date();
+  const db = getDb();
+  const now = new Date();
 
-	const result = await db
-		.delete(invites)
-		.where(
-			and(
-				lt(invites.expires_at, now),
-				isNull(invites.revoked_at),
-			),
-		)
-		.returning({ id: invites.id, tenant_id: invites.tenant_id });
+  const result = await db
+    .delete(invites)
+    .where(and(lt(invites.expires_at, now), isNull(invites.revoked_at)))
+    .returning({ id: invites.id, tenant_id: invites.tenant_id });
 
-	console.log(`Deleted ${result.length} expired invitations`, {
-		inviteIds: result.map((r) => r.id),
-	});
+  console.log(`Deleted ${result.length} expired invitations`, {
+    inviteIds: result.map((r) => r.id),
+  });
 
-	return { deleted: result.length };
+  return { deleted: result.length };
 }

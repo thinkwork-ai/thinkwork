@@ -1,5 +1,14 @@
 import { useState, useEffect } from "react";
-import { View, ScrollView, TextInput, Pressable, ActivityIndicator, Alert, Platform, useWindowDimensions } from "react-native";
+import {
+  View,
+  ScrollView,
+  TextInput,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { DetailLayout } from "@/components/layout/detail-layout";
@@ -50,7 +59,9 @@ export default function WorkspaceFileEditor() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [assistantId, fileName]);
 
   const handleSave = async () => {
@@ -77,7 +88,9 @@ export default function WorkspaceFileEditor() {
   const headerRight = (
     <View className="flex-row items-center gap-4">
       <Pressable onPress={handleCancel} className="active:opacity-70">
-        <Text className="font-semibold text-base text-neutral-400 dark:text-neutral-500">Cancel</Text>
+        <Text className="font-semibold text-base text-neutral-400 dark:text-neutral-500">
+          Cancel
+        </Text>
       </Pressable>
       <Pressable
         onPress={handleSave}
@@ -85,7 +98,10 @@ export default function WorkspaceFileEditor() {
         className="active:opacity-70"
         style={{ opacity: hasChanges ? 1 : 0.4 }}
       >
-        <Text style={{ color: colors.primary }} className="font-semibold text-base">
+        <Text
+          style={{ color: colors.primary }}
+          className="font-semibold text-base"
+        >
           {saving ? "Saving..." : "Save"}
         </Text>
       </Pressable>
@@ -93,7 +109,10 @@ export default function WorkspaceFileEditor() {
   );
 
   return (
-    <DetailLayout title={`Edit ${fileName}`} headerRight={!loading ? headerRight : undefined}>
+    <DetailLayout
+      title={`Edit ${fileName}`}
+      headerRight={!loading ? headerRight : undefined}
+    >
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.mutedForeground} />

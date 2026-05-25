@@ -33,7 +33,10 @@ describe("parseBrainEnrichmentDraftDecision", () => {
     expect(parseBrainEnrichmentDraftDecision("not json")).toBeNull();
     expect(
       parseBrainEnrichmentDraftDecision(
-        JSON.stringify({ kind: "brain_enrichment_selection", selectedCandidateIds: [] }),
+        JSON.stringify({
+          kind: "brain_enrichment_selection",
+          selectedCandidateIds: [],
+        }),
       ),
     ).toBeNull();
   });
@@ -88,7 +91,9 @@ describe("parseBrainEnrichmentDraftDecision", () => {
 // mergeAcceptedRegions — the heart of U2
 // ---------------------------------------------------------------------------
 
-function region(args: Partial<DraftCompileRegion> & { id: string; sectionSlug: string }): DraftCompileRegion {
+function region(
+  args: Partial<DraftCompileRegion> & { id: string; sectionSlug: string },
+): DraftCompileRegion {
   return {
     sectionHeading: "",
     sourceFamily: "BRAIN",
@@ -100,7 +105,9 @@ function region(args: Partial<DraftCompileRegion> & { id: string; sectionSlug: s
   };
 }
 
-function payload(overrides: Partial<BrainEnrichmentDraftPayload>): BrainEnrichmentDraftPayload {
+function payload(
+  overrides: Partial<BrainEnrichmentDraftPayload>,
+): BrainEnrichmentDraftPayload {
   return {
     proposedBodyMd: "",
     snapshotMd: "",
@@ -135,7 +142,12 @@ describe("mergeAcceptedRegions", () => {
       proposedBodyMd: "## A\n\nproposed-a\n\n## B\n\nproposed-b",
       snapshotMd: "## A\n\nsnapshot-a",
       regions: [
-        region({ id: "r1", sectionSlug: "b", sectionHeading: "B", afterMd: "proposed-b" }),
+        region({
+          id: "r1",
+          sectionSlug: "b",
+          sectionHeading: "B",
+          afterMd: "proposed-b",
+        }),
       ],
     });
     expect(
@@ -170,8 +182,10 @@ describe("mergeAcceptedRegions", () => {
 
   it("mixed: rejected modify-region reverts to beforeMd in place; accepted regions stay", () => {
     const draft = payload({
-      proposedBodyMd: "## A\n\nproposed-a\n\n## B\n\nproposed-b\n\n## C\n\nproposed-c",
-      snapshotMd: "## A\n\nsnapshot-a\n\n## B\n\nsnapshot-b\n\n## C\n\nsnapshot-c",
+      proposedBodyMd:
+        "## A\n\nproposed-a\n\n## B\n\nproposed-b\n\n## C\n\nproposed-c",
+      snapshotMd:
+        "## A\n\nsnapshot-a\n\n## B\n\nsnapshot-b\n\n## C\n\nsnapshot-c",
       regions: [
         region({
           id: "r1",

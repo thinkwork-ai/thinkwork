@@ -1,4 +1,9 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import ReactMarkdown from "react-markdown";
@@ -28,7 +33,11 @@ interface ArtifactViewDialogProps {
   } | null;
 }
 
-export function ArtifactViewDialog({ open, onOpenChange, artifact }: ArtifactViewDialogProps) {
+export function ArtifactViewDialog({
+  open,
+  onOpenChange,
+  artifact,
+}: ArtifactViewDialogProps) {
   if (!artifact) return null;
 
   const typeLabel = TYPE_LABELS[artifact.type] ?? artifact.type;
@@ -39,7 +48,10 @@ export function ArtifactViewDialog({ open, onOpenChange, artifact }: ArtifactVie
         <DialogHeader>
           <div className="flex items-center gap-2 flex-wrap">
             <DialogTitle className="text-lg">{artifact.title}</DialogTitle>
-            <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+            <Badge
+              variant="secondary"
+              className="text-[10px] uppercase tracking-wide"
+            >
               {typeLabel}
             </Badge>
             <StatusBadge status={artifact.status} size="sm" />
@@ -57,7 +69,9 @@ export function ArtifactViewDialog({ open, onOpenChange, artifact }: ArtifactVie
           ) : artifact.summary ? (
             <p className="text-muted-foreground">{artifact.summary}</p>
           ) : (
-            <p className="text-muted-foreground italic">No content available.</p>
+            <p className="text-muted-foreground italic">
+              No content available.
+            </p>
           )}
         </div>
       </DialogContent>

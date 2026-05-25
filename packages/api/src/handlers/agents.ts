@@ -1,6 +1,6 @@
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
@@ -16,31 +16,31 @@ const { agents, agentCapabilities, agentSkills } = schema;
 // ---------------------------------------------------------------------------
 
 function parsePath(rawPath: string) {
-	// Expected shapes:
-	//   /api/agents
-	//   /api/agents/:id
-	//   /api/agents/:id/capabilities
-	//   /api/agents/:id/capabilities/:capId
-	//   /api/agents/:id/skills
-	//   /api/agents/:id/skills/:skillId
-	const segments = rawPath
-		.replace(/^\/api\/agents\/?/, "")
-		.split("/")
-		.filter(Boolean);
-	return {
-		id: segments[0] || null,
-		sub: segments[1] || null, // "capabilities" | "skills"
-		subId: segments[2] || null,
-	};
+  // Expected shapes:
+  //   /api/agents
+  //   /api/agents/:id
+  //   /api/agents/:id/capabilities
+  //   /api/agents/:id/capabilities/:capId
+  //   /api/agents/:id/skills
+  //   /api/agents/:id/skills/:skillId
+  const segments = rawPath
+    .replace(/^\/api\/agents\/?/, "")
+    .split("/")
+    .filter(Boolean);
+  return {
+    id: segments[0] || null,
+    sub: segments[1] || null, // "capabilities" | "skills"
+    subId: segments[2] || null,
+  };
 }
 
 function parseBody(event: APIGatewayProxyEventV2): Record<string, unknown> {
-	if (!event.body) return {};
-	try {
-		return JSON.parse(event.body);
-	} catch {
-		return {};
-	}
+  if (!event.body) return {};
+  try {
+    return JSON.parse(event.body);
+  } catch {
+    return {};
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -48,54 +48,64 @@ function parseBody(event: APIGatewayProxyEventV2): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 export async function handler(
-	event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
+  if (event.requestContext.http.method === "OPTIONS")
+    return {
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+      },
+      body: "",
+    };
 
-	const tenantHeader = event.headers["x-tenant-id"];
-	if (!tenantHeader) return error("Missing x-tenant-id header");
+  const tenantHeader = event.headers["x-tenant-id"];
+  if (!tenantHeader) return error("Missing x-tenant-id header");
 
-	const method = event.requestContext.http.method;
-	const { id, sub, subId } = parsePath(event.rawPath);
+  const method = event.requestContext.http.method;
+  const { id, sub, subId } = parsePath(event.rawPath);
 
-	const verdict = await requireTenantMembership(event, tenantHeader, {
-		requiredRoles: method === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
-	});
-	if (!verdict.ok) return error(verdict.reason, verdict.status);
-	const tenantId = verdict.tenantId;
+  const verdict = await requireTenantMembership(event, tenantHeader, {
+    requiredRoles:
+      method === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+  });
+  if (!verdict.ok) return error(verdict.reason, verdict.status);
+  const tenantId = verdict.tenantId;
 
-	try {
-		// ----- Sub-resource: capabilities -----
-		if (sub === "capabilities") {
-			if (!id) return error("Missing agent ID");
-			return handleCapabilities(method, tenantId, id, subId, event);
-		}
+  try {
+    // ----- Sub-resource: capabilities -----
+    if (sub === "capabilities") {
+      if (!id) return error("Missing agent ID");
+      return handleCapabilities(method, tenantId, id, subId, event);
+    }
 
-		// ----- Sub-resource: skills -----
-		if (sub === "skills") {
-			if (!id) return error("Missing agent ID");
-			return handleSkills(method, tenantId, id, subId, event);
-		}
+    // ----- Sub-resource: skills -----
+    if (sub === "skills") {
+      if (!id) return error("Missing agent ID");
+      return handleSkills(method, tenantId, id, subId, event);
+    }
 
-		// ----- Root: agents CRUD -----
-		switch (method) {
-			case "GET":
-				return id ? getAgent(tenantId, id) : listAgents(tenantId);
-			case "POST":
-				return createAgent(tenantId, event);
-			case "PUT":
-				if (!id) return error("Missing agent ID");
-				return updateAgent(tenantId, id, event);
-			case "DELETE":
-				if (!id) return error("Missing agent ID");
-				return archiveAgent(tenantId, id);
-			default:
-				return error("Method not allowed", 405);
-		}
-	} catch (err: any) {
-		console.error("Agents handler error:", err);
-		return error("Internal server error", 500);
-	}
+    // ----- Root: agents CRUD -----
+    switch (method) {
+      case "GET":
+        return id ? getAgent(tenantId, id) : listAgents(tenantId);
+      case "POST":
+        return createAgent(tenantId, event);
+      case "PUT":
+        if (!id) return error("Missing agent ID");
+        return updateAgent(tenantId, id, event);
+      case "DELETE":
+        if (!id) return error("Missing agent ID");
+        return archiveAgent(tenantId, id);
+      default:
+        return error("Method not allowed", 405);
+    }
+  } catch (err: any) {
+    console.error("Agents handler error:", err);
+    return error("Internal server error", 500);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -103,96 +113,93 @@ export async function handler(
 // ---------------------------------------------------------------------------
 
 async function listAgents(tenantId: string) {
-	const rows = await db
-		.select()
-		.from(agents)
-		.where(eq(agents.tenant_id, tenantId));
-	return json(rows);
+  const rows = await db
+    .select()
+    .from(agents)
+    .where(eq(agents.tenant_id, tenantId));
+  return json(rows);
 }
 
 async function getAgent(tenantId: string, id: string) {
-	const [row] = await db
-		.select()
-		.from(agents)
-		.where(and(eq(agents.id, id), eq(agents.tenant_id, tenantId)));
-	if (!row) return notFound("Agent not found");
-	return json(row);
+  const [row] = await db
+    .select()
+    .from(agents)
+    .where(and(eq(agents.id, id), eq(agents.tenant_id, tenantId)));
+  if (!row) return notFound("Agent not found");
+  return json(row);
 }
 
-async function createAgent(
-	tenantId: string,
-	event: APIGatewayProxyEventV2,
-) {
-	const body = parseBody(event);
-	if (!body.name) return error("name is required");
-	if (!body.template_id) return error("template_id is required");
+async function createAgent(tenantId: string, event: APIGatewayProxyEventV2) {
+  const body = parseBody(event);
+  if (!body.name) return error("name is required");
+  if (!body.template_id) return error("template_id is required");
 
-	const [row] = await db
-		.insert(agents)
-		.values({
-			tenant_id: tenantId,
-			name: body.name as string,
-			slug: generateSlug(),
-			template_id: body.template_id as string,
-			role: body.role as string | undefined,
-			type: (body.type as string) ?? "agent",
-			system_prompt: body.system_prompt as string | undefined,
-			adapter_type: (body.adapter_type as string) || "sdk",
-			adapter_config: body.adapter_config ?? undefined,
-			runtime_config: body.runtime_config ?? undefined,
-		})
-		.returning();
-	return json(row, 201);
+  const [row] = await db
+    .insert(agents)
+    .values({
+      tenant_id: tenantId,
+      name: body.name as string,
+      slug: generateSlug(),
+      template_id: body.template_id as string,
+      role: body.role as string | undefined,
+      type: (body.type as string) ?? "agent",
+      system_prompt: body.system_prompt as string | undefined,
+      adapter_type: (body.adapter_type as string) || "sdk",
+      adapter_config: body.adapter_config ?? undefined,
+      runtime_config: body.runtime_config ?? undefined,
+    })
+    .returning();
+  return json(row, 201);
 }
 
 async function updateAgent(
-	tenantId: string,
-	id: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  id: string,
+  event: APIGatewayProxyEventV2,
 ) {
-	const body = parseBody(event);
+  const body = parseBody(event);
 
-	const updates: Record<string, unknown> = { updated_at: new Date() };
-	const allowedFields = [
-		"name",
-		"role",
-		"type",
-		"model",
-		"system_prompt",
-		"adapter_type",
-		"adapter_config",
-		"runtime_config",
-		"status",
-		"budget_monthly_cents",
-		"avatar_url",
-		"reports_to",
-		"human_pair_id",
-	];
-	for (const f of allowedFields) {
-		if (f in body) updates[f] = body[f];
-	}
+  const updates: Record<string, unknown> = { updated_at: new Date() };
+  const allowedFields = [
+    "name",
+    "role",
+    "type",
+    "model",
+    "system_prompt",
+    "adapter_type",
+    "adapter_config",
+    "runtime_config",
+    "status",
+    "budget_monthly_cents",
+    "avatar_url",
+    "reports_to",
+    "human_pair_id",
+  ];
+  for (const f of allowedFields) {
+    if (f in body) updates[f] = body[f];
+  }
 
-	if (Object.keys(updates).length === 1) {
-		return error("No valid fields to update");
-	}
+  if (Object.keys(updates).length === 1) {
+    return error("No valid fields to update");
+  }
 
-	const [row] = await db
-		.update(agents)
-		.set(updates)
-		.where(and(eq(agents.id, id), eq(agents.tenant_id, tenantId)))
-		.returning();
-	if (!row) return notFound("Agent not found");
-	return json(row);
+  const [row] = await db
+    .update(agents)
+    .set(updates)
+    .where(and(eq(agents.id, id), eq(agents.tenant_id, tenantId)))
+    .returning();
+  if (!row) return notFound("Agent not found");
+  return json(row);
 }
 
 async function archiveAgent(tenantId: string, id: string) {
-	const [row] = await db
-		.update(agents)
-		.set({ status: "archived", updated_at: new Date() })
-		.where(and(eq(agents.id, id), eq(agents.tenant_id, tenantId)))
-		.returning();
-	if (!row) return notFound("Agent not found");
-	return json(row);
+  const [row] = await db
+    .update(agents)
+    .set({ status: "archived", updated_at: new Date() })
+    .where(and(eq(agents.id, id), eq(agents.tenant_id, tenantId)))
+    .returning();
+  if (!row) return notFound("Agent not found");
+  return json(row);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,60 +207,60 @@ async function archiveAgent(tenantId: string, id: string) {
 // ---------------------------------------------------------------------------
 
 async function handleCapabilities(
-	method: string,
-	tenantId: string,
-	agentId: string,
-	capId: string | null,
-	event: APIGatewayProxyEventV2,
+  method: string,
+  tenantId: string,
+  agentId: string,
+  capId: string | null,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	switch (method) {
-		case "GET": {
-			const rows = await db
-				.select()
-				.from(agentCapabilities)
-				.where(
-					and(
-						eq(agentCapabilities.agent_id, agentId),
-						eq(agentCapabilities.tenant_id, tenantId),
-					),
-				);
-			return json(rows);
-		}
-		case "POST": {
-			const body = parseBody(event);
-			if (!body.capability) return error("capability is required");
+  switch (method) {
+    case "GET": {
+      const rows = await db
+        .select()
+        .from(agentCapabilities)
+        .where(
+          and(
+            eq(agentCapabilities.agent_id, agentId),
+            eq(agentCapabilities.tenant_id, tenantId),
+          ),
+        );
+      return json(rows);
+    }
+    case "POST": {
+      const body = parseBody(event);
+      if (!body.capability) return error("capability is required");
 
-			const [row] = await db
-				.insert(agentCapabilities)
-				.values({
-					agent_id: agentId,
-					tenant_id: tenantId,
-					capability: body.capability as string,
-					config: body.config ?? undefined,
-					enabled:
-						body.enabled !== undefined ? (body.enabled as boolean) : true,
-				})
-				.returning();
-			return json(row, 201);
-		}
-		case "DELETE": {
-			if (!capId) return error("Missing capability ID");
-			const [row] = await db
-				.delete(agentCapabilities)
-				.where(
-					and(
-						eq(agentCapabilities.id, capId),
-						eq(agentCapabilities.agent_id, agentId),
-						eq(agentCapabilities.tenant_id, tenantId),
-					),
-				)
-				.returning();
-			if (!row) return notFound("Capability not found");
-			return json(row);
-		}
-		default:
-			return error("Method not allowed", 405);
-	}
+      const [row] = await db
+        .insert(agentCapabilities)
+        .values({
+          agent_id: agentId,
+          tenant_id: tenantId,
+          capability: body.capability as string,
+          config: body.config ?? undefined,
+          enabled:
+            body.enabled !== undefined ? (body.enabled as boolean) : true,
+        })
+        .returning();
+      return json(row, 201);
+    }
+    case "DELETE": {
+      if (!capId) return error("Missing capability ID");
+      const [row] = await db
+        .delete(agentCapabilities)
+        .where(
+          and(
+            eq(agentCapabilities.id, capId),
+            eq(agentCapabilities.agent_id, agentId),
+            eq(agentCapabilities.tenant_id, tenantId),
+          ),
+        )
+        .returning();
+      if (!row) return notFound("Capability not found");
+      return json(row);
+    }
+    default:
+      return error("Method not allowed", 405);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -261,60 +268,60 @@ async function handleCapabilities(
 // ---------------------------------------------------------------------------
 
 async function handleSkills(
-	method: string,
-	tenantId: string,
-	agentId: string,
-	skillId: string | null,
-	event: APIGatewayProxyEventV2,
+  method: string,
+  tenantId: string,
+  agentId: string,
+  skillId: string | null,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	switch (method) {
-		case "GET": {
-			const rows = await db
-				.select()
-				.from(agentSkills)
-				.where(
-					and(
-						eq(agentSkills.agent_id, agentId),
-						eq(agentSkills.tenant_id, tenantId),
-					),
-				);
-			return json(rows);
-		}
-		case "POST": {
-			const body = parseBody(event);
-			if (!body.skill_id) return error("skill_id is required");
+  switch (method) {
+    case "GET": {
+      const rows = await db
+        .select()
+        .from(agentSkills)
+        .where(
+          and(
+            eq(agentSkills.agent_id, agentId),
+            eq(agentSkills.tenant_id, tenantId),
+          ),
+        );
+      return json(rows);
+    }
+    case "POST": {
+      const body = parseBody(event);
+      if (!body.skill_id) return error("skill_id is required");
 
-			const [row] = await db
-				.insert(agentSkills)
-				.values({
-					agent_id: agentId,
-					tenant_id: tenantId,
-					skill_id: body.skill_id as string,
-					config: body.config ?? undefined,
-					permissions: body.permissions ?? undefined,
-					rate_limit_rpm: body.rate_limit_rpm as number | undefined,
-					enabled:
-						body.enabled !== undefined ? (body.enabled as boolean) : true,
-				})
-				.returning();
-			return json(row, 201);
-		}
-		case "DELETE": {
-			if (!skillId) return error("Missing skill ID");
-			const [row] = await db
-				.delete(agentSkills)
-				.where(
-					and(
-						eq(agentSkills.id, skillId),
-						eq(agentSkills.agent_id, agentId),
-						eq(agentSkills.tenant_id, tenantId),
-					),
-				)
-				.returning();
-			if (!row) return notFound("Skill not found");
-			return json(row);
-		}
-		default:
-			return error("Method not allowed", 405);
-	}
+      const [row] = await db
+        .insert(agentSkills)
+        .values({
+          agent_id: agentId,
+          tenant_id: tenantId,
+          skill_id: body.skill_id as string,
+          config: body.config ?? undefined,
+          permissions: body.permissions ?? undefined,
+          rate_limit_rpm: body.rate_limit_rpm as number | undefined,
+          enabled:
+            body.enabled !== undefined ? (body.enabled as boolean) : true,
+        })
+        .returning();
+      return json(row, 201);
+    }
+    case "DELETE": {
+      if (!skillId) return error("Missing skill ID");
+      const [row] = await db
+        .delete(agentSkills)
+        .where(
+          and(
+            eq(agentSkills.id, skillId),
+            eq(agentSkills.agent_id, agentId),
+            eq(agentSkills.tenant_id, tenantId),
+          ),
+        )
+        .returning();
+      if (!row) return notFound("Skill not found");
+      return json(row);
+    }
+    default:
+      return error("Method not allowed", 405);
+  }
 }

@@ -88,10 +88,11 @@ function tryAwsDiscovery(
   const poolList = JSON.parse(listRaw) as {
     UserPools: Array<{ Id: string; Name: string }>;
   };
-  const pool = poolList.UserPools.find((p) =>
-    // `foundation/cognito/main.tf`:93 pattern
-    p.Name === `thinkwork-${stage}-user-pool` ||
-    p.Name === `thinkwork-${stage}-users`,
+  const pool = poolList.UserPools.find(
+    (p) =>
+      // `foundation/cognito/main.tf`:93 pattern
+      p.Name === `thinkwork-${stage}-user-pool` ||
+      p.Name === `thinkwork-${stage}-users`,
   );
   if (!pool) return {};
 

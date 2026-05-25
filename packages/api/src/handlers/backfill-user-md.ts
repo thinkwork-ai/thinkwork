@@ -30,101 +30,101 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, tenants } from "@thinkwork/database-pg/schema";
 import {
-	UserMdWriterError,
-	writeUserMdForAssignment,
+  UserMdWriterError,
+  writeUserMdForAssignment,
 } from "../lib/user-md-writer.js";
 
 type Mode = "dry-run" | "commit";
 
 interface BackfillResult {
-	mode: Mode;
-	total: number;
-	rewrote: number;
-	skipped: number;
-	failed: Array<{ agentId: string; error: string }>;
+  mode: Mode;
+  total: number;
+  rewrote: number;
+  skipped: number;
+  failed: Array<{ agentId: string; error: string }>;
 }
 
 async function run(opts: {
-	mode: Mode;
-	tenantSlug?: string;
+  mode: Mode;
+  tenantSlug?: string;
 }): Promise<BackfillResult> {
-	const db = getDb();
+  const db = getDb();
 
-	// Candidates: every agent with a human_pair_id set. Optional tenant
-	// filter applied via a slug join so the caller can scope to one tenant.
-	const whereClauses = [isNotNull(agents.human_pair_id)];
-	let rows;
-	if (opts.tenantSlug) {
-		rows = await db
-			.select({
-				agentId: agents.id,
-				humanPairId: agents.human_pair_id,
-				agentName: agents.name,
-				tenantSlug: tenants.slug,
-			})
-			.from(agents)
-			.innerJoin(tenants, eq(tenants.id, agents.tenant_id))
-			.where(and(...whereClauses, eq(tenants.slug, opts.tenantSlug)));
-	} else {
-		rows = await db
-			.select({
-				agentId: agents.id,
-				humanPairId: agents.human_pair_id,
-				agentName: agents.name,
-				tenantSlug: tenants.slug,
-			})
-			.from(agents)
-			.innerJoin(tenants, eq(tenants.id, agents.tenant_id))
-			.where(and(...whereClauses));
-	}
+  // Candidates: every agent with a human_pair_id set. Optional tenant
+  // filter applied via a slug join so the caller can scope to one tenant.
+  const whereClauses = [isNotNull(agents.human_pair_id)];
+  let rows;
+  if (opts.tenantSlug) {
+    rows = await db
+      .select({
+        agentId: agents.id,
+        humanPairId: agents.human_pair_id,
+        agentName: agents.name,
+        tenantSlug: tenants.slug,
+      })
+      .from(agents)
+      .innerJoin(tenants, eq(tenants.id, agents.tenant_id))
+      .where(and(...whereClauses, eq(tenants.slug, opts.tenantSlug)));
+  } else {
+    rows = await db
+      .select({
+        agentId: agents.id,
+        humanPairId: agents.human_pair_id,
+        agentName: agents.name,
+        tenantSlug: tenants.slug,
+      })
+      .from(agents)
+      .innerJoin(tenants, eq(tenants.id, agents.tenant_id))
+      .where(and(...whereClauses));
+  }
 
-	const result: BackfillResult = {
-		mode: opts.mode,
-		total: rows.length,
-		rewrote: 0,
-		skipped: 0,
-		failed: [],
-	};
+  const result: BackfillResult = {
+    mode: opts.mode,
+    total: rows.length,
+    rewrote: 0,
+    skipped: 0,
+    failed: [],
+  };
 
-	for (const row of rows) {
-		if (!row.humanPairId) {
-			result.skipped += 1;
-			continue;
-		}
+  for (const row of rows) {
+    if (!row.humanPairId) {
+      result.skipped += 1;
+      continue;
+    }
 
-		if (opts.mode === "dry-run") {
-			console.log(
-				`[backfill-user-md] would rewrite agent=${row.agentId} tenant=${row.tenantSlug} name=${row.agentName}`,
-			);
-			result.rewrote += 1;
-			continue;
-		}
+    if (opts.mode === "dry-run") {
+      console.log(
+        `[backfill-user-md] would rewrite agent=${row.agentId} tenant=${row.tenantSlug} name=${row.agentName}`,
+      );
+      result.rewrote += 1;
+      continue;
+    }
 
-		try {
-			// writeUserMdForAssignment does its own DB reads; no transaction
-			// needed because we're only reading the existing pairing and
-			// rewriting USER.md in S3 — no row we'd want to roll back here.
-			// If the caller wants atomicity they can wrap this in db.transaction.
-			await writeUserMdForAssignment(db, row.agentId, row.humanPairId);
-			console.log(
-				`[backfill-user-md] rewrote agent=${row.agentId} tenant=${row.tenantSlug}`,
-			);
-			result.rewrote += 1;
-		} catch (err) {
-			const message =
-				err instanceof UserMdWriterError
-					? `${err.code}: ${err.message}`
-					: err instanceof Error
-						? err.message
-						: String(err);
-			console.error(
-				`[backfill-user-md] FAILED agent=${row.agentId} tenant=${row.tenantSlug}: ${message}`,
-			);
-			result.failed.push({ agentId: row.agentId, error: message });
-		}
-	}
+    try {
+      // writeUserMdForAssignment does its own DB reads; no transaction
+      // needed because we're only reading the existing pairing and
+      // rewriting USER.md in S3 — no row we'd want to roll back here.
+      // If the caller wants atomicity they can wrap this in db.transaction.
+      await writeUserMdForAssignment(db, row.agentId, row.humanPairId);
+      console.log(
+        `[backfill-user-md] rewrote agent=${row.agentId} tenant=${row.tenantSlug}`,
+      );
+      result.rewrote += 1;
+    } catch (err) {
+      const message =
+        err instanceof UserMdWriterError
+          ? `${err.code}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      console.error(
+        `[backfill-user-md] FAILED agent=${row.agentId} tenant=${row.tenantSlug}: ${message}`,
+      );
+      result.failed.push({ agentId: row.agentId, error: message });
+    }
+  }
 
-	return result;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,49 +132,49 @@ async function run(opts: {
 // ---------------------------------------------------------------------------
 
 export async function handler(event: {
-	mode?: Mode;
-	tenantSlug?: string;
+  mode?: Mode;
+  tenantSlug?: string;
 }): Promise<BackfillResult> {
-	return run({
-		mode: event.mode ?? "dry-run",
-		tenantSlug: event.tenantSlug,
-	});
+  return run({
+    mode: event.mode ?? "dry-run",
+    tenantSlug: event.tenantSlug,
+  });
 }
 
 function parseArgs(): { mode: Mode; tenantSlug?: string } {
-	const args = process.argv.slice(2);
-	let mode: Mode = "dry-run";
-	let tenantSlug: string | undefined;
-	for (let i = 0; i < args.length; i += 1) {
-		const a = args[i];
-		if (a === "--dry-run") mode = "dry-run";
-		else if (a === "--commit") mode = "commit";
-		else if (a === "--tenant") tenantSlug = args[++i];
-	}
-	return { mode, tenantSlug };
+  const args = process.argv.slice(2);
+  let mode: Mode = "dry-run";
+  let tenantSlug: string | undefined;
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === "--dry-run") mode = "dry-run";
+    else if (a === "--commit") mode = "commit";
+    else if (a === "--tenant") tenantSlug = args[++i];
+  }
+  return { mode, tenantSlug };
 }
 
 if (
-	import.meta.url === `file://${process.argv[1]}` ||
-	process.argv[1]?.endsWith("backfill-user-md.ts")
+  import.meta.url === `file://${process.argv[1]}` ||
+  process.argv[1]?.endsWith("backfill-user-md.ts")
 ) {
-	(async () => {
-		const opts = parseArgs();
-		console.log(
-			`[backfill-user-md] starting mode=${opts.mode} tenant=${opts.tenantSlug ?? "(all)"}`,
-		);
-		try {
-			const out = await run(opts);
-			console.log(
-				`[backfill-user-md] done — total=${out.total} rewrote=${out.rewrote} skipped=${out.skipped} failed=${out.failed.length}`,
-			);
-			if (out.failed.length) {
-				console.log(JSON.stringify(out.failed, null, 2));
-				process.exitCode = 1;
-			}
-		} catch (err) {
-			console.error(`[backfill-user-md] failed:`, err);
-			process.exitCode = 1;
-		}
-	})();
+  (async () => {
+    const opts = parseArgs();
+    console.log(
+      `[backfill-user-md] starting mode=${opts.mode} tenant=${opts.tenantSlug ?? "(all)"}`,
+    );
+    try {
+      const out = await run(opts);
+      console.log(
+        `[backfill-user-md] done — total=${out.total} rewrote=${out.rewrote} skipped=${out.skipped} failed=${out.failed.length}`,
+      );
+      if (out.failed.length) {
+        console.log(JSON.stringify(out.failed, null, 2));
+        process.exitCode = 1;
+      }
+    } catch (err) {
+      console.error(`[backfill-user-md] failed:`, err);
+      process.exitCode = 1;
+    }
+  })();
 }

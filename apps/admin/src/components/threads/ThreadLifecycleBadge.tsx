@@ -6,50 +6,54 @@ import { ThreadLifecycleStatus } from "@/gql/graphql";
 // Codegen'd enum — see packages/database-pg/graphql/types/threads.graphql.
 // If the server adds a new enum value, TypeScript will flag the missing key
 // in the `styles` Record below at build time.
-const styles: Record<ThreadLifecycleStatus, { dot: string; badge: string; label: string }> = {
-	[ThreadLifecycleStatus.Running]: {
-		dot: "bg-blue-500 animate-pulse",
-		badge: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-		label: "Running",
-	},
-	[ThreadLifecycleStatus.Completed]: {
-		dot: "bg-green-500",
-		badge: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
-		label: "Completed",
-	},
-	[ThreadLifecycleStatus.Cancelled]: {
-		dot: "bg-yellow-500",
-		badge: "bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
-		label: "Cancelled",
-	},
-	[ThreadLifecycleStatus.Failed]: {
-		dot: "bg-red-500",
-		badge: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
-		label: "Failed",
-	},
-	[ThreadLifecycleStatus.Idle]: {
-		dot: "bg-gray-400",
-		badge: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-		label: "Idle",
-	},
-	// AWAITING_USER is reserved in the enum but not emitted by v1.
-	// Render as IDLE styling so the UI degrades gracefully if it ever arrives.
-	[ThreadLifecycleStatus.AwaitingUser]: {
-		dot: "bg-gray-400",
-		badge: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-		label: "Awaiting user",
-	},
+const styles: Record<
+  ThreadLifecycleStatus,
+  { dot: string; badge: string; label: string }
+> = {
+  [ThreadLifecycleStatus.Running]: {
+    dot: "bg-blue-500 animate-pulse",
+    badge: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+    label: "Running",
+  },
+  [ThreadLifecycleStatus.Completed]: {
+    dot: "bg-green-500",
+    badge: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
+    label: "Completed",
+  },
+  [ThreadLifecycleStatus.Cancelled]: {
+    dot: "bg-yellow-500",
+    badge:
+      "bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
+    label: "Cancelled",
+  },
+  [ThreadLifecycleStatus.Failed]: {
+    dot: "bg-red-500",
+    badge: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+    label: "Failed",
+  },
+  [ThreadLifecycleStatus.Idle]: {
+    dot: "bg-gray-400",
+    badge: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    label: "Idle",
+  },
+  // AWAITING_USER is reserved in the enum but not emitted by v1.
+  // Render as IDLE styling so the UI degrades gracefully if it ever arrives.
+  [ThreadLifecycleStatus.AwaitingUser]: {
+    dot: "bg-gray-400",
+    badge: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    label: "Awaiting user",
+  },
 };
 
 interface ThreadLifecycleBadgeProps {
-	/** Resolver-derived status. Null during initial fetch or on loader error. */
-	lifecycleStatus: ThreadLifecycleStatus | null | undefined;
-	/** Thread id — used to consult the active-turns store for real-time override. */
-	threadId: string;
-	/** When true and there's no prior value, render a skeleton pulse. */
-	loading?: boolean;
-	size?: "sm" | "md";
-	className?: string;
+  /** Resolver-derived status. Null during initial fetch or on loader error. */
+  lifecycleStatus: ThreadLifecycleStatus | null | undefined;
+  /** Thread id — used to consult the active-turns store for real-time override. */
+  threadId: string;
+  /** When true and there's no prior value, render a skeleton pulse. */
+  loading?: boolean;
+  size?: "sm" | "md";
+  className?: string;
 }
 
 /**
@@ -62,58 +66,60 @@ interface ThreadLifecycleBadgeProps {
  * renders a skeleton pulse (same dimensions as the real badge).
  */
 export function ThreadLifecycleBadge({
-	lifecycleStatus,
-	threadId,
-	loading = false,
-	size = "md",
-	className,
+  lifecycleStatus,
+  threadId,
+  loading = false,
+  size = "md",
+  className,
 }: ThreadLifecycleBadgeProps) {
-	const hasActiveTurn = useActiveTurnsStore((s) => s._activeThreadIds.has(threadId));
+  const hasActiveTurn = useActiveTurnsStore((s) =>
+    s._activeThreadIds.has(threadId),
+  );
 
-	// Active-turn override wins. Falls through to the resolver-derived status.
-	const effective: ThreadLifecycleStatus | null = hasActiveTurn
-		? ThreadLifecycleStatus.Running
-		: (lifecycleStatus ?? null);
+  // Active-turn override wins. Falls through to the resolver-derived status.
+  const effective: ThreadLifecycleStatus | null = hasActiveTurn
+    ? ThreadLifecycleStatus.Running
+    : (lifecycleStatus ?? null);
 
-	if (!effective) {
-		if (loading) {
-			return (
-				<span
-					className={cn(
-						"inline-block rounded-full bg-muted animate-pulse",
-						size === "sm" ? "h-4 w-16" : "h-5 w-20",
-						className,
-					)}
-					aria-label="Loading lifecycle status"
-				/>
-			);
-		}
-		// No data and not loading — nothing to render.
-		return null;
-	}
+  if (!effective) {
+    if (loading) {
+      return (
+        <span
+          className={cn(
+            "inline-block rounded-full bg-muted animate-pulse",
+            size === "sm" ? "h-4 w-16" : "h-5 w-20",
+            className,
+          )}
+          aria-label="Loading lifecycle status"
+        />
+      );
+    }
+    // No data and not loading — nothing to render.
+    return null;
+  }
 
-	// Defensive fallback: if the server ever emits a new enum value the client
-	// bundle doesn't know about, render as IDLE rather than throwing.
-	const s = styles[effective] ?? styles[ThreadLifecycleStatus.Idle];
+  // Defensive fallback: if the server ever emits a new enum value the client
+  // bundle doesn't know about, render as IDLE rather than throwing.
+  const s = styles[effective] ?? styles[ThreadLifecycleStatus.Idle];
 
-	return (
-		<Badge
-			variant="outline"
-			className={cn(
-				"border-transparent font-medium",
-				s.badge,
-				size === "sm" ? "text-[10px] px-1.5 py-0" : "text-xs px-2 py-0.5",
-				className,
-			)}
-		>
-			<span
-				className={cn(
-					"shrink-0 rounded-full",
-					size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2",
-					s.dot,
-				)}
-			/>
-			{s.label}
-		</Badge>
-	);
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "border-transparent font-medium",
+        s.badge,
+        size === "sm" ? "text-[10px] px-1.5 py-0" : "text-xs px-2 py-0.5",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "shrink-0 rounded-full",
+          size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2",
+          s.dot,
+        )}
+      />
+      {s.label}
+    </Badge>
+  );
 }

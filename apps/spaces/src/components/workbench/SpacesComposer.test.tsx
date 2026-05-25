@@ -116,9 +116,7 @@ describe("SpacesComposer", () => {
   });
 
   it("focuses the input when it mounts", async () => {
-    render(
-      <SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />,
-    );
+    render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
 
     const input = screen.getByLabelText("Send message");
     await waitFor(() => expect(document.activeElement).toBe(input));
@@ -139,9 +137,7 @@ describe("SpacesComposer", () => {
       />,
     );
 
-    const input = screen.getByLabelText(
-      "Send message",
-    ) as HTMLTextAreaElement;
+    const input = screen.getByLabelText("Send message") as HTMLTextAreaElement;
     expect(input.disabled).toBe(true);
     expect(document.activeElement).not.toBe(input);
 
@@ -171,9 +167,7 @@ describe("SpacesComposer", () => {
   });
 
   it("disables submit for empty prompts", () => {
-    render(
-      <SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />,
-    );
+    render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
 
     const submit = screen.getByRole("button", {
       name: /start/i,

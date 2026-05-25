@@ -1,4 +1,9 @@
-import { Client, cacheExchange, fetchExchange, subscriptionExchange } from "@urql/core";
+import {
+  Client,
+  cacheExchange,
+  fetchExchange,
+  subscriptionExchange,
+} from "@urql/core";
 
 // HTTP endpoint for queries/mutations (API Gateway)
 const GRAPHQL_HTTP_URL = import.meta.env.VITE_GRAPHQL_HTTP_URL || "";
@@ -20,7 +25,9 @@ export function setGraphqlTenantId(tenantId: string | null) {
   currentTenantId = tenantId;
 }
 
-export function setTokenProvider(provider: (() => Promise<string | null>) | null) {
+export function setTokenProvider(
+  provider: (() => Promise<string | null>) | null,
+) {
   tokenProvider = provider;
 }
 
@@ -30,13 +37,18 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startTokenRefresh() {
   if (refreshTimer) return;
-  refreshTimer = setInterval(async () => {
-    if (!tokenProvider) return;
-    try {
-      const fresh = await tokenProvider();
-      if (fresh) cachedToken = fresh;
-    } catch { /* best-effort */ }
-  }, 5 * 60 * 1000); // every 5 minutes
+  refreshTimer = setInterval(
+    async () => {
+      if (!tokenProvider) return;
+      try {
+        const fresh = await tokenProvider();
+        if (fresh) cachedToken = fresh;
+      } catch {
+        /* best-effort */
+      }
+    },
+    5 * 60 * 1000,
+  ); // every 5 minutes
 }
 
 export function stopTokenRefresh() {
@@ -68,7 +80,10 @@ function isExpiredJwt(token: string): boolean {
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
     const decoded = JSON.parse(atob(padded)) as { exp?: number };
-    return typeof decoded.exp === "number" && decoded.exp * 1000 <= Date.now() + 30_000;
+    return (
+      typeof decoded.exp === "number" &&
+      decoded.exp * 1000 <= Date.now() + 30_000
+    );
   } catch {
     return false;
   }
@@ -101,10 +116,12 @@ function buildRealtimeUrl(): string {
   if (!host || !realtimeHost) return "";
 
   // Auth header must reference the original API host (not the realtime host)
-  const header = btoa(JSON.stringify({
-    host,
-    "x-api-key": GRAPHQL_API_KEY,
-  }));
+  const header = btoa(
+    JSON.stringify({
+      host,
+      "x-api-key": GRAPHQL_API_KEY,
+    }),
+  );
 
   return `wss://${realtimeHost}/graphql?header=${encodeURIComponent(header)}&payload=e30=`;
 }
@@ -117,7 +134,10 @@ type Sink<T = unknown> = {
 
 class AppSyncSubscriptionClient {
   private ws: WebSocket | null = null;
-  private subs = new Map<string, { query: string; variables: Record<string, unknown>; sink: Sink }>();
+  private subs = new Map<
+    string,
+    { query: string; variables: Record<string, unknown>; sink: Sink }
+  >();
   private subCounter = 0;
   private connected = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -207,7 +227,11 @@ class AppSyncSubscriptionClient {
     }, 3000);
   }
 
-  private sendStart(id: string, query: string, variables: Record<string, unknown>) {
+  private sendStart(
+    id: string,
+    query: string,
+    variables: Record<string, unknown>,
+  ) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
     const host = getHost();
@@ -216,22 +240,28 @@ class AppSyncSubscriptionClient {
       "x-api-key": GRAPHQL_API_KEY,
     });
 
-    this.ws.send(JSON.stringify({
-      id,
-      type: "start",
-      payload: {
-        data: JSON.stringify({ query, variables }),
-        extensions: {
-          authorization: {
-            host,
-            "x-api-key": GRAPHQL_API_KEY,
+    this.ws.send(
+      JSON.stringify({
+        id,
+        type: "start",
+        payload: {
+          data: JSON.stringify({ query, variables }),
+          extensions: {
+            authorization: {
+              host,
+              "x-api-key": GRAPHQL_API_KEY,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
   }
 
-  subscribe(query: string, variables: Record<string, unknown>, sink: Sink): () => void {
+  subscribe(
+    query: string,
+    variables: Record<string, unknown>,
+    sink: Sink,
+  ): () => void {
     const id = String(++this.subCounter);
     this.subs.set(id, { query, variables, sink });
 
@@ -253,7 +283,9 @@ class AppSyncSubscriptionClient {
 const appSyncClient = GRAPHQL_WS_URL ? new AppSyncSubscriptionClient() : null;
 
 export const graphqlClient = new Client({
-  url: GRAPHQL_HTTP_URL || "https://placeholder.api.us-east-1.amazonaws.com/graphql",
+  url:
+    GRAPHQL_HTTP_URL ||
+    "https://placeholder.api.us-east-1.amazonaws.com/graphql",
   exchanges: [
     cacheExchange,
     fetchExchange,
@@ -262,10 +294,17 @@ export const graphqlClient = new Client({
           subscriptionExchange({
             forwardSubscription(request) {
               const query = request.query || "";
-              const variables = (request.variables || {}) as Record<string, unknown>;
+              const variables = (request.variables || {}) as Record<
+                string,
+                unknown
+              >;
               return {
                 subscribe(sink) {
-                  const unsubscribe = appSyncClient.subscribe(query, variables, sink as Sink);
+                  const unsubscribe = appSyncClient.subscribe(
+                    query,
+                    variables,
+                    sink as Sink,
+                  );
                   return { unsubscribe };
                 },
               };

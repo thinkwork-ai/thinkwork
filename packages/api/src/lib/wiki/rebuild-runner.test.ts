@@ -83,9 +83,8 @@ describe("scoped wiki rebuild reset", () => {
   }, 15_000);
 
   it("refuses destructive reset when compile jobs are still open", async () => {
-    const { resetScopedWikiRebuild, WikiRebuildInProgressError } = await import(
-      "./rebuild-runner.js"
-    );
+    const { resetScopedWikiRebuild, WikiRebuildInProgressError } =
+      await import("./rebuild-runner.js");
     countWikiScope.mockResolvedValue(baseWikiCounts);
     const db = makeFakeDb([
       { rows: [{ n: 2 }] },

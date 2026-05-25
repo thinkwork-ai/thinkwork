@@ -45,23 +45,23 @@ const REDACTED = "Bearer [REDACTED]";
  * nothing). The reverse order would also be safe.
  */
 export function scrubBearerStrings(
-	text: string,
-	activeBearer?: string,
+  text: string,
+  activeBearer?: string,
 ): string {
-	if (typeof text !== "string" || text.length === 0) return text;
+  if (typeof text !== "string" || text.length === 0) return text;
 
-	let scrubbed = text.replace(BEARER_HEADER_PATTERN, REDACTED);
+  let scrubbed = text.replace(BEARER_HEADER_PATTERN, REDACTED);
 
-	if (activeBearer && activeBearer.length >= 8) {
-		// Bearer-shape regex above wins for prefixed cases; the literal
-		// pass catches the bare-token reflection. We require >= 8 chars
-		// on the literal so a short test-fixture or a truncated value
-		// can't accidentally redact common substrings.
-		const escaped = escapeRegex(activeBearer);
-		scrubbed = scrubbed.replace(new RegExp(escaped, "g"), "[REDACTED]");
-	}
+  if (activeBearer && activeBearer.length >= 8) {
+    // Bearer-shape regex above wins for prefixed cases; the literal
+    // pass catches the bare-token reflection. We require >= 8 chars
+    // on the literal so a short test-fixture or a truncated value
+    // can't accidentally redact common substrings.
+    const escaped = escapeRegex(activeBearer);
+    scrubbed = scrubbed.replace(new RegExp(escaped, "g"), "[REDACTED]");
+  }
 
-	return scrubbed;
+  return scrubbed;
 }
 
 /**
@@ -72,5 +72,5 @@ export function scrubBearerStrings(
  * carry `+` or `/`.
  */
 function escapeRegex(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

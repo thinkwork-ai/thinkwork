@@ -52,7 +52,8 @@ function parseIni(content: string): Record<string, Record<string, string>> {
 
 function normalizeConfigSection(section: string): string | null {
   if (section === "default") return "default";
-  if (section.startsWith("profile ")) return section.slice("profile ".length).trim();
+  if (section.startsWith("profile "))
+    return section.slice("profile ".length).trim();
   // `[sso-session ...]` and other non-profile sections are skipped.
   return null;
 }

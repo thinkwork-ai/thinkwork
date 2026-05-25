@@ -109,8 +109,7 @@ export function createDrizzleClassifyChainStore(
         FROM agent_chain
         ORDER BY level ASC
       `);
-      const rows =
-        (result as unknown as { rows?: AgentChainRow[] }).rows ?? [];
+      const rows = (result as unknown as { rows?: AgentChainRow[] }).rows ?? [];
       return rows.map((row) => ({
         id: row.id,
         parent_agent_id: row.parent_agent_id,

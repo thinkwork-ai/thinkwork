@@ -79,10 +79,7 @@ const _DEFAULT_SFN_CLIENT = new SFNClient({});
 
 // AWS SFN error names we map to `alreadyConsumed:true`. Adding new names
 // here is a behavior change — keep the list narrow.
-const _CONSUMED_ERROR_NAMES = new Set([
-  "TaskDoesNotExist",
-  "TaskTimedOut",
-]);
+const _CONSUMED_ERROR_NAMES = new Set(["TaskDoesNotExist", "TaskTimedOut"]);
 
 // ---------------------------------------------------------------------------
 // Pure entry point — exported for unit tests.
@@ -135,7 +132,7 @@ export async function resumeRoutineExecution(
         status: input.decision === "success" ? "succeeded" : "failed",
         finishedAt: new Date().toISOString(),
         outputJson:
-          input.decision === "success" ? input.output ?? null : undefined,
+          input.decision === "success" ? (input.output ?? null) : undefined,
         errorJson:
           input.decision === "failure"
             ? {

@@ -6,7 +6,10 @@ const STDOUT_LIMIT_BYTES = 256 * 1024;
 const STDERR_LIMIT_BYTES = 32 * 1024;
 const DEFAULT_TIMEOUT_MS = 300_000;
 
-function truncate(value: string, limit: number): { text: string; truncated: boolean } {
+function truncate(
+  value: string,
+  limit: number,
+): { text: string; truncated: boolean } {
   const bytes = Buffer.byteLength(value, "utf8");
   if (bytes <= limit) return { text: value, truncated: false };
   return {

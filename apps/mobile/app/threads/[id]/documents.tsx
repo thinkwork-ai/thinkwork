@@ -30,7 +30,10 @@ function DocumentCard({ doc }: { doc: any }) {
           <FileText size={16} color="#0ea5e9" />
         </View>
         <View className="flex-1">
-          <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100" numberOfLines={1}>
+          <Text
+            className="text-base font-medium text-neutral-900 dark:text-neutral-100"
+            numberOfLines={1}
+          >
             {doc.title}
           </Text>
           <Text className="text-xs text-neutral-400 mt-0.5">

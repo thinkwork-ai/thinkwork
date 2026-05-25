@@ -12,15 +12,17 @@ const badgeVariants = cva(
         default: "bg-sky-500",
         secondary: "bg-neutral-100 dark:bg-neutral-800",
         destructive: "bg-red-100 dark:bg-red-900/30 border border-red-500/50",
-        outline: "border border-neutral-300 dark:border-neutral-700 bg-transparent",
+        outline:
+          "border border-neutral-300 dark:border-neutral-700 bg-transparent",
         success: "bg-green-100 dark:bg-green-900/30 border border-green-500/50",
-        warning: "bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-500/50",
+        warning:
+          "bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-500/50",
       },
     },
     defaultVariants: {
       variant: "default",
     },
-  }
+  },
 );
 
 const badgeTextVariants = cva("text-xs font-medium", {
@@ -56,7 +58,10 @@ export function Badge({
   return (
     <View className={cn(badgeVariants({ variant }), className)}>
       {icon && <View className="mr-1">{icon}</View>}
-      <Text className={cn(badgeTextVariants({ variant }), textClassName)} numberOfLines={1}>
+      <Text
+        className={cn(badgeTextVariants({ variant }), textClassName)}
+        numberOfLines={1}
+      >
         {children}
       </Text>
     </View>
@@ -68,18 +73,58 @@ export function StatusBadge({
   status,
   className,
 }: {
-  status: "online" | "offline" | "unknown" | "revoked" | "pending" | "starting" | "updating" | "stopped";
+  status:
+    | "online"
+    | "offline"
+    | "unknown"
+    | "revoked"
+    | "pending"
+    | "starting"
+    | "updating"
+    | "stopped";
   className?: string;
 }) {
   const config = {
-    online: { variant: "success" as const, label: "Online", dotColor: "bg-green-600" },
-    offline: { variant: "outline" as const, label: "Offline", dotColor: "bg-neutral-400 dark:bg-neutral-500" },
-    unknown: { variant: "outline" as const, label: "Unknown", dotColor: "bg-neutral-400 dark:bg-neutral-500" },
-    revoked: { variant: "destructive" as const, label: "Revoked", dotColor: "bg-red-500" },
-    pending: { variant: "warning" as const, label: "Pending", dotColor: "bg-yellow-600" },
-    starting: { variant: "warning" as const, label: "Starting", dotColor: "bg-sky-500" },
-    updating: { variant: "warning" as const, label: "Updating", dotColor: "bg-sky-500" },
-    stopped: { variant: "outline" as const, label: "Stopped", dotColor: "bg-neutral-400 dark:bg-neutral-500" },
+    online: {
+      variant: "success" as const,
+      label: "Online",
+      dotColor: "bg-green-600",
+    },
+    offline: {
+      variant: "outline" as const,
+      label: "Offline",
+      dotColor: "bg-neutral-400 dark:bg-neutral-500",
+    },
+    unknown: {
+      variant: "outline" as const,
+      label: "Unknown",
+      dotColor: "bg-neutral-400 dark:bg-neutral-500",
+    },
+    revoked: {
+      variant: "destructive" as const,
+      label: "Revoked",
+      dotColor: "bg-red-500",
+    },
+    pending: {
+      variant: "warning" as const,
+      label: "Pending",
+      dotColor: "bg-yellow-600",
+    },
+    starting: {
+      variant: "warning" as const,
+      label: "Starting",
+      dotColor: "bg-sky-500",
+    },
+    updating: {
+      variant: "warning" as const,
+      label: "Updating",
+      dotColor: "bg-sky-500",
+    },
+    stopped: {
+      variant: "outline" as const,
+      label: "Stopped",
+      dotColor: "bg-neutral-400 dark:bg-neutral-500",
+    },
   };
 
   const { variant, label, dotColor } = config[status];

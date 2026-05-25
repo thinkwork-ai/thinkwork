@@ -1,13 +1,11 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-  computers,
   messages,
   tenants,
   threadParticipants,
   threads,
 } from "@thinkwork/database-pg/schema";
-import { enqueueComputerThreadTurn } from "../computers/thread-cutover.js";
 import { resolveTenantPlatformAgent } from "../agents/tenant-platform-agent.js";
 
 const db = getDb();
@@ -26,10 +24,8 @@ export interface CreateColdContactThreadInput {
 export async function createColdContactThread(
   input: CreateColdContactThreadInput,
 ) {
-  const routing = await resolveColdContactComputer({
-    tenantId: input.tenantId,
-    spaceId: input.spaceId,
-  });
+  const platformAgent = await resolveTenantPlatformAgent(input.tenantId);
+  const agentId = platformAgent.id;
 
   const title = titleFromSubject(input.emailSubject);
   const createdAt = new Date();
@@ -45,8 +41,7 @@ export async function createColdContactThread(
       .insert(threads)
       .values({
         tenant_id: input.tenantId,
-        computer_id: routing.computerId,
-        agent_id: routing.agentId,
+        agent_id: agentId,
         space_id: input.spaceId,
         user_id: input.senderUserId,
         number: tenant.nextNumber,
@@ -108,8 +103,8 @@ export async function createColdContactThread(
           thread_id: thread.id,
           space_id: input.spaceId,
           participant_type: "agent",
-          agent_id: routing.agentId,
-          role: routing.localRole ?? "agent",
+          agent_id: agentId,
+          role: "agent",
           source: "space_auto_subscribe",
           notification_preference: "subscribed",
         },
@@ -119,49 +114,7 @@ export async function createColdContactThread(
     return { threadId: thread.id, messageId: message.id };
   });
 
-  await enqueueComputerThreadTurn({
-    tenantId: input.tenantId,
-    computerId: routing.computerId,
-    threadId,
-    messageId,
-    source: "email_cold_contact",
-    actorType: "user",
-    actorId: input.senderUserId,
-  });
-
-  return { threadId, messageId, computerId: routing.computerId };
-}
-
-async function resolveColdContactComputer(input: {
-  tenantId: string;
-  spaceId: string;
-}) {
-  const platformAgent = await resolveTenantPlatformAgent(input.tenantId);
-  const agentId = platformAgent.id;
-
-  const [computer] = await db
-    .select({ id: computers.id })
-    .from(computers)
-    .where(
-      and(
-        eq(computers.tenant_id, input.tenantId),
-        ne(computers.status, "archived"),
-        sql`(${computers.primary_agent_id} = ${agentId} OR ${computers.migrated_from_agent_id} = ${agentId})`,
-      ),
-    )
-    .limit(1);
-
-  if (!computer) {
-    throw new Error(
-      `No active Computer found for cold-contact platform agent ${platformAgent.name ?? agentId}`,
-    );
-  }
-
-  return {
-    agentId,
-    computerId: computer.id,
-    localRole: "agent",
-  };
+  return { threadId, messageId };
 }
 
 function titleFromSubject(subject: string): string {

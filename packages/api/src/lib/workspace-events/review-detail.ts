@@ -146,7 +146,10 @@ export async function loadWorkspaceReviewDetail(
   const payload = objectPayload(latestReviewEvent?.payload);
   const threadId =
     run.current_thread_turn_id && store.findThreadIdForTurn
-      ? await store.findThreadIdForTurn(run.tenant_id, run.current_thread_turn_id)
+      ? await store.findThreadIdForTurn(
+          run.tenant_id,
+          run.current_thread_turn_id,
+        )
       : null;
 
   return {

@@ -178,9 +178,11 @@ export async function searchWikiForUser(args: {
 }
 
 function joinSqlChunks(chunks: unknown[], separator: unknown): unknown {
-  const join = (sql as unknown as {
-    join?: (chunks: unknown[], separator: unknown) => unknown;
-  }).join;
+  const join = (
+    sql as unknown as {
+      join?: (chunks: unknown[], separator: unknown) => unknown;
+    }
+  ).join;
   if (join) return join(chunks, separator);
   return chunks.flatMap((chunk, index) =>
     index === 0 ? [chunk] : [separator, chunk],

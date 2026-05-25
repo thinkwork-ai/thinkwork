@@ -105,19 +105,24 @@ export function ChatSheet({
             StyleSheet.absoluteFill,
             {
               backgroundColor: isDark ? "#0a0a0a" : "#ffffff",
-              transform: [{
-                translateY: slideAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [screenHeight, 0],
-                }),
-              }],
+              transform: [
+                {
+                  translateY: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [screenHeight, 0],
+                  }),
+                },
+              ],
             },
           ]}
         >
           {/* Header — tappable handle + close + complete */}
           <View style={{ paddingTop: insets.top }}>
             {/* Drag handle — tap to close */}
-            <Pressable onPress={animateClose} className="items-center pt-2 pb-1">
+            <Pressable
+              onPress={animateClose}
+              className="items-center pt-2 pb-1"
+            >
               <View className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-700" />
             </Pressable>
 
@@ -130,7 +135,9 @@ export function ChatSheet({
                   className="flex-row items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 active:opacity-70"
                 >
                   <CheckCircle size={14} color="#ffffff" />
-                  <Text className="text-xs font-semibold text-white">Complete</Text>
+                  <Text className="text-xs font-semibold text-white">
+                    Complete
+                  </Text>
                 </Pressable>
               ) : (
                 <View style={{ width: 80 }} />
@@ -142,7 +149,10 @@ export function ChatSheet({
               </Text>
 
               {/* Right: close */}
-              <Pressable onPress={animateClose} className="p-1 active:opacity-70">
+              <Pressable
+                onPress={animateClose}
+                className="p-1 active:opacity-70"
+              >
                 <ChevronDown size={22} color={colors.foreground} />
               </Pressable>
             </View>

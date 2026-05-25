@@ -47,7 +47,10 @@ describe("stage sessions", () => {
 
     const loaded = loadStageSession("dev", configPath);
     expect(loaded?.kind).toBe("cognito");
-    expect(loaded).toMatchObject({ principalId: "sub-123", tenantSlug: "acme" });
+    expect(loaded).toMatchObject({
+      principalId: "sub-123",
+      tenantSlug: "acme",
+    });
 
     // defaultProfile survives the session write.
     expect(loadCliConfig(configPath).defaultProfile).toBe("eric");
@@ -56,7 +59,12 @@ describe("stage sessions", () => {
   it("round-trips an api-key session", () => {
     saveStageSession(
       "prod",
-      { kind: "api-key", authSecret: "secret", tenantSlug: "acme", tenantId: "t1" },
+      {
+        kind: "api-key",
+        authSecret: "secret",
+        tenantSlug: "acme",
+        tenantId: "t1",
+      },
       configPath,
     );
     const loaded = loadStageSession("prod", configPath);

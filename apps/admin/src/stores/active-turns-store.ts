@@ -40,10 +40,12 @@ function deriveCaches(turns: ActiveTurn[]) {
   const countByAgent = new Map<string, number>();
   for (const t of turns) {
     if (t.threadId) activeThreadIds.add(t.threadId);
-    if (t.agentId) countByAgent.set(t.agentId, (countByAgent.get(t.agentId) ?? 0) + 1);
+    if (t.agentId)
+      countByAgent.set(t.agentId, (countByAgent.get(t.agentId) ?? 0) + 1);
   }
   return {
-    _activeThreadIds: activeThreadIds.size > 0 ? activeThreadIds : EMPTY_THREAD_IDS,
+    _activeThreadIds:
+      activeThreadIds.size > 0 ? activeThreadIds : EMPTY_THREAD_IDS,
     _countByAgent: countByAgent.size > 0 ? countByAgent : EMPTY_AGENT_COUNTS,
   };
 }
@@ -57,8 +59,14 @@ export const useActiveTurnsStore = create<ActiveTurnsStore>((set) => ({
     set((state) => {
       // Skip update if the set of runIds + statuses hasn't changed
       if (state.turns.length === incoming.length) {
-        const oldKey = state.turns.map((t) => `${t.runId}:${t.status}`).sort().join(",");
-        const newKey = incoming.map((t) => `${t.runId}:${t.status}`).sort().join(",");
+        const oldKey = state.turns
+          .map((t) => `${t.runId}:${t.status}`)
+          .sort()
+          .join(",");
+        const newKey = incoming
+          .map((t) => `${t.runId}:${t.status}`)
+          .sort()
+          .join(",");
         if (oldKey === newKey) return state; // no change — keep same reference
       }
       return { turns: incoming, ...deriveCaches(incoming) };

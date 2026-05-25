@@ -74,9 +74,9 @@ describe("mobile workspace-review routing (U3)", () => {
     };
 
     expect(isSubAgentReview(subReview, pairedAgentIds)).toBe(true);
-    expect(subAgentReviewPreview(subReview, { pairedAgentIds, agentNames })).toBe(
-      "Sub-agent Researcher needs your input on tasks/draft.md",
-    );
+    expect(
+      subAgentReviewPreview(subReview, { pairedAgentIds, agentNames }),
+    ).toBe("Sub-agent Researcher needs your input on tasks/draft.md");
   });
 
   // ── AE2 (deep chain): sub-sub-agent → still flagged as sub-agent. We don't
@@ -86,7 +86,11 @@ describe("mobile workspace-review routing (U3)", () => {
   it("deep chain sub-sub-agent: surfaces in user A's mobile (chain owner is the user)", () => {
     const deepReview = review({
       threadId: "thread-parent",
-      run: { id: "run-deep", agentId: "agent-sub-sub", status: "awaiting_review" },
+      run: {
+        id: "run-deep",
+        agentId: "agent-sub-sub",
+        status: "awaiting_review",
+      },
       targetPath: "memory/scratch.md",
       responsibleUserId: "user-A",
     });
@@ -111,7 +115,9 @@ describe("mobile workspace-review routing (U3)", () => {
     expect(
       subAgentReviewPreview(direct, { pairedAgentIds, agentNames }),
     ).toBeNull();
-    expect(hitlThreadPreview(direct)).toBe("Waiting for confirmation: needs approval");
+    expect(hitlThreadPreview(direct)).toBe(
+      "Waiting for confirmation: needs approval",
+    );
   });
 
   // ── User A has zero pending reviews: HITL count is 0; no badge.
@@ -136,7 +142,11 @@ describe("mobile workspace-review routing (U3)", () => {
     // unrouted rows when `responsibleUserId` is set). Mobile renders only
     // what it received.
     const rowsForA: ThreadHitlReview[] = [
-      review({ threadId: "thread-A1", kind: "PAIRED", responsibleUserId: "user-A" }),
+      review({
+        threadId: "thread-A1",
+        kind: "PAIRED",
+        responsibleUserId: "user-A",
+      }),
     ];
     const byThread = pendingHitlByThreadId(rowsForA);
     expect([...byThread.keys()]).toEqual(["thread-A1"]);
@@ -164,7 +174,9 @@ describe("mobile workspace-review routing (U3)", () => {
   //    confirmation card renders so the structural pieces stay stable.
   it("preview helpers stay stable for the in-thread confirmation card (R8)", () => {
     const r = review({ reason: "review_changes" });
-    expect(hitlThreadPreview(r)).toBe("Waiting for confirmation: review changes");
+    expect(hitlThreadPreview(r)).toBe(
+      "Waiting for confirmation: review changes",
+    );
   });
 
   // ── AE4: After A approves a paired review, A's HITL count decrements;
@@ -173,8 +185,14 @@ describe("mobile workspace-review routing (U3)", () => {
   //    the result set deterministically removes it from the per-thread map.
   it("approval flow: removed row drops the per-thread mapping", () => {
     const before: ThreadHitlReview[] = [
-      review({ threadId: "thread-A1", run: { id: "run-1", agentId: "agent-A1" } }),
-      review({ threadId: "thread-A2", run: { id: "run-2", agentId: "agent-A2" } }),
+      review({
+        threadId: "thread-A1",
+        run: { id: "run-1", agentId: "agent-A1" },
+      }),
+      review({
+        threadId: "thread-A2",
+        run: { id: "run-2", agentId: "agent-A2" },
+      }),
     ];
     expect(pendingHitlByThreadId(before).size).toBe(2);
 

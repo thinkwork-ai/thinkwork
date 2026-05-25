@@ -5,7 +5,15 @@ import { View, Platform } from "react-native";
  * Use inside ScrollView/FlatList so the scrollbar stays at the page edge.
  * Header stays full-width (don't wrap it in this).
  */
-export function WebContent({ children, centered = true, bordered = false }: { children: React.ReactNode; centered?: boolean; bordered?: boolean }) {
+export function WebContent({
+  children,
+  centered = true,
+  bordered = false,
+}: {
+  children: React.ReactNode;
+  centered?: boolean;
+  bordered?: boolean;
+}) {
   if (Platform.OS !== "web") {
     return <>{children}</>;
   }

@@ -144,13 +144,7 @@ export function ApprovalDetail({
   );
 }
 
-function DetailState({
-  label,
-  tone,
-}: {
-  label: string;
-  tone?: "error";
-}) {
+function DetailState({ label, tone }: { label: string; tone?: "error" }) {
   return (
     <main className="flex min-h-[320px] items-center justify-center">
       <p

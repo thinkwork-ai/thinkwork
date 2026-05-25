@@ -19,16 +19,19 @@ export async function runThreadGet(
 
   const thread =
     parsed.kind === "id"
-      ? (await gqlQuery(ctx.client, ThreadByIdDoc, { id: parsed.id })).thread ?? null
-      : (
+      ? ((await gqlQuery(ctx.client, ThreadByIdDoc, { id: parsed.id }))
+          .thread ?? null)
+      : ((
           await gqlQuery(ctx.client, ThreadByNumberDoc, {
             tenantId: ctx.tenantId,
             number: parsed.number,
           })
-        ).threadByNumber ?? null;
+        ).threadByNumber ?? null);
 
   if (!thread) {
-    printError(`Thread "${idOrNumber}" not found in tenant "${ctx.tenantSlug}".`);
+    printError(
+      `Thread "${idOrNumber}" not found in tenant "${ctx.tenantSlug}".`,
+    );
     process.exit(1);
   }
 

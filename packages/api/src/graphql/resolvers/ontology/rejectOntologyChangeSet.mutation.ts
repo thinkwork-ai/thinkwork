@@ -10,7 +10,11 @@ export const rejectOntologyChangeSetMutation = async (
   },
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "reject_ontology_change_set");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.input.tenantId,
+    "reject_ontology_change_set",
+  );
   const actorUserId = await resolveCallerUserId(ctx);
   return rejectOntologyChangeSet({
     tenantId: args.input.tenantId,

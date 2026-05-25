@@ -49,7 +49,11 @@ export function printKeyValue(
  */
 export function printTable<T extends Record<string, unknown>>(
   rows: T[],
-  columns: Array<{ key: keyof T; header: string; format?: (v: T[keyof T]) => string }>,
+  columns: Array<{
+    key: keyof T;
+    header: string;
+    format?: (v: T[keyof T]) => string;
+  }>,
 ): void {
   if (jsonMode) return;
   if (rows.length === 0) {
@@ -60,7 +64,9 @@ export function printTable<T extends Record<string, unknown>>(
   const widths = columns.map((c) => {
     const header = c.header.length;
     const maxRow = Math.max(
-      ...rows.map((r) => (c.format ? c.format(r[c.key]) : String(r[c.key] ?? "")).length),
+      ...rows.map(
+        (r) => (c.format ? c.format(r[c.key]) : String(r[c.key] ?? "")).length,
+      ),
     );
     return Math.max(header, maxRow);
   });
@@ -69,9 +75,7 @@ export function printTable<T extends Record<string, unknown>>(
     .map((c, i) => chalk.bold(c.header.padEnd(widths[i])))
     .join("  ");
   console.log(`  ${header}`);
-  console.log(
-    "  " + widths.map((w) => chalk.dim("─".repeat(w))).join("  "),
-  );
+  console.log("  " + widths.map((w) => chalk.dim("─".repeat(w))).join("  "));
   for (const row of rows) {
     const line = columns
       .map((c, i) => {

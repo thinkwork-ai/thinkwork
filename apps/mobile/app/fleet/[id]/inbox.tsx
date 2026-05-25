@@ -21,7 +21,10 @@ export default function FleetApprovalsScreen() {
   const history: any[] | undefined = undefined; // TODO: listApprovalHistory via GraphQL
 
   // TODO: implement via GraphQL mutation
-  const reviewApproval = async (_args: { approvalId: string; decision: string }) => {
+  const reviewApproval = async (_args: {
+    approvalId: string;
+    decision: string;
+  }) => {
     throw new Error("TODO: implement reviewApproval via GraphQL");
   };
 
@@ -33,7 +36,10 @@ export default function FleetApprovalsScreen() {
     );
   }
 
-  const handleApprove = async (approvalId: string, decision: "approve_temporary" | "approve_persistent") => {
+  const handleApprove = async (
+    approvalId: string,
+    decision: "approve_temporary" | "approve_persistent",
+  ) => {
     await reviewApproval({ approvalId, decision });
   };
 
@@ -65,9 +71,7 @@ export default function FleetApprovalsScreen() {
                   >
                     <View className="flex-row items-center gap-2">
                       <Clock size={16} color={colors.mutedForeground} />
-                      <Muted className="text-xs">
-                        {expiresIn}m remaining
-                      </Muted>
+                      <Muted className="text-xs">{expiresIn}m remaining</Muted>
                       {req.riskLevel && (
                         <Text className="text-xs font-medium">
                           Risk: {req.riskLevel}
@@ -133,16 +137,15 @@ export default function FleetApprovalsScreen() {
           <View className="gap-2 pb-8">
             {(history ?? []).map((req) => {
               const isApproved = req.status === "approved";
-              const isRejected = req.status === "rejected" || req.status === "timeout";
+              const isRejected =
+                req.status === "rejected" || req.status === "timeout";
               const isPending = req.status === "pending";
               return (
                 <View
                   key={req.id}
                   className="flex-row items-center rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
                 >
-                  {isApproved && (
-                    <CheckCircle size={16} color="#16a34a" />
-                  )}
+                  {isApproved && <CheckCircle size={16} color="#16a34a" />}
                   {isRejected && <XCircle size={16} color="#dc2626" />}
                   {isPending && (
                     <Clock size={16} color={colors.mutedForeground} />

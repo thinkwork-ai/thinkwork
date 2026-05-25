@@ -43,7 +43,9 @@ vi.mock("@thinkwork/database-pg", () => ({
     select: () => ({
       from: () => ({
         innerJoin: () => ({
-          where: () => ({ limit: () => Promise.resolve(queueRows.shift() ?? []) }),
+          where: () => ({
+            limit: () => Promise.resolve(queueRows.shift() ?? []),
+          }),
         }),
         where: () => ({
           orderBy: () => ({
@@ -130,7 +132,9 @@ describe("sendThreadReplyEmail", () => {
     expect(result).toEqual({ sent: true, sesMessageId: "ses-out-123" });
     expect(mockSesSend).toHaveBeenCalledOnce();
     const command = mockSesSend.mock.calls[0][0];
-    expect(command.input.Source).toBe("default@sleek-squirrel-230.thinkwork.ai");
+    expect(command.input.Source).toBe(
+      "default@sleek-squirrel-230.thinkwork.ai",
+    );
     expect(command.input.Destinations).toEqual(["eric@thinkwork.ai"]);
 
     const rawMessage = Buffer.from(command.input.RawMessage.Data).toString(
@@ -270,9 +274,7 @@ describe("sendThreadReplyEmail", () => {
   });
 
   it("skips when the thread has no emailColdContact metadata", async () => {
-    queueRows.push(
-      [{ id: THREAD_ID, space_id: "space-1", metadata: {} }],
-    );
+    queueRows.push([{ id: THREAD_ID, space_id: "space-1", metadata: {} }]);
 
     const result = await sendThreadReplyEmail({
       tenantId: TENANT_ID,

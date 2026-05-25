@@ -36,15 +36,16 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
 
   function getAuthHeader() {
     const appsyncHost = wsUrl
-      ? new URL(wsUrl.replace("wss://", "https://").replace("ws://", "http://")).host
-          .replace(".appsync-realtime-api.", ".appsync-api.")
+      ? new URL(
+          wsUrl.replace("wss://", "https://").replace("ws://", "http://"),
+        ).host.replace(".appsync-realtime-api.", ".appsync-api.")
       : new URL(config.graphqlUrl).host;
     const token = getAuthToken();
     return token
       ? { Authorization: token, host: appsyncHost }
       : config.graphqlApiKey
-      ? { "x-api-key": config.graphqlApiKey, host: appsyncHost }
-      : { host: appsyncHost };
+        ? { "x-api-key": config.graphqlApiKey, host: appsyncHost }
+        : { host: appsyncHost };
   }
 
   function resetKaTimer() {
@@ -57,7 +58,8 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
   }
 
   function ensureConnection(): Promise<void> {
-    if (state.ready && state.ws?.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (state.ready && state.ws?.readyState === WebSocket.OPEN)
+      return Promise.resolve();
     if (state.ws && state.ws.readyState === WebSocket.CONNECTING) {
       return new Promise((resolve) => state.pendingStarts.push(resolve));
     }
@@ -87,7 +89,8 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
         const msg = JSON.parse(event.data as string);
         switch (msg.type) {
           case "connection_ack":
-            state.connectionTimeoutMs = msg.payload?.connectionTimeoutMs || 300000;
+            state.connectionTimeoutMs =
+              msg.payload?.connectionTimeoutMs || 300000;
             state.ready = true;
             resetKaTimer();
             state.pendingStarts.splice(0).forEach((fn) => fn());
@@ -108,7 +111,9 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
                 errors.every(
                   (e: { message?: unknown }) =>
                     typeof e?.message === "string" &&
-                    (e.message as string).includes("Cannot return null for non-nullable type"),
+                    (e.message as string).includes(
+                      "Cannot return null for non-nullable type",
+                    ),
                 );
               if (isNullFieldError) {
                 log?.warn("appsync ws: ignoring null-field error", msg.id);
@@ -147,7 +152,10 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
     });
   }
 
-  function forward(request: { query: string; variables?: Record<string, unknown> }) {
+  function forward(request: {
+    query: string;
+    variables?: Record<string, unknown>;
+  }) {
     return {
       subscribe(sink: Sink) {
         const subId = randomUUID();

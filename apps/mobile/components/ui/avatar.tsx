@@ -1,5 +1,11 @@
 import * as React from "react";
-import { View, Image, Text, type ViewProps, type ImageProps } from "react-native";
+import {
+  View,
+  Image,
+  Text,
+  type ViewProps,
+  type ImageProps,
+} from "react-native";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,7 +21,12 @@ const AvatarContext = React.createContext<{ size: "default" | "sm" | "lg" }>({
   size: "default",
 });
 
-function Avatar({ className, size = "default", children, ...props }: AvatarProps) {
+function Avatar({
+  className,
+  size = "default",
+  children,
+  ...props
+}: AvatarProps) {
   const sizeClass = {
     default: "h-8 w-8",
     sm: "h-6 w-6",
@@ -28,7 +39,7 @@ function Avatar({ className, size = "default", children, ...props }: AvatarProps
         className={cn(
           "rounded-full overflow-hidden relative shrink-0",
           sizeClass,
-          className
+          className,
         )}
         {...props}
       >
@@ -61,7 +72,11 @@ interface AvatarFallbackProps extends ViewProps {
   children?: React.ReactNode;
 }
 
-function AvatarFallback({ className, children, ...props }: AvatarFallbackProps) {
+function AvatarFallback({
+  className,
+  children,
+  ...props
+}: AvatarFallbackProps) {
   const { size } = React.useContext(AvatarContext);
   const textSize = size === "sm" ? "text-xs" : "text-sm";
 
@@ -69,7 +84,7 @@ function AvatarFallback({ className, children, ...props }: AvatarFallbackProps) 
     <View
       className={cn(
         "bg-muted rounded-full w-full h-full items-center justify-center",
-        className
+        className,
       )}
       {...props}
     >
@@ -93,7 +108,7 @@ function AvatarBadge({ className, ...props }: AvatarBadgeProps) {
     <View
       className={cn(
         "bg-primary absolute right-0 bottom-0 rounded-full h-2.5 w-2.5 border-2 border-background",
-        className
+        className,
       )}
       {...props}
     />

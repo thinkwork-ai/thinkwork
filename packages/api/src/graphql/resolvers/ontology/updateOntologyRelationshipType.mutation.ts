@@ -24,7 +24,11 @@ export const updateOntologyRelationshipTypeMutation = async (
   args: UpdateOntologyRelationshipTypeArgs,
   ctx: GraphQLContext,
 ) => {
-  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "update_ontology_relationship_type");
+  await requireAdminOrServiceCaller(
+    ctx,
+    args.input.tenantId,
+    "update_ontology_relationship_type",
+  );
   const actorUserId = await resolveCallerUserId(ctx);
   return updateOntologyRelationshipType({
     actorUserId,

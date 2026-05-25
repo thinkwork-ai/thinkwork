@@ -1,4 +1,8 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -38,7 +42,9 @@ describe("applet S3 storage", () => {
         appId: "pipeline-risk",
         cacheKey: "sha256-abcd",
       }),
-    ).toBe("tenants/tenant-A/applets/pipeline-risk/bundle-cache/sha256-abcd.js");
+    ).toBe(
+      "tenants/tenant-A/applets/pipeline-risk/bundle-cache/sha256-abcd.js",
+    );
   });
 
   it("rejects keys outside the tenant applet prefix", () => {
@@ -49,10 +55,7 @@ describe("applet S3 storage", () => {
       ),
     ).toThrow(/outside the tenant applet prefix/);
     expect(() =>
-      assertAppletS3Key(
-        "tenant-A",
-        "tenants/tenant-A/applets/../source.tsx",
-      ),
+      assertAppletS3Key("tenant-A", "tenants/tenant-A/applets/../source.tsx"),
     ).toThrow(/outside the tenant applet prefix/);
   });
 

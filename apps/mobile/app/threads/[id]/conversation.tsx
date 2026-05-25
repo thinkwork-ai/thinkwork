@@ -1,5 +1,11 @@
 import React, { useRef, useMemo, useState, useEffect } from "react";
-import { View, FlatList, KeyboardAvoidingView, Platform, Pressable } from "react-native";
+import {
+  View,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, MoreHorizontal } from "lucide-react-native";
@@ -79,7 +85,10 @@ export default function ThreadConversationScreen() {
   }, [messages]);
 
   const visibleChatMessages = useMemo(
-    () => (showSystemMessages ? chatMessages : chatMessages.filter((message) => !isSystemMessage(message))),
+    () =>
+      showSystemMessages
+        ? chatMessages
+        : chatMessages.filter((message) => !isSystemMessage(message)),
     [chatMessages, showSystemMessages],
   );
 
@@ -102,14 +111,19 @@ export default function ThreadConversationScreen() {
   }, [visibleChatMessages]);
 
   // Reverse for inverted FlatList (newest at bottom = first in array)
-  const invertedItems = useMemo(() => [...interleaved].reverse(), [interleaved]);
+  const invertedItems = useMemo(
+    () => [...interleaved].reverse(),
+    [interleaved],
+  );
 
-  const lastMsg = chatMessages.length > 0 ? chatMessages[chatMessages.length - 1] : null;
+  const lastMsg =
+    chatMessages.length > 0 ? chatMessages[chatMessages.length - 1] : null;
   const isStreaming = lastMsg?.role === "user";
 
   const handleSend = async (content: string) => {
     if (!id) return;
-    const mentionsToSend = pendingMentions.length > 0 ? pendingMentions : undefined;
+    const mentionsToSend =
+      pendingMentions.length > 0 ? pendingMentions : undefined;
     setPendingMentions([]);
     try {
       await sendMessage(id, content, {
@@ -126,7 +140,10 @@ export default function ThreadConversationScreen() {
   const renderItem = ({ item }: { item: ListItem }) => {
     return (
       <WebContent>
-        <ChatBubble message={item.data} showSystemMessages={showSystemMessages} />
+        <ChatBubble
+          message={item.data}
+          showSystemMessages={showSystemMessages}
+        />
       </WebContent>
     );
   };
@@ -134,76 +151,86 @@ export default function ThreadConversationScreen() {
   return (
     <View className="flex-1 bg-white dark:bg-neutral-950">
       <View style={{ flex: 1, width: "100%" }}>
-      {/* Header with back button + overflow menu */}
-      <View
-        className="flex-row items-center border-b border-neutral-200 dark:border-neutral-800 px-2"
-        style={{ paddingTop: insets.top, height: insets.top + 56 }}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          className="flex-row items-center flex-1 active:opacity-70"
+        {/* Header with back button + overflow menu */}
+        <View
+          className="flex-row items-center border-b border-neutral-200 dark:border-neutral-800 px-2"
+          style={{ paddingTop: insets.top, height: insets.top + 56 }}
         >
-          <View className="p-2 mr-1">
-            <ChevronLeft size={24} color={colors.foreground} />
-          </View>
-          <Text className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex-1" numberOfLines={1}>
-            {title}
-          </Text>
-        </Pressable>
-        <View className="px-2">
-          <HeaderContextMenu
-            trigger={<MoreHorizontal size={22} color={colors.foreground} />}
-            items={[
-              {
-                label: showSystemMessages ? "Hide System Messages" : "Show System Messages",
-                onPress: () => setShowSystemMessages((current) => !current),
-              },
-            ]}
-          />
-        </View>
-      </View>
-
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={invertedItems}
-          inverted
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingVertical: 12 }}
-          ListEmptyComponent={
-            <View className="flex-1 items-center justify-center px-8 pt-32" style={{ transform: [{ scaleY: -1 }] }}>
-              <Text className="text-lg font-semibold mb-2">No messages yet</Text>
-              <Text className="text-neutral-400 text-center">
-                Send a message to continue this conversation.
-              </Text>
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            className="flex-row items-center flex-1 active:opacity-70"
+          >
+            <View className="p-2 mr-1">
+              <ChevronLeft size={24} color={colors.foreground} />
             </View>
-          }
-          ListHeaderComponent={
-            isStreaming ? (
-              <View className="ml-2 mb-2">
-                <TypingIndicator />
-              </View>
-            ) : null
-          }
-        />
+            <Text
+              className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex-1"
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+          </Pressable>
+          <View className="px-2">
+            <HeaderContextMenu
+              trigger={<MoreHorizontal size={22} color={colors.foreground} />}
+              items={[
+                {
+                  label: showSystemMessages
+                    ? "Hide System Messages"
+                    : "Show System Messages",
+                  onPress: () => setShowSystemMessages((current) => !current),
+                },
+              ]}
+            />
+          </View>
+        </View>
 
-        {/* Input */}
-        <WebContent>
-          <ChatInput
-            onSend={handleSend}
-            mentions={mentionCandidates ?? []}
-            onMentionsChange={setPendingMentions}
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={0}
+        >
+          {/* Messages */}
+          <FlatList
+            ref={flatListRef}
+            data={invertedItems}
+            inverted
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingVertical: 12 }}
+            ListEmptyComponent={
+              <View
+                className="flex-1 items-center justify-center px-8 pt-32"
+                style={{ transform: [{ scaleY: -1 }] }}
+              >
+                <Text className="text-lg font-semibold mb-2">
+                  No messages yet
+                </Text>
+                <Text className="text-neutral-400 text-center">
+                  Send a message to continue this conversation.
+                </Text>
+              </View>
+            }
+            ListHeaderComponent={
+              isStreaming ? (
+                <View className="ml-2 mb-2">
+                  <TypingIndicator />
+                </View>
+              ) : null
+            }
           />
-        </WebContent>
-      </KeyboardAvoidingView>
+
+          {/* Input */}
+          <WebContent>
+            <ChatInput
+              onSend={handleSend}
+              mentions={mentionCandidates ?? []}
+              onMentionsChange={setPendingMentions}
+            />
+          </WebContent>
+        </KeyboardAvoidingView>
       </View>
     </View>
   );

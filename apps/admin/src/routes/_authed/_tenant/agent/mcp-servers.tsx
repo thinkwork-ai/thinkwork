@@ -50,9 +50,7 @@ import {
   type McpContextTool,
 } from "@/lib/mcp-api";
 
-export const Route = createFileRoute(
-  "/_authed/_tenant/agent/mcp-servers",
-)({
+export const Route = createFileRoute("/_authed/_tenant/agent/mcp-servers")({
   component: McpServersPage,
 });
 

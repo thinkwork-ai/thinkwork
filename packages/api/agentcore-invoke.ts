@@ -58,9 +58,8 @@ async function loadRuntimeIdsFromSsm(): Promise<Record<string, string>> {
   // params are named like /thinkwork/{stage}/agentcore/runtime-id-chat (not
   // /thinkwork/{stage}/agentcore/runtime-id/chat). Use individual GetParameter
   // calls for each known runtime type instead.
-  const { SSMClient, GetParameterCommand } = await import(
-    "@aws-sdk/client-ssm"
-  );
+  const { SSMClient, GetParameterCommand } =
+    await import("@aws-sdk/client-ssm");
   const ssm = new SSMClient({ region: AWS_REGION });
 
   const runtimeKeys = ["sdk", "strands"];
@@ -164,9 +163,8 @@ async function invokeAgentCore(
   sessionId: string,
 ): Promise<Record<string, unknown>> {
   // Dynamic import to avoid cold-start penalty when not needed
-  const { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } = await import(
-    "@aws-sdk/client-bedrock-agentcore"
-  );
+  const { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } =
+    await import("@aws-sdk/client-bedrock-agentcore");
 
   const client = new BedrockAgentCoreClient({
     region: AWS_REGION,

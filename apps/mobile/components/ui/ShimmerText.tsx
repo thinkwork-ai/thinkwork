@@ -53,7 +53,10 @@ export function ShimmerText({
           extrapolate: "clamp",
         });
         return (
-          <Animated.Text key={i} style={{ color, fontSize, lineHeight, fontFamily }}>
+          <Animated.Text
+            key={i}
+            style={{ color, fontSize, lineHeight, fontFamily }}
+          >
             {char}
           </Animated.Text>
         );

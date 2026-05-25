@@ -14,7 +14,11 @@ import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
 import { isJsonMode, logStderr, printJson, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+} from "../ui.js";
 
 const TenantMembersDoc = graphql(`
   query CliTenantMembers($tenantId: ID!) {
@@ -96,15 +100,26 @@ async function resolveMemberContext(opts: MemberCliOptions) {
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
-  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({ stage, region });
+  const { client, tenantSlug: ctxTenantSlug } = await getGqlClient({
+    stage,
+    region,
+  });
 
   const flagOrEnv = opts.tenant ?? process.env.THINKWORK_TENANT;
 
   if (flagOrEnv) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
-      return { stage, region, client, tenantId: session.tenantId, tenantSlug: flagOrEnv };
+      return {
+        stage,
+        region,
+        client,
+        tenantId: session.tenantId,
+        tenantSlug: flagOrEnv,
+      };
     }
-    const data = await gqlQuery(client, MemberTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, MemberTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
@@ -119,11 +134,19 @@ async function resolveMemberContext(opts: MemberCliOptions) {
   }
 
   if (session?.tenantId && session.tenantSlug) {
-    return { stage, region, client, tenantId: session.tenantId, tenantSlug: session.tenantSlug };
+    return {
+      stage,
+      region,
+      client,
+      tenantId: session.tenantId,
+      tenantSlug: session.tenantSlug,
+    };
   }
 
   if (ctxTenantSlug) {
-    const data = await gqlQuery(client, MemberTenantBySlugDoc, { slug: ctxTenantSlug });
+    const data = await gqlQuery(client, MemberTenantBySlugDoc, {
+      slug: ctxTenantSlug,
+    });
     if (data.tenantBySlug) {
       return {
         stage,
@@ -141,7 +164,9 @@ async function resolveMemberContext(opts: MemberCliOptions) {
 
 async function runMemberList(opts: ListOptions): Promise<void> {
   const ctx = await resolveMemberContext(opts);
-  const data = await gqlQuery(ctx.client, TenantMembersDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, TenantMembersDoc, {
+    tenantId: ctx.tenantId,
+  });
   let items = data.tenantMembers ?? [];
 
   if (opts.principalType) {
@@ -160,7 +185,10 @@ async function runMemberList(opts: ListOptions): Promise<void> {
   const rows = items.map((m) => ({
     id: m.id,
     type: m.principalType ?? "—",
-    principal: m.principalId.length > 36 ? `${m.principalId.slice(0, 33)}…` : m.principalId,
+    principal:
+      m.principalId.length > 36
+        ? `${m.principalId.slice(0, 33)}…`
+        : m.principalId,
     role: m.role,
     status: m.status,
   }));
@@ -188,7 +216,9 @@ async function runMemberInvite(
       process.exit(1);
     }
     requireTty("Invitee email");
-    resolvedEmail = await promptOrExit(() => input({ message: "Invitee email:" }));
+    resolvedEmail = await promptOrExit(() =>
+      input({ message: "Invitee email:" }),
+    );
   }
 
   const data = await gqlMutate(ctx.client, InviteMemberDoc, {
@@ -205,10 +235,15 @@ async function runMemberInvite(
     printJson(member);
     return;
   }
-  printSuccess(`Invited ${resolvedEmail} as ${member.role} (member id ${member.id}).`);
+  printSuccess(
+    `Invited ${resolvedEmail} as ${member.role} (member id ${member.id}).`,
+  );
 }
 
-async function runMemberUpdate(memberId: string, opts: UpdateOptions): Promise<void> {
+async function runMemberUpdate(
+  memberId: string,
+  opts: UpdateOptions,
+): Promise<void> {
   const ctx = await resolveMemberContext(opts);
 
   const input: Record<string, unknown> = {};
@@ -220,22 +255,32 @@ async function runMemberUpdate(memberId: string, opts: UpdateOptions): Promise<v
     process.exit(1);
   }
 
-  const data = await gqlMutate(ctx.client, UpdateTenantMemberDoc, { id: memberId, input });
+  const data = await gqlMutate(ctx.client, UpdateTenantMemberDoc, {
+    id: memberId,
+    input,
+  });
   const updated = data.updateTenantMember;
 
   if (isJsonMode()) {
     printJson(updated);
     return;
   }
-  printSuccess(`Updated member ${updated.id} (role=${updated.role}, status=${updated.status}).`);
+  printSuccess(
+    `Updated member ${updated.id} (role=${updated.role}, status=${updated.status}).`,
+  );
 }
 
-async function runMemberRemove(memberId: string, opts: RemoveOptions): Promise<void> {
+async function runMemberRemove(
+  memberId: string,
+  opts: RemoveOptions,
+): Promise<void> {
   const ctx = await resolveMemberContext(opts);
 
   if (!opts.yes) {
     if (!isInteractive()) {
-      printError("Refusing to remove without --yes in a non-interactive session.");
+      printError(
+        "Refusing to remove without --yes in a non-interactive session.",
+      );
       process.exit(1);
     }
     requireTty("Confirmation");
@@ -251,7 +296,9 @@ async function runMemberRemove(memberId: string, opts: RemoveOptions): Promise<v
     }
   }
 
-  const data = await gqlMutate(ctx.client, RemoveTenantMemberDoc, { id: memberId });
+  const data = await gqlMutate(ctx.client, RemoveTenantMemberDoc, {
+    id: memberId,
+  });
 
   if (isJsonMode()) {
     printJson({ id: memberId, removed: data.removeTenantMember });
@@ -265,7 +312,9 @@ export function registerMemberCommand(program: Command): void {
   const mem = program
     .command("member")
     .alias("members")
-    .description("List and manage tenant members (users + agents with access).");
+    .description(
+      "List and manage tenant members (users + agents with access).",
+    );
 
   mem
     .command("list")
@@ -279,7 +328,9 @@ export function registerMemberCommand(program: Command): void {
 
   mem
     .command("invite [email]")
-    .description("Invite a user by email. GraphQL path (sends invite email, creates Cognito user).")
+    .description(
+      "Invite a user by email. GraphQL path (sends invite email, creates Cognito user).",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--role <role>", "member | admin | owner", "member")
@@ -305,7 +356,9 @@ Examples:
 
   mem
     .command("remove <memberId>")
-    .description("Remove a member from the tenant. The underlying Cognito user is NOT deleted.")
+    .description(
+      "Remove a member from the tenant. The underlying Cognito user is NOT deleted.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")

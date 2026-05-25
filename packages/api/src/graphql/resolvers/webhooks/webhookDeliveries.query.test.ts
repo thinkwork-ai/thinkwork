@@ -130,11 +130,7 @@ describe("webhookDeliveries", () => {
       { id: "wd-2", webhookId: "wh-3", resolutionStatus: "rate_limited" },
     ];
 
-    const result = await webhookDeliveries_(
-      null,
-      { webhookId: "wh-3" },
-      ctx(),
-    );
+    const result = await webhookDeliveries_(null, { webhookId: "wh-3" }, ctx());
 
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ id: "wd-1", resolutionStatus: "ok" });

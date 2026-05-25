@@ -16,10 +16,7 @@ export interface AppletAPI {
     key: string,
     initialValue: T,
   ): [T, (nextValue: T) => void, AppletStateMeta];
-  useAppletQuery<T>(
-    name: string,
-    variables?: Record<string, unknown>,
-  ): T;
+  useAppletQuery<T>(name: string, variables?: Record<string, unknown>): T;
   useAppletMutation<T>(
     name: string,
   ): (variables: Record<string, unknown>) => Promise<T>;

@@ -18,8 +18,15 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
 import { relativeTime } from "@/lib/utils";
@@ -27,7 +34,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 
-export const Route = createFileRoute("/_authed/_tenant/automations/schedules/$scheduledJobId")({
+export const Route = createFileRoute(
+  "/_authed/_tenant/automations/schedules/$scheduledJobId",
+)({
   component: ScheduledJobDetailPage,
 });
 
@@ -53,11 +62,18 @@ type ScheduledJob = {
 
 type RunRow = ScheduledJobRunRow;
 
-async function apiFetch<T>(path: string, tenantId: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  tenantId: string,
+  options: RequestInit = {},
+): Promise<T> {
   const { headers, ...rest } = options;
   return authedApiFetch<T>(path, {
     ...rest,
-    extraHeaders: { "x-tenant-id": tenantId, ...(headers as Record<string, string> | undefined) },
+    extraHeaders: {
+      "x-tenant-id": tenantId,
+      ...(headers as Record<string, string> | undefined),
+    },
   });
 }
 
@@ -73,7 +89,11 @@ function formatSchedule(expr: string | null): string {
   if (!expr) return "—";
   if (expr.startsWith("rate(")) return expr.slice(5, -1);
   if (expr.startsWith("at(")) {
-    try { return new Date(expr.slice(3, -1)).toLocaleString(); } catch { return expr; }
+    try {
+      return new Date(expr.slice(3, -1)).toLocaleString();
+    } catch {
+      return expr;
+    }
   }
   return expr;
 }
@@ -86,12 +106,25 @@ function formatSchedule(expr: string | null): string {
 // Edit Scheduled Job (uses shared dialog)
 // ---------------------------------------------------------------------------
 
-function EditScheduledJobButton({ scheduledJob, tenantId, onSaved }: { scheduledJob: ScheduledJob; tenantId: string; onSaved: (t: ScheduledJob) => void }) {
+function EditScheduledJobButton({
+  scheduledJob,
+  tenantId,
+  onSaved,
+}: {
+  scheduledJob: ScheduledJob;
+  tenantId: string;
+  onSaved: (t: ScheduledJob) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+      >
         <Pencil className="h-4 w-4 mr-1" /> Edit
       </Button>
       <ScheduledJobFormDialog
@@ -110,17 +143,20 @@ function EditScheduledJobButton({ scheduledJob, tenantId, onSaved }: { scheduled
           timezone: scheduledJob.timezone,
         }}
         onSubmit={async (data) => {
-          const updated = await apiFetch<ScheduledJob>(`/api/scheduled-jobs/${scheduledJob.id}`, tenantId, {
-            method: "PUT",
-            body: JSON.stringify(data),
-          });
+          const updated = await apiFetch<ScheduledJob>(
+            `/api/scheduled-jobs/${scheduledJob.id}`,
+            tenantId,
+            {
+              method: "PUT",
+              body: JSON.stringify(data),
+            },
+          );
           onSaved(updated);
         }}
       />
     </>
   );
 }
-
 
 function ScheduledJobDetailPage() {
   const { scheduledJobId } = Route.useParams();
@@ -151,15 +187,24 @@ function ScheduledJobDetailPage() {
   const fetchData = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const jobData = await apiFetch<ScheduledJob>(`/api/scheduled-jobs/${scheduledJobId}`, tenantId);
-      const runsData = await apiFetch<RunRow[]>(`/api/thread-turns?trigger_id=${scheduledJobId}&limit=50`, tenantId);
+      const jobData = await apiFetch<ScheduledJob>(
+        `/api/scheduled-jobs/${scheduledJobId}`,
+        tenantId,
+      );
+      const runsData = await apiFetch<RunRow[]>(
+        `/api/thread-turns?trigger_id=${scheduledJobId}&limit=50`,
+        tenantId,
+      );
       setJob(jobData);
       setRuns(runsData);
       setError(null);
 
       if (jobData.agent_id) {
         try {
-          const agent = await apiFetch<{ name: string }>(`/api/agents/${jobData.agent_id}`, tenantId);
+          const agent = await apiFetch<{ name: string }>(
+            `/api/agents/${jobData.agent_id}`,
+            tenantId,
+          );
           setAgentName(agent.name);
         } catch {
           setAgentName(null);
@@ -172,7 +217,9 @@ function ScheduledJobDetailPage() {
     }
   }, [tenantId, scheduledJobId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Refetch when subscription delivers a run update for this scheduled job
   useEffect(() => {
@@ -186,10 +233,14 @@ function ScheduledJobDetailPage() {
     if (!tenantId || !job) return;
     setToggling(true);
     try {
-      const updated = await apiFetch<ScheduledJob>(`/api/scheduled-jobs/${scheduledJobId}`, tenantId, {
-        method: "PUT",
-        body: JSON.stringify({ enabled: !job.enabled }),
-      });
+      const updated = await apiFetch<ScheduledJob>(
+        `/api/scheduled-jobs/${scheduledJobId}`,
+        tenantId,
+        {
+          method: "PUT",
+          body: JSON.stringify({ enabled: !job.enabled }),
+        },
+      );
       setJob(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -202,7 +253,9 @@ function ScheduledJobDetailPage() {
     if (!tenantId) return;
     setTriggering(true);
     try {
-      await apiFetch(`/api/scheduled-jobs/${scheduledJobId}/fire`, tenantId, { method: "POST" });
+      await apiFetch(`/api/scheduled-jobs/${scheduledJobId}/fire`, tenantId, {
+        method: "POST",
+      });
       setTimeout(fetchData, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -214,7 +267,9 @@ function ScheduledJobDetailPage() {
   async function handleDelete() {
     if (!tenantId) return;
     try {
-      await apiFetch(`/api/scheduled-jobs/${scheduledJobId}`, tenantId, { method: "DELETE" });
+      await apiFetch(`/api/scheduled-jobs/${scheduledJobId}`, tenantId, {
+        method: "DELETE",
+      });
       navigate({ to: "/automations/schedules" });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -222,7 +277,8 @@ function ScheduledJobDetailPage() {
   }
 
   if (!tenantId || loading) return <PageSkeleton />;
-  if (!job) return <div className="p-6 text-destructive">Scheduled job not found</div>;
+  if (!job)
+    return <div className="p-6 text-destructive">Scheduled job not found</div>;
 
   return (
     <div className="flex flex-col -m-6" style={{ height: "calc(100% + 48px)" }}>
@@ -230,30 +286,63 @@ function ScheduledJobDetailPage() {
       <div className="shrink-0 px-6 pt-6 pb-4 border-b border-border bg-background">
         <PageHeader
           title={job.name}
-          description={job.description || TYPE_LABELS[job.trigger_type] || job.trigger_type}
+          description={
+            job.description || TYPE_LABELS[job.trigger_type] || job.trigger_type
+          }
           actions={
             <div className="flex items-center gap-2">
-              <EditScheduledJobButton scheduledJob={job} tenantId={tenantId} onSaved={setJob} />
-              <Button variant="outline" size="sm" onClick={handleToggle} disabled={toggling}>
-                {toggling ? <Loader2 className="h-4 w-4 animate-spin" /> : job.enabled ? <><Pause className="h-4 w-4 mr-1" /> Disable</> : <><Play className="h-4 w-4 mr-1" /> Enable</>}
+              <EditScheduledJobButton
+                scheduledJob={job}
+                tenantId={tenantId}
+                onSaved={setJob}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggle}
+                disabled={toggling}
+              >
+                {toggling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : job.enabled ? (
+                  <>
+                    <Pause className="h-4 w-4 mr-1" /> Disable
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-1" /> Enable
+                  </>
+                )}
               </Button>
               {job.agent_id && (
                 <Button size="sm" onClick={handleTrigger} disabled={triggering}>
-                  {triggering ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />} Trigger Now
+                  {triggering ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Zap className="h-4 w-4 mr-1" />
+                  )}{" "}
+                  Trigger Now
                 </Button>
               )}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Delete</Button>
+                  <Button variant="destructive" size="sm">
+                    <Trash2 className="h-4 w-4 mr-1" /> Delete
+                  </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete scheduled job?</AlertDialogTitle>
-                    <AlertDialogDescription>This will disable the scheduled job and remove its EventBridge schedule. Run history will be preserved.</AlertDialogDescription>
+                    <AlertDialogDescription>
+                      This will disable the scheduled job and remove its
+                      EventBridge schedule. Run history will be preserved.
+                    </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                    <AlertDialogAction onClick={handleDelete}>
+                      Delete
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -274,11 +363,15 @@ function ScheduledJobDetailPage() {
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Type</span>
-                <Badge variant="outline" className="capitalize">{job.schedule_type || "—"}</Badge>
+                <Badge variant="outline" className="capitalize">
+                  {job.schedule_type || "—"}
+                </Badge>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Expression</span>
-                <span className="font-mono text-xs">{formatSchedule(job.schedule_expression)}</span>
+                <span className="font-mono text-xs">
+                  {formatSchedule(job.schedule_expression)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Timezone</span>
@@ -287,19 +380,29 @@ function ScheduledJobDetailPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Status</span>
                 {job.enabled ? (
-                  <span className="text-green-600 dark:text-green-400 flex items-center gap-1"><Play className="h-3 w-3 fill-current" /> Active</span>
+                  <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <Play className="h-3 w-3 fill-current" /> Active
+                  </span>
                 ) : (
-                  <span className="text-muted-foreground flex items-center gap-1"><Pause className="h-3 w-3" /> Disabled</span>
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Pause className="h-3 w-3" /> Disabled
+                  </span>
                 )}
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">EB Schedule</span>
                 {job.eb_schedule_name ? (
-                  <span className="font-mono text-xs text-green-600 dark:text-green-400">{job.eb_schedule_name}</span>
+                  <span className="font-mono text-xs text-green-600 dark:text-green-400">
+                    {job.eb_schedule_name}
+                  </span>
                 ) : job.enabled && job.schedule_expression ? (
-                  <span className="text-xs text-amber-600 dark:text-amber-400">Not provisioned</span>
+                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                    Not provisioned
+                  </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground">No schedule</span>
+                  <span className="text-xs text-muted-foreground">
+                    No schedule
+                  </span>
                 )}
               </div>
             </CardContent>
@@ -312,23 +415,31 @@ function ScheduledJobDetailPage() {
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Job Type</span>
-                <Badge variant="secondary" className="text-xs">{TYPE_LABELS[job.trigger_type] || job.trigger_type}</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {TYPE_LABELS[job.trigger_type] || job.trigger_type}
+                </Badge>
               </div>
               {job.agent_id && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Agent</span>
-                  <Badge variant="outline" className="text-xs">{agentName ?? job.agent_id.slice(0, 8) + "..."}</Badge>
+                  <Badge variant="outline" className="text-xs">
+                    {agentName ?? job.agent_id.slice(0, 8) + "..."}
+                  </Badge>
                 </div>
               )}
               {job.routine_id && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Routine</span>
-                  <span className="font-mono text-xs">{job.routine_id.slice(0, 8)}...</span>
+                  <span className="font-mono text-xs">
+                    {job.routine_id.slice(0, 8)}...
+                  </span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Last Run</span>
-                <span>{job.last_run_at ? relativeTime(job.last_run_at) : "Never"}</span>
+                <span>
+                  {job.last_run_at ? relativeTime(job.last_run_at) : "Never"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Created</span>
@@ -358,7 +469,9 @@ function ScheduledJobDetailPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Run History</h2>
-            <Button variant="outline" size="sm" onClick={fetchData}>Refresh</Button>
+            <Button variant="outline" size="sm" onClick={fetchData}>
+              Refresh
+            </Button>
           </div>
           {runs.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">No runs yet.</p>

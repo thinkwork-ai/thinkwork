@@ -1,7 +1,4 @@
-import {
-  ComplianceActorType,
-  ComplianceEventType,
-} from "@/gql/graphql";
+import { ComplianceActorType, ComplianceEventType } from "@/gql/graphql";
 
 export const COMPLIANCE_RANGE_VALUES = ["7d", "30d", "this-quarter"] as const;
 export type ComplianceRange = (typeof COMPLIANCE_RANGE_VALUES)[number];
@@ -49,7 +46,9 @@ function pickIso(v: unknown): string | undefined {
 }
 
 function pickString(v: unknown): string | undefined {
-  return typeof v === "string" && v.length > 0 && v.length < 256 ? v : undefined;
+  return typeof v === "string" && v.length > 0 && v.length < 256
+    ? v
+    : undefined;
 }
 
 export function validateComplianceSearch(
@@ -122,12 +121,16 @@ export function resolveSince(
 ): string | undefined {
   if (params.since) return params.since;
   if (!params.range) return undefined;
-  if (params.range === "7d") return new Date(now.getTime() - 7 * DAY_MS).toISOString();
-  if (params.range === "30d") return new Date(now.getTime() - 30 * DAY_MS).toISOString();
+  if (params.range === "7d")
+    return new Date(now.getTime() - 7 * DAY_MS).toISOString();
+  if (params.range === "30d")
+    return new Date(now.getTime() - 30 * DAY_MS).toISOString();
   if (params.range === "this-quarter") {
     const month = now.getUTCMonth();
     const quarterStartMonth = month - (month % 3);
-    return new Date(Date.UTC(now.getUTCFullYear(), quarterStartMonth, 1)).toISOString();
+    return new Date(
+      Date.UTC(now.getUTCFullYear(), quarterStartMonth, 1),
+    ).toISOString();
   }
   return undefined;
 }

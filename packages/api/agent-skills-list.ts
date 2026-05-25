@@ -30,10 +30,16 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResult {
 function authToken(headers?: Record<string, string | undefined>) {
   const auth = headers?.authorization || headers?.Authorization;
   if (!auth) return null;
-  return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
+  return auth.startsWith("Bearer ")
+    ? auth.slice("Bearer ".length).trim()
+    : null;
 }
 
-async function listDir(baseUrl: string, token: string, path: string): Promise<ListEntry[]> {
+async function listDir(
+  baseUrl: string,
+  token: string,
+  path: string,
+): Promise<ListEntry[]> {
   const qs = new URLSearchParams({ path }).toString();
   const res = await fetch(`${baseUrl}/files/list?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -41,7 +47,9 @@ async function listDir(baseUrl: string, token: string, path: string): Promise<Li
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Failed to read ${path}: ${res.status} ${body || "Gateway error"}`);
+    throw new Error(
+      `Failed to read ${path}: ${res.status} ${body || "Gateway error"}`,
+    );
   }
 
   const data = (await res.json()) as { files?: ListEntry[] };
@@ -59,7 +67,9 @@ function errorMessage(error: unknown): string {
   return message ? `${name}: ${message}` : name;
 }
 
-export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+export async function handler(
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> {
   const expectedSecret = process.env.API_AUTH_SECRET;
   const token = authToken(event.headers);
   if (!expectedSecret || !token || token !== expectedSecret) {
@@ -109,7 +119,11 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const dirPath = queue.shift()!;
       const entries = await listDir(gatewayBaseUrl, gatewayToken, dirPath);
 
-      if (entries.some((entry) => entry.type === "file" && entry.name === "SKILL.md")) {
+      if (
+        entries.some(
+          (entry) => entry.type === "file" && entry.name === "SKILL.md",
+        )
+      ) {
         const skillId = dirPath.replace(/^\/skills\//, "");
         if (skillId) discovered.add(skillId);
       }

@@ -142,7 +142,9 @@ export function ChainPositionPanel({
       setHops(collected);
       if (cycleDetected) setWalkError("Chain cycle detected — stopping walk.");
       else if (lookupFailedAt !== null)
-        setWalkError(`Failed to load hop ${lookupFailedAt}. Partial chain shown.`);
+        setWalkError(
+          `Failed to load hop ${lookupFailedAt}. Partial chain shown.`,
+        );
     } finally {
       if (walkGenRef.current === myGen) setWalking(false);
     }
@@ -163,7 +165,9 @@ export function ChainPositionPanel({
           />
         ) : (
           <div className="flex items-center justify-between text-sm gap-4">
-            <span className="text-muted-foreground shrink-0">Previous hash</span>
+            <span className="text-muted-foreground shrink-0">
+              Previous hash
+            </span>
             <Badge variant="outline">GENESIS</Badge>
           </div>
         )}

@@ -47,25 +47,25 @@ describe("snapshotIdentity", () => {
     expect(out.userId).toBe("user-1");
   });
 
-  it.each([
-    ["tenant_id"],
-    ["user_id"],
-    ["assistant_id"],
-    ["thread_id"],
-  ])("throws InvocationValidationError(400) when %s is missing", (field) => {
-    const payload = { ...baseValid, [field]: "" };
-    expect(() => snapshotIdentity(payload)).toThrow(InvocationValidationError);
-    try {
-      snapshotIdentity(payload);
-    } catch (err) {
-      expect((err as InvocationValidationError).statusCode).toBe(400);
-    }
-  });
+  it.each([["tenant_id"], ["user_id"], ["assistant_id"], ["thread_id"]])(
+    "throws InvocationValidationError(400) when %s is missing",
+    (field) => {
+      const payload = { ...baseValid, [field]: "" };
+      expect(() => snapshotIdentity(payload)).toThrow(
+        InvocationValidationError,
+      );
+      try {
+        snapshotIdentity(payload);
+      } catch (err) {
+        expect((err as InvocationValidationError).statusCode).toBe(400);
+      }
+    },
+  );
 
   it("includes every missing field name in the error message", () => {
-    expect(() =>
-      snapshotIdentity({}),
-    ).toThrow(/tenant_id.*user_id.*assistant_id.*thread_id/);
+    expect(() => snapshotIdentity({})).toThrow(
+      /tenant_id.*user_id.*assistant_id.*thread_id/,
+    );
   });
 
   it("treats user_id as optional when eval_mode is true", () => {
@@ -80,9 +80,9 @@ describe("snapshotIdentity", () => {
   });
 
   it("still requires tenant_id, assistant_id, thread_id even in eval_mode", () => {
-    expect(() =>
-      snapshotIdentity({ eval_mode: true, user_id: "" }),
-    ).toThrow(/tenant_id.*assistant_id.*thread_id/);
+    expect(() => snapshotIdentity({ eval_mode: true, user_id: "" })).toThrow(
+      /tenant_id.*assistant_id.*thread_id/,
+    );
   });
 });
 
@@ -130,13 +130,15 @@ describe("snapshotRuntimeEnv", () => {
 
   it("selects hindsight when MEMORY_ENGINE=hindsight (case-insensitive)", () => {
     expect(
-      snapshotRuntimeEnv({ MEMORY_ENGINE: "Hindsight" } as NodeJS.ProcessEnv).memoryEngine,
+      snapshotRuntimeEnv({ MEMORY_ENGINE: "Hindsight" } as NodeJS.ProcessEnv)
+        .memoryEngine,
     ).toBe("hindsight");
   });
 
   it("falls back to managed for any other MEMORY_ENGINE value", () => {
     expect(
-      snapshotRuntimeEnv({ MEMORY_ENGINE: "weirdvalue" } as NodeJS.ProcessEnv).memoryEngine,
+      snapshotRuntimeEnv({ MEMORY_ENGINE: "weirdvalue" } as NodeJS.ProcessEnv)
+        .memoryEngine,
     ).toBe("managed");
   });
 
@@ -158,8 +160,12 @@ describe("snapshotRuntimeEnv", () => {
   });
 
   it("returns a fresh object each call (no module-load capture)", () => {
-    const a = snapshotRuntimeEnv({ AWS_REGION: "us-west-2" } as NodeJS.ProcessEnv);
-    const b = snapshotRuntimeEnv({ AWS_REGION: "eu-west-1" } as NodeJS.ProcessEnv);
+    const a = snapshotRuntimeEnv({
+      AWS_REGION: "us-west-2",
+    } as NodeJS.ProcessEnv);
+    const b = snapshotRuntimeEnv({
+      AWS_REGION: "eu-west-1",
+    } as NodeJS.ProcessEnv);
     expect(a.awsRegion).toBe("us-west-2");
     expect(b.awsRegion).toBe("eu-west-1");
   });
@@ -173,9 +179,9 @@ describe("snapshotRuntimeEnv", () => {
   });
 
   it("defaults memoryRetainFnName to empty string when MEMORY_RETAIN_FN_NAME is unset", () => {
-    expect(
-      snapshotRuntimeEnv({} as NodeJS.ProcessEnv).memoryRetainFnName,
-    ).toBe("");
+    expect(snapshotRuntimeEnv({} as NodeJS.ProcessEnv).memoryRetainFnName).toBe(
+      "",
+    );
   });
 });
 
@@ -295,10 +301,7 @@ describe("logStructured", () => {
 
   it("writes one JSON line per call", () => {
     const out = captureStdout();
-    logStructured(
-      { level: "info", event: "test", tenantId: "t1" },
-      out.stream,
-    );
+    logStructured({ level: "info", event: "test", tenantId: "t1" }, out.stream);
     const written = out.lines();
     expect(written).toHaveLength(1);
     expect(written[0]?.endsWith("\n")).toBe(true);

@@ -13,17 +13,13 @@ import { Streamdown } from "streamdown";
 import type { ComponentProps } from "react";
 
 export type ResponseProps = ComponentProps<typeof Streamdown> & {
-	className?: string;
+  className?: string;
 };
 
-export const Response = ({
-	className,
-	children,
-	...props
-}: ResponseProps) => (
-	<div className={cn("ai-response prose prose-sm max-w-none", className)}>
-		<Streamdown {...props}>{children}</Streamdown>
-	</div>
+export const Response = ({ className, children, ...props }: ResponseProps) => (
+  <div className={cn("ai-response prose prose-sm max-w-none", className)}>
+    <Streamdown {...props}>{children}</Streamdown>
+  </div>
 );
 
 Response.displayName = "Response";

@@ -36,12 +36,16 @@ async function resolveCtx(opts: { stage?: string; tenant?: string }) {
 export function registerToolsCommand(program: Command): void {
   const tools = program
     .command("tools")
-    .description("Configure built-in agent tools (web_search, …) for your tenant");
+    .description(
+      "Configure built-in agent tools (web_search, …) for your tenant",
+    );
 
   tools
     .command("list")
     .alias("ls")
-    .description("List configured built-in tools. Prompts for stage/tenant in a TTY when omitted.")
+    .description(
+      "List configured built-in tools. Prompts for stage/tenant in a TTY when omitted.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .addHelpText(
@@ -76,13 +80,18 @@ Examples:
         }
         console.log("");
         for (const r of rows) {
-          const status = r.enabled ? chalk.green("enabled") : chalk.dim("disabled");
+          const status = r.enabled
+            ? chalk.green("enabled")
+            : chalk.dim("disabled");
           const key = r.hasSecret ? chalk.green("yes") : chalk.red("no");
           const provider = r.provider ?? chalk.dim("—");
           console.log(`  ${chalk.bold(r.toolSlug)}  ${status}`);
           console.log(`    Provider:  ${provider}`);
           console.log(`    Has key:   ${key}`);
-          if (r.lastTestedAt) console.log(`    Tested:    ${new Date(r.lastTestedAt).toLocaleString()}`);
+          if (r.lastTestedAt)
+            console.log(
+              `    Tested:    ${new Date(r.lastTestedAt).toLocaleString()}`,
+            );
           console.log("");
         }
       } catch (err) {
@@ -100,10 +109,15 @@ Examples:
 
   webSearch
     .command("set")
-    .description("Set or update web_search provider + API key (enables the tool). Prompts when flags are missing in a TTY.")
+    .description(
+      "Set or update web_search provider + API key (enables the tool). Prompts when flags are missing in a TTY.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--provider <name>", `Provider (${TOOL_PROVIDERS["web-search"].join("|")})`)
+    .option(
+      "--provider <name>",
+      `Provider (${TOOL_PROVIDERS["web-search"].join("|")})`,
+    )
     .option("--key <key>", "API key (will prompt hidden if omitted)")
     .addHelpText(
       "after",
@@ -129,27 +143,39 @@ Examples:
           let provider = opts.provider;
           if (!provider) {
             if (!process.stdin.isTTY) {
-              printError(`--provider is required. One of: ${TOOL_PROVIDERS["web-search"].join(", ")}`);
+              printError(
+                `--provider is required. One of: ${TOOL_PROVIDERS["web-search"].join(", ")}`,
+              );
               process.exit(1);
             }
             provider = await select({
               message: "Provider:",
-              choices: TOOL_PROVIDERS["web-search"].map((p) => ({ name: p, value: p })),
+              choices: TOOL_PROVIDERS["web-search"].map((p) => ({
+                name: p,
+                value: p,
+              })),
               loop: false,
             });
           }
           if (!TOOL_PROVIDERS["web-search"].includes(provider)) {
-            printError(`provider must be one of: ${TOOL_PROVIDERS["web-search"].join(", ")}`);
+            printError(
+              `provider must be one of: ${TOOL_PROVIDERS["web-search"].join(", ")}`,
+            );
             process.exit(1);
           }
 
           let apiKey = opts.key;
           if (!apiKey) {
             if (!process.stdin.isTTY) {
-              printError("--key is required. Pass it as a flag or pipe via env.");
+              printError(
+                "--key is required. Pass it as a flag or pipe via env.",
+              );
               process.exit(1);
             }
-            apiKey = await password({ message: `${provider} API key:`, mask: "*" });
+            apiKey = await password({
+              message: `${provider} API key:`,
+              mask: "*",
+            });
           }
           if (!apiKey) {
             printError("API key is required");
@@ -160,11 +186,18 @@ Examples:
             api.apiUrl,
             api.authSecret,
             "/api/skills/builtin-tools/web-search",
-            { method: "PUT", body: JSON.stringify({ provider, apiKey, enabled: true }) },
+            {
+              method: "PUT",
+              body: JSON.stringify({ provider, apiKey, enabled: true }),
+            },
             { "x-tenant-slug": tenant.slug },
           );
-          printSuccess(`web_search configured with provider=${provider}, enabled=true`);
-          printWarning("Run `thinkwork tools web-search test` to verify connectivity.");
+          printSuccess(
+            `web_search configured with provider=${provider}, enabled=true`,
+          );
+          printWarning(
+            "Run `thinkwork tools web-search test` to verify connectivity.",
+          );
         } catch (err) {
           if (isCancellation(err)) return;
           printError(err instanceof Error ? err.message : String(err));
@@ -175,7 +208,9 @@ Examples:
 
   webSearch
     .command("test")
-    .description("Test the stored web_search provider + key against the provider API.")
+    .description(
+      "Test the stored web_search provider + key against the provider API.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(async (opts: { stage?: string; tenant?: string }) => {
@@ -190,7 +225,9 @@ Examples:
           { "x-tenant-slug": tenant.slug },
         );
         if (result.ok) {
-          printSuccess(`${result.provider}: ${result.resultCount} result(s) returned.`);
+          printSuccess(
+            `${result.provider}: ${result.resultCount} result(s) returned.`,
+          );
         } else {
           printError(`Test failed: ${result.error}`);
           process.exit(1);

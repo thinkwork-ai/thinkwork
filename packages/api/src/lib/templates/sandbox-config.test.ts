@@ -14,9 +14,7 @@ describe("validateTemplateSandbox", () => {
   });
 
   it("accepts a minimal valid object", () => {
-    expect(
-      validateTemplateSandbox({ environment: "default-public" }),
-    ).toEqual({
+    expect(validateTemplateSandbox({ environment: "default-public" })).toEqual({
       ok: true,
       value: { environment: "default-public" },
     });

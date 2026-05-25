@@ -20,9 +20,6 @@ describe("createThread opening message mention routing", () => {
     expect(source).toContain("dispatchAgentMentions");
     expect(source).toContain("dispatchDefaultAgentTurn");
     expect(source).toContain("parsedOpeningMentions.length === 0");
-    expect(source).toContain(
-      "row.computer_id && parsedOpeningMentions.length === 0",
-    );
   });
 
   it("marks the thread creator read for the opening message", () => {
@@ -32,9 +29,9 @@ describe("createThread opening message mention routing", () => {
     expect(source).toContain("last_read_at: openingMessageCreatedAt");
   });
 
-  it("binds new non-computer threads to the tenant platform agent", () => {
+  it("binds new threads to the tenant platform agent by default", () => {
     expect(source).toContain("resolveDefaultThreadAgentId");
-    expect(source).toContain("const threadAgentId = threadComputer");
+    expect(source).toContain("const threadAgentId =");
     expect(source).toContain("agent_id: threadAgentId ?? undefined");
   });
 });

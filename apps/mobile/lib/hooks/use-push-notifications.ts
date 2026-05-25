@@ -12,7 +12,10 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { useMutation } from "urql";
-import { RegisterPushTokenMutation, UnregisterPushTokenMutation } from "@/lib/graphql-queries";
+import {
+  RegisterPushTokenMutation,
+  UnregisterPushTokenMutation,
+} from "@/lib/graphql-queries";
 import { pushNavigationTarget } from "@/lib/push-navigation";
 
 // Show notifications even when the app is in the foreground
@@ -35,33 +38,54 @@ export function usePushNotifications(isAuthenticated: boolean) {
     // Skip on web and non-device environments (simulators may work with limitations)
     if (Platform.OS === "web" || !isAuthenticated) return;
 
-    console.log("[push-notifications] Starting registration flow, isDevice:", Device.isDevice, "platform:", Platform.OS);
+    console.log(
+      "[push-notifications] Starting registration flow, isDevice:",
+      Device.isDevice,
+      "platform:",
+      Platform.OS,
+    );
 
-    registerForPushNotificationsAsync().then(async (token) => {
-      console.log("[push-notifications] registerForPushNotificationsAsync returned:", token ? token.slice(0, 30) + "..." : "null");
-      if (!token) return;
-      setExpoPushToken(token);
+    registerForPushNotificationsAsync()
+      .then(async (token) => {
+        console.log(
+          "[push-notifications] registerForPushNotificationsAsync returned:",
+          token ? token.slice(0, 30) + "..." : "null",
+        );
+        if (!token) return;
+        setExpoPushToken(token);
 
-      // Register token with backend
-      const { error } = await executeRegister({
-        input: { token, platform: Platform.OS },
+        // Register token with backend
+        const { error } = await executeRegister({
+          input: { token, platform: Platform.OS },
+        });
+        if (error) {
+          console.error(
+            "[push-notifications] Failed to register token:",
+            error.message,
+          );
+        } else {
+          console.log(
+            "[push-notifications] Token registered with backend successfully",
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("[push-notifications] Registration flow error:", err);
       });
-      if (error) {
-        console.error("[push-notifications] Failed to register token:", error.message);
-      } else {
-        console.log("[push-notifications] Token registered with backend successfully");
-      }
-    }).catch((err) => {
-      console.error("[push-notifications] Registration flow error:", err);
-    });
 
     // Listen for notifications received while app is foregrounded
-    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      console.log("[push-notifications] Received:", notification.request.content.title);
-    });
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log(
+          "[push-notifications] Received:",
+          notification.request.content.title,
+        );
+      });
 
     // Listen for notification taps — navigate to thread
-    const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
+    const handleNotificationResponse = (
+      response: Notifications.NotificationResponse,
+    ) => {
       const content = response.notification.request.content;
       const trigger = response.notification.request.trigger as any;
 
@@ -70,7 +94,10 @@ export function usePushNotifications(isAuthenticated: boolean) {
       if (target?.kind === "computer_approval") {
         setTimeout(() => {
           Linking.openURL(target.url).catch((err) => {
-            console.error("[push-notifications] Failed to open approval URL:", err);
+            console.error(
+              "[push-notifications] Failed to open approval URL:",
+              err,
+            );
           });
         }, 500);
       } else if (target?.kind === "thread") {
@@ -78,7 +105,10 @@ export function usePushNotifications(isAuthenticated: boolean) {
       }
     };
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener(
+        handleNotificationResponse,
+      );
 
     // Handle cold launch — check if the app was opened from a notification
     Notifications.getLastNotificationResponseAsync().then((response) => {
@@ -108,7 +138,10 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   // Check existing permission
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
-  console.log("[push-notifications] Existing permission status:", existingStatus);
+  console.log(
+    "[push-notifications] Existing permission status:",
+    existingStatus,
+  );
 
   // Request if not already granted
   if (existingStatus !== "granted") {
@@ -119,7 +152,10 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   }
 
   if (finalStatus !== "granted") {
-    console.warn("[push-notifications] Permission not granted, finalStatus:", finalStatus);
+    console.warn(
+      "[push-notifications] Permission not granted, finalStatus:",
+      finalStatus,
+    );
     return null;
   }
 
@@ -135,7 +171,9 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   // On simulators, we can receive local/simctl pushes but can't get an Expo push token.
   // Return null token — permissions are still granted so simctl pushes work.
   if (!Device.isDevice) {
-    console.log("[push-notifications] Simulator detected — skipping token registration");
+    console.log(
+      "[push-notifications] Simulator detected — skipping token registration",
+    );
     return null;
   }
 
@@ -150,7 +188,10 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   try {
     console.log("[push-notifications] Calling getExpoPushTokenAsync...");
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-    console.log("[push-notifications] Got token:", tokenData.data.slice(0, 30) + "...");
+    console.log(
+      "[push-notifications] Got token:",
+      tokenData.data.slice(0, 30) + "...",
+    );
     return tokenData.data;
   } catch (err) {
     console.error("[push-notifications] getExpoPushTokenAsync failed:", err);

@@ -10,7 +10,12 @@ import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isJsonMode, printJson, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess, printWarning } from "../ui.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+  printWarning,
+} from "../ui.js";
 
 const QueuedWakeupsDoc = graphql(`
   query CliQueuedWakeups($tenantId: ID!) {
@@ -63,17 +68,23 @@ async function resolveWakeupContext(opts: WakeupCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, WakeupTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, WakeupTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, WakeupTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    const data = await gqlQuery(client, WakeupTenantBySlugDoc, {
+      slug: ctxSlug,
+    });
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -88,7 +99,9 @@ function fmtIso(iso: string | null | undefined): string {
 
 async function runWakeupList(opts: WakeupCliOptions): Promise<void> {
   const ctx = await resolveWakeupContext(opts);
-  const data = await gqlQuery(ctx.client, QueuedWakeupsDoc, { tenantId: ctx.tenantId });
+  const data = await gqlQuery(ctx.client, QueuedWakeupsDoc, {
+    tenantId: ctx.tenantId,
+  });
   const items = data.queuedWakeups ?? [];
   if (isJsonMode()) {
     printJson({ items });
@@ -168,7 +181,9 @@ export function registerWakeupCommand(program: Command): void {
   const wake = program
     .command("wakeup")
     .alias("wakeups")
-    .description("View and create agent wakeup requests (deferred/enqueued invocations).");
+    .description(
+      "View and create agent wakeup requests (deferred/enqueued invocations).",
+    );
 
   wake
     .command("list")
@@ -183,7 +198,11 @@ export function registerWakeupCommand(program: Command): void {
     .description("Queue a wakeup for an agent.")
     .option("--agent <id>", "Target agent")
     .option("--thread <id>", "Thread to operate on (optional)")
-    .option("--delay-seconds <n>", "Currently a no-op; the API has no delay field", "0")
+    .option(
+      "--delay-seconds <n>",
+      "Currently a no-op; the API has no delay field",
+      "0",
+    )
     .option("--payload <json>", "Optional input payload")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")

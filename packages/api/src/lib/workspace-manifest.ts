@@ -21,7 +21,8 @@ import {
 } from "@aws-sdk/client-s3";
 
 const s3 = new S3Client({
-  region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+  region:
+    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
 });
 
 function workspacePrefix(tenantSlug: string, instanceId: string): string {
@@ -33,14 +34,22 @@ export async function regenerateManifest(
   tenantSlug: string,
   instanceId: string,
 ): Promise<void> {
-  await regenerateManifestForPrefix(bucket, workspacePrefix(tenantSlug, instanceId));
+  await regenerateManifestForPrefix(
+    bucket,
+    workspacePrefix(tenantSlug, instanceId),
+  );
 }
 
 export async function regenerateManifestForPrefix(
   bucket: string,
   prefix: string,
 ): Promise<void> {
-  const files: { path: string; etag: string; size: number; last_modified: string }[] = [];
+  const files: {
+    path: string;
+    etag: string;
+    size: number;
+    last_modified: string;
+  }[] = [];
   let continuationToken: string | undefined;
 
   do {
@@ -62,7 +71,9 @@ export async function regenerateManifestForPrefix(
         last_modified: obj.LastModified?.toISOString() ?? "",
       });
     }
-    continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+    continuationToken = result.IsTruncated
+      ? result.NextContinuationToken
+      : undefined;
   } while (continuationToken);
 
   const manifest = {

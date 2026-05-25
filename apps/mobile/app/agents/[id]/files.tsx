@@ -1,5 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
-import { View, Text, ScrollView, ActivityIndicator, Pressable, Alert } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  ActivityIndicator,
+  Pressable,
+  Alert,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAgents } from "@/lib/hooks/use-agents";
 import { useAuth } from "@/lib/auth-context";
@@ -9,7 +16,12 @@ import { Folder, FileText, ChevronRight, Trash2 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
 
-type FileEntry = { name: string; type: "file" | "dir"; size: number; modified: string };
+type FileEntry = {
+  name: string;
+  type: "file" | "dir";
+  size: number;
+  modified: string;
+};
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -19,7 +31,10 @@ function formatSize(bytes: number): string {
 
 function Breadcrumbs({ path, id }: { path: string; id: string }) {
   const router = useRouter();
-  const parts = path.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  const parts = path
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
+    .filter(Boolean);
 
   const navigateTo = (targetPath: string) => {
     router.push(`/agents/${id}/files?path=${encodeURIComponent(targetPath)}`);
@@ -37,7 +52,9 @@ function Breadcrumbs({ path, id }: { path: string; id: string }) {
           <View key={fullPath} className="flex-row items-center">
             <ChevronRight size={14} color="#a3a3a3" />
             {isLast ? (
-              <Text className="text-lg text-neutral-900 dark:text-neutral-100 font-medium">{part}</Text>
+              <Text className="text-lg text-neutral-900 dark:text-neutral-100 font-medium">
+                {part}
+              </Text>
             ) : (
               <Pressable onPress={() => navigateTo(fullPath)}>
                 <Text className="text-lg text-sky-500 font-medium">{part}</Text>
@@ -88,7 +105,10 @@ function FileRow({
         ) : (
           <FileText size={22} color="#737373" />
         )}
-        <Text className="flex-1 ml-3 text-lg text-neutral-900 dark:text-neutral-100 font-medium" numberOfLines={1}>
+        <Text
+          className="flex-1 ml-3 text-lg text-neutral-900 dark:text-neutral-100 font-medium"
+          numberOfLines={1}
+        >
           {file.name}
         </Text>
         {!isDir && (
@@ -104,7 +124,10 @@ function FileRow({
 
 export default function AgentFilesScreen() {
   const router = useRouter();
-  const { id, path: pathParam } = useLocalSearchParams<{ id: string; path?: string }>();
+  const { id, path: pathParam } = useLocalSearchParams<{
+    id: string;
+    path?: string;
+  }>();
   const currentPath = pathParam || "/";
   const { user } = useAuth();
   const tenantId = (user as any)?.tenantId;
@@ -115,10 +138,16 @@ export default function AgentFilesScreen() {
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
   // TODO: files.listFiles and files.deleteFile actions not yet available via GraphQL hooks
-  const listFilesAction = async (_args: { agentId: string; path: string }): Promise<{ files?: FileEntry[]; error?: string }> => {
+  const listFilesAction = async (_args: {
+    agentId: string;
+    path: string;
+  }): Promise<{ files?: FileEntry[]; error?: string }> => {
     return { error: "File listing not yet available via GraphQL" };
   };
-  const deleteFileAction = async (_args: { agentId: string; path: string }): Promise<{ error?: string }> => {
+  const deleteFileAction = async (_args: {
+    agentId: string;
+    path: string;
+  }): Promise<{ error?: string }> => {
     return { error: "File deletion not yet available via GraphQL" };
   };
   const [files, setFiles] = useState<FileEntry[] | null>(null);
@@ -129,70 +158,94 @@ export default function AgentFilesScreen() {
 
   const agentId = id!;
 
-  const loadFiles = useCallback(async (path: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await listFilesAction({ agentId, path });
-      setFiles(result.files ?? []);
-      if (result.error) setError(result.error);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error loading files");
-    } finally {
-      setLoading(false);
-    }
-  }, [agentId]);
+  const loadFiles = useCallback(
+    async (path: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await listFilesAction({ agentId, path });
+        setFiles(result.files ?? []);
+        if (result.error) setError(result.error);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error loading files");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [agentId],
+  );
 
   useEffect(() => {
     loadFiles(currentPath);
     setEditMode(false);
   }, [currentPath]);
 
-  const handleFilePress = useCallback((file: FileEntry) => {
-    if (editMode) return; // Don't navigate in edit mode
-    if (file.type === "dir") {
-      const newPath = currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
-      router.push(`/agents/${id}/files?path=${encodeURIComponent(newPath)}`);
-    } else {
-      const filePath = currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
-      router.push(`/agents/${id}/file-view?path=${encodeURIComponent(filePath)}&name=${encodeURIComponent(file.name)}`);
-    }
-  }, [currentPath, id, router, editMode]);
+  const handleFilePress = useCallback(
+    (file: FileEntry) => {
+      if (editMode) return; // Don't navigate in edit mode
+      if (file.type === "dir") {
+        const newPath =
+          currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
+        router.push(`/agents/${id}/files?path=${encodeURIComponent(newPath)}`);
+      } else {
+        const filePath =
+          currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
+        router.push(
+          `/agents/${id}/file-view?path=${encodeURIComponent(filePath)}&name=${encodeURIComponent(file.name)}`,
+        );
+      }
+    },
+    [currentPath, id, router, editMode],
+  );
 
-  const handleDelete = useCallback((file: FileEntry) => {
-    const filePath = currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
-    const label = file.type === "dir" ? "folder" : "file";
+  const handleDelete = useCallback(
+    (file: FileEntry) => {
+      const filePath =
+        currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
+      const label = file.type === "dir" ? "folder" : "file";
 
-    Alert.alert(
-      `Delete ${label}`,
-      `Are you sure you want to delete "${file.name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setDeletingPath(filePath);
-            try {
-              const result = await deleteFileAction({ agentId, path: filePath });
-              if ((result as any)?.error) {
-                Alert.alert("Error", (result as any).error);
-              } else {
-                await loadFiles(currentPath);
+      Alert.alert(
+        `Delete ${label}`,
+        `Are you sure you want to delete "${file.name}"?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              setDeletingPath(filePath);
+              try {
+                const result = await deleteFileAction({
+                  agentId,
+                  path: filePath,
+                });
+                if ((result as any)?.error) {
+                  Alert.alert("Error", (result as any).error);
+                } else {
+                  await loadFiles(currentPath);
+                }
+              } catch (err) {
+                Alert.alert(
+                  "Error",
+                  err instanceof Error ? err.message : "Delete failed",
+                );
+              } finally {
+                setDeletingPath(null);
               }
-            } catch (err) {
-              Alert.alert("Error", err instanceof Error ? err.message : "Delete failed");
-            } finally {
-              setDeletingPath(null);
-            }
+            },
           },
-        },
-      ]
-    );
-  }, [currentPath, agentId, loadFiles]);
+        ],
+      );
+    },
+    [currentPath, agentId, loadFiles],
+  );
 
-  const pathParts = currentPath.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
-  const title = pathParts.length > 0 ? pathParts[pathParts.length - 1] : "Workspace";
+  const pathParts = currentPath
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
+    .filter(Boolean);
+  const title =
+    pathParts.length > 0 ? pathParts[pathParts.length - 1] : "Workspace";
 
   if (gateways === undefined) {
     return (
@@ -212,7 +265,12 @@ export default function AgentFilesScreen() {
       headerRight={
         <Pressable onPress={() => setEditMode(!editMode)} className="p-1">
           {editMode ? (
-            <Text style={{ color: "#0ea5e9" }} className="font-semibold text-base">Done</Text>
+            <Text
+              style={{ color: "#0ea5e9" }}
+              className="font-semibold text-base"
+            >
+              Done
+            </Text>
           ) : (
             <Trash2 size={20} color="#ef4444" />
           )}
@@ -226,8 +284,13 @@ export default function AgentFilesScreen() {
             <View className="flex-1">
               <Breadcrumbs path={currentPath} id={id!} />
             </View>
-            <Pressable onPress={() => loadFiles(currentPath)} className="px-3 py-1">
-              <Text className="text-base text-sky-500 font-medium">Refresh</Text>
+            <Pressable
+              onPress={() => loadFiles(currentPath)}
+              className="px-3 py-1"
+            >
+              <Text className="text-base text-sky-500 font-medium">
+                Refresh
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -251,7 +314,10 @@ export default function AgentFilesScreen() {
         ) : (
           <ScrollView className="flex-1">
             {files?.map((file) => {
-              const filePath = currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
+              const filePath =
+                currentPath === "/"
+                  ? `/${file.name}`
+                  : `${currentPath}/${file.name}`;
               return (
                 <FileRow
                   key={file.name}

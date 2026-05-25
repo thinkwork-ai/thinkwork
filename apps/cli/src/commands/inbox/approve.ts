@@ -8,7 +8,10 @@ interface ApproveOptions extends InboxCliOptions {
   notes?: string;
 }
 
-export async function runInboxApprove(id: string, opts: ApproveOptions): Promise<void> {
+export async function runInboxApprove(
+  id: string,
+  opts: ApproveOptions,
+): Promise<void> {
   const ctx = await resolveInboxContext(opts);
 
   const data = await gqlMutate(ctx.client, ApproveInboxItemDoc, {

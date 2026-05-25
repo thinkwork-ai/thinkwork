@@ -20,23 +20,23 @@ import { db } from "../db.js";
 import { enqueueCompileJob } from "./repository.js";
 
 export interface PostTurnCompileArgs {
-	tenantId: string;
-	ownerId: string;
-	adapterKind: string;
+  tenantId: string;
+  ownerId: string;
+  adapterKind: string;
 }
 
 export interface PostTurnCompileResult {
-	status:
-		| "skipped_flag_off"
-		| "skipped_adapter"
-		| "skipped_missing_inputs"
-		| "skipped_tenant_not_found"
-		| "deduped"
-		| "enqueued"
-		| "enqueued_invoke_failed"
-		| "error";
-	jobId?: string;
-	error?: string;
+  status:
+    | "skipped_flag_off"
+    | "skipped_adapter"
+    | "skipped_missing_inputs"
+    | "skipped_tenant_not_found"
+    | "deduped"
+    | "enqueued"
+    | "enqueued_invoke_failed"
+    | "error";
+  jobId?: string;
+  error?: string;
 }
 
 /**
@@ -45,48 +45,48 @@ export interface PostTurnCompileResult {
  * throwing.
  */
 export async function maybeEnqueuePostTurnCompile(
-	args: PostTurnCompileArgs,
+  args: PostTurnCompileArgs,
 ): Promise<PostTurnCompileResult> {
-	if (!args.tenantId || !args.ownerId) {
-		return { status: "skipped_missing_inputs" };
-	}
-	if (args.adapterKind !== "hindsight") {
-		return { status: "skipped_adapter" };
-	}
+  if (!args.tenantId || !args.ownerId) {
+    return { status: "skipped_missing_inputs" };
+  }
+  if (args.adapterKind !== "hindsight") {
+    return { status: "skipped_adapter" };
+  }
 
-	try {
-		const [tenantRow] = await db
-			.select({ enabled: tenants.wiki_compile_enabled })
-			.from(tenants)
-			.where(eq(tenants.id, args.tenantId))
-			.limit(1);
+  try {
+    const [tenantRow] = await db
+      .select({ enabled: tenants.wiki_compile_enabled })
+      .from(tenants)
+      .where(eq(tenants.id, args.tenantId))
+      .limit(1);
 
-		if (!tenantRow) return { status: "skipped_tenant_not_found" };
-		if (!tenantRow.enabled) return { status: "skipped_flag_off" };
+    if (!tenantRow) return { status: "skipped_tenant_not_found" };
+    if (!tenantRow.enabled) return { status: "skipped_flag_off" };
 
-		const { inserted, job } = await enqueueCompileJob({
-			tenantId: args.tenantId,
-			ownerId: args.ownerId,
-			trigger: "memory_retain",
-		});
+    const { inserted, job } = await enqueueCompileJob({
+      tenantId: args.tenantId,
+      ownerId: args.ownerId,
+      trigger: "memory_retain",
+    });
 
-		if (!inserted) {
-			return { status: "deduped", jobId: job.id };
-		}
+    if (!inserted) {
+      return { status: "deduped", jobId: job.id };
+    }
 
-		const invokeErr = await invokeWikiCompile(job.id).catch((err) => err);
-		if (invokeErr instanceof Error) {
-			return {
-				status: "enqueued_invoke_failed",
-				jobId: job.id,
-				error: invokeErr.message,
-			};
-		}
+    const invokeErr = await invokeWikiCompile(job.id).catch((err) => err);
+    if (invokeErr instanceof Error) {
+      return {
+        status: "enqueued_invoke_failed",
+        jobId: job.id,
+        error: invokeErr.message,
+      };
+    }
 
-		return { status: "enqueued", jobId: job.id };
-	} catch (err) {
-		return { status: "error", error: (err as Error)?.message ?? String(err) };
-	}
+    return { status: "enqueued", jobId: job.id };
+  } catch (err) {
+    return { status: "error", error: (err as Error)?.message ?? String(err) };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -96,28 +96,29 @@ export async function maybeEnqueuePostTurnCompile(
 // ---------------------------------------------------------------------------
 
 export async function invokeWikiCompile(jobId: string): Promise<void> {
-	const fnName = resolveWikiCompileFunctionName();
-	if (!fnName) {
-		console.warn(
-			"[wiki-enqueue] wiki-compile function name unresolved (no STAGE or WIKI_COMPILE_FN); skipping invoke",
-		);
-		return;
-	}
+  const fnName = resolveWikiCompileFunctionName();
+  if (!fnName) {
+    console.warn(
+      "[wiki-enqueue] wiki-compile function name unresolved (no STAGE or WIKI_COMPILE_FN); skipping invoke",
+    );
+    return;
+  }
 
-	const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
-	const lambda = new LambdaClient({});
-	await lambda.send(
-		new InvokeCommand({
-			FunctionName: fnName,
-			InvocationType: "Event",
-			Payload: new TextEncoder().encode(JSON.stringify({ jobId })),
-		}),
-	);
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
+  const lambda = new LambdaClient({});
+  await lambda.send(
+    new InvokeCommand({
+      FunctionName: fnName,
+      InvocationType: "Event",
+      Payload: new TextEncoder().encode(JSON.stringify({ jobId })),
+    }),
+  );
 }
 
 function resolveWikiCompileFunctionName(): string | null {
-	if (process.env.WIKI_COMPILE_FN) return process.env.WIKI_COMPILE_FN;
-	const stage = process.env.STAGE;
-	if (!stage) return null;
-	return `thinkwork-${stage}-api-wiki-compile`;
+  if (process.env.WIKI_COMPILE_FN) return process.env.WIKI_COMPILE_FN;
+  const stage = process.env.STAGE;
+  if (!stage) return null;
+  return `thinkwork-${stage}-api-wiki-compile`;
 }

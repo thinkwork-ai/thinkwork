@@ -22,14 +22,11 @@
 
 import { invokeClaudeJson } from "./bedrock.js";
 import { describeAllPageTypes } from "./templates.js";
-import {
-	validatePlannerResult,
-	type PlannerResult,
-} from "./planner.js";
+import { validatePlannerResult, type PlannerResult } from "./planner.js";
 import type {
-	WikiPageType,
-	WikiPageRow,
-	SectionAggregation,
+  WikiPageType,
+  WikiPageRow,
+  SectionAggregation,
 } from "./repository.js";
 import type { DerivedParentCandidate } from "./parent-expander.js";
 
@@ -38,36 +35,36 @@ import type { DerivedParentCandidate } from "./parent-expander.js";
 // ---------------------------------------------------------------------------
 
 export interface AggregationCandidatePage {
-	id: string;
-	type: WikiPageType;
-	slug: string;
-	title: string;
-	summary: string | null;
-	parent_page_id: string | null;
-	hubness_score: number;
-	tags: string[];
-	sections: Array<{
-		id: string;
-		section_slug: string;
-		heading: string;
-		body_md: string;
-		aggregation: SectionAggregation | null;
-		promotion_score?: number;
-		promotion_status?: SectionAggregation["promotion_status"];
-	}>;
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  summary: string | null;
+  parent_page_id: string | null;
+  hubness_score: number;
+  tags: string[];
+  sections: Array<{
+    id: string;
+    section_slug: string;
+    heading: string;
+    body_md: string;
+    aggregation: SectionAggregation | null;
+    promotion_score?: number;
+    promotion_status?: SectionAggregation["promotion_status"];
+  }>;
 }
 
 export interface AggregationLinkNeighborhood {
-	pageId: string;
-	inboundCount: number;
+  pageId: string;
+  inboundCount: number;
 }
 
 export interface AggregationBatch {
-	tenantId: string;
-	ownerId: string;
-	recentlyChangedPages: AggregationCandidatePage[];
-	parentCandidates: DerivedParentCandidate[];
-	linkNeighborhoods: AggregationLinkNeighborhood[];
+  tenantId: string;
+  ownerId: string;
+  recentlyChangedPages: AggregationCandidatePage[];
+  parentCandidates: DerivedParentCandidate[];
+  linkNeighborhoods: AggregationLinkNeighborhood[];
 }
 
 // ---------------------------------------------------------------------------
@@ -179,69 +176,71 @@ const AGGREGATION_OUTPUT_SCHEMA = `{
 // ---------------------------------------------------------------------------
 
 export function buildAggregationUserPrompt(batch: AggregationBatch): string {
-	const lines: string[] = [];
+  const lines: string[] = [];
 
-	lines.push("## Recently-changed pages in this scope\n");
-	if (batch.recentlyChangedPages.length === 0) {
-		lines.push("(none)");
-	} else {
-		for (const p of batch.recentlyChangedPages) {
-			lines.push(
-				`- id=${p.id} type=${p.type} slug=${p.slug} title=${JSON.stringify(p.title)}` +
-					(p.parent_page_id ? ` parent_page_id=${p.parent_page_id}` : "") +
-					` hubness=${p.hubness_score}` +
-					(p.tags.length > 0 ? ` tags=${JSON.stringify(p.tags.slice(0, 8))}` : ""),
-			);
-			// Surface the page summary so the aggregation planner has real
-			// evidence to judge membership. Without it the model sees only
-			// slug+title and over-groups (e.g. putting every restaurant under
-			// "Austin Restaurants" regardless of actual geography).
-			if (p.summary) {
-				lines.push(`    summary: ${truncate(p.summary, 300)}`);
-			}
-			for (const s of p.sections) {
-				const agg = s.aggregation;
-				const aggStr = agg
-					? ` linked=${agg.linked_page_ids.length} records=${agg.supporting_record_count} score=${agg.promotion_score} status=${agg.promotion_status}`
-					: "";
-				lines.push(
-					`  · section=${s.section_slug}${aggStr} body_chars=${s.body_md.length}`,
-				);
-			}
-		}
-	}
+  lines.push("## Recently-changed pages in this scope\n");
+  if (batch.recentlyChangedPages.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const p of batch.recentlyChangedPages) {
+      lines.push(
+        `- id=${p.id} type=${p.type} slug=${p.slug} title=${JSON.stringify(p.title)}` +
+          (p.parent_page_id ? ` parent_page_id=${p.parent_page_id}` : "") +
+          ` hubness=${p.hubness_score}` +
+          (p.tags.length > 0
+            ? ` tags=${JSON.stringify(p.tags.slice(0, 8))}`
+            : ""),
+      );
+      // Surface the page summary so the aggregation planner has real
+      // evidence to judge membership. Without it the model sees only
+      // slug+title and over-groups (e.g. putting every restaurant under
+      // "Austin Restaurants" regardless of actual geography).
+      if (p.summary) {
+        lines.push(`    summary: ${truncate(p.summary, 300)}`);
+      }
+      for (const s of p.sections) {
+        const agg = s.aggregation;
+        const aggStr = agg
+          ? ` linked=${agg.linked_page_ids.length} records=${agg.supporting_record_count} score=${agg.promotion_score} status=${agg.promotion_status}`
+          : "";
+        lines.push(
+          `  · section=${s.section_slug}${aggStr} body_chars=${s.body_md.length}`,
+        );
+      }
+    }
+  }
 
-	lines.push("\n## Derived parent candidates (deterministic metadata expansion)\n");
-	if (batch.parentCandidates.length === 0) {
-		lines.push("(none)");
-	} else {
-		for (const c of batch.parentCandidates) {
-			lines.push(
-				`- reason=${c.reason} parent=${JSON.stringify(c.parentTitle)} slug=${c.parentSlug} section=${c.suggestedSectionSlug} supporting=${c.supportingCount} tags=${JSON.stringify(c.observedTags.slice(0, 6))}`,
-			);
-		}
-	}
+  lines.push(
+    "\n## Derived parent candidates (deterministic metadata expansion)\n",
+  );
+  if (batch.parentCandidates.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const c of batch.parentCandidates) {
+      lines.push(
+        `- reason=${c.reason} parent=${JSON.stringify(c.parentTitle)} slug=${c.parentSlug} section=${c.suggestedSectionSlug} supporting=${c.supportingCount} tags=${JSON.stringify(c.observedTags.slice(0, 6))}`,
+      );
+    }
+  }
 
-	lines.push("\n## Link neighborhoods\n");
-	if (batch.linkNeighborhoods.length === 0) {
-		lines.push("(none)");
-	} else {
-		for (const n of batch.linkNeighborhoods.slice(0, 30)) {
-			lines.push(
-				`- pageId=${n.pageId} inbound=${n.inboundCount}`,
-			);
-		}
-	}
+  lines.push("\n## Link neighborhoods\n");
+  if (batch.linkNeighborhoods.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const n of batch.linkNeighborhoods.slice(0, 30)) {
+      lines.push(`- pageId=${n.pageId} inbound=${n.inboundCount}`);
+    }
+  }
 
-	lines.push("\n## Required output JSON shape\n");
-	lines.push("```");
-	lines.push(AGGREGATION_OUTPUT_SCHEMA);
-	lines.push("```");
-	lines.push(
-		"\nReturn ONLY the JSON object. Include empty arrays for categories that don't apply.",
-	);
+  lines.push("\n## Required output JSON shape\n");
+  lines.push("```");
+  lines.push(AGGREGATION_OUTPUT_SCHEMA);
+  lines.push("```");
+  lines.push(
+    "\nReturn ONLY the JSON object. Include empty arrays for categories that don't apply.",
+  );
 
-	return lines.join("\n");
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -255,43 +254,43 @@ export function buildAggregationUserPrompt(batch: AggregationBatch): string {
  * existing apply loop doesn't over-reach.
  */
 export async function runAggregationPlanner(
-	batch: AggregationBatch,
-	opts: { signal?: AbortSignal; modelId?: string } = {},
+  batch: AggregationBatch,
+  opts: { signal?: AbortSignal; modelId?: string } = {},
 ): Promise<PlannerResult> {
-	const user = buildAggregationUserPrompt(batch);
-	const resp = await invokeClaudeJson<Record<string, unknown>>({
-		system: AGGREGATION_SYSTEM,
-		user,
-		// Aggregation output tends to be smaller than the leaf planner's, but
-		// section promotions carry a full newPage seed — leave comfortable
-		// headroom.
-		maxTokens: 16000,
-		temperature: 0,
-		modelId: opts.modelId,
-		signal: opts.signal,
-	});
+  const user = buildAggregationUserPrompt(batch);
+  const resp = await invokeClaudeJson<Record<string, unknown>>({
+    system: AGGREGATION_SYSTEM,
+    user,
+    // Aggregation output tends to be smaller than the leaf planner's, but
+    // section promotions carry a full newPage seed — leave comfortable
+    // headroom.
+    maxTokens: 16000,
+    temperature: 0,
+    modelId: opts.modelId,
+    signal: opts.signal,
+  });
 
-	const parsed = resp.parsed;
-	// Force leaf-only fields to [] before validation — the aggregation planner
-	// is banned from emitting them.
-	parsed.pageUpdates = [];
-	parsed.unresolvedMentions = [];
-	parsed.promotions = [];
-	if (!Array.isArray(parsed.pageLinks)) parsed.pageLinks = [];
-	if (!Array.isArray(parsed.newPages)) parsed.newPages = [];
-	validatePlannerResult(parsed);
-	return {
-		...(parsed as unknown as PlannerResult),
-		usage: {
-			inputTokens: resp.inputTokens,
-			outputTokens: resp.outputTokens,
-			bedrockRetries: resp.retries,
-		},
-	};
+  const parsed = resp.parsed;
+  // Force leaf-only fields to [] before validation — the aggregation planner
+  // is banned from emitting them.
+  parsed.pageUpdates = [];
+  parsed.unresolvedMentions = [];
+  parsed.promotions = [];
+  if (!Array.isArray(parsed.pageLinks)) parsed.pageLinks = [];
+  if (!Array.isArray(parsed.newPages)) parsed.newPages = [];
+  validatePlannerResult(parsed);
+  return {
+    ...(parsed as unknown as PlannerResult),
+    usage: {
+      inputTokens: resp.inputTokens,
+      outputTokens: resp.outputTokens,
+      bedrockRetries: resp.retries,
+    },
+  };
 }
 
 function truncate(s: string, n: number): string {
-	return s.length <= n ? s : `${s.slice(0, n)}…`;
+  return s.length <= n ? s : `${s.slice(0, n)}…`;
 }
 
 // Test-only exports.

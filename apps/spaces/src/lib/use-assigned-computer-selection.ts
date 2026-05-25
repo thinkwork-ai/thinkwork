@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "urql";
-import { AssignedComputersQuery } from "@/lib/graphql-queries";
+import { useState } from "react";
+
+/**
+ * Computer feature retired 2026-05-24. This hook is preserved as a stub
+ * returning permanent "no Computer assigned" state so existing consumers
+ * (NewThreadDialog, SpacesWorkbench, use-customize-mutations, automations)
+ * naturally fall into their no-Computer code paths without needing edits.
+ *
+ * Remove this hook + its consumers in a follow-up pass once the no-Computer
+ * UI states have been verified in production for a release cycle.
+ */
 
 export interface AssignedComputer {
   id: string;
@@ -12,48 +20,17 @@ export interface AssignedComputer {
   sourceAgent?: { id: string; name?: string | null } | null;
 }
 
-interface AssignedComputersResult {
-  assignedComputers?: AssignedComputer[];
-}
-
-export function useAssignedComputerSelection(options?: { pause?: boolean }) {
-  const [{ data, fetching }] = useQuery<AssignedComputersResult>({
-    query: AssignedComputersQuery,
-    pause: options?.pause,
-  });
-  const computers = useMemo(
-    () =>
-      (data?.assignedComputers ?? []).filter(
-        (computer) => computer.status !== "archived",
-      ),
-    [data?.assignedComputers],
-  );
+export function useAssignedComputerSelection(_options?: { pause?: boolean }) {
   const [selectedComputerId, setSelectedComputerId] = useState<string | null>(
     null,
   );
 
-  useEffect(() => {
-    if (
-      selectedComputerId &&
-      computers.some((computer) => computer.id === selectedComputerId)
-    ) {
-      return;
-    }
-    setSelectedComputerId(computers[0]?.id ?? null);
-  }, [computers, selectedComputerId]);
-
-  const selectedComputer = useMemo(
-    () =>
-      computers.find((computer) => computer.id === selectedComputerId) ?? null,
-    [computers, selectedComputerId],
-  );
-
   return {
-    computers,
-    fetching,
-    loaded: data !== undefined,
-    noAssignedComputers: data !== undefined && computers.length === 0,
-    selectedComputer,
+    computers: [] as AssignedComputer[],
+    fetching: false,
+    loaded: true,
+    noAssignedComputers: true,
+    selectedComputer: null as AssignedComputer | null,
     selectedComputerId,
     setSelectedComputerId,
   };

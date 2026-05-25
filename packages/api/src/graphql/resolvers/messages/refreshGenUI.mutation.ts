@@ -15,11 +15,11 @@
 import type { GraphQLContext } from "../../context.js";
 
 export const refreshGenUI = async (
-	_parent: unknown,
-	_args: { messageId: string; toolIndex: number },
-	_ctx: GraphQLContext,
+  _parent: unknown,
+  _args: { messageId: string; toolIndex: number },
+  _ctx: GraphQLContext,
 ) => {
-	throw new Error(
-		"refreshGenUI is not implemented in this build. GenUI refresh was previously backed by a provider-specific external-task adapter, which has been removed. Rewire against a generic MCP server lookup or remove the refresh affordance from clients.",
-	);
+  throw new Error(
+    "refreshGenUI is not implemented in this build. GenUI refresh was previously backed by a provider-specific external-task adapter, which has been removed. Rewire against a generic MCP server lookup or remove the refresh affordance from clients.",
+  );
 };

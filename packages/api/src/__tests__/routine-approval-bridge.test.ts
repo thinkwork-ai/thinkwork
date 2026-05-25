@@ -75,9 +75,7 @@ vi.mock("drizzle-orm", () => ({
   and: (...a: unknown[]) => ({ _and: a }),
 }));
 
-import {
-  bridgeInboxDecisionToRoutineApproval,
-} from "../graphql/resolvers/inbox/routine-approval-bridge.js";
+import { bridgeInboxDecisionToRoutineApproval } from "../graphql/resolvers/inbox/routine-approval-bridge.js";
 
 const baseInboxItem = {
   id: "inbox-1",
@@ -128,7 +126,11 @@ describe("routine-approval-bridge — happy paths", () => {
     expect(result).toEqual({ dispatched: true, alreadyDecided: false });
     expect(mockLambdaSend).toHaveBeenCalledTimes(1);
     const call = mockLambdaSend.mock.calls[0][0] as {
-      input: { FunctionName: string; InvocationType: string; Payload: Uint8Array };
+      input: {
+        FunctionName: string;
+        InvocationType: string;
+        Payload: Uint8Array;
+      };
     };
     expect(call.input.FunctionName).toBe("thinkwork-dev-routine-resume");
     expect(call.input.InvocationType).toBe("RequestResponse");
@@ -232,15 +234,12 @@ describe("routine-approval-bridge — type discriminator", () => {
   });
 
   it("isRoutineApprovalInboxItem narrows the type predicate", async () => {
-    const { isRoutineApprovalInboxItem } = await import(
-      "../graphql/resolvers/inbox/routine-approval-bridge.js"
+    const { isRoutineApprovalInboxItem } =
+      await import("../graphql/resolvers/inbox/routine-approval-bridge.js");
+    expect(isRoutineApprovalInboxItem({ type: "routine_approval" })).toBe(true);
+    expect(isRoutineApprovalInboxItem({ type: "workspace_review" })).toBe(
+      false,
     );
-    expect(
-      isRoutineApprovalInboxItem({ type: "routine_approval" }),
-    ).toBe(true);
-    expect(
-      isRoutineApprovalInboxItem({ type: "workspace_review" }),
-    ).toBe(false);
   });
 });
 

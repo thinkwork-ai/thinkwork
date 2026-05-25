@@ -2,24 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSubscription } from "urql";
 import { ComputerThreadChunkSubscription } from "@/lib/graphql-queries";
 import {
-	emptyState,
-	mergeUIMessageChunk,
-	type UIMessageStreamState,
+  emptyState,
+  mergeUIMessageChunk,
+  type UIMessageStreamState,
 } from "./ui-message-merge";
 
 export interface ComputerThreadChunk {
-	seq: number;
-	text: string;
-	publishedAt?: string | null;
+  seq: number;
+  text: string;
+  publishedAt?: string | null;
 }
 
 interface ChunkSubscriptionResult {
-	onComputerThreadChunk?: {
-		threadId: string;
-		chunk?: unknown;
-		seq?: number | null;
-		publishedAt?: string | null;
-	} | null;
+  onComputerThreadChunk?: {
+    threadId: string;
+    chunk?: unknown;
+    seq?: number | null;
+    publishedAt?: string | null;
+  } | null;
 }
 
 /**
@@ -41,49 +41,49 @@ interface ChunkSubscriptionResult {
  * deduplication of legacy `{text}` chunks but no longer drops by window.
  */
 export function useComputerThreadChunks(threadId: string | null | undefined) {
-	const [chunks, setChunks] = useState<ComputerThreadChunk[]>([]);
-	const [streamState, setStreamState] = useState<UIMessageStreamState>(
-		() => emptyState(),
-	);
-	const reset = useCallback(() => {
-		setChunks([]);
-		setStreamState(emptyState());
-	}, []);
+  const [chunks, setChunks] = useState<ComputerThreadChunk[]>([]);
+  const [streamState, setStreamState] = useState<UIMessageStreamState>(() =>
+    emptyState(),
+  );
+  const reset = useCallback(() => {
+    setChunks([]);
+    setStreamState(emptyState());
+  }, []);
 
-	useEffect(() => {
-		setChunks([]);
-		setStreamState(emptyState());
-	}, [threadId]);
+  useEffect(() => {
+    setChunks([]);
+    setStreamState(emptyState());
+  }, [threadId]);
 
-	useSubscription<ChunkSubscriptionResult>(
-		{
-			query: ComputerThreadChunkSubscription,
-			variables: { threadId },
-			pause: !threadId,
-		},
-		(_previous, event) => {
-			const eventChunk = event.onComputerThreadChunk;
-			if (!eventChunk) return event;
-			// Feed the raw chunk payload into the typed merge — its parser
-			// detects legacy {text} envelopes by shape and routes them to
-			// streamState.legacyText, leaving streamState.parts untouched.
-			setStreamState((current) =>
-				mergeUIMessageChunk(current, eventChunk.chunk, eventChunk.seq),
-			);
+  useSubscription<ChunkSubscriptionResult>(
+    {
+      query: ComputerThreadChunkSubscription,
+      variables: { threadId },
+      pause: !threadId,
+    },
+    (_previous, event) => {
+      const eventChunk = event.onComputerThreadChunk;
+      if (!eventChunk) return event;
+      // Feed the raw chunk payload into the typed merge — its parser
+      // detects legacy {text} envelopes by shape and routes them to
+      // streamState.legacyText, leaving streamState.parts untouched.
+      setStreamState((current) =>
+        mergeUIMessageChunk(current, eventChunk.chunk, eventChunk.seq),
+      );
 
-			// Legacy accumulator: keep populating for the pre-U8 thread surface.
-			const next = toComputerThreadChunk(eventChunk);
-			if (next) {
-				setChunks((current) => mergeComputerThreadChunk(current, next));
-			}
-			return event;
-		},
-	);
+      // Legacy accumulator: keep populating for the pre-U8 thread surface.
+      const next = toComputerThreadChunk(eventChunk);
+      if (next) {
+        setChunks((current) => mergeComputerThreadChunk(current, next));
+      }
+      return event;
+    },
+  );
 
-	return useMemo(
-		() => ({ chunks, streamState, reset }),
-		[chunks, streamState, reset],
-	);
+  return useMemo(
+    () => ({ chunks, streamState, reset }),
+    [chunks, streamState, reset],
+  );
 }
 
 /**
@@ -94,38 +94,38 @@ export function useComputerThreadChunks(threadId: string | null | undefined) {
  * against AppSync redelivery.
  */
 export function mergeComputerThreadChunk(
-	current: ComputerThreadChunk[],
-	next: ComputerThreadChunk,
+  current: ComputerThreadChunk[],
+  next: ComputerThreadChunk,
 ) {
-	const withoutDuplicate = current.filter((chunk) => chunk.seq !== next.seq);
-	return [...withoutDuplicate, next].sort((a, b) => a.seq - b.seq);
+  const withoutDuplicate = current.filter((chunk) => chunk.seq !== next.seq);
+  return [...withoutDuplicate, next].sort((a, b) => a.seq - b.seq);
 }
 
 function toComputerThreadChunk(
-	event: ChunkSubscriptionResult["onComputerThreadChunk"],
+  event: ChunkSubscriptionResult["onComputerThreadChunk"],
 ): ComputerThreadChunk | null {
-	if (!event || typeof event.seq !== "number") return null;
-	const chunk = parseChunk(event.chunk);
-	if (!chunk.text) return null;
-	return {
-		seq: event.seq,
-		text: chunk.text,
-		publishedAt: event.publishedAt ?? null,
-	};
+  if (!event || typeof event.seq !== "number") return null;
+  const chunk = parseChunk(event.chunk);
+  if (!chunk.text) return null;
+  return {
+    seq: event.seq,
+    text: chunk.text,
+    publishedAt: event.publishedAt ?? null,
+  };
 }
 
 function parseChunk(value: unknown): { text: string } {
-	if (typeof value === "string") {
-		try {
-			const parsed = JSON.parse(value) as { text?: unknown };
-			return { text: typeof parsed.text === "string" ? parsed.text : "" };
-		} catch {
-			return { text: "" };
-		}
-	}
-	if (value && typeof value === "object" && "text" in value) {
-		const text = (value as { text?: unknown }).text;
-		return { text: typeof text === "string" ? text : "" };
-	}
-	return { text: "" };
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as { text?: unknown };
+      return { text: typeof parsed.text === "string" ? parsed.text : "" };
+    } catch {
+      return { text: "" };
+    }
+  }
+  if (value && typeof value === "object" && "text" in value) {
+    const text = (value as { text?: unknown }).text;
+    return { text: typeof text === "string" ? text : "" };
+  }
+  return { text: "" };
 }

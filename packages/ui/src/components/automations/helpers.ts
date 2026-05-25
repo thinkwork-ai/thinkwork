@@ -8,9 +8,11 @@ import type { ScheduledJobRunRow } from "./types.js";
  */
 export function runDurationMs(run: ScheduledJobRunRow): number | null {
   const fromUsage = run.usage_json?.duration_ms;
-  if (typeof fromUsage === "number" && Number.isFinite(fromUsage)) return fromUsage;
+  if (typeof fromUsage === "number" && Number.isFinite(fromUsage))
+    return fromUsage;
   if (run.started_at && run.finished_at) {
-    const ms = new Date(run.finished_at).getTime() - new Date(run.started_at).getTime();
+    const ms =
+      new Date(run.finished_at).getTime() - new Date(run.started_at).getTime();
     return Number.isFinite(ms) ? ms : null;
   }
   return null;

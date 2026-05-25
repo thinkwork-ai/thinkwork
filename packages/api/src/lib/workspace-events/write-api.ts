@@ -16,12 +16,16 @@ export interface WorkspaceWakeWriteResult {
   blockedObjectKey?: string;
 }
 
-export function workspaceInboxObjectKey(input: WorkspaceWakeWriteInput): string {
+export function workspaceInboxObjectKey(
+  input: WorkspaceWakeWriteInput,
+): string {
   const targetPrefix = input.targetPath ? `${input.targetPath}/` : "";
   return `tenants/${input.tenantSlug}/agents/${input.agentSlug}/workspace/${targetPrefix}work/inbox/${input.requestId}.md`;
 }
 
-export function workspaceBlockedObjectKey(input: WorkspaceWakeWriteInput): string {
+export function workspaceBlockedObjectKey(
+  input: WorkspaceWakeWriteInput,
+): string {
   if (!input.parentRunId) {
     throw new Error("parentRunId is required when waitForResult is true");
   }
@@ -67,4 +71,3 @@ export async function writeWorkspaceWakeRequest(
 
   return { sourceObjectKey, blockedObjectKey };
 }
-

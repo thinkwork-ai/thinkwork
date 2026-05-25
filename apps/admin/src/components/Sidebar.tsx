@@ -22,10 +22,7 @@ import { IconPlanet } from "@tabler/icons-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
-import {
-  ThreadsPagedQuery,
-  RoutinesListQuery,
-} from "@/lib/graphql-queries";
+import { ThreadsPagedQuery, RoutinesListQuery } from "@/lib/graphql-queries";
 import { Badge } from "@/components/ui/badge";
 import { getAdminExtensions } from "@/extensions/registry";
 import {

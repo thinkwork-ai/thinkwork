@@ -14,7 +14,9 @@ import { AnchorStatusPanel } from "@/components/compliance/AnchorStatusPanel";
 import { PayloadSection } from "@/components/compliance/PayloadSection";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
-export const Route = createFileRoute("/_authed/_tenant/compliance/events/$eventId")({
+export const Route = createFileRoute(
+  "/_authed/_tenant/compliance/events/$eventId",
+)({
   component: ComplianceEventDetailPage,
 });
 
@@ -37,7 +39,9 @@ function ComplianceEventDetailPage() {
       header={
         <PageHeader
           title="Compliance event"
-          description={event ? formatEventTypeLabel(event.eventType) : "Loading…"}
+          description={
+            event ? formatEventTypeLabel(event.eventType) : "Loading…"
+          }
           actions={
             <Button asChild variant="outline" size="sm">
               <Link to="/compliance" search={(prev) => prev}>
@@ -116,7 +120,9 @@ function ComplianceEventDetailPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="text-xs text-muted-foreground shrink-0 min-w-[5rem]">{label}</span>
+      <span className="text-xs text-muted-foreground shrink-0 min-w-[5rem]">
+        {label}
+      </span>
       <span className="truncate font-mono text-xs">{value}</span>
     </div>
   );

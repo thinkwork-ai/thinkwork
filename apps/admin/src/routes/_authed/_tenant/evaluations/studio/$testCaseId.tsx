@@ -43,8 +43,7 @@ export const Route = createFileRoute(
   component: EvalTestCaseDetailPage,
 });
 
-const EVAL_RESULT_SHEET_WIDTH_CLASS =
-  "data-[side=right]:max-w-none";
+const EVAL_RESULT_SHEET_WIDTH_CLASS = "data-[side=right]:max-w-none";
 const EVAL_RESULT_SHEET_STYLE = {
   width: "min(750px, calc(100vw - 2rem))",
   maxWidth: "none",
@@ -69,7 +68,9 @@ interface HistoryRow {
 
 function statusBadge(status: string) {
   if (status === "pass")
-    return <Badge className="bg-green-600 hover:bg-green-600 text-white">pass</Badge>;
+    return (
+      <Badge className="bg-green-600 hover:bg-green-600 text-white">pass</Badge>
+    );
   if (status === "fail") return <Badge variant="destructive">fail</Badge>;
   return <Badge variant="secondary">{status}</Badge>;
 }
@@ -96,7 +97,9 @@ const historyColumns: ColumnDef<HistoryRow>[] = [
     size: 80,
     cell: ({ row }) => (
       <span className="text-sm tabular-nums">
-        {row.original.score != null ? Number(row.original.score).toFixed(2) : "—"}
+        {row.original.score != null
+          ? Number(row.original.score).toFixed(2)
+          : "—"}
       </span>
     ),
   },
@@ -143,7 +146,11 @@ function EvalTestCaseDetailPage() {
     if (val == null) return fallback;
     let p: unknown = val;
     while (typeof p === "string") {
-      try { p = JSON.parse(p); } catch { return fallback; }
+      try {
+        p = JSON.parse(p);
+      } catch {
+        return fallback;
+      }
     }
     return Array.isArray(p) ? p : fallback;
   };
@@ -210,12 +217,15 @@ function EvalTestCaseDetailPage() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete test case?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will permanently delete this test case and cannot be undone.
+                      This will permanently delete this test case and cannot be
+                      undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                    <AlertDialogAction onClick={handleDelete}>
+                      Delete
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -245,8 +255,14 @@ function EvalTestCaseDetailPage() {
               </label>
               <div className="mt-1 space-y-2">
                 {assertions.map((a, i) => (
-                  <div key={i} className="flex items-start gap-2 bg-muted/50 p-2 rounded-md">
-                    <Badge variant="outline" className="text-xs shrink-0 mt-0.5">
+                  <div
+                    key={i}
+                    className="flex items-start gap-2 bg-muted/50 p-2 rounded-md"
+                  >
+                    <Badge
+                      variant="outline"
+                      className="text-xs shrink-0 mt-0.5"
+                    >
                       {a.type ?? "?"}
                     </Badge>
                     <span className="text-sm">{a.value ?? "—"}</span>
@@ -304,7 +320,10 @@ function EvalTestCaseDetailPage() {
         </div>
       </div>
 
-      <Sheet open={!!selectedResult} onOpenChange={() => setSelectedResult(null)}>
+      <Sheet
+        open={!!selectedResult}
+        onOpenChange={() => setSelectedResult(null)}
+      >
         <SheetContent
           className={`${EVAL_RESULT_SHEET_WIDTH_CLASS} overflow-y-auto`}
           style={EVAL_RESULT_SHEET_STYLE}
@@ -354,23 +373,24 @@ function EvalTestCaseDetailPage() {
                 </pre>
               </div>
 
-              {selectedResult.assertions != null && (() => {
-                try {
-                  const raw = selectedResult.assertions as unknown;
-                  const parsed =
-                    typeof raw === "string" ? JSON.parse(raw) : raw;
-                  return (
-                    <div>
-                      <h4 className="text-sm font-medium mb-1">Assertions</h4>
-                      <pre className="text-xs bg-muted/50 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">
-                        {JSON.stringify(parsed, null, 2)}
-                      </pre>
-                    </div>
-                  );
-                } catch {
-                  return null;
-                }
-              })()}
+              {selectedResult.assertions != null &&
+                (() => {
+                  try {
+                    const raw = selectedResult.assertions as unknown;
+                    const parsed =
+                      typeof raw === "string" ? JSON.parse(raw) : raw;
+                    return (
+                      <div>
+                        <h4 className="text-sm font-medium mb-1">Assertions</h4>
+                        <pre className="text-xs bg-muted/50 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">
+                          {JSON.stringify(parsed, null, 2)}
+                        </pre>
+                      </div>
+                    );
+                  } catch {
+                    return null;
+                  }
+                })()}
             </div>
           )}
         </SheetContent>

@@ -10,7 +10,12 @@ import { ArtifactType, ArtifactStatus } from "../gql/graphql.js";
 import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlQuery } from "../lib/gql-client.js";
-import { isJsonMode, printJson, printKeyValue, printTable } from "../lib/output.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  printTable,
+} from "../lib/output.js";
 import { printError, printMissingApiSessionError } from "../ui.js";
 
 const ArtifactsDoc = graphql(`
@@ -89,17 +94,23 @@ async function resolveArtContext(opts: ArtCliOptions) {
     if (session?.tenantSlug === flagOrEnv && session.tenantId) {
       return { stage, region, client, tenantId: session.tenantId };
     }
-    const data = await gqlQuery(client, ArtifactTenantBySlugDoc, { slug: flagOrEnv });
+    const data = await gqlQuery(client, ArtifactTenantBySlugDoc, {
+      slug: flagOrEnv,
+    });
     if (!data.tenantBySlug) {
       printError(`Tenant "${flagOrEnv}" not found.`);
       process.exit(1);
     }
     return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
-  if (session?.tenantId) return { stage, region, client, tenantId: session.tenantId };
+  if (session?.tenantId)
+    return { stage, region, client, tenantId: session.tenantId };
   if (ctxSlug) {
-    const data = await gqlQuery(client, ArtifactTenantBySlugDoc, { slug: ctxSlug });
-    if (data.tenantBySlug) return { stage, region, client, tenantId: data.tenantBySlug.id };
+    const data = await gqlQuery(client, ArtifactTenantBySlugDoc, {
+      slug: ctxSlug,
+    });
+    if (data.tenantBySlug)
+      return { stage, region, client, tenantId: data.tenantBySlug.id };
   }
   printMissingApiSessionError(stage, session !== null);
   process.exit(1);
@@ -123,8 +134,12 @@ interface ListOptions extends ArtCliOptions {
 
 async function runArtList(opts: ListOptions): Promise<void> {
   const ctx = await resolveArtContext(opts);
-  const type = opts.type ? TYPE_BY_NAME[opts.type.toUpperCase()] ?? null : null;
-  const status = opts.status ? STATUS_BY_NAME[opts.status.toUpperCase()] ?? null : null;
+  const type = opts.type
+    ? (TYPE_BY_NAME[opts.type.toUpperCase()] ?? null)
+    : null;
+  const status = opts.status
+    ? (STATUS_BY_NAME[opts.status.toUpperCase()] ?? null)
+    : null;
   const data = await gqlQuery(ctx.client, ArtifactsDoc, {
     tenantId: ctx.tenantId,
     threadId: opts.thread ?? null,
@@ -217,10 +232,7 @@ export function registerArtifactCommand(program: Command): void {
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--thread <id>", "Filter by thread")
     .option("--agent <id>", "Filter by producing agent")
-    .option(
-      "--type <t>",
-      "DATA_VIEW | NOTE | REPORT | PLAN | DRAFT | DIGEST",
-    )
+    .option("--type <t>", "DATA_VIEW | NOTE | REPORT | PLAN | DRAFT | DIGEST")
     .option("--status <s>", "DRAFT | FINAL | SUPERSEDED")
     .option("--limit <n>", "Max rows", "25")
     .option("--cursor <c>", "Pagination cursor")
@@ -228,9 +240,14 @@ export function registerArtifactCommand(program: Command): void {
 
   art
     .command("get <id>")
-    .description("Fetch one artifact. Human mode prints a preview; --json full; --raw pipes content.")
+    .description(
+      "Fetch one artifact. Human mode prints a preview; --json full; --raw pipes content.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--raw", "Print only the markdown body to stdout (for piping to pandoc / bat / less)")
+    .option(
+      "--raw",
+      "Print only the markdown body to stdout (for piping to pandoc / bat / less)",
+    )
     .action(runArtGet);
 }

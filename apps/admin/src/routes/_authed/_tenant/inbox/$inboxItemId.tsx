@@ -1,7 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import { useState } from "react";
-import { ArrowLeft, MessageSquare, ChevronRight, MessagesSquare as ThreadIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  MessageSquare,
+  ChevronRight,
+  MessagesSquare as ThreadIcon,
+} from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -20,7 +25,12 @@ import {
   AddInboxItemCommentMutation,
   ActivityLogQuery,
 } from "@/lib/graphql-queries";
-import { InboxItemPayloadRenderer, typeLabel, typeIcon, defaultTypeIcon } from "@/components/inbox/InboxItemPayload";
+import {
+  InboxItemPayloadRenderer,
+  typeLabel,
+  typeIcon,
+  defaultTypeIcon,
+} from "@/components/inbox/InboxItemPayload";
 import { ActivityRow } from "@/components/ActivityRow";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
@@ -68,7 +78,9 @@ function InboxItemDetailPage() {
   const status = item.status.toLowerCase();
   const isActionable = status === "pending" || status === "revision_requested";
   const payload: Record<string, unknown> = item.config
-    ? (typeof item.config === "string" ? JSON.parse(item.config) : item.config)
+    ? typeof item.config === "string"
+      ? JSON.parse(item.config)
+      : item.config
     : {};
   const TypeIcon = typeIcon[item.type] ?? defaultTypeIcon;
   const activityEntries = activityResult.data?.activityLog ?? [];
@@ -77,7 +89,9 @@ function InboxItemDetailPage() {
     reexecute({ requestPolicy: "network-only" });
   }
 
-  async function handleAction(fn: () => Promise<{ error?: { message: string } | null }>) {
+  async function handleAction(
+    fn: () => Promise<{ error?: { message: string } | null }>,
+  ) {
     setError(null);
     const { error: err } = await fn();
     if (err) setError(err.message);
@@ -99,7 +113,9 @@ function InboxItemDetailPage() {
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-4">
         <Link to="/inbox">
-          <Button variant="ghost" size="icon-sm"><ArrowLeft className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon-sm">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
         </Link>
         <PageHeader
           title={item.title || "Request"}
@@ -118,13 +134,17 @@ function InboxItemDetailPage() {
                 <TypeIcon className="h-4 w-4" />
                 {typeLabel[item.type] ?? item.type.replace(/_/g, " ")}
                 {item.revision > 1 && (
-                  <Badge variant="outline" className="text-xs">v{item.revision}</Badge>
+                  <Badge variant="outline" className="text-xs">
+                    v{item.revision}
+                  </Badge>
                 )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {item.description && (
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.description}</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {item.description}
+                </p>
               )}
 
               <InboxItemPayloadRenderer type={item.type} payload={payload} />
@@ -134,7 +154,9 @@ function InboxItemDetailPage() {
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-2"
                 onClick={() => setShowRawPayload((v) => !v)}
               >
-                <ChevronRight className={`h-3 w-3 transition-transform ${showRawPayload ? "rotate-90" : ""}`} />
+                <ChevronRight
+                  className={`h-3 w-3 transition-transform ${showRawPayload ? "rotate-90" : ""}`}
+                />
                 See full request
               </button>
               {showRawPayload && (
@@ -156,14 +178,18 @@ function InboxItemDetailPage() {
                     <Button
                       size="sm"
                       className="bg-green-700 hover:bg-green-600 text-white"
-                      onClick={() => handleAction(() => approveMut({ id: inboxItemId }))}
+                      onClick={() =>
+                        handleAction(() => approveMut({ id: inboxItemId }))
+                      }
                     >
                       Approve
                     </Button>
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => handleAction(() => rejectMut({ id: inboxItemId }))}
+                      onClick={() =>
+                        handleAction(() => rejectMut({ id: inboxItemId }))
+                      }
                     >
                       Reject
                     </Button>
@@ -176,7 +202,12 @@ function InboxItemDetailPage() {
                     onClick={() => {
                       const notes = window.prompt("Revision notes:");
                       if (!notes) return;
-                      handleAction(() => revisionMut({ id: inboxItemId, input: { reviewNotes: notes } }));
+                      handleAction(() =>
+                        revisionMut({
+                          id: inboxItemId,
+                          input: { reviewNotes: notes },
+                        }),
+                      );
                     }}
                   >
                     Request revision
@@ -186,7 +217,9 @@ function InboxItemDetailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleAction(() => resubmitMut({ id: inboxItemId }))}
+                    onClick={() =>
+                      handleAction(() => resubmitMut({ id: inboxItemId }))
+                    }
                   >
                     Mark resubmitted
                   </Button>
@@ -200,7 +233,8 @@ function InboxItemDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <ThreadIcon className="h-4 w-4" /> Linked Threads ({item.linkedThreads.length})
+                  <ThreadIcon className="h-4 w-4" /> Linked Threads (
+                  {item.linkedThreads.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -216,7 +250,11 @@ function InboxItemDetailPage() {
                         {linked.identifier ?? `#${linked.number}`}
                       </span>
                       <span>{linked.title}</span>
-                      <StatusBadge status={linked.status.toLowerCase()} size="sm" className="ml-2" />
+                      <StatusBadge
+                        status={linked.status.toLowerCase()}
+                        size="sm"
+                        className="ml-2"
+                      />
                     </Link>
                   ))}
                 </div>
@@ -228,19 +266,26 @@ function InboxItemDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" /> Comments ({item.comments.length})
+                <MessageSquare className="h-4 w-4" /> Comments (
+                {item.comments.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {item.comments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No comments yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  No comments yet.
+                </p>
               ) : (
                 <div className="space-y-4">
                   {item.comments.map((c) => (
                     <div key={c.id}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium">{c.authorType ?? "User"}</span>
-                        <span className="text-xs text-muted-foreground">{relativeTime(c.createdAt)}</span>
+                        <span className="text-xs font-medium">
+                          {c.authorType ?? "User"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {relativeTime(c.createdAt)}
+                        </span>
                       </div>
                       <p className="text-sm">{c.content}</p>
                       <Separator className="mt-4" />
@@ -270,7 +315,9 @@ function InboxItemDetailPage() {
           {/* Activity timeline */}
           {activityEntries.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Activity</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Activity</CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="space-y-1">
                   {activityEntries.map((entry) => (
@@ -291,14 +338,24 @@ function InboxItemDetailPage() {
 
         {/* Properties sidebar */}
         <Card className="h-fit">
-          <CardHeader><CardTitle>Properties</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Properties</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-3">
-            <Row label="Status"><StatusBadge status={status} size="sm" /></Row>
-            <Row label="Type"><Badge variant="outline">{item.type}</Badge></Row>
+            <Row label="Status">
+              <StatusBadge status={status} size="sm" />
+            </Row>
+            <Row label="Type">
+              <Badge variant="outline">{item.type}</Badge>
+            </Row>
             <Row label="Revision">{item.revision}</Row>
             {item.entityType && <Row label="Entity">{item.entityType}</Row>}
-            {item.decidedAt && <Row label="Decided">{formatDateTime(item.decidedAt)}</Row>}
-            {item.expiresAt && <Row label="Expires">{formatDateTime(item.expiresAt)}</Row>}
+            {item.decidedAt && (
+              <Row label="Decided">{formatDateTime(item.decidedAt)}</Row>
+            )}
+            {item.expiresAt && (
+              <Row label="Expires">{formatDateTime(item.expiresAt)}</Row>
+            )}
             <Row label="Created">{formatDateTime(item.createdAt)}</Row>
           </CardContent>
         </Card>
@@ -307,7 +364,13 @@ function InboxItemDetailPage() {
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>

@@ -66,7 +66,9 @@ export async function resolveIdentifier<T>(
       process.exit(1);
     }
     if (items.length === 1) {
-      console.log(`  Using the only ${resourceLabel}: ${defaultLabel(items[0], opts)}`);
+      console.log(
+        `  Using the only ${resourceLabel}: ${defaultLabel(items[0], opts)}`,
+      );
       return items[0];
     }
     const chosenId = await select({
@@ -145,7 +147,10 @@ function formatAvailable<T>(
     .map((it) => opts.getAliases(it)[0])
     .filter((n): n is string => Boolean(n))
     .slice(0, 10);
-  const suffix = items.length > names.length ? `, …(${items.length - names.length} more)` : "";
+  const suffix =
+    items.length > names.length
+      ? `, …(${items.length - names.length} more)`
+      : "";
   return names.join(", ") + suffix;
 }
 

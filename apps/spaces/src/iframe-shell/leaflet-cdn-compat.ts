@@ -115,10 +115,7 @@ export function installLeafletCdnCompatibilityBridge(
     this: Node,
     node: T,
   ): T {
-    if (
-      node instanceof HTMLScriptElement &&
-      isKnownLeafletAsset(node.src)
-    ) {
+    if (node instanceof HTMLScriptElement && isKnownLeafletAsset(node.src)) {
       void registryReady.then((registry) => {
         const leafletModule = registry.leaflet as typeof registry.leaflet & {
           default?: unknown;

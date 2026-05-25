@@ -520,9 +520,7 @@ function validateExecution(
     });
     return null;
   }
-  if (
-    !(ALLOWED_EXECUTION_VALUES as readonly string[]).includes(raw)
-  ) {
+  if (!(ALLOWED_EXECUTION_VALUES as readonly string[]).includes(raw)) {
     errors.push({
       kind: "SkillMdUnsupportedExecution",
       message:
@@ -548,7 +546,9 @@ function validateExecution(
  * unknown-but-tolerated keys — is preserved verbatim for downstream
  * callers.
  */
-function extractInternal(record: Record<string, unknown>): Record<string, unknown> {
+function extractInternal(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(record)) {
     if (k === "name" || k === "description" || k === "allowed-tools") continue;

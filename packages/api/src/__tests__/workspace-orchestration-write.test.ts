@@ -38,11 +38,12 @@ describe("workspace orchestration write API helpers", () => {
       waitForResult: true,
     });
 
-    expect(result.blockedObjectKey).toContain("/work/runs/run_parent/events/blocked.json");
+    expect(result.blockedObjectKey).toContain(
+      "/work/runs/run_parent/events/blocked.json",
+    );
     expect(result.sourceObjectKey).toContain("/expenses/work/inbox/r1.md");
     const calls = s3Mock.commandCalls(PutObjectCommand);
     expect(calls[0].args[0].input.Key).toBe(result.blockedObjectKey);
     expect(calls[1].args[0].input.Key).toBe(result.sourceObjectKey);
   });
 });
-

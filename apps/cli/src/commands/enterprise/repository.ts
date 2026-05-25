@@ -33,9 +33,7 @@ export interface EnterpriseRepositoryPrepareResult {
   ready: boolean;
 }
 
-export class GhCliEnterpriseRepositoryClient
-  implements EnterpriseRepositoryClient
-{
+export class GhCliEnterpriseRepositoryClient implements EnterpriseRepositoryClient {
   async repositoryExists(repository: string): Promise<boolean> {
     try {
       gh(["repo", "view", repository, "--json", "name"]);

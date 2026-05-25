@@ -103,7 +103,10 @@ const BASE_PAYLOAD: RetainPayloadInput = {
 
 describe("buildRetainTranscript", () => {
   it("returns history + user message + assistant response in order", () => {
-    const transcript = buildRetainTranscript(BASE_PAYLOAD, "Your favorite is teal.");
+    const transcript = buildRetainTranscript(
+      BASE_PAYLOAD,
+      "Your favorite is teal.",
+    );
     expect(transcript).toEqual([
       { role: "user", content: "my favorite color is teal" },
       { role: "assistant", content: "Noted! I'll remember that." },
@@ -162,7 +165,9 @@ describe("buildRetainTranscript", () => {
       },
       "",
     );
-    expect(transcript).toEqual([{ role: "assistant", content: "real response" }]);
+    expect(transcript).toEqual([
+      { role: "assistant", content: "real response" },
+    ]);
   });
 
   it("omits the trailing user entry when payload.message is empty", () => {
@@ -170,7 +175,9 @@ describe("buildRetainTranscript", () => {
       { messages_history: [], message: "" },
       "tail assistant",
     );
-    expect(transcript).toEqual([{ role: "assistant", content: "tail assistant" }]);
+    expect(transcript).toEqual([
+      { role: "assistant", content: "tail assistant" },
+    ]);
   });
 
   it("omits the trailing assistant entry when assistantContent is empty", () => {
@@ -331,21 +338,24 @@ describe("retainConversation", () => {
     ["tenantId", { tenantId: "" }],
     ["userId", { userId: "" }],
     ["threadId", { threadId: "" }],
-  ])("missing identity field %s skips Lambda invoke", async (_label, override) => {
-    const sendSpy = vi.fn();
-    const lambdaClient = { send: sendSpy } as unknown as LambdaClient;
+  ])(
+    "missing identity field %s skips Lambda invoke",
+    async (_label, override) => {
+      const sendSpy = vi.fn();
+      const lambdaClient = { send: sendSpy } as unknown as LambdaClient;
 
-    const result = await retainConversation({
-      payload: BASE_PAYLOAD,
-      identity: makeIdentity(override),
-      env: makeEnv(),
-      assistantContent: "any",
-      lambdaClient,
-    });
+      const result = await retainConversation({
+        payload: BASE_PAYLOAD,
+        identity: makeIdentity(override),
+        env: makeEnv(),
+        assistantContent: "any",
+        lambdaClient,
+      });
 
-    expect(result).toEqual({ retained: false });
-    expect(sendSpy).not.toHaveBeenCalled();
-  });
+      expect(result).toEqual({ retained: false });
+      expect(sendSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it("empty memoryRetainFnName skips Lambda invoke", async () => {
     const sendSpy = vi.fn();

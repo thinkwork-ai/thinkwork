@@ -30,18 +30,31 @@ export function InlineApprovalCard({
   const [showComment, setShowComment] = useState(false);
   const [, executeDecide] = useDecideInboxItem();
 
-  const handleDecision = useCallback(async (status: string) => {
-    setDecided(status);
-    await executeDecide({
-      id: inboxItemId,
-      input: { status: status as any, comment: comment || undefined },
-    });
-    onDecided?.();
-  }, [inboxItemId, comment, executeDecide, onDecided]);
+  const handleDecision = useCallback(
+    async (status: string) => {
+      setDecided(status);
+      await executeDecide({
+        id: inboxItemId,
+        input: { status: status as any, comment: comment || undefined },
+      });
+      onDecided?.();
+    },
+    [inboxItemId, comment, executeDecide, onDecided],
+  );
 
   if (decided) {
-    const label = decided === "APPROVED" ? "Approved" : decided === "REJECTED" ? "Rejected" : "Revision requested";
-    const color = decided === "APPROVED" ? "text-green-500" : decided === "REJECTED" ? "text-red-500" : "text-amber-500";
+    const label =
+      decided === "APPROVED"
+        ? "Approved"
+        : decided === "REJECTED"
+          ? "Rejected"
+          : "Revision requested";
+    const color =
+      decided === "APPROVED"
+        ? "text-green-500"
+        : decided === "REJECTED"
+          ? "text-red-500"
+          : "text-amber-500";
     return (
       <View className="border border-neutral-200 dark:border-neutral-800 rounded-lg p-3 my-1">
         <View className="flex-row items-center gap-2">
@@ -59,9 +72,7 @@ export function InlineApprovalCard({
         <ShieldAlert size={16} color="#f59e0b" />
         <Text className="text-sm font-medium flex-1">{title}</Text>
       </View>
-      {description && (
-        <Muted className="text-xs">{description}</Muted>
-      )}
+      {description && <Muted className="text-xs">{description}</Muted>}
       {showComment && (
         <TextInput
           value={comment}

@@ -31,4 +31,3 @@ describe("canonicalizeWorkspaceEvent", () => {
     expect(event.runId).toBe("run_123");
   });
 });
-

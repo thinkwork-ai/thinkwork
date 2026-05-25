@@ -58,7 +58,7 @@ describe("buildExecuteCodeTool", () => {
 
   it("preserves multiline Python source without sandbox file handoff", async () => {
     const source = [
-      "message = \"hello from sandbox\"",
+      'message = "hello from sandbox"',
       "for index in range(2):",
       "    print(f'{index}: {message}')",
     ].join("\n");

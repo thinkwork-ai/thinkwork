@@ -34,7 +34,10 @@ export function registerMeCommand(program: Command): void {
     .description(
       "Print the identity behind the current session for a stage. Use after `thinkwork login` to verify everything works, or as a scriptable introspection (`--json | jq`).",
     )
-    .option("-s, --stage <name>", "Stage to introspect (defaults to the saved default stage)")
+    .option(
+      "-s, --stage <name>",
+      "Stage to introspect (defaults to the saved default stage)",
+    )
     .option("-r, --region <region>", "AWS region", "us-east-1")
     .addHelpText(
       "after",
@@ -51,7 +54,10 @@ Examples:
 `,
     )
     .action(async (opts: { stage?: string; region: string }) => {
-      const stage = await resolveStage({ flag: opts.stage, region: opts.region });
+      const stage = await resolveStage({
+        flag: opts.stage,
+        region: opts.region,
+      });
       const session = loadStageSession(stage);
       if (!session) {
         printError(
@@ -62,9 +68,17 @@ Examples:
 
       if (!isJsonMode()) printHeader("me", stage);
 
-      const { client, tenantSlug } = await getGqlClient({ stage, region: opts.region });
+      const { client, tenantSlug } = await getGqlClient({
+        stage,
+        region: opts.region,
+      });
 
-      let me: { id: string; email: string; name: string | null; tenantId: string } | null = null;
+      let me: {
+        id: string;
+        email: string;
+        name: string | null;
+        tenantId: string;
+      } | null = null;
       try {
         const res = await client.query(ME_QUERY, {}).toPromise();
         if (res.error) throw res.error;
@@ -90,7 +104,10 @@ Examples:
         ["Stage", stage],
         ["Mode", session.kind],
         ["User ID", me?.id],
-        ["Email", me?.email ?? (session.kind === "cognito" ? session.email : undefined)],
+        [
+          "Email",
+          me?.email ?? (session.kind === "cognito" ? session.email : undefined),
+        ],
         ["Name", me?.name ?? undefined],
         ["Tenant ID", me?.tenantId ?? session.tenantId],
         ["Tenant slug", tenantSlug ?? session.tenantSlug],

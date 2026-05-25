@@ -32,7 +32,9 @@ export interface ResolveStageOptions {
   validate?: boolean;
 }
 
-export async function resolveStage(opts: ResolveStageOptions = {}): Promise<string> {
+export async function resolveStage(
+  opts: ResolveStageOptions = {},
+): Promise<string> {
   const region = opts.region ?? "us-east-1";
   const validate = opts.validate ?? true;
 

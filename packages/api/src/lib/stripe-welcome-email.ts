@@ -19,72 +19,71 @@
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 
 export interface WelcomeEmailInput {
-	email: string;
-	plan: string;
-	tenantId: string;
-	sessionId: string;
-	adminUrl: string;
+  email: string;
+  plan: string;
+  tenantId: string;
+  sessionId: string;
+  adminUrl: string;
 }
 
 const DEFAULT_FROM_EMAIL = "hello@agents.thinkwork.ai";
 
 let sesClient: SESClient | null = null;
 function getSes(): SESClient {
-	if (!sesClient) {
-		sesClient = new SESClient({
-			region: process.env.AWS_REGION || "us-east-1",
-		});
-	}
-	return sesClient;
+  if (!sesClient) {
+    sesClient = new SESClient({
+      region: process.env.AWS_REGION || "us-east-1",
+    });
+  }
+  return sesClient;
 }
 
 function escapeHtml(s: string): string {
-	return s
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function buildWelcomeLink(adminUrl: string, sessionId: string): string {
-	// Mirrors the Stripe success_url. Clicking this link is equivalent to
-	// re-visiting the post-checkout landing page (which kicks Google OAuth
-	// and lets bootstrapUser claim the paid tenant).
-	const base = adminUrl.replace(/\/$/, "");
-	return `${base}/onboarding/welcome?session_id=${encodeURIComponent(sessionId)}`;
+  // Mirrors the Stripe success_url. Clicking this link is equivalent to
+  // re-visiting the post-checkout landing page (which kicks Google OAuth
+  // and lets bootstrapUser claim the paid tenant).
+  const base = adminUrl.replace(/\/$/, "");
+  return `${base}/onboarding/welcome?session_id=${encodeURIComponent(sessionId)}`;
 }
 
 export async function sendStripeWelcomeEmail(
-	input: WelcomeEmailInput,
+  input: WelcomeEmailInput,
 ): Promise<boolean> {
-	const fromEmail =
-		process.env.STRIPE_WELCOME_FROM_EMAIL || DEFAULT_FROM_EMAIL;
-	const link = buildWelcomeLink(input.adminUrl, input.sessionId);
+  const fromEmail = process.env.STRIPE_WELCOME_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+  const link = buildWelcomeLink(input.adminUrl, input.sessionId);
 
-	const planLabel =
-		input.plan && input.plan !== "unknown"
-			? input.plan.charAt(0).toUpperCase() + input.plan.slice(1)
-			: "";
-	const subject = planLabel
-		? `Welcome to ThinkWork ${planLabel} — finish setting up your account`
-		: "Welcome to ThinkWork — finish setting up your account";
+  const planLabel =
+    input.plan && input.plan !== "unknown"
+      ? input.plan.charAt(0).toUpperCase() + input.plan.slice(1)
+      : "";
+  const subject = planLabel
+    ? `Welcome to ThinkWork ${planLabel} — finish setting up your account`
+    : "Welcome to ThinkWork — finish setting up your account";
 
-	const textBody = [
-		`Payment received — thank you.`,
-		``,
-		planLabel
-			? `Your ThinkWork ${planLabel} workspace is ready.`
-			: `Your ThinkWork workspace is ready.`,
-		``,
-		`Finish setting up your account:`,
-		link,
-		``,
-		`You'll sign in with Google to claim your workspace. If you paid with a different email than the one tied to your Google account, let us know — hello@thinkwork.ai.`,
-		``,
-		`— ThinkWork`,
-	].join("\n");
+  const textBody = [
+    `Payment received — thank you.`,
+    ``,
+    planLabel
+      ? `Your ThinkWork ${planLabel} workspace is ready.`
+      : `Your ThinkWork workspace is ready.`,
+    ``,
+    `Finish setting up your account:`,
+    link,
+    ``,
+    `You'll sign in with Google to claim your workspace. If you paid with a different email than the one tied to your Google account, let us know — hello@thinkwork.ai.`,
+    ``,
+    `— ThinkWork`,
+  ].join("\n");
 
-	const htmlBody = `<!doctype html>
+  const htmlBody = `<!doctype html>
 <html lang="en">
   <body style="margin:0;padding:0;background:#070a0f;color:#e2e8f0;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="padding:40px 16px;">
@@ -115,30 +114,30 @@ export async function sendStripeWelcomeEmail(
   </body>
 </html>`;
 
-	try {
-		const res = await getSes().send(
-			new SendEmailCommand({
-				Source: fromEmail,
-				Destination: { ToAddresses: [input.email] },
-				Message: {
-					Subject: { Data: subject, Charset: "UTF-8" },
-					Body: {
-						Text: { Data: textBody, Charset: "UTF-8" },
-						Html: { Data: htmlBody, Charset: "UTF-8" },
-					},
-				},
-				ReplyToAddresses: ["hello@thinkwork.ai"],
-			}),
-		);
-		console.log(
-			`[stripe-welcome-email] Sent from=${fromEmail} to=${input.email} tenantId=${input.tenantId} sesMessageId=${res.MessageId}`,
-		);
-		return true;
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		console.error(
-			`[stripe-welcome-email] SES send failed from=${fromEmail} to=${input.email} tenantId=${input.tenantId}: ${msg}`,
-		);
-		return false;
-	}
+  try {
+    const res = await getSes().send(
+      new SendEmailCommand({
+        Source: fromEmail,
+        Destination: { ToAddresses: [input.email] },
+        Message: {
+          Subject: { Data: subject, Charset: "UTF-8" },
+          Body: {
+            Text: { Data: textBody, Charset: "UTF-8" },
+            Html: { Data: htmlBody, Charset: "UTF-8" },
+          },
+        },
+        ReplyToAddresses: ["hello@thinkwork.ai"],
+      }),
+    );
+    console.log(
+      `[stripe-welcome-email] Sent from=${fromEmail} to=${input.email} tenantId=${input.tenantId} sesMessageId=${res.MessageId}`,
+    );
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[stripe-welcome-email] SES send failed from=${fromEmail} to=${input.email} tenantId=${input.tenantId}: ${msg}`,
+    );
+    return false;
+  }
 }

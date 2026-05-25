@@ -17,7 +17,11 @@ import { useActiveTurnsStore } from "@/stores/active-turns-store";
  * Subscribes to AppSync real-time events for the current tenant.
  * Invalidates React Query caches and shows toast notifications.
  */
-export function AppSyncSubscriptionProvider({ children }: { children: ReactNode }) {
+export function AppSyncSubscriptionProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const { tenantId } = useTenant();
   const queryClient = useQueryClient();
 
@@ -32,8 +36,12 @@ export function AppSyncSubscriptionProvider({ children }: { children: ReactNode 
     const event = agentResult.data?.onAgentStatusChanged;
     if (!event) return;
 
-    queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(event.tenantId) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(event.agentId) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.agents.all(event.tenantId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.agents.detail(event.agentId),
+    });
 
     if (event.status === "ERROR") {
       toast.error(`${event.name} is now ${event.status.toLowerCase()}`);
@@ -53,8 +61,12 @@ export function AppSyncSubscriptionProvider({ children }: { children: ReactNode 
     const event = threadResult.data?.onThreadUpdated;
     if (!event) return;
 
-    queryClient.invalidateQueries({ queryKey: queryKeys.threads.all(event.tenantId) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(event.threadId) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.threads.all(event.tenantId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.threads.detail(event.threadId),
+    });
 
     // Query invalidation above is sufficient — no toast needed for thread updates
   }, [threadResult.data]);
@@ -70,8 +82,12 @@ export function AppSyncSubscriptionProvider({ children }: { children: ReactNode 
     const event = inboxItemResult.data?.onInboxItemStatusChanged;
     if (!event) return;
 
-    queryClient.invalidateQueries({ queryKey: queryKeys.inboxItems.all(event.tenantId) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.inboxItems.detail(event.inboxItemId) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.inboxItems.all(event.tenantId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.inboxItems.detail(event.inboxItemId),
+    });
 
     const title = `Inbox item "${event.title ?? "request"}" ${event.status.toLowerCase()}`;
     if (event.status === "APPROVED") {
@@ -112,7 +128,9 @@ export function AppSyncSubscriptionProvider({ children }: { children: ReactNode 
     for (const w of data.queuedWakeups ?? []) {
       if (existingRunIds.has(w.id)) continue;
       // Parse threadId from triggerDetail (format: "ticket:UUID")
-      const threadId = w.triggerDetail?.startsWith("ticket:") ? w.triggerDetail.slice(7) : null;
+      const threadId = w.triggerDetail?.startsWith("ticket:")
+        ? w.triggerDetail.slice(7)
+        : null;
       turnEntries.push({
         runId: `wakeup:${w.id}`,
         threadId,

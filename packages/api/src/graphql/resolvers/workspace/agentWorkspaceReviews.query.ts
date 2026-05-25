@@ -61,7 +61,11 @@ export async function agentWorkspaceReviews(
   if (args.responsibleUserId) {
     const callerUserId = await resolveCallerUserId(ctx);
     if (args.responsibleUserId !== callerUserId) {
-      await requireAdminOrServiceCaller(ctx, args.tenantId, "agent_workspace_reviews");
+      await requireAdminOrServiceCaller(
+        ctx,
+        args.tenantId,
+        "agent_workspace_reviews",
+      );
     }
   }
 

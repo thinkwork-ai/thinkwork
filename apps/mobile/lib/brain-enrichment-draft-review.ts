@@ -8,7 +8,8 @@ import type {
 // runtime constants directly from the SDK index drags the provider tree into
 // the test environment. The SDK still exports the same string literals; both
 // places must change together if the wire format changes.
-const BRAIN_ENRICHMENT_DRAFT_REVIEW_KIND = "brain_enrichment_draft_review" as const;
+const BRAIN_ENRICHMENT_DRAFT_REVIEW_KIND =
+  "brain_enrichment_draft_review" as const;
 const BRAIN_ENRICHMENT_DRAFT_DECISION_KIND =
   "brain_enrichment_draft_decision" as const;
 
@@ -33,8 +34,10 @@ export function isBrainEnrichmentDraftReviewPayload(
   return (
     !!parsed &&
     typeof parsed === "object" &&
-    (parsed as { kind?: unknown }).kind === BRAIN_ENRICHMENT_DRAFT_REVIEW_KIND &&
-    typeof (parsed as { proposedBodyMd?: unknown }).proposedBodyMd === "string" &&
+    (parsed as { kind?: unknown }).kind ===
+      BRAIN_ENRICHMENT_DRAFT_REVIEW_KIND &&
+    typeof (parsed as { proposedBodyMd?: unknown }).proposedBodyMd ===
+      "string" &&
     Array.isArray((parsed as { regions?: unknown }).regions)
   );
 }

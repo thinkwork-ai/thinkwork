@@ -9,9 +9,6 @@ export const Route = createFileRoute(
 
 function KnowledgeKnowledgeBaseDetailPage() {
   return (
-    <KnowledgeBaseDetailPage
-      embedded
-      listHref="/knowledge/knowledge-bases"
-    />
+    <KnowledgeBaseDetailPage embedded listHref="/knowledge/knowledge-bases" />
   );
 }

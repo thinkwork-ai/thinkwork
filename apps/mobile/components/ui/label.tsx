@@ -18,7 +18,7 @@ function Label({ className, children, disabled, ...props }: LabelProps) {
       className={cn(
         "gap-2 flex-row items-center",
         disabled && "opacity-50",
-        className
+        className,
       )}
       {...props}
     >

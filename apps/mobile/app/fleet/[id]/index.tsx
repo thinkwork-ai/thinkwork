@@ -4,7 +4,12 @@ import { useAgent } from "@/lib/hooks/use-agents";
 import { Text, Muted } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
-import { Shield, FileText, CheckCircle, ChevronRight } from "lucide-react-native";
+import {
+  Shield,
+  FileText,
+  CheckCircle,
+  ChevronRight,
+} from "lucide-react-native";
 
 export default function FleetAgentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,7 +69,9 @@ export default function FleetAgentDetailScreen() {
         {/* Header card */}
         <View className="mb-6 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
           <Text className="text-xl font-bold">{assistant.name}</Text>
-          <Muted className="mt-1">Stack: {(assistant as any).stackName || "\u2014"}</Muted>
+          <Muted className="mt-1">
+            Stack: {(assistant as any).stackName || "\u2014"}
+          </Muted>
           <View className="mt-3 flex-row items-center gap-3">
             <View className="rounded-full bg-neutral-200 px-3 py-1 dark:bg-neutral-800">
               <Text className="text-xs font-medium">agentcore</Text>

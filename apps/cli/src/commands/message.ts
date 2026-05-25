@@ -129,7 +129,8 @@ async function runMessageSend(
       ? "user"
       : null;
   const senderId =
-    opts.asAgent ?? (ctx.session?.kind === "cognito" ? ctx.session.principalId : null);
+    opts.asAgent ??
+    (ctx.session?.kind === "cognito" ? ctx.session.principalId : null);
 
   const data = await gqlMutate(ctx.client, SendMessageDoc, {
     input: {
@@ -149,7 +150,10 @@ async function runMessageSend(
   printSuccess(`Sent message ${msg.id} to thread ${threadId}`);
 }
 
-async function runMessageList(threadId: string, opts: ListOptions): Promise<void> {
+async function runMessageList(
+  threadId: string,
+  opts: ListOptions,
+): Promise<void> {
   const ctx = await resolveMessageContext(opts);
   const limit = Number.parseInt(opts.limit ?? "50", 10);
 
@@ -175,7 +179,7 @@ async function runMessageList(threadId: string, opts: ListOptions): Promise<void
     sender:
       e.node.senderType && e.node.senderId
         ? `${e.node.senderType}:${e.node.senderId.slice(0, 8)}`
-        : e.node.senderType ?? "—",
+        : (e.node.senderType ?? "—"),
     content: truncate(e.node.content, 80),
     tokens: e.node.tokenCount != null ? String(e.node.tokenCount) : "—",
   }));
@@ -190,7 +194,9 @@ async function runMessageList(threadId: string, opts: ListOptions): Promise<void
 
   if (data.messages.pageInfo.hasNextPage && data.messages.pageInfo.endCursor) {
     console.log("");
-    console.log(`  More results — next cursor: ${data.messages.pageInfo.endCursor}`);
+    console.log(
+      `  More results — next cursor: ${data.messages.pageInfo.endCursor}`,
+    );
   }
 }
 
@@ -203,7 +209,9 @@ export function registerMessageCommand(program: Command): void {
 
   msg
     .command("send <threadId> [content]")
-    .description("Send a message to a thread. Prompts for content if omitted and TTY.")
+    .description(
+      "Send a message to a thread. Prompts for content if omitted and TTY.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--file <path>", "Read message content from a file")

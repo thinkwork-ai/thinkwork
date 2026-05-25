@@ -32,23 +32,23 @@ const NODE_PREFIX = Buffer.from([0x01]);
 
 /** Convert a UUID string to its 16-byte network-byte-order Buffer. RFC 4122 form. */
 function uuidToBytes(uuidStr: string): Buffer {
-	const hex = uuidStr.replace(/-/g, "");
-	if (hex.length !== 32 || !/^[0-9a-f]+$/i.test(hex)) {
-		throw new Error(
-			`audit-verifier/merkle: expected 32 hex chars (UUID), got ${hex.length} for input "${uuidStr}"`,
-		);
-	}
-	return Buffer.from(hex, "hex");
+  const hex = uuidStr.replace(/-/g, "");
+  if (hex.length !== 32 || !/^[0-9a-f]+$/i.test(hex)) {
+    throw new Error(
+      `audit-verifier/merkle: expected 32 hex chars (UUID), got ${hex.length} for input "${uuidStr}"`,
+    );
+  }
+  return Buffer.from(hex, "hex");
 }
 
 /** Convert a 64-char hex SHA-256 digest to its 32-byte Buffer. */
 function hexToBytes(hex: string): Buffer {
-	if (hex.length !== 64 || !/^[0-9a-f]+$/i.test(hex)) {
-		throw new Error(
-			`audit-verifier/merkle: expected 64-char hex digest, got ${hex.length} for input "${hex}"`,
-		);
-	}
-	return Buffer.from(hex, "hex");
+  if (hex.length !== 64 || !/^[0-9a-f]+$/i.test(hex)) {
+    throw new Error(
+      `audit-verifier/merkle: expected 64-char hex digest, got ${hex.length} for input "${hex}"`,
+    );
+  }
+  return Buffer.from(hex, "hex");
 }
 
 /**
@@ -64,23 +64,23 @@ function hexToBytes(hex: string): Buffer {
  * value above.
  */
 export function computeLeafHash(
-	tenantId: string,
-	eventHashHex: string,
+  tenantId: string,
+  eventHashHex: string,
 ): string {
-	return createHash("sha256")
-		.update(LEAF_PREFIX)
-		.update(uuidToBytes(tenantId))
-		.update(hexToBytes(eventHashHex))
-		.digest("hex");
+  return createHash("sha256")
+    .update(LEAF_PREFIX)
+    .update(uuidToBytes(tenantId))
+    .update(hexToBytes(eventHashHex))
+    .digest("hex");
 }
 
 /** node = sha256(0x01 || left || right) */
 function combineNodes(leftHex: string, rightHex: string): string {
-	return createHash("sha256")
-		.update(NODE_PREFIX)
-		.update(hexToBytes(leftHex))
-		.update(hexToBytes(rightHex))
-		.digest("hex");
+  return createHash("sha256")
+    .update(NODE_PREFIX)
+    .update(hexToBytes(leftHex))
+    .update(hexToBytes(rightHex))
+    .digest("hex");
 }
 
 /**
@@ -93,26 +93,26 @@ function combineNodes(leftHex: string, rightHex: string): string {
  * empty-cadence anchor (zero new chain heads in the 15-min window).
  */
 export function buildMerkleTree(leaves: string[]): {
-	root: string;
-	levels: string[][];
+  root: string;
+  levels: string[][];
 } {
-	if (leaves.length === 0) {
-		const empty = createHash("sha256").update(LEAF_PREFIX).digest("hex");
-		return { root: empty, levels: [[]] };
-	}
-	const levels: string[][] = [leaves.slice()];
-	while (true) {
-		const current = levels[levels.length - 1];
-		if (current.length <= 1) break;
-		const next: string[] = [];
-		for (let i = 0; i < current.length; i += 2) {
-			const left = current[i];
-			const right = i + 1 < current.length ? current[i + 1] : current[i];
-			next.push(combineNodes(left, right));
-		}
-		levels.push(next);
-	}
-	return { root: levels[levels.length - 1][0], levels };
+  if (leaves.length === 0) {
+    const empty = createHash("sha256").update(LEAF_PREFIX).digest("hex");
+    return { root: empty, levels: [[]] };
+  }
+  const levels: string[][] = [leaves.slice()];
+  while (true) {
+    const current = levels[levels.length - 1];
+    if (current.length <= 1) break;
+    const next: string[] = [];
+    for (let i = 0; i < current.length; i += 2) {
+      const left = current[i];
+      const right = i + 1 < current.length ? current[i + 1] : current[i];
+      next.push(combineNodes(left, right));
+    }
+    levels.push(next);
+  }
+  return { root: levels[levels.length - 1][0], levels };
 }
 
 /**
@@ -130,8 +130,8 @@ export function buildMerkleTree(leaves: string[]): {
  *     // acc === expected root
  */
 export interface ProofStep {
-	hash: string;
-	position: "left" | "right";
+  hash: string;
+  position: "left" | "right";
 }
 
 /**
@@ -141,16 +141,16 @@ export interface ProofStep {
  * are the dominant production case in early months.
  */
 export function verifyProofPath(
-	leafHash: string,
-	proofPath: ProofStep[],
+  leafHash: string,
+  proofPath: ProofStep[],
 ): string {
-	let acc = leafHash;
-	for (const step of proofPath) {
-		const left = step.position === "left" ? step.hash : acc;
-		const right = step.position === "right" ? step.hash : acc;
-		acc = combineNodes(left, right);
-	}
-	return acc;
+  let acc = leafHash;
+  for (const step of proofPath) {
+    const left = step.position === "left" ? step.hash : acc;
+    const right = step.position === "right" ? step.hash : acc;
+    acc = combineNodes(left, right);
+  }
+  return acc;
 }
 
 /**
@@ -163,5 +163,5 @@ export function verifyProofPath(
  * before retention locks) is undetected.
  */
 export const EMPTY_TREE_ROOT = createHash("sha256")
-	.update(LEAF_PREFIX)
-	.digest("hex");
+  .update(LEAF_PREFIX)
+  .digest("hex");

@@ -164,8 +164,11 @@ export async function executeRunbook(
         previousOutputs,
       });
       runbookResponseRecorded =
-        (await recordArtifactRunbookResponseIfReady(task.id, api, finalOutput)) ||
-        runbookResponseRecorded;
+        (await recordArtifactRunbookResponseIfReady(
+          task.id,
+          api,
+          finalOutput,
+        )) || runbookResponseRecorded;
       await api.appendTaskEvent(task.id, {
         eventType: "runbook_task_completed",
         level: "info",
@@ -270,7 +273,8 @@ async function recordArtifactRunbookResponseIfReady(
   output: unknown,
 ) {
   if (!hasSuccessfulSaveAppEvidence(output)) return false;
-  if (!isRecord(output) || typeof output.responseText !== "string") return false;
+  if (!isRecord(output) || typeof output.responseText !== "string")
+    return false;
   const content = output.responseText.trim();
   if (!content) return false;
   await api.recordRunbookResponse(computerTaskId, {

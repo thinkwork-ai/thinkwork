@@ -16,7 +16,12 @@ interface MentionAutocompleteProps {
   visible: boolean;
 }
 
-export function MentionAutocomplete({ query, candidates, onSelect, visible }: MentionAutocompleteProps) {
+export function MentionAutocomplete({
+  query,
+  candidates,
+  onSelect,
+  visible,
+}: MentionAutocompleteProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   const dark = colorScheme === "dark";
@@ -55,17 +60,22 @@ export function MentionAutocomplete({ query, candidates, onSelect, visible }: Me
         {filtered.map((candidate, i) => {
           const isAssistant = candidate.type === "assistant";
           const badgeBg = isAssistant
-            ? (dark ? "rgba(249,115,22,0.15)" : "rgba(249,115,22,0.1)")
-            : (dark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)");
+            ? dark
+              ? "rgba(249,115,22,0.15)"
+              : "rgba(249,115,22,0.1)"
+            : dark
+              ? "rgba(99,102,241,0.15)"
+              : "rgba(99,102,241,0.1)";
           const badgeText = isAssistant
-            ? (dark ? "#38bdf8" : "#0284c7")
-            : (dark ? "#818cf8" : "#4f46e5");
+            ? dark
+              ? "#38bdf8"
+              : "#0284c7"
+            : dark
+              ? "#818cf8"
+              : "#4f46e5";
 
           return (
-            <Pressable
-              key={candidate.id}
-              onPress={() => onSelect(candidate)}
-            >
+            <Pressable key={candidate.id} onPress={() => onSelect(candidate)}>
               {({ pressed }) => (
                 <View
                   style={{
@@ -75,7 +85,11 @@ export function MentionAutocomplete({ query, candidates, onSelect, visible }: Me
                     paddingVertical: 14,
                     borderBottomWidth: i < filtered.length - 1 ? 1 : 0,
                     borderBottomColor: dark ? "#2a2a2a" : "#f0f0f0",
-                    backgroundColor: pressed ? (dark ? "#2a2a2a" : "#f5f5f5") : "transparent",
+                    backgroundColor: pressed
+                      ? dark
+                        ? "#2a2a2a"
+                        : "#f5f5f5"
+                      : "transparent",
                   }}
                 >
                   <Text
@@ -98,7 +112,13 @@ export function MentionAutocomplete({ query, candidates, onSelect, visible }: Me
                       backgroundColor: badgeBg,
                     }}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: badgeText }}>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "600",
+                        color: badgeText,
+                      }}
+                    >
                       {isAssistant ? "Agent" : "Member"}
                     </Text>
                   </View>

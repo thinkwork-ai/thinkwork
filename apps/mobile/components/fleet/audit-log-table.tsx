@@ -31,7 +31,9 @@ export function AuditLogTable({ entries }: AuditLogTableProps) {
         >
           <View className="flex-row items-center justify-between">
             <Text className="text-sm font-medium">{entry.eventType}</Text>
-            <Text className={`text-xs font-medium ${statusColor(entry.status)}`}>
+            <Text
+              className={`text-xs font-medium ${statusColor(entry.status)}`}
+            >
               {entry.status}
             </Text>
           </View>

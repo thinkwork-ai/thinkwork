@@ -14,7 +14,9 @@ const concatMessages = (messages: Uint8Array[]): Uint8Array => {
   }
   return combined;
 };
-edHashes.sha512Async = async (...messages: Uint8Array[]): Promise<Uint8Array> => {
+edHashes.sha512Async = async (
+  ...messages: Uint8Array[]
+): Promise<Uint8Array> => {
   return sha512(concatMessages(messages));
 };
 edHashes.sha512 = (...messages: Uint8Array[]): Uint8Array => {
@@ -58,7 +60,8 @@ function sha256Hex(data: Uint8Array): string {
 async function generateIdentity(): Promise<DeviceIdentity> {
   // Generate random 32-byte private key
   const privateKeyBytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) privateKeyBytes[i] = Math.floor(Math.random() * 256);
+  for (let i = 0; i < 32; i++)
+    privateKeyBytes[i] = Math.floor(Math.random() * 256);
 
   const publicKeyBytes = await getPublicKey(privateKeyBytes);
   const deviceId = await sha256Hex(publicKeyBytes);
@@ -77,7 +80,12 @@ export async function loadOrCreateIdentity(): Promise<DeviceIdentity> {
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as DeviceIdentity;
-      if (parsed.version === 1 && parsed.deviceId && parsed.publicKey && parsed.privateKey) {
+      if (
+        parsed.version === 1 &&
+        parsed.deviceId &&
+        parsed.publicKey &&
+        parsed.privateKey
+      ) {
         return parsed;
       }
     } catch {
@@ -91,7 +99,7 @@ export async function loadOrCreateIdentity(): Promise<DeviceIdentity> {
 
 export async function signPayload(
   privateKeyB64: string,
-  message: string
+  message: string,
 ): Promise<string> {
   const privateKeyBytes = base64UrlDecode(privateKeyB64);
   const messageBytes = new TextEncoder().encode(message);

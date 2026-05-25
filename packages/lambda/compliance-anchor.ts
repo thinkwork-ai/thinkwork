@@ -42,9 +42,9 @@ import { tenantAnchorState } from "@thinkwork/database-pg/schema";
 import { sql } from "drizzle-orm";
 import pLimit from "p-limit";
 import {
-	S3Client,
-	PutObjectCommand,
-	type S3ClientConfig,
+  S3Client,
+  PutObjectCommand,
+  type S3ClientConfig,
 } from "@aws-sdk/client-s3";
 // Note: @aws-sdk/client-cloudwatch is intentionally NOT imported here.
 // In U8b the anchor Lambda still emits no metrics directly (only the
@@ -73,32 +73,33 @@ const NODE_PREFIX = Buffer.from([0x01]);
 // ---------------------------------------------------------------------------
 
 export interface TenantSlice {
-	tenant_id: string;
-	latest_event_hash: string;
-	latest_recorded_at: string;
-	latest_event_id: string;
-	leaf_hash: string;
-	proof_path: Array<{ hash: string; position: "left" | "right" }>;
+  tenant_id: string;
+  latest_event_hash: string;
+  latest_recorded_at: string;
+  latest_event_id: string;
+  leaf_hash: string;
+  proof_path: Array<{ hash: string; position: "left" | "right" }>;
 }
 
 export interface AnchorResult {
-	dispatched: true;
-	anchored: boolean;
-	merkle_root: string;
-	tenant_count: number;
-	anchored_event_count: number;
-	cadence_id: string;
-	// Optional U8b additions:
-	s3_key?: string;
-	retain_until_date?: string;
+  dispatched: true;
+  anchored: boolean;
+  merkle_root: string;
+  tenant_count: number;
+  anchored_event_count: number;
+  cadence_id: string;
+  // Optional U8b additions:
+  s3_key?: string;
+  retain_until_date?: string;
 }
 
 export type AnchorFn = (
-	merkleRoot: string,
-	tenantSlices: TenantSlice[],
-	cadenceId: string,
+  merkleRoot: string,
+  tenantSlices: TenantSlice[],
+  cadenceId: string,
 ) => Promise<
-	Pick<AnchorResult, "anchored"> & Partial<Pick<AnchorResult, "s3_key" | "retain_until_date">>
+  Pick<AnchorResult, "anchored"> &
+    Partial<Pick<AnchorResult, "s3_key" | "retain_until_date">>
 >;
 
 // ---------------------------------------------------------------------------
@@ -107,36 +108,36 @@ export type AnchorFn = (
 
 /** UUID-string → 16-byte network-byte-order Buffer. RFC 4122 form. */
 function uuidToBytes(uuidStr: string): Buffer {
-	return Buffer.from(uuidStr.replace(/-/g, ""), "hex");
+  return Buffer.from(uuidStr.replace(/-/g, ""), "hex");
 }
 
 /** Hex 64-char SHA-256 digest → 32-byte Buffer. */
 function hexToBytes(hex: string): Buffer {
-	if (hex.length !== 64) {
-		throw new Error(`expected 64-char hex digest, got ${hex.length}`);
-	}
-	return Buffer.from(hex, "hex");
+  if (hex.length !== 64) {
+    throw new Error(`expected 64-char hex digest, got ${hex.length}`);
+  }
+  return Buffer.from(hex, "hex");
 }
 
 /** leaf = sha256(0x00 || tenant_id_bytes || event_hash_bytes). */
 export function computeLeafHash(
-	tenantId: string,
-	eventHashHex: string,
+  tenantId: string,
+  eventHashHex: string,
 ): string {
-	return createHash("sha256")
-		.update(LEAF_PREFIX)
-		.update(uuidToBytes(tenantId))
-		.update(hexToBytes(eventHashHex))
-		.digest("hex");
+  return createHash("sha256")
+    .update(LEAF_PREFIX)
+    .update(uuidToBytes(tenantId))
+    .update(hexToBytes(eventHashHex))
+    .digest("hex");
 }
 
 /** node = sha256(0x01 || left || right). */
 function combineNodes(leftHex: string, rightHex: string): string {
-	return createHash("sha256")
-		.update(NODE_PREFIX)
-		.update(hexToBytes(leftHex))
-		.update(hexToBytes(rightHex))
-		.digest("hex");
+  return createHash("sha256")
+    .update(NODE_PREFIX)
+    .update(hexToBytes(leftHex))
+    .update(hexToBytes(rightHex))
+    .digest("hex");
 }
 
 /**
@@ -150,25 +151,25 @@ function combineNodes(leftHex: string, rightHex: string): string {
  * tree is always balanced. Verifier must replay the same convention.
  */
 export function buildMerkleTree(leaves: string[]): {
-	root: string;
-	levels: string[][];
+  root: string;
+  levels: string[][];
 } {
-	if (leaves.length === 0) {
-		const empty = createHash("sha256").update(LEAF_PREFIX).digest("hex");
-		return { root: empty, levels: [[]] };
-	}
-	const levels: string[][] = [leaves.slice()];
-	while (levels[levels.length - 1].length > 1) {
-		const current = levels[levels.length - 1];
-		const next: string[] = [];
-		for (let i = 0; i < current.length; i += 2) {
-			const left = current[i];
-			const right = i + 1 < current.length ? current[i + 1] : current[i];
-			next.push(combineNodes(left, right));
-		}
-		levels.push(next);
-	}
-	return { root: levels[levels.length - 1][0], levels };
+  if (leaves.length === 0) {
+    const empty = createHash("sha256").update(LEAF_PREFIX).digest("hex");
+    return { root: empty, levels: [[]] };
+  }
+  const levels: string[][] = [leaves.slice()];
+  while (levels[levels.length - 1].length > 1) {
+    const current = levels[levels.length - 1];
+    const next: string[] = [];
+    for (let i = 0; i < current.length; i += 2) {
+      const left = current[i];
+      const right = i + 1 < current.length ? current[i + 1] : current[i];
+      next.push(combineNodes(left, right));
+    }
+    levels.push(next);
+  }
+  return { root: levels[levels.length - 1][0], levels };
 }
 
 /**
@@ -178,23 +179,23 @@ export function buildMerkleTree(leaves: string[]): {
  * at the named position to recompute the root.
  */
 export function deriveProofPath(
-	levels: string[][],
-	leafIndex: number,
+  levels: string[][],
+  leafIndex: number,
 ): Array<{ hash: string; position: "left" | "right" }> {
-	const path: Array<{ hash: string; position: "left" | "right" }> = [];
-	let idx = leafIndex;
-	for (let level = 0; level < levels.length - 1; level++) {
-		const layer = levels[level];
-		const isRightChild = idx % 2 === 1;
-		const siblingIdx = isRightChild ? idx - 1 : idx + 1;
-		const sibling = siblingIdx < layer.length ? layer[siblingIdx] : layer[idx];
-		path.push({
-			hash: sibling,
-			position: isRightChild ? "left" : "right",
-		});
-		idx = Math.floor(idx / 2);
-	}
-	return path;
+  const path: Array<{ hash: string; position: "left" | "right" }> = [];
+  let idx = leafIndex;
+  for (let level = 0; level < levels.length - 1; level++) {
+    const layer = levels[level];
+    const isRightChild = idx % 2 === 1;
+    const siblingIdx = isRightChild ? idx - 1 : idx + 1;
+    const sibling = siblingIdx < layer.length ? layer[siblingIdx] : layer[idx];
+    path.push({
+      hash: sibling,
+      position: isRightChild ? "left" : "right",
+    });
+    idx = Math.floor(idx / 2);
+  }
+  return path;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,33 +206,34 @@ export function deriveProofPath(
 // ---------------------------------------------------------------------------
 
 interface AnchorEnv {
-	readonly readerSecretArn: string;
-	readonly drainerSecretArn: string;
-	readonly anchorBucketName: string;
-	readonly kmsKeyArn: string;
-	readonly mode: "GOVERNANCE" | "COMPLIANCE";
-	readonly retentionDays: number;
-	readonly stage: string;
-	readonly region: string;
+  readonly readerSecretArn: string;
+  readonly drainerSecretArn: string;
+  readonly anchorBucketName: string;
+  readonly kmsKeyArn: string;
+  readonly mode: "GOVERNANCE" | "COMPLIANCE";
+  readonly retentionDays: number;
+  readonly stage: string;
+  readonly region: string;
 }
 
 function getAnchorEnv(): AnchorEnv {
-	const rawMode = process.env.COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE || "GOVERNANCE";
-	const mode: "GOVERNANCE" | "COMPLIANCE" =
-		rawMode === "COMPLIANCE" ? "COMPLIANCE" : "GOVERNANCE";
-	return Object.freeze({
-		readerSecretArn: process.env.COMPLIANCE_READER_SECRET_ARN || "",
-		drainerSecretArn: process.env.COMPLIANCE_DRAINER_SECRET_ARN || "",
-		anchorBucketName: process.env.COMPLIANCE_ANCHOR_BUCKET_NAME || "",
-		kmsKeyArn: process.env.COMPLIANCE_ANCHOR_KMS_KEY_ARN || "",
-		mode,
-		retentionDays: parseInt(
-			process.env.COMPLIANCE_ANCHOR_RETENTION_DAYS || "365",
-			10,
-		),
-		stage: process.env.STAGE || "dev",
-		region: process.env.AWS_REGION || "us-east-1",
-	});
+  const rawMode =
+    process.env.COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE || "GOVERNANCE";
+  const mode: "GOVERNANCE" | "COMPLIANCE" =
+    rawMode === "COMPLIANCE" ? "COMPLIANCE" : "GOVERNANCE";
+  return Object.freeze({
+    readerSecretArn: process.env.COMPLIANCE_READER_SECRET_ARN || "",
+    drainerSecretArn: process.env.COMPLIANCE_DRAINER_SECRET_ARN || "",
+    anchorBucketName: process.env.COMPLIANCE_ANCHOR_BUCKET_NAME || "",
+    kmsKeyArn: process.env.COMPLIANCE_ANCHOR_KMS_KEY_ARN || "",
+    mode,
+    retentionDays: parseInt(
+      process.env.COMPLIANCE_ANCHOR_RETENTION_DAYS || "365",
+      10,
+    ),
+    stage: process.env.STAGE || "dev",
+    region: process.env.AWS_REGION || "us-east-1",
+  });
 }
 
 const ENV: AnchorEnv = getAnchorEnv();
@@ -246,74 +248,79 @@ let _drainerDb: Database | undefined;
 let _s3: S3Client | undefined;
 
 function getS3Client(): S3Client {
-	if (_s3) return _s3;
-	const config: S3ClientConfig = {
-		region: ENV.region,
-		// Bound the SDK call so a regional S3 degradation doesn't consume
-		// the full Lambda timeout. Mirrors the SecretsManager + CloudWatch
-		// timeouts used elsewhere in this file + watchdog.
-		requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
-	};
-	_s3 = new S3Client(config);
-	return _s3;
+  if (_s3) return _s3;
+  const config: S3ClientConfig = {
+    region: ENV.region,
+    // Bound the SDK call so a regional S3 degradation doesn't consume
+    // the full Lambda timeout. Mirrors the SecretsManager + CloudWatch
+    // timeouts used elsewhere in this file + watchdog.
+    requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
+  };
+  _s3 = new S3Client(config);
+  return _s3;
 }
 
 async function resolveDatabaseUrl(secretArn: string): Promise<string> {
-	if (!secretArn) {
-		throw new Error("compliance-anchor: secret ARN is empty");
-	}
+  if (!secretArn) {
+    throw new Error("compliance-anchor: secret ARN is empty");
+  }
 
-	const { SecretsManagerClient, GetSecretValueCommand } = await import(
-		"@aws-sdk/client-secrets-manager"
-	);
-	const sm = new SecretsManagerClient({
-		requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
-	});
-	const result = await sm.send(
-		new GetSecretValueCommand({ SecretId: secretArn }),
-	);
-	const secret = JSON.parse(result.SecretString || "{}") as {
-		username: string;
-		password: string;
-		host: string;
-		port: number | string;
-		dbname: string;
-	};
-	const user = encodeURIComponent(secret.username);
-	const pass = encodeURIComponent(secret.password);
-	return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=no-verify`;
+  const { SecretsManagerClient, GetSecretValueCommand } =
+    await import("@aws-sdk/client-secrets-manager");
+  const sm = new SecretsManagerClient({
+    requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
+  });
+  const result = await sm.send(
+    new GetSecretValueCommand({ SecretId: secretArn }),
+  );
+  const secret = JSON.parse(result.SecretString || "{}") as {
+    username: string;
+    password: string;
+    host: string;
+    port: number | string;
+    dbname: string;
+  };
+  const user = encodeURIComponent(secret.username);
+  const pass = encodeURIComponent(secret.password);
+  return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=no-verify`;
 }
 
 async function getReaderDb(): Promise<Database> {
-	if (_readerDb) return _readerDb;
-	if (process.env.NODE_ENV === "test" && process.env.COMPLIANCE_READER_DATABASE_URL) {
-		_readerDb = createDb(process.env.COMPLIANCE_READER_DATABASE_URL);
-	} else {
-		_readerDb = createDb(await resolveDatabaseUrl(ENV.readerSecretArn));
-	}
-	const dbAny = _readerDb as unknown as {
-		$client?: { on?: (event: string, cb: () => void) => void };
-	};
-	dbAny.$client?.on?.("error", () => {
-		_readerDb = undefined;
-	});
-	return _readerDb;
+  if (_readerDb) return _readerDb;
+  if (
+    process.env.NODE_ENV === "test" &&
+    process.env.COMPLIANCE_READER_DATABASE_URL
+  ) {
+    _readerDb = createDb(process.env.COMPLIANCE_READER_DATABASE_URL);
+  } else {
+    _readerDb = createDb(await resolveDatabaseUrl(ENV.readerSecretArn));
+  }
+  const dbAny = _readerDb as unknown as {
+    $client?: { on?: (event: string, cb: () => void) => void };
+  };
+  dbAny.$client?.on?.("error", () => {
+    _readerDb = undefined;
+  });
+  return _readerDb;
 }
 
 async function getDrainerDb(): Promise<Database> {
-	if (_drainerDb) return _drainerDb;
-	if (process.env.NODE_ENV === "test" && process.env.COMPLIANCE_DRAINER_DATABASE_URL) {
-		_drainerDb = createDb(process.env.COMPLIANCE_DRAINER_DATABASE_URL);
-	} else {
-		_drainerDb = createDb(await resolveDatabaseUrl(ENV.drainerSecretArn));
-	}
-	const dbAny = _drainerDb as unknown as {
-		$client?: { on?: (event: string, cb: () => void) => void };
-	};
-	dbAny.$client?.on?.("error", () => {
-		_drainerDb = undefined;
-	});
-	return _drainerDb;
+  if (_drainerDb) return _drainerDb;
+  if (
+    process.env.NODE_ENV === "test" &&
+    process.env.COMPLIANCE_DRAINER_DATABASE_URL
+  ) {
+    _drainerDb = createDb(process.env.COMPLIANCE_DRAINER_DATABASE_URL);
+  } else {
+    _drainerDb = createDb(await resolveDatabaseUrl(ENV.drainerSecretArn));
+  }
+  const dbAny = _drainerDb as unknown as {
+    $client?: { on?: (event: string, cb: () => void) => void };
+  };
+  dbAny.$client?.on?.("error", () => {
+    _drainerDb = undefined;
+  });
+  return _drainerDb;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,30 +340,32 @@ async function getDrainerDb(): Promise<Database> {
 // ---------------------------------------------------------------------------
 
 interface ChainHeadFingerprint {
-	tenant_id: string;
-	event_hash: string;
+  tenant_id: string;
+  event_hash: string;
 }
 
 export function deriveCadenceId(
-	heads: Array<{ tenant_id: string; event_hash: string }>,
+  heads: Array<{ tenant_id: string; event_hash: string }>,
 ): string {
-	const canonical: ChainHeadFingerprint[] = heads
-		.map((h) => ({ tenant_id: h.tenant_id, event_hash: h.event_hash }))
-		.sort((a, b) => (a.tenant_id < b.tenant_id ? -1 : a.tenant_id > b.tenant_id ? 1 : 0));
-	const digest = createHash("sha256")
-		.update(JSON.stringify(canonical))
-		.digest("hex");
-	// Reshape sha256(32-byte hex) → UUIDv7 form (8-4-4-4-12).
-	// Patch version nibble (13th hex) to '7' and variant nibble (17th) to 8/9/a/b.
-	const a = digest.slice(0, 8);
-	const b = digest.slice(8, 12);
-	// version = 7
-	const c = "7" + digest.slice(13, 16);
-	// variant = 0b10xx → first hex of d ∈ {8,9,a,b}. Mask: (digest[16] & 0x3) | 0x8.
-	const variantNibble = (parseInt(digest[16], 16) & 0x3) | 0x8;
-	const d = variantNibble.toString(16) + digest.slice(17, 20);
-	const e = digest.slice(20, 32);
-	return `${a}-${b}-${c}-${d}-${e}`;
+  const canonical: ChainHeadFingerprint[] = heads
+    .map((h) => ({ tenant_id: h.tenant_id, event_hash: h.event_hash }))
+    .sort((a, b) =>
+      a.tenant_id < b.tenant_id ? -1 : a.tenant_id > b.tenant_id ? 1 : 0,
+    );
+  const digest = createHash("sha256")
+    .update(JSON.stringify(canonical))
+    .digest("hex");
+  // Reshape sha256(32-byte hex) → UUIDv7 form (8-4-4-4-12).
+  // Patch version nibble (13th hex) to '7' and variant nibble (17th) to 8/9/a/b.
+  const a = digest.slice(0, 8);
+  const b = digest.slice(8, 12);
+  // version = 7
+  const c = "7" + digest.slice(13, 16);
+  // variant = 0b10xx → first hex of d ∈ {8,9,a,b}. Mask: (digest[16] & 0x3) | 0x8.
+  const variantNibble = (parseInt(digest[16], 16) & 0x3) | 0x8;
+  const d = variantNibble.toString(16) + digest.slice(17, 20);
+  const e = digest.slice(20, 32);
+  return `${a}-${b}-${c}-${d}-${e}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,136 +373,136 @@ export function deriveCadenceId(
 // ---------------------------------------------------------------------------
 
 export const _anchor_fn_live: AnchorFn = async (
-	merkleRoot,
-	tenantSlices,
-	cadenceId,
+  merkleRoot,
+  tenantSlices,
+  cadenceId,
 ) => {
-	if (!ENV.kmsKeyArn) {
-		throw new Error(
-			"compliance-anchor: COMPLIANCE_ANCHOR_KMS_KEY_ARN is required for SSE-KMS PutObject",
-		);
-	}
-	if (!ENV.anchorBucketName) {
-		throw new Error(
-			"compliance-anchor: COMPLIANCE_ANCHOR_BUCKET_NAME is required",
-		);
-	}
+  if (!ENV.kmsKeyArn) {
+    throw new Error(
+      "compliance-anchor: COMPLIANCE_ANCHOR_KMS_KEY_ARN is required for SSE-KMS PutObject",
+    );
+  }
+  if (!ENV.anchorBucketName) {
+    throw new Error(
+      "compliance-anchor: COMPLIANCE_ANCHOR_BUCKET_NAME is required",
+    );
+  }
 
-	// 1. Merkle self-check (Decision #16) — recompute root from received
-	// leaves and assert equality before WORM-locking. Cheap insurance
-	// against a runAnchorPass arithmetic bug producing inconsistent
-	// (root, leaves) — which would otherwise become 365 days of poisoned
-	// audit evidence.
-	const expectedRoot = buildMerkleTree(
-		tenantSlices.map((s) => s.leaf_hash),
-	).root;
-	if (expectedRoot !== merkleRoot) {
-		throw new Error(
-			`compliance-anchor: leaf-set / merkleRoot mismatch — expected ${expectedRoot}, got ${merkleRoot}`,
-		);
-	}
+  // 1. Merkle self-check (Decision #16) — recompute root from received
+  // leaves and assert equality before WORM-locking. Cheap insurance
+  // against a runAnchorPass arithmetic bug producing inconsistent
+  // (root, leaves) — which would otherwise become 365 days of poisoned
+  // audit evidence.
+  const expectedRoot = buildMerkleTree(
+    tenantSlices.map((s) => s.leaf_hash),
+  ).root;
+  if (expectedRoot !== merkleRoot) {
+    throw new Error(
+      `compliance-anchor: leaf-set / merkleRoot mismatch — expected ${expectedRoot}, got ${merkleRoot}`,
+    );
+  }
 
-	const retainUntilDate = new Date(
-		Date.now() + ENV.retentionDays * 86400 * 1000,
-	);
+  const retainUntilDate = new Date(
+    Date.now() + ENV.retentionDays * 86400 * 1000,
+  );
 
-	// 2. Slice-key construction — single source of truth for both
-	// PutObject calls and the anchor's `proof_keys` array (Decision #5,
-	// closes referential-integrity gap).
-	const sliceKeyFor = (slice: TenantSlice): string =>
-		`proofs/tenant-${slice.tenant_id}/cadence-${cadenceId}.json`;
-	const proofKeys = tenantSlices.map(sliceKeyFor);
+  // 2. Slice-key construction — single source of truth for both
+  // PutObject calls and the anchor's `proof_keys` array (Decision #5,
+  // closes referential-integrity gap).
+  const sliceKeyFor = (slice: TenantSlice): string =>
+    `proofs/tenant-${slice.tenant_id}/cadence-${cadenceId}.json`;
+  const proofKeys = tenantSlices.map(sliceKeyFor);
 
-	const s3 = getS3Client();
+  const s3 = getS3Client();
 
-	// 3. Slices first (Decision #3) — bounded concurrency via p-limit.
-	// Any rejection bubbles up to runAnchorPass, which rolls back the
-	// drainer transaction; the next cadence (with deterministic cadence_id)
-	// retries the same keys.
-	const limit = pLimit(8);
-	const slicePromises = tenantSlices.map((slice, idx) =>
-		limit(async () => {
-			const sliceBody = JSON.stringify({
-				schema_version: 1,
-				tenant_id: slice.tenant_id,
-				latest_event_hash: slice.latest_event_hash,
-				latest_recorded_at: slice.latest_recorded_at,
-				latest_event_id: slice.latest_event_id,
-				leaf_hash: slice.leaf_hash,
-				proof_path: slice.proof_path,
-				global_root: merkleRoot,
-				cadence_id: cadenceId,
-			});
-			await s3.send(
-				new PutObjectCommand({
-					Bucket: ENV.anchorBucketName,
-					Key: proofKeys[idx],
-					Body: sliceBody,
-					ContentType: "application/json",
-					ServerSideEncryption: "aws:kms",
-					SSEKMSKeyId: ENV.kmsKeyArn,
-					ChecksumAlgorithm: "SHA256",
-					// No per-object Object Lock override — bucket-default applies (R2).
-				}),
-			);
-		}),
-	);
-	await Promise.all(slicePromises);
+  // 3. Slices first (Decision #3) — bounded concurrency via p-limit.
+  // Any rejection bubbles up to runAnchorPass, which rolls back the
+  // drainer transaction; the next cadence (with deterministic cadence_id)
+  // retries the same keys.
+  const limit = pLimit(8);
+  const slicePromises = tenantSlices.map((slice, idx) =>
+    limit(async () => {
+      const sliceBody = JSON.stringify({
+        schema_version: 1,
+        tenant_id: slice.tenant_id,
+        latest_event_hash: slice.latest_event_hash,
+        latest_recorded_at: slice.latest_recorded_at,
+        latest_event_id: slice.latest_event_id,
+        leaf_hash: slice.leaf_hash,
+        proof_path: slice.proof_path,
+        global_root: merkleRoot,
+        cadence_id: cadenceId,
+      });
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: ENV.anchorBucketName,
+          Key: proofKeys[idx],
+          Body: sliceBody,
+          ContentType: "application/json",
+          ServerSideEncryption: "aws:kms",
+          SSEKMSKeyId: ENV.kmsKeyArn,
+          ChecksumAlgorithm: "SHA256",
+          // No per-object Object Lock override — bucket-default applies (R2).
+        }),
+      );
+    }),
+  );
+  await Promise.all(slicePromises);
 
-	// 4. Anchor LAST. The anchor object is the verifier-discoverable
-	// commit point; if any slice failed, we never reach this line.
-	const anchorKey = `anchors/cadence-${cadenceId}.json`;
-	const recordedAtRange = computeRecordedAtRange(tenantSlices);
-	const anchorBody = JSON.stringify({
-		schema_version: 1,
-		cadence_id: cadenceId,
-		recorded_at: new Date().toISOString(),
-		merkle_root: merkleRoot,
-		tenant_count: tenantSlices.length,
-		anchored_event_count: tenantSlices.length, // 1 chain-head event per tenant per cadence
-		recorded_at_range: recordedAtRange,
-		leaf_algorithm: "sha256_rfc6962",
-		proof_keys: proofKeys,
-	});
-	try {
-		await s3.send(
-			new PutObjectCommand({
-				Bucket: ENV.anchorBucketName,
-				Key: anchorKey,
-				Body: anchorBody,
-				ContentType: "application/json",
-				ServerSideEncryption: "aws:kms",
-				SSEKMSKeyId: ENV.kmsKeyArn,
-				ChecksumAlgorithm: "SHA256",
-				ObjectLockMode: ENV.mode,
-				ObjectLockRetainUntilDate: retainUntilDate,
-			}),
-		);
-	} catch (err) {
-		// On S3 failure, invalidate the cached client so the next
-		// invocation rebuilds. Mirrors the _readerDb / _drainerDb pattern.
-		_s3 = undefined;
-		throw err;
-	}
+  // 4. Anchor LAST. The anchor object is the verifier-discoverable
+  // commit point; if any slice failed, we never reach this line.
+  const anchorKey = `anchors/cadence-${cadenceId}.json`;
+  const recordedAtRange = computeRecordedAtRange(tenantSlices);
+  const anchorBody = JSON.stringify({
+    schema_version: 1,
+    cadence_id: cadenceId,
+    recorded_at: new Date().toISOString(),
+    merkle_root: merkleRoot,
+    tenant_count: tenantSlices.length,
+    anchored_event_count: tenantSlices.length, // 1 chain-head event per tenant per cadence
+    recorded_at_range: recordedAtRange,
+    leaf_algorithm: "sha256_rfc6962",
+    proof_keys: proofKeys,
+  });
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: ENV.anchorBucketName,
+        Key: anchorKey,
+        Body: anchorBody,
+        ContentType: "application/json",
+        ServerSideEncryption: "aws:kms",
+        SSEKMSKeyId: ENV.kmsKeyArn,
+        ChecksumAlgorithm: "SHA256",
+        ObjectLockMode: ENV.mode,
+        ObjectLockRetainUntilDate: retainUntilDate,
+      }),
+    );
+  } catch (err) {
+    // On S3 failure, invalidate the cached client so the next
+    // invocation rebuilds. Mirrors the _readerDb / _drainerDb pattern.
+    _s3 = undefined;
+    throw err;
+  }
 
-	return {
-		anchored: true,
-		s3_key: anchorKey,
-		retain_until_date: retainUntilDate.toISOString(),
-	};
+  return {
+    anchored: true,
+    s3_key: anchorKey,
+    retain_until_date: retainUntilDate.toISOString(),
+  };
 };
 
 function computeRecordedAtRange(
-	tenantSlices: TenantSlice[],
+  tenantSlices: TenantSlice[],
 ): { min: string; max: string } | null {
-	if (tenantSlices.length === 0) return null;
-	let minIso = tenantSlices[0].latest_recorded_at;
-	let maxIso = tenantSlices[0].latest_recorded_at;
-	for (const slice of tenantSlices) {
-		if (slice.latest_recorded_at < minIso) minIso = slice.latest_recorded_at;
-		if (slice.latest_recorded_at > maxIso) maxIso = slice.latest_recorded_at;
-	}
-	return { min: minIso, max: maxIso };
+  if (tenantSlices.length === 0) return null;
+  let minIso = tenantSlices[0].latest_recorded_at;
+  let maxIso = tenantSlices[0].latest_recorded_at;
+  for (const slice of tenantSlices) {
+    if (slice.latest_recorded_at < minIso) minIso = slice.latest_recorded_at;
+    if (slice.latest_recorded_at > maxIso) maxIso = slice.latest_recorded_at;
+  }
+  return { min: minIso, max: maxIso };
 }
 
 /**
@@ -503,7 +512,7 @@ function computeRecordedAtRange(
  * test that asserts `S3Client.send` is called with `PutObjectCommand`.
  */
 export function getWiredAnchorFn(): AnchorFn {
-	return _anchor_fn_live;
+  return _anchor_fn_live;
 }
 
 // ---------------------------------------------------------------------------
@@ -513,36 +522,36 @@ export function getWiredAnchorFn(): AnchorFn {
 // ---------------------------------------------------------------------------
 
 interface ChainHead {
-	tenant_id: string;
-	event_id: string;
-	event_hash: string;
-	recorded_at: Date;
+  tenant_id: string;
+  event_id: string;
+  event_hash: string;
+  recorded_at: Date;
 }
 
 function coerceDbTimestamp(value: Date | string): Date {
-	if (value instanceof Date) return value;
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) {
-		throw new Error(
-			`compliance-anchor: invalid recorded_at timestamp: ${String(value)}`,
-		);
-	}
-	return date;
+  if (value instanceof Date) return value;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(
+      `compliance-anchor: invalid recorded_at timestamp: ${String(value)}`,
+    );
+  }
+  return date;
 }
 
 export async function readChainHeads(readerDb: Database): Promise<ChainHead[]> {
-	// SQL: per tenant, pick the row with maximum (recorded_at, event_id)
-	// where recorded_at > tenant_anchor_state.last_anchored_recorded_at.
-	// Tie-break on event_id to handle equal-microsecond timestamps.
-	//
-	// Using DISTINCT ON (PostgreSQL-specific) is the cleanest Drizzle
-	// raw-SQL expression here; the column set is small and stable.
-	const result = await readerDb.execute<{
-		tenant_id: string;
-		event_id: string;
-		event_hash: string;
-		recorded_at: Date | string;
-	}>(sql`
+  // SQL: per tenant, pick the row with maximum (recorded_at, event_id)
+  // where recorded_at > tenant_anchor_state.last_anchored_recorded_at.
+  // Tie-break on event_id to handle equal-microsecond timestamps.
+  //
+  // Using DISTINCT ON (PostgreSQL-specific) is the cleanest Drizzle
+  // raw-SQL expression here; the column set is small and stable.
+  const result = await readerDb.execute<{
+    tenant_id: string;
+    event_id: string;
+    event_hash: string;
+    recorded_at: Date | string;
+  }>(sql`
 		SELECT DISTINCT ON (ae.tenant_id)
 			ae.tenant_id::text AS tenant_id,
 			ae.event_id::text AS event_id,
@@ -554,16 +563,18 @@ export async function readChainHeads(readerDb: Database): Promise<ChainHead[]> {
 		WHERE ae.recorded_at > COALESCE(tas.last_anchored_recorded_at, '-infinity'::timestamptz)
 		ORDER BY ae.tenant_id, ae.recorded_at DESC, ae.event_id DESC
 	`);
-	// drizzle execute returns { rows: [...] } in node-postgres mode
-	const rows =
-		(result as unknown as {
-			rows?: Array<ChainHead & { recorded_at: Date | string }>;
-		}).rows ??
-		(result as unknown as Array<ChainHead & { recorded_at: Date | string }>);
-	return rows.map((row) => ({
-		...row,
-		recorded_at: coerceDbTimestamp(row.recorded_at),
-	}));
+  // drizzle execute returns { rows: [...] } in node-postgres mode
+  const rows =
+    (
+      result as unknown as {
+        rows?: Array<ChainHead & { recorded_at: Date | string }>;
+      }
+    ).rows ??
+    (result as unknown as Array<ChainHead & { recorded_at: Date | string }>);
+  return rows.map((row) => ({
+    ...row,
+    recorded_at: coerceDbTimestamp(row.recorded_at),
+  }));
 }
 
 /**
@@ -571,18 +582,20 @@ export async function readChainHeads(readerDb: Database): Promise<ChainHead[]> {
  * payload (`anchored_event_count`) so deploy smoke can pin growth across
  * cadences.
  */
-export async function countUnanchoredEvents(readerDb: Database): Promise<number> {
-	const result = await readerDb.execute<{ cnt: string }>(sql`
+export async function countUnanchoredEvents(
+  readerDb: Database,
+): Promise<number> {
+  const result = await readerDb.execute<{ cnt: string }>(sql`
 		SELECT COUNT(*)::text AS cnt
 		FROM compliance.audit_events ae
 		LEFT JOIN compliance.tenant_anchor_state tas
 			ON ae.tenant_id = tas.tenant_id
 		WHERE ae.recorded_at > COALESCE(tas.last_anchored_recorded_at, '-infinity'::timestamptz)
 	`);
-	const rows =
-		(result as unknown as { rows?: Array<{ cnt: string }> }).rows ??
-		(result as unknown as Array<{ cnt: string }>);
-	return rows.length > 0 ? parseInt(rows[0].cnt, 10) : 0;
+  const rows =
+    (result as unknown as { rows?: Array<{ cnt: string }> }).rows ??
+    (result as unknown as Array<{ cnt: string }>);
+  return rows.length > 0 ? parseInt(rows[0].cnt, 10) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -590,94 +603,96 @@ export async function countUnanchoredEvents(readerDb: Database): Promise<number>
 // ---------------------------------------------------------------------------
 
 export interface AnchorPassDeps {
-	readerDb: Database;
-	drainerDb: Database;
-	anchorFn?: AnchorFn;
-	cadenceId?: string;
-	// `cw` was dropped in U8a — the inert anchor doesn't emit metrics
-	// (only the watchdog does, via its own client). U8b will re-thread a
-	// CloudWatchClient if/when the live anchor emits its own metrics; for
-	// now the unused parameter was dead code that confused reviewers.
+  readerDb: Database;
+  drainerDb: Database;
+  anchorFn?: AnchorFn;
+  cadenceId?: string;
+  // `cw` was dropped in U8a — the inert anchor doesn't emit metrics
+  // (only the watchdog does, via its own client). U8b will re-thread a
+  // CloudWatchClient if/when the live anchor emits its own metrics; for
+  // now the unused parameter was dead code that confused reviewers.
 }
 
 export async function runAnchorPass(
-	deps: AnchorPassDeps,
+  deps: AnchorPassDeps,
 ): Promise<AnchorResult> {
-	const anchorFn = deps.anchorFn ?? getWiredAnchorFn();
+  const anchorFn = deps.anchorFn ?? getWiredAnchorFn();
 
-	// 1. Reader-side SELECT — runs to completion BEFORE drainer transaction
-	// starts. Two PG sessions, two transactions; the snapshot is what the
-	// Merkle tree was computed against.
-	const heads = await readChainHeads(deps.readerDb);
-	const anchoredEventCount = await countUnanchoredEvents(deps.readerDb);
+  // 1. Reader-side SELECT — runs to completion BEFORE drainer transaction
+  // starts. Two PG sessions, two transactions; the snapshot is what the
+  // Merkle tree was computed against.
+  const heads = await readChainHeads(deps.readerDb);
+  const anchoredEventCount = await countUnanchoredEvents(deps.readerDb);
 
-	// Sort tenants deterministically — by tenant_id ascending — so the
-	// Merkle tree shape is deterministic given the same input set.
-	heads.sort((a, b) => (a.tenant_id < b.tenant_id ? -1 : a.tenant_id > b.tenant_id ? 1 : 0));
+  // Sort tenants deterministically — by tenant_id ascending — so the
+  // Merkle tree shape is deterministic given the same input set.
+  heads.sort((a, b) =>
+    a.tenant_id < b.tenant_id ? -1 : a.tenant_id > b.tenant_id ? 1 : 0,
+  );
 
-	// Derive cadence_id deterministically from chain heads (Decision #5a).
-	// Same heads → same cadence_id → retries idempotent on slice keys.
-	const cadenceId = deps.cadenceId ?? deriveCadenceId(heads);
+  // Derive cadence_id deterministically from chain heads (Decision #5a).
+  // Same heads → same cadence_id → retries idempotent on slice keys.
+  const cadenceId = deps.cadenceId ?? deriveCadenceId(heads);
 
-	// 2. Compute Merkle leaves + tree.
-	const leaves = heads.map((h) => computeLeafHash(h.tenant_id, h.event_hash));
-	const { root: merkleRoot, levels } = buildMerkleTree(leaves);
+  // 2. Compute Merkle leaves + tree.
+  const leaves = heads.map((h) => computeLeafHash(h.tenant_id, h.event_hash));
+  const { root: merkleRoot, levels } = buildMerkleTree(leaves);
 
-	// 3. Build per-tenant slices with proof paths.
-	const tenantSlices: TenantSlice[] = heads.map((h, i) => ({
-		tenant_id: h.tenant_id,
-		latest_event_hash: h.event_hash,
-		latest_recorded_at: h.recorded_at.toISOString(),
-		latest_event_id: h.event_id,
-		leaf_hash: leaves[i],
-		proof_path: deriveProofPath(levels, i),
-	}));
+  // 3. Build per-tenant slices with proof paths.
+  const tenantSlices: TenantSlice[] = heads.map((h, i) => ({
+    tenant_id: h.tenant_id,
+    latest_event_hash: h.event_hash,
+    latest_recorded_at: h.recorded_at.toISOString(),
+    latest_event_id: h.event_id,
+    leaf_hash: leaves[i],
+    proof_path: deriveProofPath(levels, i),
+  }));
 
-	// 4. Call the seam function (now async — `_anchor_fn_live` does S3 PutObject).
-	// Throws on Merkle self-check failure or S3 error; the drainer transaction
-	// below is rolled back (the tenant_anchor_state UPDATE never starts).
-	const seamResult = await anchorFn(merkleRoot, tenantSlices, cadenceId);
+  // 4. Call the seam function (now async — `_anchor_fn_live` does S3 PutObject).
+  // Throws on Merkle self-check failure or S3 error; the drainer transaction
+  // below is rolled back (the tenant_anchor_state UPDATE never starts).
+  const seamResult = await anchorFn(merkleRoot, tenantSlices, cadenceId);
 
-	// 5. Drainer-side UPDATE — single transaction over all tenants.
-	// Skipped for empty heads (nothing to advance).
-	if (heads.length > 0) {
-		await deps.drainerDb.transaction(async (tx) => {
-			for (const head of heads) {
-				await tx
-					.insert(tenantAnchorState)
-					.values({
-						tenant_id: head.tenant_id,
-						last_anchored_recorded_at: head.recorded_at,
-						last_anchored_event_id: head.event_id,
-						last_cadence_id: cadenceId,
-					})
-					.onConflictDoUpdate({
-						target: tenantAnchorState.tenant_id,
-						set: {
-							last_anchored_recorded_at: head.recorded_at,
-							last_anchored_event_id: head.event_id,
-							last_cadence_id: cadenceId,
-							updated_at: sql`now()`,
-						},
-					});
-			}
-		});
-	}
+  // 5. Drainer-side UPDATE — single transaction over all tenants.
+  // Skipped for empty heads (nothing to advance).
+  if (heads.length > 0) {
+    await deps.drainerDb.transaction(async (tx) => {
+      for (const head of heads) {
+        await tx
+          .insert(tenantAnchorState)
+          .values({
+            tenant_id: head.tenant_id,
+            last_anchored_recorded_at: head.recorded_at,
+            last_anchored_event_id: head.event_id,
+            last_cadence_id: cadenceId,
+          })
+          .onConflictDoUpdate({
+            target: tenantAnchorState.tenant_id,
+            set: {
+              last_anchored_recorded_at: head.recorded_at,
+              last_anchored_event_id: head.event_id,
+              last_cadence_id: cadenceId,
+              updated_at: sql`now()`,
+            },
+          });
+      }
+    });
+  }
 
-	const result: AnchorResult = {
-		dispatched: true,
-		anchored: seamResult.anchored,
-		merkle_root: merkleRoot,
-		tenant_count: heads.length,
-		anchored_event_count: anchoredEventCount,
-		cadence_id: cadenceId,
-		...(seamResult.s3_key !== undefined && { s3_key: seamResult.s3_key }),
-		...(seamResult.retain_until_date !== undefined && {
-			retain_until_date: seamResult.retain_until_date,
-		}),
-	};
+  const result: AnchorResult = {
+    dispatched: true,
+    anchored: seamResult.anchored,
+    merkle_root: merkleRoot,
+    tenant_count: heads.length,
+    anchored_event_count: anchoredEventCount,
+    cadence_id: cadenceId,
+    ...(seamResult.s3_key !== undefined && { s3_key: seamResult.s3_key }),
+    ...(seamResult.retain_until_date !== undefined && {
+      retain_until_date: seamResult.retain_until_date,
+    }),
+  };
 
-	return result;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -685,38 +700,38 @@ export async function runAnchorPass(
 // ---------------------------------------------------------------------------
 
 export async function handler(): Promise<AnchorResult> {
-	const readerDb = await getReaderDb();
-	const drainerDb = await getDrainerDb();
+  const readerDb = await getReaderDb();
+  const drainerDb = await getDrainerDb();
 
-	let result: AnchorResult;
-	try {
-		result = await runAnchorPass({ readerDb, drainerDb });
-	} catch (err) {
-		// On any error, log structured + rethrow. Scheduler retry-policy=0
-		// ensures no replay; the next 15-min cadence picks up the same
-		// chain heads (idempotent because tenant_anchor_state didn't
-		// advance).
-		console.error({
-			level: "error",
-			msg: "compliance-anchor: cadence failed",
-			error: err instanceof Error ? err.message : String(err),
-			stack: err instanceof Error ? err.stack : undefined,
-		});
-		// Invalidate cached PG clients on error — defends against
-		// connection-level state corruption.
-		_readerDb = undefined;
-		_drainerDb = undefined;
-		throw err;
-	}
+  let result: AnchorResult;
+  try {
+    result = await runAnchorPass({ readerDb, drainerDb });
+  } catch (err) {
+    // On any error, log structured + rethrow. Scheduler retry-policy=0
+    // ensures no replay; the next 15-min cadence picks up the same
+    // chain heads (idempotent because tenant_anchor_state didn't
+    // advance).
+    console.error({
+      level: "error",
+      msg: "compliance-anchor: cadence failed",
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    // Invalidate cached PG clients on error — defends against
+    // connection-level state corruption.
+    _readerDb = undefined;
+    _drainerDb = undefined;
+    throw err;
+  }
 
-	// Smoke-pin surface — `dispatched: true` in the structured log line
-	// is what the deploy smoke gate asserts via Lambda invoke response
-	// payload.
-	console.log({
-		level: "info",
-		msg: "compliance-anchor: cadence complete",
-		...result,
-	});
+  // Smoke-pin surface — `dispatched: true` in the structured log line
+  // is what the deploy smoke gate asserts via Lambda invoke response
+  // payload.
+  console.log({
+    level: "info",
+    msg: "compliance-anchor: cadence complete",
+    ...result,
+  });
 
-	return result;
+  return result;
 }

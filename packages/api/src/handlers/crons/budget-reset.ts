@@ -12,23 +12,23 @@ import { agents } from "@thinkwork/database-pg/schema";
 const db = getDb();
 
 export async function handler(): Promise<{ reset: boolean; count: number }> {
-	const now = new Date();
+  const now = new Date();
 
-	// Only reset on the 1st of the month
-	if (now.getUTCDate() !== 1) {
-		return { reset: false, count: 0 };
-	}
+  // Only reset on the 1st of the month
+  if (now.getUTCDate() !== 1) {
+    return { reset: false, count: 0 };
+  }
 
-	const result = await db
-		.update(agents)
-		.set({
-			budget_paused: false,
-			budget_paused_at: null,
-			budget_paused_reason: null,
-		})
-		.where(eq(agents.budget_paused, true))
-		.returning({ id: agents.id });
+  const result = await db
+    .update(agents)
+    .set({
+      budget_paused: false,
+      budget_paused_at: null,
+      budget_paused_reason: null,
+    })
+    .where(eq(agents.budget_paused, true))
+    .returning({ id: agents.id });
 
-	console.log(`[budget-reset] Unpaused ${result.length} agents`);
-	return { reset: true, count: result.length };
+  console.log(`[budget-reset] Unpaused ${result.length} agents`);
+  return { reset: true, count: result.length };
 }

@@ -21,22 +21,22 @@
  */
 
 import {
-	GetObjectCommand,
-	ListObjectsV2Command,
-	type ListObjectsV2CommandOutput,
-	type S3Client,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  type ListObjectsV2CommandOutput,
+  type S3Client,
 } from "@aws-sdk/client-s3";
 
 export interface AnchorKey {
-	key: string;
-	lastModified: Date;
+  key: string;
+  lastModified: Date;
 }
 
 export interface EnumerateOptions {
-	bucket: string;
-	since?: Date;
-	until?: Date;
-	prefix?: string; // override "anchors/" only in tests
+  bucket: string;
+  since?: Date;
+  until?: Date;
+  prefix?: string; // override "anchors/" only in tests
 }
 
 /**
@@ -48,30 +48,30 @@ export interface EnumerateOptions {
  * (S3 SDK quirk). We coerce to `[]` so the for-loop short-circuits.
  */
 export async function* enumerateAnchors(
-	s3: S3Client,
-	opts: EnumerateOptions,
+  s3: S3Client,
+  opts: EnumerateOptions,
 ): AsyncIterable<AnchorKey> {
-	const prefix = opts.prefix ?? "anchors/";
-	let continuationToken: string | undefined = undefined;
-	do {
-		const out: ListObjectsV2CommandOutput = await s3.send(
-			new ListObjectsV2Command({
-				Bucket: opts.bucket,
-				Prefix: prefix,
-				ContinuationToken: continuationToken,
-			}),
-		);
-		const contents = out.Contents ?? [];
-		for (const item of contents) {
-			if (typeof item.Key !== "string") continue;
-			if (!(item.LastModified instanceof Date)) continue;
-			if (opts.since && item.LastModified < opts.since) continue;
-			if (opts.until && item.LastModified >= opts.until) continue;
-			yield { key: item.Key, lastModified: item.LastModified };
-		}
-		continuationToken =
-			out.IsTruncated === true ? out.NextContinuationToken : undefined;
-	} while (continuationToken);
+  const prefix = opts.prefix ?? "anchors/";
+  let continuationToken: string | undefined = undefined;
+  do {
+    const out: ListObjectsV2CommandOutput = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: opts.bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const contents = out.Contents ?? [];
+    for (const item of contents) {
+      if (typeof item.Key !== "string") continue;
+      if (!(item.LastModified instanceof Date)) continue;
+      if (opts.since && item.LastModified < opts.since) continue;
+      if (opts.until && item.LastModified >= opts.until) continue;
+      yield { key: item.Key, lastModified: item.LastModified };
+    }
+    continuationToken =
+      out.IsTruncated === true ? out.NextContinuationToken : undefined;
+  } while (continuationToken);
 }
 
 /**
@@ -83,31 +83,29 @@ export async function* enumerateAnchors(
  * key so the orchestrator can surface it in `parse_failures[]`.
  */
 export async function getJsonBody(
-	s3: S3Client,
-	bucket: string,
-	key: string,
+  s3: S3Client,
+  bucket: string,
+  key: string,
 ): Promise<unknown> {
-	const out = await s3.send(
-		new GetObjectCommand({ Bucket: bucket, Key: key }),
-	);
-	if (!out.Body) {
-		throw new Error(
-			`audit-verifier/s3: GetObject returned empty body for key ${key}`,
-		);
-	}
-	// transformToString is the AWS SDK v3 helper for decoding the
-	// streaming body. It handles the under-the-hood Readable / Web
-	// Streams difference between Node 18 and Node 20+.
-	const text = await out.Body.transformToString("utf-8");
-	try {
-		return JSON.parse(text);
-	} catch (err) {
-		throw new Error(
-			`audit-verifier/s3: object body is not JSON for key ${key}: ${
-				err instanceof Error ? err.message : String(err)
-			}`,
-		);
-	}
+  const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if (!out.Body) {
+    throw new Error(
+      `audit-verifier/s3: GetObject returned empty body for key ${key}`,
+    );
+  }
+  // transformToString is the AWS SDK v3 helper for decoding the
+  // streaming body. It handles the under-the-hood Readable / Web
+  // Streams difference between Node 18 and Node 20+.
+  const text = await out.Body.transformToString("utf-8");
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(
+      `audit-verifier/s3: object body is not JSON for key ${key}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
 }
 
 /**
@@ -116,14 +114,14 @@ export async function getJsonBody(
  * and exits 2 (unrecoverable) rather than 1 (mismatch found).
  */
 export function isUnrecoverableS3Error(err: unknown): boolean {
-	if (typeof err !== "object" || err === null) return false;
-	const name = (err as { name?: unknown }).name;
-	if (typeof name !== "string") return false;
-	return (
-		name === "NoSuchBucket" ||
-		name === "AccessDenied" ||
-		name === "InvalidAccessKeyId" ||
-		name === "SignatureDoesNotMatch" ||
-		name === "ExpiredToken"
-	);
+  if (typeof err !== "object" || err === null) return false;
+  const name = (err as { name?: unknown }).name;
+  if (typeof name !== "string") return false;
+  return (
+    name === "NoSuchBucket" ||
+    name === "AccessDenied" ||
+    name === "InvalidAccessKeyId" ||
+    name === "SignatureDoesNotMatch" ||
+    name === "ExpiredToken"
+  );
 }

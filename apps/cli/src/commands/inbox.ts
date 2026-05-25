@@ -19,7 +19,9 @@ import { runInboxComment } from "./inbox/comment.js";
 export function registerInboxCommand(program: Command): void {
   const inbox = program
     .command("inbox")
-    .description("View and act on approval requests routed to you or your workspace.");
+    .description(
+      "View and act on approval requests routed to you or your workspace.",
+    );
 
   inbox
     .command("list")
@@ -32,7 +34,10 @@ export function registerInboxCommand(program: Command): void {
       "PENDING | APPROVED | REJECTED | REVISION_REQUESTED | EXPIRED | CANCELLED (default: PENDING)",
       "PENDING",
     )
-    .option("--entity-type <type>", "Filter by entity type (thread, agent, artifact, …)")
+    .option(
+      "--entity-type <type>",
+      "Filter by entity type (thread, agent, artifact, …)",
+    )
     .option("--entity-id <id>", "Filter by entity ID")
     .option("--mine", "Only items routed to the caller")
     .addHelpText(
@@ -84,8 +89,13 @@ Examples:
 
   inbox
     .command("request-revision <id>")
-    .description("Ask for changes — the agent gets the item back with your notes.")
-    .option("--notes <text>", "What needs to change (required; prompted in TTY)")
+    .description(
+      "Ask for changes — the agent gets the item back with your notes.",
+    )
+    .option(
+      "--notes <text>",
+      "What needs to change (required; prompted in TTY)",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runInboxRequestRevision);
@@ -95,7 +105,10 @@ Examples:
     .description("Resubmit a revised inbox item for approval.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--notes <text>", "What changed (sent as description on the resubmit input)")
+    .option(
+      "--notes <text>",
+      "What changed (sent as description on the resubmit input)",
+    )
     .action(runInboxResubmit);
 
   inbox

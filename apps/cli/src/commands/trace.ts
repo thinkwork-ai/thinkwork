@@ -6,7 +6,10 @@ import { Command } from "commander";
 import { graphql } from "../gql/index.js";
 import { gqlQuery } from "../lib/gql-client.js";
 import { isJsonMode, printJson, printTable } from "../lib/output.js";
-import { resolveTenantContext, type TenantCliOptions } from "../lib/resolve-tenant-id.js";
+import {
+  resolveTenantContext,
+  type TenantCliOptions,
+} from "../lib/resolve-tenant-id.js";
 
 const ThreadTracesDoc = graphql(`
   query CliThreadTraces($threadId: ID!, $tenantId: ID!) {
@@ -40,7 +43,10 @@ const TurnInvocationLogsDoc = graphql(`
   }
 `);
 
-async function runTraceThread(threadId: string, opts: TenantCliOptions): Promise<void> {
+async function runTraceThread(
+  threadId: string,
+  opts: TenantCliOptions,
+): Promise<void> {
   const ctx = await resolveTenantContext(opts);
   const data = await gqlQuery(ctx.client, ThreadTracesDoc, {
     threadId,
@@ -73,7 +79,10 @@ async function runTraceThread(threadId: string, opts: TenantCliOptions): Promise
   );
 }
 
-async function runTraceTurn(turnId: string, opts: TenantCliOptions): Promise<void> {
+async function runTraceTurn(
+  turnId: string,
+  opts: TenantCliOptions,
+): Promise<void> {
   const ctx = await resolveTenantContext(opts);
   const data = await gqlQuery(ctx.client, TurnInvocationLogsDoc, {
     tenantId: ctx.tenantId,
@@ -115,7 +124,9 @@ export function registerTraceCommand(program: Command): void {
 
   trace
     .command("thread <threadId>")
-    .description("Trace events for a thread (every LLM call across every turn).")
+    .description(
+      "Trace events for a thread (every LLM call across every turn).",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runTraceThread);

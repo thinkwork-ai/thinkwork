@@ -1,11 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import {
-  db,
-  eq,
-  and,
-  threads,
-  threadToCamel,
-} from "../../utils.js";
+import { db, eq, and, threads, threadToCamel } from "../../utils.js";
 import {
   resolveCallerTenantId,
   resolveCallerUserId,

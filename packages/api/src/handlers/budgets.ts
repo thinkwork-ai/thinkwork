@@ -1,6 +1,6 @@
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { eq, and, sql } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
@@ -15,44 +15,51 @@ const { agents, budgetPolicies, tenantSettings } = schema;
 // ---------------------------------------------------------------------------
 
 export async function handler(
-	event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
+  if (event.requestContext.http.method === "OPTIONS")
+    return {
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+      },
+      body: "",
+    };
 
-	const tenantHeader = event.headers["x-tenant-id"];
-	if (!tenantHeader) return error("Missing x-tenant-id header");
+  const tenantHeader = event.headers["x-tenant-id"];
+  if (!tenantHeader) return error("Missing x-tenant-id header");
 
-	const method = event.requestContext.http.method;
-	const path = event.rawPath;
+  const method = event.requestContext.http.method;
+  const path = event.rawPath;
 
-	// Budgets expose financial data — GET is restricted to owner/admin
-	// per the per-handler role table. Mutations (none today) would be
-	// the same.
-	const verdict = await requireTenantMembership(event, tenantHeader, {
-		requiredRoles: ["owner", "admin"],
-	});
-	if (!verdict.ok) return error(verdict.reason, verdict.status);
-	const tenantId = verdict.tenantId;
+  // Budgets expose financial data — GET is restricted to owner/admin
+  // per the per-handler role table. Mutations (none today) would be
+  // the same.
+  const verdict = await requireTenantMembership(event, tenantHeader, {
+    requiredRoles: ["owner", "admin"],
+  });
+  if (!verdict.ok) return error(verdict.reason, verdict.status);
+  const tenantId = verdict.tenantId;
 
-	try {
-		// GET /api/budgets/tenant
-		if (path === "/api/budgets/tenant" && method === "GET") {
-			return getTenantBudget(tenantId);
-		}
+  try {
+    // GET /api/budgets/tenant
+    if (path === "/api/budgets/tenant" && method === "GET") {
+      return getTenantBudget(tenantId);
+    }
 
-		// GET /api/budgets/agents/:id
-		const agentMatch = path.match(
-			/^\/api\/budgets\/agents\/([^/]+)$/,
-		);
-		if (agentMatch && method === "GET") {
-			return getAgentBudget(tenantId, agentMatch[1]);
-		}
+    // GET /api/budgets/agents/:id
+    const agentMatch = path.match(/^\/api\/budgets\/agents\/([^/]+)$/);
+    if (agentMatch && method === "GET") {
+      return getAgentBudget(tenantId, agentMatch[1]);
+    }
 
-		return error("Route not found", 404);
-	} catch (err) {
-		console.error("Budgets handler error:", err);
-		return error("Internal server error", 500);
-	}
+    return error("Route not found", 404);
+  } catch (err) {
+    console.error("Budgets handler error:", err);
+    return error("Internal server error", 500);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -60,44 +67,39 @@ export async function handler(
 // ---------------------------------------------------------------------------
 
 async function getAgentBudget(
-	tenantId: string,
-	agentId: string,
+  tenantId: string,
+  agentId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const [agent] = await db
-		.select({
-			id: agents.id,
-			name: agents.name,
-			budget_monthly_cents: agents.budget_monthly_cents,
-			spent_monthly_cents: agents.spent_monthly_cents,
-		})
-		.from(agents)
-		.where(
-			and(
-				eq(agents.id, agentId),
-				eq(agents.tenant_id, tenantId),
-			),
-		);
+  const [agent] = await db
+    .select({
+      id: agents.id,
+      name: agents.name,
+      budget_monthly_cents: agents.budget_monthly_cents,
+      spent_monthly_cents: agents.spent_monthly_cents,
+    })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)));
 
-	if (!agent) return notFound("Agent not found");
+  if (!agent) return notFound("Agent not found");
 
-	const policies = await db
-		.select()
-		.from(budgetPolicies)
-		.where(
-			and(
-				eq(budgetPolicies.agent_id, agentId),
-				eq(budgetPolicies.tenant_id, tenantId),
-				eq(budgetPolicies.scope, "agent"),
-			),
-		);
+  const policies = await db
+    .select()
+    .from(budgetPolicies)
+    .where(
+      and(
+        eq(budgetPolicies.agent_id, agentId),
+        eq(budgetPolicies.tenant_id, tenantId),
+        eq(budgetPolicies.scope, "agent"),
+      ),
+    );
 
-	return json({
-		agent_id: agent.id,
-		name: agent.name,
-		monthly_cents: agent.budget_monthly_cents,
-		spent: agent.spent_monthly_cents,
-		policies,
-	});
+  return json({
+    agent_id: agent.id,
+    name: agent.name,
+    monthly_cents: agent.budget_monthly_cents,
+    spent: agent.spent_monthly_cents,
+    policies,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -105,27 +107,27 @@ async function getAgentBudget(
 // ---------------------------------------------------------------------------
 
 async function getTenantBudget(
-	tenantId: string,
+  tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const [settings] = await db
-		.select({
-			budget_monthly_cents: tenantSettings.budget_monthly_cents,
-		})
-		.from(tenantSettings)
-		.where(eq(tenantSettings.tenant_id, tenantId));
+  const [settings] = await db
+    .select({
+      budget_monthly_cents: tenantSettings.budget_monthly_cents,
+    })
+    .from(tenantSettings)
+    .where(eq(tenantSettings.tenant_id, tenantId));
 
-	const [spentAgg] = await db
-		.select({
-			total_spent: sql<number>`coalesce(sum(${agents.spent_monthly_cents}), 0)::int`,
-			agent_count: sql<number>`count(*)::int`,
-		})
-		.from(agents)
-		.where(eq(agents.tenant_id, tenantId));
+  const [spentAgg] = await db
+    .select({
+      total_spent: sql<number>`coalesce(sum(${agents.spent_monthly_cents}), 0)::int`,
+      agent_count: sql<number>`count(*)::int`,
+    })
+    .from(agents)
+    .where(eq(agents.tenant_id, tenantId));
 
-	return json({
-		tenant_id: tenantId,
-		budget_monthly_cents: settings?.budget_monthly_cents ?? null,
-		total_spent_cents: spentAgg.total_spent,
-		agent_count: spentAgg.agent_count,
-	});
+  return json({
+    tenant_id: tenantId,
+    budget_monthly_cents: settings?.budget_monthly_cents ?? null,
+    total_spent_cents: spentAgg.total_spent,
+    agent_count: spentAgg.agent_count,
+  });
 }

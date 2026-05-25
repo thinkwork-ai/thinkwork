@@ -11,7 +11,14 @@ import { ChevronRight } from "lucide-react-native";
 import { COLORS } from "@/lib/theme";
 import { Pressable } from "react-native";
 
-function NavRow({ label, badge, onPress, colors, disabled, isLast }: {
+function NavRow({
+  label,
+  badge,
+  onPress,
+  colors,
+  disabled,
+  isLast,
+}: {
   label: string;
   badge?: number;
   onPress: () => void;
@@ -25,11 +32,15 @@ function NavRow({ label, badge, onPress, colors, disabled, isLast }: {
       disabled={disabled}
       className={`flex-row items-center justify-between py-3 active:opacity-70 ${isLast ? "" : "border-b border-neutral-200 dark:border-neutral-800"} ${disabled ? "opacity-40" : ""}`}
     >
-      <Text className="text-base text-neutral-500 dark:text-neutral-400">{label}</Text>
+      <Text className="text-base text-neutral-500 dark:text-neutral-400">
+        {label}
+      </Text>
       <View className="flex-row items-center gap-2">
         {badge !== undefined && badge > 0 && (
           <View className="bg-neutral-200 dark:bg-neutral-700 rounded-full px-2 py-0.5 min-w-[24px] items-center">
-            <Text className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{badge}</Text>
+            <Text className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+              {badge}
+            </Text>
           </View>
         )}
         <ChevronRight size={20} color={colors.mutedForeground} />
@@ -59,25 +70,34 @@ export default function AgentConfigScreen() {
 
   return (
     <DetailLayout title="Agent Settings">
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
         <WebContent bordered>
           <View className="px-4">
             <NavRow
               label="Persona"
-              onPress={() => activeAgent && router.push(`/agents/${activeAgent.id}/profile`)}
+              onPress={() =>
+                activeAgent && router.push(`/agents/${activeAgent.id}/profile`)
+              }
               colors={colors}
               disabled={!activeAgent}
             />
             <NavRow
               label="Model Selection"
-              onPress={() => activeAgent && router.push(`/agents/${activeAgent.id}/model`)}
+              onPress={() =>
+                activeAgent && router.push(`/agents/${activeAgent.id}/model`)
+              }
               colors={colors}
               disabled={!activeAgent}
             />
             <NavRow
               label="Skills"
               badge={skillCount}
-              onPress={() => activeAgent && router.push(`/agents/${activeAgent.id}/skills`)}
+              onPress={() =>
+                activeAgent && router.push(`/agents/${activeAgent.id}/skills`)
+              }
               colors={colors}
               disabled={!activeAgent}
             />

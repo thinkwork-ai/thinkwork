@@ -10,10 +10,7 @@ import {
 import { COLORS } from "@/lib/theme";
 import type { SimConfig } from "./hooks/useForceSimulation";
 import { KnowledgeGraph } from "./KnowledgeGraph";
-import {
-  NodeDetailModal,
-  type NodeDetailModalTarget,
-} from "./NodeDetailModal";
+import { NodeDetailModal, type NodeDetailModalTarget } from "./NodeDetailModal";
 import { loadGraphState } from "./graphStateCache";
 import type {
   GraphFilter,
@@ -245,7 +242,9 @@ export function WikiGraphView({
 
 function toInternalSubgraph(payload: WikiGraphPayload): WikiSubgraph {
   const NOW = new Date().toISOString();
-  const nodes: WikiGraphNode[] = payload.nodes.map((n) => nodeFromPayload(n, NOW));
+  const nodes: WikiGraphNode[] = payload.nodes.map((n) =>
+    nodeFromPayload(n, NOW),
+  );
   const edges: WikiGraphEdge[] = payload.edges.map((e, idx) =>
     edgeFromPayload(e, idx, NOW),
   );
@@ -259,7 +258,10 @@ function toInternalSubgraph(payload: WikiGraphPayload): WikiSubgraph {
   };
 }
 
-function nodeFromPayload(p: WikiGraphNodeFromServer, now: string): WikiGraphNode {
+function nodeFromPayload(
+  p: WikiGraphNodeFromServer,
+  now: string,
+): WikiGraphNode {
   return {
     id: p.id,
     slug: p.slug,

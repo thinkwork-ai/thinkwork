@@ -7,9 +7,9 @@
 export interface UiAction {
   id?: string;
   label?: string;
-  event?: 'click' | 'submit' | 'change';
+  event?: "click" | "submit" | "change";
   action: {
-    type: 'tool.invoke' | 'navigate' | 'local.state.update';
+    type: "tool.invoke" | "navigate" | "local.state.update";
     server?: string;
     tool?: string;
     args?: Record<string, unknown>;
