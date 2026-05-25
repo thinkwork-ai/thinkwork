@@ -34,7 +34,8 @@ Target branch: `main`
 - Verification: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-source-files.test.ts src/lib/spaces/customer-onboarding-seed.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts` passed.
 - PR: [#1704](https://github.com/thinkwork-ai/thinkwork/pull/1704)
 - CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
-- Remaining live validation: after merge/deploy, open the Customer Onboarding Workspace tab and confirm `CONTEXT.md` plus `docs/customer-onboarding-intake.md` render; then run the Native Demo Smoke below.
+- Deploy note: main deploy `26408828637` passed, but the `Bootstrap` job skipped because the workflow only treated `packages/workspace-defaults/files/**` as workspace-default changes. Follow-up branch `codex/customer-onboarding-bootstrap-trigger` adds the Customer Onboarding seed/backfill files to that trigger so the next deploy runs the source-file backfill.
+- Remaining live validation: after the follow-up merge/deploy, open the Customer Onboarding Workspace tab and confirm `CONTEXT.md` plus `docs/customer-onboarding-intake.md` render; then run the Native Demo Smoke below.
 
 ### Active Unit Notes
 

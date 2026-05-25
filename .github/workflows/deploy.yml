@@ -73,6 +73,13 @@ jobs:
               - 'terraform/**'
             workspace_defaults:
               - 'packages/workspace-defaults/files/**'
+              # Customer Onboarding Space source files are seeded by the same
+              # bootstrap handler that refreshes workspace defaults. If this
+              # source changes, bootstrap must run even when canonical defaults
+              # under packages/workspace-defaults/files did not move.
+              - 'packages/api/src/handlers/seed-workspace-defaults.ts'
+              - 'packages/api/src/lib/spaces/customer-onboarding-seed.ts'
+              - 'packages/api/src/lib/spaces/customer-onboarding-source-files.ts'
             admin:
               - 'apps/admin/**'
             spaces:
