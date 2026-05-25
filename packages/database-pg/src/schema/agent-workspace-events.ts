@@ -141,41 +141,8 @@ export const agentWorkspaceEvents = pgTable(
   ],
 );
 
-export const agentWorkspaceWaits = pgTable(
-  "agent_workspace_waits",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    tenant_id: uuid("tenant_id")
-      .references(() => tenants.id)
-      .notNull(),
-    waiting_run_id: uuid("waiting_run_id")
-      .references(() => agentWorkspaceRuns.id)
-      .notNull(),
-    wait_for_run_id: uuid("wait_for_run_id").references(
-      () => agentWorkspaceRuns.id,
-    ),
-    wait_for_target_path: text("wait_for_target_path"),
-    status: text("status").notNull().default("waiting"),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-    satisfied_at: timestamp("satisfied_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("idx_agent_workspace_waits_waiting").on(
-      table.tenant_id,
-      table.waiting_run_id,
-      table.status,
-    ),
-    index("idx_agent_workspace_waits_wait_for").on(
-      table.tenant_id,
-      table.wait_for_run_id,
-      table.status,
-    ),
-  ],
-);
+// agentWorkspaceWaits retired in PR #1690 — table was schema-only with
+// zero application consumers and zero rows in production.
 
 export const agentWorkspaceRunsRelations = relations(
   agentWorkspaceRuns,
@@ -201,7 +168,6 @@ export const agentWorkspaceRunsRelations = relations(
       references: [agentWorkspaceRuns.id],
     }),
     events: many(agentWorkspaceEvents),
-    waits: many(agentWorkspaceWaits),
   }),
 );
 
@@ -223,20 +189,3 @@ export const agentWorkspaceEventsRelations = relations(
   }),
 );
 
-export const agentWorkspaceWaitsRelations = relations(
-  agentWorkspaceWaits,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [agentWorkspaceWaits.tenant_id],
-      references: [tenants.id],
-    }),
-    waitingRun: one(agentWorkspaceRuns, {
-      fields: [agentWorkspaceWaits.waiting_run_id],
-      references: [agentWorkspaceRuns.id],
-    }),
-    waitForRun: one(agentWorkspaceRuns, {
-      fields: [agentWorkspaceWaits.wait_for_run_id],
-      references: [agentWorkspaceRuns.id],
-    }),
-  }),
-);

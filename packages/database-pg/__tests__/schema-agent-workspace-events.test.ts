@@ -3,7 +3,6 @@ import { getTableColumns, getTableName } from "drizzle-orm";
 import {
   agentWorkspaceEvents,
   agentWorkspaceRuns,
-  agentWorkspaceWaits,
   WORKSPACE_EVENT_TYPES,
   WORKSPACE_RUN_STATUSES,
 } from "../src/schema/agent-workspace-events";
@@ -43,12 +42,6 @@ describe("agent workspace orchestration schema", () => {
     ]);
   });
 
-  it("defines single-wait relationships for v1 fan-out", () => {
-    const columns = getTableColumns(agentWorkspaceWaits);
-    expect(getTableName(agentWorkspaceWaits)).toBe("agent_workspace_waits");
-    expect(columns.waiting_run_id.notNull).toBe(true);
-    expect(columns.wait_for_run_id.notNull).toBe(false);
-    expect(columns.wait_for_target_path.notNull).toBe(false);
-    expect(columns.status.notNull).toBe(true);
-  });
+  // agentWorkspaceWaits retired in PR #1690 — table was schema-only
+  // with zero application consumers.
 });
