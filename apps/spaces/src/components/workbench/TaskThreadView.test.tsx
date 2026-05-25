@@ -234,6 +234,28 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
+  it("does not mount the artifact side panel when no selected artifact can be displayed", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Artifact loading gap",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "message-1", role: "USER", content: "Open app" }],
+        }}
+        artifactPanelState={{
+          artifacts: [],
+          selectedArtifactId: "artifact_123",
+          isOpen: true,
+          onOpenChange: vi.fn(),
+          onSelectArtifact: vi.fn(),
+        }}
+      />,
+    );
+
+    expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
+  });
+
   it("reserves thread width for the info panel with details and downloadable attachments", () => {
     const onDownloadAttachment = vi.fn();
 
@@ -309,12 +331,21 @@ describe("TaskThreadView", () => {
     expect(within(panel).getByText("Date started")).toBeTruthy();
     expect(within(panel).getByText("Eric Odom")).toBeTruthy();
     expect(within(panel).getByText("Executive")).toBeTruthy();
-    expect(within(panel).getByText("Onboarding checklist")).toBeTruthy();
+    expect(within(panel).getByText("Progress")).toBeTruthy();
     expect(within(panel).getByText("1/2 required complete")).toBeTruthy();
     expect(within(panel).getByText("Get contract signed")).toBeTruthy();
     expect(
       within(panel).getByText("Enter customer information into P21"),
     ).toBeTruthy();
+    fireEvent.click(
+      within(panel).getByRole("button", {
+        name: /update enter customer information into p21/i,
+      }),
+    );
+    expect(screen.getByLabelText("Follow up")).toHaveProperty(
+      "value",
+      "Enter customer information into P21: ",
+    );
     fireEvent.click(
       within(panel).getByRole("button", { name: /general-ledger/i }),
     );
