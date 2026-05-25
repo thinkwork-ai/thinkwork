@@ -78,13 +78,11 @@ Before getting into the deployment tiers, it helps to frame the runtime in produ
 ```
 External systems and users
     ↓
-Threads
-    ↓
-Computers
+Threads (per Space)
     ↓
 Company Brain
     ↓
-Agents
+Tenant platform agent
     ↓
 Integrations and responses back out
 ```
@@ -112,7 +110,7 @@ See [Company Brain](/concepts/knowledge/).
 
 ### Agents
 
-Agents are the delegated execution layer. They receive a thread or Computer-delegated task plus assembled context, decide what to do, call tools, and produce a response.
+Agents are the execution layer. The tenant platform agent receives a thread plus assembled context, decides what to do, calls tools, and produces a response. Per-Space configuration (CONTEXT.md, skills, MCP) is rendered into the workspace the agent runs against.
 
 In managed mode, this execution happens in AgentCore. Strands is the default runtime; Pi is a parallel runtime substrate that individual agents or templates can opt into. The surrounding harness remains ThinkWork's either way. That distinction is important: managed does not mean vendor-hosted.
 
@@ -184,8 +182,7 @@ The app tier is where computation happens. It depends on both lower tiers.
 | AppSync GraphQL API      | Real-time subscriptions (WebSocket), used for streaming responses                                          |
 | API Gateway v2           | HTTP queries and mutations, integration webhook ingress                                                    |
 | AgentCore runtimes       | Container-based managed runtimes: Strands (default) and Pi (opt-in), both on Bedrock AgentCore             |
-| ECS Fargate + EFS        | ThinkWork Computer runtime substrate: lightweight per-user orchestration tasks with persistent workspaces  |
-| Integration Lambdas      | One per integration (Slack, GitHub, Google) — handles inbound events                                       |
+| Integration Lambdas      | One per integration (GitHub, Google) — handles inbound events                                              |
 | Step Functions           | Automation runner, routine executor                                                                        |
 | EventBridge              | Triggers for scheduled automations                                                                         |
 | Bedrock AgentCore Memory | Always on — automatic per-turn retention into four strategies (semantic, preferences, summaries, episodes) |

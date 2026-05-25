@@ -1,9 +1,15 @@
 ---
 title: Slack Workspace App
-description: "Install ThinkWork in Slack, link Slack users, route requests to assigned shared Computers, and understand scopes, attribution, and supported Slack surfaces."
+description: "Slack integration is currently disabled while the Spaces-based ingestion path is being designed. This page describes the previous Computer-routed design as historical reference."
 ---
 
-The Slack workspace app lets people work with assigned shared Computers from Slack without turning Slack into a separate agent runtime. Slack is an ingress and delivery surface: messages are verified, mapped to the right tenant workspace and linked requester, routed to an assigned shared Computer, queued as Computer thread turns, and answered back in Slack with explicit attribution.
+:::caution[Slack integration is currently disabled]
+The Slack workspace app described on this page is **not operational in v1**. The previous Computer-routed implementation was retired in PR #1666 alongside the Computer feature kill. Inbound Slack endpoints (`/slack/events`, `/slack/slash-command`, `/slack/interactivity`) currently respond 200 OK and drop events.
+
+The replacement design — Slack ingestion flowing into Spaces and the tenant platform agent — is on the roadmap. This page is preserved as historical reference for the install model, scopes, and attribution patterns that the replacement will likely re-use.
+:::
+
+The Slack workspace app (when re-enabled) lets people work with the tenant platform agent from Slack without turning Slack into a separate agent runtime. Slack is an ingress and delivery surface: messages are verified, mapped to the right tenant workspace and linked requester, routed to a Space, and answered back in Slack with explicit attribution.
 
 ## What the app does
 

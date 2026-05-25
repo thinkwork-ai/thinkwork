@@ -1,11 +1,11 @@
 ---
 title: Admin — Agent Templates
-description: Reusable and legacy template bundles for Computer and agent authoring infrastructure. Tenant Agent and Spaces are the primary current operation surfaces.
+description: Reusable and legacy template bundles for agent authoring infrastructure. Tenant Agent and Spaces are the primary current operation surfaces.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Templates are reusable configuration bundles for Computer and agent authoring infrastructure. They still exist for supported template flows, but they are no longer the primary place operators tune the managed-agent runtime. For day-to-day operation, configure tenant-wide defaults in [Tenant Agent](/applications/admin/agents/) and local context or runtime policy in [Spaces](/applications/admin/spaces/).
+Templates are reusable configuration bundles for agent authoring infrastructure. They still exist for supported template flows, but they are no longer the primary place operators tune the managed-agent runtime. For day-to-day operation, configure tenant-wide defaults in [Tenant Agent](/applications/admin/agents/) and local context or runtime policy in [Spaces](/applications/admin/spaces/).
 
 <Aside type="note">
   Older template docs described fleet-wide rotation across many top-level
@@ -32,22 +32,21 @@ This is how template-backed authoring flows stay reusable. It is separate from S
 **Route:** `/agent-templates`  
 **File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/index.tsx`
 
-The list is a searchable table showing every template in the tenant. The tabs filter by **All**, **Computer Templates**, and **Agent Templates**.
+The list is a searchable table showing every Agent Template in the tenant.
 
-| Column      | Notes                                                                                              |
-| ----------- | -------------------------------------------------------------------------------------------------- |
-| Name        | Display name                                                                                       |
-| Description | Short summary                                                                                      |
-| Category    | Author-chosen category tag                                                                         |
-| Kind        | Computer Template or Agent Template                                                                |
-| Runtime     | Default managed runtime for agents created from the template (`Strands` or `Pi`)                   |
-| Model       | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.)                            |
-| Source      | Where the template came from (built-in, tenant-created, imported)                                  |
-| Skill count | How many skills are attached                                                                       |
-| Published   | Badge showing whether the template is publishable to child agents                                  |
-| Action      | Computer Templates link to Computers; Agent Templates expose supported legacy or authoring actions |
+| Column      | Notes                                                                            |
+| ----------- | -------------------------------------------------------------------------------- |
+| Name        | Display name                                                                     |
+| Description | Short summary                                                                    |
+| Category    | Author-chosen category tag                                                       |
+| Runtime     | Default managed runtime for agents created from the template (`Strands` or `Pi`) |
+| Model       | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.)          |
+| Source      | Where the template came from (built-in, tenant-created, imported)                |
+| Skill count | How many skills are attached                                                     |
+| Published   | Badge showing whether the template is publishable to child agents                |
+| Action      | Supported legacy or authoring actions                                            |
 
-The backing query is `AgentTemplatesListQuery`. Computer creation and migration are handled from the Computers surface and migration CLI. Where an Agent Template still exposes a create-agent action, treat it as legacy or authoring infrastructure rather than the primary path for new managed-agent specialization.
+The backing query is `AgentTemplatesListQuery`. Where an Agent Template still exposes a create-agent action, treat it as legacy or authoring infrastructure rather than the primary path for new managed-agent specialization.
 
 ## The template detail
 
@@ -63,7 +62,6 @@ The detail page has three tabs:
 ### Configuration tab
 
 - **Identity** — name, slug, description, category, publish toggle
-- **Kind** — Computer Template or Agent Template
 - **Runtime selector** — default managed runtime for new agents created from this template: Strands or Pi
 - **Model select** — dropdown backed by the tenant's configured model catalog
 - **System prompt editor** — the prompt inherited by agents created from the template

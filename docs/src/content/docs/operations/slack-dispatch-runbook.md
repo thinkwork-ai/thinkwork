@@ -1,9 +1,15 @@
 ---
 title: Slack Dispatch Runbook
-description: "How to operate Slack Computer responses, attribution degradation, revoked tokens, unknown teams, and dispatch failures."
+description: "Historical runbook for the retired Computer-routed Slack dispatch path. Slack integration is currently disabled."
 ---
 
-This runbook covers the ThinkWork Slack workspace app from signed ingress through outbound response delivery. Use it when Slack users report missing answers, duplicated answers, degraded attribution, or install/linking problems.
+:::caution[Slack dispatch is currently disabled]
+This runbook describes the **retired** Computer-routed Slack dispatch path (`slack-dispatch` Lambda, `computer_tasks` queue polling). That Lambda was removed in PR #1666 alongside the Computer feature kill. Inbound Slack endpoints return 200 OK and drop events.
+
+The metrics, alarms, and DLQ wiring documented below no longer exist on the deployed stack. Preserved as historical reference; will be replaced when the Spaces-based Slack ingestion design lands.
+:::
+
+This runbook covers the ThinkWork Slack workspace app from signed ingress through outbound response delivery.
 
 ## Metrics
 

@@ -92,7 +92,7 @@ Routing is configured per integration in the relevant admin surface, such as [We
 ### What's tenant-scoped (admin web)
 
 - **Target Space per integration.** Every integration that creates work needs a Space. When inbound routing finds no more-specific match, the new thread routes there and invokes the tenant platform agent in that Space context.
-- **Routing rules per integration.** A list of predicate-to-target rules evaluated in order. Predicates can be: `@-mention`, `channel = #engineering`, `from-domain = customer.com`, `label = bug`, or provider-specific fields. Define rules in the provider's admin surface. The first matching rule wins; if none match, the integration's target Computer runs.
+- **Routing rules per integration.** A list of predicate-to-target rules evaluated in order. Predicates can be: `@-mention`, `channel = #engineering`, `from-domain = customer.com`, `label = bug`, or provider-specific fields. Define rules in the provider's admin surface. The first matching rule wins; if none match, the integration's target Space runs.
 - **Reopen behavior.** Whether a closed thread should reopen on a new inbound event in the same external conversation is on by default and channel-aware (Slack `threadTs`, GitHub issue id, Email `inReplyTo` chain). To disable per-channel — e.g., to force a new thread on every email even if `inReplyTo` matches — set the integration's reopen mode to `disabled`.
 - **Signing secret rotation.** Each integration's webhook signing secret lives in the tenant credential vault. Rotate it from the provider's admin surface; active integration runtimes pick up the new value from deployed configuration. See [Integrations → credential vault](/concepts/integrations#credential-vault).
 

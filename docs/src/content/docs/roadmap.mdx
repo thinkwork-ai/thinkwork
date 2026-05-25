@@ -14,19 +14,18 @@ These features are complete and supported in v1:
 | Feature                                                                      | Status |
 | ---------------------------------------------------------------------------- | ------ |
 | Managed agents (AgentCore + Bedrock)                                         | Stable |
-| ThinkWork Computers (product surface + migration foundation)                 | Beta   |
+| Spaces (per-space rendered workspace, scoped to tenant platform agent)       | Beta   |
 | Pi managed runtime substrate (parallel AgentCore runtime)                    | Beta   |
 | Connected agents (BYO runtime webhook)                                       | Stable |
-| Templates (Computer Templates + Agent Templates)                             | Stable |
+| Agent Templates                                                              | Stable |
 | Skill packs (SKILL.md → S3 → invoke-time loading)                            | Stable |
-| Threads + channels (CHAT, AUTO, EMAIL, SLACK, GITHUB)                        | Stable |
+| Threads + channels (CHAT, AUTO, EMAIL, GITHUB)                               | Stable |
 | AgentCore managed memory with automatic per-turn retention (always on)       | Stable |
 | Hindsight memory add-on (`enable_hindsight = true`, ECS Fargate)             | Beta   |
 | Knowledge Bases (Bedrock KB + document upload)                               | Stable |
-| Slack integration                                                            | Stable |
 | GitHub integration                                                           | Stable |
 | Google Workspace integration (Gmail + Calendar)                              | Beta   |
-| private extension tracker integration (Computer-first pickup + PR writeback) | Beta   |
+| private extension tracker integration (pickup + PR writeback)                | Beta   |
 | Tenant credential vault (KMS-backed provider credentials)                    | Stable |
 | Scheduled automations (EventBridge + Step Functions)                         | Stable |
 | Event-driven automations                                                     | Beta   |
@@ -86,24 +85,29 @@ An evaluation agent that can perform end-to-end tests using a browser (Nova Act 
 
 **Not in v1 because:** Requires browser automation infrastructure (headless Chrome on ECS) and a more sophisticated eval harness. Post-v1 priority.
 
-### Full Computer-use runtime
+### Browser-use runtime
 
-The ThinkWork Computer foundation ships the product model, ECS/EFS substrate, runtime callback API, manager skeleton, and migration tooling. Full browser/computer-use automation inside the Computer runtime is still future work.
+Browser/computer-use automation (Nova Act or similar) running inside a managed runtime is still future work.
 
 **Not in v1 because:** It requires hardened browser isolation, profile/credential handling, per-tenant runtime policy, and production evaluation against real web workflows.
+
+### Slack integration
+
+Slack ingress (events, slash commands, message actions) is currently disabled while the Spaces-based ingestion path is being designed. Inbound Slack endpoints return 200 OK and drop events without routing — a follow-up brainstorm will define how Slack messages flow into Spaces and the tenant platform agent.
+
+**Not in v1 because:** The previous Computer-routed Slack dispatch was retired in PR #1666. The replacement design is open.
 
 ## What's next (active development)
 
 These are the highest-priority items being actively worked on:
 
-1. **ThinkWork Computers** — Product surface, migration operationalization, ECS/EFS runtime skeleton
+1. **Spaces ingestion** — Email, Slack, and webhook ingress flowing into per-Space rendered workspaces
 2. **Integration platform expansion** — Linear is the current proof; future integration ordering is still being planned
-3. **Computer runtime hardening** — CLI/tool install, stronger isolation, runtime reconciliation, browser/computer-use path
-4. **Cost tracking** — Aggregated cost reports by tenant, Computer, Agent, and time period
-5. **Places module** — Location intelligence as an optional Terraform module
-6. **AutoResearch** — Step Functions-based iterative research loop
-7. **End-user web client** — White-label React app for end users
-8. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
+3. **Cost tracking** — Aggregated cost reports by tenant, Space, Agent, and time period
+4. **Places module** — Location intelligence as an optional Terraform module
+5. **AutoResearch** — Step Functions-based iterative research loop
+6. **End-user web client** — White-label React app for end users
+7. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
 
 ## Contributing
 
