@@ -292,7 +292,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       adapter_type: agents.adapter_type,
       runtime: agents.runtime,
       template_runtime: agentTemplates.runtime,
-      model: agentTemplates.model,
+      model: agents.model,
+      template_model: agentTemplates.model,
       name: agents.name,
       slug: agents.slug,
       system_prompt: agents.system_prompt,
@@ -317,12 +318,25 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     return;
   }
 
+  const payload = wakeup.payload as Record<string, unknown> | null;
+  const runtimeType = normalizeAgentRuntimeType(
+    agent.runtime ?? agent.template_runtime,
+  );
+  const agentModel = agent.model ?? agent.template_model ?? null;
+
   // PRD-02: Pre-invocation budget gate
   if (agent.budget_paused) {
+    const error = "Agent paused: budget exceeded";
     console.log(
       `[wakeup-processor] Agent ${wakeup.agent_id} is budget-paused, skipping`,
     );
-    await failWakeup(wakeup.id, "Agent paused: budget exceeded");
+    await failWakeupBeforeRun({
+      wakeup,
+      payload,
+      error,
+      runtimeType,
+      model: agentModel,
+    });
     return;
   }
 
@@ -435,7 +449,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     logPrefix: "[wakeup-processor]",
   });
 
-  const payload = wakeup.payload as Record<string, unknown> | null;
   const workspacePayload =
     wakeup.source === "workspace_event"
       ? normalizeWorkspaceWakeupPayload(payload)
@@ -603,10 +616,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ? (templateContextEngineResult.value ?? undefined)
       : undefined
     : undefined;
-
-  const runtimeType = normalizeAgentRuntimeType(
-    agent.runtime ?? agent.template_runtime,
-  );
 
   // 4. Create trigger_run record
   // Extract trigger_id from trigger_detail if present (e.g. "manual_fire:trigger:UUID" or "schedule:job-XXX")
@@ -887,6 +896,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_snapshot: {
         ...((wakeup.payload as Record<string, unknown> | undefined) ?? {}),
         runtime_type: runtimeType,
+        model: agentModel,
       },
       thread_id: runThreadId || undefined,
       turn_number: turnNumber || undefined,
@@ -1244,7 +1254,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_engine_enabled: contextEngineEnabled || undefined,
       context_engine_config: contextEngineConfig,
       runtime_type: runtimeType,
-      model: agent.model,
+      model: agentModel,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,
       knowledge_bases: knowledgeBasesConfig,
       guardrail_config: guardrailPayload || undefined,
@@ -1607,7 +1617,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         tenantId: wakeup.tenant_id,
         agentId: wakeup.agent_id,
         requestId: wakeup.id,
-        model: usage.model || agent.model || null,
+        model: usage.model || agentModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cachedReadTokens: usage.cachedReadTokens,
@@ -1628,7 +1638,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           agentName: agent.name,
           eventType: "invocation",
           amountUsd: costResult.totalUsd,
-          model: usage.model || agent.model || null,
+          model: usage.model || agentModel,
         });
       }
     } catch (costErr) {
@@ -1721,7 +1731,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             context_engine_enabled: contextEngineEnabled || undefined,
             context_engine_config: contextEngineConfig,
             runtime_type: runtimeType,
-            model: agent.model,
+            model: agentModel,
             skills: skillsConfig.length > 0 ? skillsConfig : undefined,
             knowledge_bases: knowledgeBasesConfig,
             guardrail_config: guardrailPayload || undefined,
@@ -1761,7 +1771,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             tenantId: wakeup.tenant_id,
             agentId: wakeup.agent_id,
             requestId: `${wakeup.id}-loop-${loopTurn}`,
-            model: loopUsage.model || agent.model || null,
+            model: loopUsage.model || agentModel,
             inputTokens: loopUsage.inputTokens,
             outputTokens: loopUsage.outputTokens,
             cachedReadTokens: loopUsage.cachedReadTokens,
@@ -2057,6 +2067,107 @@ async function failWakeup(wakeupId: string, error: string): Promise<void> {
     .update(agentWakeupRequests)
     .set({ status: "failed", finished_at: new Date() })
     .where(eq(agentWakeupRequests.id, wakeupId));
+}
+
+async function failWakeupBeforeRun(input: {
+  wakeup: WakeupRow;
+  payload: Record<string, unknown> | null;
+  error: string;
+  runtimeType: AgentRuntimeType;
+  model: string | null;
+}): Promise<void> {
+  const now = new Date();
+  const threadId = String(input.payload?.threadId || "") || undefined;
+  let runId: string | null = null;
+
+  if (threadId) {
+    let turnNumber: number | undefined;
+    try {
+      const [countRow] = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(threadTurns)
+        .where(eq(threadTurns.thread_id, threadId));
+      turnNumber = (countRow?.count || 0) + 1;
+    } catch {}
+
+    const [run] = await db
+      .insert(threadTurns)
+      .values({
+        tenant_id: input.wakeup.tenant_id,
+        agent_id: input.wakeup.agent_id,
+        wakeup_request_id: input.wakeup.id,
+        invocation_source: input.wakeup.source,
+        trigger_detail: input.wakeup.trigger_detail,
+        runtime_type: input.runtimeType,
+        status: "failed",
+        started_at: now,
+        finished_at: now,
+        error: input.error,
+        thread_id: threadId,
+        turn_number: turnNumber,
+        context_snapshot: {
+          ...(input.payload ?? {}),
+          runtime_type: input.runtimeType,
+          model: input.model,
+        },
+      })
+      .returning({ id: threadTurns.id });
+    runId = run?.id ?? null;
+
+    await db
+      .update(threads)
+      .set({
+        last_turn_completed_at: now,
+        last_response_preview: `Error: ${input.error}`.slice(0, 200),
+      })
+      .where(eq(threads.id, threadId));
+
+    if (runId) {
+      await notifyThreadTurnUpdate({
+        runId,
+        triggerId: null,
+        tenantId: input.wakeup.tenant_id,
+        threadId,
+        agentId: input.wakeup.agent_id,
+        status: "failed",
+        triggerName: null,
+      });
+    }
+
+    if (input.wakeup.source === "chat_message") {
+      const content =
+        "This agent is paused because its budget has been exceeded. Ask an operator to unpause it, then try again.";
+      try {
+        const errReply = await insertAssistantMessage(
+          threadId,
+          input.wakeup.tenant_id,
+          input.wakeup.agent_id,
+          content,
+        );
+        if (errReply) {
+          await notifyNewMessage({
+            messageId: errReply.id,
+            threadId,
+            tenantId: input.wakeup.tenant_id,
+            role: "assistant",
+            content,
+            senderType: "agent",
+            senderId: input.wakeup.agent_id,
+          });
+        }
+      } catch (err) {
+        console.error(
+          `[wakeup-processor] Failed to insert pre-run failure message:`,
+          err,
+        );
+      }
+    }
+  }
+
+  await db
+    .update(agentWakeupRequests)
+    .set({ status: "failed", finished_at: now, run_id: runId ?? undefined })
+    .where(eq(agentWakeupRequests.id, input.wakeup.id));
 }
 
 async function updateWorkspaceRunAfterTurn(
