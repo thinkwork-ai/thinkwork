@@ -27,6 +27,11 @@ import {
   createCoordinatorAgentService,
   type CoordinatorAgentService,
 } from "./coordinator-agent.js";
+import {
+  CUSTOMER_ONBOARDING_CHECKLIST_ITEMS,
+  CUSTOMER_ONBOARDING_CHECKLIST_KEY,
+  buildCustomerOnboardingChecklistConfig,
+} from "./customer-onboarding-seed.js";
 
 export const CUSTOMER_ONBOARDING_TEMPLATE_KEY = "customer_onboarding";
 
@@ -264,6 +269,10 @@ export interface CustomerOnboardingWorkflowRepository {
     tenantId: string;
     spaceId?: string | null;
   }): Promise<CustomerOnboardingWorkflowSpace | null>;
+  ensureNativeChecklist?(input: {
+    tenantId: string;
+    spaceId: string;
+  }): Promise<void>;
   findExistingThread(input: {
     tenantId: string;
     spaceId: string;
@@ -312,10 +321,32 @@ export async function startCustomerOnboardingWorkflow(
   const coordinator = deps.coordinator ?? createCoordinatorAgentService();
   const normalized = normalizeCustomerOnboardingSource(input.opportunity);
 
-  const space = await repository.findSpace({
+  let space = await repository.findSpace({
     tenantId: input.tenantId,
     spaceId: input.spaceId,
   });
+  if (!space) {
+    throw new CustomerOnboardingWorkflowError(
+      "Customer Onboarding Space not found",
+      404,
+      "CUSTOMER_ONBOARDING_SPACE_NOT_FOUND",
+    );
+  }
+  if (
+    space.checklistItems.length === 0 &&
+    shouldUseNativeChecklist(input, space) &&
+    repository.ensureNativeChecklist
+  ) {
+    await repository.ensureNativeChecklist({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+    });
+    space = await repository.findSpace({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+    });
+  }
+
   if (!space) {
     throw new CustomerOnboardingWorkflowError(
       "Customer Onboarding Space not found",
@@ -606,6 +637,12 @@ function buildKickoffMessage(
   }
   if (source.missingFields.length > 0) {
     lines.push(`Missing onboarding fields: ${source.missingFields.join(", ")}`);
+    lines.push(
+      "Question: Please provide the missing onboarding information so the checklist can continue.",
+    );
+    for (const field of source.missingFields) {
+      lines.push(`- ${questionFieldForMissingField(field).label}`);
+    }
   }
   return lines.join("\n");
 }
@@ -993,6 +1030,73 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
           }
         : null,
     };
+  }
+
+  async ensureNativeChecklist(input: {
+    tenantId: string;
+    spaceId: string;
+  }): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [template] = await tx
+        .insert(spaceChecklistTemplates)
+        .values({
+          tenant_id: input.tenantId,
+          space_id: input.spaceId,
+          key: CUSTOMER_ONBOARDING_CHECKLIST_KEY,
+          name: "Customer Onboarding v1",
+          description:
+            "Required native onboarding checklist items for ThinkWork-managed Customer Onboarding Threads.",
+          config: buildCustomerOnboardingChecklistConfig(),
+        })
+        .onConflictDoUpdate({
+          target: [
+            spaceChecklistTemplates.tenant_id,
+            spaceChecklistTemplates.space_id,
+            spaceChecklistTemplates.key,
+          ],
+          set: {
+            name: "Customer Onboarding v1",
+            description:
+              "Required native onboarding checklist items for ThinkWork-managed Customer Onboarding Threads.",
+            config: buildCustomerOnboardingChecklistConfig(),
+            updated_at: new Date(),
+          },
+        })
+        .returning({ id: spaceChecklistTemplates.id });
+
+      for (const item of CUSTOMER_ONBOARDING_CHECKLIST_ITEMS) {
+        await tx
+          .insert(spaceChecklistItems)
+          .values({
+            tenant_id: input.tenantId,
+            space_id: input.spaceId,
+            template_id: template.id,
+            key: item.key,
+            title: item.title,
+            description: item.description,
+            role_key: item.roleKey,
+            required: item.required,
+            sort_order: item.sortOrder,
+            external_task_template: item.checklistTemplate,
+          })
+          .onConflictDoUpdate({
+            target: [
+              spaceChecklistItems.tenant_id,
+              spaceChecklistItems.template_id,
+              spaceChecklistItems.key,
+            ],
+            set: {
+              title: item.title,
+              description: item.description,
+              role_key: item.roleKey,
+              required: item.required,
+              sort_order: item.sortOrder,
+              external_task_template: item.checklistTemplate,
+              updated_at: new Date(),
+            },
+          });
+      }
+    });
   }
 
   async findExistingThread(input: {

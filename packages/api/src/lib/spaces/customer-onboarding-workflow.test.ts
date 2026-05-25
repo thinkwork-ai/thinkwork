@@ -393,6 +393,52 @@ describe("startCustomerOnboardingWorkflow", () => {
     );
   });
 
+  it("repairs an existing native onboarding Space with missing checklist rows", async () => {
+    const emptySpace: CustomerOnboardingWorkflowSpace = {
+      ...nativeSpace,
+      checklistItems: [],
+    };
+    const repository = makeRepository({ space: nativeSpace }) as ReturnType<
+      typeof makeRepository
+    > & {
+      ensureNativeChecklist: NonNullable<
+        CustomerOnboardingWorkflowRepository["ensureNativeChecklist"]
+      >;
+    };
+    const findSpace = vi
+      .fn()
+      .mockResolvedValueOnce(emptySpace)
+      .mockResolvedValueOnce(nativeSpace);
+    const ensureNativeChecklist = vi.fn(async () => {});
+    repository.findSpace = findSpace;
+    repository.ensureNativeChecklist = ensureNativeChecklist;
+
+    const result = await startCustomerOnboardingWorkflow(
+      {
+        tenantId: "tenant-1",
+        source: "manual",
+        opportunity: completeNativePayload,
+        startedBy: { type: "user", id: "user-1" },
+      },
+      {
+        repository,
+        taskAdapter: { createTask: vi.fn() },
+        coordinator: noopCoordinator,
+      },
+    );
+
+    expect(ensureNativeChecklist).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    });
+    expect(findSpace).toHaveBeenLastCalledWith({
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    });
+    expect(result.linkedTasks).toHaveLength(7);
+    expect(repository.linkedTasks).toHaveLength(7);
+  });
+
   it("applies tax and credit applicability independently", async () => {
     const repository = makeRepository({ space: nativeSpace });
 
@@ -513,6 +559,12 @@ describe("startCustomerOnboardingWorkflow", () => {
         },
       },
     });
+    expect(repository.createdCases[0]?.kickoffMessage).toContain(
+      "Question: Please provide the missing onboarding information so the checklist can continue.",
+    );
+    expect(repository.createdCases[0]?.kickoffMessage).toContain(
+      "- DocuSign recipient name and email",
+    );
     expect(repository.linkedTasks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
