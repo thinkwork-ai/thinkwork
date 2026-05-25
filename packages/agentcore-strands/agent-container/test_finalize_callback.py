@@ -39,6 +39,7 @@ _original_check = _boot_assert.check
 _boot_assert.check = lambda *a, **kw: None
 try:
     from server import (  # noqa: E402
+        _build_completion_result,
         _build_finalize_payload,
         _post_finalize_callback,
     )
@@ -129,6 +130,25 @@ def test_build_finalize_payload_populates_response(base_payload, base_result):
     assert response["tool_invocations"] == base_result["tool_invocations"]
     assert response["tools_called"] == ["search"]
     assert response["bedrock_request_ids"] == ["req-1"]
+
+
+def test_build_completion_result_carries_composed_system_prompt():
+    result = _build_completion_result(
+        response_text="hi",
+        request_model="model-a",
+        strands_usage={
+            "input_tokens": 3,
+            "output_tokens": 2,
+            "tools_called": ["recall"],
+            "tool_invocations": [{"name": "recall"}],
+            "bedrock_request_ids": ["req-1"],
+        },
+        invocation_tool_costs=[],
+        turn_result={"composed_system_prompt": "Current date\n\nUSER.md"},
+    )
+
+    assert result["composed_system_prompt"] == "Current date\n\nUSER.md"
+    assert result["usage"]["total_tokens"] == 5
 
 
 def test_build_finalize_payload_populates_usage(base_payload, base_result):

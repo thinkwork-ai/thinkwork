@@ -402,7 +402,13 @@ export const ThreadsListQuery = graphql(`
       assigneeType
       assigneeId
       agentId
+      spaceId
       userId
+      space {
+        id
+        name
+        slug
+      }
       agent {
         id
         name
@@ -507,7 +513,13 @@ export const ThreadDetailQuery = graphql(`
       assigneeType
       assigneeId
       agentId
+      spaceId
       userId
+      space {
+        id
+        name
+        slug
+      }
       agent {
         id
         name

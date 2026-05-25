@@ -403,6 +403,11 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
     recall fans out across managed memory, Hindsight, and compiled wiki pages,
     then returns one grouped result.
 
+    Before calling this tool, use facts already present in the current prompt
+    and workspace files. USER.md is authoritative for the requester's profile,
+    preferences, and family facts; do not call recall just to re-fetch a fact
+    already visible there.
+
     Args:
         query: What to search for.
         scope: "memory" (default, managed memory + Hindsight + wiki),

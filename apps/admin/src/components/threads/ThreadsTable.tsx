@@ -152,15 +152,29 @@ export function ThreadsTable({
               </span>
 
               <span className="min-w-0 truncate">{thread.title}</span>
-              {thread.space && (
+            </div>
+          );
+        },
+      },
+      {
+        id: "space",
+        header: "Space",
+        size: 180,
+        cell: ({ row }) => {
+          const space = row.original.space;
+          return (
+            <div className="flex h-10 min-w-0 items-center px-2">
+              {space ? (
                 <Badge
                   variant="outline"
-                  className="hidden max-w-36 shrink-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground sm:inline-flex"
-                  title={`Space: ${thread.space.name}`}
+                  className="max-w-full gap-1 px-1.5 text-xs font-normal text-muted-foreground"
+                  title={`Space: ${space.name}`}
                 >
-                  <Hash className="h-3 w-3" />
-                  <span className="truncate">{thread.space.name}</span>
+                  <Hash className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{space.name}</span>
                 </Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
               )}
             </div>
           );

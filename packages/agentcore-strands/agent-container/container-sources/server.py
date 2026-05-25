@@ -2523,6 +2523,48 @@ def _post_finalize_callback(
     return False
 
 
+def _build_completion_result(
+    *,
+    response_text: str,
+    request_model: str,
+    strands_usage: dict,
+    invocation_tool_costs: list,
+    turn_result: dict,
+) -> dict:
+    """Build the OpenAI-shaped response envelope for direct and finalize paths."""
+    input_tokens = strands_usage.get("input_tokens", 0)
+    output_tokens = strands_usage.get("output_tokens", 0)
+    result = {
+        "id": f"chatcmpl_{int(time.time())}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": request_model or DEFAULT_MODEL,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": response_text},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        },
+        "bedrock_request_ids": strands_usage.get("bedrock_request_ids", []),
+        "tool_costs": invocation_tool_costs,
+        "tools_called": strands_usage.get("tools_called", []),
+        "tool_invocations": strands_usage.get("tool_invocations", []),
+        "composed_system_prompt": turn_result.get("composed_system_prompt") or None,
+        # PRD-41B Phase 7 item 2: per-call Hindsight Bedrock usage captured
+        # from retain/reflect responses by hindsight_usage_capture.py.
+        "hindsight_usage": strands_usage.get("hindsight_usage", []),
+    }
+    if turn_result.get("computer_thread_response") is not None:
+        result["computer_thread_response"] = turn_result["computer_thread_response"]
+    return result
+
+
 def _build_full_thread_transcript(history_payload, message: str, response_text: str) -> list:
     """Construct the per-turn transcript for retain_full_thread.
 
@@ -3262,38 +3304,13 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 duration_ms = turn_result["duration_ms"]
                 invocation_tool_costs = turn_result["invocation_tool_costs"]
 
-                input_tokens = strands_usage.get("input_tokens", 0)
-                output_tokens = strands_usage.get("output_tokens", 0)
-
-                result = {
-                    "id": f"chatcmpl_{int(time.time())}",
-                    "object": "chat.completion",
-                    "created": int(time.time()),
-                    "model": request_model or DEFAULT_MODEL,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "message": {"role": "assistant", "content": response_text},
-                            "finish_reason": "stop",
-                        }
-                    ],
-                    "usage": {
-                        "prompt_tokens": input_tokens,
-                        "completion_tokens": output_tokens,
-                        "total_tokens": input_tokens + output_tokens,
-                    },
-                    "bedrock_request_ids": strands_usage.get("bedrock_request_ids", []),
-                    "tool_costs": invocation_tool_costs,
-                    "tools_called": strands_usage.get("tools_called", []),
-                    "tool_invocations": strands_usage.get("tool_invocations", []),
-                    # PRD-41B Phase 7 item 2: per-call Hindsight Bedrock usage
-                    # captured from retain/reflect responses by the monkey-patch
-                    # in hindsight_usage_capture.py. chat-agent-invoke parses
-                    # this and writes one cost_events row per entry.
-                    "hindsight_usage": strands_usage.get("hindsight_usage", []),
-                }
-                if turn_result.get("computer_thread_response") is not None:
-                    result["computer_thread_response"] = turn_result["computer_thread_response"]
+                result = _build_completion_result(
+                    response_text=response_text,
+                    request_model=request_model,
+                    strands_usage=strands_usage,
+                    invocation_tool_costs=invocation_tool_costs,
+                    turn_result=turn_result,
+                )
 
                 # Attach guardrail block info if present
                 if strands_usage.get("guardrail_block"):
