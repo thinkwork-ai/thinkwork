@@ -33,6 +33,18 @@ function openThinkingDisclosure(index = 0): HTMLElement {
 }
 
 describe("TaskThreadView", () => {
+  it("renders loading as the monospace shimmer state", () => {
+    render(<TaskThreadView thread={null} isLoading />);
+
+    const status = screen.getByRole("status", { name: "Loading thread" });
+    expect(status.querySelectorAll(".tw-shimmer-char").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      status.querySelector('[aria-hidden="true"]')?.className,
+    ).toContain("font-mono");
+  });
+
   it("renders transcript messages, generated artifact cards, and command composer", () => {
     render(
       <TaskThreadView
