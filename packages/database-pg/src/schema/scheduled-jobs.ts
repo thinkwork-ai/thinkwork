@@ -114,6 +114,7 @@ export const threadTurns = pgTable(
     finalized_at: timestamp("finalized_at", { withTimezone: true }),
     error: text("error"),
     error_code: text("error_code"),
+    system_prompt: text("system_prompt"),
     usage_json: jsonb("usage_json"),
     result_json: jsonb("result_json"),
     context_snapshot: jsonb("context_snapshot"),

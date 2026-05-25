@@ -67,6 +67,7 @@ type ThreadTurn {
   finishedAt: AWSDateTime
   error: String
   errorCode: String
+  systemPrompt: String
   usageJson: AWSJSON
   resultJson: AWSJSON
   contextSnapshot: AWSJSON
@@ -97,7 +98,15 @@ type ThreadTurnEvent {
 }
 
 extend type Query {
-  threadTurns(tenantId: ID!, agentId: ID, routineId: ID, triggerId: ID, threadId: ID, status: String, limit: Int): [ThreadTurn!]!
+  threadTurns(
+    tenantId: ID!
+    agentId: ID
+    routineId: ID
+    triggerId: ID
+    threadId: ID
+    status: String
+    limit: Int
+  ): [ThreadTurn!]!
   threadTurn(id: ID!): ThreadTurn
   threadTurnEvents(runId: ID!, afterSeq: Int, limit: Int): [ThreadTurnEvent!]!
   queuedWakeups(tenantId: ID!): [AgentWakeupRequest!]!

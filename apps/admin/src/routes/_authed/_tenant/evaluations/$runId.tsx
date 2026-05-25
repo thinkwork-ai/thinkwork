@@ -18,14 +18,13 @@ import {
   Square,
 } from "lucide-react";
 import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { EvalTestCaseForm } from "@/components/evaluations/EvalTestCaseForm";
+import { SystemPromptSheet } from "@/components/SystemPromptSheet";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -763,87 +762,12 @@ function ResultDetailSheet({
           )}
         </div>
         <SystemPromptSheet
-          testCaseId={result.testCaseId}
-          testCaseName={result.testCaseName}
+          evalTestCaseId={result.testCaseId}
+          titleSuffix={result.testCaseName}
           capturedSystemPrompt={result.systemPrompt}
           open={showSystemPrompt}
           onOpenChange={setShowSystemPrompt}
         />
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function SystemPromptSheet({
-  testCaseId,
-  testCaseName,
-  capturedSystemPrompt,
-  open,
-  onOpenChange,
-}: {
-  testCaseId: string | null;
-  testCaseName?: string | null;
-  /** The system prompt the runtime actually used for this result, captured
-   * from Pi's `composed_system_prompt` response. Null on legacy rows. */
-  capturedSystemPrompt: string | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const captured = capturedSystemPrompt?.trim() || "";
-  // Only fetch the test case for the per-case fallback when the runtime
-  // capture is absent — saves a round-trip on the common path.
-  const [tc] = useQuery({
-    query: EvalTestCaseQuery,
-    variables: { id: testCaseId ?? "" },
-    pause: !open || !testCaseId || captured.length > 0,
-    requestPolicy: "cache-first",
-  });
-  const override = tc.data?.evalTestCase?.systemPrompt?.trim() || "";
-  const displayed = captured || override;
-  const source: "captured" | "override" | null = captured
-    ? "captured"
-    : override
-      ? "override"
-      : null;
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        className={cn(EVAL_RESULT_SHEET_WIDTH_CLASS, "overflow-y-auto")}
-        style={EVAL_RESULT_SHEET_STYLE}
-      >
-        <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
-          <SheetTitle className="text-base leading-snug">
-            System prompt
-            {testCaseName ? (
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {testCaseName}
-              </span>
-            ) : null}
-          </SheetTitle>
-          <SheetDescription className="text-xs">
-            {source === "captured"
-              ? "The composed system prompt the runtime ran against this case — workspace files (PLATFORM/CAPABILITIES/GUARDRAILS/MEMORY_GUIDE/SOUL/IDENTITY/USER/AGENTS/CONTEXT/TOOLS) plus the runtime tool policy, captured from the agent at invoke time."
-              : source === "override"
-                ? "Per-case system prompt override stored on this test case. The runtime did not capture a composed prompt for this result; this is the fallback override stored on the test case row."
-                : "No system prompt captured for this result. Pi runtime started capturing composed prompts on 2026-05-24; older results show empty."}
-          </SheetDescription>
-        </SheetHeader>
-        <div className="px-6 py-4">
-          {!captured && tc.fetching ? (
-            <PageSkeleton />
-          ) : !displayed ? (
-            <p className="text-sm text-muted-foreground italic">
-              No system prompt available for this result.
-            </p>
-          ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {displayed}
-              </ReactMarkdown>
-            </div>
-          )}
-        </div>
       </SheetContent>
     </Sheet>
   );
