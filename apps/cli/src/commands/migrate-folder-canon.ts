@@ -27,6 +27,10 @@ export function registerMigrateFolderCanonCommand(program: Command): void {
       "--noop-check",
       "Exit nonzero if any migration operation would still be needed.",
     )
+    .option(
+      "--cleanup-legacy-files",
+      "After AGENTS.md migration markers are verified, delete retired SOUL/IDENTITY/PLATFORM/CAPABILITIES files.",
+    )
     .action(async (opts, cmd) => {
       const parent = cmd.parent as Command | undefined;
       const mode = resolveMode(opts);
@@ -48,6 +52,7 @@ export function registerMigrateFolderCanonCommand(program: Command): void {
         snapshotPrefix: opts.snapshot,
         mode,
         store: new AwsCliWorkspaceObjectStore(bucket),
+        cleanupLegacyFiles: Boolean(opts.cleanupLegacyFiles),
       });
       console.log(JSON.stringify(summary, null, 2));
       if (summary.tenantReports.some((report) => report.status === "failed")) {

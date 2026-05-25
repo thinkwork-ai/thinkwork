@@ -837,7 +837,7 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
     expect(md).not.toContain(".DS_Store");
   });
 
-  it("discovers both legacy flat and workspaces-parent subagent contexts during transition", async () => {
+  it("discovers only workspaces-parent subagent contexts after final cleanup", async () => {
     state.listObjectsResponses = [
       "AGENTS.md",
       "legacy-flat/CONTEXT.md",
@@ -881,11 +881,11 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
     expect(md).toContain(
       "| DBT Review | workspaces/sql/workspaces/warehouse-dbt/ | Review DBT models |",
     );
-    expect(context).toContain("| Legacy Flat | Legacy context. |");
+    expect(context).not.toContain("| Legacy Flat | Legacy context. |");
     expect(context).toContain("| SQL | Warehouse context. |");
   });
 
-  it("prefers workspaces-parent context over legacy flat context for the same slug", async () => {
+  it("rejects flat subagent contexts even when the slug matches a workspaces-parent context", async () => {
     state.listObjectsResponses = [
       "AGENTS.md",
       "expenses/CONTEXT.md",
@@ -907,7 +907,7 @@ describe("regenerateWorkspaceMap — recursive folder tree", () => {
 
     expect(md).toContain("workspaces/");
     expect(md).toContain("expenses/ ← Workspace Expenses");
-    expect(md).not.toContain("expenses/ ← Legacy Expenses");
+    expect(md).toContain("expenses/ ← Legacy Expenses");
     expect(context).toContain("| Workspace Expenses | New context. |");
     expect(context).not.toContain("| Legacy Expenses | Legacy context. |");
   });

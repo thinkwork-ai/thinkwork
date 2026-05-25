@@ -7,8 +7,8 @@ authz layer requires `x-agent-id == args.id`, so this tool can only
 rename the agent it's running as.
 
 Server-side this triggers `writeIdentityMdForAgent` inside the same DB
-transaction, which does name-line surgery on the agent's IDENTITY.md in
-S3. DB name and IDENTITY.md stay atomic — a failure on either side
+transaction, which does name-line surgery on the agent's AGENTS.md in
+S3. DB name and AGENTS.md stay atomic — a failure on either side
 rolls both back.
 
 Part of docs/plans/2026-04-22-003-feat-agent-self-serve-tools-plan.md.
@@ -67,7 +67,7 @@ def _post_graphql(
 @tool
 def update_agent_name(new_name: str) -> str:
     """Rename yourself. This updates both the database record and your
-    IDENTITY.md's Name line.
+    AGENTS.md identity Name line.
 
     You can only rename yourself — the tool cannot target any other
     agent. Your human can still rename you through the admin UI; this
@@ -81,7 +81,7 @@ def update_agent_name(new_name: str) -> str:
     Args:
         new_name: The new name. Must be non-empty after trimming. Any
             newlines in the name are collapsed to spaces server-side
-            (the Name line in IDENTITY.md is a single-line bullet).
+            (the Name line in AGENTS.md is a single-line bullet).
 
     Returns:
         A short confirmation string the agent can relay to the human,
@@ -94,11 +94,7 @@ def update_agent_name(new_name: str) -> str:
     tenant_id = os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
     agent_id = os.environ.get("AGENT_ID") or os.environ.get("_MCP_AGENT_ID") or ""
     api_url = os.environ.get("THINKWORK_API_URL") or ""
-    api_secret = (
-        os.environ.get("API_AUTH_SECRET")
-        or os.environ.get("THINKWORK_API_SECRET")
-        or ""
-    )
+    api_secret = os.environ.get("API_AUTH_SECRET") or os.environ.get("THINKWORK_API_SECRET") or ""
     if not (tenant_id and agent_id and api_url and api_secret):
         return "update_agent_name: runtime is missing tenant / agent / API config."
 

@@ -15,6 +15,7 @@ export interface FolderCanonMigrationOptions {
   mode: FolderCanonMode;
   store: WorkspaceObjectStore;
   migratedDate?: string;
+  cleanupLegacyFiles?: boolean;
 }
 
 export interface FolderCanonOperation {
@@ -183,6 +184,34 @@ async function migrateAgentPrefix(
     operations.push({ type: "delete-object", key: sourceKey });
   }
 
+  if (options.cleanupLegacyFiles) {
+    for (const spec of LEGACY_FILES) {
+      if (!relativePaths.includes(spec.filename)) continue;
+      if (!legacyContents.has(spec.filename)) {
+        operations.push({
+          type: "delete-object",
+          key: `${prefix}${spec.filename}`,
+        });
+        continue;
+      }
+      if (
+        !hasExactMigratedBlock(
+          nextAgentsMd,
+          spec.filename,
+          legacyContents.get(spec.filename) ?? "",
+        )
+      ) {
+        throw new Error(
+          `Refusing to delete ${prefix}${spec.filename}: AGENTS.md has no complete migrated block for the current file content`,
+        );
+      }
+      operations.push({
+        type: "delete-object",
+        key: `${prefix}${spec.filename}`,
+      });
+    }
+  }
+
   if (options.mode === "noop-check") {
     return {
       tenantSlug,
@@ -293,11 +322,30 @@ function upsertMigratedSection(
   },
 ): string {
   const marker = `<!-- migrated from ${input.filename} on ${input.migratedDate} -->`;
-  if (markdown.includes(`migrated from ${input.filename} `)) return markdown;
-  const content = input.content.endsWith("\n")
-    ? input.content
-    : `${input.content}\n`;
-  const block = `${marker}\n${content}<!-- /migrated from ${input.filename} -->`;
+  const existingRange = findMigratedBlockRange(markdown, input.filename);
+  if (existingRange) {
+    const existingBlock = markdown.slice(
+      existingRange.start,
+      existingRange.end,
+    );
+    const existingMarkerEnd = existingBlock.indexOf("\n");
+    const existingMarker =
+      existingMarkerEnd === -1
+        ? marker
+        : existingBlock.slice(0, existingMarkerEnd);
+    const block = renderMigratedBlock(
+      input.filename,
+      input.content,
+      existingMarker,
+    );
+    if (existingBlock === block) return markdown;
+    return (
+      markdown.slice(0, existingRange.start) +
+      block +
+      markdown.slice(existingRange.end)
+    );
+  }
+  const block = renderMigratedBlock(input.filename, input.content, marker);
   const range = findSectionBodyRange(markdown, input.section);
   if (!range) {
     const suffix = markdown.endsWith("\n") ? "" : "\n";
@@ -307,6 +355,41 @@ function upsertMigratedSection(
   const nextBody =
     body.trim().length > 0 ? `${body}\n\n${block}\n` : `\n${block}\n`;
   return markdown.slice(0, range.start) + nextBody + markdown.slice(range.end);
+}
+
+function renderMigratedBlock(
+  filename: string,
+  content: string,
+  openingMarker: string,
+): string {
+  const normalizedContent = content.endsWith("\n") ? content : `${content}\n`;
+  return `${openingMarker}\n${normalizedContent}<!-- /migrated from ${filename} -->`;
+}
+
+function hasExactMigratedBlock(
+  markdown: string,
+  filename: string,
+  content: string,
+): boolean {
+  const range = findMigratedBlockRange(markdown, filename);
+  if (!range) return false;
+  const block = markdown.slice(range.start, range.end);
+  const openingMarkerEnd = block.indexOf("\n");
+  if (openingMarkerEnd === -1) return false;
+  const openingMarker = block.slice(0, openingMarkerEnd);
+  return block === renderMigratedBlock(filename, content, openingMarker);
+}
+
+function findMigratedBlockRange(
+  markdown: string,
+  filename: string,
+): { start: number; end: number } | null {
+  const start = markdown.indexOf(`<!-- migrated from ${filename} `);
+  if (start === -1) return null;
+  const closing = `<!-- /migrated from ${filename} -->`;
+  const closeStart = markdown.indexOf(closing, start);
+  if (closeStart === -1) return null;
+  return { start, end: closeStart + closing.length };
 }
 
 function rewriteWorkspaceRouting(markdown: string, slugs: string[]): string {

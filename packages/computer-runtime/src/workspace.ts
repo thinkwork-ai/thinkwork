@@ -13,12 +13,8 @@ const MAX_WORKSPACE_FILE_BYTES = 256 * 1024;
 const MAX_PROMPT_FILE_CHARS = 24_000;
 
 const PROMPT_WORKSPACE_FILES = [
-  "PLATFORM.md",
-  "CAPABILITIES.md",
   "GUARDRAILS.md",
   "MEMORY_GUIDE.md",
-  "SOUL.md",
-  "IDENTITY.md",
   "USER.md",
   "AGENTS.md",
   "CONTEXT.md",

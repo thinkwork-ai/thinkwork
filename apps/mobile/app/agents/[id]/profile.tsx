@@ -10,10 +10,8 @@ import { useAgent } from "@/lib/hooks/use-agents";
 import { listWorkspaceFiles } from "@/lib/workspace-api";
 
 const WORKSPACE_FILE_DESCRIPTIONS: Record<string, string> = {
-  "SOUL.md": "Core personality, values, and behavioral guidelines",
   "USER.md": "What the assistant knows about you",
-  "IDENTITY.md": "Name, role, and persona definition",
-  "AGENTS.md": "Multi-agent collaboration rules",
+  "AGENTS.md": "Identity, personality, routing, and collaboration rules",
   "TOOLS.md": "Tool usage preferences and instructions",
 };
 
@@ -55,11 +53,15 @@ export default function AgentProfileScreen() {
       ) : files.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <Muted className="text-center">
-            No persona files yet. Edit your agent in the admin dashboard to generate defaults.
+            No persona files yet. Edit your agent in the admin dashboard to
+            generate defaults.
           </Muted>
         </View>
       ) : (
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
           <View className="px-4">
             {files.map((fileName, i) => (
               <Pressable
@@ -70,7 +72,9 @@ export default function AgentProfileScreen() {
                   )
                 }
                 className={`flex-row items-center justify-between py-3 active:opacity-70 ${
-                  i < files.length - 1 ? "border-b border-neutral-200 dark:border-neutral-800" : ""
+                  i < files.length - 1
+                    ? "border-b border-neutral-200 dark:border-neutral-800"
+                    : ""
                 }`}
               >
                 <View className="flex-1 mr-2">

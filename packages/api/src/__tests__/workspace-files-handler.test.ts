@@ -4071,6 +4071,155 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
+  it("update-identity-field rewrites the AGENTS.md identity line", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .resolves(
+        body(
+          [
+            "# AGENTS.md",
+            "",
+            "## Identity",
+            "",
+            "- **Name:** Marco",
+            "- **Creature:** old creature",
+            "- **Vibe:** focused",
+            "- **Emoji:** 🤖",
+            "- **Avatar:** none",
+            "",
+          ].join("\n"),
+        ),
+      );
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: "axolotl\nwith injection",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const put = s3Mock.commandCalls(PutObjectCommand)[0]?.args[0].input;
+    expect(put?.Key).toBe("tenants/acme/agents/marco/workspace/AGENTS.md");
+    expect(String(put?.Body)).toContain(
+      "- **Creature:** axolotl with injection",
+    );
+  });
+
+  it("update-identity-field rejects unknown fields before writing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "name",
+          value: "Nova",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain("Unknown identity field");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("update-identity-field rejects non-string values before writing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: 42,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain("value must be a string");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("update-identity-field returns 422 when AGENTS.md is missing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .rejects(noSuchKey());
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: "axolotl",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body.error).toContain("AGENTS.md is missing the Creature");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("update-identity-field returns 422 when the requested AGENTS.md anchor is missing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .resolves(body("# AGENTS.md\n\n## Identity\n- **Name:** Marco\n"));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "update-identity-field",
+          agentId: AGENT_ID,
+          field: "creature",
+          value: "axolotl",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body.error).toContain("AGENTS.md is missing the Creature");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
   it("GET by a member-role caller still succeeds (reads stay open)", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // resolveCallerFromAuth
@@ -4083,23 +4232,23 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
 
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/IDENTITY.md",
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
       })
       .rejects(noSuchKey());
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/IDENTITY.md",
+        Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/AGENTS.md",
       })
       .rejects(noSuchKey());
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/defaults/workspace/IDENTITY.md",
+        Key: "tenants/acme/agents/_catalog/defaults/workspace/AGENTS.md",
       })
       .resolves(body("Your name is {{AGENT_NAME}}."));
 
     const res = await parse(
       await handler(
-        event({ action: "get", agentId: AGENT_ID, path: "IDENTITY.md" }),
+        event({ action: "get", agentId: AGENT_ID, path: "AGENTS.md" }),
       ),
     );
     expect(res.statusCode).toBe(200);

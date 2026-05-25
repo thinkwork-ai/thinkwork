@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { CANONICAL_FILE_NAMES, loadDefaults } from "../index.js";
+import { CANONICAL_FILE_NAMES, loadDefaults, loadFile } from "../index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "..", "..");
@@ -26,16 +26,12 @@ const LOCAL_FILES_DIR = join(PACKAGE_ROOT, "files");
 
 // Map canonical name → absolute path of its authoritative .md source.
 const AUTHORITATIVE_SOURCES: Record<string, string> = {
-  "SOUL.md": join(LOCAL_FILES_DIR, "SOUL.md"),
-  "IDENTITY.md": join(LOCAL_FILES_DIR, "IDENTITY.md"),
   "USER.md": join(LOCAL_FILES_DIR, "USER.md"),
   "SPACE.md": join(LOCAL_FILES_DIR, "SPACE.md"),
   "AGENTS.md": join(LOCAL_FILES_DIR, "AGENTS.md"),
   "CONTEXT.md": join(LOCAL_FILES_DIR, "CONTEXT.md"),
   "GUARDRAILS.md": join(LOCAL_FILES_DIR, "GUARDRAILS.md"),
   "MEMORY_GUIDE.md": join(LOCAL_FILES_DIR, "MEMORY_GUIDE.md"),
-  "CAPABILITIES.md": join(LOCAL_FILES_DIR, "CAPABILITIES.md"),
-  "PLATFORM.md": join(LOCAL_FILES_DIR, "PLATFORM.md"),
   "ROUTER.md": join(LOCAL_FILES_DIR, "ROUTER.md"),
   "memory/lessons.md": join(LOCAL_FILES_DIR, "memory", "lessons.md"),
   "memory/preferences.md": join(LOCAL_FILES_DIR, "memory", "preferences.md"),
@@ -67,6 +63,12 @@ describe("workspace-defaults parity", () => {
     const loaded = loadDefaults();
     expect(Object.keys(loaded).sort()).toEqual(
       [...CANONICAL_FILE_NAMES].sort(),
+    );
+  });
+
+  it("rejects retired legacy default files", () => {
+    expect(() => loadFile("SOUL.md" as never)).toThrow(
+      "Unknown workspace default file: SOUL.md",
     );
   });
 

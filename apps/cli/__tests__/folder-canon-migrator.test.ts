@@ -146,6 +146,73 @@ describe("migrateFolderCanon", () => {
     expect(store.deletes).toEqual([]);
   });
 
+  it("deletes retired legacy files only after migrated AGENTS.md sections are verified", async () => {
+    const store = seededStore();
+    await migrateFolderCanon({
+      tenantSlug: "acme",
+      agentSlug: "master",
+      mode: "apply",
+      store,
+      migratedDate: "2026-05-24",
+    });
+
+    store.writes = [];
+    store.copies = [];
+    store.deletes = [];
+
+    const summary = await migrateFolderCanon({
+      tenantSlug: "acme",
+      agentSlug: "master",
+      mode: "apply",
+      store,
+      migratedDate: "2026-05-24",
+      cleanupLegacyFiles: true,
+    });
+
+    expect(summary.tenantReports[0]?.status).toBe("migrated");
+    expect(store.deletes).toEqual([
+      `${PREFIX}SOUL.md`,
+      `${PREFIX}IDENTITY.md`,
+      `${PREFIX}PLATFORM.md`,
+      `${PREFIX}CAPABILITIES.md`,
+    ]);
+    expect(store.objects.has(`${PREFIX}SOUL.md`)).toBe(false);
+    expect(store.objects.has(`${PREFIX}IDENTITY.md`)).toBe(false);
+    expect(store.objects.has(`${PREFIX}PLATFORM.md`)).toBe(false);
+    expect(store.objects.has(`${PREFIX}CAPABILITIES.md`)).toBe(false);
+  });
+
+  it("refreshes stale migrated blocks before deleting retired legacy files", async () => {
+    const store = seededStore();
+    await migrateFolderCanon({
+      tenantSlug: "acme",
+      agentSlug: "master",
+      mode: "apply",
+      store,
+      migratedDate: "2026-05-24",
+    });
+    store.objects.set(`${PREFIX}SOUL.md`, "Updated soul after first pass.\n");
+    store.writes = [];
+    store.copies = [];
+    store.deletes = [];
+
+    const summary = await migrateFolderCanon({
+      tenantSlug: "acme",
+      agentSlug: "master",
+      mode: "apply",
+      store,
+      migratedDate: "2026-05-24",
+      cleanupLegacyFiles: true,
+    });
+
+    expect(summary.tenantReports[0]?.status).toBe("migrated");
+    expect(store.writes).toEqual([`${PREFIX}AGENTS.md`]);
+    expect(store.objects.get(`${PREFIX}AGENTS.md`)).toContain(
+      "<!-- migrated from SOUL.md on 2026-05-24 -->\nUpdated soul after first pass.\n<!-- /migrated from SOUL.md -->",
+    );
+    expect(store.objects.has(`${PREFIX}SOUL.md`)).toBe(false);
+  });
+
   it("reports pending operations in noop-check without mutating", async () => {
     const store = seededStore();
 

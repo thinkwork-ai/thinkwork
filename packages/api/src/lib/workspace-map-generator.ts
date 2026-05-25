@@ -110,7 +110,7 @@ interface WorkspaceContextPath {
   slug: string;
   folder: string;
   contextPath: string;
-  layout: "legacy-flat" | "workspaces-parent";
+  layout: "workspaces-parent";
 }
 
 // ---------------------------------------------------------------------------
@@ -289,16 +289,6 @@ function getWorkspaceContextPath(path: string): WorkspaceContextPath | null {
     };
   }
 
-  const legacy = path.match(/^([^/.][^/]*)\/CONTEXT\.md$/);
-  if (legacy?.[1]) {
-    return {
-      slug: legacy[1],
-      folder: `${legacy[1]}/`,
-      contextPath: path,
-      layout: "legacy-flat",
-    };
-  }
-
   return null;
 }
 
@@ -308,7 +298,7 @@ function collectWorkspaceContextPaths(paths: string[]): WorkspaceContextPath[] {
     const parsed = getWorkspaceContextPath(path);
     if (!parsed) continue;
     const existing = bySlug.get(parsed.slug);
-    if (!existing || parsed.layout === "workspaces-parent") {
+    if (!existing) {
       bySlug.set(parsed.slug, parsed);
     }
   }

@@ -1,15 +1,15 @@
 """
 update_identity Strands tool.
 
-Lets the agent edit one of the 4 personality fields on its own
-IDENTITY.md: Creature, Vibe, Emoji, Avatar. Never the Name line (that's
-reserved for `update_agent_name`, which goes through the updateAgent
-mutation + writeIdentityMdForAgent on the server).
+Lets the agent edit one of the 4 personality fields in its own
+AGENTS.md identity section: Creature, Vibe, Emoji, Avatar. Never the
+Name line (that's reserved for `update_agent_name`, which goes through
+the updateAgent mutation + writeIdentityMdForAgent on the server).
 
 Server-side this hits `/api/workspaces/files` with
 `{action: "update-identity-field", field, value}`. The endpoint does
 line-surgery on the matching bullet and preserves every other line in
-the file — anything the agent has written below the scaffold survives.
+AGENTS.md.
 
 Part of docs/plans/2026-04-22-003-feat-agent-self-serve-tools-plan.md.
 """
@@ -66,7 +66,7 @@ def _post_update_identity(
 
 @tool
 def update_identity(field: IdentityField, value: str) -> str:
-    """Update one of your IDENTITY.md personality fields.
+    """Update one of your AGENTS.md identity personality fields.
 
     Accepts only the 4 personality bullets: ``creature``, ``vibe``,
     ``emoji``, ``avatar``. You cannot change your Name through this tool
@@ -75,7 +75,7 @@ def update_identity(field: IdentityField, value: str) -> str:
     Use this when your human describes your personality (``you're a
     quick, sharp fox``) or when you've learned something real about your
     own style that belongs in a single-line bullet. Don't use it for
-    every ephemeral mood — IDENTITY.md is who you are, not a journal.
+    every ephemeral mood — AGENTS.md identity is who you are, not a journal.
 
     Args:
         field: One of ``"creature"``, ``"vibe"``, ``"emoji"``,
@@ -94,18 +94,12 @@ def update_identity(field: IdentityField, value: str) -> str:
     tenant_id = os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
     agent_id = os.environ.get("AGENT_ID") or os.environ.get("_MCP_AGENT_ID") or ""
     api_url = os.environ.get("THINKWORK_API_URL") or ""
-    api_secret = (
-        os.environ.get("API_AUTH_SECRET")
-        or os.environ.get("THINKWORK_API_SECRET")
-        or ""
-    )
+    api_secret = os.environ.get("API_AUTH_SECRET") or os.environ.get("THINKWORK_API_SECRET") or ""
     if not (tenant_id and agent_id and api_url and api_secret):
         return "update_identity: runtime is missing tenant / agent / API config."
 
     try:
-        payload = _post_update_identity(
-            tenant_id, agent_id, field, value, api_url, api_secret
-        )
+        payload = _post_update_identity(tenant_id, agent_id, field, value, api_url, api_secret)
     except urllib.error.HTTPError as e:
         try:
             detail = json.loads(e.read().decode("utf-8")).get("error") or str(e)

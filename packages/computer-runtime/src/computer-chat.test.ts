@@ -28,7 +28,7 @@ function context(): ThreadTurnContext {
 describe("Computer chat system prompt", () => {
   it("appends local workspace files to the API system prompt", async () => {
     const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
-    await writeFile(join(root, "IDENTITY.md"), "Name: Marco\n", {
+    await writeFile(join(root, "AGENTS.md"), "Name: Marco\n", {
       encoding: "utf8",
     });
     await writeFile(join(root, "USER.md"), "Name: Eric\n", {
@@ -38,7 +38,7 @@ describe("Computer chat system prompt", () => {
     const prompt = await buildSystemPrompt(context(), root);
 
     expect(prompt).toContain("You are Marco.");
-    expect(prompt).toContain("# IDENTITY.md");
+    expect(prompt).toContain("# AGENTS.md");
     expect(prompt).toContain("Name: Marco");
     expect(prompt).toContain("# USER.md");
     expect(prompt).toContain("Name: Eric");
@@ -46,7 +46,7 @@ describe("Computer chat system prompt", () => {
 
   it("suppresses workspace USER.md for shared Computer thread turns", async () => {
     const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
-    await writeFile(join(root, "IDENTITY.md"), "Name: Marco\n", {
+    await writeFile(join(root, "AGENTS.md"), "Name: Marco\n", {
       encoding: "utf8",
     });
     await writeFile(join(root, "USER.md"), "Name: Workspace Owner\n", {
@@ -61,7 +61,7 @@ describe("Computer chat system prompt", () => {
       root,
     );
 
-    expect(prompt).toContain("# IDENTITY.md");
+    expect(prompt).toContain("# AGENTS.md");
     expect(prompt).toContain("Name: Marco");
     expect(prompt).not.toContain("# USER.md");
     expect(prompt).not.toContain("Workspace Owner");

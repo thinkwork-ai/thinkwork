@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 
 import {
@@ -7,6 +7,7 @@ import {
 } from "../src/commands/migrate-folder-canon.js";
 
 const execFileSyncMock = vi.hoisted(() => vi.fn());
+const migrateFolderCanonMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", async () => {
   const actual =
@@ -19,7 +20,17 @@ vi.mock("node:child_process", async () => {
   };
 });
 
+vi.mock("../src/lib/migrations/folder-canon-migrator.js", () => ({
+  migrateFolderCanon: migrateFolderCanonMock,
+}));
+
 describe("migrate-folder-canon command registration", () => {
+  beforeEach(() => {
+    execFileSyncMock.mockReset();
+    migrateFolderCanonMock.mockReset();
+    process.exitCode = undefined;
+  });
+
   it("registers the migration command and Plan-B mode flags", () => {
     const program = new Command();
     registerMigrateFolderCanonCommand(program);
@@ -36,6 +47,37 @@ describe("migrate-folder-canon command registration", () => {
     expect(help).toMatch(/--repair/);
     expect(help).toMatch(/--noop-check/);
     expect(help).toMatch(/--snapshot/);
+    expect(help).toMatch(/--cleanup-legacy-files/);
+  });
+
+  it("passes cleanupLegacyFiles to the migrator", async () => {
+    migrateFolderCanonMock.mockResolvedValueOnce({
+      mode: "apply",
+      tenantReports: [],
+      pendingOperations: 0,
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const program = new Command();
+    registerMigrateFolderCanonCommand(program);
+
+    await program.parseAsync(
+      [
+        "migrate-folder-canon",
+        "--workspace-bucket",
+        "bucket",
+        "--apply",
+        "--cleanup-legacy-files",
+      ],
+      { from: "user" },
+    );
+
+    expect(migrateFolderCanonMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "apply",
+        cleanupLegacyFiles: true,
+      }),
+    );
+    log.mockRestore();
   });
 
   it("paginates S3 list-objects-v2 results", async () => {
