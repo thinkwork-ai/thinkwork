@@ -141,14 +141,17 @@ Target branch: `main`
 
 ## Follow-Up Run: Thread Progress Markdown
 
-- Status: active
-- Active branch: `codex/thread-progress-md`
-- Active worktree: `.Codex/worktrees/thread-progress-md`
+- Status: merged and live-verified
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: the Info Panel checklist is the visible operational state, but the agent turn context does not yet receive a durable thread-level progress ledger. Status answers can drift unless every turn sees the current goal, tasks, owners, blockers, missing information, and next steps.
 - Scope: render a per-thread `PROGRESS.md` into S3 at `tenants/<tenant-slug>/threads/<thread-id>/PROGRESS.md`, refresh it after Customer Onboarding workflow creation, deterministic chat updates, and assistant finalization, then inject the file into future agent wakeup context when present.
-- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/thread-progress/storage.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/chat-finalize/process-finalize.test.ts src/handlers/wakeup-processor.system-prompt.test.ts`; `pnpm --filter @thinkwork/api typecheck`.
-- PR: pending.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/thread-progress/storage.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/chat-finalize/process-finalize.test.ts src/handlers/wakeup-processor.system-prompt.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `git diff --check origin/main...HEAD`.
+- PR: [#1719](https://github.com/thinkwork-ai/thinkwork/pull/1719)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26417425731` completed successfully.
+- Live E2E: created Customer Onboarding thread `14a71df7-0d6f-4ecf-a3cd-a314d55f0b09`; verified seven native checklist rows; verified S3 `tenants/sleek-squirrel-230/threads/14a71df7-0d6f-4ecf-a3cd-a314d55f0b09/PROGRESS.md`; sent chat updates that marked DocuSign, D&B, tax exemption, P21, and missing intake complete while blocking credit check; verified `PROGRESS.md` refreshed to 5/7 required complete with Finance blocker; asked status and verified response came from checklist progress; verified Spaces Info Panel shows 5/7 progress, owners, statuses, and task-click composer prefill.
 
 ### Active Unit Notes
 
