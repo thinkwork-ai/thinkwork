@@ -75,6 +75,10 @@ import {
   applyAgentSkillMetadata,
   loadWorkspaceSkillConfigs,
 } from "../lib/resolve-agent-runtime-config.js";
+import {
+  prependThreadProgressPromptBlock,
+  readThreadProgressMarkdown,
+} from "../lib/thread-progress/storage.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
@@ -1438,6 +1442,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     await insertUserMessage(runThreadId, wakeup.tenant_id, userContent);
   }
 
+  agentMessage = await prependThreadProgressForAgentTurn(agentMessage, {
+    tenantSlug,
+    threadId: runThreadId,
+  });
+
   try {
     const triggerChannel = threadContext?.channel || wakeup.source || "";
 
@@ -2333,6 +2342,28 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         await promoteNextDeferredWakeup(wakeup.tenant_id, runThreadId);
       } catch {}
     }
+  }
+}
+
+async function prependThreadProgressForAgentTurn(
+  agentMessage: string,
+  input: { tenantSlug: string; threadId?: string },
+): Promise<string> {
+  if (!input.tenantSlug || !input.threadId) return agentMessage;
+  try {
+    const content = await readThreadProgressMarkdown(
+      { tenantSlug: input.tenantSlug, threadId: input.threadId },
+      { bucket: WORKSPACE_BUCKET || process.env.WORKSPACE_BUCKET },
+    );
+    if (!content) return agentMessage;
+    return prependThreadProgressPromptBlock(agentMessage, content);
+  } catch (error) {
+    console.warn("[wakeup-processor] Failed to load thread PROGRESS.md", {
+      tenantSlug: input.tenantSlug,
+      threadId: input.threadId,
+      error,
+    });
+    return agentMessage;
   }
 }
 
