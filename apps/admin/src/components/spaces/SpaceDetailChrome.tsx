@@ -319,6 +319,7 @@ export function SpaceWorkspacePanel({ spaceId }: { spaceId: string }) {
     <WorkspaceEditor
       target={{ spaceId }}
       mode="context"
+      defaultOpenFile="SPACE.md"
       className="min-h-[620px]"
     />
   );
