@@ -15,13 +15,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U2 Support native checklist rows in linked task compatibility storage
-- Active branch: `codex/u2-native-checklist-linked-tasks`
-- Active worktree: `.Codex/worktrees/customer-onboarding-u2`
+- Active unit: U3 Pivot onboarding workflow to deterministic native checklist creation
+- Active branch: `codex/u3-native-onboarding-workflow`
+- Active worktree: `.Codex/worktrees/customer-onboarding-u3`
 - Started: 2026-05-25
-- Latest merged PR: [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695)
-- Active PR: [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696)
-- CI: pending for U2; local verification passed
+- Latest merged PR: [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696)
+- Active PR: none
+- CI: not started for U3; local verification passed
 
 ### Active Unit Notes
 
@@ -32,13 +32,17 @@ Target branch: `main`
 - U1 merged via [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) at `d22a771d`.
 - Created isolated U2 worktree from `origin/main` at `d22a771d`.
 - U2 verification passed: focused linked-task API tests, linked-task database schema tests, GraphQL contract test, full `@thinkwork/api` test suite, repo-wide typecheck, repo lint, touched-file Prettier check, `git diff --check`, and `pnpm schema:build`.
+- U2 merged via [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696) at `94650bac`.
+- Created isolated U3 worktree from `origin/main` at `94650bac`.
+- U3 verification passed: customer onboarding workflow tests, startCustomerOnboarding resolver tests, full `@thinkwork/api` test suite, repo-wide typecheck, repo lint, touched-file Prettier check, and `git diff --check`.
 
 ### Progress Log
 
-| Date       | Unit | Branch                                     | PR                                                           | Status      | Verification             | Notes                                                          |
-| ---------- | ---- | ------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------------------ | -------------------------------------------------------------- |
-| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed` | [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) | Merged      | CI passed                | Native seed/config/runbook refresh merged.                     |
-| 2026-05-25 | U2   | `codex/u2-native-checklist-linked-tasks`   | [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696) | In progress | Local passed; CI pending | Native linked-task provider/status/mutation pushed for review. |
+| Date       | Unit | Branch                                     | PR                                                           | Status      | Verification | Notes                                               |
+| ---------- | ---- | ------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------ | --------------------------------------------------- |
+| 2026-05-25 | U1   | `codex/u1-customer-onboarding-native-seed` | [#1695](https://github.com/thinkwork-ai/thinkwork/pull/1695) | Merged      | CI passed    | Native seed/config/runbook refresh merged.          |
+| 2026-05-25 | U2   | `codex/u2-native-checklist-linked-tasks`   | [#1696](https://github.com/thinkwork-ai/thinkwork/pull/1696) | Merged      | CI passed    | Native linked-task provider/status/mutation merged. |
+| 2026-05-25 | U3   | `codex/u3-native-onboarding-workflow`      | none                                                         | In progress | Local passed | Native onboarding workflow pivot ready for PR.      |
 
 ### CI Failures
 
