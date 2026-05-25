@@ -15,6 +15,9 @@ import {
 
 const { Pool } = pg;
 
+const CUSTOMER_ONBOARDING_DEMO_SPACE_ID =
+  "0b640386-05d7-4dbb-9585-e4c0b8c03f5f";
+
 interface SeedOptions {
   tenantId: string;
   spaceId: string | null;
@@ -38,6 +41,14 @@ interface SeedSummary {
   checklistItemCount: number;
   spaceFileCount: number;
   spaceFilesWritten: boolean;
+  nativeChecklist: {
+    systemOfRecord: "thinkwork";
+    requiredItemCount: number;
+    conditionalItemKeys: string[];
+    sourceFiles: string[];
+    folderStructureIncludesIntakeDoc: boolean;
+    folderStructureExpandsSkills: boolean;
+  };
   includeLastMileIntegration: boolean;
   writebackPolicy: string;
   dryRun: boolean;
@@ -60,12 +71,13 @@ async function main() {
   if (options.dryRun) {
     printSummary({
       tenantId: options.tenantId,
-      spaceId: null,
+      spaceId: options.spaceId,
       checklistTemplateId: null,
       memberCount: configuredMemberUserIds.length,
       checklistItemCount: CUSTOMER_ONBOARDING_CHECKLIST_ITEMS.length,
       spaceFileCount: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.length,
       spaceFilesWritten: false,
+      nativeChecklist: nativeChecklistSummary(),
       includeLastMileIntegration: options.includeLastMileIntegration,
       writebackPolicy: options.writebackPolicy,
       dryRun: true,
@@ -73,6 +85,7 @@ async function main() {
     console.log(
       JSON.stringify(
         {
+          demoSpaceId: CUSTOMER_ONBOARDING_DEMO_SPACE_ID,
           space: {
             slug: CUSTOMER_ONBOARDING_SPACE_SLUG,
             prompt: CUSTOMER_ONBOARDING_SPACE_PROMPT,
@@ -150,6 +163,7 @@ async function main() {
       checklistItemCount: CUSTOMER_ONBOARDING_CHECKLIST_ITEMS.length,
       spaceFileCount: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.length,
       spaceFilesWritten: options.writeSpaceFiles,
+      nativeChecklist: nativeChecklistSummary(),
       includeLastMileIntegration: options.includeLastMileIntegration,
       writebackPolicy: options.writebackPolicy,
       dryRun: false,
@@ -230,6 +244,31 @@ function parseArgs(args: string[], envVars: NodeJS.ProcessEnv): SeedOptions {
     workspaceBucket:
       first(values, "--workspace-bucket") ?? envVars.WORKSPACE_BUCKET ?? null,
     dryRun: flags.has("--dry-run"),
+  };
+}
+
+function nativeChecklistSummary(): SeedSummary["nativeChecklist"] {
+  const contextFile =
+    CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.find(
+      (file) => file.path === "CONTEXT.md",
+    )?.content ?? "";
+  return {
+    systemOfRecord: "thinkwork",
+    requiredItemCount: CUSTOMER_ONBOARDING_CHECKLIST_ITEMS.filter(
+      (item) => item.required,
+    ).length,
+    conditionalItemKeys: CUSTOMER_ONBOARDING_CHECKLIST_ITEMS.filter(
+      (item) => item.checklistTemplate.applicability !== "always",
+    ).map((item) => item.key),
+    sourceFiles: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.map(
+      (file) => file.path,
+    ),
+    folderStructureIncludesIntakeDoc: contextFile.includes(
+      "docs/customer-onboarding-intake.md",
+    ),
+    folderStructureExpandsSkills: /^\s*(?:[|` -]+)?skills\//im.test(
+      contextFile,
+    ),
   };
 }
 
