@@ -8,6 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import {
+  UpdateLinkedTaskMutation,
+  UpdateThreadMutation,
+} from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import {
   SpacesThreadDetailRoute,
@@ -69,21 +73,29 @@ vi.mock("@/lib/use-computer-thread-chunks", () => ({
 }));
 
 const reexecuteThreadQuery = vi.fn();
+const reexecuteLinkedTasksQuery = vi.fn();
 const reexecuteTasksQuery = vi.fn();
 const sendMessage = vi.fn();
+const updateThreadMock = vi.fn();
+const updateLinkedTaskMock = vi.fn();
 const resetStreamingChunks = vi.fn();
 
 let threadData: unknown;
 let taskData: unknown;
 let eventData: unknown;
 let mentionTargetsData: unknown;
+let linkedTasksData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(usePageHeaderActions).mockReset();
   reexecuteThreadQuery.mockReset();
+  reexecuteLinkedTasksQuery.mockReset();
   reexecuteTasksQuery.mockReset();
   sendMessage.mockReset();
+  updateThreadMock.mockReset();
+  updateLinkedTaskMock.mockReset();
   resetStreamingChunks.mockReset();
   streamingChunks = [];
   threadData = {
@@ -122,11 +134,26 @@ beforeEach(() => {
   };
   eventData = { computerEvents: [] };
   mentionTargetsData = { threadMentionTargets: [] };
+  linkedTasksData = { threadLinkedTasks: [] };
 
-  vi.mocked(useMutation).mockReturnValue([
-    { fetching: false, stale: false, hasNext: false },
-    sendMessage,
-  ]);
+  sendMessage.mockResolvedValue({});
+  updateThreadMock.mockResolvedValue({});
+  updateLinkedTaskMock.mockResolvedValue({});
+  vi.mocked(useMutation).mockImplementation((mutation) => {
+    if (mutation === UpdateThreadMutation) {
+      return [
+        { fetching: false, stale: false, hasNext: false },
+        updateThreadMock,
+      ];
+    }
+    if (mutation === UpdateLinkedTaskMutation) {
+      return [
+        { fetching: false, stale: false, hasNext: false },
+        updateLinkedTaskMock,
+      ];
+    }
+    return [{ fetching: false, stale: false, hasNext: false }, sendMessage];
+  });
   vi.mocked(useSubscription).mockReturnValue([
     { data: null, fetching: false, stale: false },
     () => {},
@@ -142,10 +169,18 @@ beforeEach(() => {
   }));
   vi.mocked(useQuery).mockImplementation((options) => {
     const variables = options.variables as
-      | { messageLimit?: number; threadId?: string; limit?: number }
+      | {
+          messageLimit?: number;
+          threadId?: string;
+          tenantId?: string;
+          limit?: number;
+        }
       | undefined;
     if (variables?.messageLimit) {
       return [queryState(threadData), reexecuteThreadQuery];
+    }
+    if (variables?.tenantId && variables?.threadId) {
+      return [queryState(linkedTasksData), reexecuteLinkedTasksQuery];
     }
     if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
@@ -365,6 +400,100 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.queryByText("Transient streamed text")).toBeNull();
     await waitFor(() => {
       expect(resetStreamingChunks).toHaveBeenCalled();
+    });
+  });
+
+  it("renders and updates native onboarding checklist rows", async () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Acme onboarding",
+        status: "OPEN",
+        metadata: {
+          customerOnboarding: {
+            workflow: "customer_onboarding",
+            facts: {
+              companyName: "Acme Inc",
+              taxExempt: true,
+              creditTermsRequested: false,
+            },
+          },
+        },
+        messages: { edges: [] },
+      },
+    };
+    linkedTasksData = {
+      threadLinkedTasks: [
+        {
+          id: "linked-1",
+          provider: "THINKWORK",
+          title: "Get contract signed",
+          required: true,
+          status: "TODO",
+          syncStatus: "SYNCED",
+        },
+      ],
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    expect(screen.getByText("Get contract signed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("combobox", { name: "Checklist status" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Completed" }));
+
+    await waitFor(() => {
+      expect(updateLinkedTaskMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          linkedTaskId: "linked-1",
+          status: "COMPLETED",
+        },
+      });
+    });
+    expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  it("completes an onboarding Thread after required checklist rows are complete", async () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Acme onboarding",
+        status: "OPEN",
+        metadata: {
+          customerOnboarding: { workflow: "customer_onboarding" },
+        },
+        messages: { edges: [] },
+      },
+    };
+    linkedTasksData = {
+      threadLinkedTasks: [
+        {
+          id: "linked-1",
+          provider: "THINKWORK",
+          title: "Get contract signed",
+          required: true,
+          status: "COMPLETED",
+          syncStatus: "SYNCED",
+        },
+      ],
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Complete Thread" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Complete Thread" }),
+    );
+
+    await waitFor(() => {
+      expect(updateThreadMock).toHaveBeenCalledWith({
+        id: "thread-1",
+        input: { status: "DONE" },
+      });
     });
   });
 });

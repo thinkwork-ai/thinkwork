@@ -46,16 +46,26 @@ describe("StartOnboardingDialog", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start onboarding" }));
     fireEvent.change(screen.getByLabelText("Opportunity ID"), {
       target: { value: "OPP-1" },
     });
     fireEvent.change(screen.getByLabelText("Customer"), {
       target: { value: "Acme Inc" },
     });
-    fireEvent.change(screen.getByLabelText("Sales rep"), {
+    fireEvent.change(screen.getByLabelText("Sales rep name"), {
       target: { value: "Jordan" },
     });
+    fireEvent.change(screen.getByLabelText("Primary contact email"), {
+      target: { value: "casey@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("AP contact email"), {
+      target: { value: "ap@example.com" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Tax exempt" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Credit terms requested" }),
+    );
     fireEvent.change(screen.getByLabelText("Document URL"), {
       target: { value: "https://example.com/doc.pdf" },
     });
@@ -69,7 +79,12 @@ describe("StartOnboardingDialog", () => {
         opportunity: expect.objectContaining({
           opportunityId: "OPP-1",
           customerName: "Acme Inc",
-          salesRep: "Jordan",
+          salesRep: { name: "Jordan" },
+          primaryContact: { email: "casey@example.com" },
+          contacts: [{ email: "casey@example.com" }],
+          accountsPayableContact: { email: "ap@example.com" },
+          taxExempt: true,
+          creditTermsRequested: true,
           documents: [
             {
               title: "Onboarding document",
@@ -83,11 +98,11 @@ describe("StartOnboardingDialog", () => {
 
   it("keeps the dialog open and surfaces mutation errors", async () => {
     startOnboardingMock.mockResolvedValue({
-      error: { message: "LastMile unavailable" },
+      error: { message: "GraphQL unavailable" },
     });
     render(<StartOnboardingDialog tenantId="tenant-1" spaceId="space-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start onboarding" }));
     fireEvent.change(screen.getByLabelText("Opportunity ID"), {
       target: { value: "OPP-1" },
     });
@@ -96,6 +111,6 @@ describe("StartOnboardingDialog", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create Thread" }));
 
-    await screen.findByText("LastMile unavailable");
+    await screen.findByText("GraphQL unavailable");
   });
 });

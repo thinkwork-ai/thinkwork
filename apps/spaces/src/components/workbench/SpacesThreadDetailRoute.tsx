@@ -3,6 +3,12 @@ import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
+import { OnboardingChecklistPanel } from "@/components/spaces/OnboardingChecklistPanel";
+import {
+  parseSpaceRecord,
+  sourceContextFromThreadMetadata,
+  type LinkedTaskSummary,
+} from "@/components/spaces/space-types";
 import {
   TaskThreadView,
   normalizePersistedParts,
@@ -23,9 +29,12 @@ import {
   RunbookRunsQuery,
   SendMessageMutation,
   ThreadArtifactsQuery,
+  ThreadLinkedTasksQuery,
   ThreadMentionTargetsQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
+  UpdateLinkedTaskMutation,
+  UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
@@ -58,8 +67,10 @@ interface ThreadResult {
     status?: string | null;
     spaceId?: string | null;
     lifecycleStatus?: string | null;
+    metadata?: unknown;
     costSummary?: number | null;
     createdAt?: string | null;
+    updatedAt?: string | null;
     messages?: {
       edges?: Array<{
         node: {
@@ -157,6 +168,10 @@ interface MentionTargetsResult {
   threadMentionTargets?: MentionTarget[] | null;
 }
 
+interface ThreadLinkedTasksResult {
+  threadLinkedTasks?: LinkedTaskSummary[] | null;
+}
+
 export function SpacesThreadDetailRoute({
   threadId,
   backHref,
@@ -169,6 +184,9 @@ export function SpacesThreadDetailRoute({
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
   const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
+  const [updatingLinkedTaskId, setUpdatingLinkedTaskId] = useState<
+    string | null
+  >(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
   );
@@ -228,7 +246,23 @@ export function SpacesThreadDetailRoute({
       pause: !computerId,
       requestPolicy: "cache-and-network",
     });
+  const [
+    {
+      data: linkedTasksData,
+      fetching: linkedTasksFetching,
+      error: linkedTasksError,
+    },
+    reexecuteLinkedTasksQuery,
+  ] = useQuery<ThreadLinkedTasksResult>({
+    query: ThreadLinkedTasksQuery,
+    variables: { tenantId: tenantId ?? "", threadId },
+    pause: !tenantId || !threadId,
+    requestPolicy: "cache-and-network",
+  });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
+  const [{ fetching: completingThread }, updateThread] =
+    useMutation(UpdateThreadMutation);
+  const [, updateLinkedTask] = useMutation(UpdateLinkedTaskMutation);
   const {
     chunks,
     streamState,
@@ -279,9 +313,11 @@ export function SpacesThreadDetailRoute({
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+      reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
+    reexecuteLinkedTasksQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     threadId,
@@ -294,9 +330,11 @@ export function SpacesThreadDetailRoute({
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+      reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
+    reexecuteLinkedTasksQuery,
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
@@ -311,11 +349,13 @@ export function SpacesThreadDetailRoute({
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
+      reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
     messageUpdate?.onNewMessage?.threadId,
     reexecuteEventsQuery,
+    reexecuteLinkedTasksQuery,
     reexecuteMentionTargetsQuery,
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
@@ -382,6 +422,15 @@ export function SpacesThreadDetailRoute({
     isActiveRunbookQueue(queue.status),
   );
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
+  const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
+  const onboardingSourceContext = sourceContextFromThreadMetadata(
+    data?.thread?.metadata,
+  );
+  const isCustomerOnboardingThread =
+    hasCustomerOnboardingMetadata(data?.thread?.metadata) ||
+    linkedTasks.length > 0;
+  const showOnboardingChecklist =
+    isCustomerOnboardingThread || linkedTasksFetching;
   const completionNotificationRef = useRef<{
     threadId: string;
     hasDurableAssistant: boolean;
@@ -605,7 +654,40 @@ export function SpacesThreadDetailRoute({
     reexecuteTasksQuery,
   ]);
 
-  return (
+  async function handleUpdateLinkedTask(taskId: string, status: string) {
+    if (!tenantId) return;
+    setUpdatingLinkedTaskId(taskId);
+    const result = await updateLinkedTask({
+      input: {
+        tenantId,
+        threadId,
+        linkedTaskId: taskId,
+        status,
+      },
+    });
+    setUpdatingLinkedTaskId(null);
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+  }
+
+  async function handleCompleteThread() {
+    const result = await updateThread({
+      id: threadId,
+      input: { status: "DONE" },
+    });
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success("Thread completed");
+    reexecuteQuery({ requestPolicy: "network-only" });
+    reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+  }
+
+  const threadView = (
     <TaskThreadView
       thread={visibleThread}
       isLoading={fetching && !data}
@@ -686,6 +768,31 @@ export function SpacesThreadDetailRoute({
       runbookQueues={runbookQueues}
     />
   );
+
+  if (!showOnboardingChecklist) return threadView;
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col bg-background lg:flex-row">
+      <div className="min-h-0 min-w-0 flex-1">{threadView}</div>
+      <div className="h-[42vh] shrink-0 border-t lg:h-full lg:w-[360px] lg:border-l lg:border-t-0">
+        <OnboardingChecklistPanel
+          tasks={linkedTasks}
+          sourceContext={onboardingSourceContext}
+          isLoading={linkedTasksFetching && linkedTasks.length === 0}
+          error={linkedTasksError?.message ?? null}
+          completedAt={
+            normalizeThreadStatus(data?.thread?.status) === "done"
+              ? data?.thread?.updatedAt
+              : null
+          }
+          isCompleting={completingThread}
+          updatingTaskId={updatingLinkedTaskId}
+          onUpdateTask={handleUpdateLinkedTask}
+          onCompleteThread={handleCompleteThread}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function deriveThreadArtifacts(
@@ -755,6 +862,18 @@ function resolveAgentsInvolved(thread?: ThreadResult["thread"]) {
   const computerName = thread.computer?.name?.trim() || thread.computer?.slug;
   if (computerName) agents.add(computerName);
   return Array.from(agents);
+}
+
+function hasCustomerOnboardingMetadata(metadata: unknown) {
+  const root = parseSpaceRecord(metadata);
+  const onboarding = parseSpaceRecord(root.customerOnboarding);
+  return onboarding.workflow === "customer_onboarding";
+}
+
+function normalizeThreadStatus(value?: string | null) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 async function downloadThreadAttachment(
