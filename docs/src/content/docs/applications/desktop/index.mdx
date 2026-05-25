@@ -1,85 +1,94 @@
 ---
 title: Desktop App
-description: The ThinkWork Spaces desktop app — a macOS Electron client for end users that packages the same Spaces web app with native login, secure token storage, app chrome, and auto-update support.
+description: ThinkWork Spaces as an installed macOS app for daily thread, agent, and artifact work.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-The desktop app is the macOS client for end users who want ThinkWork Spaces as a daily-driver application instead of a browser tab. It packages the same Spaces experience served at `app.thinkwork.ai`: threads, Spaces navigation, agent chat, generated artifacts, side panels, and the command composer.
+ThinkWork Spaces Desktop is the installed macOS app for end users who live in Threads, Spaces, agent chat, and generated artifacts all day. It gives the Spaces product a dedicated Dock icon, native window frame, persistent sign-in, and update channel instead of asking users to keep one more browser tab alive.
 
-The app is built with Electron. Most product UI lives in the shared `apps/spaces` React app, while the desktop shell adds native-window behavior, app branding, protocol callbacks, secure token storage, and packaging.
+The Desktop app packages the same Spaces experience served on the web: Spaces navigation, thread lists, agent chat, generated artifacts, side panels, and the command composer. The native shell adds installation, app identity, OAuth callback handling, secure token storage, and release-time updates around that shared Spaces product.
 
 <Aside type="note">
-  The desktop app is not a separate product surface. It is the Spaces web app
-  running inside a native shell. When shared Spaces UI changes are released into
-  a new desktop build, the same thread, sidebar, composer, and artifact changes
-  appear in the desktop app.
+  Desktop is not a fork of Spaces. It is the shared Spaces app running inside a
+  native shell, so product work should land in Spaces first unless the change is
+  specifically about the macOS host.
 </Aside>
 
-## Install
+## Why desktop exists
 
-Download the current macOS desktop build from the ThinkWork GitHub Releases
-page:
+A browser tab is easy to lose. Desktop gives ThinkWork a stable place in the user's day: a Dock icon, a `Command-Tab` target, native window controls, and a window that can sit beside terminals, spreadsheets, browsers, and communication tools.
 
-[Download ThinkWork Spaces for macOS](https://github.com/thinkwork-ai/thinkwork/releases?q=desktop-v&expanded=true)
+That identity matters for an agent workspace. Users should be able to return to their threads and artifacts without hunting through tab groups or wondering whether a stale browser session still has the right state. Desktop makes Spaces feel like installed work software while keeping the underlying product model identical to the web app.
 
-Use the `arm64.dmg` artifact on Apple Silicon Macs and the `x64.dmg` artifact
-on Intel Macs. Canary releases install as **ThinkWork Spaces (Canary)** and can
-run side by side with the stable app.
+Desktop also gives ThinkWork a controlled delivery surface:
 
-After downloading, open the DMG and drag **ThinkWork Spaces** into
-**Applications**. macOS should recognize release builds as signed and notarized
-by ThinkWork Inc.
+- **Installed identity.** Stable, canary, and development builds have distinct app names, bundle IDs, callback schemes, and user data directories.
+- **Persistent session restore.** Cognito tokens are stored through macOS safe storage instead of browser local storage.
+- **Native app chrome.** The sidebar and main header align with the macOS window frame rather than browser chrome.
+- **Release-time updates.** Web Spaces changes appear on the web when deployed; Desktop receives them when a new Electron build packages the updated Spaces bundle.
 
-## Who uses it
+## What users do there
 
-End users inside a ThinkWork tenant. The desktop app is for people who spend most of their day in Spaces and want:
+Desktop is for end users inside a ThinkWork tenant who want Spaces as their primary work surface.
 
-- A dedicated macOS app with its own Dock icon
-- A native window that can sit beside browsers, terminals, spreadsheets, and communication tools
-- Persistent sign-in backed by the macOS keychain
-- The same Spaces, threads, and artifacts they use on the web
+| Area                | What it supports                                                                  |
+| ------------------- | --------------------------------------------------------------------------------- |
+| Spaces              | Navigate contextual workrooms, workspace files, tools, and agent context          |
+| Threads             | Read and continue durable work records across chat, automations, and integrations |
+| Agent chat          | Send messages, review responses, and continue work with the tenant platform agent |
+| Generated artifacts | Inspect reports, applets, plans, notes, and other thread-generated outputs        |
+| Side panels         | Keep detail, metadata, and supporting views near the active thread                |
+| Command composer    | Start or continue work without switching surfaces                                 |
 
 Operators still configure tenant-level settings in the [Admin Web App](/applications/admin/). Personal mobile workflows, push notifications, and user-scoped integration setup still live in the [Mobile App](/applications/mobile/).
 
-## Sign in
+## Install
 
-When the app starts without a saved session, it shows a minimal sign-in screen with a **Log in** button. Clicking the button opens the tenant's Cognito hosted sign-in flow in the user's browser.
+Download the current macOS desktop build from the ThinkWork GitHub Releases page:
 
-After the user completes Google/Cognito sign-in, the browser asks to open **ThinkWork Spaces**. Approving that prompt sends the OAuth callback back to the desktop app through the ThinkWork desktop deep-link scheme. The app stores the resulting Cognito tokens in encrypted macOS safe storage and opens the Spaces shell.
+[Download ThinkWork Spaces for macOS](https://github.com/thinkwork-ai/thinkwork/releases?q=desktop-v&expanded=true)
 
-On a trusted Mac, the user can select the browser's "always allow" option for the ThinkWork callback prompt to make future sign-ins smoother.
+Use the `arm64.dmg` artifact on Apple Silicon Macs. Use an `x64.dmg` artifact only when a release includes one for Intel Macs. Canary releases install as **ThinkWork Spaces (Canary)** and can run side by side with the stable app.
+
+After downloading, open the DMG and drag **ThinkWork Spaces** into **Applications**. macOS should recognize release builds as signed and notarized by ThinkWork Inc.
+
+## Sign in and session restore
+
+When the app starts without a saved session, it shows a minimal sign-in screen with a **Log in** button. Clicking the button opens the tenant's Cognito hosted sign-in flow in the user's system browser.
+
+After Google/Cognito sign-in completes, the browser asks to open **ThinkWork Spaces**. Approving that prompt sends the OAuth callback back to the Desktop app through the channel's deep-link scheme. The app stores the resulting Cognito tokens through encrypted macOS safe storage and opens the Spaces shell.
 
 <Aside type="tip">
   macOS may ask for permission to use confidential information in the "ThinkWork
-  Spaces Safe Storage" keychain item. Allowing this lets the desktop app restore
-  the saved session instead of asking the user to sign in again.
+  Spaces Safe Storage" keychain item. Allowing this lets Desktop restore the
+  saved session instead of asking the user to sign in again.
 </Aside>
 
-If Cognito rejects a login attempt, the desktop app returns to the sign-in screen and shows the OAuth error message so the user can retry with a fresh login URL.
+If Cognito rejects a login attempt, Desktop returns to the sign-in screen and shows the OAuth error message so the user can retry with a fresh login URL.
 
-## Header and navigation
+## Native shell
 
-The desktop shell uses native-style app chrome:
+The Desktop shell uses native-style app chrome around the shared Spaces product.
 
-| Area               | Behavior                                                                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Sidebar header** | Contains the macOS window controls, sidebar toggle, back button, and forward button. Empty space in this header can be dragged to move the app window. |
-| **Main header**    | Shows the active page or thread title, plus page actions such as overflow, info, fullscreen, and side-panel controls.                                  |
-| **Sidebar**        | Runs all the way to the top of the window so the desktop app keeps the same visual frame as the web Spaces sidebar.                                    |
+| Area           | Behavior                                                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sidebar header | Contains the macOS window controls, sidebar toggle, back button, and forward button. Empty space in this header can be dragged to move the app window. |
+| Main header    | Shows the active page or thread title, plus page actions such as overflow, info, fullscreen, and side-panel controls.                                  |
+| Sidebar        | Runs all the way to the top of the window so Desktop keeps the same visual frame as the web Spaces sidebar.                                            |
 
-The desktop app intentionally removes the post-login product title from the header. Once signed in, the header should focus on the user's current thread or page.
+Desktop intentionally removes the post-login product title from the header. Once signed in, the header should focus on the user's current thread or page.
 
-## Web and desktop updates
+## Desktop and web Spaces
 
-Most user-facing work should be built in the shared Spaces app first. Updates to thread views, composer behavior, generated artifacts, side panels, sidebar navigation, and shared styling flow into both:
+Most user-facing work belongs in the shared Spaces app first. Updates to thread views, composer behavior, generated artifacts, side panels, sidebar navigation, and shared styling flow into both:
 
-- **Web** when `app.thinkwork.ai` is deployed
+- **Web Spaces** when `app.thinkwork.ai` is deployed
 - **Desktop** when a new Electron build packages the updated Spaces bundle
 
-The desktop app does not load the production website live at runtime. It packages a built Spaces bundle into the app, so web changes flow into desktop at build/release time.
+Desktop does not load the production website live at runtime. It packages a built Spaces bundle into the app, so web changes flow into Desktop at build and release time.
 
-Desktop-specific work is still needed for native concerns:
+Desktop-specific work is limited to native concerns:
 
 - OAuth callback and deep-link handling
 - Secure token storage
@@ -87,17 +96,35 @@ Desktop-specific work is still needed for native concerns:
 - Native window chrome and draggable regions
 - Differences between browser APIs and Electron APIs
 
+## App channels
+
+Desktop uses separate app identities for stable, canary, and development builds. That separation lets teams test new builds without overwriting the user's stable install or mixing saved sessions across channels.
+
+| Channel     | App name                  | Callback scheme                     |
+| ----------- | ------------------------- | ----------------------------------- |
+| Stable      | ThinkWork Spaces          | `thinkwork://oauth/callback`        |
+| Canary      | ThinkWork Spaces (Canary) | `thinkwork-canary://oauth/callback` |
+| Development | ThinkWork Spaces (Dev)    | `thinkwork-dev://oauth/callback`    |
+
+## Known limits
+
+- **macOS is the supported Desktop target today.** The app architecture is Electron-based, but public install guidance should stay macOS-first until Windows or Linux release artifacts are intentionally shipped.
+- **Desktop follows Spaces releases.** A web-only Spaces deployment does not update the packaged app until a Desktop build is released.
+- **No local-only backend.** Desktop talks to the same deployed ThinkWork stack as Web Spaces and Mobile.
+
 ## Relationship to other apps
 
 | App                                   | Primary audience            | Purpose                                                                 |
 | ------------------------------------- | --------------------------- | ----------------------------------------------------------------------- |
-| [Desktop App](/applications/desktop/) | End users                   | Dedicated macOS Spaces app for daily thread and artifact work           |
+| [Desktop App](/applications/desktop/) | End users                   | Installed macOS Spaces app for daily thread and artifact work           |
 | [Mobile App](/applications/mobile/)   | End users                   | On-the-go chat, notifications, personal integrations, and task handling |
 | [Admin Web App](/applications/admin/) | Operators and agent authors | Tenant, agent, guardrail, analytics, and integration configuration      |
 | [CLI](/applications/cli/)             | Operators and developers    | Deployment, stack inspection, and API-side operations                   |
 
 ## Related pages
 
-- [Mobile App](/applications/mobile/) — the end-user mobile client
-- [Admin Web App](/applications/admin/) — the operator-facing control plane
-- [Threads](/concepts/threads/) — the underlying work-record model shared by web, desktop, and mobile
+- [Applications](/applications/) - the full map of ThinkWork application surfaces
+- [Mobile App](/applications/mobile/) - the end-user mobile client
+- [Admin Web App](/applications/admin/) - the operator-facing control plane
+- [Threads](/concepts/threads/) - the durable work record shared by web, desktop, and mobile
+- [Spaces](/concepts/spaces/) - the contextual workroom model Desktop packages
