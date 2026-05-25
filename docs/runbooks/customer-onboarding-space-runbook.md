@@ -69,6 +69,10 @@ The script is idempotent. It upserts:
 
 Coordinator wakeups use the tenant platform agent. The old `space_agent_assignments` table is no longer part of the seed path.
 
+The deploy bootstrap also checks every active Customer Onboarding Space and
+backfills missing Space source files into the prefix used by the Workspace tab.
+Existing operator-authored files are preserved by that deploy-time path.
+
 ## Seed Space Source Files
 
 The v1 Space uses ICM-style source files:
@@ -88,6 +92,11 @@ pnpm exec tsx scripts/seed-customer-onboarding-space.ts \
 ```
 
 After writing files, use the Space Workspace tab's folder-structure refresh. The generated `## Folder Structure` should include `docs/customer-onboarding-intake.md` and should not expand `skills/` package trees. Skills are shown in the Skills tab, not in the workspace folder map.
+
+The source files include a Human Question skill pattern. When required intake is
+missing, the coordinator should ask the human in the current Thread using a
+question-card-shaped prompt and keep the `missing_onboarding_information`
+checklist row open until the answer is captured.
 
 ## Optional Phase-Two LastMile Config
 
@@ -110,9 +119,10 @@ This is not required for the native v1 demo.
 2. Start onboarding manually.
 3. Answer the intake questions, including tax exemption and credit terms.
 4. Confirm the Thread kickoff includes the customer facts and missing answers.
-5. Confirm checklist rows appear for DocuSign, D&B, P21, final review, and conditional credit/tax work.
-6. Mark required checklist rows complete.
-7. Mark the Thread `DONE` after human review.
+5. Confirm checklist rows appear for DocuSign, D&B, P21, final review, missing information when needed, and conditional credit/tax work.
+6. If required intake is missing, confirm the Thread asks the human for the missing fields and the missing-information row stays open.
+7. Mark required checklist rows complete.
+8. Mark the Thread `DONE` after human review.
 
 ## Verify
 

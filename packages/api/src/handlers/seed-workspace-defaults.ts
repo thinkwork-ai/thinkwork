@@ -24,7 +24,7 @@
  * deploy-pipeline wiring lands in plan §008 U4.
  */
 
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, or } from "drizzle-orm";
 import {
   GetObjectCommand,
   NoSuchKey,
@@ -32,8 +32,9 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getDb } from "@thinkwork/database-pg";
-import { agentTemplates, tenants } from "@thinkwork/database-pg/schema";
+import { agentTemplates, spaces, tenants } from "@thinkwork/database-pg/schema";
 import { DEFAULTS_VERSION, loadDefaults } from "@thinkwork/workspace-defaults";
+import { ensureCustomerOnboardingSourceFiles } from "../lib/spaces/customer-onboarding-source-files.js";
 import { ensureDefaultsExist } from "../lib/workspace-copy.js";
 
 const db = getDb();
@@ -59,6 +60,8 @@ type SeedSummary = {
   alreadyCurrent: number;
   errors: number;
   defaultTemplatesPatched: number;
+  customerOnboardingSpacesChecked: number;
+  customerOnboardingSourceFilesWritten: number;
   results: PerTenantResult[];
 };
 
@@ -146,6 +149,44 @@ async function patchDefaultAgentTemplateGuardrails(
   return true;
 }
 
+async function ensureCustomerOnboardingSpaceSources(
+  tenantId: string,
+  tenantSlug: string,
+): Promise<{ spacesChecked: number; filesWritten: number }> {
+  const rows = await db
+    .select({ id: spaces.id, slug: spaces.slug, name: spaces.name })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.tenant_id, tenantId),
+        or(
+          eq(spaces.kind, "customer_onboarding"),
+          eq(spaces.template_key, "customer_onboarding"),
+        ),
+        eq(spaces.status, "active"),
+        isNotNull(spaces.slug),
+      ),
+    );
+
+  let filesWritten = 0;
+  for (const space of rows) {
+    if (!space.slug) continue;
+    const result = await ensureCustomerOnboardingSourceFiles({
+      bucket: workspaceBucket(),
+      tenantSlug,
+      spaceSlug: space.slug,
+      overwrite: false,
+      s3Client: s3,
+    });
+    filesWritten += result.written.length;
+    console.log(
+      `[seed-defaults] ${tenantSlug}/${space.slug}: customer onboarding source files checked (${result.written.length} written, ${result.skipped.length} existing)`,
+    );
+  }
+
+  return { spacesChecked: rows.length, filesWritten };
+}
+
 export async function handler(): Promise<SeedSummary> {
   if (!process.env.WORKSPACE_BUCKET) {
     throw new Error("WORKSPACE_BUCKET environment variable is required");
@@ -167,6 +208,8 @@ export async function handler(): Promise<SeedSummary> {
   let alreadyCurrent = 0;
   let errors = 0;
   let defaultTemplatesPatched = 0;
+  let customerOnboardingSpacesChecked = 0;
+  let customerOnboardingSourceFilesWritten = 0;
 
   for (const row of rows) {
     const tenantSlug = row.slug!;
@@ -194,6 +237,13 @@ export async function handler(): Promise<SeedSummary> {
       if (await patchDefaultAgentTemplateGuardrails(row.id, tenantSlug)) {
         defaultTemplatesPatched++;
       }
+      const customerOnboardingSeed = await ensureCustomerOnboardingSpaceSources(
+        row.id,
+        tenantSlug,
+      );
+      customerOnboardingSpacesChecked += customerOnboardingSeed.spacesChecked;
+      customerOnboardingSourceFilesWritten +=
+        customerOnboardingSeed.filesWritten;
     } catch (err) {
       errors++;
       const message = err instanceof Error ? err.message : String(err);
@@ -214,11 +264,13 @@ export async function handler(): Promise<SeedSummary> {
     alreadyCurrent,
     errors,
     defaultTemplatesPatched,
+    customerOnboardingSpacesChecked,
+    customerOnboardingSourceFilesWritten,
     results,
   };
 
   console.log(
-    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${errors} error(s)`,
+    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${customerOnboardingSpacesChecked} customer onboarding Space(s) checked, ${customerOnboardingSourceFilesWritten} customer onboarding source file(s) written, ${errors} error(s)`,
   );
 
   return summary;

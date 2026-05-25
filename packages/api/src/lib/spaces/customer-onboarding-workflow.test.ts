@@ -432,6 +432,105 @@ describe("startCustomerOnboardingWorkflow", () => {
     );
   });
 
+  it("runs the native checklist loop with a human-question request for missing intake", async () => {
+    const repository = makeRepository({ space: nativeSpace });
+
+    const result = await startCustomerOnboardingWorkflow(
+      {
+        tenantId: "tenant-1",
+        source: "manual",
+        opportunity: {
+          opportunityId: "opp-question",
+          customerName: "Question Co",
+          creditTermsRequested: true,
+          taxExempt: true,
+          billingSameAsShipping: true,
+          billingAddress: "100 Main St, Chicago, IL",
+        },
+        startedBy: { type: "user", id: "user-1" },
+      },
+      {
+        repository,
+        taskAdapter: { createTask: vi.fn() },
+        coordinator: noopCoordinator,
+      },
+    );
+
+    expect(result.thread).toMatchObject({
+      id: "thread-1",
+      title: "Question Co onboarding",
+      identifier: "TICK-42",
+    });
+    expect(result.linkedTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "thinkwork",
+          externalTaskId: "thinkwork:thread-1:docusign_package",
+          status: "todo",
+        }),
+        expect.objectContaining({
+          provider: "thinkwork",
+          externalTaskId: "thinkwork:thread-1:credit_check",
+          status: "todo",
+        }),
+        expect.objectContaining({
+          provider: "thinkwork",
+          externalTaskId: "thinkwork:thread-1:tax_exemption_forms",
+          status: "todo",
+        }),
+        expect.objectContaining({
+          provider: "thinkwork",
+          externalTaskId: "thinkwork:thread-1:missing_onboarding_information",
+          status: "todo",
+        }),
+        expect.objectContaining({
+          provider: "thinkwork",
+          externalTaskId: "thinkwork:thread-1:final_onboarding_review",
+          status: "todo",
+        }),
+      ]),
+    );
+    expect(repository.createdCases[0]?.metadata).toMatchObject({
+      customerOnboarding: {
+        humanInput: {
+          skill: "human_question",
+          channel: "thread",
+          checklistItemKey: "missing_onboarding_information",
+          questionCard: {
+            _type: "question_card",
+            schema: {
+              id: "customer_onboarding_missing_intake",
+              title: "Missing onboarding information",
+              fields: expect.arrayContaining([
+                expect.objectContaining({
+                  id: "docusignRecipient",
+                  label: "DocuSign recipient name and email",
+                  type: "text",
+                }),
+              ]),
+            },
+          },
+        },
+      },
+    });
+    expect(repository.linkedTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({
+            key: "missing_onboarding_information",
+          }),
+          required: true,
+          metadata: expect.objectContaining({
+            humanInput: expect.objectContaining({
+              skill: "human_question",
+              checklistItemKey: "missing_onboarding_information",
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("mirrors provider failures as linked task sync errors", async () => {
     const repository = makeRepository({
       space: { ...baseSpace, checklistItems: [baseSpace.checklistItems[0]!] },

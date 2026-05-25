@@ -170,6 +170,7 @@ This Space coordinates customer onboarding from a ThinkWork-native checklist. A 
 - Keep the Thread as the case file for kickoff facts, missing answers, checklist status, blocker discussion, documents, and final summary.
 - Read \`docs/customer-onboarding-intake.md\` before creating or interpreting onboarding checklist work.
 - Treat DocuSign, Dun & Bradstreet, credit review, tax exemption forms, and P21 setup as manual checklist steps until external integrations are enabled.
+- When required intake is missing, ask the human in the Thread using the Human Question skill pattern from \`docs/customer-onboarding-intake.md\`; keep the missing-information checklist row open until the answer is captured.
 - Do not mark onboarding complete automatically. Required checklist items must be complete and a human must confirm completion.
 
 ## Folder Structure
@@ -184,6 +185,15 @@ customer-onboarding/
 ## Token Management
 
 Load only this file and \`docs/customer-onboarding-intake.md\` for ordinary onboarding coordination. Do not load unrelated Space files unless the Thread asks for them.
+
+## Skills & Human Input
+
+Use the Human Question skill pattern when you need a human answer before the checklist can move forward:
+
+- Ask in the current Thread; do not create an external task or side-channel.
+- Ask grouped, answerable questions using the question-card schema in \`docs/customer-onboarding-intake.md\`.
+- Tie the request to the \`missing_onboarding_information\` checklist row.
+- After the human answers, summarize the captured facts in the Thread and update checklist rows that are now unblocked.
 `,
     },
     {
@@ -245,6 +255,44 @@ Load only this file and \`docs/customer-onboarding-intake.md\` for ordinary onbo
 - Required when \`taxExempt = true\`: collect and validate tax exemption forms.
 - Required when required intake is missing: resolve missing onboarding information.
 - Optional/manual override: any item can be marked not applicable by a human with a note.
+
+## Human Question Skill Pattern
+
+Use this pattern when the agent needs to elicit missing onboarding information from a human.
+
+1. State the blocking checklist item.
+2. Ask only for the missing fields needed to move the workflow forward.
+3. Prefer a Question Card when the runtime supports \`present_form\`; otherwise ask the same fields as a concise Thread reply.
+4. Keep answers in the Thread and treat the Thread as the case file.
+
+Question Card result shape:
+
+\`\`\`json
+{
+  "_type": "question_card",
+  "schema": {
+    "id": "customer_onboarding_missing_intake",
+    "title": "Missing onboarding information",
+    "fields": [
+      {
+        "id": "taxExempt",
+        "label": "Are they agricultural or sales-tax exempt?",
+        "type": "boolean"
+      },
+      {
+        "id": "creditTermsRequested",
+        "label": "Do they want credit terms?",
+        "type": "boolean"
+      },
+      {
+        "id": "docusignRecipient",
+        "label": "Who should receive the DocuSign package?",
+        "type": "text"
+      }
+    ]
+  }
+}
+\`\`\`
 `,
     },
   ];
