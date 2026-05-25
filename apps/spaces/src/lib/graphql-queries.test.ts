@@ -121,7 +121,7 @@ describe("computer GraphQL queries", () => {
     expect(print(SpacesQuery)).toContain("unreadThreadCount");
     expect(print(SpacesQuery)).toContain("lastActivityAt");
     expect(print(SpaceQuery)).toContain("checklistTemplates");
-    expect(print(SpaceQuery)).toContain("agentAssignments");
+    expect(print(SpaceQuery)).not.toContain("agentAssignments");
     expect(print(SpaceThreadsQuery)).toContain("spaceId: $spaceId");
     expect(print(SpaceThreadContextQuery)).toContain("participants");
     expect(print(ThreadLinkedTasksQuery)).toContain("threadLinkedTasks");
