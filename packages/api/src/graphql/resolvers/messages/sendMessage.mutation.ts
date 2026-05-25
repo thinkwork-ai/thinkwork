@@ -24,6 +24,7 @@ import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-t
 import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-routing.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
+import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -216,6 +217,36 @@ export const sendMessage = async (
   const hasAgentMentions = parsedMentions.some(
     (mention) => mention.targetType === "agent",
   );
+  let customerOnboardingHandled = false;
+  if (isUserMessage && senderType === "user" && parsedMentions.length === 0) {
+    try {
+      const onboardingUpdate = await applyCustomerOnboardingChatUpdate({
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        content: i.content,
+        senderUserId: senderId,
+      });
+      customerOnboardingHandled = onboardingUpdate?.handled ?? false;
+      if (onboardingUpdate?.assistantMessageId) {
+        notifyNewMessage({
+          messageId: onboardingUpdate.assistantMessageId,
+          threadId: i.threadId,
+          tenantId: thread.tenant_id,
+          role: "assistant",
+          content:
+            onboardingUpdate.missingFields.length === 0
+              ? "Captured the onboarding update. All required intake fields are now captured."
+              : `Captured the onboarding update. Still missing: ${onboardingUpdate.missingFields.join(", ")}.`,
+          senderType: "system",
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn(
+        "[sendMessage] customer onboarding chat update failed:",
+        err,
+      );
+    }
+  }
   if (hasAgentMentions) {
     try {
       await dispatchAgentMentions({
@@ -235,7 +266,8 @@ export const sendMessage = async (
     isUserMessage &&
     senderType === "user" &&
     parsedMentions.length === 0 &&
-    !thread.computer_id
+    !thread.computer_id &&
+    !customerOnboardingHandled
   ) {
     try {
       await dispatchDefaultAgentTurn({

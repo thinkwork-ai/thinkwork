@@ -90,13 +90,25 @@ Target branch: `main`
 
 ## Follow-Up Run: Native Checklist DB Constraint Apply
 
-- Status: active
-- Active branch: `codex/customer-onboarding-db-constraint`
-- Active worktree: `.Codex/worktrees/customer-onboarding-db-constraint`
+- Status: merged
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: `packages/database-pg/drizzle/0135_native_checklist_linked_tasks.sql` existed, but deploy's manual migration drift gate is disabled and the migration was not applied to dev. Live E2E failed inserting `provider = 'thinkwork'` with `linked_tasks_provider_allowed`.
 - Scope: run the existing idempotent native-checklist constraint migration from the normal deploy pipeline before Terraform apply, matching the workflow's other explicit DB backfill steps.
-- Verification so far: touched-file Prettier check; `git diff --check`.
+- Verification: touched-file Prettier check; `git diff --check`; CI passed.
+- PR: [#1711](https://github.com/thinkwork-ai/thinkwork/pull/1711)
+- Deploy: main deploy `26413325001` completed the `Apply native checklist linked task constraints` step successfully. Live Customer Onboarding normal thread creation now creates the Thread, asks the missing intake questions, and renders the checklist in the Spaces Info Panel.
+
+## Follow-Up Run: Customer Onboarding Chat Checklist Updates
+
+- Status: active
+- Active branch: `codex/customer-onboarding-chat-updates`
+- Active worktree: `.Codex/worktrees/customer-onboarding-chat-updates`
+- Started: 2026-05-25
+- Root cause: live E2E after PR #1711 verified Thread creation, missing-question prompting, and Info Panel checklist rendering, but a human answer in chat did not update missing intake state or checklist statuses.
+- Scope: add a deterministic Customer Onboarding `sendMessage` hook that extracts intake answers and completion statements from same-thread chat, updates `threads.metadata.customerOnboarding`, updates ThinkWork linked checklist rows, records linked-task events, and writes an assistant summary message. Handled onboarding chat updates skip the generic default-agent turn so the demo path is deterministic.
+- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
 
 ### Active Unit Notes
 
