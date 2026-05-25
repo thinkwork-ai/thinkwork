@@ -106,7 +106,6 @@ type ThreadIdleLearningRun {
   id: ID!
   tenantId: ID!
   threadId: ID!
-  computerId: ID
   requesterUserId: ID
   scheduledJobId: ID
   activitySequence: Int!

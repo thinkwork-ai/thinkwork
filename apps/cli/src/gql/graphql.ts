@@ -883,7 +883,6 @@ export type CreateRoutineInput = {
 
 export type CreateScheduledJobInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
-  computerId?: InputMaybe<Scalars['ID']['input']>;
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   createdById?: InputMaybe<Scalars['String']['input']>;
   createdByType?: InputMaybe<Scalars['String']['input']>;
@@ -1097,7 +1096,6 @@ export type EvalRun = {
   agentName?: Maybe<Scalars['String']['output']>;
   categories: Array<Scalars['String']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  computerId?: Maybe<Scalars['ID']['output']>;
   costUsd?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   errorMessage?: Maybe<Scalars['String']['output']>;
@@ -3689,7 +3687,6 @@ export type QueryScheduledJobArgs = {
 
 export type QueryScheduledJobsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
-  computerId?: InputMaybe<Scalars['ID']['input']>;
   connectionId?: InputMaybe<Scalars['ID']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -4353,7 +4350,6 @@ export type SaveAppletStateInput = {
 export type ScheduledJob = {
   __typename?: 'ScheduledJob';
   agentId?: Maybe<Scalars['ID']['output']>;
-  computerId?: Maybe<Scalars['ID']['output']>;
   config?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   createdById?: Maybe<Scalars['String']['output']>;
@@ -4695,7 +4691,6 @@ export type StartCustomerOnboardingPayload = {
 
 export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
-  computerId?: InputMaybe<Scalars['ID']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
@@ -5089,7 +5084,6 @@ export type ThreadIdleLearningRun = {
   canRollback: Scalars['Boolean']['output'];
   candidateSummary?: Maybe<Scalars['AWSJSON']['output']>;
   changedFiles: Array<ThreadIdleLearningChangedFile>;
-  computerId?: Maybe<Scalars['ID']['output']>;
   createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
   error?: Maybe<Scalars['String']['output']>;
   finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;

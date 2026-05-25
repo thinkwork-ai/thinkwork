@@ -6,7 +6,6 @@ type ScheduledJob {
   triggerType: String!
   agentId: ID
   spaceId: ID
-  computerId: ID
   routineId: ID
   name: String!
   description: String
@@ -30,7 +29,6 @@ input CreateScheduledJobInput {
   triggerType: String!
   agentId: ID
   spaceId: ID
-  computerId: ID
   routineId: ID
   name: String!
   description: String
@@ -48,7 +46,6 @@ extend type Query {
     tenantId: ID!
     agentId: ID
     spaceId: ID
-    computerId: ID
     routineId: ID
     triggerType: String
     connectionId: ID
