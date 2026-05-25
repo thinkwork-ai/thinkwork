@@ -779,7 +779,7 @@ export const UpdateUserProfileMutation = graphql(`
 // Threads
 // ---------------------------------------------------------------------------
 
-export const ThreadsQuery = graphql(`
+export const ThreadsQuery = gql`
   query Threads(
     $tenantId: ID!
     $channel: ThreadChannel
@@ -799,6 +799,13 @@ export const ThreadsQuery = graphql(`
       id
       tenantId
       agentId
+      spaceId
+      space {
+        id
+        name
+        slug
+        icon
+      }
       number
       identifier
       title
@@ -825,7 +832,21 @@ export const ThreadsQuery = graphql(`
       updatedAt
     }
   }
-`);
+`;
+
+export const SpacesQuery = gql`
+  query Spaces($tenantId: ID!) {
+    spaces(tenantId: $tenantId, status: ACTIVE) {
+      id
+      tenantId
+      name
+      slug
+      icon
+      status
+      updatedAt
+    }
+  }
+`;
 
 export const ThreadQuery = graphql(`
   query Thread($id: ID!) {
