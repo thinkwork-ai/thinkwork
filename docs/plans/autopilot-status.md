@@ -77,13 +77,26 @@ Target branch: `main`
 
 ## Follow-Up Run: Customer Onboarding Thread Trigger
 
-- Status: active
-- Active branch: `codex/customer-onboarding-checklist-seed`
-- Active worktree: `.Codex/worktrees/customer-onboarding-checklist-seed`
+- Status: merged
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: live E2E proved the Space files were present, but the existing Customer Onboarding Space could still have zero database checklist rows. Also, ordinary `createThread` calls in that Space did not invoke the onboarding workflow; only the dedicated Start onboarding mutation did.
 - Scope: repair missing native checklist rows when the workflow starts, route ordinary Customer Onboarding Space thread creation through the native onboarding workflow, and make the kickoff message ask the human for missing intake fields in chat.
-- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/threads/createThread.onboarding.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier check; `git diff --check`.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/threads/createThread.onboarding.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier check; `git diff --check`.
+- PR: [#1710](https://github.com/thinkwork-ai/thinkwork/pull/1710)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26412725311` completed successfully; live normal thread creation reached the Customer Onboarding workflow but exposed dev DB drift on the `linked_tasks_provider_allowed` CHECK constraint.
+
+## Follow-Up Run: Native Checklist DB Constraint Apply
+
+- Status: active
+- Active branch: `codex/customer-onboarding-db-constraint`
+- Active worktree: `.Codex/worktrees/customer-onboarding-db-constraint`
+- Started: 2026-05-25
+- Root cause: `packages/database-pg/drizzle/0135_native_checklist_linked_tasks.sql` existed, but deploy's manual migration drift gate is disabled and the migration was not applied to dev. Live E2E failed inserting `provider = 'thinkwork'` with `linked_tasks_provider_allowed`.
+- Scope: run the existing idempotent native-checklist constraint migration from the normal deploy pipeline before Terraform apply, matching the workflow's other explicit DB backfill steps.
+- Verification so far: touched-file Prettier check; `git diff --check`.
 
 ### Active Unit Notes
 
