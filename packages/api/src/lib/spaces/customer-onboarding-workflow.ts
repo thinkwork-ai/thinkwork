@@ -115,6 +115,7 @@ export interface CustomerOnboardingThreadRef {
 
 export interface CustomerOnboardingLinkedTaskResult {
   checklistItemId: string;
+  provider: "lastmile" | "thinkwork";
   title: string;
   externalTaskId: string;
   externalTaskUrl: string | null;
@@ -513,6 +514,7 @@ function linkedTaskFromSnapshot(
 ): CustomerOnboardingLinkedTaskResult {
   return {
     checklistItemId: item.id,
+    provider: "lastmile",
     title: snapshot.title ?? item.title,
     externalTaskId: snapshot.externalTaskId,
     externalTaskUrl: snapshot.externalTaskUrl,
@@ -529,6 +531,7 @@ function linkedTaskFromProviderError(
 ): CustomerOnboardingLinkedTaskResult {
   return {
     checklistItemId: item.id,
+    provider: "lastmile",
     title: item.title,
     externalTaskId: `pending:${threadId}:${item.id}`,
     externalTaskUrl: null,
@@ -751,7 +754,7 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
         space_id: input.spaceId,
         thread_id: input.threadId,
         checklist_item_id: input.checklistItem.id,
-        provider: "lastmile",
+        provider: input.task.provider,
         external_task_id: input.task.externalTaskId,
         external_task_url: input.task.externalTaskUrl,
         title: input.task.title,
@@ -773,7 +776,7 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
       linked_task_id: row.id,
       space_id: input.spaceId,
       thread_id: input.threadId,
-      provider: "lastmile",
+      provider: input.task.provider,
       event_type: input.task.providerError ? "sync_failed" : "created",
       new_status: input.task.status,
       message: input.task.providerError

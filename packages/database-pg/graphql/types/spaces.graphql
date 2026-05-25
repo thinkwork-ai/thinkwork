@@ -173,6 +173,7 @@ type StartCustomerOnboardingPayload {
 
 type CustomerOnboardingLinkedTaskResult {
   checklistItemId: ID!
+  provider: LinkedTaskProvider!
   title: String!
   externalTaskId: String!
   externalTaskUrl: String

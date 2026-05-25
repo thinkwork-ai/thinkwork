@@ -52,6 +52,7 @@ import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
 import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
 import {
+  linkedTaskMutations,
   linkedTaskQueries,
   linkedTaskTypeResolvers,
 } from "./linked-tasks/index.js";
@@ -126,6 +127,7 @@ export const mutationResolvers: Record<string, any> = {
   ...slackMutations,
   ...ontologyMutations,
   ...spaceMutations,
+  ...linkedTaskMutations,
 };
 
 import { agentTypeResolvers } from "./tenant-agent/types.js";
