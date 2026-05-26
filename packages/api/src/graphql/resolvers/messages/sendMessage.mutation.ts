@@ -218,7 +218,7 @@ export const sendMessage = async (
     (mention) => mention.targetType === "agent",
   );
   let customerOnboardingHandled = false;
-  if (isUserMessage && senderType === "user" && parsedMentions.length === 0) {
+  if (isUserMessage && senderType === "user" && !hasAgentMentions) {
     try {
       const onboardingUpdate = await applyCustomerOnboardingChatUpdate({
         tenantId: thread.tenant_id,

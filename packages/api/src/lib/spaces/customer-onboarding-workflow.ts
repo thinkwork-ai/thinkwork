@@ -247,6 +247,7 @@ export interface CreateCustomerOnboardingCaseInput {
   createdByType: "user" | "system";
   createdById: string | null;
   kickoffMessage: string;
+  humanInput: CustomerOnboardingHumanInputRequest | null;
   metadata: Record<string, unknown>;
 }
 
@@ -390,7 +391,13 @@ export async function startCustomerOnboardingWorkflow(
   }
 
   const title = buildThreadTitle(normalized);
-  const metadata = buildWorkflowMetadata(normalized, input.source, space);
+  const humanInput = buildHumanInputRequest(normalized);
+  const metadata = buildWorkflowMetadata(
+    normalized,
+    input.source,
+    space,
+    humanInput,
+  );
   const thread = await repository.createCase({
     tenantId: input.tenantId,
     space,
@@ -399,10 +406,12 @@ export async function startCustomerOnboardingWorkflow(
     createdByType: input.startedBy?.type ?? "system",
     createdById: input.startedBy?.id ?? null,
     kickoffMessage: buildKickoffMessage(normalized),
+    humanInput,
     metadata,
   });
 
-  const checklistPlan = shouldUseNativeChecklist(input, space)
+  const useNativeChecklist = shouldUseNativeChecklist(input, space);
+  const checklistPlan = useNativeChecklist
     ? planNativeChecklistItems(space, thread.id, normalized)
     : await planExternalChecklistItems({
         input,
@@ -432,17 +441,18 @@ export async function startCustomerOnboardingWorkflow(
     threadId: thread.id,
   });
 
-  await coordinator.enqueueWakeup({
-    tenantId: input.tenantId,
-    spaceId: space.id,
-    threadId: thread.id,
-    reason: "kickoff_triage",
-    idempotencyKey: `space-coordinator:${input.tenantId}:${thread.id}:kickoff_triage`,
-    summary: shouldUseNativeChecklist(input, space)
-      ? `A new customer onboarding Thread was created with ${linkedTaskResults.length} ThinkWork checklist rows. Review missing facts, not-applicable items, and possible blockers.`
-      : "A new customer onboarding Thread was created and checklist tasks were mirrored. Review missing facts, unassigned tasks, and possible blockers.",
-    requestedBy: input.startedBy ?? { type: "system" },
-  });
+  if (!useNativeChecklist) {
+    await coordinator.enqueueWakeup({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+      threadId: thread.id,
+      reason: "kickoff_triage",
+      idempotencyKey: `space-coordinator:${input.tenantId}:${thread.id}:kickoff_triage`,
+      summary:
+        "A new customer onboarding Thread was created and checklist tasks were mirrored. Review missing facts, unassigned tasks, and possible blockers.",
+      requestedBy: input.startedBy ?? { type: "system" },
+    });
+  }
 
   return {
     thread,
@@ -578,8 +588,8 @@ function buildWorkflowMetadata(
   source: NormalizedCustomerOnboardingSource,
   startSource: CustomerOnboardingStartSource,
   space: CustomerOnboardingWorkflowSpace,
+  humanInput: CustomerOnboardingHumanInputRequest | null,
 ): Record<string, unknown> {
-  const humanInput = buildHumanInputRequest(source);
   return {
     customerOnboarding: {
       source: startSource === "webhook" ? "lastmile_crm" : "manual",
@@ -855,6 +865,16 @@ function evaluateChecklistApplicability(
   if (applicability === "when_true") {
     const value = intakeField ? booleanIntakeValue(source, intakeField) : null;
     const applicable = value === true;
+    if (value === null) {
+      return {
+        applicability,
+        intakeField,
+        applicable: true,
+        required: false,
+        pendingIntake: true,
+        reason: `${intakeField ?? "intake field"} is not known yet`,
+      };
+    }
     return {
       applicability,
       intakeField,
@@ -1195,9 +1215,13 @@ class DrizzleCustomerOnboardingRepository
         role: "system",
         content: input.kickoffMessage,
         sender_type: "system",
+        tool_results: input.humanInput
+          ? [input.humanInput.questionCard]
+          : undefined,
         metadata: {
           kind: "customer_onboarding_kickoff",
           workflow: "customer_onboarding",
+          humanInputRequest: input.humanInput ?? undefined,
         },
       });
 
