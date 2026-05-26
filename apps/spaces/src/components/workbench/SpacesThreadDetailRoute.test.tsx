@@ -563,14 +563,35 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.getByText("Sales · Completed")).toBeTruthy();
     expect(screen.queryByText("signed package received")).toBeNull();
     expect(screen.queryByText("Stale linked task title")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Update Get contract signed" }),
-    );
+    const originalFocus = HTMLTextAreaElement.prototype.focus;
+    let focusAttempts = 0;
+    const focusSpy = vi
+      .spyOn(HTMLTextAreaElement.prototype, "focus")
+      .mockImplementation(function focusWithDroppedFirstAttempt(
+        this: HTMLTextAreaElement,
+        options?: FocusOptions,
+      ) {
+        focusAttempts += 1;
+        if (focusAttempts === 1) return;
+        return originalFocus.call(this, options);
+      });
 
-    expect(screen.getByLabelText("Follow up")).toHaveProperty(
-      "value",
-      "Get contract signed: ",
-    );
+    try {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Update Get contract signed" }),
+      );
+
+      expect(screen.getByLabelText("Follow up")).toHaveProperty(
+        "value",
+        "Get contract signed: ",
+      );
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByLabelText("Follow up"));
+      });
+      expect(focusAttempts).toBeGreaterThan(1);
+    } finally {
+      focusSpy.mockRestore();
+    }
   });
 
   it("completes an onboarding Thread after required checklist rows are complete", async () => {
