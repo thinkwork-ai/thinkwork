@@ -1473,12 +1473,32 @@ function FollowUpComposer({
   useEffect(() => {
     if (!prefillText) return;
     composer.setText(prefillText);
-    window.requestAnimationFrame(() => {
-      const textarea = textareaRef.current;
+    const focusPrefilledComposer = () => {
+      const textarea =
+        textareaRef.current ??
+        document.querySelector<HTMLTextAreaElement>(
+          'textarea[aria-label="Follow up"]',
+        );
       if (!textarea) return;
-      textarea.focus();
+      textarea.focus({ preventScroll: true });
       textarea.setSelectionRange(prefillText.length, prefillText.length);
+      return document.activeElement === textarea;
+    };
+    const timeoutIds: number[] = [];
+    const scheduleTimeout = (delay: number) => {
+      const timeoutId = window.setTimeout(focusPrefilledComposer, delay);
+      timeoutIds.push(timeoutId);
+    };
+    const animationFrameId = window.requestAnimationFrame(() => {
+      if (!focusPrefilledComposer()) {
+        scheduleTimeout(0);
+        scheduleTimeout(75);
+      }
     });
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    };
   }, [prefillText, prefillToken]);
 
   // Plan-012 U13: in-thread composer migrated to AI Elements
