@@ -9,7 +9,7 @@ severity: medium
 applies_when:
   - Editing any file under `packages/workspace-defaults/files/`
   - Touching the inlined `loadDefaults()` constants in `packages/workspace-defaults/src/index.ts`
-  - Running pre-push verification on a Strands-runtime PR that includes a `workspace-defaults` doc change
+  - Running pre-push verification on any runtime, workspace, or folder-canon PR that includes a `workspace-defaults` doc change
 tags: [workspace-defaults, byte-parity, pre-push, ci, vitest, plan-008]
 ---
 
@@ -17,7 +17,7 @@ tags: [workspace-defaults, byte-parity, pre-push, ci, vitest, plan-008]
 
 ## Context
 
-`packages/workspace-defaults/` is the seed source for every agent's workspace files (`AGENTS.md`, `MEMORY_GUIDE.md`, `CONTEXT.md`, `IDENTITY.md`, `SOUL.md`, `PLATFORM.md`, `GUARDRAILS.md`, `ROUTER.md`, `TOOLS.md`, `USER.md`, and the three `memory/*.md` writable files). The package keeps **two synchronized representations** of every canonical file:
+`packages/workspace-defaults/` is the seed source for every agent's workspace files. The current canonical default set is `USER.md`, `SPACE.md`, `AGENTS.md`, `CONTEXT.md`, `GUARDRAILS.md`, `MEMORY_GUIDE.md`, `ROUTER.md`, the three `memory/*.md` writable files, `skills/.gitkeep`, and the default artifact-builder skill files. `SOUL.md`, `IDENTITY.md`, `PLATFORM.md`, and `CAPABILITIES.md` are retired legacy root files; their remaining content moved into `AGENTS.md` and current policy/tool files. The package keeps **two synchronized representations** of every canonical file:
 
 1. The authoritative `.md` source in `packages/workspace-defaults/files/<name>.md`
 2. A verbatim inlined string constant in `packages/workspace-defaults/src/index.ts` (e.g., `AGENTS_MD`, `MEMORY_GUIDE_MD`, `CONTEXT_MD`), exposed via `loadDefaults()`
@@ -26,7 +26,7 @@ The runtime container reads from `loadDefaults()`, not from the `.md` files dire
 
 A byte-parity guardrail at `packages/workspace-defaults/src/__tests__/parity.test.ts` enforces `loadDefaults()[name] === readFileSync(authoritative)` for every entry in `CANONICAL_FILE_NAMES`. The `AUTHORITATIVE_SOURCES` map at `src/index.ts:32-40` declares which `.md` source each constant mirrors.
 
-This guardrail is **only exercised by vitest** (TS-side). A Python-only pre-push verification (e.g., `uv run pytest packages/agentcore-strands/agent-container/`) misses it entirely.
+This guardrail is **only exercised by vitest** (TS-side). Runtime-only verification, such as Pi or Strands container tests, misses it entirely.
 
 ## Guidance
 
@@ -38,7 +38,7 @@ When editing any `packages/workspace-defaults/files/*.md`, do all three of:
    pnpm --filter @thinkwork/workspace-defaults test
    ```
    Total runtime: ~300ms. There is no excuse not to.
-3. **Don't trust a Python-only pre-push pass** to clear the gate. The vitest suite is the byte-parity contract; Python tests cover Strands runtime behavior, not workspace-defaults.
+3. **Don't trust runtime-only tests** to clear the gate. The vitest suite is the byte-parity contract; Pi and Strands runtime tests cover prompt/runtime behavior, not workspace-defaults source parity.
 
 If the change is non-trivial (multi-paragraph rewrite of a `.md` file), prefer to copy-paste the new file content directly into the constant rather than hand-translating — the parity test will reject anything off by a single character.
 
@@ -50,15 +50,15 @@ Without this discipline, a PR that edits `packages/workspace-defaults/files/*.md
 2. Pass local TypeScript tests **only if the developer remembered to run them**
 3. Fail CI on the parity test, requiring a re-push cycle
 
-Cycle cost: one extra commit + ~3-5 minutes of CI re-run. Cumulative cost across many `.md` edits adds up. More importantly: the runtime keeps reading the *old* inlined constant until the inline copy is updated, so any forgotten parity update silently means agents in production are reading stale guidance even though the authoritative `.md` looks correct.
+Cycle cost: one extra commit + ~3-5 minutes of CI re-run. Cumulative cost across many `.md` edits adds up. More importantly: the runtime keeps reading the _old_ inlined constant until the inline copy is updated, so any forgotten parity update silently means agents in production are reading stale guidance even though the authoritative `.md` looks correct.
 
 ## When to Apply
 
 - Every PR that touches `packages/workspace-defaults/files/<canonical>.md`
 - Every PR that touches `packages/workspace-defaults/src/index.ts` directly (verify the inlined string still matches `files/*.md`)
-- Any plan-008 unit (or follow-up) that updates `MEMORY_GUIDE.md`, `AGENTS.md`, `ROUTER.md`, or any other workspace-defaults file as part of a sub-agent / system-prompt teaching change
+- Any folder-canon, workspace-specialist, memory, or runtime prompt change that updates `MEMORY_GUIDE.md`, `AGENTS.md`, `ROUTER.md`, `SPACE.md`, or any other workspace-defaults file
 
-Especially relevant for the **plan §008 fat-folder sub-agents** workstream, where multiple units (U2 in PR #589, future Phase E admin-builder UI work) touch the workspace-defaults docs.
+Especially relevant for folder-canon and workspace-specialist changes, where source markdown and bundled TypeScript constants must stay byte-identical.
 
 ## Examples
 
