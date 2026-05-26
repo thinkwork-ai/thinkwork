@@ -287,9 +287,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-    !showStreamingBuffer &&
-    !showProcessingShimmer,
+      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+      !showStreamingBuffer &&
+      !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -328,7 +328,7 @@ export function TaskThreadView({
           <ConversationContent
             data-testid="thread-conversation-content"
             className={cn(
-              "w-full gap-0 px-4 pt-10 sm:px-6",
+              "w-full gap-0 px-4 pt-4 sm:px-6",
               infoPanelOpen && "md:pr-[332px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
@@ -1276,7 +1276,9 @@ function TranscriptMessage({
                 onDownloadAttachment={onDownloadAttachment}
               />
             ) : null}
-            {!body && attachments.length === 0 ? <>(No message content)</> : null}
+            {!body && attachments.length === 0 ? (
+              <>(No message content)</>
+            ) : null}
           </div>
         ) : (
           <>

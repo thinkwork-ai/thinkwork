@@ -441,6 +441,12 @@ describe("TaskThreadView", () => {
       screen.getByTestId("thread-conversation-content").className,
     ).toContain("md:pr-[332px]");
     expect(
+      screen.getByTestId("thread-conversation-content").className,
+    ).toContain("pt-4");
+    expect(
+      screen.getByTestId("thread-conversation-content").className,
+    ).not.toContain("pt-10");
+    expect(
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("max-w-[750px]");
     expect(
@@ -465,10 +471,10 @@ describe("TaskThreadView", () => {
     expect(within(panel).getByText("50%")).toBeTruthy();
     expect(within(panel).getByText("1/2 required complete")).toBeTruthy();
     // Completed task uses the filled tabler icon in the muted text color (not emerald)
-    const completedIcon = within(panel).getByTestId(
-      "checklist-icon-completed",
+    const completedIcon = within(panel).getByTestId("checklist-icon-completed");
+    expect(completedIcon.getAttribute("class") ?? "").toContain(
+      "text-white/55",
     );
-    expect(completedIcon.getAttribute("class") ?? "").toContain("text-white/55");
     expect(completedIcon.getAttribute("class") ?? "").not.toContain("emerald");
     expect(within(panel).queryByText("Ops · Completed")).toBeTruthy();
     expect(within(panel).getByText("Get contract signed")).toBeTruthy();
