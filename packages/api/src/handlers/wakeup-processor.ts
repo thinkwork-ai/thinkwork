@@ -590,6 +590,19 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     humanName = human?.name || "";
   }
 
+  let currentUserEmail = "";
+  let currentUserName = "";
+  if (invokerUserId) {
+    const [currentUser] = await db
+      .select({ email: users.email, name: users.name })
+      .from(users)
+      .where(
+        and(eq(users.id, invokerUserId), eq(users.tenant_id, wakeup.tenant_id)),
+      );
+    currentUserEmail = currentUser?.email || "";
+    currentUserName = currentUser?.name || "";
+  }
+
   // Resolve Bedrock guardrail: class-level → tenant default → none
   let guardrailPayload:
     | { guardrailIdentifier: string; guardrailVersion: string }
@@ -1583,6 +1596,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       // System / agent actors produce no invoker — downstream
       // admin skills refuse. See feat/current-user-id-plumbing.
       user_id: invokerUserId,
+      current_user_email: currentUserEmail || undefined,
+      current_user_name: currentUserName || undefined,
       trace_id: traceId,
       message: agentMessage,
       use_memory: true,
@@ -2093,6 +2108,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             thread_id: resolvedThreadId,
             // R15: same invoker as the primary invocation above.
             user_id: invokerUserId,
+            current_user_email: currentUserEmail || undefined,
+            current_user_name: currentUserName || undefined,
             message: `Continue working. Previous response:\n${loopMessage.slice(0, 2000)}`,
             use_memory: true,
             tenant_slug: tenantSlug || undefined,

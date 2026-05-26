@@ -754,6 +754,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // target agent's paired human so Pi receives a user_id for memory/tools.
       // Generic wakeup-style runs still do not fall back to human_pair_id.
       user_id: currentUserId || undefined,
+      current_user_email: currentUserEmail || undefined,
       trace_id: traceId,
       message: userMessage,
       messages_history: messagesHistory,

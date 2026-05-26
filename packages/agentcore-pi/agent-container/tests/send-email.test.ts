@@ -66,6 +66,67 @@ describe("buildSendEmailTool", () => {
     });
   });
 
+  it("resolves me and placeholder recipients to the current requester email", async () => {
+    const fetchCalls: Array<[string | URL | Request, RequestInit | undefined]> =
+      [];
+    const fetchMock = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        fetchCalls.push([input, init]);
+        return new Response(
+          JSON.stringify({ messageId: "ses-123", status: "sent" }),
+          { status: 200 },
+        );
+      },
+    );
+    const tool = buildSendEmailTool({
+      sendEmailConfig: {
+        apiUrl: "https://api.example.com",
+        apiSecret: "secret",
+        agentId: "agent-1",
+        tenantId: "tenant-1",
+      },
+      payload: {
+        tenant_slug: "acme",
+        current_user_email: "eric@thinkwork.ai",
+        turn_context: { spaceSlug: "finance" },
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await tool?.execute("call-1", {
+      to: ["me", "user@example.com"],
+      subject: "Thread status",
+      body: "Here is the status.",
+    });
+
+    expect(JSON.parse(String(fetchCalls[0]?.[1]?.body))).toMatchObject({
+      to: "eric@thinkwork.ai",
+    });
+  });
+
+  it("rejects me when the current requester email is unavailable", async () => {
+    const fetchImpl = vi.fn();
+    const tool = buildSendEmailTool({
+      sendEmailConfig: {
+        apiUrl: "https://api.example.com",
+        apiSecret: "secret",
+        agentId: "agent-1",
+        tenantId: "tenant-1",
+      },
+      payload: { tenant_slug: "acme", turn_context: { spaceSlug: "finance" } },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await expect(
+      tool?.execute("call-1", {
+        to: "me",
+        subject: "Thread status",
+        body: "Here is the status.",
+      }),
+    ).rejects.toThrow(/current user email is unavailable/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("returns null when runtime credentials are incomplete", () => {
     const tool = buildSendEmailTool({
       sendEmailConfig: {

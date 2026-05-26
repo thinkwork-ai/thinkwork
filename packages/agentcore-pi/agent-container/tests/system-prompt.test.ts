@@ -117,6 +117,30 @@ describe("composeSystemPrompt", () => {
     expect(prompt).toMatch(/Tuesday, May 5, 2026/);
   });
 
+  it("pins the current requester email ahead of tool policy and USER.md", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {
+        user_id: "user-1",
+        current_user_email: "eric@thinkwork.ai",
+        current_user_name: "Eric Odom",
+      },
+      workspaceDir: "/tmp/workspace",
+      now,
+      fileReader: readerFor({ "USER.md": "USER_BLOCK" }),
+    });
+
+    expect(prompt).toContain("<current_requester>");
+    expect(prompt).toContain("Name: Eric Odom");
+    expect(prompt).toContain("Email: eric@thinkwork.ai");
+    expect(prompt).toContain('email "me"');
+    expect(prompt.indexOf("<current_requester>")).toBeLessThan(
+      prompt.indexOf("## Runtime Tool Policy"),
+    );
+    expect(prompt.indexOf("## Runtime Tool Policy")).toBeLessThan(
+      prompt.indexOf("USER_BLOCK"),
+    );
+  });
+
   it("injects a runtime tool policy when execute_code is unavailable", async () => {
     const prompt = await composeSystemPrompt({
       payload: { user_id: "user-1" },
