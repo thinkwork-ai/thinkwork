@@ -90,6 +90,8 @@ const MONEY_AMOUNT = /\$\s?\d[\d,]*(?:\.\d{2})?\s?(?:k|m)?\b/i;
 
 const STATUS_REQUEST =
   /\b(?:what(?:'s| is)?|show|give me|current|latest)?\s*(?:the\s+)?(?:onboarding\s+)?(?:status|progress|checklist)\b/i;
+const ASSIGNMENT_REQUEST =
+  /\b(?:who(?:'s| is)?|whose|who is|show|what(?:'s| is)?)\s+(?:assigned|handling|owns?|owner|responsible)\b/i;
 
 const BLOCKED_WORDS =
   /\b(?:blocked|blocker|stuck|waiting on|waiting for|hold|on hold|cannot|can't)\b/i;
@@ -103,15 +105,6 @@ export async function applyCustomerOnboardingChatUpdate(
 ): Promise<CustomerOnboardingChatUpdateResult | null> {
   const db = getDb();
   const extracted = extractCustomerOnboardingChatUpdate(input.content);
-  if (
-    Object.keys(extracted.facts).length === 0 &&
-    extracted.completedTaskKeys.length === 0 &&
-    extracted.taskStatusUpdates.length === 0 &&
-    extracted.taskAssignments.length === 0 &&
-    !extracted.statusRequest
-  ) {
-    return null;
-  }
 
   const [thread] = await db
     .select()
@@ -128,6 +121,7 @@ export async function applyCustomerOnboardingChatUpdate(
   const threadMetadata = objectRecord(thread.metadata);
   const onboarding = objectRecord(threadMetadata.customerOnboarding);
   if (onboarding.workflow !== CUSTOMER_ONBOARDING_TEMPLATE_KEY) return null;
+  const hasExtractedSignal = hasCustomerOnboardingSignal(extracted);
 
   const previousFacts = objectRecord(onboarding.facts);
   const mergedOpportunity = mergeOnboardingFacts(
@@ -138,18 +132,20 @@ export async function applyCustomerOnboardingChatUpdate(
   const now = new Date();
 
   const result = await db.transaction(async (tx) => {
-    const nextMetadata = buildUpdatedThreadMetadata({
-      current: threadMetadata,
-      normalized,
-      extracted,
-      updatedAt: now,
-      updatedByUserId: input.senderUserId ?? null,
-    });
+    if (hasExtractedSignal) {
+      const nextMetadata = buildUpdatedThreadMetadata({
+        current: threadMetadata,
+        normalized,
+        extracted,
+        updatedAt: now,
+        updatedByUserId: input.senderUserId ?? null,
+      });
 
-    await tx
-      .update(threads)
-      .set({ metadata: nextMetadata, updated_at: now })
-      .where(eq(threads.id, input.threadId));
+      await tx
+        .update(threads)
+        .set({ metadata: nextMetadata, updated_at: now })
+        .where(eq(threads.id, input.threadId));
+    }
 
     const taskRows = await tx
       .select()
@@ -297,14 +293,23 @@ export async function applyCustomerOnboardingChatUpdate(
       }
     }
 
-    const assistantContent = extracted.statusRequest
-      ? buildProgressStatusSummary({ normalized, taskRows, statusChanges })
-      : buildAssistantSummary({
-          normalized,
+    const assistantContent = extracted.assignmentRequest
+      ? buildAssignmentStatusSummary({
+          taskRows,
           statusChanges,
-          completedTaskKeys: extracted.completedTaskKeys,
           assignmentChanges,
-        });
+          requestedTaskKey: extracted.assignmentTaskKey,
+        })
+      : extracted.statusRequest
+        ? buildProgressStatusSummary({ normalized, taskRows, statusChanges })
+        : hasExtractedSignal
+          ? buildAssistantSummary({
+              normalized,
+              statusChanges,
+              completedTaskKeys: extracted.completedTaskKeys,
+              assignmentChanges,
+            })
+          : buildCustomerOnboardingOnlySummary(normalized);
     const [assistantMessage] = await tx
       .insert(messages)
       .values({
@@ -317,6 +322,7 @@ export async function applyCustomerOnboardingChatUpdate(
           kind: "customer_onboarding_chat_update",
           workflow: "customer_onboarding",
           statusRequest: extracted.statusRequest,
+          assignmentRequest: extracted.assignmentRequest,
           missingFields: normalized.missingFields,
           statusChanges,
           assignmentChanges,
@@ -357,6 +363,8 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     note: string;
   }>;
   statusRequest: boolean;
+  assignmentRequest: boolean;
+  assignmentTaskKey: string | null;
 } {
   const facts: CustomerOnboardingSourceInput = {};
   const segments = content
@@ -484,7 +492,22 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     taskStatusUpdates: [...taskStatusUpdates.values()],
     taskAssignments: [...taskAssignments.values()],
     statusRequest: isStatusRequest(whole),
+    assignmentRequest: isAssignmentRequest(whole),
+    assignmentTaskKey: taskKeyFromContent(whole),
   };
+}
+
+function hasCustomerOnboardingSignal(
+  extracted: ReturnType<typeof extractCustomerOnboardingChatUpdate>,
+): boolean {
+  return (
+    Object.keys(extracted.facts).length > 0 ||
+    extracted.completedTaskKeys.length > 0 ||
+    extracted.taskStatusUpdates.length > 0 ||
+    extracted.taskAssignments.length > 0 ||
+    extracted.statusRequest ||
+    extracted.assignmentRequest
+  );
 }
 
 function mergeOnboardingFacts(
@@ -642,8 +665,7 @@ const ASSIGNMENT_WORDS =
 function isCreditEvidenceSegment(segment: string): boolean {
   return (
     CREDIT_EVIDENCE_WORDS.test(segment) ||
-    (/\bapproved\s+(?:for|at)\b/i.test(segment) &&
-      MONEY_AMOUNT.test(segment))
+    (/\bapproved\s+(?:for|at)\b/i.test(segment) && MONEY_AMOUNT.test(segment))
   );
 }
 
@@ -659,6 +681,19 @@ function isStatusRequest(content: string): boolean {
   if (!trimmed) return false;
   if (STATUS_REQUEST.test(trimmed)) return true;
   return /^(?:status|progress|checklist)\??$/i.test(trimmed);
+}
+
+function isAssignmentRequest(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  return ASSIGNMENT_REQUEST.test(trimmed);
+}
+
+function taskKeyFromContent(content: string): string | null {
+  for (const { key, patterns } of TASK_KEY_ALIASES) {
+    if (patterns.some((pattern) => pattern.test(content))) return key;
+  }
+  return null;
 }
 
 function activeStatus(currentStatus: LinkedTaskStatus): LinkedTaskStatus {
@@ -698,8 +733,86 @@ function buildAssistantSummary(input: {
   return lines.join("\n");
 }
 
+function buildCustomerOnboardingOnlySummary(
+  normalized: NormalizedCustomerOnboardingSource,
+): string {
+  const lines = [
+    "I’m tracking this onboarding in ThinkWork. No external systems are needed for this workflow.",
+  ];
+  if (normalized.missingFields.length > 0) {
+    lines.push(`Still missing: ${normalized.missingFields.join(", ")}.`);
+    lines.push(
+      "Reply with intake answers, task updates, assignments, or ask for status.",
+    );
+  } else {
+    lines.push(
+      "All intake fields are captured. Reply with task updates or assignments.",
+    );
+  }
+  return lines.join("\n");
+}
+
+function buildAssignmentStatusSummary(input: {
+  taskRows: Array<typeof linkedTasks.$inferSelect>;
+  statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"];
+  assignmentChanges: CustomerOnboardingChatUpdateResult["assignmentChanges"];
+  requestedTaskKey: string | null;
+}): string {
+  const statusChangesByKey = new Map(
+    input.statusChanges.map((change) => [
+      change.checklistItemKey,
+      change.nextStatus,
+    ]),
+  );
+  const assignmentChangesByKey = new Map(
+    input.assignmentChanges.map((change) => [
+      change.checklistItemKey,
+      change.nextAssignee,
+    ]),
+  );
+  const tasks = input.taskRows
+    .map((task) => {
+      const key = stringValue(objectRecord(task.metadata).checklistItemKey);
+      return {
+        key,
+        title: cleanChecklistTaskTitle(task.title),
+        status:
+          statusChangesByKey.get(key ?? "") ??
+          (task.status as LinkedTaskStatus),
+        owner:
+          assignmentChangesByKey.get(key ?? "") ??
+          stringValue(task.assignee_display) ??
+          formatStatusLabel(stringValue(task.role_key)) ??
+          "Unassigned",
+      };
+    })
+    .filter(
+      (task) => !input.requestedTaskKey || task.key === input.requestedTaskKey,
+    );
+
+  if (tasks.length === 0) {
+    return input.requestedTaskKey
+      ? "I don’t see that task in this onboarding checklist yet."
+      : "I don’t see any onboarding checklist task assignments yet.";
+  }
+
+  if (tasks.length === 1) {
+    const task = tasks[0];
+    return `${task.title} is assigned to ${task.owner}. Status: ${formatStatusLabel(task.status) ?? task.status}.`;
+  }
+
+  return [
+    "Current onboarding task assignments:",
+    ...tasks.map((task) => `- ${task.title}: ${task.owner}`),
+  ].join("\n");
+}
+
 function normalizeMoneyAmount(value: string): string {
   return value.replace(/\s+/g, "");
+}
+
+function cleanChecklistTaskTitle(title: string): string {
+  return title.replace(/\s+-\s+.+$/u, "").trim() || title;
 }
 
 function buildProgressStatusSummary(input: {

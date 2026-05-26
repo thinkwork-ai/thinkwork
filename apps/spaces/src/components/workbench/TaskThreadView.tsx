@@ -284,9 +284,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-      !showStreamingBuffer &&
-      !showProcessingShimmer,
+    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+    !showStreamingBuffer &&
+    !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -357,6 +357,8 @@ export function TaskThreadView({
                         : undefined
                     }
                     onOpenArtifact={artifactPanelState?.onSelectArtifact}
+                    onSendFollowUp={onSendFollowUp}
+                    isSending={isSending}
                     showProcessingShimmer={
                       index === latestUserIndex && showProcessingShimmer
                     }
@@ -796,6 +798,8 @@ function TranscriptSegment({
   streamingChunks,
   streamState,
   onOpenArtifact,
+  onSendFollowUp,
+  isSending,
   showProcessingShimmer,
 }: {
   message: TaskThreadMessage;
@@ -804,6 +808,12 @@ function TranscriptSegment({
   streamingChunks: ComputerThreadChunk[];
   streamState?: UIMessageStreamState;
   onOpenArtifact?: (artifactId: string) => void;
+  onSendFollowUp?: (
+    content: string,
+    files?: File[],
+    mentions?: ComposerMention[],
+  ) => Promise<void> | void;
+  isSending?: boolean;
   showProcessingShimmer: boolean;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
@@ -814,7 +824,12 @@ function TranscriptSegment({
   const hasTypedParts = streamState != null && streamState.parts.length > 0;
   return (
     <>
-      <TranscriptMessage message={message} onOpenArtifact={onOpenArtifact} />
+      <TranscriptMessage
+        message={message}
+        onOpenArtifact={onOpenArtifact}
+        onSendFollowUp={onSendFollowUp}
+        isSending={isSending}
+      />
       {turn ? <ThreadTurnActivity turn={turn} /> : null}
       {isLatestUser ? (
         <>
@@ -1112,13 +1127,22 @@ function CollapsibleUserMessageBody({ body }: { body: string }) {
 function TranscriptMessage({
   message,
   onOpenArtifact,
+  onSendFollowUp,
+  isSending,
 }: {
   message: TaskThreadMessage;
   onOpenArtifact?: (artifactId: string) => void;
+  onSendFollowUp?: (
+    content: string,
+    files?: File[],
+    mentions?: ComposerMention[],
+  ) => Promise<void> | void;
+  isSending?: boolean;
 }) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
   const actions = actionRowsForMessage(message);
+  const questionCards = !isUser ? questionCardsForMessage(message) : [];
   const body = message.content?.trim() ?? "";
   const typedParts = !isUser ? (message.parts ?? []) : [];
   const renderedTypedParts =
@@ -1149,6 +1173,18 @@ function TranscriptMessage({
                   <ActionRow
                     key={`${message.id}-${action.title}`}
                     {...action}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {questionCards.length > 0 ? (
+              <div className="grid gap-3">
+                {questionCards.map((card) => (
+                  <QuestionCard
+                    key={`${message.id}-${card.id}`}
+                    card={card}
+                    disabled={!onSendFollowUp || isSending}
+                    onSubmit={(content) => onSendFollowUp?.(content, [], [])}
                   />
                 ))}
               </div>
@@ -1753,6 +1789,140 @@ function ActionRow({
   );
 }
 
+interface QuestionCardPayload {
+  id: string;
+  title: string;
+  fields: QuestionCardField[];
+}
+
+interface QuestionCardField {
+  id: string;
+  label: string;
+  type: "text" | "boolean";
+}
+
+function QuestionCard({
+  card,
+  disabled,
+  onSubmit,
+}: {
+  card: QuestionCardPayload;
+  disabled?: boolean;
+  onSubmit?: (content: string) => Promise<void> | void;
+}) {
+  const [values, setValues] = useState<Record<string, string | boolean>>({});
+  const answeredCount = card.fields.filter((field) =>
+    isQuestionCardAnswerPresent(values[field.id]),
+  ).length;
+  const canSubmit = answeredCount > 0 && !disabled;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit || !onSubmit) return;
+    await onSubmit(questionCardAnswerContent(card, values));
+  }
+
+  return (
+    <form
+      className="grid max-w-2xl gap-3 rounded-2xl border border-white/10 bg-[#242424] p-4 text-white shadow-lg"
+      aria-label={card.title}
+      onSubmit={handleSubmit}
+    >
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-white">{card.title}</p>
+        <p className="text-xs text-white/55">
+          Answer what you know. Blank fields can stay blank.
+        </p>
+      </div>
+      <div className="grid gap-3">
+        {card.fields.map((field) => (
+          <QuestionCardFieldControl
+            key={field.id}
+            field={field}
+            value={values[field.id]}
+            disabled={disabled}
+            onChange={(nextValue) =>
+              setValues((current) => ({
+                ...current,
+                [field.id]: nextValue,
+              }))
+            }
+          />
+        ))}
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-zinc-950 transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/45"
+        >
+          Submit answers
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function QuestionCardFieldControl({
+  field,
+  value,
+  disabled,
+  onChange,
+}: {
+  field: QuestionCardField;
+  value: string | boolean | undefined;
+  disabled?: boolean;
+  onChange: (value: string | boolean) => void;
+}) {
+  if (field.type === "boolean") {
+    return (
+      <div className="grid gap-1.5">
+        <p className="text-xs font-medium text-white/75">{field.label}</p>
+        <div className="flex gap-2">
+          {[
+            { label: "yes", value: true },
+            { label: "no", value: false },
+          ].map((option) => {
+            const nextValue = option.value;
+            const selected = value === nextValue;
+            return (
+              <button
+                key={option.label}
+                type="button"
+                aria-pressed={selected}
+                disabled={disabled}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors",
+                  selected
+                    ? "border-white/60 bg-white text-zinc-950"
+                    : "border-white/10 bg-white/5 text-white/65 hover:bg-white/10 hover:text-white",
+                  disabled && "cursor-not-allowed opacity-60",
+                )}
+                onClick={() => onChange(nextValue)}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <label className="grid gap-1.5">
+      <span className="text-xs font-medium text-white/75">{field.label}</span>
+      <input
+        type="text"
+        value={typeof value === "string" ? value : ""}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:border-white/30 disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
+  );
+}
+
 function actionRowsForMessage(message: TaskThreadMessage) {
   const rows: Array<{
     title: string;
@@ -1778,6 +1948,7 @@ function actionRowsForMessage(message: TaskThreadMessage) {
   const toolResults = parseArray(message.toolResults);
   for (const result of toolResults) {
     const record = parseRecord(result);
+    if (isQuestionCardRecord(record)) continue;
     const name =
       stringValue(record.name) ||
       stringValue(record.toolName) ||
@@ -1791,6 +1962,81 @@ function actionRowsForMessage(message: TaskThreadMessage) {
   }
 
   return rows;
+}
+
+function questionCardsForMessage(
+  message: TaskThreadMessage,
+): QuestionCardPayload[] {
+  return parseArray(message.toolResults)
+    .map((result) => parseQuestionCard(result))
+    .filter((card): card is QuestionCardPayload => card !== null);
+}
+
+function parseQuestionCard(value: unknown): QuestionCardPayload | null {
+  const record = parseRecord(value);
+  if (!isQuestionCardRecord(record)) return null;
+
+  const schema = parseRecord(record.schema);
+  const id = stringValue(schema.id) ?? "question_card";
+  const title = stringValue(schema.title) ?? "Questions";
+  const fields = parseArray(schema.fields)
+    .map((field) => {
+      const fieldRecord = parseRecord(field);
+      const fieldId = stringValue(fieldRecord.id);
+      const label = stringValue(fieldRecord.label);
+      const rawType = stringValue(fieldRecord.type)?.toLowerCase();
+      if (!fieldId || !label) return null;
+      return {
+        id: fieldId,
+        label,
+        type: rawType === "boolean" ? "boolean" : "text",
+      } satisfies QuestionCardField;
+    })
+    .filter((field): field is QuestionCardField => field !== null);
+
+  if (fields.length === 0) return null;
+  return { id, title, fields };
+}
+
+function isQuestionCardRecord(record: Record<string, unknown>) {
+  return stringValue(record._type) === "question_card";
+}
+
+function isQuestionCardAnswerPresent(value: string | boolean | undefined) {
+  if (typeof value === "boolean") return true;
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+const QUESTION_CARD_CANONICAL_LABELS: Record<string, string> = {
+  opportunityUrl: "opportunity link",
+  salesRep: "sales owner",
+  contacts: "primary customer contact",
+  dealValue: "deal value",
+  productPlan: "product plan",
+  closeDate: "target onboarding date",
+  documents: "contract link",
+  primaryContact: "primary contact",
+  accountsPayableContact: "accounts payable contact",
+  billingAddress: "billing address",
+  shippingAddress: "shipping address",
+  taxExempt: "tax exempt",
+  creditTermsRequested: "credit terms requested",
+  docusignRecipient: "DocuSign recipient",
+};
+
+function questionCardAnswerContent(
+  card: QuestionCardPayload,
+  values: Record<string, string | boolean>,
+) {
+  const lines = ["Customer onboarding intake answers:"];
+  for (const field of card.fields) {
+    const value = values[field.id];
+    if (!isQuestionCardAnswerPresent(value)) continue;
+    const label = QUESTION_CARD_CANONICAL_LABELS[field.id] ?? field.label;
+    const answer = typeof value === "boolean" ? (value ? "yes" : "no") : value;
+    lines.push(`- ${label}: ${answer}`);
+  }
+  return lines.join("\n");
 }
 
 function actionRowsForTurn(

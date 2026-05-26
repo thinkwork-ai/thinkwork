@@ -174,6 +174,17 @@ describe("extractCustomerOnboardingChatUpdate", () => {
       },
     ]);
   });
+
+  it("recognizes task assignment questions as onboarding workflow requests", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      "whose assigned to the docusign task?",
+    );
+
+    expect(result.assignmentRequest).toBe(true);
+    expect(result.assignmentTaskKey).toBe("docusign_package");
+    expect(result.facts).toEqual({});
+    expect(result.taskAssignments).toEqual([]);
+  });
 });
 
 describe("sendMessage customer onboarding hook", () => {
@@ -193,5 +204,20 @@ describe("sendMessage customer onboarding hook", () => {
     ).toBeLessThan(source.indexOf("await dispatchDefaultAgentTurn"));
     expect(source).toContain("!hasAgentMentions");
     expect(source).toContain("!customerOnboardingHandled");
+  });
+
+  it("does not return generic-agent fallback before checking onboarding workflow metadata", () => {
+    const source = readFileSync(
+      new URL("./customer-onboarding-chat-updates.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source.indexOf("const [thread] = await db")).toBeLessThan(
+      source.indexOf(
+        "if (onboarding.workflow !== CUSTOMER_ONBOARDING_TEMPLATE_KEY)",
+      ),
+    );
+    expect(source).toContain("buildCustomerOnboardingOnlySummary");
+    expect(source).toContain("assignmentRequest");
   });
 });

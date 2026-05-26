@@ -736,7 +736,7 @@ export function SpacesThreadDetailRoute({
   const threadView = (
     <TaskThreadView
       thread={visibleThread}
-      isLoading={fetching || hasMismatchedThreadData}
+      isLoading={(fetching && !routeThread) || hasMismatchedThreadData}
       error={error?.message ?? null}
       streamingChunks={hasDurableAssistant ? [] : chunks}
       streamState={hasDurableAssistant ? undefined : streamState}
@@ -1217,9 +1217,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 
