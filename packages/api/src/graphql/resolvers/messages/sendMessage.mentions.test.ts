@@ -38,6 +38,15 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("callerVisibleThreadPredicate");
   });
 
+  it("validates attachment references before persisting message metadata", () => {
+    expect(source).toContain("canonicalizeMessageAttachmentMetadata");
+    expect(source.indexOf("await canonicalizeMessageAttachmentMetadata")).toBeLessThan(
+      source.indexOf(".insert(messages)"),
+    );
+    expect(source).toContain('extensions: { code: "BAD_USER_INPUT" }');
+    expect(source).toContain("metadata: canonicalMetadata");
+  });
+
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
     expect(source).toContain('const senderType = i.senderType ?? "user"');
     expect(source).toContain('senderType === "agent"');

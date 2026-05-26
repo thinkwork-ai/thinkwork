@@ -30,6 +30,7 @@ import {
   users,
   costEvents,
   agentWorkspaceRuns,
+  threadAttachments,
 } from "@thinkwork/database-pg/schema";
 import {
   extractUsage,
@@ -339,6 +340,85 @@ export function extractComposedSystemPrompt(
 }
 
 const db = getDb();
+
+export async function loadChatMessageAttachmentContext(input: {
+  tenantId: string;
+  threadId: string;
+  messageId: string;
+}) {
+  const [message] = await db
+    .select({ metadata: messages.metadata })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, input.threadId),
+        eq(messages.id, input.messageId),
+      ),
+    )
+    .limit(1);
+
+  const currentIds = new Set(
+    parseAttachmentIdsFromMetadata(message?.metadata),
+  );
+  const rows = await db
+    .select({
+      id: threadAttachments.id,
+      s3Key: threadAttachments.s3_key,
+      name: threadAttachments.name,
+      mimeType: threadAttachments.mime_type,
+      sizeBytes: threadAttachments.size_bytes,
+      createdAt: threadAttachments.created_at,
+    })
+    .from(threadAttachments)
+    .where(
+      and(
+        eq(threadAttachments.tenant_id, input.tenantId),
+        eq(threadAttachments.thread_id, input.threadId),
+      ),
+    )
+    .orderBy(asc(threadAttachments.created_at), asc(threadAttachments.id));
+
+  return {
+    messageAttachments: rows
+      .filter((row) => currentIds.has(row.id) && row.s3Key)
+      .map((row) => ({
+        attachment_id: row.id,
+        s3_key: row.s3Key,
+        name: row.name,
+        mime_type: row.mimeType,
+        size_bytes: row.sizeBytes,
+      })),
+    threadAttachmentManifest: rows.map((row) => ({
+      attachment_id: row.id,
+      name: row.name,
+      mime_type: row.mimeType,
+      size_bytes: row.sizeBytes,
+      created_at: row.createdAt?.toISOString?.() ?? String(row.createdAt),
+      staged_on_this_turn: currentIds.has(row.id),
+    })),
+  };
+}
+
+function parseAttachmentIdsFromMetadata(metadata: unknown): string[] {
+  const record = parseJsonRecord(metadata);
+  const attachments = Array.isArray(record.attachments)
+    ? record.attachments
+    : [];
+  const ids: string[] = [];
+  for (const entry of attachments) {
+    const attachment = parseJsonRecord(entry);
+    if (typeof attachment.attachmentId === "string") {
+      ids.push(attachment.attachmentId.toLowerCase());
+    }
+  }
+  return ids;
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -769,6 +849,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ? (templateContextEngineResult.value ?? undefined)
       : undefined
     : undefined;
+  const messageId =
+    typeof payload?.messageId === "string" ? payload.messageId : null;
 
   // 4. Create trigger_run record
   // Extract trigger_id from trigger_detail if present (e.g. "manual_fire:trigger:UUID" or "schedule:job-XXX")
@@ -1537,6 +1619,25 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           }
         : undefined,
     };
+
+    if (wakeup.source === "chat_message" && runThreadId && messageId) {
+      const attachmentContext = await loadChatMessageAttachmentContext({
+        tenantId: wakeup.tenant_id,
+        threadId: runThreadId,
+        messageId,
+      });
+      if (attachmentContext.messageAttachments.length > 0) {
+        Object.assign(agentCorePayload, {
+          message_attachments: attachmentContext.messageAttachments,
+        });
+      }
+      if (attachmentContext.threadAttachmentManifest.length > 0) {
+        Object.assign(agentCorePayload, {
+          thread_attachments_manifest:
+            attachmentContext.threadAttachmentManifest,
+        });
+      }
+    }
 
     if (wakeup.source === "workspace_event" && workspacePayload) {
       Object.assign(agentCorePayload, {

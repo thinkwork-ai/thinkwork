@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadConversation } from "./ThreadConversation";
 
 afterEach(cleanup);
@@ -62,5 +62,38 @@ describe("ThreadConversation", () => {
     );
 
     expect(screen.getByText("Credit report completed")).toBeTruthy();
+  });
+
+  it("renders downloadable attachment chips from persisted message metadata", () => {
+    const onDownloadAttachment = vi.fn();
+    render(
+      <ThreadConversation
+        attachments={[
+          {
+            id: "attachment-1",
+            name: "Financial Sample.xlsx",
+            sizeBytes: 2048,
+          },
+        ]}
+        onDownloadAttachment={onDownloadAttachment}
+        messages={[
+          {
+            id: "m1",
+            role: "USER",
+            content: "Here's the financials",
+            metadata: {
+              attachments: [{ attachmentId: "attachment-1" }],
+            },
+          },
+        ]}
+      />,
+    );
+
+    const chip = screen.getByRole("button", {
+      name: "Download Financial Sample.xlsx",
+    });
+    expect(chip).toBeTruthy();
+    fireEvent.click(chip);
+    expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
   });
 });

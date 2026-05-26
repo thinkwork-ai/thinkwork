@@ -151,6 +151,9 @@ describe("computer GraphQL queries", () => {
     expect(thread).toContain("sender");
     expect(thread).toContain("mentions");
     expect(thread).toContain("participants");
+    expect(thread).toContain("attachments");
+    expect(thread).toContain("mimeType");
+    expect(thread).toContain("sizeBytes");
     expect(mentionTargets).toContain("threadMentionTargets");
     expect(mentionTargets).toContain("targetType");
     expect(mentionTargets).toContain("targetId");

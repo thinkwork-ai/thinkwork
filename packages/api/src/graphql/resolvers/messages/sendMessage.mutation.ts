@@ -25,6 +25,10 @@ import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-ro
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
+import {
+  canonicalizeMessageAttachmentMetadata,
+  MessageAttachmentRefsError,
+} from "../../../lib/thread-attachments/message-attachment-refs.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -120,6 +124,22 @@ export const sendMessage = async (
   // contents (s3_key, mime_type, size) live exclusively on the
   // thread_attachments table — never duplicated into messages.metadata.
   const parsedMetadata = i.metadata ? JSON.parse(i.metadata) : undefined;
+  let canonicalMetadata: Record<string, unknown> | undefined;
+  try {
+    canonicalMetadata = await canonicalizeMessageAttachmentMetadata({
+      db,
+      tenantId: thread.tenant_id,
+      threadId: i.threadId,
+      metadata: parsedMetadata,
+    });
+  } catch (err) {
+    if (err instanceof MessageAttachmentRefsError) {
+      throw new GraphQLError(err.message, {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+    throw err;
+  }
   const mentionTargets = await loadThreadMentionTargets({
     tenantId: thread.tenant_id,
     threadId: i.threadId,
@@ -144,7 +164,7 @@ export const sendMessage = async (
         sender_id: senderId,
         tool_calls: i.toolCalls ? JSON.parse(i.toolCalls) : undefined,
         tool_results: i.toolResults ? JSON.parse(i.toolResults) : undefined,
-        metadata: parsedMetadata,
+        metadata: canonicalMetadata,
         created_at: messageActivityAt,
       })
       .returning();

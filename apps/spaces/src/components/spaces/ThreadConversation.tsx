@@ -1,7 +1,12 @@
-import { Bot, Clock, UserRound } from "lucide-react";
+import { Bot, Clock, Download, FileText, UserRound } from "lucide-react";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
 import { normalizePersistedParts } from "@/components/workbench/TaskThreadView";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import {
+  resolveMessageAttachments,
+  type MessageAttachmentDisplay,
+  type ThreadAttachmentSummary,
+} from "@/lib/thread-message-attachments";
 
 export interface ThreadConversationMessage {
   id: string;
@@ -26,12 +31,16 @@ export interface ThreadConversationMessage {
 
 interface ThreadConversationProps {
   messages: ThreadConversationMessage[];
+  attachments?: ThreadAttachmentSummary[];
+  onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
   isLoading?: boolean;
   error?: string | null;
 }
 
 export function ThreadConversation({
   messages,
+  attachments = [],
+  onDownloadAttachment,
   isLoading = false,
   error,
 }: ThreadConversationProps) {
@@ -65,7 +74,12 @@ export function ThreadConversation({
           group.kind === "milestone" ? (
             <MilestoneRow key={group.message.id} message={group.message} />
           ) : (
-            <MessageGroup key={group.id} group={group} />
+            <MessageGroup
+              key={group.id}
+              group={group}
+              attachments={attachments}
+              onDownloadAttachment={onDownloadAttachment}
+            />
           ),
         )}
       </div>
@@ -114,8 +128,12 @@ function groupMessages(messages: ThreadConversationMessage[]): MessageGroup[] {
 
 function MessageGroup({
   group,
+  attachments,
+  onDownloadAttachment,
 }: {
   group: Extract<MessageGroup, { kind: "message" }>;
+  attachments: ThreadAttachmentSummary[];
+  onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
 }) {
   const Icon = group.senderType === "agent" ? Bot : UserRound;
   return (
@@ -132,7 +150,12 @@ function MessageGroup({
         </div>
         <div className="space-y-2">
           {group.messages.map((message) => (
-            <MessageBody key={message.id} message={message} />
+            <MessageBody
+              key={message.id}
+              message={message}
+              attachments={attachments}
+              onDownloadAttachment={onDownloadAttachment}
+            />
           ))}
         </div>
       </div>
@@ -140,20 +163,72 @@ function MessageGroup({
   );
 }
 
-function MessageBody({ message }: { message: ThreadConversationMessage }) {
+function MessageBody({
+  message,
+  attachments,
+  onDownloadAttachment,
+}: {
+  message: ThreadConversationMessage;
+  attachments: ThreadAttachmentSummary[];
+  onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
+}) {
   const typedParts = normalizePersistedParts(message.parts);
   const renderedParts = typedParts.length
     ? renderTypedParts(typedParts, { keyPrefix: message.id }).filter(Boolean)
     : null;
+  const messageAttachments = resolveMessageAttachments({
+    metadata: message.metadata,
+    threadAttachments: attachments,
+  });
   return (
-    <div className="rounded-md bg-muted/45 px-3 py-2 text-sm leading-6">
+    <div className="grid min-w-0 gap-2 rounded-md bg-muted/45 px-3 py-2 text-sm leading-6">
       {renderedParts?.length ? (
         <div className="space-y-2">{renderedParts}</div>
-      ) : (
+      ) : message.content ? (
         <p className="whitespace-pre-wrap break-words">
           {highlightMentions(message.content ?? "", message.mentions ?? [])}
         </p>
-      )}
+      ) : messageAttachments.length === 0 ? (
+        <p className="text-muted-foreground">(No message content)</p>
+      ) : null}
+      {messageAttachments.length > 0 ? (
+        <ConversationAttachmentChips
+          attachments={messageAttachments}
+          onDownloadAttachment={onDownloadAttachment}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ConversationAttachmentChips({
+  attachments,
+  onDownloadAttachment,
+}: {
+  attachments: MessageAttachmentDisplay[];
+  onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap gap-2">
+      {attachments.map((attachment) => (
+        <button
+          key={attachment.id}
+          type="button"
+          aria-label={`Download ${attachment.label}`}
+          disabled={!onDownloadAttachment}
+          className="inline-flex min-h-9 max-w-full min-w-0 items-center gap-2 rounded-full border bg-background/70 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => void onDownloadAttachment?.(attachment.id)}
+        >
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate">{attachment.label}</span>
+          {attachment.sizeBytes ? (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {formatFileSize(attachment.sizeBytes)}
+            </span>
+          ) : null}
+          <Download className="size-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      ))}
     </div>
   );
 }
@@ -229,4 +304,17 @@ function formatTime(value?: string | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatFileSize(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB"];
+  let size = value / 1024;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }

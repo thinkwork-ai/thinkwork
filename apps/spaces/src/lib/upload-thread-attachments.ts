@@ -74,7 +74,7 @@ export async function uploadThreadAttachments(input: {
   /** Optional fetch override for tests; defaults to global fetch. */
   fetchImpl?: typeof fetch;
 }): Promise<UploadResult> {
-  const fetchImpl = input.fetchImpl ?? fetch;
+  const fetchImpl = input.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const uploaded: UploadedAttachment[] = [];
   const failures: UploadFailure[] = [];
 
