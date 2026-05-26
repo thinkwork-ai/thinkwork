@@ -224,6 +224,70 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     ]);
   });
 
+  it("maps clicked-task prefill commands to removals and statuses", () => {
+    const removed = extractCustomerOnboardingChatUpdate(
+      "Get the Agriculture Exemption Form: Remove",
+    );
+    const deleted = extractCustomerOnboardingChatUpdate(
+      "Get Tank Certifications: Delete task",
+    );
+    const completed = extractCustomerOnboardingChatUpdate(
+      "Get Tank Certifications: completed",
+    );
+    const blocked = extractCustomerOnboardingChatUpdate(
+      "Get Tank Certifications: blocked",
+    );
+    const knownTask = extractCustomerOnboardingChatUpdate(
+      "Collect tax exemption forms: Delete",
+    );
+    const assigned = extractCustomerOnboardingChatUpdate(
+      "Get Tank Certifications: assign to @Scott Hertel",
+    );
+
+    expect(removed.taskRemovals).toEqual([
+      {
+        title: "Get the Agriculture Exemption Form",
+        key: null,
+        note: "Get the Agriculture Exemption Form: Remove",
+      },
+    ]);
+    expect(deleted.taskRemovals).toEqual([
+      {
+        title: "Get Tank Certifications",
+        key: null,
+        note: "Get Tank Certifications: Delete task",
+      },
+    ]);
+    expect(completed.taskStatusUpdates).toEqual([
+      {
+        key: "custom_get_tank_certifications",
+        status: "completed",
+        note: "Get Tank Certifications: completed",
+      },
+    ]);
+    expect(blocked.taskStatusUpdates).toEqual([
+      {
+        key: "custom_get_tank_certifications",
+        status: "blocked",
+        note: "Get Tank Certifications: blocked",
+      },
+    ]);
+    expect(knownTask.taskRemovals).toEqual([
+      {
+        title: "Collect tax exemption forms",
+        key: "tax_exemption_forms",
+        note: "Collect tax exemption forms: Delete",
+      },
+    ]);
+    expect(assigned.taskAssignments).toEqual([
+      {
+        key: "custom_get_tank_certifications",
+        assigneeDisplay: "Scott Hertel",
+        note: "Get Tank Certifications: assign to @Scott Hertel",
+      },
+    ]);
+  });
+
   it("maps mentioned DocuSign ownership updates to the DocuSign task", () => {
     const result = extractCustomerOnboardingChatUpdate(
       "@Rebecca Odom is handling the DocuSign package too",
@@ -282,5 +346,18 @@ describe("sendMessage customer onboarding hook", () => {
     );
     expect(source).toContain("buildCustomerOnboardingOnlySummary");
     expect(source).toContain("assignmentRequest");
+  });
+
+  it("does not mark non-actionable onboarding chat as handled", () => {
+    const source = readFileSync(
+      new URL("./customer-onboarding-chat-updates.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("const shouldHandle");
+    expect(source).toContain("handled: false");
+    expect(source.indexOf("if (!shouldHandle)")).toBeLessThan(
+      source.indexOf("const assistantContent"),
+    );
   });
 });

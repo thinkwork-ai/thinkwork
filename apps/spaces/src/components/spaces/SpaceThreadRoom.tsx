@@ -19,6 +19,7 @@ import {
 } from "@/lib/graphql-queries";
 import { getIdToken } from "@/lib/auth";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
+import type { ThreadAttachmentSummary } from "@/lib/thread-message-attachments";
 
 interface SpaceThreadRoomProps {
   threadId: string;
@@ -30,6 +31,7 @@ interface SpaceThreadCollaborationResult {
     id: string;
     spaceId?: string | null;
     title?: string | null;
+    attachments?: ThreadAttachmentSummary[] | null;
     participants?: ThreadParticipantSummary[] | null;
     messages?: {
       edges?: Array<{ node: ThreadConversationMessage }>;
@@ -102,6 +104,10 @@ export function SpaceThreadRoom({
       <ThreadParticipantsBar participants={thread?.participants ?? []} />
       <ThreadConversation
         messages={messages}
+        attachments={thread?.attachments ?? []}
+        onDownloadAttachment={(attachmentId) =>
+          downloadThreadAttachment(threadId, attachmentId)
+        }
         isLoading={fetching && !data}
         error={error?.message ?? null}
       />
@@ -133,7 +139,8 @@ export function SpaceThreadRoom({
 
 async function uploadFiles(threadId: string, files: File[]) {
   const apiUrl = import.meta.env.VITE_API_URL || "";
-  if (files.length === 0 || !apiUrl) return [];
+  if (files.length === 0) return [];
+  if (!apiUrl) throw new Error("Attachment upload endpoint is not configured");
   const token = await getIdToken();
   if (!token) throw new Error("Sign-in required to upload attachments");
   const result = await uploadThreadAttachments({
@@ -141,10 +148,47 @@ async function uploadFiles(threadId: string, files: File[]) {
     threadId,
     files,
   });
+  if (result.uploaded.length === 0 && result.failures.length > 0) {
+    const first = result.failures[0]!;
+    throw new Error(`Upload failed for ${first.file.name}: ${first.message}`);
+  }
   if (result.failures.length > 0) {
-    toast.warning("Some attachments could not be uploaded.");
+    toast.warning(
+      `${result.failures.length} attachment${result.failures.length === 1 ? "" : "s"} could not be uploaded.`,
+    );
   }
   return result.uploaded.map((file) => ({ attachmentId: file.attachmentId }));
+}
+
+async function downloadThreadAttachment(
+  threadId: string,
+  attachmentId: string,
+) {
+  const apiUrl = import.meta.env.VITE_API_URL || "";
+  const token = await getIdToken();
+  if (!apiUrl || !token) {
+    toast.error("Sign-in required to download attachments.");
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `${apiUrl}/api/threads/${threadId}/attachments/${attachmentId}/download`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/json",
+        },
+      },
+    );
+    if (!res.ok) throw new Error(`download failed (${res.status})`);
+    const body = (await res.json()) as { url?: string };
+    if (!body.url) throw new Error("download URL missing");
+    window.open(body.url, "_blank", "noopener,noreferrer");
+  } catch {
+    toast.error("Could not download attachment. Try again.");
+  }
 }
 
 function toSendMention(mention: ComposerMention) {

@@ -409,6 +409,14 @@ export const SpaceThreadCollaborationQuery = gql`
       channel
       archivedAt
       metadata
+      attachments {
+        id
+        name
+        mimeType
+        sizeBytes
+        uploadedBy
+        createdAt
+      }
       participants {
         id
         participantType

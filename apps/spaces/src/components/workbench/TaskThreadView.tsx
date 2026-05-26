@@ -64,6 +64,10 @@ import type {
   AccumulatedPart,
   UIMessageStreamState,
 } from "@/lib/ui-message-merge";
+import {
+  resolveMessageAttachments,
+  type MessageAttachmentDisplay,
+} from "@/lib/thread-message-attachments";
 import type {
   RunbookQueueData,
   TaskQueueData,
@@ -324,8 +328,8 @@ export function TaskThreadView({
           <ConversationContent
             data-testid="thread-conversation-content"
             className={cn(
-              "w-full gap-0 px-4 pt-4 sm:px-6",
-              infoPanelOpen && "md:pr-[340px]",
+              "w-full gap-0 px-4 pt-10 sm:px-6",
+              infoPanelOpen && "md:pr-[332px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
           >
@@ -358,6 +362,8 @@ export function TaskThreadView({
                     onOpenArtifact={artifactPanelState?.onSelectArtifact}
                     onSendFollowUp={onSendFollowUp}
                     isSending={isSending}
+                    threadAttachments={infoPanelState?.attachments ?? []}
+                    onDownloadAttachment={infoPanelState?.onDownloadAttachment}
                     showProcessingShimmer={
                       index === latestUserIndex && showProcessingShimmer
                     }
@@ -384,7 +390,7 @@ export function TaskThreadView({
           data-testid="follow-up-composer-dock"
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6",
-            infoPanelOpen && "md:pr-[340px]",
+            infoPanelOpen && "md:pr-[332px]",
           )}
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
@@ -509,7 +515,7 @@ function ThreadInfoPanel({
 
   return (
     <aside
-      className="absolute right-6 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
+      className="absolute right-4 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >
@@ -527,6 +533,13 @@ function ThreadInfoPanel({
             />
           </section>
 
+          {state.checklist ? (
+            <ThreadInfoChecklist
+              checklist={state.checklist}
+              onTaskPrompt={onTaskPrompt}
+            />
+          ) : null}
+
           {state.attachments.length > 0 ? (
             <section className="border-t border-white/10 pt-4">
               <h2 className="mb-2 text-sm font-medium text-white/55">
@@ -534,41 +547,47 @@ function ThreadInfoPanel({
               </h2>
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {state.attachments.map((attachment) => (
-                  <button
+                  <InfoPanelAttachmentButton
                     key={attachment.id}
-                    type="button"
-                    className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm text-white/75 hover:bg-white/8 hover:text-white"
-                    onClick={() =>
-                      void state.onDownloadAttachment(attachment.id)
-                    }
-                  >
-                    <FileText className="size-4 shrink-0 text-white/45" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">
-                        {attachment.name || "Attachment"}
-                      </span>
-                      {attachment.sizeBytes ? (
-                        <span className="block text-xs text-white/40">
-                          {formatFileSize(attachment.sizeBytes)}
-                        </span>
-                      ) : null}
-                    </span>
-                    <Download className="size-3.5 shrink-0 text-white/45" />
-                  </button>
+                    attachment={attachment}
+                    onDownload={state.onDownloadAttachment}
+                  />
                 ))}
               </div>
             </section>
           ) : null}
-
-          {state.checklist ? (
-            <ThreadInfoChecklist
-              checklist={state.checklist}
-              onTaskPrompt={onTaskPrompt}
-            />
-          ) : null}
         </div>
       </div>
     </aside>
+  );
+}
+
+function InfoPanelAttachmentButton({
+  attachment,
+  onDownload,
+}: {
+  attachment: ThreadInfoAttachment;
+  onDownload: (attachmentId: string) => void | Promise<void>;
+}) {
+  const label = attachment.name || "Attachment";
+  return (
+    <button
+      type="button"
+      aria-label={`Download ${label}`}
+      className="flex min-h-10 w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm text-white/75 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35"
+      onClick={() => void onDownload(attachment.id)}
+    >
+      <FileText className="size-4 shrink-0 text-white/45" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {attachment.sizeBytes ? (
+          <span className="block text-xs text-white/40">
+            {formatFileSize(attachment.sizeBytes)}
+          </span>
+        ) : null}
+      </span>
+      <Download className="size-3.5 shrink-0 text-white/45" />
+    </button>
   );
 }
 
@@ -669,7 +688,9 @@ function ThreadInfoChecklistRow({
     task.status && task.status.trim() ? formatInfoStatus(task.status) : "";
   const hasSublabel = Boolean(assignee) || Boolean(statusLabel);
   const sublabel =
-    assignee && statusLabel ? `${assignee} · ${statusLabel}` : assignee || statusLabel;
+    assignee && statusLabel
+      ? `${assignee} · ${statusLabel}`
+      : assignee || statusLabel;
 
   return (
     <button
@@ -798,9 +819,7 @@ function formatInfoStatus(value?: string | null) {
   );
 }
 
-function pickLatestUpdatedAt(
-  tasks: ThreadInfoChecklistTask[],
-): string | null {
+function pickLatestUpdatedAt(tasks: ThreadInfoChecklistTask[]): string | null {
   let best: { value: string; time: number } | null = null;
   for (const task of tasks) {
     if (!task.updatedAt) continue;
@@ -869,6 +888,8 @@ function TranscriptSegment({
   onOpenArtifact,
   onSendFollowUp,
   isSending,
+  threadAttachments,
+  onDownloadAttachment,
   showProcessingShimmer,
 }: {
   message: TaskThreadMessage;
@@ -883,6 +904,8 @@ function TranscriptSegment({
     mentions?: ComposerMention[],
   ) => Promise<void> | void;
   isSending?: boolean;
+  threadAttachments: ThreadInfoAttachment[];
+  onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
   showProcessingShimmer: boolean;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
@@ -898,6 +921,8 @@ function TranscriptSegment({
         onOpenArtifact={onOpenArtifact}
         onSendFollowUp={onSendFollowUp}
         isSending={isSending}
+        threadAttachments={threadAttachments}
+        onDownloadAttachment={onDownloadAttachment}
       />
       {turn ? <ThreadTurnActivity turn={turn} /> : null}
       {isLatestUser ? (
@@ -1198,6 +1223,8 @@ function TranscriptMessage({
   onOpenArtifact,
   onSendFollowUp,
   isSending,
+  threadAttachments,
+  onDownloadAttachment,
 }: {
   message: TaskThreadMessage;
   onOpenArtifact?: (artifactId: string) => void;
@@ -1207,12 +1234,20 @@ function TranscriptMessage({
     mentions?: ComposerMention[],
   ) => Promise<void> | void;
   isSending?: boolean;
+  threadAttachments: ThreadInfoAttachment[];
+  onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
 }) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
   const actions = actionRowsForMessage(message);
   const questionCards = !isUser ? questionCardsForMessage(message) : [];
   const body = message.content?.trim() ?? "";
+  const attachments = isUser
+    ? resolveMessageAttachments({
+        metadata: message.metadata,
+        threadAttachments,
+      })
+    : [];
   const typedParts = !isUser ? (message.parts ?? []) : [];
   const renderedTypedParts =
     typedParts.length > 0
@@ -1233,7 +1268,16 @@ function TranscriptMessage({
         }
       >
         {isUser ? (
-          <CollapsibleUserMessageBody body={body} />
+          <div className="grid min-w-0 gap-2">
+            {body ? <CollapsibleUserMessageBody body={body} /> : null}
+            {attachments.length > 0 ? (
+              <MessageAttachmentList
+                attachments={attachments}
+                onDownloadAttachment={onDownloadAttachment}
+              />
+            ) : null}
+            {!body && attachments.length === 0 ? <>(No message content)</> : null}
+          </div>
         ) : (
           <>
             {actions.length > 0 ? (
@@ -1279,6 +1323,38 @@ function TranscriptMessage({
         )}
       </MessageContent>
     </Message>
+  );
+}
+
+function MessageAttachmentList({
+  attachments,
+  onDownloadAttachment,
+}: {
+  attachments: MessageAttachmentDisplay[];
+  onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap gap-2">
+      {attachments.map((attachment) => (
+        <button
+          key={attachment.id}
+          type="button"
+          aria-label={`Download ${attachment.label}`}
+          disabled={!onDownloadAttachment}
+          className="inline-flex min-h-9 max-w-full min-w-0 items-center gap-2 rounded-full border border-border/70 bg-background/45 px-3 py-1.5 text-sm text-foreground/90 transition-colors hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => void onDownloadAttachment?.(attachment.id)}
+        >
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate">{attachment.label}</span>
+          {attachment.sizeBytes ? (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {formatFileSize(attachment.sizeBytes)}
+            </span>
+          ) : null}
+          <Download className="size-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1367,6 +1443,7 @@ function FollowUpComposer({
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
@@ -1394,6 +1471,12 @@ function FollowUpComposer({
   useEffect(() => {
     if (!prefillText) return;
     composer.setText(prefillText);
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(prefillText.length, prefillText.length);
+    });
   }, [prefillText, prefillToken]);
 
   // Plan-012 U13: in-thread composer migrated to AI Elements
@@ -1521,6 +1604,7 @@ function FollowUpComposer({
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
             <PromptInputTextarea
+              ref={textareaRef}
               aria-label="Follow up"
               className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
               value={composer.text}

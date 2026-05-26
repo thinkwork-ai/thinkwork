@@ -113,6 +113,8 @@ const ADD_TASK_WORDS =
   /\b(?:add|create|new|put)\b.*\b(?:task|checklist|todo|to-do|tasklist|task list)\b|\b(?:add|put)\b.+\b(?:to|on)\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/i;
 const REMOVE_TASK_WORDS =
   /\b(?:remove|delete|drop)\b.*\b(?:task|checklist|todo|to-do|tasklist|task list)\b|\b(?:remove|delete|drop)\b.+\bfrom\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/i;
+const REMOVE_COMMAND_WORDS =
+  /^(?:please\s+)?(?:remove|delete|drop)(?:\s+(?:this|the)?\s*(?:task|checklist item|todo|to-do))?\.?$/i;
 
 export async function applyCustomerOnboardingChatUpdate(
   input: ApplyCustomerOnboardingChatUpdateInput,
@@ -457,6 +459,23 @@ export async function applyCustomerOnboardingChatUpdate(
       }
     }
 
+    const shouldHandle =
+      extracted.assignmentRequest || extracted.statusRequest || hasExtractedSignal;
+    if (!shouldHandle) {
+      return {
+        handled: false,
+        assistantMessageId: null,
+        assistantContent: "",
+        missingFields: normalized.missingFields,
+        statusRequest: extracted.statusRequest,
+        addedTasks,
+        removedTasks,
+        unmatchedTaskRemovals,
+        statusChanges,
+        assignmentChanges,
+      };
+    }
+
     const assistantContent = extracted.assignmentRequest
       ? buildAssignmentStatusSummary({
           taskRows: activeTaskRows,
@@ -519,10 +538,12 @@ export async function applyCustomerOnboardingChatUpdate(
     };
   });
 
-  await refreshCustomerOnboardingProgressMarkdownSafely({
-    tenantId: input.tenantId,
-    threadId: input.threadId,
-  });
+  if (result.handled) {
+    await refreshCustomerOnboardingProgressMarkdownSafely({
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+    });
+  }
 
   return result;
 }
@@ -654,6 +675,39 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     { title: string; key: string | null; note: string }
   >();
   for (const segment of segments) {
+    const prefixedTaskCommand = taskCommandFromPrefixedSegment(segment);
+    if (prefixedTaskCommand?.type === "removal") {
+      taskRemovals.set(
+        prefixedTaskCommand.key ??
+          normalizeTaskTitleForMatch(prefixedTaskCommand.title),
+        {
+          title: prefixedTaskCommand.title,
+          key: prefixedTaskCommand.key,
+          note: segment,
+        },
+      );
+      continue;
+    }
+    if (prefixedTaskCommand?.type === "status") {
+      taskStatusUpdates.set(prefixedTaskCommand.key, {
+        key: prefixedTaskCommand.key,
+        status: prefixedTaskCommand.status,
+        note: segment,
+      });
+      if (prefixedTaskCommand.status === "completed") {
+        completedTaskKeys.add(prefixedTaskCommand.key);
+      }
+      continue;
+    }
+    if (prefixedTaskCommand?.type === "assignment") {
+      taskAssignments.set(prefixedTaskCommand.key, {
+        key: prefixedTaskCommand.key,
+        assigneeDisplay: prefixedTaskCommand.assigneeDisplay,
+        note: segment,
+      });
+      continue;
+    }
+
     const taskAdditionTitle = taskAdditionTitleFromSegment(segment);
     if (taskAdditionTitle) {
       taskAdditions.set(normalizeTaskTitleForMatch(taskAdditionTitle), {
@@ -857,6 +911,62 @@ function taskMutationIntro(segment: string): boolean {
   return ADD_TASK_WORDS.test(segment) || REMOVE_TASK_WORDS.test(segment);
 }
 
+function taskCommandFromPrefixedSegment(segment: string):
+  | {
+      type: "removal";
+      title: string;
+      key: string | null;
+    }
+  | {
+      type: "status";
+      title: string;
+      key: string;
+      status: LinkedTaskStatus;
+    }
+  | {
+      type: "assignment";
+      title: string;
+      key: string;
+      assigneeDisplay: string;
+    }
+  | null {
+  const match = segment.match(/^(.+?)\s*:\s*(.+)$/);
+  const rawTitle = match?.[1]?.trim();
+  if (rawTitle && taskMutationIntro(rawTitle)) return null;
+  const title = cleanTaskMutationTitle(rawTitle);
+  const command = match?.[2]?.trim();
+  if (!title || !command) return null;
+  if (taskMutationIntro(title)) return null;
+
+  const knownKey = taskKeyFromPrefilledTitle(title);
+  if (REMOVE_COMMAND_WORDS.test(command)) {
+    return {
+      type: "removal",
+      title,
+      key: knownKey,
+    };
+  }
+
+  const assigneeDisplay = assignmentDisplayFromSegment(command);
+  if (assigneeDisplay && ASSIGNMENT_WORDS.test(command)) {
+    return {
+      type: "assignment",
+      title,
+      key: knownKey ?? customChecklistItemKey(title),
+      assigneeDisplay,
+    };
+  }
+
+  const status = statusFromSegment(command);
+  if (!status) return null;
+  return {
+    type: "status",
+    title,
+    key: knownKey ?? customChecklistItemKey(title),
+    status,
+  };
+}
+
 function taskRemovalFromSegment(segment: string): {
   title: string;
   key: string | null;
@@ -872,6 +982,42 @@ function taskRemovalFromSegment(segment: string): {
     if (title) return { title, key };
   }
   return key ? { title: key, key } : null;
+}
+
+function taskKeyFromPrefilledTitle(title: string): string | null {
+  const normalized = normalizeTaskTitleForMatch(title);
+  const exactAliases: Array<[string, RegExp[]]> = [
+    [
+      "dun_and_bradstreet_check",
+      [/\b(?:check\s+)?(?:dun\s+(?:and|&)\s+bradstreet|d&b|dnb)(?:\s+information)?\b/i],
+    ],
+    [
+      "tax_exemption_forms",
+      [/\b(?:collect\s+)?tax exemption forms?\b/i],
+    ],
+    ["credit_check", [/\b(?:run\s+)?credit check\b/i, /\bcredit review\b/i]],
+    [
+      "docusign_package",
+      [/\b(?:send and receive\s+)?docusign package\b/i, /\border form\b/i],
+    ],
+    [
+      "p21_customer_setup",
+      [
+        /\benter customer information into p21\b/i,
+        /\bp21 customer setup\b/i,
+        /\bcustomer setup\b/i,
+      ],
+    ],
+    [
+      "final_onboarding_review",
+      [/\bcomplete final onboarding review\b/i, /\bfinal onboarding review\b/i],
+    ],
+  ];
+
+  for (const [key, patterns] of exactAliases) {
+    if (patterns.some((pattern) => pattern.test(normalized))) return key;
+  }
+  return null;
 }
 
 function cleanTaskMutationTitle(value: string | undefined): string | null {

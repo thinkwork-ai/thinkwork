@@ -84,6 +84,45 @@ describe("uploadThreadAttachments", () => {
     });
   });
 
+  it("binds the default global fetch so browser uploads do not hit illegal invocation", async () => {
+    const originalFetch = globalThis.fetch;
+    const receiver = { expected: true };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(function (this: typeof receiver) {
+        if (this !== receiver) {
+          throw new TypeError("Illegal invocation");
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify(presignBody("att-1", "data.csv")), {
+            status: 200,
+          }),
+        );
+      });
+
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: fetchImpl.bind(receiver) as typeof fetch,
+    });
+
+    try {
+      const result = await uploadThreadAttachments({
+        endpoints: { apiUrl: API_URL, token: "tok" },
+        threadId: THREAD_ID,
+        files: [file("data.csv")],
+      });
+
+      expect(result.failures).toEqual([]);
+      expect(result.uploaded).toHaveLength(1);
+      expect(fetchImpl).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(globalThis, "fetch", {
+        configurable: true,
+        value: originalFetch,
+      });
+    }
+  });
+
   it("captures presign failure without trying PUT/finalize", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

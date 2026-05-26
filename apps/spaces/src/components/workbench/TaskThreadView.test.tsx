@@ -77,6 +77,7 @@ describe("TaskThreadView", () => {
             },
           ],
         }}
+        onSendFollowUp={vi.fn()}
       />,
     );
 
@@ -379,7 +380,7 @@ describe("TaskThreadView", () => {
     expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
   });
 
-  it("reserves thread width for the info panel with details and downloadable attachments", () => {
+  it("reserves thread width for the info panel with details and downloadable attachments", async () => {
     const onDownloadAttachment = vi.fn();
 
     render(
@@ -432,12 +433,13 @@ describe("TaskThreadView", () => {
           },
           onDownloadAttachment,
         }}
+        onSendFollowUp={vi.fn()}
       />,
     );
 
     expect(
       screen.getByTestId("thread-conversation-content").className,
-    ).toContain("md:pr-[340px]");
+    ).toContain("md:pr-[332px]");
     expect(
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("max-w-[750px]");
@@ -445,12 +447,12 @@ describe("TaskThreadView", () => {
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("px-3");
     expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
-      "md:pr-[340px]",
+      "md:pr-[332px]",
     );
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
     expect(panel.className).toContain("absolute");
-    expect(panel.className).toContain("right-6");
+    expect(panel.className).toContain("right-4");
     expect(panel.className).toContain("top-4");
     expect(panel.className).toContain("max-h-[calc(100%-2rem)]");
     expect(panel.className).toContain("overflow-hidden");
@@ -478,13 +480,64 @@ describe("TaskThreadView", () => {
         name: /update enter customer information into p21/i,
       }),
     );
-    expect(screen.getByLabelText("Follow up")).toHaveProperty(
+    const followUpInput = screen.getByLabelText(
+      "Follow up",
+    ) as HTMLTextAreaElement;
+    expect(followUpInput).toHaveProperty(
       "value",
       "Enter customer information into P21: ",
     );
+    await waitFor(() => expect(document.activeElement).toBe(followUpInput));
+    expect(followUpInput.selectionStart).toBe(followUpInput.value.length);
+    expect(followUpInput.selectionEnd).toBe(followUpInput.value.length);
     fireEvent.click(
       within(panel).getByRole("button", { name: /general-ledger/i }),
     );
+    expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
+  });
+
+  it("renders persisted attachment chips in user transcript messages", () => {
+    const onDownloadAttachment = vi.fn();
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Attachment thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Here's the financials",
+              metadata: {
+                attachments: [{ attachmentId: "attachment-1" }],
+              },
+            },
+          ],
+        }}
+        infoPanelState={{
+          isOpen: false,
+          onOpenChange: vi.fn(),
+          startedAt: "2026-05-18T20:50:00.000Z",
+          startedBy: "Eric Odom",
+          agents: [],
+          attachments: [
+            {
+              id: "attachment-1",
+              name: "Financial Sample.xlsx",
+              sizeBytes: 2048,
+            },
+          ],
+          onDownloadAttachment,
+        }}
+      />,
+    );
+
+    const chip = screen.getByRole("button", {
+      name: "Download Financial Sample.xlsx",
+    });
+    fireEvent.click(chip);
     expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
   });
 

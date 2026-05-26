@@ -278,9 +278,8 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         return;
       }
       if (uploadResult.failures.length > 0) {
-        console.warn(
-          "[SpacesWorkbench] partial upload failure:",
-          uploadResult.failures,
+        setError(
+          `${uploadResult.failures.length} attachment${uploadResult.failures.length === 1 ? "" : "s"} could not be uploaded. Sending the files that finished.`,
         );
       }
 
@@ -297,7 +296,11 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         },
       });
       if (sent.error) {
-        setError(sent.error.message ?? "Failed to send the first message");
+        setError(
+          attachmentRefs.length > 0
+            ? "Files uploaded, but the first message did not send. Try sending the message again."
+            : (sent.error.message ?? "Failed to send the first message"),
+        );
         return;
       }
 

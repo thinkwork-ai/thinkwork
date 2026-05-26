@@ -839,16 +839,17 @@ export function SpacesThreadDetailRoute({
         setOptimisticMessage(content);
         resetStreamingChunks();
 
-        // U1 of finance pilot: upload attached files before the
-        // sendMessage mutation so the resulting attachmentId references
-        // are embedded in `metadata.attachments`. The Strands turn
-        // (U3) reads that list at dispatch and stages files to /tmp
-        // before the model loop. Partial-success: any failed upload
-        // surfaces inline; the message still sends so the user isn't
-        // blocked.
+        // Upload attached files before sendMessage so persisted messages only
+        // reference finalized thread_attachment rows. All-failed uploads block
+        // the send; partial success sends only finalized files and tells the
+        // user which part did not make it.
         const apiUrl = import.meta.env.VITE_API_URL || "";
         let attachmentRefs: { attachmentId: string }[] = [];
-        if (files && files.length > 0 && apiUrl) {
+        if (files && files.length > 0) {
+          if (!apiUrl) {
+            setOptimisticMessage(null);
+            throw new Error("Attachment upload endpoint is not configured");
+          }
           const token = await getIdToken();
           if (!token) {
             setOptimisticMessage(null);
@@ -862,10 +863,16 @@ export function SpacesThreadDetailRoute({
           attachmentRefs = result.uploaded.map((a) => ({
             attachmentId: a.attachmentId,
           }));
+          if (attachmentRefs.length === 0 && result.failures.length > 0) {
+            setOptimisticMessage(null);
+            const first = result.failures[0]!;
+            throw new Error(
+              `Upload failed for ${first.file.name}: ${first.message}`,
+            );
+          }
           if (result.failures.length > 0) {
-            console.warn(
-              "[ComputerThreadDetail] attachment upload failures:",
-              result.failures,
+            toast.warning(
+              `${result.failures.length} attachment${result.failures.length === 1 ? "" : "s"} could not be uploaded.`,
             );
           }
         }
@@ -895,6 +902,11 @@ export function SpacesThreadDetailRoute({
         const result = await sendMessage({ input: sendInput });
         if (result.error) {
           setOptimisticMessage(null);
+          if (attachmentRefs.length > 0) {
+            toast.error(
+              "Files uploaded, but the message did not send. Try sending the message again.",
+            );
+          }
           throw result.error;
         }
         reexecuteQuery({ requestPolicy: "network-only" });
