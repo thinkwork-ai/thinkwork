@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { UpdateState } from "@thinkwork/desktop-ipc";
-import { Button, Spinner } from "@thinkwork/ui";
+import { Button, cn, Spinner } from "@thinkwork/ui";
 import { getDesktopBridge } from "@/lib/desktop-runtime";
 import { isDesktop } from "@/lib/desktop-detection";
 
 type DesktopUpdateBridge = NonNullable<ReturnType<typeof getDesktopBridge>>;
 
-export function DesktopUpdateBadge() {
+export function DesktopUpdateBadge({ className }: { className?: string }) {
   const updateState = useDesktopUpdateState();
 
   if (!updateState || !shouldShowUpdateControl(updateState)) return null;
@@ -21,7 +21,10 @@ export function DesktopUpdateBadge() {
       type="button"
       size="sm"
       variant={action?.variant ?? "secondary"}
-      className="h-7 rounded-full border-[#54a9ff]/60 bg-[#2f9bff] px-3 text-xs font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] hover:bg-[#2388e6] disabled:border-[#3a3a3a] disabled:bg-[#2d2d2d] disabled:text-[#a5a5a5]"
+      className={cn(
+        "h-[26px] min-h-0 rounded-full border-[#54a9ff]/60 bg-[#2f9bff] px-3 py-0 text-sm font-semibold leading-none text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] hover:bg-[#2388e6] disabled:border-[#3a3a3a] disabled:bg-[#2d2d2d] disabled:text-[#a5a5a5]",
+        className,
+      )}
       title={title}
       aria-label={title}
       disabled={!action || !bridge}

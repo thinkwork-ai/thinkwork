@@ -37,9 +37,7 @@ export function SpacesSidebar() {
     <Sidebar collapsible={isDesktop ? "offcanvas" : "icon"}>
       {isDesktop ? (
         <SidebarHeader className="desktop-app-header h-[var(--desktop-app-header-height)] shrink-0 justify-center bg-sidebar px-4 py-0 pl-20">
-          <div className="flex min-w-0 items-center gap-1 text-sidebar-foreground">
-            <DesktopNavigationControls />
-          </div>
+          <DesktopNavigationControls className="w-full" />
         </SidebarHeader>
       ) : (
         <SidebarHeader className="pb-3">
