@@ -150,20 +150,35 @@ export function DataTable<TData, TValue>({
       : {}),
   });
 
-  const colgroup = tableClassName?.includes("table-fixed") ? (
+  const isFixedLayout = tableClassName?.includes("table-fixed") ?? false;
+  // Always emit a colgroup. Two layout modes:
+  // - `table-fixed`: cols with explicit size get that width; others get no
+  //   width (existing behavior; equal distribution by browser).
+  // - auto layout (default): cols with `meta.flex === true` get
+  //   `width: 100%` (absorb remainder); cols with explicit size get that
+  //   width (honored as a minimum, grows with content); unsized cols get no
+  //   width (content-sized).
+  const colgroup = (
     <colgroup>
       {table.getAllColumns().map((col) => {
         const size = col.columnDef.size;
+        const meta = col.columnDef.meta as { flex?: boolean } | undefined;
         const hasExplicitSize = size !== undefined && size !== 150;
+        let width: string | number | undefined;
+        if (!isFixedLayout && meta?.flex) {
+          width = "100%";
+        } else if (hasExplicitSize) {
+          width = size;
+        }
         return (
           <col
             key={col.id}
-            style={hasExplicitSize ? { width: size } : undefined}
+            style={width !== undefined ? { width } : undefined}
           />
         );
       })}
     </colgroup>
-  ) : null;
+  );
 
   const headerRow = !hideHeader ? (
     <TableHeader
@@ -171,16 +186,28 @@ export function DataTable<TData, TValue>({
     >
       {table.getHeaderGroups().map((headerGroup) => (
         <TableRow key={headerGroup.id}>
-          {headerGroup.headers.map((header) => (
-            <TableHead key={header.id}>
-              {header.isPlaceholder
-                ? null
-                : flexRender(
-                    header.column.columnDef.header,
-                    header.getContext(),
-                  )}
-            </TableHead>
-          ))}
+          {headerGroup.headers.map((header) => {
+            const headerMeta = header.column.columnDef.meta as
+              | { flex?: boolean }
+              | undefined;
+            return (
+              <TableHead
+                key={header.id}
+                className={
+                  !isFixedLayout && headerMeta?.flex
+                    ? "max-w-0 overflow-hidden"
+                    : undefined
+                }
+              >
+                {header.isPlaceholder
+                  ? null
+                  : flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )}
+              </TableHead>
+            );
+          })}
         </TableRow>
       ))}
     </TableHeader>
@@ -199,18 +226,26 @@ export function DataTable<TData, TValue>({
             )}
             onClick={() => onRowClick?.(row.original)}
           >
-            {row.getVisibleCells().map((cell) => (
-              <TableCell
-                key={cell.id}
-                className={
-                  tableClassName?.includes("table-fixed")
-                    ? "overflow-hidden"
-                    : undefined
-                }
-              >
-                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </TableCell>
-            ))}
+            {row.getVisibleCells().map((cell) => {
+              const cellMeta = cell.column.columnDef.meta as
+                | { flex?: boolean }
+                | undefined;
+              const isFlexCell = !isFixedLayout && cellMeta?.flex;
+              return (
+                <TableCell
+                  key={cell.id}
+                  className={
+                    isFixedLayout
+                      ? "overflow-hidden"
+                      : isFlexCell
+                        ? "max-w-0 overflow-hidden"
+                        : undefined
+                  }
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              );
+            })}
           </TableRow>
         ))
       ) : (

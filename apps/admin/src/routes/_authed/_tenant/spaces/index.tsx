@@ -43,6 +43,7 @@ export const Route = createFileRoute("/_authed/_tenant/spaces/")({
 type SpaceRow = {
   id: string;
   name: string;
+  description: string | null;
   accessMode: string;
   status: string;
   updatedAt: string;
@@ -56,6 +57,16 @@ const columns: ColumnDef<SpaceRow>[] = [
       <span className="block min-w-0 truncate font-medium">
         {row.original.name}
       </span>
+    ),
+    size: 200,
+  },
+  {
+    accessorKey: "description",
+    header: "Description",
+    cell: ({ row }) => (
+      <div className="text-muted-foreground text-sm truncate overflow-hidden">
+        {row.original.description ?? "—"}
+      </div>
     ),
   },
   {
@@ -114,6 +125,7 @@ function SpacesPage() {
       .map((space) => ({
         id: space.id,
         name: space.name,
+        description: space.description ?? null,
         accessMode: space.accessMode,
         status: space.status,
         updatedAt: space.updatedAt,
@@ -164,10 +176,11 @@ function SpacesPage() {
           data={rows}
           filterValue={search}
           pageSize={20}
-          scrollable
+          tableClassName="table-fixed"
+          allowHorizontalScroll={false}
           onRowClick={(row) =>
             navigate({
-              to: "/spaces/$spaceId/configuration",
+              to: "/spaces/$spaceId/workspace",
               params: { spaceId: row.id },
             })
           }
@@ -180,7 +193,7 @@ function SpacesPage() {
         onCreated={(spaceId) => {
           reexecuteSpaces({ requestPolicy: "network-only" });
           void navigate({
-            to: "/spaces/$spaceId/configuration",
+            to: "/spaces/$spaceId/workspace",
             params: { spaceId },
           });
         }}

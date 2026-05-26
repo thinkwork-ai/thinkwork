@@ -1,22 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  SpaceConfigurationPanel,
   SpaceDetailChrome,
+  SpaceSettingsPanel,
 } from "@/components/spaces/SpaceDetailChrome";
 
 export const Route = createFileRoute(
-  "/_authed/_tenant/spaces/$spaceId_/configuration",
+  "/_authed/_tenant/spaces/$spaceId_/settings",
 )({
-  component: SpaceConfigurationRoute,
+  component: SpaceSettingsRoute,
 });
 
-function SpaceConfigurationRoute() {
+function SpaceSettingsRoute() {
   const { spaceId } = Route.useParams();
 
   return (
-    <SpaceDetailChrome spaceId={spaceId} activeTab="configuration">
+    <SpaceDetailChrome spaceId={spaceId} activeTab="settings">
       {({ space, draft, setDraft, refreshSpace }) => (
-        <SpaceConfigurationPanel
+        <SpaceSettingsPanel
           space={space}
           draft={draft}
           setDraft={setDraft}

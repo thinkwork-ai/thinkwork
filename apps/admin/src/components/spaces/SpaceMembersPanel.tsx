@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Trash2, UserPlus } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import { AddSpaceMemberDialog } from "@/components/spaces/AddSpaceMemberDialog";
 interface SpaceMembersPanelProps {
   spaceId: string;
   tenantId: string;
+  addOpen: boolean;
+  onAddOpenChange: (open: boolean) => void;
 }
 
 type MemberRow = {
@@ -43,8 +45,9 @@ const ROLE_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
 export function SpaceMembersPanel({
   spaceId,
   tenantId,
+  addOpen,
+  onAddOpenChange,
 }: SpaceMembersPanelProps) {
-  const [addOpen, setAddOpen] = useState(false);
   const [removingUserIds, setRemovingUserIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -61,7 +64,7 @@ export function SpaceMembersPanel({
       (space?.members ?? []).map((member) => ({
         id: member.id,
         userId: member.userId,
-        name: member.user?.name ?? member.user?.email ?? member.userId,
+        name: member.user?.name ?? member.userId,
         email: member.user?.email ?? "",
         role: member.role,
         joinedAt: member.createdAt ?? null,
@@ -104,16 +107,19 @@ export function SpaceMembersPanel({
         accessorKey: "name",
         header: "User",
         cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              {row.original.name}
-            </div>
-            {row.original.email && row.original.email !== row.original.name ? (
-              <div className="truncate text-xs text-muted-foreground">
-                {row.original.email}
-              </div>
-            ) : null}
-          </div>
+          <span className="truncate text-sm font-medium">
+            {row.original.name}
+          </span>
+        ),
+        size: 220,
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }) => (
+          <span className="text-muted-foreground text-sm truncate overflow-hidden">
+            {row.original.email || "—"}
+          </span>
         ),
       },
       {
@@ -178,19 +184,6 @@ export function SpaceMembersPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Members</h2>
-          <p className="text-sm text-muted-foreground">
-            People who can access this private Space.
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          <UserPlus className="h-3.5 w-3.5" />
-          Add member
-        </Button>
-      </div>
-
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
           {error.message}
@@ -212,7 +205,7 @@ export function SpaceMembersPanel({
         tenantId={tenantId}
         existingUserIds={existingUserIds}
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={onAddOpenChange}
         onMemberAdded={() => reexecute({ requestPolicy: "network-only" })}
       />
     </div>

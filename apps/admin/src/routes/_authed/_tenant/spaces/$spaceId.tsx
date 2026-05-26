@@ -9,7 +9,7 @@ function SpaceDetailRedirect() {
 
   return (
     <Navigate
-      to="/spaces/$spaceId/configuration"
+      to="/spaces/$spaceId/workspace"
       params={{ spaceId }}
       replace
     />
