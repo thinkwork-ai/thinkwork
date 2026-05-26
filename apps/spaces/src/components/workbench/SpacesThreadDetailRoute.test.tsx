@@ -441,10 +441,12 @@ describe("SpacesThreadDetailRoute", () => {
         content: [
           "# PROGRESS",
           "",
+          "Goal: Complete customer onboarding for E2E Progress MD 20260525201201 Co.",
+          "",
           "## Tasks",
           "| Task | Status | Owner | Required | Blocker/Notes |",
           "| --- | --- | --- | --- | --- |",
-          "| Get contract signed | Todo | Sales | Yes |  |",
+          "| Get contract signed - E2E Progress MD 20260525201201 Co | Completed | Sales | Yes | signed package received |",
         ].join("\n"),
       },
     };
@@ -455,6 +457,13 @@ describe("SpacesThreadDetailRoute", () => {
 
     expect(screen.getByText("Progress")).toBeTruthy();
     expect(screen.getByText("Get contract signed")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Get contract signed - E2E Progress MD 20260525201201 Co",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText("Sales")).toBeNull();
+    expect(screen.queryByText("signed package received")).toBeNull();
     expect(screen.queryByText("Stale linked task title")).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "Update Get contract signed" }),

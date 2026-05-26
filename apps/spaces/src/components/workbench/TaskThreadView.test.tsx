@@ -314,7 +314,7 @@ describe("TaskThreadView", () => {
 
     expect(
       screen.getByTestId("thread-conversation-content").className,
-    ).toContain("md:pr-[324px]");
+    ).toContain("md:pr-[332px]");
     expect(
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("max-w-[750px]");
@@ -322,12 +322,14 @@ describe("TaskThreadView", () => {
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("px-3");
     expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
-      "md:pr-[324px]",
+      "md:pr-[332px]",
     );
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
     expect(panel.className).toContain("absolute");
-    expect(panel.className).toContain("right-6");
+    expect(panel.className).toContain("right-4");
+    expect(panel.className).toContain("bottom-4");
+    expect(panel.className).toContain("overflow-hidden");
     expect(within(panel).getByText("Date started")).toBeTruthy();
     expect(within(panel).getByText("Eric Odom")).toBeTruthy();
     expect(within(panel).getByText("Executive")).toBeTruthy();
