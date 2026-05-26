@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { extractCustomerOnboardingChatUpdate } from "./customer-onboarding-chat-updates.js";
+import {
+  extractCustomerOnboardingChatUpdate,
+  shouldDispatchAgentForCustomerOnboardingMessage,
+} from "./customer-onboarding-chat-updates.js";
 
 describe("extractCustomerOnboardingChatUpdate", () => {
   it("extracts intake answers and same-thread checklist completions", () => {
@@ -75,6 +78,24 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     expect(result.statusRequest).toBe(true);
     expect(result.facts).toEqual({});
     expect(result.taskStatusUpdates).toEqual([]);
+  });
+
+  it("lets email delivery status requests continue to the agent", () => {
+    expect(
+      shouldDispatchAgentForCustomerOnboardingMessage(
+        "can you email me the status of things",
+      ),
+    ).toBe(true);
+    expect(
+      shouldDispatchAgentForCustomerOnboardingMessage(
+        "what is the onboarding status?",
+      ),
+    ).toBe(false);
+    expect(
+      shouldDispatchAgentForCustomerOnboardingMessage(
+        "email me when the customer signs the contract",
+      ),
+    ).toBe(false);
   });
 
   it("maps task-prefixed chat replies to native checklist statuses", () => {
@@ -326,6 +347,7 @@ describe("sendMessage customer onboarding hook", () => {
 
     expect(source).toContain("applyCustomerOnboardingChatUpdate");
     expect(source).toContain("customerOnboardingHandled");
+    expect(source).toContain("agentDispatchRequired");
     expect(
       source.indexOf("await applyCustomerOnboardingChatUpdate"),
     ).toBeLessThan(source.indexOf("await dispatchDefaultAgentTurn"));

@@ -246,7 +246,9 @@ export const sendMessage = async (
         content: i.content,
         senderUserId: senderId,
       });
-      customerOnboardingHandled = onboardingUpdate?.handled ?? false;
+      customerOnboardingHandled =
+        (onboardingUpdate?.handled ?? false) &&
+        !onboardingUpdate?.agentDispatchRequired;
       if (onboardingUpdate?.assistantMessageId) {
         notifyNewMessage({
           messageId: onboardingUpdate.assistantMessageId,

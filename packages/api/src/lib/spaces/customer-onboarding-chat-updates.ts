@@ -25,6 +25,7 @@ interface ApplyCustomerOnboardingChatUpdateInput {
 
 export interface CustomerOnboardingChatUpdateResult {
   handled: boolean;
+  agentDispatchRequired: boolean;
   assistantMessageId: string | null;
   assistantContent: string;
   missingFields: string[];
@@ -102,6 +103,7 @@ const STATUS_REQUEST =
   /\b(?:what(?:'s| is)?|show|give me|current|latest)?\s*(?:the\s+)?(?:onboarding\s+)?(?:status|progress|checklist)\b/i;
 const ASSIGNMENT_REQUEST =
   /\b(?:who(?:'s| is)?|whose|who is|show|what(?:'s| is)?)\s+(?:assigned|handling|owns?|owner|responsible)\b/i;
+const EMAIL_DELIVERY_REQUEST = /\b(?:e-?mail|mail)\b/i;
 
 const BLOCKED_WORDS =
   /\b(?:blocked|blocker|stuck|waiting on|waiting for|hold|on hold|cannot|can't)\b/i;
@@ -121,6 +123,9 @@ export async function applyCustomerOnboardingChatUpdate(
 ): Promise<CustomerOnboardingChatUpdateResult | null> {
   const db = getDb();
   const extracted = extractCustomerOnboardingChatUpdate(input.content);
+  const agentDispatchRequired = shouldDispatchAgentForCustomerOnboardingMessage(
+    input.content,
+  );
 
   const [thread] = await db
     .select()
@@ -460,10 +465,13 @@ export async function applyCustomerOnboardingChatUpdate(
     }
 
     const shouldHandle =
-      extracted.assignmentRequest || extracted.statusRequest || hasExtractedSignal;
+      extracted.assignmentRequest ||
+      extracted.statusRequest ||
+      hasExtractedSignal;
     if (!shouldHandle) {
       return {
         handled: false,
+        agentDispatchRequired,
         assistantMessageId: null,
         assistantContent: "",
         missingFields: normalized.missingFields,
@@ -513,6 +521,7 @@ export async function applyCustomerOnboardingChatUpdate(
           workflow: "customer_onboarding",
           statusRequest: extracted.statusRequest,
           assignmentRequest: extracted.assignmentRequest,
+          agentDispatchRequired,
           missingFields: normalized.missingFields,
           statusChanges,
           assignmentChanges,
@@ -526,6 +535,7 @@ export async function applyCustomerOnboardingChatUpdate(
 
     return {
       handled: true,
+      agentDispatchRequired,
       assistantMessageId: assistantMessage?.id ?? null,
       assistantContent,
       missingFields: normalized.missingFields,
@@ -772,6 +782,16 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
   };
 }
 
+export function shouldDispatchAgentForCustomerOnboardingMessage(
+  content: string,
+): boolean {
+  const extracted = extractCustomerOnboardingChatUpdate(content);
+  return (
+    EMAIL_DELIVERY_REQUEST.test(content) &&
+    (extracted.statusRequest || extracted.assignmentRequest)
+  );
+}
+
 function hasCustomerOnboardingSignal(
   extracted: ReturnType<typeof extractCustomerOnboardingChatUpdate>,
 ): boolean {
@@ -989,12 +1009,11 @@ function taskKeyFromPrefilledTitle(title: string): string | null {
   const exactAliases: Array<[string, RegExp[]]> = [
     [
       "dun_and_bradstreet_check",
-      [/\b(?:check\s+)?(?:dun\s+(?:and|&)\s+bradstreet|d&b|dnb)(?:\s+information)?\b/i],
+      [
+        /\b(?:check\s+)?(?:dun\s+(?:and|&)\s+bradstreet|d&b|dnb)(?:\s+information)?\b/i,
+      ],
     ],
-    [
-      "tax_exemption_forms",
-      [/\b(?:collect\s+)?tax exemption forms?\b/i],
-    ],
+    ["tax_exemption_forms", [/\b(?:collect\s+)?tax exemption forms?\b/i]],
     ["credit_check", [/\b(?:run\s+)?credit check\b/i, /\bcredit review\b/i]],
     [
       "docusign_package",
