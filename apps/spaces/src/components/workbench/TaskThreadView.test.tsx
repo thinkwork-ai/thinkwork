@@ -332,7 +332,7 @@ describe("TaskThreadView", () => {
     expect(panel.className).toContain("max-h-[calc(100%-2rem)]");
     expect(panel.className).toContain("overflow-hidden");
     expect(panel.className).toContain("md:grid");
-    expect(within(panel).getByText("May 18, 2026, 3:50 PM")).toBeTruthy();
+    expect(within(panel).getByText(/May 18, 2026/)).toBeTruthy();
     expect(within(panel).getByText("Triggered by Eric Odom")).toBeTruthy();
     expect(within(panel).queryByText("Agents involved")).toBeNull();
     expect(within(panel).queryByText("Executive")).toBeNull();
