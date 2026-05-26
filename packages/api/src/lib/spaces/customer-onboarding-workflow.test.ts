@@ -320,7 +320,7 @@ describe("startCustomerOnboardingWorkflow", () => {
     );
   });
 
-  it("creates deterministic native checklist rows for manual onboarding without LastMile", async () => {
+  it("creates deterministic native checklist rows and enqueues coordinator triage for manual onboarding", async () => {
     const repository = makeRepository({ space: nativeSpace });
     const taskAdapter = { createTask: vi.fn() };
     const coordinator = {
@@ -386,7 +386,17 @@ describe("startCustomerOnboardingWorkflow", () => {
         }),
       ]),
     );
-    expect(coordinator.enqueueWakeup).not.toHaveBeenCalled();
+    expect(coordinator.enqueueWakeup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        threadId: "thread-1",
+        reason: "kickoff_triage",
+        idempotencyKey: "space-coordinator:tenant-1:thread-1:kickoff_triage",
+        summary: expect.stringContaining("ThinkWork checklist rows"),
+        requestedBy: { type: "user", id: "user-1" },
+      }),
+    );
   });
 
   it("repairs an existing native onboarding Space with missing checklist rows", async () => {
