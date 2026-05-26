@@ -1,9 +1,10 @@
 ---
 title: Admin Spaces UI Cleanup
 date: 2026-05-26
-status: requirements
+status: completed
 scope: lightweight
 area: apps/admin
+completed_by: "PR #1735"
 ---
 
 # Admin Spaces UI Cleanup

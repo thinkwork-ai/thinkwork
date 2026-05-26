@@ -1,6 +1,8 @@
 ---
 date: 2026-05-21
 topic: admin-space-studio-simplification
+status: superseded
+superseded_by: docs/brainstorms/2026-05-26-admin-spaces-ui-cleanup-requirements.md
 ---
 
 # Admin Space Studio Simplification

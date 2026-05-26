@@ -1,8 +1,11 @@
 ---
 date: 2026-05-24
 type: refactor
-status: active
+status: completed
 origin: docs/brainstorms/2026-05-24-folder-is-the-agent-thinkwork-alignment-requirements.md
+completed_by:
+  - "PR #1679"
+  - "PR #1680"
 ---
 
 # refactor: Folder is the Agent — ThinkWork Alignment Implementation

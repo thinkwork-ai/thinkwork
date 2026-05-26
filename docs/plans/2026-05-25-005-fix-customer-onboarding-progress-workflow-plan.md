@@ -1,9 +1,13 @@
 ---
 title: "fix: Customer Onboarding progress workflow"
 type: fix
-status: active
+status: completed
 date: 2026-05-25
 origin: docs/plans/2026-05-25-004-feat-customer-onboarding-native-checklist-plan.md
+completed_by:
+  - "PR #1710"
+  - "PR #1722"
+  - "PR #1744"
 ---
 
 # fix: Customer Onboarding progress workflow

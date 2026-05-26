@@ -1,9 +1,12 @@
 ---
 title: "feat: Thread PROGRESS.md state"
 type: feat
-status: active
+status: completed
 date: 2026-05-25
 origin: docs/brainstorms/2026-05-19-spaces-customer-onboarding-v1-requirements.md
+completed_by:
+  - "PR #1719"
+  - "PR #1722"
 ---
 
 # feat: Thread PROGRESS.md state

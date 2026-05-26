@@ -1,9 +1,10 @@
 ---
 title: Spaces Thread Attachments
 type: feat
-status: active
+status: completed
 date: 2026-05-26
 origin: docs/brainstorms/2026-05-26-spaces-thread-attachments-requirements.md
+completed_by: "PR #1740"
 ---
 
 # Spaces Thread Attachments
