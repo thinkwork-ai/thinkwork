@@ -130,6 +130,50 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     ]);
     expect(result.completedTaskKeys).toEqual(["credit_check"]);
   });
+
+  it("maps same-message member assignment and natural task completions", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      "@Rebecca Odom is going to handle the data entry. We've already check D&B. We ran their credit, and they are approved for $10k.",
+    );
+
+    expect(result.facts).toMatchObject({
+      creditTermsRequested: true,
+      requestedTerms: "Credit limit $10k",
+    });
+    expect(result.taskStatusUpdates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "dun_and_bradstreet_check",
+          status: "completed",
+        }),
+        expect.objectContaining({
+          key: "credit_check",
+          status: "completed",
+        }),
+      ]),
+    );
+    expect(result.taskAssignments).toEqual([
+      {
+        key: "p21_customer_setup",
+        assigneeDisplay: "Rebecca Odom",
+        note: "@Rebecca Odom is going to handle the data entry.",
+      },
+    ]);
+  });
+
+  it("maps mentioned DocuSign ownership updates to the DocuSign task", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      "@Rebecca Odom is handling the DocuSign package too",
+    );
+
+    expect(result.taskAssignments).toEqual([
+      {
+        key: "docusign_package",
+        assigneeDisplay: "Rebecca Odom",
+        note: "@Rebecca Odom is handling the DocuSign package too",
+      },
+    ]);
+  });
 });
 
 describe("sendMessage customer onboarding hook", () => {
@@ -147,6 +191,7 @@ describe("sendMessage customer onboarding hook", () => {
     expect(
       source.indexOf("await applyCustomerOnboardingChatUpdate"),
     ).toBeLessThan(source.indexOf("await dispatchDefaultAgentTurn"));
+    expect(source).toContain("!hasAgentMentions");
     expect(source).toContain("!customerOnboardingHandled");
   });
 });

@@ -34,6 +34,12 @@ export interface CustomerOnboardingChatUpdateResult {
     previousStatus: LinkedTaskStatus;
     nextStatus: LinkedTaskStatus;
   }>;
+  assignmentChanges: Array<{
+    checklistItemKey: string;
+    title: string;
+    previousAssignee: string | null;
+    nextAssignee: string;
+  }>;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -52,7 +58,7 @@ const TASK_KEY_ALIASES: Array<{
   },
   {
     key: "credit_check",
-    patterns: [/\bcredit check\b/i, /\bcredit review\b/i],
+    patterns: [/\bcredit check\b/i, /\bcredit review\b/i, /\bcredit\b/i],
   },
   {
     key: "docusign_package",
@@ -60,7 +66,13 @@ const TASK_KEY_ALIASES: Array<{
   },
   {
     key: "p21_customer_setup",
-    patterns: [/\bp21\b/i],
+    patterns: [
+      /\bp21\b/i,
+      /\bdata entry\b/i,
+      /\bcustomer information\b/i,
+      /\bcustomer setup\b/i,
+      /\berp\b/i,
+    ],
   },
   {
     key: "final_onboarding_review",
@@ -69,9 +81,11 @@ const TASK_KEY_ALIASES: Array<{
 ];
 
 const DONE_WORDS =
-  /\b(?:done|complete|completed|checked|collected|received|signed|approved|entered|created|set up|setup)\b/i;
+  /\b(?:done|complete|completed|check|checked|collected|received|signed|approved|entered|created|set up|setup)\b/i;
 const CREDIT_APPROVED_WORDS =
   /\b(?:credit\s+(?:check|review)\s+)?(?:approved|complete|completed|done)\b|\blimit\s+(?:set|approved)\b|\bapproved\s+(?:for|at)\b/i;
+const CREDIT_EVIDENCE_WORDS =
+  /\b(?:credit|credit\s+check|credit\s+review|credit\s+limit|ran\s+(?:their\s+|the\s+)?credit)\b/i;
 const MONEY_AMOUNT = /\$\s?\d[\d,]*(?:\.\d{2})?\s?(?:k|m)?\b/i;
 
 const STATUS_REQUEST =
@@ -93,6 +107,7 @@ export async function applyCustomerOnboardingChatUpdate(
     Object.keys(extracted.facts).length === 0 &&
     extracted.completedTaskKeys.length === 0 &&
     extracted.taskStatusUpdates.length === 0 &&
+    extracted.taskAssignments.length === 0 &&
     !extracted.statusRequest
   ) {
     return null;
@@ -149,8 +164,16 @@ export async function applyCustomerOnboardingChatUpdate(
 
     const statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"] =
       [];
+    const assignmentChanges: CustomerOnboardingChatUpdateResult["assignmentChanges"] =
+      [];
     const explicitStatusByKey = new Map(
       extracted.taskStatusUpdates.map((update) => [update.key, update]),
+    );
+    const assignmentByKey = new Map(
+      extracted.taskAssignments.map((assignment) => [
+        assignment.key,
+        assignment,
+      ]),
     );
     for (const task of taskRows) {
       const key = stringValue(objectRecord(task.metadata).checklistItemKey);
@@ -164,7 +187,26 @@ export async function applyCustomerOnboardingChatUpdate(
         completedTaskKeys: extracted.completedTaskKeys,
         explicitStatus: explicitStatusByKey.get(key)?.status,
       });
-      if (nextStatus === previousStatus) continue;
+      const assignment = assignmentByKey.get(key);
+      const nextAssigneeDisplay =
+        assignment?.assigneeDisplay ?? task.assignee_display;
+      const assigneeChanged =
+        assignment !== undefined &&
+        nextAssigneeDisplay !== task.assignee_display;
+      const nextRequired = desiredRequiredForTask({
+        checklistItemKey: key,
+        currentRequired: task.required,
+        normalized,
+      });
+      const requiredChanged = nextRequired !== task.required;
+
+      if (
+        nextStatus === previousStatus &&
+        !assigneeChanged &&
+        !requiredChanged
+      ) {
+        continue;
+      }
 
       const nextTaskMetadata = compactObject({
         ...objectRecord(task.metadata),
@@ -179,6 +221,11 @@ export async function applyCustomerOnboardingChatUpdate(
           },
           lastStatusUpdatedAt: now.toISOString(),
           lastStatusUpdatedByUserId: input.senderUserId ?? null,
+          lastAssignmentNote: assignment?.note,
+          lastAssignmentUpdatedAt: assignment ? now.toISOString() : undefined,
+          lastAssignmentUpdatedByUserId: assignment
+            ? (input.senderUserId ?? null)
+            : undefined,
         }),
       });
 
@@ -189,34 +236,65 @@ export async function applyCustomerOnboardingChatUpdate(
           blocked: nextStatus === "blocked",
           sync_status: "synced",
           last_synced_at: now,
+          assignee_display: nextAssigneeDisplay,
+          required: nextRequired,
           metadata: nextTaskMetadata,
           updated_at: now,
         })
         .where(eq(linkedTasks.id, task.id));
 
-      await tx.insert(linkedTaskEvents).values({
-        tenant_id: input.tenantId,
-        linked_task_id: task.id,
-        space_id: task.space_id,
-        thread_id: input.threadId,
-        provider: "thinkwork",
-        event_type: nextStatus === "completed" ? "completed" : "status_changed",
-        previous_status: previousStatus,
-        new_status: nextStatus,
-        message: `${task.title} marked ${nextStatus.replace(/_/g, " ")} from Customer Onboarding chat.`,
-        metadata: {
-          source: "customer_onboarding_chat_update",
-          checklistItemKey: key,
-        },
-        occurred_at: now,
-      });
+      if (nextStatus !== previousStatus) {
+        await tx.insert(linkedTaskEvents).values({
+          tenant_id: input.tenantId,
+          linked_task_id: task.id,
+          space_id: task.space_id,
+          thread_id: input.threadId,
+          provider: "thinkwork",
+          event_type:
+            nextStatus === "completed" ? "completed" : "status_changed",
+          previous_status: previousStatus,
+          new_status: nextStatus,
+          message: `${task.title} marked ${nextStatus.replace(/_/g, " ")} from Customer Onboarding chat.`,
+          metadata: {
+            source: "customer_onboarding_chat_update",
+            checklistItemKey: key,
+          },
+          occurred_at: now,
+        });
 
-      statusChanges.push({
-        checklistItemKey: key,
-        title: task.title,
-        previousStatus,
-        nextStatus,
-      });
+        statusChanges.push({
+          checklistItemKey: key,
+          title: task.title,
+          previousStatus,
+          nextStatus,
+        });
+      }
+      if (assignment && assigneeChanged) {
+        await tx.insert(linkedTaskEvents).values({
+          tenant_id: input.tenantId,
+          linked_task_id: task.id,
+          space_id: task.space_id,
+          thread_id: input.threadId,
+          provider: "thinkwork",
+          event_type: "reassigned",
+          previous_status: previousStatus,
+          new_status: nextStatus,
+          message: `${task.title} reassigned to ${assignment.assigneeDisplay} from Customer Onboarding chat.`,
+          metadata: {
+            source: "customer_onboarding_chat_update",
+            checklistItemKey: key,
+            assigneeDisplay: assignment.assigneeDisplay,
+          },
+          occurred_at: now,
+        });
+
+        assignmentChanges.push({
+          checklistItemKey: key,
+          title: task.title,
+          previousAssignee: task.assignee_display,
+          nextAssignee: assignment.assigneeDisplay,
+        });
+      }
     }
 
     const assistantContent = extracted.statusRequest
@@ -225,6 +303,7 @@ export async function applyCustomerOnboardingChatUpdate(
           normalized,
           statusChanges,
           completedTaskKeys: extracted.completedTaskKeys,
+          assignmentChanges,
         });
     const [assistantMessage] = await tx
       .insert(messages)
@@ -240,6 +319,7 @@ export async function applyCustomerOnboardingChatUpdate(
           statusRequest: extracted.statusRequest,
           missingFields: normalized.missingFields,
           statusChanges,
+          assignmentChanges,
         },
         created_at: now,
       })
@@ -251,6 +331,7 @@ export async function applyCustomerOnboardingChatUpdate(
       missingFields: normalized.missingFields,
       statusRequest: extracted.statusRequest,
       statusChanges,
+      assignmentChanges,
     };
   });
 
@@ -270,11 +351,16 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     status: LinkedTaskStatus;
     note: string;
   }>;
+  taskAssignments: Array<{
+    key: string;
+    assigneeDisplay: string;
+    note: string;
+  }>;
   statusRequest: boolean;
 } {
   const facts: CustomerOnboardingSourceInput = {};
   const segments = content
-    .split(/[\n;]+/g)
+    .split(/(?:[\n;]+|(?<=[.!?])\s+)/g)
     .map((segment) => segment.trim())
     .filter(Boolean);
   const whole = content.trim();
@@ -323,10 +409,7 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
       facts.taxExempt = booleanFromText(segment);
     } else if (/\bcredit terms(?: requested)?\b/.test(lower)) {
       facts.creditTermsRequested = booleanFromText(segment);
-    } else if (
-      /\bcredit (?:check|review|limit)\b/.test(lower) ||
-      /\blimit (?:set|approved)\b/.test(lower)
-    ) {
+    } else if (isCreditEvidenceSegment(segment)) {
       facts.creditApprovalNotes = segment;
       if (CREDIT_APPROVED_WORDS.test(segment)) {
         facts.creditTermsRequested = true;
@@ -361,18 +444,31 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     string,
     { key: string; status: LinkedTaskStatus; note: string }
   >();
+  const taskAssignments = new Map<
+    string,
+    { key: string; assigneeDisplay: string; note: string }
+  >();
   for (const segment of segments) {
     const explicitStatus = statusFromSegment(segment);
-    if (!explicitStatus) continue;
+    const assigneeDisplay = assignmentDisplayFromSegment(segment);
     for (const { key, patterns } of TASK_KEY_ALIASES) {
       if (patterns.some((pattern) => pattern.test(segment))) {
-        taskStatusUpdates.set(key, {
-          key,
-          status: explicitStatus,
-          note: segment,
-        });
-        if (explicitStatus === "completed") {
-          completedTaskKeys.add(key);
+        if (explicitStatus) {
+          taskStatusUpdates.set(key, {
+            key,
+            status: explicitStatus,
+            note: segment,
+          });
+          if (explicitStatus === "completed") {
+            completedTaskKeys.add(key);
+          }
+        }
+        if (assigneeDisplay && ASSIGNMENT_WORDS.test(segment)) {
+          taskAssignments.set(key, {
+            key,
+            assigneeDisplay,
+            note: segment,
+          });
         }
       }
     }
@@ -386,6 +482,7 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     facts: compactObject(facts) as CustomerOnboardingSourceInput,
     completedTaskKeys: [...completedTaskKeys],
     taskStatusUpdates: [...taskStatusUpdates.values()],
+    taskAssignments: [...taskAssignments.values()],
     statusRequest: isStatusRequest(whole),
   };
 }
@@ -471,6 +568,7 @@ function buildUpdatedThreadMetadata(input: {
       lastChatUpdate: {
         extractedFacts: input.extracted.facts,
         completedTaskKeys: input.extracted.completedTaskKeys,
+        taskAssignments: input.extracted.taskAssignments,
         updatedAt: input.updatedAt.toISOString(),
         updatedByUserId: input.updatedByUserId,
       },
@@ -505,8 +603,26 @@ function desiredStatusForTask(input: {
   return input.currentStatus;
 }
 
+function desiredRequiredForTask(input: {
+  checklistItemKey: string;
+  currentRequired: boolean;
+  normalized: NormalizedCustomerOnboardingSource;
+}): boolean {
+  if (input.checklistItemKey === "credit_check") {
+    return input.normalized.creditTermsRequested === true;
+  }
+  if (input.checklistItemKey === "tax_exemption_forms") {
+    return input.normalized.taxExempt === true;
+  }
+  if (input.checklistItemKey === "missing_onboarding_information") {
+    return input.normalized.missingFields.length > 0;
+  }
+  return input.currentRequired;
+}
+
 function statusFromSegment(segment: string): LinkedTaskStatus | null {
   if (NOT_APPLICABLE_WORDS.test(segment)) return "not_applicable";
+  if (BLOCKED_WORDS.test(segment)) return "blocked";
   if (
     TASK_KEY_ALIASES.find((task) => task.key === "credit_check")?.patterns.some(
       (pattern) => pattern.test(segment),
@@ -516,9 +632,26 @@ function statusFromSegment(segment: string): LinkedTaskStatus | null {
     return "completed";
   }
   if (DONE_WORDS.test(segment)) return "completed";
-  if (BLOCKED_WORDS.test(segment)) return "blocked";
   if (IN_PROGRESS_WORDS.test(segment)) return "in_progress";
   return null;
+}
+
+const ASSIGNMENT_WORDS =
+  /\b(?:handle|handling|handled|assigned|assign|owns?|owner|responsible|take|taking)\b/i;
+
+function isCreditEvidenceSegment(segment: string): boolean {
+  return (
+    CREDIT_EVIDENCE_WORDS.test(segment) ||
+    (/\bapproved\s+(?:for|at)\b/i.test(segment) &&
+      MONEY_AMOUNT.test(segment))
+  );
+}
+
+function assignmentDisplayFromSegment(segment: string): string | null {
+  const match = segment.match(
+    /@([A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*)?)/,
+  );
+  return match?.[1]?.trim() || null;
 }
 
 function isStatusRequest(content: string): boolean {
@@ -538,6 +671,7 @@ function buildAssistantSummary(input: {
   normalized: NormalizedCustomerOnboardingSource;
   statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"];
   completedTaskKeys: string[];
+  assignmentChanges: CustomerOnboardingChatUpdateResult["assignmentChanges"];
 }): string {
   const lines = ["Captured the onboarding update and refreshed Progress."];
   if (input.normalized.missingFields.length === 0) {
@@ -554,6 +688,12 @@ function buildAssistantSummary(input: {
     }
   } else if (input.completedTaskKeys.length > 0) {
     lines.push("I did not find matching ThinkWork checklist rows to update.");
+  }
+  if (input.assignmentChanges.length > 0) {
+    lines.push("Assignment updates:");
+    for (const change of input.assignmentChanges) {
+      lines.push(`- ${change.title}: ${change.nextAssignee}`);
+    }
   }
   return lines.join("\n");
 }
