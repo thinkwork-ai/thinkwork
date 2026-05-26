@@ -1,7 +1,7 @@
 ---
 title: "feat: Promote Applications docs and polish Desktop identity"
 type: feat
-status: completed
+status: active
 date: 2026-05-25
 origin: docs/brainstorms/2026-05-25-docs-applications-section-and-desktop-showcase-requirements.md
 ---
@@ -10,7 +10,7 @@ origin: docs/brainstorms/2026-05-25-docs-applications-section-and-desktop-showca
 
 ## Overview
 
-Promote Applications from a nested Reference group into a root-level docs section above Components, add a real `/applications/` hub page, rewrite the Desktop page so it presents ThinkWork Spaces as an installed Mac app rather than an Electron implementation note, and round the visible Desktop app icon corners so the Dock presence matches the product framing.
+Promote Applications from a nested Reference group into a root-level docs section above Components, add a real `/applications/` hub page, rewrite the Desktop page so it presents ThinkWork Spaces as an installed Mac app rather than an Electron implementation note, and polish the visible Desktop app icon so the Dock presence matches the product framing.
 
 The work is mostly docs, with one targeted Desktop identity asset pass. It changes public information architecture, product positioning, and a user-visible macOS app asset. The plan therefore keeps implementation small while grounding Desktop wording and icon handling in current source material: `apps/desktop/README.md`, `.github/workflows/release-desktop.yml`, `apps/desktop/package.json`, `scripts/build-desktop.sh`, and the existing docs page at `docs/src/content/docs/applications/desktop/index.mdx`.
 
@@ -22,7 +22,7 @@ The existing docs already contain substantial application documentation under `d
 
 The Desktop page has useful install, sign-in, and update details, but its first read is still too implementation-weighted. It should lead with the product role: ThinkWork Spaces as a dedicated macOS app for daily thread, agent, and artifact work, with native shell details serving as trust-building proof points (see origin: `docs/brainstorms/2026-05-25-docs-applications-section-and-desktop-showcase-requirements.md`).
 
-The installed-app story also has to be true visually. The current Dock icon presents as a hard-edged black square beside standard macOS rounded-square icons. That undercuts the "first-class desktop app" positioning, so this plan includes a narrow icon asset pass that preserves the existing artwork and applies rounded transparent corners for stable, canary, dev, and local-development icon paths.
+The installed-app story also has to be true visually. The current Dock icon presents as a hard-edged black square beside standard macOS rounded-square icons. That undercuts the "first-class desktop app" positioning, so this plan includes a small icon asset refresh for stable, canary, dev, and local-development icon paths.
 
 ---
 
@@ -41,8 +41,8 @@ The installed-app story also has to be true visually. The current Dock icon pres
 - R11. Desktop copy reads like a first-class product showcase without becoming a release runbook.
 - R12. Deeper signing, notarization, update-channel, and debugging guidance stays out of this pass.
 - R13. Desktop does not overpromise platform coverage.
-- R14. Desktop app icon keeps the existing brain mark and dark background, but reads as a rounded macOS Dock icon rather than a sharp black square.
-- R15. Stable, canary, dev, and local-development icon assets use the same rounded-corner treatment.
+- R14. Desktop app icon reads as a polished rounded-square macOS Dock icon, not a sharp black square.
+- R15. Stable, canary, dev, and local-development icon assets remain visually related while preserving channel identity.
 
 **Origin actors:** A1 prospective customer/evaluator, A2 end user, A3 operator/implementer, A4 planning/implementation agent.
 
@@ -93,7 +93,7 @@ The installed-app story also has to be true visually. The current Dock icon pres
 - Use the docs style guide's hub pattern for `/applications/`: two to three framing paragraphs, a compact comparison table, a `<CardGrid>` for app drill-downs, and related links.
 - Rewrite Desktop by reordering around product value first, then user flows, then native proof points. Keep release/operator facts concise and push CI-level details out of page scope.
 - Keep platform wording macOS-first unless implementation verifies broader current release support. The README says macOS is the launch target, while the release workflow currently builds Mac artifacts.
-- Treat the Desktop icon as part of application identity, not decorative docs art. The change should be intentionally narrow: keep the current artwork and apply rounded transparent corners only.
+- Treat the Desktop icon as part of application identity, not decorative docs art. The replacement should use a native rounded-square composition with enough padding and contrast to remain legible at Dock size.
 - Update all user-visible Desktop icon assets together: stable `.icns`, canary `.icns`, dev `.icns`, active/generated source expectations, and local Dock `icon.png`.
 
 ---
@@ -104,14 +104,14 @@ The installed-app story also has to be true visually. The current Dock icon pres
 
 - Desktop platform wording: use macOS-first wording. The Desktop README names macOS as the launch target and the release workflow builds/signs/notarizes Mac artifacts.
 - Applications overview shape: use a hybrid hub page with prose, comparison table, and CardGrid because that matches `docs/STYLE.md` for section roots and keeps the four-app comparison scannable.
-- Desktop icon scope: include rounded-corner icon polish in this implementation plan because the screenshot shows current app identity visibly conflicts with the first-class Desktop positioning.
+- Desktop icon scope: include icon polish in this implementation plan because the screenshot shows current app identity visibly conflicts with the first-class Desktop positioning.
 
 ### Deferred to Implementation
 
 - Exact Desktop first-screen wording: choose during copy editing against the current page, but it must lead with installed Spaces product value before native implementation details.
 - Exact Starlight card icons: choose from existing Starlight icon names already used in docs pages; icons are presentation only and should not block the content pass.
 - Whether to mention checksum mirror details: decide while editing Desktop. Include only if it supports user trust; leave command-level checksum verification to release/operator docs.
-- Exact icon composition: resolved by user clarification during implementation - preserve the existing artwork and apply rounded corners only.
+- Exact icon composition: decide during implementation whether to reuse the current brain mark on a rounded-square background or simplify the mark for Dock-size legibility.
 
 ---
 
@@ -261,9 +261,8 @@ The installed-app story also has to be true visually. The current Dock icon pres
 - Run the docs build for Astro/Starlight.
 - Run the repo's formatting check or format the touched Markdown/MDX/JS files according to normal repo workflow.
 - Manually inspect the rendered sidebar and key pages if a local preview is available: `/applications/`, `/applications/desktop/`, `/applications/admin/`, `/api/graphql/`.
-- Manually inspect the rounded Desktop app icon in a Dock-sized context or packaged-app preview.
+- Manually inspect the refreshed Desktop app icon in a Dock-sized context or packaged-app preview.
 - Treat content review as part of verification: read the first screen of Desktop and Applications after editing to confirm tone and scope match the origin doc.
-- Before handoff, run the repo-required pre-commit gate or record any unavailable portions explicitly: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm format:check`.
 
 **Patterns to follow:**
 
@@ -276,7 +275,7 @@ The installed-app story also has to be true visually. The current Dock icon pres
 - Navigation: Applications root and child links resolve.
 - Regression: Reference still exposes API Reference and SDK pages after Applications moves.
 - Content QA: Desktop page does not contain release-runbook depth such as secret lists or tag-push command recipes.
-- Visual QA: Desktop icon keeps the existing artwork and reads as a rounded macOS app icon at Dock size, not a hard-edged black square.
+- Visual QA: Desktop icon reads as a rounded macOS app icon at Dock size, not a hard-edged black square.
 
 **Verification:**
 
@@ -286,9 +285,9 @@ The installed-app story also has to be true visually. The current Dock icon pres
 
 ---
 
-- U5. **Round Desktop Dock icon assets**
+- U5. **Polish Desktop Dock icon assets**
 
-**Goal:** Preserve the existing Desktop app icon artwork while applying transparent rounded corners across local/dev and packaged channel assets.
+**Goal:** Replace the hard-edged Desktop app icon with a native-looking rounded-square icon across local/dev and packaged channel assets.
 
 **Requirements:** R6, R14, R15, AE6
 
@@ -305,9 +304,10 @@ The installed-app story also has to be true visually. The current Dock icon pres
 
 **Approach:**
 
-- Start from the existing 1024x1024 `icon.png` artwork.
-- Apply a transparent rounded-corner mask only. Do not add gradients, badges, alternate backgrounds, simplified marks, or other embellishments.
-- Regenerate `.icns` files from the rounded source asset so packaged stable/canary/dev builds and local development Dock branding all use the same rounded-corner treatment.
+- Design or generate a 1024x1024 source icon that reads as a native macOS rounded-square app icon at Dock size.
+- Preserve ThinkWork identity by using the brain mark or a simplified variant, but avoid edge-to-edge black canvas.
+- Keep stable, canary, and dev assets visually related. If channel variants need differentiation, use restrained channel-specific accents rather than separate visual languages.
+- Regenerate `.icns` files from the polished source assets so packaged stable/canary/dev builds and local development Dock branding all use the same polished family.
 - Leave `scripts/build-desktop.sh` channel selection behavior unchanged unless implementation reveals a broken asset path.
 
 **Patterns to follow:**
@@ -320,12 +320,12 @@ The installed-app story also has to be true visually. The current Dock icon pres
 
 - Test expectation: none -- this is a static visual asset refresh with existing code-path coverage for which icon file local branding loads.
 - Visual: local dev Dock icon no longer appears as a sharp black square.
-- Visual: packaged `.icns` preview shows the original artwork with rounded transparent corners at small Dock sizes.
+- Visual: packaged `.icns` preview shows rounded corners/padding and remains legible at small Dock sizes.
 - Regression: stable, canary, and dev packaged builds still resolve their channel-specific icon paths.
 
 **Verification:**
 
-- Confirm the PNG source remains 1024x1024 and corner pixels are transparent.
+- Confirm the PNG source remains 1024x1024 and includes alpha where appropriate.
 - Confirm all `.icns` files are regenerated and present at the paths selected by `scripts/build-desktop.sh`.
 - Launch or preview a local/dev build and compare the Dock icon against standard rounded macOS app icons.
 

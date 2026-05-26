@@ -48,8 +48,8 @@ The Applications section should move to the root docs navigation above Component
 
 **Desktop application identity**
 
-- R14. The Desktop app icon should keep the existing brain mark and dark background, but use transparent rounded corners so it no longer appears as a sharp black square in the macOS Dock.
-- R15. Stable, canary, dev, and local-development icon assets should use the same rounded-corner treatment so every user-visible Desktop icon path is consistent.
+- R14. The Desktop app icon should look native in the macOS Dock: a polished rounded-square app icon with appropriate padding, not a sharp black square.
+- R15. Stable, canary, dev, and local-development icon assets should remain visually related while preserving their channel identity where needed.
 
 ---
 
@@ -60,7 +60,7 @@ The Applications section should move to the root docs navigation above Component
 - AE3. **Covers R5, R6, R11.** Given a prospective customer opens `/applications/desktop/`, when they read the first screen, the page explains why Desktop exists as an installed Spaces app before it explains Electron details.
 - AE4. **Covers R7, R10.** Given an existing Spaces web user reads the Desktop page, when they look for differences, the page makes clear that Desktop uses the same Spaces product experience and differs primarily in native shell, sign-in, persistence, and update delivery.
 - AE5. **Covers R12, R13.** Given an operator reads the Desktop page, when they look for release mechanics, they see enough status to support users but are not led into unsupported Windows/Linux or CI-specific instructions.
-- AE6. **Covers R14, R15.** Given the Desktop app is shown in the macOS Dock next to standard rounded app icons, when a user scans the Dock, ThinkWork Spaces keeps its existing mark but reads as a rounded app icon rather than a raw square canvas.
+- AE6. **Covers R14, R15.** Given the Desktop app is shown in the macOS Dock next to standard rounded app icons, when a user scans the Dock, ThinkWork Spaces reads as a native rounded-square app icon rather than a raw square canvas.
 
 ---
 
@@ -107,7 +107,7 @@ The Applications section should move to the root docs navigation above Component
 
 - [Affects R9, R13] [Technical] Confirm the exact current Desktop release status, platform support wording, and auto-update wording against the current desktop app and release pipeline before editing the public docs.
 - [Affects R3, R4] [Content] Decide whether the Applications overview should use a table, cards, or short sections based on the existing docs style during implementation.
-- [Affects R14, R15] [Design] Apply rounded corners only; do not redesign or embellish the existing icon artwork.
+- [Affects R14, R15] [Design] Decide whether the polished Desktop icon should reuse the current brain mark on a rounded-square background or use a simplified variant optimized for Dock size.
 
 ---
 
