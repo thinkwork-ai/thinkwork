@@ -2,6 +2,9 @@
 title: "AI Elements iframe Canvas foundation decision"
 date: 2026-05-10
 category: architecture-patterns
+status: stale
+stale_date: 2026-05-26
+stale_reason: "The Computer Thread + Canvas product framing was retired in PR #1666. The generic iframe artifact lesson may still inform future generated-app work, but the Computer-specific direction is historical."
 tags:
   - computer
   - ai-elements
@@ -11,6 +14,8 @@ tags:
 ---
 
 # AI Elements Iframe Canvas Foundation Decision
+
+> Stale as current product guidance. The Computer Thread + Canvas framing was retired in PR #1666. The generic iframe-artifact reasoning may still inform future generated-app surfaces, but this doc should not be read as an active Computer implementation plan.
 
 ## Decision
 

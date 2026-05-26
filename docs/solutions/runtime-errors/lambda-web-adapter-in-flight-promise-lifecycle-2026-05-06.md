@@ -2,7 +2,7 @@
 title: "Lambda Web Adapter waits for awaited Promises before HTTP response"
 date: 2026-05-06
 category: runtime-errors
-module: packages/agentcore-flue/agent-container
+module: LWA-fronted agent runtime Lambdas
 problem_type: institutional_gap
 component: runtime
 symptoms:
@@ -20,6 +20,8 @@ related_components:
 
 # Lambda Web Adapter in-flight Promise lifecycle
 
+> Naming note: this was observed on the former Flue runtime path. The runtime has since been renamed back to Pi, but the Lambda Web Adapter lifecycle lesson is runtime-agnostic for LWA-fronted handlers.
+
 ## Background
 
 Plan §2026-05-06-001 added end-of-turn auto-retain on the Flue runtime: after each agent turn, the trusted handler invokes the `memory-retain` Lambda with `InvocationType=Event` so Hindsight's reflection layer can persist the conversation transcript.
@@ -35,12 +37,12 @@ The plan chose (1) because the institutional record had no entry on (2). The rel
 
 After PR #836 (auto-retain) and PR #838 (smoke gate extension) merged and deployed, four production deploy runs exercised the awaited path:
 
-| Deploy | Date | Outcome |
-|--------|------|---------|
-| 25431722506 | 2026-05-06 | Flue Smoke Test green; no LWA truncation observed |
-| 25436770816 | 2026-05-06 | Flue Smoke Test green |
+| Deploy      | Date       | Outcome                                                                                                         |
+| ----------- | ---------- | --------------------------------------------------------------------------------------------------------------- |
+| 25431722506 | 2026-05-06 | Flue Smoke Test green; no LWA truncation observed                                                               |
+| 25436770816 | 2026-05-06 | Flue Smoke Test green                                                                                           |
 | 25439216873 | 2026-05-06 | First run with the 3-scenario gate (incl. memory-bearing); `flue_retain.retained === true` returned in response |
-| 25441410280 | 2026-05-06 | Drift confirm run; all gates green end-to-end |
+| 25441410280 | 2026-05-06 | Drift confirm run; all gates green end-to-end                                                                   |
 
 Plus a manual smoke-equivalent test through admin chat (told Marco "remember I prefer rooibos tea"; fresh thread surfaced "rooibos" via `hindsight_recall`) confirmed the retain Lambda was actually invoked and Hindsight ingested the transcript — empirical proof the Event invoke was queued, not truncated mid-handshake.
 

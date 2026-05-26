@@ -6,6 +6,9 @@ module: agentcore-pi
 problem_type: spike_verdict
 component: agent_runtime
 severity: medium
+status: stale
+stale_date: 2026-05-26
+stale_reason: "Flue was renamed back to the Pi runtime. Use this as historical spike evidence only; current runtime code lives under packages/agentcore-pi and packages/pi-aws."
 applies_when:
   - Deciding whether to reframe the Pi parallel runtime around @flue/sdk
   - Validating Flue's extension-point coverage for ThinkWork integration
@@ -23,6 +26,8 @@ tags:
 ---
 
 # FR-9 spike verdict — Flue framework hands-on validation
+
+> Stale as current implementation guidance. The Flue-branded runtime path was renamed back to Pi; current runtime code lives under `packages/agentcore-pi` and `packages/pi-aws`. This spike remains useful historical evidence for the Pi runtime's Flue-derived extension points and AgentCore Code Interpreter connector shape.
 
 **Verdict: PROCEED-WITH-REFRAME.** All extension points needed for ThinkWork integration work as documented. Zero Flue source modifications required to land the spike's critical-path tests. The reframe described in the 2026-05-03 brainstorm is feasible.
 
