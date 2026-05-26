@@ -17,7 +17,7 @@ import {
   Mic,
   Search,
   Sparkles,
-  Users,
+  Zap,
 } from "lucide-react";
 import {
   Children,
@@ -507,82 +507,64 @@ function ThreadInfoPanel({
 
   return (
     <aside
-      className="absolute bottom-4 right-4 top-4 z-20 hidden w-[300px] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:block"
+      className="absolute right-4 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >
-      <div className="h-full space-y-5 overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]">
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium text-white/55">Thread</h2>
-          <InfoPanelRow
-            icon={<CalendarDays className="size-4" />}
-            label="Date started"
-            value={startedAt || "Unknown"}
-          />
-          <InfoPanelRow
-            icon={<Users className="size-4" />}
-            label="Started by"
-            value={startedBy}
-          />
-          <div className="grid gap-1.5">
-            <div className="flex items-center gap-2 text-sm text-white/45">
-              <Bot className="size-4" />
-              <span>Agents involved</span>
-            </div>
-            {state.agents.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {state.agents.map((agent) => (
-                  <span
-                    key={agent}
-                    className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75"
+      <div className="min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+        <div className="space-y-5 p-5">
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium text-white/55">Thread</h2>
+            <InfoPanelInlineRow
+              icon={<CalendarDays className="size-4" />}
+              value={startedAt || "Unknown"}
+            />
+            <InfoPanelInlineRow
+              icon={<Zap className="size-4" />}
+              value={`Triggered by ${startedBy}`}
+            />
+          </section>
+
+          {state.attachments.length > 0 ? (
+            <section className="border-t border-white/10 pt-4">
+              <h2 className="mb-2 text-sm font-medium text-white/55">
+                Attachments
+              </h2>
+              <div className="max-h-56 space-y-1 overflow-y-auto">
+                {state.attachments.map((attachment) => (
+                  <button
+                    key={attachment.id}
+                    type="button"
+                    className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm text-white/75 hover:bg-white/8 hover:text-white"
+                    onClick={() =>
+                      void state.onDownloadAttachment(attachment.id)
+                    }
                   >
-                    {agent}
-                  </span>
+                    <FileText className="size-4 shrink-0 text-white/45" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">
+                        {attachment.name || "Attachment"}
+                      </span>
+                      {attachment.sizeBytes ? (
+                        <span className="block text-xs text-white/40">
+                          {formatFileSize(attachment.sizeBytes)}
+                        </span>
+                      ) : null}
+                    </span>
+                    <Download className="size-3.5 shrink-0 text-white/45" />
+                  </button>
                 ))}
               </div>
-            ) : (
-              <p className="text-sm text-white/70">No agents yet</p>
-            )}
-          </div>
-        </section>
+            </section>
+          ) : null}
 
-        {state.attachments.length > 0 ? (
-          <section className="border-t border-white/10 pt-4">
-            <h2 className="mb-2 text-sm font-medium text-white/55">
-              Attachments
-            </h2>
-            <div className="max-h-56 space-y-1 overflow-y-auto">
-              {state.attachments.map((attachment) => (
-                <button
-                  key={attachment.id}
-                  type="button"
-                  className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm text-white/75 hover:bg-white/8 hover:text-white"
-                  onClick={() => void state.onDownloadAttachment(attachment.id)}
-                >
-                  <FileText className="size-4 shrink-0 text-white/45" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">
-                      {attachment.name || "Attachment"}
-                    </span>
-                    {attachment.sizeBytes ? (
-                      <span className="block text-xs text-white/40">
-                        {formatFileSize(attachment.sizeBytes)}
-                      </span>
-                    ) : null}
-                  </span>
-                  <Download className="size-3.5 shrink-0 text-white/45" />
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {state.checklist ? (
-          <ThreadInfoChecklist
-            checklist={state.checklist}
-            onTaskPrompt={onTaskPrompt}
-          />
-        ) : null}
+          {state.checklist ? (
+            <ThreadInfoChecklist
+              checklist={state.checklist}
+              onTaskPrompt={onTaskPrompt}
+            />
+          ) : null}
+        </div>
       </div>
     </aside>
   );
@@ -609,21 +591,10 @@ function ThreadInfoChecklist({
   return (
     <section className="border-t border-white/10 pt-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium text-white/55">Progress</h2>
-          <p className="mt-1 text-xs text-white/45">
-            {total ? `${completed}/${total} required complete` : "No tasks yet"}
-          </p>
-        </div>
+        <h2 className="text-sm font-medium text-white/55">Progress</h2>
         <span className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75">
           {progress}%
         </span>
-      </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-white/70"
-          style={{ width: `${progress}%` }}
-        />
       </div>
 
       {checklist.error ? (
@@ -725,46 +696,35 @@ function ThreadInfoCompletionAction({
     !hasBlockers &&
     !checklist.completedAt &&
     Boolean(checklist.onCompleteThread);
-  const label = checklist.completedAt
-    ? "Completed"
-    : allRequiredComplete
-      ? hasBlockers
-        ? "Review blockers before completing"
-        : "Ready to complete"
-      : "Waiting on required tasks";
+  const label = checklist.completedAt ? "Completed" : "Mark as completed";
+
+  if (!checklist.onCompleteThread && !checklist.completedAt) return null;
 
   return (
-    <div className="mt-4 border-t border-white/10 pt-3">
-      <p className="mb-2 text-xs font-medium text-white/55">{label}</p>
+    <div className="mt-2 flex justify-end">
       <button
         type="button"
-        className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-3 text-xs font-medium text-white/75 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-45"
+        className="text-xs font-medium text-white/45 transition-colors hover:text-primary disabled:cursor-not-allowed disabled:hover:text-white/45 disabled:opacity-45"
         disabled={!canComplete || checklist.isCompleting}
         onClick={() => void checklist.onCompleteThread?.()}
       >
-        <CheckCircle2 className="size-3.5" />
-        Complete Thread
+        {checklist.isCompleting ? "Marking completed..." : label}
       </button>
     </div>
   );
 }
 
-function InfoPanelRow({
+function InfoPanelInlineRow({
   icon,
-  label,
   value,
 }: {
   icon: ReactNode;
-  label: string;
   value: string;
 }) {
   return (
-    <div className="grid gap-1">
-      <div className="flex items-center gap-2 text-sm text-white/45">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <p className="truncate text-sm text-white/75">{value}</p>
+    <div className="flex min-w-0 items-center gap-2 text-sm text-white/75">
+      <span className="shrink-0 text-white/45">{icon}</span>
+      <span className="truncate">{value}</span>
     </div>
   );
 }

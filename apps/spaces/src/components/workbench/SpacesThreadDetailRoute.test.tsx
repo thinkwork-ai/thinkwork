@@ -504,7 +504,7 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
     renderHeaderAction();
     fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Thread" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark as completed" }));
 
     await waitFor(() => {
       expect(updateThreadMock).toHaveBeenCalledWith({
