@@ -5,6 +5,9 @@ category: workflow-issues
 problem_type: workflow_issue
 component: tooling
 severity: medium
+status: stale
+stale_date: 2026-05-26
+stale_reason: "The repo-local packages/skill-catalog source tree and composable-skills execution-mode migration described here were retired. Keep only as historical background for explicit slug-transition planning."
 related_components:
   - database
   - development_workflow
@@ -24,6 +27,8 @@ tags:
 ---
 
 # Skill-catalog slug collisions between execution modes need explicit migration plans
+
+> Stale as current implementation guidance. The repo-local `packages/skill-catalog` tree and the specific composable-skills execution-mode migration described here have been retired. The durable lesson is still valid at a higher level: when a persisted slug is reused for a different capability shape, plan the migration explicitly and preflight live references before changing behavior.
 
 ## Context
 
@@ -158,7 +163,7 @@ steps:
     # …
   - id: act
     mode: sequential
-    skill: customer-onboarding/act    # agent-mode sub-skill
+    skill: customer-onboarding/act # agent-mode sub-skill
 ```
 
 **Pre-flight query Unit 8 should run before deciding:**
