@@ -4,7 +4,6 @@ import {
   AlertCircle,
   Bot,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -48,7 +47,7 @@ import {
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import { IconPaperclip } from "@tabler/icons-react";
+import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
   ReasoningContent,
@@ -580,37 +579,57 @@ function ThreadInfoChecklist({
   checklist: ThreadInfoChecklistState;
   onTaskPrompt: (task: ThreadInfoChecklistTask) => void;
 }) {
-  const requiredTasks = checklist.tasks.filter(
-    (task) =>
-      task.required !== false &&
-      normalizeInfoStatus(task.status) !== "not_applicable",
+  const visibleTasks = checklist.tasks.filter(
+    (task) => normalizeInfoStatus(task.status) !== "not_applicable",
   );
+  const requiredTasks = visibleTasks.filter((task) => task.required !== false);
   const completed = requiredTasks.filter(
     (task) => normalizeInfoStatus(task.status) === "completed",
   ).length;
   const total = requiredTasks.length;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const latestUpdatedAt = useMemo(
+    () => pickLatestUpdatedAt(visibleTasks),
+    [visibleTasks],
+  );
 
   return (
     <section className="border-t border-white/10 pt-4">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-sm font-medium text-white/55">Progress</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-white/55">
+          Progress
+        </h2>
         <span className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75">
           {progress}%
         </span>
       </div>
 
+      {total > 0 ? (
+        <p className="mt-1 text-xs text-white/55">
+          {completed}/{total} required complete
+        </p>
+      ) : null}
+
+      {total > 0 ? (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-white/40"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      ) : null}
+
       {checklist.error ? (
         <p className="mt-3 rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-100">
           {checklist.error}
         </p>
-      ) : checklist.isLoading && checklist.tasks.length === 0 ? (
+      ) : checklist.isLoading && visibleTasks.length === 0 ? (
         <p className="mt-3 text-sm text-white/55">Loading checklist...</p>
-      ) : checklist.tasks.length === 0 ? (
+      ) : visibleTasks.length === 0 ? (
         <p className="mt-3 text-sm text-white/55">No linked tasks</p>
       ) : (
-        <div className="mt-3 space-y-1">
-          {checklist.tasks.map((task) => (
+        <div className="mt-3 space-y-2">
+          {visibleTasks.map((task) => (
             <ThreadInfoChecklistRow
               key={task.id}
               task={task}
@@ -623,6 +642,11 @@ function ThreadInfoChecklist({
       {checklist.completedAt ? (
         <p className="mt-3 text-xs text-white/45">
           Thread completed {formatInfoDate(checklist.completedAt)}
+        </p>
+      ) : null}
+      {latestUpdatedAt && !checklist.completedAt ? (
+        <p className="mt-1 text-[10px] text-white/45">
+          Updated {relativeChecklistTime(latestUpdatedAt)}
         </p>
       ) : null}
       <ThreadInfoCompletionAction checklist={checklist} />
@@ -640,11 +664,12 @@ function ThreadInfoChecklistRow({
   const status = normalizeInfoStatus(task.status);
   const isComplete = status === "completed";
   const isBlocked = task.blocked || status === "blocked";
-  const Icon = isComplete
-    ? CheckCircle2
-    : isBlocked
-      ? AlertCircle
-      : CircleDashed;
+  const assignee = task.assigneeDisplay?.trim() ?? "";
+  const statusLabel =
+    task.status && task.status.trim() ? formatInfoStatus(task.status) : "";
+  const hasSublabel = Boolean(assignee) || Boolean(statusLabel);
+  const sublabel =
+    assignee && statusLabel ? `${assignee} · ${statusLabel}` : assignee || statusLabel;
 
   return (
     <button
@@ -654,22 +679,32 @@ function ThreadInfoChecklistRow({
       aria-label={`Update ${task.title}`}
     >
       <div className="flex items-start gap-2">
-        <Icon
-          className={cn(
-            "mt-0.5 size-3.5 shrink-0",
-            isComplete
-              ? "text-emerald-300"
-              : isBlocked
-                ? "text-red-300"
-                : "text-white/45",
-          )}
-        />
+        {isComplete ? (
+          <IconCircleCheckFilled
+            className="mt-0.5 size-3.5 shrink-0 text-white/45"
+            aria-hidden
+            data-testid="checklist-icon-completed"
+          />
+        ) : isBlocked ? (
+          <AlertCircle
+            className="mt-0.5 size-3.5 shrink-0 text-red-300"
+            aria-hidden
+            data-testid="checklist-icon-blocked"
+          />
+        ) : (
+          <CircleDashed
+            className="mt-0.5 size-3.5 shrink-0 text-white/45"
+            aria-hidden
+            data-testid="checklist-icon-todo"
+          />
+        )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-white/80">
-              {task.title}
-            </p>
-          </div>
+          <p className="line-clamp-2 text-xs font-medium leading-snug text-white/80">
+            {task.title}
+          </p>
+          {hasSublabel ? (
+            <p className="mt-0.5 truncate text-[10px] text-white/45">{sublabel}</p>
+          ) : null}
         </div>
       </div>
     </button>
@@ -761,6 +796,40 @@ function formatInfoStatus(value?: string | null) {
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ") || "Unknown"
   );
+}
+
+function pickLatestUpdatedAt(
+  tasks: ThreadInfoChecklistTask[],
+): string | null {
+  let best: { value: string; time: number } | null = null;
+  for (const task of tasks) {
+    if (!task.updatedAt) continue;
+    const time = new Date(task.updatedAt).getTime();
+    if (Number.isNaN(time)) continue;
+    if (!best || time > best.time) {
+      best = { value: task.updatedAt, time };
+    }
+  }
+  return best?.value ?? null;
+}
+
+function relativeChecklistTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const diffMs = date.getTime() - Date.now();
+  const absMs = Math.abs(diffMs);
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["day", 86_400_000],
+    ["hour", 3_600_000],
+    ["minute", 60_000],
+  ];
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  for (const [unit, ms] of units) {
+    if (absMs >= ms) {
+      return formatter.format(Math.round(diffMs / ms), unit);
+    }
+  }
+  return "just now";
 }
 
 function formatFileSize(value: number) {

@@ -461,7 +461,13 @@ describe("TaskThreadView", () => {
     expect(within(panel).queryByText("Executive")).toBeNull();
     expect(within(panel).getByText("Progress")).toBeTruthy();
     expect(within(panel).getByText("50%")).toBeTruthy();
-    expect(within(panel).queryByText("1/2 required complete")).toBeNull();
+    expect(within(panel).getByText("1/2 required complete")).toBeTruthy();
+    // Completed task uses the filled tabler icon in the muted text color (not emerald)
+    const completedIcon = within(panel).getByTestId(
+      "checklist-icon-completed",
+    );
+    expect(completedIcon.getAttribute("class") ?? "").toContain("text-white/45");
+    expect(within(panel).queryByText("Ops · Completed")).toBeTruthy();
     expect(within(panel).getByText("Get contract signed")).toBeTruthy();
     expect(
       within(panel).getByText("Enter customer information into P21"),
