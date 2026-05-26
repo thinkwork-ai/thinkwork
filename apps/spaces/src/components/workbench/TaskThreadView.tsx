@@ -17,7 +17,7 @@ import {
   Mic,
   Search,
   Sparkles,
-  Users,
+  Zap,
 } from "lucide-react";
 import {
   Children,
@@ -515,36 +515,14 @@ function ThreadInfoPanel({
         <div className="space-y-5 p-5">
           <section className="space-y-3">
             <h2 className="text-sm font-medium text-white/55">Thread</h2>
-            <InfoPanelRow
+            <InfoPanelInlineRow
               icon={<CalendarDays className="size-4" />}
-              label="Date started"
               value={startedAt || "Unknown"}
             />
-            <InfoPanelRow
-              icon={<Users className="size-4" />}
-              label="Started by"
-              value={startedBy}
+            <InfoPanelInlineRow
+              icon={<Zap className="size-4" />}
+              value={`Triggered by ${startedBy}`}
             />
-            <div className="grid gap-1.5">
-              <div className="flex items-center gap-2 text-sm text-white/45">
-                <Bot className="size-4" />
-                <span>Agents involved</span>
-              </div>
-              {state.agents.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {state.agents.map((agent) => (
-                    <span
-                      key={agent}
-                      className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75"
-                    >
-                      {agent}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-white/70">No agents yet</p>
-              )}
-            </div>
           </section>
 
           {state.attachments.length > 0 ? (
@@ -736,22 +714,17 @@ function ThreadInfoCompletionAction({
   );
 }
 
-function InfoPanelRow({
+function InfoPanelInlineRow({
   icon,
-  label,
   value,
 }: {
   icon: ReactNode;
-  label: string;
   value: string;
 }) {
   return (
-    <div className="grid gap-1">
-      <div className="flex items-center gap-2 text-sm text-white/45">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <p className="truncate text-sm text-white/75">{value}</p>
+    <div className="flex min-w-0 items-center gap-2 text-sm text-white/75">
+      <span className="shrink-0 text-white/45">{icon}</span>
+      <span className="truncate">{value}</span>
     </div>
   );
 }
