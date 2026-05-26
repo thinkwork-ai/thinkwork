@@ -40,9 +40,9 @@ describe("TaskThreadView", () => {
     expect(status.querySelectorAll(".tw-shimmer-char").length).toBeGreaterThan(
       0,
     );
-    expect(
-      status.querySelector('[aria-hidden="true"]')?.className,
-    ).toContain("font-mono");
+    expect(status.querySelector('[aria-hidden="true"]')?.className).toContain(
+      "font-mono",
+    );
   });
 
   it("renders transcript messages, generated artifact cards, and command composer", () => {
@@ -97,6 +97,117 @@ describe("TaskThreadView", () => {
     // authoritative turn-level row.
     expect(screen.queryByText("Thinking")).toBeNull();
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
+  });
+
+  it("renders question card tool results as an intake form instead of raw JSON", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Customer onboarding",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Please provide the missing onboarding information.",
+              toolResults: [
+                {
+                  _type: "question_card",
+                  schema: {
+                    id: "customer_onboarding_missing_intake",
+                    title: "Missing onboarding information",
+                    fields: [
+                      {
+                        id: "salesRep",
+                        type: "text",
+                        label: "Sales owner",
+                      },
+                      {
+                        id: "taxExempt",
+                        type: "boolean",
+                        label: "Are they agricultural or sales-tax exempt?",
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("form", { name: /missing onboarding/i }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Sales owner")).toBeTruthy();
+    expect(
+      screen.getByText("Are they agricultural or sales-tax exempt?"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Loaded tool result")).toBeNull();
+    expect(screen.queryByText(/question_card/)).toBeNull();
+  });
+
+  it("submits question card answers through the follow-up callback", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Customer onboarding",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Please provide the missing onboarding information.",
+              toolResults: [
+                {
+                  _type: "question_card",
+                  schema: {
+                    id: "customer_onboarding_missing_intake",
+                    title: "Missing onboarding information",
+                    fields: [
+                      {
+                        id: "salesRep",
+                        type: "text",
+                        label: "Sales owner",
+                      },
+                      {
+                        id: "taxExempt",
+                        type: "boolean",
+                        label: "Are they agricultural or sales-tax exempt?",
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Sales owner"), {
+      target: { value: "Rebecca Odom" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "yes" }));
+    fireEvent.click(screen.getByRole("button", { name: /submit answers/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        [
+          "Customer onboarding intake answers:",
+          "- sales owner: Rebecca Odom",
+          "- tax exempt: yes",
+        ].join("\n"),
+        [],
+        [],
+      );
+    });
   });
 
   it("opens a transcript artifact through the artifact panel callback", () => {
