@@ -6,6 +6,9 @@ module: apps/admin agent-builder workspace files
 problem_type: workflow_issue
 component: development_workflow
 severity: medium
+status: stale
+stale_date: 2026-05-26
+stale_reason: "The synthetic agents UI grouping was retired in favor of real workspaces/ folders. The manifest-regeneration lesson remains useful, but the agents/ grouping details are historical."
 applies_when:
   - "Cleaning up S3-backed agent workspace files after manual or UI smoke tests"
   - "Verifying Agent Builder sub-agent affordances against deployed admin"
@@ -14,6 +17,8 @@ tags: [agent-builder, workspace-files, s3, manifest, sub-agents, smoke-test]
 ---
 
 # Agent Builder smoke cleanup must patch routing rows and regenerate manifest
+
+> Stale as current UI/storage guidance. The old synthetic `agents` section has been retired in favor of real `workspaces/` folders. The surviving lesson is narrower: direct S3 edits still need manifest regeneration, but current smoke cleanup should reason about `workspaces/<slug>/` folders and the workspace-files API, not the historical synthetic `agents` grouping.
 
 ## Context
 
