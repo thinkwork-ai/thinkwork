@@ -40,5 +40,21 @@ export async function threadLinkedTasks(
     )
     .orderBy(asc(linkedTasks.created_at));
 
-  return rows.map((row) => toGraphqlLinkedTask(row));
+  return rows
+    .filter((row) => !isRemovedChecklistTask(row.metadata))
+    .map((row) => toGraphqlLinkedTask(row));
+}
+
+function isRemovedChecklistTask(metadata: unknown): boolean {
+  const record =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  const nativeChecklist =
+    record.nativeChecklist &&
+    typeof record.nativeChecklist === "object" &&
+    !Array.isArray(record.nativeChecklist)
+      ? (record.nativeChecklist as Record<string, unknown>)
+      : {};
+  return Boolean(nativeChecklist.removedAt);
 }

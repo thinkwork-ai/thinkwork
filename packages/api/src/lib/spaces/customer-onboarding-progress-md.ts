@@ -171,9 +171,7 @@ export function renderCustomerOnboardingProgressMarkdown(input: {
   ].join("\n");
 }
 
-export class DrizzleCustomerOnboardingProgressRepository
-  implements CustomerOnboardingProgressRepository
-{
+export class DrizzleCustomerOnboardingProgressRepository implements CustomerOnboardingProgressRepository {
   async load(input: {
     tenantId: string;
     threadId: string;
@@ -224,24 +222,26 @@ export class DrizzleCustomerOnboardingProgressRepository
       threadId: thread.id,
       threadTitle: thread.title,
       normalized,
-      tasks: taskRows.map((task) => {
-        const taskMetadata = objectRecord(task.metadata);
-        const nativeChecklist = objectRecord(taskMetadata.nativeChecklist);
-        return {
-          title: task.title,
-          status: task.status as LinkedTaskStatus,
-          required: task.required,
-          blocked: task.blocked,
-          owner: stringValue(task.assignee_display),
-          roleKey: stringValue(task.role_key),
-          checklistItemKey: stringValue(taskMetadata.checklistItemKey),
-          notes:
-            stringValue(nativeChecklist.lastStatusNote) ??
-            stringValue(taskMetadata.note) ??
-            null,
-          updatedAt: task.updated_at ?? null,
-        };
-      }),
+      tasks: taskRows
+        .filter((task) => !isRemovedChecklistTask(task.metadata))
+        .map((task) => {
+          const taskMetadata = objectRecord(task.metadata);
+          const nativeChecklist = objectRecord(taskMetadata.nativeChecklist);
+          return {
+            title: task.title,
+            status: task.status as LinkedTaskStatus,
+            required: task.required,
+            blocked: task.blocked,
+            owner: stringValue(task.assignee_display),
+            roleKey: stringValue(task.role_key),
+            checklistItemKey: stringValue(taskMetadata.checklistItemKey),
+            notes:
+              stringValue(nativeChecklist.lastStatusNote) ??
+              stringValue(taskMetadata.note) ??
+              null,
+            updatedAt: task.updated_at ?? null,
+          };
+        }),
     };
   }
 }
@@ -325,6 +325,12 @@ function objectRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonRecord)
     : {};
+}
+
+function isRemovedChecklistTask(metadata: unknown): boolean {
+  return Boolean(
+    objectRecord(objectRecord(metadata).nativeChecklist).removedAt,
+  );
 }
 
 function stringValue(value: unknown): string | null {

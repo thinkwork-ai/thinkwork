@@ -200,6 +200,63 @@ describe("threadLinkedTasks", () => {
     ).resolves.toEqual([]);
   });
 
+  it("omits checklist rows removed through thread chat", async () => {
+    captures.threadRows.push({
+      id: "thread-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+    });
+    captures.linkedTaskRows.push(
+      {
+        id: "linked-task-active",
+        tenant_id: "tenant-1",
+        space_id: "space-1",
+        thread_id: "thread-1",
+        provider: "thinkwork",
+        external_task_id: "thinkwork:thread-1:active",
+        title: "Confirm Tank Certification",
+        required: true,
+        status: "todo",
+        blocked: false,
+        sync_status: "synced",
+        metadata: {
+          nativeChecklist: {},
+        },
+      },
+      {
+        id: "linked-task-removed",
+        tenant_id: "tenant-1",
+        space_id: "space-1",
+        thread_id: "thread-1",
+        provider: "thinkwork",
+        external_task_id: "thinkwork:thread-1:removed",
+        title: "Collect outdated paperwork",
+        required: false,
+        status: "cancelled",
+        blocked: false,
+        sync_status: "synced",
+        metadata: {
+          nativeChecklist: {
+            removedAt: "2026-05-26T14:00:00.000Z",
+          },
+        },
+      },
+    );
+
+    await expect(
+      threadLinkedTasks(
+        {},
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        ctx,
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "linked-task-active",
+        title: "Confirm Tank Certification",
+      }),
+    ]);
+  });
+
   it("falls back to tenant read access for non-Space task mirrors", async () => {
     captures.threadRows.push({
       id: "thread-1",

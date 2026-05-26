@@ -161,6 +161,44 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     ]);
   });
 
+  it("extracts checklist task additions from message commands", () => {
+    const result = extractCustomerOnboardingChatUpdate(
+      "Add a new task to the thread:\n\nConfirm Tank Certification",
+    );
+
+    expect(result.taskAdditions).toEqual([
+      {
+        title: "Confirm Tank Certification",
+        note: "Add a new task to the thread: Confirm Tank Certification",
+      },
+    ]);
+    expect(result.taskRemovals).toEqual([]);
+  });
+
+  it("extracts checklist task removals by custom title and known task alias", () => {
+    const custom = extractCustomerOnboardingChatUpdate(
+      "Remove Confirm Tank Certification from the checklist",
+    );
+    const known = extractCustomerOnboardingChatUpdate(
+      "Remove the tax exemption forms task",
+    );
+
+    expect(custom.taskRemovals).toEqual([
+      {
+        title: "Confirm Tank Certification",
+        key: null,
+        note: "Remove Confirm Tank Certification from the checklist",
+      },
+    ]);
+    expect(known.taskRemovals).toEqual([
+      {
+        title: "tax exemption forms",
+        key: "tax_exemption_forms",
+        note: "Remove the tax exemption forms task",
+      },
+    ]);
+  });
+
   it("maps mentioned DocuSign ownership updates to the DocuSign task", () => {
     const result = extractCustomerOnboardingChatUpdate(
       "@Rebecca Odom is handling the DocuSign package too",
