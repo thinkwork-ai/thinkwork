@@ -1,13 +1,16 @@
 ---
 title: "feat: Space Detail — Members tab, Workspace label revert, Generate Folder Structure parity"
 type: feat
-status: active
+status: completed
 created: 2026-05-24
 origin:
   - docs/plans/2026-05-23-002-feat-space-detail-polish-and-tenant-scoped-email-plan.md
   - docs/plans/2026-05-24-002-feat-context-md-folder-structure-generation-plan.md
   - docs/plans/2026-05-21-001-feat-public-private-space-access-plan.md
 depth: standard
+completed_by:
+  - "PR #1652"
+  - "PR #1735"
 ---
 
 # feat: Space Detail — Members tab, Workspace label revert, Generate Folder Structure parity

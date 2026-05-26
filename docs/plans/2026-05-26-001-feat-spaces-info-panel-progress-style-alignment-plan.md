@@ -2,8 +2,11 @@
 title: "feat: Align spaces info-panel Progress section with admin thread detail style"
 type: feat
 created: 2026-05-26
-status: active
+status: completed
 depth: lightweight
+completed_by:
+  - "PR #1733"
+  - "PR #1736"
 ---
 
 # feat: Align spaces info-panel Progress section with admin thread detail style

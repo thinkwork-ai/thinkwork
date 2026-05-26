@@ -1,7 +1,11 @@
-# Spaces Thread Attachments Requirements
+---
+title: Spaces Thread Attachments Requirements
+date: 2026-05-26
+status: completed
+completed_by: "PR #1740"
+---
 
-Date: 2026-05-26
-Status: Requirements captured
+# Spaces Thread Attachments Requirements
 
 ## Problem
 

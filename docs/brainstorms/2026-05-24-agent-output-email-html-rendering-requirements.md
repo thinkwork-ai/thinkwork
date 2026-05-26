@@ -1,6 +1,10 @@
 ---
 date: 2026-05-24
 topic: agent-output-email-html-rendering
+status: completed
+completed_by:
+  - "PR #1665"
+  - "PR #1745"
 ---
 
 # Agent Output → Email-Friendly HTML

@@ -1,10 +1,11 @@
 ---
 title: "feat: Simplify admin Space Studio"
 type: feat
-status: active
+status: superseded
 date: 2026-05-21
 origin: docs/brainstorms/2026-05-21-admin-space-studio-simplification-requirements.md
 deepened: 2026-05-21
+superseded_by: docs/plans/2026-05-26-002-feat-admin-spaces-ui-cleanup-plan.md
 ---
 
 # feat: Simplify admin Space Studio

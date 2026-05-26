@@ -1,9 +1,12 @@
 ---
 title: "feat: Channel-rendering module + email markdown→HTML"
 type: feat
-status: active
+status: completed
 date: 2026-05-24
 origin: docs/brainstorms/2026-05-24-agent-output-email-html-rendering-requirements.md
+completed_by:
+  - "PR #1665"
+  - "PR #1745"
 ---
 
 # feat: Channel-rendering module + email markdown→HTML

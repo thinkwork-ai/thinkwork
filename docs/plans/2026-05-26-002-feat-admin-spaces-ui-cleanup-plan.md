@@ -2,9 +2,10 @@
 title: "feat: Admin Spaces UI Cleanup"
 date: 2026-05-26
 type: feat
-status: active
+status: completed
 depth: standard
 origin: docs/brainstorms/2026-05-26-admin-spaces-ui-cleanup-requirements.md
+completed_by: "PR #1735"
 ---
 
 # feat: Admin Spaces UI Cleanup

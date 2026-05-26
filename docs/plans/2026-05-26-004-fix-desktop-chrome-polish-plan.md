@@ -1,9 +1,12 @@
 ---
 title: "fix: Polish desktop chrome drag and toolbar treatment"
 type: fix
-status: active
+status: completed
 date: 2026-05-26
 origin: docs/brainstorms/2026-05-20-computer-electron-desktop-shell-requirements.md
+completed_by:
+  - "commit b9cd502f"
+  - "commit 040da7c0"
 ---
 
 # fix: Polish desktop chrome drag and toolbar treatment
