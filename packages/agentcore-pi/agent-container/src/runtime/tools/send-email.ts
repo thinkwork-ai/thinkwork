@@ -42,6 +42,45 @@ function normalizeRecipients(value: unknown): string[] {
   return raw.map((item) => String(item).trim()).filter(Boolean);
 }
 
+const CURRENT_USER_RECIPIENT_ALIASES = new Set([
+  "me",
+  "myself",
+  "my email",
+  "current user",
+  "current requester",
+  "the user",
+]);
+
+const PLACEHOLDER_RECIPIENTS = new Set([
+  "user@example.com",
+  "me@example.com",
+  "example@example.com",
+]);
+
+function resolveRecipients(value: unknown, currentUserEmail: string): string[] {
+  const seen = new Set<string>();
+  const resolved: string[] = [];
+  for (const recipient of normalizeRecipients(value)) {
+    const normalized = recipient.toLowerCase();
+    const resolvedRecipient =
+      CURRENT_USER_RECIPIENT_ALIASES.has(normalized) ||
+      PLACEHOLDER_RECIPIENTS.has(normalized)
+        ? currentUserEmail
+        : recipient;
+    if (!resolvedRecipient) {
+      throw new Error(
+        `send_email cannot resolve recipient "${recipient}" because the current user email is unavailable.`,
+      );
+    }
+    const dedupeKey = resolvedRecipient.toLowerCase();
+    if (!seen.has(dedupeKey)) {
+      seen.add(dedupeKey);
+      resolved.push(resolvedRecipient);
+    }
+  }
+  return resolved;
+}
+
 async function readError(response: Response): Promise<string> {
   const body = await response.text().catch(() => "");
   return body
@@ -61,6 +100,7 @@ export function buildSendEmailTool(
   const inboundMessageId = asString(config.inboundMessageId);
   const inboundFrom = asString(config.inboundFrom);
   const inboundBody = asString(config.inboundBody);
+  const currentUserEmail = asString(options.payload.current_user_email);
   const turnContext = objectValue(options.payload.turn_context);
   const activeSpaceTenantSlug =
     asString(turnContext.spaceTenantSlug) ||
@@ -76,11 +116,13 @@ export function buildSendEmailTool(
     label: "Send Email",
     description:
       "Send a plain text email from the active Space email address. " +
-      "Use this when the user asks you to email, forward, or share results by email.",
+      "Use this when the user asks you to email, forward, or share results by email. " +
+      'Use recipient "me" for the signed-in user when they ask you to email them.',
     parameters: Type.Object({
       to: Type.Union([
         Type.String({
-          description: "Recipient email address or comma-separated recipients.",
+          description:
+            'Recipient email address, "me" for the signed-in user, or comma-separated recipients.',
         }),
         Type.Array(Type.String(), {
           description: "Recipient email addresses. Maximum 5 recipients.",
@@ -114,7 +156,7 @@ export function buildSendEmailTool(
     execute: async (_toolCallId, params) => {
       const started = Date.now();
       const typedParams = objectValue(params);
-      const recipients = normalizeRecipients(typedParams.to);
+      const recipients = resolveRecipients(typedParams.to, currentUserEmail);
       const subject = asString(typedParams.subject);
       const body = asString(typedParams.body);
       const mode = asString(typedParams.mode) || "outbound";

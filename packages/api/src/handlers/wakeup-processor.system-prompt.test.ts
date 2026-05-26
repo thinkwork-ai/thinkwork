@@ -41,6 +41,10 @@ describe("wakeup processor system prompt capture", () => {
     expect(source).toContain(
       "spaceSlug: renderedWorkspace.activeSpace?.slug ?? runSpaceSlug",
     );
+    expect(source).toContain(
+      "current_user_email: currentUserEmail || undefined",
+    );
+    expect(source).toContain("current_user_name: currentUserName || undefined");
     expect(source.indexOf("turn_context: runSpaceId")).toBeGreaterThan(-1);
   });
 });

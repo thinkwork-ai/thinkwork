@@ -7,6 +7,8 @@ export interface PiInvocationPayload {
   tenant_slug?: unknown;
   instance_id?: unknown;
   user_id?: unknown;
+  current_user_email?: unknown;
+  current_user_name?: unknown;
   eval_mode?: unknown;
 }
 
@@ -129,6 +131,31 @@ function buildRuntimeToolPolicy(toolNames: string[] | undefined): string {
   ].join("\n");
 }
 
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildCurrentRequesterContext(payload: PiInvocationPayload): string {
+  const userId = asString(payload.user_id);
+  const name = asString(payload.current_user_name);
+  const email = asString(payload.current_user_email);
+  if (!userId && !name && !email) return "";
+
+  return [
+    "<current_requester>",
+    "This is the signed-in user who triggered the current turn.",
+    name ? `Name: ${name}` : "",
+    email ? `Email: ${email}` : "",
+    userId ? `User ID: ${userId}` : "",
+    email
+      ? 'When the user asks you to email "me", "my email", or "the current user", send to this email address.'
+      : "Do not invent a recipient email address for the current user.",
+    "</current_requester>",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /**
  * Build the agent's system prompt by reading workspace files from disk.
  *
@@ -146,6 +173,8 @@ export async function composeSystemPrompt(
   const reader = args.fileReader ?? defaultFileReader;
   const now = args.now ?? new Date();
   const parts: string[] = [`Current date: ${formatDate(now)}`];
+  const requesterContext = buildCurrentRequesterContext(args.payload);
+  if (requesterContext) parts.push(requesterContext);
   parts.push(buildRuntimeToolPolicy(args.availableToolNames));
 
   let filesLoaded = 0;

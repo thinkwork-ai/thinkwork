@@ -220,5 +220,6 @@ describe("chat-agent-invoke runtime routing", () => {
       tenantSlug: "acme",
       spaceSlug: "customer-onboarding",
     });
+    expect(body.current_user_email).toBe("user-1@example.com");
   });
 });
