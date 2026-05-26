@@ -1,37 +1,43 @@
 ---
-title: Company Brain
-description: The harness-owned context substrate for ThinkWork agents — memory, compiled pages, knowledge bases, workspace files, and approved tools behind one inspectable layer.
+title: Memory
+description: "The harness-owned context layer for ThinkWork agents: retained memory, compiled pages, knowledge bases, workspace files, and approved tools behind one inspectable contract."
 ---
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
-Company Brain is the context substrate agents use before they act. It is not a single database, vector index, or chat-history trick. It is the ThinkWork-owned layer that decides what an agent should know for the current turn, where each fact came from, how fresh it is, and whether it is durable enough to carry forward.
+Memory is the context layer agents use before they act. It is not a single database, vector index, or chat-history trick. It is the ThinkWork-owned layer that decides what an agent should know for the current turn, where each fact came from, how fresh it is, and whether it is durable enough to carry forward.
 
 The clean model is:
 
 - **Threads** keep the complete record of work.
-- **Company Brain** assembles the context that should matter now.
+- **Memory** assembles the context that should matter now.
 - **Agents** reason and act using that assembled context.
 
-That distinction matters. Threads answer "what happened?" Company Brain answers "what should the agent know before it responds or takes action?"
+That distinction matters. Threads answer "what happened?" Memory answers "what should the agent know before it responds or takes action?"
+
+<Aside type="note">
+  Some route paths and older implementation names still use `knowledge` or
+  Company Brain for compatibility. The visible component name in the docs is
+  Memory.
+</Aside>
 
 ## What It Contains
 
-Company Brain is an umbrella over several source families. Operators see them together in Admin because they all affect what an agent can know, but each source keeps its own contract and provenance.
+Memory is an umbrella over several source families. Operators see them together in Admin because they all affect what an agent can know, but each source keeps its own contract and provenance.
 
 <CardGrid>
-  <Card title="Memory" icon="seti:bookmark">
+  <Card title="Retained Memory" icon="seti:bookmark">
     Durable facts, preferences, and observations retained from prior work.
     Hindsight and AgentCore Memory are adapter implementations below the
     ThinkWork memory contract.
   </Card>
   <Card title="Pages" icon="graph">
-    Compiled Company Brain pages: entity, topic, and decision pages distilled
-    from memory records and source citations.
+    Compiled pages: entity, topic, and decision pages distilled from memory
+    records and source citations.
   </Card>
   <Card title="Business Ontology" icon="setting">
     Tenant-governed business types, relationships, facet templates, and mappings
-    that shape shared Brain materialization.
+    that shape durable memory materialization.
   </Card>
   <Card title="Knowledge Bases" icon="open-book">
     Operator-curated documents backed by Bedrock Knowledge Bases and Aurora
@@ -56,22 +62,22 @@ Company Brain is an umbrella over several source families. Operators see them to
 
 Most agent systems expose memory, RAG, workspace search, and external search as separate tools. That makes agents choose implementation details mid-turn and makes operators debug the wrong layer: was the answer bad because the memory engine missed, the KB was stale, or the agent never called the right tool?
 
-Company Brain puts those sources behind one product boundary:
+Memory puts those sources behind one product boundary:
 
 - operators can inspect and test the sources together;
 - agents can ask for context without hard-coding every backend;
 - every hit carries provenance, source family, rank, freshness, and provider status;
 - backend choices can change without changing the product story.
 
-## How a Turn Uses Company Brain
+## How a Turn Uses Memory
 
-At turn time, Company Brain can assemble context from recent thread history, memory recall, compiled pages, knowledge-base chunks, workspace files, and approved MCP tools. The router ranks and budgets those results before the model sees them.
+At turn time, Memory can assemble context from recent thread history, memory recall, compiled pages, knowledge-base chunks, workspace files, and approved MCP tools. The router ranks and budgets those results before the model sees them.
 
 ```
 User message arrives in a thread
         │
         ▼
-  Company Brain source routing
+  Memory source routing
         │
         ├─ Recent thread history
         ├─ Memory recall
@@ -91,44 +97,44 @@ Every source is optional. A focused support bot may only need a knowledge base. 
 
 ## Trust and Provenance
 
-Company Brain treats source trust as a product concern, not a prompt afterthought.
+Memory treats source trust as a product concern, not a prompt afterthought.
 
 - **Authored knowledge** comes from operator-managed documents and keeps file/chunk citations.
 - **Memory** comes from prior work and keeps adapter/source references.
-- **Ontology** defines approved business meaning before it changes durable Brain structure.
+- **Ontology** defines approved business meaning before it changes durable memory structure.
 - **Compiled pages** summarize many source facts and keep page-section provenance.
 - **External MCP hits** are transient unless a separate workflow promotes them.
 - **Operational facets** can be live and fresh, but should not be silently converted into durable narrative facts.
 
 <Aside type="note">
   The internal Context Engine service and `query_context` tool are still the
-  developer contract behind Company Brain source routing. Product-facing docs
-  use Company Brain; API reference docs still name the exact contract developers
+  developer contract behind Memory source routing. Product-facing docs use
+  Memory; API reference docs still name the exact contract developers
   call.
 </Aside>
 
 ## Admin Surface
 
-In Admin, Company Brain lives at `/knowledge` and has four tabs:
+In Admin, Memory lives at `/knowledge` and has four tabs:
 
 | Tab             | Purpose                                                         |
 | --------------- | --------------------------------------------------------------- |
 | Memory          | Browse, search, edit, and visualize retained memory records     |
-| Pages           | Inspect compiled Company Brain pages and graph/search output    |
+| Pages           | Inspect compiled pages and graph/search output                  |
 | Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status           |
 | Sources         | Configure and verify the provider layer used by `query_context` |
 
 Ontology Studio lives under **Manage → Ontology** because it governs tenant-level business vocabulary rather than one source family. Operators use it to scan for suggestions, review change sets, approve definitions, and monitor reprocess jobs.
 
-The route path still says `/knowledge` for compatibility, but the visible module name is Company Brain.
+The route path still says `/knowledge` for compatibility, but the visible module name is Memory.
 
 ## Related Pages
 
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — authored document sources and Bedrock KBs
-- [Memory Facet](/concepts/knowledge/memory/) — retained facts and memory backends
+- [Retained Memory](/concepts/knowledge/memory/) — retained facts and memory backends
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — durable page distillation
-- [Business Ontology](/concepts/knowledge/business-ontology/) — governed business/domain meaning for Brain materialization
+- [Business Ontology](/concepts/knowledge/business-ontology/) — governed business/domain meaning for durable memory materialization
 - [Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how memories become pages
 - [Page Model](/concepts/knowledge/compounding-memory-pages/) — sections, aliases, links, mentions, and sources
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how `query_context` assembles source hits
-- [Admin — Company Brain](/applications/admin/knowledge/) — operator workflows
+- [Admin — Memory](/applications/admin/knowledge/) — operator workflows

@@ -5,7 +5,7 @@ description: Run suggestion scans, review change sets, approve ontology updates,
 
 import { Aside } from "@astrojs/starlight/components";
 
-This guide is for admins operating the business ontology loop in a live ThinkWork tenant. It assumes you understand the boundary from the [Business Ontology concept page](/concepts/knowledge/business-ontology/): Hindsight stores memory, ontology defines meaning, and the Company Brain materializes approved meaning into pages and facets.
+This guide is for admins operating the business ontology loop in a live ThinkWork tenant. It assumes you understand the boundary from the [Business Ontology concept page](/concepts/knowledge/business-ontology/): Hindsight stores memory, ontology defines meaning, and the memory layer materializes approved meaning into pages and facets.
 
 Ontology work happens in Admin under **Manage → Ontology**. The studio has four practical surfaces:
 
@@ -73,7 +73,7 @@ The job status matters more than the change-set status. A change set can be appr
 After a successful job:
 
 1. Open **Definitions** and confirm the approved entity, relationship, facet, or mapping appears with the expected lifecycle status.
-2. Search Company Brain for an affected business object through the Brain provider or `query_brain_context`.
+2. Search Memory for an affected business object through the Brain provider or `query_brain_context`.
 3. Inspect the page/facet output and confirm sections match the approved facet templates.
 4. Check provenance: new or rewritten sections should cite source records, not just inferred text.
 5. Compare expected impact to job metrics. A zero-page reprocess can be valid, but it should be explainable from sparse source data or template-only changes.
@@ -123,6 +123,6 @@ Keep these rules while expanding the ontology:
 ## Related pages
 
 - [Business Ontology](/concepts/knowledge/business-ontology/)
-- [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
-- [Company Brain Context API](/api/context-engine/)
+- [Memory Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
+- [Memory Context API](/api/context-engine/)
 - [Compiled Pages API](/api/compounding-memory/)

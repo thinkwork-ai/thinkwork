@@ -142,7 +142,7 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     {
-                      label: "Company Brain",
+                      label: "Memory",
                       slug: "applications/admin/knowledge",
                     },
                     {
@@ -150,7 +150,7 @@ export default defineConfig({
                       slug: "applications/admin/ontology",
                     },
                     {
-                      label: "Memory Facet",
+                      label: "Retained Memory",
                       slug: "applications/admin/memory",
                     },
                     {
@@ -229,53 +229,6 @@ export default defineConfig({
           collapsed: true,
           items: [
             {
-              label: "Threads",
-              collapsed: true,
-              items: [
-                { label: "Overview", slug: "concepts/threads" },
-                {
-                  label: "Lifecycle and Types",
-                  slug: "concepts/threads/lifecycle-and-types",
-                },
-                {
-                  label: "Routing and Metadata",
-                  slug: "concepts/threads/routing-and-metadata",
-                },
-              ],
-            },
-            {
-              label: "Spaces",
-              collapsed: true,
-              items: [
-                { label: "Overview", slug: "concepts/spaces" },
-                {
-                  label: "Workspace Context",
-                  slug: "concepts/spaces/workspace-context",
-                },
-                {
-                  label: "Access and Membership",
-                  slug: "concepts/spaces/access-and-membership",
-                },
-                {
-                  label: "Triggers and Channels",
-                  slug: "concepts/spaces/triggers-and-channels",
-                },
-                { label: "Tools", slug: "concepts/spaces/tools" },
-                {
-                  label: "Knowledge and Memory",
-                  slug: "concepts/spaces/knowledge-and-memory",
-                },
-                {
-                  label: "Runtime Policy",
-                  slug: "concepts/spaces/runtime-policy",
-                },
-                {
-                  label: "Spaces and Threads",
-                  slug: "concepts/spaces/spaces-and-threads",
-                },
-              ],
-            },
-            {
               label: "Agents",
               collapsed: true,
               items: [
@@ -317,7 +270,54 @@ export default defineConfig({
               ],
             },
             {
-              label: "Company Brain",
+              label: "Spaces",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "concepts/spaces" },
+                {
+                  label: "Workspace Context",
+                  slug: "concepts/spaces/workspace-context",
+                },
+                {
+                  label: "Access and Membership",
+                  slug: "concepts/spaces/access-and-membership",
+                },
+                {
+                  label: "Triggers and Channels",
+                  slug: "concepts/spaces/triggers-and-channels",
+                },
+                { label: "Tools", slug: "concepts/spaces/tools" },
+                {
+                  label: "Knowledge and Memory",
+                  slug: "concepts/spaces/knowledge-and-memory",
+                },
+                {
+                  label: "Runtime Policy",
+                  slug: "concepts/spaces/runtime-policy",
+                },
+                {
+                  label: "Spaces and Threads",
+                  slug: "concepts/spaces/spaces-and-threads",
+                },
+              ],
+            },
+            {
+              label: "Threads",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "concepts/threads" },
+                {
+                  label: "Lifecycle and Types",
+                  slug: "concepts/threads/lifecycle-and-types",
+                },
+                {
+                  label: "Routing and Metadata",
+                  slug: "concepts/threads/routing-and-metadata",
+                },
+              ],
+            },
+            {
+              label: "Memory",
               collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/knowledge" },
@@ -326,7 +326,7 @@ export default defineConfig({
                   slug: "concepts/knowledge/document-knowledge",
                 },
                 {
-                  label: "Memory Facet",
+                  label: "Retained Memory",
                   slug: "concepts/knowledge/memory",
                 },
                 {
@@ -476,7 +476,7 @@ export default defineConfig({
               items: [
                 { label: "GraphQL Schema", slug: "api/graphql" },
                 { label: "Compiled Pages", slug: "api/compounding-memory" },
-                { label: "Company Brain Context", slug: "api/context-engine" },
+                { label: "Memory Context", slug: "api/context-engine" },
               ],
             },
             {

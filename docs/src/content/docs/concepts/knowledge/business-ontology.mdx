@@ -5,7 +5,7 @@ description: How ThinkWork turns retained memory into governed business types, r
 
 import { Aside } from "@astrojs/starlight/components";
 
-Business ontology is the governed vocabulary that sits between raw memory and the shared Company Brain. It answers a different question from Hindsight and compiled pages:
+Business ontology is the governed vocabulary that sits between raw memory and the shared compiled-memory layer. It answers a different question from Hindsight and compiled pages:
 
 - **Hindsight is memory.** It keeps retained observations, preferences, events, and source facts.
 - **Ontology is meaning.** It defines the tenant's business types, relationship language, facet templates, and optional standards mappings.
@@ -15,7 +15,7 @@ The ontology layer exists because "compile memory into a wiki" is too loose by i
 
 ## What the ontology owns
 
-The first version is intentionally a business/domain ontology, not an agent-work ontology. Agent workflows, task events, and Symphony ETL can reuse the same change-set pattern later, but this layer is scoped to customer, opportunity, commitment, risk, product, person, and similar business concepts in the Company Brain.
+The first version is intentionally a business/domain ontology, not an agent-work ontology. Agent workflows, task events, and Symphony ETL can reuse the same change-set pattern later, but this layer is scoped to customer, opportunity, commitment, risk, product, person, and similar business concepts in the Memory.
 
 It owns four definition families:
 
@@ -91,7 +91,7 @@ The product rule is: **conform where it helps, never contort the tenant vocabula
 
 ## Where agents consume it
 
-Agents do not call ontology admin APIs directly. They consume the approved ontology through Company Brain:
+Agents do not call ontology admin APIs directly. They consume the approved ontology through Memory:
 
 - the Brain Context provider returns tenant-shared, ontology-shaped entity pages and facets;
 - the split `query_brain_context` tool searches business/domain context such as customers, commitments, risks, relationships, and cited provenance;
@@ -102,8 +102,8 @@ This keeps ontology governance in Admin while letting agents benefit from the ap
 
 ## Related pages
 
-- [Company Brain](/concepts/knowledge/) — the product boundary around memory, pages, knowledge bases, workspace files, and source routing
-- [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how retained memories become compiled pages
-- [Company Brain Graph Direction](/concepts/knowledge/knowledge-graph/) — how typed relationship semantics fit with existing page links
-- [Company Brain Context API](/api/context-engine/) — the provider contract used by agents and MCP clients
+- [Memory](/concepts/knowledge/) — the product boundary around memory, pages, knowledge bases, workspace files, and source routing
+- [Memory Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how retained memories become compiled pages
+- [Memory Graph Direction](/concepts/knowledge/knowledge-graph/) — how typed relationship semantics fit with existing page links
+- [Memory Context API](/api/context-engine/) — the provider contract used by agents and MCP clients
 - [Operating Business Ontology](/guides/business-ontology-operations/) — operator workflow and recovery steps

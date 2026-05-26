@@ -5,7 +5,7 @@ description: Create and manage Bedrock Knowledge Bases, upload documents via pre
 
 import { Aside } from '@astrojs/starlight/components';
 
-Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Admin Company Brain page lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
+Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Admin Memory page lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
 
 ## The list view
 
@@ -154,7 +154,7 @@ Because the vector index lives in Aurora, a single Aurora snapshot restore bring
 ## Related pages
 
 - [Agents](/applications/admin/agents/) — where a KB can be attached to an agent
-- [Admin — Company Brain](/applications/admin/knowledge/) — the combined Admin surface for Memory, Pages, Knowledge Bases, and Sources
+- [Admin — Memory](/applications/admin/knowledge/) — the combined Admin surface for Memory, Pages, Knowledge Bases, and Sources
 - [Memory](/applications/admin/memory/) — the Memory tab behavior: stateful memory vs stateless documents
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the product model
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how retrieval is assembled into a turn
