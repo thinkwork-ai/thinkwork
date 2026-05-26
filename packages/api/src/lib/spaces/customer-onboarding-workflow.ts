@@ -441,18 +441,17 @@ export async function startCustomerOnboardingWorkflow(
     threadId: thread.id,
   });
 
-  if (!useNativeChecklist) {
-    await coordinator.enqueueWakeup({
-      tenantId: input.tenantId,
-      spaceId: space.id,
-      threadId: thread.id,
-      reason: "kickoff_triage",
-      idempotencyKey: `space-coordinator:${input.tenantId}:${thread.id}:kickoff_triage`,
-      summary:
-        "A new customer onboarding Thread was created and checklist tasks were mirrored. Review missing facts, unassigned tasks, and possible blockers.",
-      requestedBy: input.startedBy ?? { type: "system" },
-    });
-  }
+  await coordinator.enqueueWakeup({
+    tenantId: input.tenantId,
+    spaceId: space.id,
+    threadId: thread.id,
+    reason: "kickoff_triage",
+    idempotencyKey: `space-coordinator:${input.tenantId}:${thread.id}:kickoff_triage`,
+    summary: useNativeChecklist
+      ? `A new customer onboarding Thread was created with ${linkedTaskResults.length} ThinkWork checklist rows. Review missing facts, not-applicable items, and possible blockers.`
+      : "A new customer onboarding Thread was created and checklist tasks were mirrored. Review missing facts, unassigned tasks, and possible blockers.",
+    requestedBy: input.startedBy ?? { type: "system" },
+  });
 
   return {
     thread,
