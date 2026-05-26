@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +12,7 @@ import {
 import {
   DesktopUpdatesController,
   detectRuntimeInfo,
+  resolveImportedAutoUpdater,
   type AutoUpdaterLike,
   type UpdatesAppLike,
 } from "../../src/main/updates";
@@ -261,6 +262,103 @@ describe("desktop updater controller", () => {
     expect(updater.quitAndInstallCalls).toBe(1);
   });
 
+  it("checks for packaged updates when the app starts", async () => {
+    const updater = new FakeAutoUpdater();
+    const states: UpdateState[] = [];
+    const controller = new DesktopUpdatesController({
+      app: appLike(userDataDir),
+      autoUpdater: updater,
+      now: fixedClock(),
+      runtimeInfo,
+      onStateChange: (state) => states.push(state),
+    });
+
+    await controller.start();
+
+    expect(updater.checkForUpdatesCalls).toBe(1);
+    expect(updater.autoDownload).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(updater.allowPrerelease).toBe(false);
+    expect(updater.channel).toBe("latest");
+    expect(states.at(-1)).toMatchObject({
+      status: "available",
+      availableVersion: "1.0.1",
+    });
+  });
+
+  it("enables prerelease updates for canary builds", async () => {
+    const updater = new FakeAutoUpdater();
+    const controller = new DesktopUpdatesController({
+      app: {
+        ...appLike(userDataDir),
+        getVersion: () => "1.0.0-canary.1",
+      },
+      autoUpdater: updater,
+      now: fixedClock(),
+      runtimeInfo,
+    });
+
+    await controller.start();
+
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe("canary");
+  });
+
+  it("can enable updates for packaged builds when Electron reports non-packaged", async () => {
+    const updater = new FakeAutoUpdater();
+    const controller = new DesktopUpdatesController({
+      app: {
+        ...appLike(userDataDir),
+        isPackaged: false,
+      },
+      autoUpdater: updater,
+      updatesEnabled: true,
+      now: fixedClock(),
+      runtimeInfo,
+    });
+
+    await controller.start();
+    await controller.checkForUpdates();
+
+    expect(updater.checkForUpdatesCalls).toBe(2);
+    expect(controller.getState()).toMatchObject({
+      status: "available",
+      availableVersion: "1.0.1",
+    });
+  });
+
+  it("finds packaged update config from an app bundle path when Electron reports non-packaged", async () => {
+    const updater = new FakeAutoUpdater();
+    const resourcesDir = join(
+      userDataDir,
+      "ThinkWork Spaces (Canary).app",
+      "Contents",
+      "Resources",
+    );
+    await mkdir(resourcesDir, { recursive: true });
+    await writeFile(join(resourcesDir, "app-update.yml"), "provider: github\n", {
+      flag: "w",
+    });
+    const controller = new DesktopUpdatesController({
+      app: {
+        ...appLike(userDataDir),
+        getAppPath: () => join(resourcesDir, "app.asar"),
+        getVersion: () => "1.0.0-canary.14",
+        isPackaged: false,
+      },
+      autoUpdater: updater,
+      now: fixedClock(),
+      runtimeInfo,
+    });
+
+    await controller.start();
+
+    expect(updater.forceDevUpdateConfig).toBe(true);
+    expect(updater.updateConfigPath).toBe(join(resourcesDir, "app-update.yml"));
+    expect(updater.checkForUpdatesCalls).toBe(1);
+    expect(updater.channel).toBe("canary");
+  });
+
   it("starts in non-packaged dev mode without an updater instance", async () => {
     const controller = new DesktopUpdatesController({
       app: {
@@ -274,6 +372,19 @@ describe("desktop updater controller", () => {
     await expect(controller.checkForUpdates()).resolves.toBeUndefined();
     await expect(controller.downloadUpdate()).resolves.toBeUndefined();
     expect(controller.getState()).toMatchObject({ status: "disabled" });
+  });
+});
+
+describe("desktop updater import", () => {
+  it("resolves autoUpdater from CommonJS dynamic import shapes", () => {
+    const updater = new FakeAutoUpdater();
+
+    expect(resolveImportedAutoUpdater({ default: { autoUpdater: updater } })).toBe(
+      updater,
+    );
+    expect(
+      resolveImportedAutoUpdater({ "module.exports": { autoUpdater: updater } }),
+    ).toBe(updater);
   });
 });
 
@@ -297,10 +408,15 @@ function tick(): Promise<void> {
 class FakeAutoUpdater extends EventEmitter implements AutoUpdaterLike {
   autoDownload = true;
   autoInstallOnAppQuit = false;
+  allowPrerelease = false;
+  forceDevUpdateConfig = false;
   channel: string | null = null;
+  updateConfigPath: string | null = null;
+  checkForUpdatesCalls = 0;
   quitAndInstallCalls = 0;
 
   async checkForUpdates(): Promise<unknown> {
+    this.checkForUpdatesCalls += 1;
     this.emit("checking-for-update");
     this.emit("update-available", { version: "1.0.1" });
     return undefined;

@@ -107,6 +107,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/build-desktop.sh "${STAGE}" --publish always
 
+      - name: Publish desktop update metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#desktop-v}"
+          latest_file="apps/desktop/dist/latest-mac.yml"
+          if [ ! -f "$latest_file" ]; then
+            echo "Missing desktop updater metadata: $latest_file" >&2
+            exit 1
+          fi
+
+          # GitHub release asset names cannot contain '/', so electron-builder
+          # uploads scoped package artifacts with '.' while the generated YAML
+          # may still point at '@thinkwork/desktop-*'. Clobber the metadata with
+          # the resolvable asset names and publish the semantic channel alias.
+          perl -0pi -e 's/@thinkwork\/desktop/@thinkwork.desktop/g' "$latest_file"
+          gh release upload "v${version}" "$latest_file" --repo "${GITHUB_REPOSITORY}" --clobber
+
+          channel="latest"
+          if [[ "$version" == *"-canary"* ]]; then
+            channel="canary"
+          elif [[ "$version" == *"-beta"* ]]; then
+            channel="beta"
+          elif [[ "$version" == *"-alpha"* ]]; then
+            channel="alpha"
+          fi
+
+          if [ "$channel" != "latest" ]; then
+            channel_file="apps/desktop/dist/${channel}-mac.yml"
+            cp "$latest_file" "$channel_file"
+            gh release upload "v${version}" "$channel_file" --repo "${GITHUB_REPOSITORY}" --clobber
+          fi
+
       - name: Build desktop SHA-256 manifest
         run: |
           set -euo pipefail

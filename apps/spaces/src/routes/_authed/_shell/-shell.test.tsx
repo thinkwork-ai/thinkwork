@@ -46,6 +46,7 @@ vi.mock("@thinkwork/ui", async () => {
         {children}
       </section>
     ),
+    useSidebar: () => ({ open: true }),
   };
 });
 
@@ -114,10 +115,11 @@ describe("_authed/_shell layout", () => {
 
     expect(screen.getByTestId("desktop-application-header")).toBeTruthy();
     expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
+    expect(
+      screen.getByRole("separator", { name: /resize sidebar/i }),
+    ).toBeTruthy();
     expect(screen.queryByTestId("app-top-bar")).toBeNull();
-    expect(screen.getByTestId("sidebar-inset").className).toContain(
-      "pt-[var(--desktop-app-header-height)]",
-    );
+    expect(screen.getByTestId("sidebar-inset").className).not.toContain("pt-");
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 });

@@ -395,7 +395,9 @@ export class DesktopOAuthController {
   }
 
   private redirectUri(): string {
-    return `${resolveDeepLinkScheme(this.env.stage)}://oauth/callback`;
+    return `${resolveDeepLinkScheme(
+      this.env.deepLinkScheme ?? this.env.stage,
+    )}://oauth/callback`;
   }
 
   private cognitoDomainBase(): string {

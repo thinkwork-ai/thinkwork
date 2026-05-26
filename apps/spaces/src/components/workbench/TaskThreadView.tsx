@@ -60,6 +60,7 @@ import {
   TaskQueue,
   taskQueueFromRunbookQueue,
 } from "@/components/runbooks/RunbookQueue";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import type {
   AccumulatedPart,
   UIMessageStreamState,
@@ -2181,13 +2182,15 @@ function findLastIndex<T>(items: T[], predicate: (item: T) => boolean) {
 function TaskThreadState({ label, tone }: { label: string; tone?: "error" }) {
   return (
     <main className="flex w-full flex-1 items-center justify-center p-6">
-      <p
-        className={
-          tone === "error" ? "text-destructive" : "text-muted-foreground"
-        }
-      >
-        {label}
-      </p>
+      {tone === "error" ? (
+        <p className="text-destructive">{label}</p>
+      ) : (
+        <LoadingShimmer
+          text={label}
+          ariaLabel={label}
+          className="font-mono text-sm text-muted-foreground"
+        />
+      )}
     </main>
   );
 }

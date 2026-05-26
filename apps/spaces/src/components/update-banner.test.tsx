@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThinkworkBridge, UpdateState } from "@thinkwork/desktop-ipc";
-import { UpdateBanner } from "./update-banner";
+import { DesktopUpdateBadge, UpdateBanner } from "./update-banner";
 
 const desktopDetectionMocks = vi.hoisted(() => ({
   isDesktop: vi.fn(),
@@ -107,6 +107,70 @@ describe("UpdateBanner", () => {
   });
 });
 
+describe("DesktopUpdateBadge", () => {
+  it("renders a Codex-style available update badge and downloads on click", async () => {
+    const bridge = createBridge(
+      updateState({ status: "available", availableVersion: "1.2.3" }),
+    );
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(bridge);
+
+    render(<DesktopUpdateBadge />);
+
+    const button = await screen.findByRole("button", {
+      name: "Download update v1.2.3",
+    });
+
+    expect(button.textContent).toContain("Update");
+    expect(button.className).toContain("bg-[#2f9bff]");
+    fireEvent.click(button);
+
+    expect(bridge.downloadUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders download progress without expanding the chrome label", async () => {
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(
+      createBridge(updateState({ status: "downloading", downloadPercent: 42 })),
+    );
+
+    render(<DesktopUpdateBadge />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Downloading update 42%...",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("42%")).toBeTruthy();
+  });
+
+  it("installs a downloaded update from the badge", async () => {
+    const bridge = createBridge(
+      updateState({ status: "downloaded", downloadedVersion: "1.2.3" }),
+    );
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(bridge);
+
+    render(<DesktopUpdateBadge />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Restart to install update v1.2.3",
+      }),
+    );
+
+    expect(screen.getByText("Restart")).toBeTruthy();
+    expect(bridge.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays hidden when desktop updates are disabled", async () => {
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(
+      createBridge(updateState({ status: "disabled" })),
+    );
+
+    render(<DesktopUpdateBadge />);
+
+    await waitFor(() => expect(screen.queryByRole("button")).toBeNull());
+  });
+});
+
 function createBridge(state: UpdateState): ThinkworkBridge {
   return {
     getSessionTokens: vi.fn(),
@@ -120,6 +184,19 @@ function createBridge(state: UpdateState): ThinkworkBridge {
     onOAuthError: vi.fn(() => () => {}),
     consumePendingOAuth: vi.fn(),
     onDeepLink: vi.fn(() => () => {}),
+    getDesktopConfig: vi.fn(async () => ({
+      stage: "dev",
+      configured: true,
+      missing: [],
+      oauthRedirectUri: "thinkwork-dev://oauth/callback",
+      endpoints: {
+        apiUrl: "https://api.example.com",
+        graphqlHttpUrl: "https://api.example.com/graphql",
+        graphqlUrl: "https://appsync.example.com/graphql",
+        graphqlWsUrl: "wss://appsync.example.com/graphql",
+        cognitoDomain: "https://auth.example.com",
+      },
+    })),
     getUpdateState: vi.fn(async () => state),
     checkForUpdates: vi.fn(),
     downloadUpdate: vi.fn(),

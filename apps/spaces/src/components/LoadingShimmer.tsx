@@ -19,7 +19,7 @@ export function LoadingShimmer({
   className = "font-mono text-sm",
 }: LoadingShimmerProps) {
   return (
-    <span role="status" aria-live="polite">
+    <span role="status" aria-live="polite" aria-label={ariaLabel}>
       <span aria-hidden="true" className={className}>
         {text.split("").map((char, index) => (
           <span

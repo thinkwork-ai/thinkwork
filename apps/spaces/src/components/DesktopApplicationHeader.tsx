@@ -5,57 +5,91 @@ import {
   SidebarTrigger,
   ToggleGroup,
   ToggleGroupItem,
+  useSidebar,
 } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
+import { DesktopUpdateBadge } from "@/components/update-banner";
+
+export function DesktopNavigationControls({
+  className,
+  onBackFallback,
+}: {
+  className?: string;
+  onBackFallback?: () => void;
+}) {
+  const handleHistoryBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    onBackFallback?.();
+  };
+
+  return (
+    <div
+      className={`flex min-w-0 items-center gap-1 text-sidebar-foreground ${className ?? ""}`}
+    >
+      <SidebarTrigger className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        onClick={handleHistoryBack}
+      >
+        <ArrowLeft className="size-4" />
+        <span className="sr-only">Back</span>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        onClick={() => window.history.forward()}
+      >
+        <ArrowRight className="size-4" />
+        <span className="sr-only">Forward</span>
+      </Button>
+      <DesktopUpdateBadge className="ml-auto" />
+    </div>
+  );
+}
 
 export function DesktopApplicationHeader() {
   const { actions } = usePageHeader();
+  const { open } = useSidebar();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const headerActions = actions?.hideTopBar ? null : actions;
   const tabs = headerActions?.tabs ?? [];
+  const hasContent = Boolean(headerActions || tabs.length > 0);
   const activeTab =
     [...tabs]
       .reverse()
       .find((tab) => pathname === tab.to || pathname.startsWith(`${tab.to}/`))
       ?.to ?? "";
 
-  const handleHistoryBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    if (headerActions?.backHref) {
-      void navigate({ to: headerActions.backHref });
-    }
-  };
+  if (open && !hasContent) {
+    return null;
+  }
 
   return (
-    <header className="desktop-app-header absolute inset-x-0 top-0 z-50 grid h-11 grid-cols-[var(--sidebar-width)_minmax(0,1fr)] text-foreground">
-      <div className="desktop-app-header-controls flex min-w-0 items-center gap-1 bg-sidebar pl-20 pr-2 text-sidebar-foreground">
-        <SidebarTrigger className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          onClick={handleHistoryBack}
-        >
-          <ArrowLeft className="size-4" />
-          <span className="sr-only">Back</span>
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          onClick={() => window.history.forward()}
-        >
-          <ArrowRight className="size-4" />
-          <span className="sr-only">Forward</span>
-        </Button>
-      </div>
-      <div className="flex min-w-0 items-center gap-2 bg-background/95 pl-3 pr-3">
+    <header
+      className={`desktop-app-header flex h-11 shrink-0 items-center gap-2 pr-3 text-foreground ${open ? "bg-background pl-3" : "bg-background/95 pl-20"}`}
+    >
+      {open ? null : (
+        <DesktopNavigationControls
+          className="shrink-0"
+          onBackFallback={() => {
+            if (headerActions?.backHref) {
+              void navigate({ to: headerActions.backHref });
+            }
+          }}
+        />
+      )}
+      <div
+        className={`flex min-w-0 flex-1 items-center gap-2 ${headerActions || tabs.length > 0 ? "" : "pointer-events-none"}`}
+      >
         {headerActions ? (
           <div className="flex min-w-0 items-center gap-2">
             <h1 className="truncate text-sm font-medium">

@@ -96,6 +96,27 @@ export const OAuthErrorEventSchema = z
   })
   .strict();
 
+export const DesktopConfigSchema = z
+  .object({
+    stage: z.string().min(1),
+    configured: z.boolean(),
+    missing: z.array(z.string().min(1)),
+    oauthRedirectUri: z.string().min(1),
+    endpoints: z
+      .object({
+        apiUrl: z.string().nullable(),
+        graphqlHttpUrl: z.string().nullable(),
+        graphqlUrl: z.string().nullable(),
+        graphqlWsUrl: z.string().nullable(),
+        cognitoDomain: z.string().nullable(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const GetDesktopConfigRequestSchema = EmptyRequestSchema;
+export const GetDesktopConfigResponseSchema = DesktopConfigSchema;
+
 export const UpdateStatusSchema = z.enum([
   "disabled",
   "checking",
@@ -222,6 +243,10 @@ export const ChannelSchemas = {
     request: ConsumePendingOAuthRequestSchema,
     response: ConsumePendingOAuthResponseSchema,
   },
+  getDesktopConfig: {
+    request: GetDesktopConfigRequestSchema,
+    response: GetDesktopConfigResponseSchema,
+  },
   getUpdateState: {
     request: GetUpdateStateRequestSchema,
     response: GetUpdateStateResponseSchema,
@@ -260,6 +285,7 @@ export type OAuthSuccessCallback = z.infer<typeof OAuthSuccessCallbackSchema>;
 export type OAuthFailureCallback = z.infer<typeof OAuthFailureCallbackSchema>;
 export type PendingOAuthCallback = z.infer<typeof PendingOAuthCallbackSchema>;
 export type OAuthErrorEvent = z.infer<typeof OAuthErrorEventSchema>;
+export type DesktopConfig = z.infer<typeof DesktopConfigSchema>;
 export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
 export type UpdateArchMetadata = z.infer<typeof UpdateArchMetadataSchema>;
 export type UpdateState = z.infer<typeof UpdateStateSchema>;

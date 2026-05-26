@@ -28,6 +28,9 @@ export function resolveDeepLinkScheme(
   stage: string | null | undefined,
 ): DeepLinkScheme {
   const normalized = (stage ?? "").trim().toLowerCase();
+  if (DEEP_LINK_SCHEMES.includes(normalized as DeepLinkScheme)) {
+    return normalized as DeepLinkScheme;
+  }
   if (normalized === "canary") return "thinkwork-canary";
   if (
     normalized === "prod" ||

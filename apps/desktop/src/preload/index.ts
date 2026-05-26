@@ -6,6 +6,7 @@ import {
   CONSUME_PENDING_OAUTH_CHANNEL,
   DEEP_LINK_EVENT_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
+  GET_DESKTOP_CONFIG_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
@@ -20,6 +21,7 @@ import {
   UPDATE_STATE_EVENT_CHANNEL,
   UPDATE_TELEMETRY_EVENT_CHANNEL,
   DeepLinkEventSchema,
+  GetDesktopConfigResponseSchema,
   GetSessionTokensResponseSchema,
   GetUpdateStateResponseSchema,
   ConsumePendingOAuthResponseSchema,
@@ -118,6 +120,11 @@ const bridge = {
     ipcRenderer.on(OAUTH_ERROR_EVENT_CHANNEL, wrappedListener);
     return () =>
       ipcRenderer.removeListener(OAUTH_ERROR_EVENT_CHANNEL, wrappedListener);
+  },
+  async getDesktopConfig() {
+    return GetDesktopConfigResponseSchema.parse(
+      await ipcRenderer.invoke(GET_DESKTOP_CONFIG_CHANNEL),
+    );
   },
   async getUpdateState() {
     return GetUpdateStateResponseSchema.parse(

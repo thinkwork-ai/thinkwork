@@ -37,6 +37,9 @@ function loadSpacesEnv(mode: string): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("VITE_") && value) env[key] = value;
   }
+  if (process.env.THINKWORK_DESKTOP_SCHEME) {
+    env.THINKWORK_DESKTOP_SCHEME = process.env.THINKWORK_DESKTOP_SCHEME;
+  }
   return env;
 }
 

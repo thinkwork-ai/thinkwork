@@ -340,6 +340,39 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 
+  it("does not render a previous thread while the route thread is loading", () => {
+    threadData = {
+      thread: {
+        id: "previous-thread",
+        computerId: "computer-1",
+        title: "Previous thread title",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content: "Old thread body",
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="next-thread" />);
+
+    expect(screen.getByText("Loading thread")).toBeTruthy();
+    expect(screen.queryByText("Previous thread title")).toBeNull();
+    expect(screen.queryByText("Old thread body")).toBeNull();
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: "Thread",
+        documentTitle: "Thread · Thread",
+      }),
+    );
+  });
+
   it("passes live AppSync chunks into the thread detail while a turn is running", () => {
     streamingChunks = [{ seq: 1, text: "Streaming through the route" }];
     eventData = {

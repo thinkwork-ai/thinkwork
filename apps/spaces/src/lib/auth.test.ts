@@ -35,6 +35,7 @@ function stubLocation(origin: string): { navigations: string[] } {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   Object.defineProperty(window, "location", {
     configurable: true,
     value: ORIGINAL_LOCATION,
@@ -144,6 +145,69 @@ describe("Cognito token storage", () => {
       tenantId: "tenant-id",
       groups: ["users"],
     });
+  });
+
+  it("refreshes expired federated tokens from the stored refresh token", async () => {
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    const expiredIdToken = makeIdToken({
+      email: "user@example.com",
+      sub: "user-sub",
+      exp: Math.floor(Date.now() / 1000) - 60,
+    });
+    const expiredAccessToken = makeIdToken({
+      exp: Math.floor(Date.now() / 1000) - 60,
+    });
+    const refreshedIdToken = makeIdToken({
+      email: "user@example.com",
+      sub: "user-sub",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const refreshedAccessToken = makeIdToken({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "google-user");
+    window.localStorage.setItem(
+      `${prefix}.google-user.idToken`,
+      expiredIdToken,
+    );
+    window.localStorage.setItem(
+      `${prefix}.google-user.accessToken`,
+      expiredAccessToken,
+    );
+    window.localStorage.setItem(
+      `${prefix}.google-user.refreshToken`,
+      "refresh-token",
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            id_token: refreshedIdToken,
+            access_token: refreshedAccessToken,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    vi.resetModules();
+    const { getIdToken, getAccessToken } = await import("./auth");
+
+    await expect(getIdToken()).resolves.toBe(refreshedIdToken);
+    await expect(getAccessToken()).resolves.toBe(refreshedAccessToken);
+    expect(window.localStorage.getItem(`${prefix}.google-user.idToken`)).toBe(
+      refreshedIdToken,
+    );
+    expect(
+      window.localStorage.getItem(`${prefix}.google-user.accessToken`),
+    ).toBe(refreshedAccessToken);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/token",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(URLSearchParams),
+      }),
+    );
   });
 });
 

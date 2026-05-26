@@ -12,6 +12,7 @@ import type { ICognitoStorage } from "../../src/main/cognito-storage";
 const env = {
   nodeEnv: "test",
   stage: "dev",
+  deepLinkScheme: null,
   rendererUrl: null,
   apiUrl: "https://api.example.test",
   graphqlHttpUrl: "https://api.example.test/graphql",
@@ -106,6 +107,25 @@ describe("DesktopOAuthController", () => {
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(url.searchParams.get("state")).toBe(result.state);
+  });
+
+  it("prefers the packaged desktop scheme for canary builds pointed at dev", async () => {
+    const openExternal = vi.fn(async () => undefined);
+    const controller = createController({
+      env: {
+        ...env,
+        stage: "dev",
+        deepLinkScheme: "thinkwork-canary",
+      },
+      shell: { openExternal },
+    });
+
+    const result = await controller.startOAuth();
+    const url = new URL(result.url);
+
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "thinkwork-canary://oauth/callback",
+    );
   });
 
   it("exchanges a matching callback and writes Cognito keys by token username", async () => {
