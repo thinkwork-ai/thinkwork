@@ -170,9 +170,34 @@ describe("extractCustomerOnboardingChatUpdate", () => {
       {
         title: "Confirm Tank Certification",
         note: "Add a new task to the thread: Confirm Tank Certification",
+        assigneeDisplay: null,
       },
     ]);
     expect(result.taskRemovals).toEqual([]);
+  });
+
+  it("extracts short new-task commands and separates assignee language", () => {
+    const shorthand = extractCustomerOnboardingChatUpdate(
+      "New task: Get Tank Certifications",
+    );
+    const assigned = extractCustomerOnboardingChatUpdate(
+      "add a new task: Get Tank Certifications, @Rebecca Odom will handle that task",
+    );
+
+    expect(shorthand.taskAdditions).toEqual([
+      {
+        title: "Get Tank Certifications",
+        note: "New task: Get Tank Certifications",
+        assigneeDisplay: null,
+      },
+    ]);
+    expect(assigned.taskAdditions).toEqual([
+      {
+        title: "Get Tank Certifications",
+        note: "add a new task: Get Tank Certifications, @Rebecca Odom will handle that task",
+        assigneeDisplay: "Rebecca Odom",
+      },
+    ]);
   });
 
   it("extracts checklist task removals by custom title and known task alias", () => {

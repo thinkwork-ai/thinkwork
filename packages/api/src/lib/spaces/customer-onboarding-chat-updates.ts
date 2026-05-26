@@ -213,6 +213,7 @@ export async function applyCustomerOnboardingChatUpdate(
             required: true,
             sync_status: "synced",
             last_synced_at: now,
+            assignee_display: addition.assigneeDisplay,
             metadata: restoredMetadata,
             updated_at: now,
           })
@@ -237,7 +238,7 @@ export async function applyCustomerOnboardingChatUpdate(
           title: addition.title,
           required: true,
           role_key: null,
-          assignee_display: null,
+          assignee_display: addition.assigneeDisplay,
           assignee_external_id: null,
           status: "todo",
           blocked: false,
@@ -273,6 +274,7 @@ export async function applyCustomerOnboardingChatUpdate(
           source: "customer_onboarding_chat_update",
           checklistItemKey,
           customChecklistTask: true,
+          assigneeDisplay: addition.assigneeDisplay,
         },
         occurred_at: now,
       });
@@ -541,6 +543,7 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
   taskAdditions: Array<{
     title: string;
     note: string;
+    assigneeDisplay: string | null;
   }>;
   taskRemovals: Array<{
     title: string;
@@ -642,7 +645,10 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     string,
     { key: string; assigneeDisplay: string; note: string }
   >();
-  const taskAdditions = new Map<string, { title: string; note: string }>();
+  const taskAdditions = new Map<
+    string,
+    { title: string; note: string; assigneeDisplay: string | null }
+  >();
   const taskRemovals = new Map<
     string,
     { title: string; key: string | null; note: string }
@@ -653,6 +659,7 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
       taskAdditions.set(normalizeTaskTitleForMatch(taskAdditionTitle), {
         title: taskAdditionTitle,
         note: segment,
+        assigneeDisplay: assignmentDisplayFromSegment(segment),
       });
       continue;
     }
@@ -820,7 +827,7 @@ function buildUpdatedThreadMetadata(input: {
 function taskAdditionTitleFromSegment(segment: string): string | null {
   if (!ADD_TASK_WORDS.test(segment)) return null;
   const patterns = [
-    /\b(?:add|create)\s+(?:a\s+)?(?:new\s+)?(?:task|checklist item|todo|to-do)(?:\s+(?:to|for|on)\s+(?:the\s+)?(?:thread|checklist|tasklist|task list))?\s*(?::|-|called|named)?\s*(.+)$/i,
+    /\b(?:add|create|new)\s+(?:a\s+)?(?:new\s+)?(?:task|checklist item|todo|to-do)(?:\s+(?:to|for|on)\s+(?:the\s+)?(?:thread|checklist|tasklist|task list))?\s*(?::|-|called|named)?\s*(.+)$/i,
     /\b(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/i,
     /\b(?:we\s+need|need)\s+(?:a\s+)?(?:task|checklist item)\s+(?:for|to)\s+(.+)$/i,
   ];
@@ -871,6 +878,10 @@ function cleanTaskMutationTitle(value: string | undefined): string | null {
   const title = value
     ?.replace(
       /\bfrom\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/gi,
+      "",
+    )
+    .replace(
+      /\s*,?\s*@[^,.;:]+?\s+\b(?:will|is|was|can|should|shall|would|could|going|handling|handle|handles|handled|assigned|owns?|responsible|taking|take)\b.*$/i,
       "",
     )
     .replace(/\b(?:task|checklist item|todo|to-do)$/i, "")
