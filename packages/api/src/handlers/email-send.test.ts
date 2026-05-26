@@ -99,6 +99,10 @@ describe("email-send direct routine invocation", () => {
             Data: "Current weather for Austin: clear.",
             Charset: "UTF-8",
           },
+          Html: {
+            Data: expect.stringContaining("Current weather for Austin: clear."),
+            Charset: "UTF-8",
+          },
         },
       },
     });
@@ -183,6 +187,56 @@ describe("email-send HTTP agent invocation", () => {
       ses_message_id: "ses-space-1",
       tenant_id: tenantId,
     });
+  });
+
+  it("renders agent markdown as multipart html email", async () => {
+    selectRows.push(
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
+      [{ enabled: true, config: {} }],
+    );
+
+    const result = await handler(
+      emailSendEvent({
+        agentId,
+        to: "recipient@example.com",
+        subject: "Thread status",
+        body: [
+          "Hi Eric,",
+          "",
+          "**OVERALL PROGRESS:** 20%",
+          "",
+          "| Task | Status |",
+          "|---|---|",
+          "| Check Dun & Bradstreet information | ✅ Completed |",
+        ].join("\n"),
+        threadId: "thread-finance",
+        spaceTenantSlug: "acme",
+        spaceSlug: "finance",
+      }),
+    );
+
+    expect(result).toMatchObject({ statusCode: 200 });
+    const command = mockSesSend.mock.calls[0][0];
+    const rawMessage = Buffer.from(command.input.RawMessage.Data).toString(
+      "utf8",
+    );
+    expect(rawMessage).toContain("Content-Type: multipart/alternative;");
+    expect(rawMessage).toContain("Content-Type: text/plain; charset=UTF-8");
+    expect(rawMessage).toContain("Content-Type: text/html; charset=UTF-8");
+    expect(rawMessage).toContain("<strong>OVERALL PROGRESS:</strong>");
+    expect(rawMessage).toContain("<table");
+    expect(rawMessage).toContain("<td");
+    const htmlPart = rawMessage.split(
+      "Content-Type: text/html; charset=UTF-8",
+    )[1];
+    expect(htmlPart).not.toContain("|---|---|");
   });
 
   it("does not require a legacy email_channel capability row", async () => {

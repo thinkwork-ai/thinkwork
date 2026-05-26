@@ -20,6 +20,7 @@ import {
 import { generateReplyToken } from "../lib/email-tokens.js";
 import { deriveSpaceAddress } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
+import { renderForEmail } from "../lib/channel-rendering/email-renderer.js";
 
 const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 
@@ -243,11 +244,6 @@ export async function handler(
     rawHeaders.push(`References: ${replyId}`);
   }
 
-  rawHeaders.push(
-    `Content-Type: text/plain; charset=UTF-8`,
-    `Content-Transfer-Encoding: 7bit`,
-  );
-
   // Build full body: agent reply + quoted original thread
   let fullBody = req.body;
   if (req.inReplyTo && req.quotedBody) {
@@ -259,7 +255,28 @@ export async function handler(
     fullBody += `\n\nOn ${new Date().toLocaleDateString("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}, ${from} wrote:\n${quoted}`;
   }
 
-  const rawMessage = [...rawHeaders, "", fullBody].join("\r\n");
+  const rendered = renderForEmail(fullBody);
+  const boundary = `thinkwork-alt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  rawHeaders.push(
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+  );
+
+  const rawMessage = [
+    ...rawHeaders,
+    "",
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=UTF-8`,
+    `Content-Transfer-Encoding: 8bit`,
+    "",
+    rendered.text,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: 8bit`,
+    "",
+    rendered.html,
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
 
   // Send via SES
   try {
@@ -346,10 +363,16 @@ async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
 
   const { SESClient, SendEmailCommand } = await import("@aws-sdk/client-ses");
   const ses = new SESClient({});
+  const rendered = req.bodyFormat === "markdown" ? renderForEmail(body) : null;
   const messageBody =
     req.bodyFormat === "html"
       ? { Html: { Data: body, Charset: "UTF-8" } }
-      : { Text: { Data: body, Charset: "UTF-8" } };
+      : rendered
+        ? {
+            Text: { Data: rendered.text, Charset: "UTF-8" },
+            Html: { Data: rendered.html, Charset: "UTF-8" },
+          }
+        : { Text: { Data: body, Charset: "UTF-8" } };
 
   const result = await ses.send(
     new SendEmailCommand({
