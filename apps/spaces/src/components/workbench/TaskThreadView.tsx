@@ -325,7 +325,7 @@ export function TaskThreadView({
             data-testid="thread-conversation-content"
             className={cn(
               "w-full gap-0 px-4 pt-10 sm:px-6",
-              infoPanelOpen && "md:pr-[332px]",
+              infoPanelOpen && "md:pr-[340px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
           >
@@ -384,7 +384,7 @@ export function TaskThreadView({
           data-testid="follow-up-composer-dock"
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6",
-            infoPanelOpen && "md:pr-[332px]",
+            infoPanelOpen && "md:pr-[340px]",
           )}
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
@@ -509,7 +509,7 @@ function ThreadInfoPanel({
 
   return (
     <aside
-      className="absolute right-4 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
+      className="absolute right-6 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >
@@ -674,36 +674,36 @@ function ThreadInfoChecklistRow({
   return (
     <button
       type="button"
-      className="block w-full rounded-md px-0.5 py-1.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+      className="block w-full rounded-md text-left text-sm transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       onClick={() => onTaskPrompt(task)}
       aria-label={`Update ${task.title}`}
     >
       <div className="flex items-start gap-2">
         {isComplete ? (
           <IconCircleCheckFilled
-            className="mt-0.5 size-3.5 shrink-0 text-white/45"
+            className="mt-1 size-3.5 shrink-0 text-white/55"
             aria-hidden
             data-testid="checklist-icon-completed"
           />
         ) : isBlocked ? (
           <AlertCircle
-            className="mt-0.5 size-3.5 shrink-0 text-red-300"
+            className="mt-1 size-3.5 shrink-0 text-red-300"
             aria-hidden
             data-testid="checklist-icon-blocked"
           />
         ) : (
           <CircleDashed
-            className="mt-0.5 size-3.5 shrink-0 text-white/45"
+            className="mt-1 size-3.5 shrink-0 text-white/45"
             aria-hidden
             data-testid="checklist-icon-todo"
           />
         )}
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-xs font-medium leading-snug text-white/80">
-            {task.title}
-          </p>
+          <p className="line-clamp-2 text-white/80">{task.title}</p>
           {hasSublabel ? (
-            <p className="mt-0.5 truncate text-[10px] text-white/45">{sublabel}</p>
+            <p className="mt-0.5 truncate text-[10px] text-white/55">
+              {sublabel}
+            </p>
           ) : null}
         </div>
       </div>
