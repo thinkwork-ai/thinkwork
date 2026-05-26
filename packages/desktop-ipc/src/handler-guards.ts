@@ -22,12 +22,34 @@ export function assertSafeSenderFrame(
 ): void {
   const url = event.senderFrame?.url;
   const allowedPrefixes =
-    options.allowedUrlPrefixes ?? DEFAULT_ALLOWED_SENDER_URL_PREFIXES;
+    options.allowedUrlPrefixes ?? defaultAllowedSenderUrlPrefixes();
 
   if (!url || !allowedPrefixes.some((prefix) => url.startsWith(prefix))) {
     throw new Error(
       `Rejected IPC call from untrusted sender frame: ${url ?? "unknown"}`,
     );
+  }
+}
+
+function defaultAllowedSenderUrlPrefixes(): readonly string[] {
+  const rendererUrl = currentRendererUrlPrefix();
+  if (!rendererUrl) return DEFAULT_ALLOWED_SENDER_URL_PREFIXES;
+
+  return [...DEFAULT_ALLOWED_SENDER_URL_PREFIXES, rendererUrl];
+}
+
+function currentRendererUrlPrefix(): string | null {
+  const rendererUrl =
+    typeof process === "undefined"
+      ? undefined
+      : process.env.ELECTRON_RENDERER_URL;
+  if (!rendererUrl) return null;
+
+  try {
+    const url = new URL(rendererUrl);
+    return `${url.origin}/`;
+  } catch {
+    return null;
   }
 }
 

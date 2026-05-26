@@ -25,6 +25,10 @@ export default defineConfig(({ mode }) => {
     (mode === "development"
       ? "http://localhost:5175/iframe-shell.html"
       : "https://sandbox.thinkwork.ai/iframe-shell.html");
+  const devServerPort = Number.parseInt(
+    process.env.THINKWORK_SPACES_DEV_PORT || env.VITE_SPACES_DEV_PORT || "5174",
+    10,
+  );
 
   return {
     plugins: [
@@ -49,7 +53,10 @@ export default defineConfig(({ mode }) => {
       // The host bundle does not need it.
     },
     server: {
-      port: 5174,
+      port:
+        Number.isFinite(devServerPort) && devServerPort > 0
+          ? devServerPort
+          : 5174,
       strictPort: true,
     },
   };

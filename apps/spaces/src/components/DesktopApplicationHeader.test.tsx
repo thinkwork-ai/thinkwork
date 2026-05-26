@@ -1,4 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const pageHeaderMock = vi.hoisted(() => ({
@@ -87,7 +93,7 @@ describe("DesktopApplicationHeader", () => {
     expect(screen.queryByText("ThinkWork Spaces")).toBeNull();
   });
 
-  it("removes the content header when the route hides the top bar and the sidebar is open", () => {
+  it("keeps a hidden drag region when the route hides the top bar and the sidebar is open", () => {
     pageHeaderMock.actions = {
       title: "New thread",
       hideTopBar: true,
@@ -96,16 +102,22 @@ describe("DesktopApplicationHeader", () => {
 
     const { container } = render(<DesktopApplicationHeader />);
 
-    expect(container.firstElementChild).toBeNull();
+    expect(container.firstElementChild?.className).toContain(
+      "desktop-app-header",
+    );
+    expect(screen.getByTestId("desktop-hidden-drag-region")).toBeTruthy();
     expect(screen.queryByText("Toggle Sidebar")).toBeNull();
     expect(screen.queryByText("New thread")).toBeNull();
     expect(screen.queryByText("Hidden action")).toBeNull();
   });
 
-  it("does not add an empty content header on routes without header actions", () => {
+  it("adds only the hidden drag region on routes without header actions", () => {
     const { container } = render(<DesktopApplicationHeader />);
 
-    expect(container.firstElementChild).toBeNull();
+    expect(container.firstElementChild?.className).toContain(
+      "desktop-app-header",
+    );
+    expect(screen.getByTestId("desktop-hidden-drag-region")).toBeTruthy();
   });
 
   it("moves chrome controls onto the content header when the sidebar is fully collapsed", () => {
@@ -115,5 +127,58 @@ describe("DesktopApplicationHeader", () => {
 
     expect(container.firstElementChild?.className).toContain("pl-20");
     expect(screen.getByText("Toggle Sidebar")).toBeTruthy();
+  });
+
+  it("renders muted desktop navigation controls", () => {
+    sidebarMock.open = false;
+
+    render(<DesktopApplicationHeader />);
+
+    expect(screen.getByText("Toggle Sidebar").className).toContain(
+      "text-muted-foreground/70",
+    );
+    expect(
+      screen.getByRole("button", { name: "Refresh thread" }).className,
+    ).toContain("text-muted-foreground/70");
+    expect(screen.getByRole("button", { name: "Back" }).className).toContain(
+      "text-muted-foreground/70",
+    );
+  });
+
+  it("emits a desktop refresh event from the navigation controls", () => {
+    const onRefresh = vi.fn();
+    sidebarMock.open = false;
+    window.addEventListener("thinkwork:desktop-refresh", onRefresh);
+
+    render(<DesktopApplicationHeader />);
+    screen.getByRole("button", { name: "Refresh thread" }).click();
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    window.removeEventListener("thinkwork:desktop-refresh", onRefresh);
+  });
+
+  it("spins the refresh icon until the active route completes the refresh", async () => {
+    const onRefresh = vi.fn((event: Event) => event.preventDefault());
+    sidebarMock.open = false;
+    window.addEventListener("thinkwork:desktop-refresh", onRefresh);
+
+    render(<DesktopApplicationHeader />);
+    const refreshButton = screen.getByRole("button", {
+      name: "Refresh thread",
+    });
+
+    fireEvent.click(refreshButton);
+
+    expect(refreshButton.querySelector("svg")?.getAttribute("class")).toContain(
+      "animate-spin",
+    );
+    fireEvent(window, new CustomEvent("thinkwork:desktop-refresh-complete"));
+
+    await waitFor(() => {
+      expect(
+        refreshButton.querySelector("svg")?.getAttribute("class"),
+      ).not.toContain("animate-spin");
+    });
+    window.removeEventListener("thinkwork:desktop-refresh", onRefresh);
   });
 });

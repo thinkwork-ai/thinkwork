@@ -94,6 +94,7 @@ describe("ThreadDetailActions (dropdown trigger)", () => {
     );
     const trigger = screen.getByTestId("thread-actions-trigger");
     expect(trigger.getAttribute("aria-label")).toBe("Thread actions");
+    expect(trigger.className).toContain("text-muted-foreground/70");
   });
 });
 

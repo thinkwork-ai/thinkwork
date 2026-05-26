@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +40,11 @@ import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { notifyAgentCompletion } from "@/lib/desktop-notifications";
+import {
+  desktopToolbarActiveButtonClassName,
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
 
 interface SpacesThreadDetailRouteProps {
   threadId: string;
@@ -194,6 +199,11 @@ export function SpacesThreadDetailRoute({
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
   );
+  const [manualRefreshStartedAt, setManualRefreshStartedAt] = useState<
+    number | null
+  >(null);
+  const [manualRefreshObservedFetching, setManualRefreshObservedFetching] =
+    useState(false);
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<ThreadResult>({
     query: ComputerThreadQuery,
     variables: { id: threadId, messageLimit: 100 },
@@ -224,34 +234,38 @@ export function SpacesThreadDetailRoute({
       })),
     [attachedData?.artifacts],
   );
-  const [{ data: mentionTargetsData }, reexecuteMentionTargetsQuery] =
-    useQuery<MentionTargetsResult>({
-      query: ThreadMentionTargetsQuery,
-      variables: { threadId },
-      pause: !threadId,
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: mentionTargetsData, fetching: mentionTargetsFetching },
+    reexecuteMentionTargetsQuery,
+  ] = useQuery<MentionTargetsResult>({
+    query: ThreadMentionTargetsQuery,
+    variables: { threadId },
+    pause: !threadId,
+    requestPolicy: "cache-and-network",
+  });
 
   const computerId = routeThread?.computerId ?? null;
-  const [{ data: tasksData }, reexecuteTasksQuery] =
+  const [{ data: tasksData, fetching: tasksFetching }, reexecuteTasksQuery] =
     useQuery<ThreadTasksResult>({
       query: ComputerThreadTasksQuery,
       variables: { computerId, threadId, limit: 6 },
       pause: !computerId,
     });
-  const [{ data: eventsData }, reexecuteEventsQuery] =
+  const [{ data: eventsData, fetching: eventsFetching }, reexecuteEventsQuery] =
     useQuery<ThreadEventsResult>({
       query: ComputerEventsQuery,
       variables: { computerId, limit: 100 },
       pause: !computerId,
     });
-  const [{ data: runbookRunsData }, reexecuteRunbookRunsQuery] =
-    useQuery<RunbookRunsResult>({
-      query: RunbookRunsQuery,
-      variables: { computerId, threadId, limit: 5 },
-      pause: !computerId,
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: runbookRunsData, fetching: runbookRunsFetching },
+    reexecuteRunbookRunsQuery,
+  ] = useQuery<RunbookRunsResult>({
+    query: RunbookRunsQuery,
+    variables: { computerId, threadId, limit: 5 },
+    pause: !computerId,
+    requestPolicy: "cache-and-network",
+  });
   const [
     {
       data: linkedTasksData,
@@ -445,6 +459,33 @@ export function SpacesThreadDetailRoute({
   const hasActiveRunbookQueue = runbookQueues.some((queue) =>
     isActiveRunbookQueue(queue.status),
   );
+  const isManualRefreshFetching =
+    fetching ||
+    mentionTargetsFetching ||
+    tasksFetching ||
+    eventsFetching ||
+    runbookRunsFetching ||
+    linkedTasksFetching ||
+    progressMarkdownFetching;
+  const handleRefreshThread = useCallback(() => {
+    setManualRefreshStartedAt(Date.now());
+    setManualRefreshObservedFetching(false);
+    reexecuteQuery({ requestPolicy: "network-only" });
+    reexecuteTasksQuery({ requestPolicy: "network-only" });
+    reexecuteEventsQuery({ requestPolicy: "network-only" });
+    reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+    reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
+    reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+    reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
+  }, [
+    reexecuteEventsQuery,
+    reexecuteLinkedTasksQuery,
+    reexecuteMentionTargetsQuery,
+    reexecuteProgressMarkdownQuery,
+    reexecuteQuery,
+    reexecuteRunbookRunsQuery,
+    reexecuteTasksQuery,
+  ]);
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
   const progressChecklistTasks = useMemo(
@@ -476,6 +517,46 @@ export function SpacesThreadDetailRoute({
       resetStreamingChunks();
     }
   }, [hasDurableAssistant, resetStreamingChunks]);
+
+  useEffect(() => {
+    function handleDesktopRefresh(event: Event) {
+      event.preventDefault();
+      handleRefreshThread();
+    }
+
+    window.addEventListener("thinkwork:desktop-refresh", handleDesktopRefresh);
+    return () =>
+      window.removeEventListener(
+        "thinkwork:desktop-refresh",
+        handleDesktopRefresh,
+      );
+  }, [handleRefreshThread]);
+
+  useEffect(() => {
+    if (manualRefreshStartedAt === null) return;
+    if (isManualRefreshFetching) {
+      setManualRefreshObservedFetching(true);
+      return;
+    }
+
+    const minimumSpinMs = manualRefreshObservedFetching ? 250 : 400;
+    const elapsedMs = Date.now() - manualRefreshStartedAt;
+    const timeout = window.setTimeout(
+      () => {
+        window.dispatchEvent(
+          new CustomEvent("thinkwork:desktop-refresh-complete"),
+        );
+        setManualRefreshStartedAt(null);
+        setManualRefreshObservedFetching(false);
+      },
+      Math.max(0, minimumSpinMs - elapsedMs),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [
+    isManualRefreshFetching,
+    manualRefreshObservedFetching,
+    manualRefreshStartedAt,
+  ]);
 
   useEffect(() => {
     const previous = completionNotificationRef.current;
@@ -608,24 +689,30 @@ export function SpacesThreadDetailRoute({
     // in-page header keeps the bare thread title — no need to repeat
     // "Thread" inside the page the user is already on.
     documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
+    titleTrailing: (
+      <ThreadDetailActions
+        threadId={threadId}
+        threadTitle={threadTitle}
+        attachedArtifacts={attachedArtifacts}
+        onDeleted={() => {
+          // ChatSidebar owns post-delete navigation because it has the
+          // actual visible, filtered thread order the user is looking at.
+        }}
+      />
+    ),
     action: (
-      <div className="flex items-center gap-2">
-        <ThreadDetailActions
-          threadId={threadId}
-          threadTitle={threadTitle}
-          attachedArtifacts={attachedArtifacts}
-          onDeleted={() => {
-            // ChatSidebar owns post-delete navigation because it has the
-            // actual visible, filtered thread order the user is looking at.
-          }}
-        />
+      <div className={`flex items-center ${desktopToolbarGapClassName}`}>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
           aria-label={threadInfoOpen ? "Close thread info" : "Open thread info"}
           title={threadInfoOpen ? "Close thread info" : "Open thread info"}
-          className={threadInfoOpen ? undefined : "text-muted-foreground"}
+          className={
+            threadInfoOpen
+              ? desktopToolbarActiveButtonClassName
+              : desktopToolbarButtonClassName
+          }
           onClick={() => {
             const nextOpen = !threadInfoOpen;
             setThreadInfoOpen(nextOpen);
@@ -653,7 +740,9 @@ export function SpacesThreadDetailRoute({
                 : "Maximize artifact panel"
             }
             className={
-              artifactFullscreen ? "text-primary" : "text-muted-foreground"
+              artifactFullscreen
+                ? desktopToolbarActiveButtonClassName
+                : desktopToolbarButtonClassName
             }
             onClick={() => {
               setArtifactFullscreen((current) => !current);
@@ -682,7 +771,9 @@ export function SpacesThreadDetailRoute({
                 : "Open artifact side panel"
             }
             className={
-              artifactPanelOpen ? "text-primary" : "text-muted-foreground"
+              artifactPanelOpen
+                ? desktopToolbarActiveButtonClassName
+                : desktopToolbarButtonClassName
             }
             onClick={() => {
               const nextOpen = !artifactPanelOpen;
