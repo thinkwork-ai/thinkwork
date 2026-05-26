@@ -390,7 +390,7 @@ describe("workspace editor target capabilities", () => {
     expect(editorSource).toMatch(/requestOpenWorkspaceFile\(defaultOpenFile\)/);
     expect(editorSource).not.toMatch(/files\[0\]/);
     expect(agentWorkspaceSource).toContain('defaultOpenFile="AGENTS.md"');
-    expect(spaceChromeSource).toContain('defaultOpenFile="SPACE.md"');
+    expect(spaceChromeSource).toContain('defaultOpenFile="CONTEXT.md"');
     expect(userRouteSource).toContain('defaultOpenFile="USER.md"');
     expect(userKnowledgeSource).not.toContain("defaultOpenFile");
   });

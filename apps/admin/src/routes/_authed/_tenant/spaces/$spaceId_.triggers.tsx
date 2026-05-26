@@ -3,6 +3,7 @@ import {
   SpaceDetailChrome,
   SpaceTriggersAdd,
   SpaceTriggersPanel,
+  SpaceTriggersProvider,
 } from "@/components/spaces/SpaceDetailChrome";
 
 export const Route = createFileRoute(
@@ -15,14 +16,18 @@ function SpaceTriggersRoute() {
   const { spaceId } = Route.useParams();
 
   return (
-    <SpaceDetailChrome
-      spaceId={spaceId}
-      activeTab="triggers"
-      headerActions={() => <SpaceTriggersAdd />}
-    >
-      {({ space, refreshSpace }) => (
-        <SpaceTriggersPanel space={space} refreshSpace={refreshSpace} />
-      )}
-    </SpaceDetailChrome>
+    <SpaceTriggersProvider spaceId={spaceId}>
+      <SpaceDetailChrome
+        spaceId={spaceId}
+        activeTab="triggers"
+        headerActions={({ space, refreshSpace }) => (
+          <SpaceTriggersAdd space={space} refreshSpace={refreshSpace} />
+        )}
+      >
+        {({ space, refreshSpace }) => (
+          <SpaceTriggersPanel space={space} refreshSpace={refreshSpace} />
+        )}
+      </SpaceDetailChrome>
+    </SpaceTriggersProvider>
   );
 }

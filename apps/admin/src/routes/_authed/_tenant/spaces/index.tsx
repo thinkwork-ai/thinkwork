@@ -176,7 +176,8 @@ function SpacesPage() {
           data={rows}
           filterValue={search}
           pageSize={20}
-          scrollable
+          tableClassName="table-fixed"
+          allowHorizontalScroll={false}
           onRowClick={(row) =>
             navigate({
               to: "/spaces/$spaceId/workspace",

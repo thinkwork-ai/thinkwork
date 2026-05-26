@@ -157,7 +157,7 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).toContain('header: "Description"');
     expect(detailChromeSource).toContain('header: "Status"');
     expect(detailChromeSource).toContain('header: "Last Run"');
-    expect(detailChromeSource).toContain('header: "Next Run / Last Delivery"');
+    expect(detailChromeSource).not.toContain('header: "Next Run / Last Delivery"');
     expect(detailChromeSource).not.toContain('header: "Schedule / Trigger"');
     expect(detailChromeSource).not.toContain("Add Schedule");
     expect(detailChromeSource).not.toContain("Add Webhook");
