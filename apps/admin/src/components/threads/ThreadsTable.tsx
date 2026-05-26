@@ -107,6 +107,15 @@ export interface ThreadsTableProps {
   scope?: "tenant" | "computer";
 }
 
+const COMPACT_COLUMN_WIDTHS = {
+  space: 116,
+  runtime: 82,
+  model: 124,
+  user: 128,
+  lastActivity: 120,
+  inbox: 28,
+} as const;
+
 export function ThreadsTable({
   items,
   inboxStatusFor,
@@ -160,11 +169,11 @@ export function ThreadsTable({
       {
         id: "space",
         header: () => <div className="text-center">Space</div>,
-        size: 180,
+        size: COMPACT_COLUMN_WIDTHS.space,
         cell: ({ row }) => {
           const space = row.original.space;
           return (
-            <div className="flex h-10 min-w-0 items-center justify-center px-2">
+            <div className="flex h-10 min-w-0 items-center justify-center">
               {space ? (
                 <Badge
                   variant="outline"
@@ -183,11 +192,11 @@ export function ThreadsTable({
       {
         id: "runtime",
         header: () => <div className="text-center">Runtime</div>,
-        size: 110,
+        size: COMPACT_COLUMN_WIDTHS.runtime,
         cell: ({ row }) => {
           const runtimeType = row.original.lastRuntimeType;
           return (
-            <div className="flex h-10 items-center justify-center px-2">
+            <div className="flex h-10 items-center justify-center">
               {runtimeType ? (
                 <Badge
                   variant="secondary"
@@ -206,14 +215,14 @@ export function ThreadsTable({
       {
         id: "model",
         header: () => <div className="text-center">Model</div>,
-        size: 190,
+        size: COMPACT_COLUMN_WIDTHS.model,
         cell: ({ row }) => {
           const model = row.original.lastModel;
           const modelDisplayName =
             row.original.lastModelDisplayName ??
             (model ? formatModelId(model) : null);
           return (
-            <div className="flex h-10 items-center justify-center px-2">
+            <div className="flex h-10 items-center justify-center">
               {model ? (
                 <Badge
                   variant="outline"
@@ -232,12 +241,12 @@ export function ThreadsTable({
       {
         id: "user",
         header: () => <div className="text-center">User</div>,
-        size: 120,
+        size: COMPACT_COLUMN_WIDTHS.user,
         cell: ({ row }) => {
           const label = threadUserLabel(row.original);
           return (
             <div
-              className="h-10 whitespace-nowrap px-2 text-center text-sm leading-10 text-muted-foreground"
+              className="h-10 whitespace-nowrap text-center text-sm leading-10 text-muted-foreground"
               title={label}
             >
               {row.original.userId || row.original.user ? label : "—"}
@@ -248,9 +257,9 @@ export function ThreadsTable({
       {
         id: "lastActivity",
         header: () => <div className="text-center">Last Activity</div>,
-        size: 105,
+        size: COMPACT_COLUMN_WIDTHS.lastActivity,
         cell: ({ row }) => (
-          <div className="h-10 truncate px-2 text-center text-sm leading-10 text-muted-foreground">
+          <div className="h-10 truncate text-center text-sm leading-10 text-muted-foreground">
             {formatThreadActivityTime(
               row.original.lastActivityAt,
               row.original.updatedAt,
@@ -261,7 +270,7 @@ export function ThreadsTable({
       {
         id: "inbox",
         header: "",
-        size: 34,
+        size: COMPACT_COLUMN_WIDTHS.inbox,
         cell: ({ row }) => (
           <div className="flex h-10 items-center justify-center">
             <InboxIndicator status={inboxStatusFor(row.original)} />
@@ -279,6 +288,7 @@ export function ThreadsTable({
       hideHeader={hideHeader}
       scrollable={scrollable}
       tableClassName="table-fixed"
+      allowHorizontalScroll={false}
       {...(pagination
         ? {
             pageSize: pagination.pageSize,
