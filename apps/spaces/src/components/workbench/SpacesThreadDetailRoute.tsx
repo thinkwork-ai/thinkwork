@@ -919,6 +919,7 @@ function parseProgressMarkdownTasks(
   );
   if (tableStart < 0) return [];
 
+  const subject = extractProgressSubject(lines);
   const tasks: ThreadInfoChecklistTask[] = [];
   for (const line of lines.slice(tableStart + 2)) {
     if (!line.trim().startsWith("|")) break;
@@ -928,7 +929,7 @@ function parseProgressMarkdownTasks(
     if (!title || /^---+$/.test(title)) continue;
     tasks.push({
       id: `progress:${tasks.length}:${title}`,
-      title,
+      title: displayProgressTaskTitle(title, subject),
       status,
       assigneeDisplay: owner || null,
       required: !/^no$/i.test(required),
@@ -939,6 +940,31 @@ function parseProgressMarkdownTasks(
     });
   }
   return tasks;
+}
+
+function extractProgressSubject(lines: string[]): string | null {
+  for (const line of lines) {
+    const goalMatch = line.match(
+      /^Goal:\s*Complete customer onboarding for\s+(.+?)\.?\s*$/i,
+    );
+    if (goalMatch?.[1]) return goalMatch[1].trim();
+
+    const threadMatch = line.match(/^Thread:\s*(.+?)\s+onboarding\s*$/i);
+    if (threadMatch?.[1]) return threadMatch[1].trim();
+  }
+  return null;
+}
+
+function displayProgressTaskTitle(
+  title: string,
+  subject: string | null,
+): string {
+  const trimmed = title.trim();
+  if (!subject) return trimmed;
+  const suffix = ` - ${subject}`;
+  return trimmed.endsWith(suffix)
+    ? trimmed.slice(0, -suffix.length).trim()
+    : trimmed;
 }
 
 function splitMarkdownTableRow(line: string): string[] {

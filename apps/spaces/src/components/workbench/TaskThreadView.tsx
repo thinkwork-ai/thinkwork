@@ -325,7 +325,7 @@ export function TaskThreadView({
             data-testid="thread-conversation-content"
             className={cn(
               "w-full gap-0 px-4 pt-10 sm:px-6",
-              infoPanelOpen && "md:pr-[324px]",
+              infoPanelOpen && "md:pr-[332px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
           >
@@ -382,7 +382,7 @@ export function TaskThreadView({
           data-testid="follow-up-composer-dock"
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6",
-            infoPanelOpen && "md:pr-[324px]",
+            infoPanelOpen && "md:pr-[332px]",
           )}
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
@@ -507,11 +507,11 @@ function ThreadInfoPanel({
 
   return (
     <aside
-      className="absolute right-6 top-4 z-20 hidden max-h-[calc(100vh-8rem)] w-[300px] overflow-y-auto rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 p-5 text-[#ececec] shadow-2xl md:block"
+      className="absolute bottom-4 right-4 top-4 z-20 hidden w-[300px] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:block"
       aria-label="Thread info"
       data-testid="thread-info-panel"
     >
-      <div className="space-y-5">
+      <div className="h-full space-y-5 overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]">
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-white/55">Thread</h2>
           <InfoPanelRow
@@ -696,19 +696,6 @@ function ThreadInfoChecklistRow({
               {task.title}
             </p>
           </div>
-          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] leading-snug text-white/40">
-            <span>{formatInfoStatus(task.status)}</span>
-            {task.required === false ? <span>Optional</span> : null}
-            {task.assigneeDisplay ? <span>{task.assigneeDisplay}</span> : null}
-            {!task.assigneeDisplay && task.roleKey ? (
-              <span>{formatInfoStatus(task.roleKey)}</span>
-            ) : null}
-          </div>
-          {task.notes ? (
-            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/35">
-              {task.notes}
-            </p>
-          ) : null}
         </div>
       </div>
     </button>
