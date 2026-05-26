@@ -25,6 +25,7 @@ import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
   messages,
+  spaces,
   threads,
   users,
   threadTurns,
@@ -427,7 +428,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       );
     }
 
-    const spaceId = await resolveThreadSpaceId({ tenantId, threadId });
+    const spaceContext = await resolveThreadSpaceContext({
+      tenantId,
+      threadId,
+    });
+    const spaceId = spaceContext?.spaceId ?? null;
+    const spaceSlug = spaceContext?.spaceSlug ?? null;
 
     // 2. Resolve agent runtime config (agent + template + tenant + skills +
     //    KBs + MCP + guardrail + sandbox template). Shared with the
@@ -808,10 +814,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         !isAnyEffectivelyBlocked("browser_automation", "browser")
           ? true
           : undefined,
-      turn_context: renderedWorkspace.rendered
+      turn_context: spaceId
         ? {
             spaceId: renderedWorkspace.activeSpace?.id ?? spaceId,
-            spaceSlug: renderedWorkspace.activeSpace?.slug ?? undefined,
+            tenantSlug: tenantSlug || undefined,
+            spaceSlug: renderedWorkspace.activeSpace?.slug ?? spaceSlug,
             renderedWorkspacePrefix,
           }
         : undefined,
@@ -947,10 +954,10 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
   }
 }
 
-async function resolveThreadSpaceId(input: {
+async function resolveThreadSpaceContext(input: {
   tenantId: string;
   threadId: string;
-}): Promise<string | null> {
+}): Promise<{ spaceId: string; spaceSlug: string | null } | null> {
   const [thread] = await db
     .select({ spaceId: threads.space_id })
     .from(threads)
@@ -961,5 +968,14 @@ async function resolveThreadSpaceId(input: {
       ),
     )
     .limit(1);
-  return thread?.spaceId ?? null;
+  if (!thread?.spaceId) return null;
+
+  const [space] = await db
+    .select({ slug: spaces.slug })
+    .from(spaces)
+    .where(
+      and(eq(spaces.tenant_id, input.tenantId), eq(spaces.id, thread.spaceId)),
+    )
+    .limit(1);
+  return { spaceId: thread.spaceId, spaceSlug: space?.slug ?? null };
 }

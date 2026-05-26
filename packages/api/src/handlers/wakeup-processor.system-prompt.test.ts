@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { extractComposedSystemPrompt } from "./wakeup-processor.js";
 
@@ -27,5 +28,19 @@ describe("wakeup processor system prompt capture", () => {
         response: { composed_system_prompt: "" },
       }),
     ).toBeNull();
+  });
+
+  it("passes active Space slugs into wakeup AgentCore payloads", () => {
+    const source = readFileSync(
+      new URL("./wakeup-processor.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("runSpaceSlug");
+    expect(source).toContain("tenantSlug: tenantSlug || undefined");
+    expect(source).toContain(
+      "spaceSlug: renderedWorkspace.activeSpace?.slug ?? runSpaceSlug",
+    );
+    expect(source.indexOf("turn_context: runSpaceId")).toBeGreaterThan(-1);
   });
 });
