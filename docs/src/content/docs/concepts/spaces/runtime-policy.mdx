@@ -1,0 +1,47 @@
+---
+title: Runtime Policy
+description: How Space policy relates to tenant-agent defaults for model, guardrail, budget, paused state, and sandbox behavior.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Runtime policy determines the execution profile for work in a Space. The tenant platform agent carries broad defaults, and a Space can inherit or narrow behavior when the product exposes local controls for that setting.
+
+The common case is inheritance. A Space should only differ from the tenant default when the workroom has a concrete risk, cost, or execution constraint.
+
+## Policy areas
+
+Runtime policy can include:
+
+- Model selection.
+- Guardrail behavior.
+- Budget and paused state.
+- Sandbox behavior.
+- Tool constraints and provenance.
+
+The exact Admin controls may change as the product evolves. The invariant is the same: tenant-agent defaults are broad, and Space policy is local to the workroom.
+
+## Inheritance
+
+When a Space leaves a runtime value empty, it should inherit from the tenant platform agent.
+
+```text
+Space policy
+  -> tenant platform-agent default
+  -> deployment fallback
+```
+
+Use inheritance until the Space has a reason to differ. Copied defaults become stale; empty inherited fields continue to follow the tenant baseline.
+
+<Aside type="caution">
+  Do not document or rely on a Space runtime control unless the current product
+  surface exposes it. Some older docs described controls that may not be visible
+  in the current Admin Settings tab.
+</Aside>
+
+## Related pages
+
+- [Runtime Configuration](/concepts/agents/runtime-selection/) - tenant defaults and Space overrides
+- [Admin - Tenant Agent](/applications/admin/agents/) - tenant-wide baseline configuration
+- [Admin - Space Settings](/applications/admin/spaces/settings/) - current editable Space fields
+- [Control](/concepts/control/) - guardrails, budgets, usage, and audit

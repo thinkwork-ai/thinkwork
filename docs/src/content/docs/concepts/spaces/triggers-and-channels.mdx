@@ -1,0 +1,52 @@
+---
+title: Triggers and Channels
+description: How chat, email, schedules, webhooks, and integrations start or wake work inside a Space.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Triggers and channels are how work enters a Space. A user can start a chat thread, an email can arrive at the Space address, a schedule can wake the agent, a webhook can receive an external event, or an integration can route provider work into the Space.
+
+The result is still a [Thread](/concepts/threads/). The Space supplies the local context and policy for that thread.
+
+## Common entry points
+
+| Entry point | What happens |
+| ----------- | ------------ |
+| Chat | A user starts or resumes a thread in a selected Space |
+| Email | Cold-contact email from a registered tenant user to the Space address creates or reopens an email thread when enabled |
+| Schedule | A recurring or one-time schedule wakes work in the Space |
+| Webhook | An external POST creates or wakes work in the Space |
+| Integration | A connector routes Slack, GitHub, or other provider events into the selected Space |
+
+Each entry point keeps channel metadata so operators can tell where the work came from.
+
+## Space email
+
+Space cold-contact email uses the current Space address format:
+
+```text
+<space-slug>@<tenant-slug>.thinkwork.ai
+```
+
+Cold-contact email is accepted only when the Space email trigger is enabled and the sender email matches a registered tenant user. Private Spaces additionally require that user to be a Space member. Archived Spaces do not accept new cold-contact email.
+
+Token-bearing replies to agent-initiated email are different. They continue an existing thread and can work even when cold-contact email is disabled.
+
+<Aside type="note">
+  Legacy per-agent and older Space address forms under the agents subdomain are
+  retired for new cold-contact work. Use the Space address shown in Admin.
+</Aside>
+
+## Trigger lifecycle
+
+Triggers are local to the Space they are configured for. A schedule or webhook attached to a Space wakes the tenant platform agent with that Space's workspace, knowledge, tools, and policy.
+
+For the operator UI, see [Admin - Space Triggers](/applications/admin/spaces/triggers/).
+
+## Related pages
+
+- [Admin - Space Triggers](/applications/admin/spaces/triggers/) - Schedule, Webhook, and Email rows
+- [Automations](/concepts/automations/) - scheduled and event-driven work
+- [Threads: Routing and Metadata](/concepts/threads/routing-and-metadata/) - channel metadata and routing
+- [Spaces and Threads](/concepts/spaces/spaces-and-threads/) - how Spaces shape durable work records

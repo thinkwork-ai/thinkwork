@@ -1,0 +1,56 @@
+---
+title: Spaces and Threads
+description: How Spaces shape the durable Threads created by chat, email, schedules, webhooks, and integrations.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Threads are the durable record of work. Spaces are the workrooms that shape those threads. When a chat message, email, schedule, webhook, or integration event creates work, the thread records what happened and the Space explains the context it happened in.
+
+This separation keeps the system understandable. The thread is the trace. The Space is the local context, access boundary, channel, and policy that shaped the trace.
+
+## What the thread gets from the Space
+
+A Space can affect a thread's:
+
+- Workspace context.
+- Participant access.
+- Knowledge and memory scope.
+- Trigger or channel metadata.
+- Tool availability.
+- Runtime policy.
+
+Historical records may still expose an agent id. In the current managed model, that id is the tenant platform agent. The Space is the useful boundary for explaining why the turn had local behavior.
+
+## Work entry examples
+
+| Source | Thread shape |
+| ------ | ------------ |
+| Mobile chat | A user starts or resumes a Space-scoped chat thread |
+| Email | Email from a registered tenant user to `space-slug@tenant-slug.thinkwork.ai` creates or reopens an email thread when enabled |
+| Schedule | A Space schedule wakes an automation thread in that Space |
+| Webhook | An external event creates or wakes a thread in the configured Space |
+| Integration | A provider event routes into the Space selected by integration rules |
+
+## Audit value
+
+When an operator audits a thread, the Space tells them where the work belonged. That makes it easier to answer:
+
+- Which workspace context was available?
+- Which people should have had access?
+- Which trigger or channel started the work?
+- Which knowledge and tools were available?
+- Which local policy applied?
+
+<Aside type="tip">
+  If a thread's behavior looks surprising, inspect the Space before changing
+  the tenant platform agent. The Space is often where the local context or
+  trigger policy lives.
+</Aside>
+
+## Related pages
+
+- [Threads](/concepts/threads/) - the universal work container
+- [Threads: Routing and Metadata](/concepts/threads/routing-and-metadata/) - channel-specific routing
+- [Admin - Threads](/applications/admin/threads/) - operator thread views
+- [Admin - Spaces](/applications/admin/spaces/) - operator Space configuration

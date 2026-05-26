@@ -1,0 +1,47 @@
+---
+title: Spaces list
+description: The Admin `/spaces` table for finding, creating, and opening Spaces.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The Spaces list is the operator entry point for Space Studio. It shows the tenant's Spaces and lets an admin create a new workroom before configuring its workspace, KBs, triggers, settings, and members.
+
+**Route:** `/spaces`
+
+## What the list shows
+
+The table shows each Space with enough information to orient before opening it:
+
+| Column | Meaning |
+| ------ | ------- |
+| Space | Space name and identity |
+| Description | Short operator-facing description |
+| Access | Public or Private |
+| Status | Active or archived state |
+| Updated | Last update time |
+
+Click a row to open Space Studio. The detail route lands on the Workspace tab.
+
+## Create a Space
+
+Use **New Space** from the list header.
+
+1. Enter the Space name.
+2. Add an optional description.
+3. Choose Public or Private access.
+4. Save.
+5. Configure Workspace, KBs, Triggers, Settings, and Members for Private Spaces as needed.
+
+<Aside type="tip">
+  Create the Space first, then add local context. Empty Spaces inherit the
+  tenant platform-agent baseline until you add workspace files, knowledge,
+  triggers, or access constraints.
+</Aside>
+
+## Related pages
+
+- [Admin - Spaces](/applications/admin/spaces/) - Space Studio overview
+- [Admin - Space Workspace](/applications/admin/spaces/workspace/) - default landing tab
+- [Access and Membership](/concepts/spaces/access-and-membership/) - Public and Private Spaces
+- [Spaces (concept)](/concepts/spaces/) - contextual workrooms

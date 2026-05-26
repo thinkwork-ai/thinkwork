@@ -1,0 +1,36 @@
+---
+title: KBs
+description: The Space Studio KBs tab for selecting knowledge bases available inside a Space.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+KBs is the Space Studio tab for selecting which knowledge bases are available inside a Space. Use it when a workroom needs access to specific authored documents, runbooks, policies, or customer material.
+
+**Route:** `/spaces/:spaceId/kbs`
+
+## What the tab controls
+
+The KBs tab selects tenant knowledge bases for this Space. Selected knowledge bases become eligible context sources when the tenant platform agent works in the Space.
+
+Use the tab for:
+
+- customer documents;
+- support or policy runbooks;
+- project documentation;
+- department-specific source material.
+
+This tab is named **KBs** in the Admin UI. Do not treat it as the full Memory surface; memory and knowledge bases are related context sources with different contracts.
+
+<Aside type="tip">
+  If a document should inform only one customer or workflow, attach it through
+  the Space that owns that work. If it should inform the whole tenant, manage it
+  in Company Brain and link broadly where appropriate.
+</Aside>
+
+## Related pages
+
+- [Knowledge and Memory](/concepts/spaces/knowledge-and-memory/) - how Space knowledge and memory fit the model
+- [Admin - Company Brain](/applications/admin/knowledge/) - memory, pages, knowledge bases, and sources
+- [Knowledge Bases](/applications/admin/knowledge-bases/) - knowledge-base management
+- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) - authored document sources

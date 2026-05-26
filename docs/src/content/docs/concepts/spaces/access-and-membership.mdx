@@ -1,0 +1,49 @@
+---
+title: Access and Membership
+description: How Public and Private Spaces control who can participate and which inbound work is accepted.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Space access is the boundary around a workroom. It decides who can open the Space, who can participate in its threads, and whether cold-contact inbound work is accepted for a Public or Private context.
+
+Access does not create a new agent. It controls who can use a Space and which people count as members when a Space is private.
+
+## Public Spaces
+
+Public Spaces are available to registered tenant users. They work well for broad internal contexts such as General Support, Product Questions, or Company Operations.
+
+Use a Public Space when:
+
+- Most tenant users should be able to start or resume work there.
+- The Space does not carry restricted customer, finance, legal, or incident context.
+- Inbound channels should accept registered tenant users without a separate member list.
+
+## Private Spaces
+
+Private Spaces restrict access to Space members. They work well for customer rooms, sensitive finance work, executive workflows, private projects, and incident response.
+
+Use a Private Space when:
+
+- Only a named group should see the Space and its threads.
+- Cold-contact inbound email should be rejected unless it comes from a member.
+- The Space carries context that should not be visible across the tenant.
+
+<Aside type="caution">
+  A Private Space is a product access boundary. It should not be used as a
+  substitute for secret storage. Credentials and OAuth tokens still belong in
+  the connector, MCP, or credential surfaces that own them.
+</Aside>
+
+## Membership effects
+
+Membership matters for Private Spaces. Members can access the Space and participate in its work. Non-members should not be able to open the Space or send cold-contact email into it.
+
+Public Spaces do not need a member list for normal access, so the Admin Members tab is hidden for Public Spaces.
+
+## Related pages
+
+- [Admin - Space Members](/applications/admin/spaces/members/) - managing Private Space members
+- [Admin - Space Settings](/applications/admin/spaces/settings/) - changing Public or Private access
+- [Threads](/concepts/threads/) - durable work records scoped by tenant and Space
+- [Spaces](/concepts/spaces/) - Spaces overview

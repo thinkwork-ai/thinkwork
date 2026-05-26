@@ -1,0 +1,41 @@
+---
+title: Tools
+description: How Spaces shape tool availability for work without replacing tenant-level tool and MCP registration.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Space tools are the capabilities the tenant platform agent can use while working in a particular workroom. They let a Space narrow or extend what is available for a context without making a separate managed agent for every project, customer, or channel.
+
+ThinkWork separates registration from availability. Tenant-level surfaces register built-in tools, MCP servers, and credentials. A Space participates in deciding which of those capabilities are available when work happens in that Space.
+
+The current Admin Space Studio tabs are Workspace, KBs, Triggers, Settings, and Members. There is no current Admin Tools tab. Space-level tool policy exists as runtime policy and API state; agents or services that need to inspect or update it use the Space tools API surface rather than inferring a hidden UI tab.
+
+## What tools mean in a Space
+
+Tools can include platform-owned capabilities, approved MCP servers, and skill-backed actions made available to the runtime. A Space does not store secret material in markdown. Credentials and OAuth grants stay in the surfaces that own them.
+
+Use Space-level tool availability when:
+
+- A customer room needs a customer-specific MCP server.
+- A finance Space should expose analysis tools but not broad write tools.
+- A support Space needs browser or knowledge lookup capabilities.
+- A webhook or schedule should run with a constrained capability set.
+
+## Provenance matters
+
+Operators should be able to reason about why a tool was available. The useful question is not just "can the agent call this?" It is "which tenant default, Space setting, or capability package made this available for this turn?"
+
+That provenance helps when debugging a thread, tightening policy, or explaining why a Space behaved differently from another Space.
+
+<Aside type="tip">
+  Register tools and MCP servers once at the tenant level. Use Spaces to make
+  availability fit the workroom.
+</Aside>
+
+## Related pages
+
+- [Admin - Tenant MCP Servers](/applications/admin/mcp-servers/) - tenant-level MCP registrations
+- [Admin - Built-in Tools](/applications/admin/builtin-tools/) - platform-owned tools
+- [Skills](/concepts/agents/skills/) - reusable capability folders
+- [Admin - Spaces](/applications/admin/spaces/) - operator Space configuration

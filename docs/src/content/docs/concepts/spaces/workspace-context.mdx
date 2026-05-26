@@ -1,0 +1,53 @@
+---
+title: Workspace Context
+description: How Space workspace files give the tenant platform agent local procedures, notes, and operating context.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Space workspace context is the local file set for a workroom. It is where operators put the procedures, customer notes, project facts, team norms, and channel-specific instructions that should matter inside one Space without becoming tenant-wide agent defaults.
+
+The tenant platform agent has its own baseline workspace. A Space adds the context for the current work. That lets the same agent behave differently in Support, Finance, Product Launch, or Customer Onboarding without cloning the agent.
+
+## What belongs here
+
+Put content in a Space workspace when it is true for that workroom:
+
+- Customer or account context.
+- Project goals, milestones, and handoff notes.
+- Team-specific operating norms.
+- Workflow instructions for a recurring business process.
+- Channel or inbox procedures.
+- Links and summaries that orient the agent before it calls tools.
+
+Do not use Space workspace files for reusable specialist behavior. That belongs in a folder specialist under the tenant agent workspace.
+
+## How it composes
+
+When work starts in a Space, ThinkWork resolves the tenant platform agent first, then applies the current Space context for the turn. The Space does not replace the tenant agent's identity. It narrows the workroom.
+
+```text
+Tenant platform agent
+  + active Space workspace
+  + thread history
+  + eligible tools and knowledge
+  = turn context
+```
+
+<Aside type="tip">
+  Keep tenant-agent files broad and stable. Put local procedures in the Space
+  that owns the work so unrelated Spaces do not inherit the wrong context.
+</Aside>
+
+## Editing model
+
+Space workspace files are authored state. Edits should be visible on later turns in that Space, while in-flight turns continue with the context they already loaded.
+
+Use the Admin Workspace tab for Space files. Use [Tenant Agent](/applications/admin/agents/) when the instruction should apply across the tenant, and use folder specialists when the instruction defines reusable delegated behavior.
+
+## Related pages
+
+- [Admin - Space Workspace](/applications/admin/spaces/workspace/) - operator tab for editing Space files
+- [Workspace Composition](/concepts/agents/workspace-composition/) - how workspace layers resolve
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folder specialists as behavior boundaries
+- [Spaces](/concepts/spaces/) - Spaces overview

@@ -97,8 +97,8 @@ The dialog shows:
 
 - **Provider** - a fixed provider badge, such as `agentcore`, `agentcore+nova_act`, or `thinkwork-email`.
 - **Status** - for Code Sandbox, tenant provisioning state. Other tools show whether the tenant-side prerequisite is available.
-- **Template or Space opt-in** - older template-backed flows still point to **Agent Template → Configuration**; Space-aware flows should be controlled from the Space's Tools and Configuration tabs.
-- **Tenant or Space policy** - extra gates such as `sandbox_enabled`, Space runtime overrides, or Space tool availability.
+- **Template or Space opt-in** - older template-backed flows still point to **Agent Template -> Configuration**; Space-aware flows should be controlled by the current Space surfaces and runtime policy.
+- **Tenant or Space policy** - extra gates such as `sandbox_enabled`, Space-local policy, or Space tool availability.
 
 Registration rules:
 
@@ -147,8 +147,8 @@ The admin UI never receives a plaintext API key after the initial save. Subseque
 5. Click Test — verify the result count comes back non-zero
 6. Set Enabled = true
 7. Save
-8. Open the relevant Space → Tools tab and allow Web Search where supported
-9. New turns in that Space can receive `web_search`
+8. Do not look for a current Space Studio Tools tab. If a deployment uses Space-level tool policy, inspect or update it through the Space tools API or the rollout-specific surface that owns that policy.
+9. New eligible turns can receive `web_search`
 
 ### Switch providers
 
@@ -171,8 +171,8 @@ All Spaces stop receiving `web_search`, even when their local tool policy allows
 ### Enable Space email
 
 1. Open the relevant Space
-2. Go to the Configuration tab
-3. Enable **Email Triggers**
+2. Go to the Triggers tab
+3. Use **Add -> Email** to enable the Space email trigger
 4. Copy the Space email address
 5. Confirm send/reply behavior with an approved test message
 
@@ -190,5 +190,5 @@ The runtime injects `send_email` as a direct platform tool. It does not install 
 
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — the other path for exposing external capabilities
 - [Skills Catalog](/applications/admin/skills-catalog/) — the third path: reusable skill packs with embedded tools
-- [Spaces](/applications/admin/spaces/) — Space tool and runtime policy
+- [Spaces](/applications/admin/spaces/) — current Space Studio tabs and local policy context
 - [Agent Templates](/applications/admin/agent-templates/) — legacy/template-backed built-in tool opt-ins

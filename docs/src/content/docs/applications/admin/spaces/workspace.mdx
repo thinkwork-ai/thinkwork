@@ -1,0 +1,36 @@
+---
+title: Workspace
+description: The Space Studio Workspace tab for editing Space-local context files.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Workspace is the default Space Studio tab. It edits the files that apply only inside the current Space: procedures, customer context, project notes, team norms, and workflow instructions that should not become tenant-wide defaults.
+
+**Route:** `/spaces/:spaceId/workspace`
+
+Opening `/spaces/:spaceId` redirects here.
+
+## What to put in a Space workspace
+
+Use Space workspace files for local context:
+
+- customer, project, or team notes;
+- inbox or channel procedures;
+- workflow-specific runbooks;
+- escalation rules for this workroom;
+- context the tenant platform agent should read only when work happens in this Space.
+
+Use [Tenant Agent](/applications/admin/agents/) for baseline files that apply across the tenant. Use folder specialists for reusable delegated behavior.
+
+<Aside type="note">
+  A Space workspace does not clone the tenant platform agent. It adds local
+  workroom context for turns that happen in the Space.
+</Aside>
+
+## Related pages
+
+- [Workspace Context](/concepts/spaces/workspace-context/) - conceptual model for Space files
+- [Workspace Composition](/concepts/agents/workspace-composition/) - how workspace layers resolve
+- [Admin - Tenant Agent](/applications/admin/agents/) - tenant-wide baseline workspace
+- [Admin - Spaces](/applications/admin/spaces/) - Space Studio overview

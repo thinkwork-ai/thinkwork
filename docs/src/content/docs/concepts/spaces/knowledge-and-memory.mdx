@@ -1,0 +1,41 @@
+---
+title: Knowledge and Memory
+description: How Space knowledge bases and scoped memory affect what the tenant platform agent can know for a workroom.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Spaces can narrow what the tenant platform agent knows for a particular workroom. Knowledge bases bring authored source material into the Space. Memory captures retained facts and observations that belong to that Space's history.
+
+This keeps context local. A support Space can use support runbooks, a customer Space can use customer documents, and an internal finance Space can retain finance-specific lessons without making every other Space inherit them.
+
+## Knowledge bases
+
+Knowledge bases are operator-curated document sources. Assign them to a Space when the agent should be able to retrieve from that material while working there.
+
+Good Space knowledge-base candidates include:
+
+- Customer documentation.
+- Product or policy runbooks.
+- Project plans and operating docs.
+- Department-specific source material.
+
+The Admin KBs tab controls which knowledge bases are selected for the Space.
+
+## Space-scoped memory
+
+Memory is retained knowledge from prior work. Space-scoped memory should answer "what has this workroom learned?" rather than "what is true for the whole tenant?"
+
+Use Space memory for observations, preferences, and facts that should follow future work in the same Space. Use tenant-wide Company Brain or agent workspace files for broader facts that should apply across Spaces.
+
+<Aside type="note">
+  Knowledge bases and memory are related but not interchangeable. Knowledge
+  bases are authored source material. Memory is retained from work over time.
+</Aside>
+
+## Related pages
+
+- [Admin - Space KBs](/applications/admin/spaces/kbs/) - selecting knowledge bases for a Space
+- [Company Brain](/concepts/knowledge/) - the broader context substrate
+- [Memory Facet](/concepts/knowledge/memory/) - retained facts and memory backends
+- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) - authored document sources

@@ -1,0 +1,33 @@
+---
+title: Settings
+description: The Space Studio Settings tab for name, access mode, and description.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Settings is the Space Studio tab for a Space's editable identity and access mode. It controls the fields operators use to name, describe, and classify the workroom.
+
+**Route:** `/spaces/:spaceId/settings`
+
+## Editable fields
+
+| Field | Meaning |
+| ----- | ------- |
+| Name | Human-readable Space name |
+| Access | Public or Private |
+| Description | Operator-facing summary of the Space's purpose |
+
+Changing access from Public to Private makes membership matter. Changing a Space's description helps operators and authors understand what belongs in the workroom.
+
+<Aside type="caution">
+  The current Settings tab documents name, access, and description. Do not rely
+  on older docs that describe advanced runtime controls here unless the current
+  Admin UI exposes them.
+</Aside>
+
+## Related pages
+
+- [Access and Membership](/concepts/spaces/access-and-membership/) - Public and Private Space behavior
+- [Admin - Space Members](/applications/admin/spaces/members/) - member management for Private Spaces
+- [Runtime Policy](/concepts/spaces/runtime-policy/) - how Space policy relates to tenant defaults
+- [Admin - Spaces](/applications/admin/spaces/) - Space Studio overview

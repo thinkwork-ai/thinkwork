@@ -1,6 +1,6 @@
 ---
 title: Runtime Configuration
-description: How ThinkWork resolves tenant-agent defaults and Space runtime overrides for managed turns.
+description: How ThinkWork resolves tenant-agent defaults and Space runtime policy for managed turns.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -8,7 +8,7 @@ import { Aside } from "@astrojs/starlight/components";
 Runtime configuration determines which model, guardrail, budget state, and sandbox settings the managed runtime uses for a turn. In the current Space architecture, operators do not normally choose a runtime per top-level managed agent. They configure:
 
 - **Tenant agent defaults** on [Admin — Tenant Agent](/applications/admin/agents/).
-- **Space runtime overrides** on [Admin — Spaces](/applications/admin/spaces/).
+- **Space runtime policy** from the active Space.
 
 ## Resolution order
 
@@ -72,4 +72,4 @@ For user-facing operations, think in terms of **tenant-agent defaults plus Space
 - [Agents](/concepts/agents/) — tenant platform agent model
 - [Spaces](/concepts/spaces/) — Space context and policy
 - [Admin — Tenant Agent](/applications/admin/agents/) — default configuration
-- [Admin — Spaces](/applications/admin/spaces/) — Space overrides
+- [Runtime Policy](/concepts/spaces/runtime-policy/) — how Space policy relates to tenant defaults
