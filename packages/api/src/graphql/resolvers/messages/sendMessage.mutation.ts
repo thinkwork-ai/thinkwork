@@ -233,10 +233,7 @@ export const sendMessage = async (
           threadId: i.threadId,
           tenantId: thread.tenant_id,
           role: "assistant",
-          content:
-            onboardingUpdate.missingFields.length === 0
-              ? "Captured the onboarding update. All required intake fields are now captured."
-              : `Captured the onboarding update. Still missing: ${onboardingUpdate.missingFields.join(", ")}.`,
+          content: onboardingUpdate.assistantContent,
           senderType: "system",
         }).catch(() => {});
       }

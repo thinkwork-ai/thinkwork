@@ -26,8 +26,18 @@ interface ApplyCustomerOnboardingChatUpdateInput {
 export interface CustomerOnboardingChatUpdateResult {
   handled: boolean;
   assistantMessageId: string | null;
+  assistantContent: string;
   missingFields: string[];
   statusRequest: boolean;
+  addedTasks: Array<{
+    title: string;
+  }>;
+  removedTasks: Array<{
+    title: string;
+  }>;
+  unmatchedTaskRemovals: Array<{
+    title: string;
+  }>;
   statusChanges: Array<{
     checklistItemKey: string;
     title: string;
@@ -99,6 +109,10 @@ const IN_PROGRESS_WORDS =
   /\b(?:sent|started|working|in progress|pending|waiting on|waiting for|submitted)\b/i;
 const NOT_APPLICABLE_WORDS =
   /\b(?:not applicable|n\/a|na|not needed|skip|skipped|waived)\b/i;
+const ADD_TASK_WORDS =
+  /\b(?:add|create|new|put)\b.*\b(?:task|checklist|todo|to-do|tasklist|task list)\b|\b(?:add|put)\b.+\b(?:to|on)\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/i;
+const REMOVE_TASK_WORDS =
+  /\b(?:remove|delete|drop)\b.*\b(?:task|checklist|todo|to-do|tasklist|task list)\b|\b(?:remove|delete|drop)\b.+\bfrom\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/i;
 
 export async function applyCustomerOnboardingChatUpdate(
   input: ApplyCustomerOnboardingChatUpdateInput,
@@ -121,6 +135,7 @@ export async function applyCustomerOnboardingChatUpdate(
   const threadMetadata = objectRecord(thread.metadata);
   const onboarding = objectRecord(threadMetadata.customerOnboarding);
   if (onboarding.workflow !== CUSTOMER_ONBOARDING_TEMPLATE_KEY) return null;
+  if (!thread.space_id) return null;
   const hasExtractedSignal = hasCustomerOnboardingSignal(extracted);
 
   const previousFacts = objectRecord(onboarding.facts);
@@ -158,9 +173,16 @@ export async function applyCustomerOnboardingChatUpdate(
         ),
       );
 
+    const activeTaskRows = taskRows.filter(
+      (task) => !isRemovedChecklistTask(task),
+    );
     const statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"] =
       [];
     const assignmentChanges: CustomerOnboardingChatUpdateResult["assignmentChanges"] =
+      [];
+    const addedTasks: CustomerOnboardingChatUpdateResult["addedTasks"] = [];
+    const removedTasks: CustomerOnboardingChatUpdateResult["removedTasks"] = [];
+    const unmatchedTaskRemovals: CustomerOnboardingChatUpdateResult["unmatchedTaskRemovals"] =
       [];
     const explicitStatusByKey = new Map(
       extracted.taskStatusUpdates.map((update) => [update.key, update]),
@@ -171,7 +193,147 @@ export async function applyCustomerOnboardingChatUpdate(
         assignment,
       ]),
     );
-    for (const task of taskRows) {
+
+    for (const addition of extracted.taskAdditions) {
+      if (findTaskByTitle(activeTaskRows, addition.title)) continue;
+
+      const restored = findRemovedCustomTaskByTitle(taskRows, addition.title);
+      if (restored) {
+        const restoredMetadata = restoreRemovedChecklistMetadata({
+          current: restored.metadata,
+          note: addition.note,
+          updatedAt: now,
+          updatedByUserId: input.senderUserId ?? null,
+        });
+        const [updated] = await tx
+          .update(linkedTasks)
+          .set({
+            status: "todo",
+            blocked: false,
+            required: true,
+            sync_status: "synced",
+            last_synced_at: now,
+            metadata: restoredMetadata,
+            updated_at: now,
+          })
+          .where(eq(linkedTasks.id, restored.id))
+          .returning();
+        activeTaskRows.push(updated);
+        addedTasks.push({ title: updated.title });
+        continue;
+      }
+
+      const checklistItemKey = customChecklistItemKey(addition.title);
+      const [created] = await tx
+        .insert(linkedTasks)
+        .values({
+          tenant_id: input.tenantId,
+          space_id: thread.space_id,
+          thread_id: input.threadId,
+          checklist_item_id: null,
+          provider: "thinkwork",
+          external_task_id: `thinkwork:${input.threadId}:${checklistItemKey}`,
+          external_task_url: null,
+          title: addition.title,
+          required: true,
+          role_key: null,
+          assignee_display: null,
+          assignee_external_id: null,
+          status: "todo",
+          blocked: false,
+          sync_status: "synced",
+          last_synced_at: now,
+          metadata: {
+            workflow: "customer_onboarding",
+            systemOfRecord: "thinkwork",
+            checklistItemKey,
+            customChecklistTask: true,
+            nativeChecklist: {
+              createdFrom: "customer_onboarding_chat_update",
+              createdNote: addition.note,
+              createdAt: now.toISOString(),
+              createdByUserId: input.senderUserId ?? null,
+            },
+          },
+          created_at: now,
+          updated_at: now,
+        })
+        .returning();
+
+      await tx.insert(linkedTaskEvents).values({
+        tenant_id: input.tenantId,
+        linked_task_id: created.id,
+        space_id: created.space_id,
+        thread_id: input.threadId,
+        provider: "thinkwork",
+        event_type: "created",
+        new_status: "todo",
+        message: `${created.title} added to the onboarding checklist from Customer Onboarding chat.`,
+        metadata: {
+          source: "customer_onboarding_chat_update",
+          checklistItemKey,
+          customChecklistTask: true,
+        },
+        occurred_at: now,
+      });
+
+      activeTaskRows.push(created);
+      addedTasks.push({ title: created.title });
+    }
+
+    for (const removal of extracted.taskRemovals) {
+      const task = findTaskForRemoval(activeTaskRows, removal);
+      if (!task) {
+        unmatchedTaskRemovals.push({ title: removal.title });
+        continue;
+      }
+
+      const previousStatus = task.status as LinkedTaskStatus;
+      const nextMetadata = markChecklistTaskRemoved({
+        current: task.metadata,
+        note: removal.note,
+        updatedAt: now,
+        updatedByUserId: input.senderUserId ?? null,
+      });
+      await tx
+        .update(linkedTasks)
+        .set({
+          status: "cancelled",
+          blocked: false,
+          required: false,
+          sync_status: "synced",
+          last_synced_at: now,
+          metadata: nextMetadata,
+          updated_at: now,
+        })
+        .where(eq(linkedTasks.id, task.id));
+
+      await tx.insert(linkedTaskEvents).values({
+        tenant_id: input.tenantId,
+        linked_task_id: task.id,
+        space_id: task.space_id,
+        thread_id: input.threadId,
+        provider: "thinkwork",
+        event_type: "status_changed",
+        previous_status: previousStatus,
+        new_status: "cancelled",
+        message: `${task.title} removed from the onboarding checklist from Customer Onboarding chat.`,
+        metadata: {
+          source: "customer_onboarding_chat_update",
+          checklistItemKey: stringValue(
+            objectRecord(task.metadata).checklistItemKey,
+          ),
+          removed: true,
+        },
+        occurred_at: now,
+      });
+
+      const index = activeTaskRows.findIndex((row) => row.id === task.id);
+      if (index >= 0) activeTaskRows.splice(index, 1);
+      removedTasks.push({ title: task.title });
+    }
+
+    for (const task of activeTaskRows) {
       const key = stringValue(objectRecord(task.metadata).checklistItemKey);
       if (!key) continue;
 
@@ -295,19 +457,26 @@ export async function applyCustomerOnboardingChatUpdate(
 
     const assistantContent = extracted.assignmentRequest
       ? buildAssignmentStatusSummary({
-          taskRows,
+          taskRows: activeTaskRows,
           statusChanges,
           assignmentChanges,
           requestedTaskKey: extracted.assignmentTaskKey,
         })
       : extracted.statusRequest
-        ? buildProgressStatusSummary({ normalized, taskRows, statusChanges })
+        ? buildProgressStatusSummary({
+            normalized,
+            taskRows: activeTaskRows,
+            statusChanges,
+          })
         : hasExtractedSignal
           ? buildAssistantSummary({
               normalized,
               statusChanges,
               completedTaskKeys: extracted.completedTaskKeys,
               assignmentChanges,
+              addedTasks,
+              removedTasks,
+              unmatchedTaskRemovals,
             })
           : buildCustomerOnboardingOnlySummary(normalized);
     const [assistantMessage] = await tx
@@ -326,6 +495,9 @@ export async function applyCustomerOnboardingChatUpdate(
           missingFields: normalized.missingFields,
           statusChanges,
           assignmentChanges,
+          addedTasks,
+          removedTasks,
+          unmatchedTaskRemovals,
         },
         created_at: now,
       })
@@ -334,8 +506,12 @@ export async function applyCustomerOnboardingChatUpdate(
     return {
       handled: true,
       assistantMessageId: assistantMessage?.id ?? null,
+      assistantContent,
       missingFields: normalized.missingFields,
       statusRequest: extracted.statusRequest,
+      addedTasks,
+      removedTasks,
+      unmatchedTaskRemovals,
       statusChanges,
       assignmentChanges,
     };
@@ -362,15 +538,25 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     assigneeDisplay: string;
     note: string;
   }>;
+  taskAdditions: Array<{
+    title: string;
+    note: string;
+  }>;
+  taskRemovals: Array<{
+    title: string;
+    key: string | null;
+    note: string;
+  }>;
   statusRequest: boolean;
   assignmentRequest: boolean;
   assignmentTaskKey: string | null;
 } {
   const facts: CustomerOnboardingSourceInput = {};
-  const segments = content
+  const rawSegments = content
     .split(/(?:[\n;]+|(?<=[.!?])\s+)/g)
     .map((segment) => segment.trim())
     .filter(Boolean);
+  const segments = foldContinuationTaskMutations(rawSegments);
   const whole = content.trim();
 
   for (const segment of segments) {
@@ -456,7 +642,33 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     string,
     { key: string; assigneeDisplay: string; note: string }
   >();
+  const taskAdditions = new Map<string, { title: string; note: string }>();
+  const taskRemovals = new Map<
+    string,
+    { title: string; key: string | null; note: string }
+  >();
   for (const segment of segments) {
+    const taskAdditionTitle = taskAdditionTitleFromSegment(segment);
+    if (taskAdditionTitle) {
+      taskAdditions.set(normalizeTaskTitleForMatch(taskAdditionTitle), {
+        title: taskAdditionTitle,
+        note: segment,
+      });
+      continue;
+    }
+
+    const taskRemoval = taskRemovalFromSegment(segment);
+    if (taskRemoval) {
+      taskRemovals.set(
+        taskRemoval.key ?? normalizeTaskTitleForMatch(taskRemoval.title),
+        {
+          ...taskRemoval,
+          note: segment,
+        },
+      );
+      continue;
+    }
+
     const explicitStatus = statusFromSegment(segment);
     const assigneeDisplay = assignmentDisplayFromSegment(segment);
     for (const { key, patterns } of TASK_KEY_ALIASES) {
@@ -491,6 +703,8 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     completedTaskKeys: [...completedTaskKeys],
     taskStatusUpdates: [...taskStatusUpdates.values()],
     taskAssignments: [...taskAssignments.values()],
+    taskAdditions: [...taskAdditions.values()],
+    taskRemovals: [...taskRemovals.values()],
     statusRequest: isStatusRequest(whole),
     assignmentRequest: isAssignmentRequest(whole),
     assignmentTaskKey: taskKeyFromContent(whole),
@@ -505,6 +719,8 @@ function hasCustomerOnboardingSignal(
     extracted.completedTaskKeys.length > 0 ||
     extracted.taskStatusUpdates.length > 0 ||
     extracted.taskAssignments.length > 0 ||
+    extracted.taskAdditions.length > 0 ||
+    extracted.taskRemovals.length > 0 ||
     extracted.statusRequest ||
     extracted.assignmentRequest
   );
@@ -592,9 +808,217 @@ function buildUpdatedThreadMetadata(input: {
         extractedFacts: input.extracted.facts,
         completedTaskKeys: input.extracted.completedTaskKeys,
         taskAssignments: input.extracted.taskAssignments,
+        taskAdditions: input.extracted.taskAdditions,
+        taskRemovals: input.extracted.taskRemovals,
         updatedAt: input.updatedAt.toISOString(),
         updatedByUserId: input.updatedByUserId,
       },
+    }),
+  });
+}
+
+function taskAdditionTitleFromSegment(segment: string): string | null {
+  if (!ADD_TASK_WORDS.test(segment)) return null;
+  const patterns = [
+    /\b(?:add|create)\s+(?:a\s+)?(?:new\s+)?(?:task|checklist item|todo|to-do)(?:\s+(?:to|for|on)\s+(?:the\s+)?(?:thread|checklist|tasklist|task list))?\s*(?::|-|called|named)?\s*(.+)$/i,
+    /\b(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/i,
+    /\b(?:we\s+need|need)\s+(?:a\s+)?(?:task|checklist item)\s+(?:for|to)\s+(.+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const title = cleanTaskMutationTitle(segment.match(pattern)?.[1]);
+    if (title) return title;
+  }
+  return null;
+}
+
+function foldContinuationTaskMutations(segments: string[]): string[] {
+  const folded: string[] = [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    const next = segments[index + 1];
+    if (next && /:\s*$/.test(segment) && taskMutationIntro(segment)) {
+      folded.push(`${segment} ${next}`);
+      index += 1;
+    } else {
+      folded.push(segment);
+    }
+  }
+  return folded;
+}
+
+function taskMutationIntro(segment: string): boolean {
+  return ADD_TASK_WORDS.test(segment) || REMOVE_TASK_WORDS.test(segment);
+}
+
+function taskRemovalFromSegment(segment: string): {
+  title: string;
+  key: string | null;
+} | null {
+  if (!REMOVE_TASK_WORDS.test(segment)) return null;
+  const key = taskKeyFromContent(segment);
+  const patterns = [
+    /\b(?:remove|delete|drop)\s+(?:the\s+)?(?:task|checklist item|todo|to-do)?\s*(?::|-|called|named)?\s*(.+?)(?:\s+from\s+(?:the\s+)?(?:thread|checklist|tasklist|task list))?$/i,
+    /\b(?:remove|delete|drop)\s+(.+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const title = cleanTaskMutationTitle(segment.match(pattern)?.[1]);
+    if (title) return { title, key };
+  }
+  return key ? { title: key, key } : null;
+}
+
+function cleanTaskMutationTitle(value: string | undefined): string | null {
+  const title = value
+    ?.replace(
+      /\bfrom\s+(?:the\s+)?(?:thread|checklist|tasklist|task list)\b/gi,
+      "",
+    )
+    .replace(/\b(?:task|checklist item|todo|to-do)$/i, "")
+    .replace(/^["'“”‘’\s]+|["'“”‘’\s.?!]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!title || isGenericTaskTarget(title)) return null;
+  return title;
+}
+
+function isGenericTaskTarget(value: string): boolean {
+  return /^(?:task|tasks|checklist|checklist item|todo|to-do|tasklist|task list)$/i.test(
+    value.trim(),
+  );
+}
+
+function customChecklistItemKey(title: string): string {
+  const slug = normalizeTaskTitleForMatch(title)
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return `custom_${slug || "task"}`;
+}
+
+function findTaskByTitle(
+  tasks: Array<typeof linkedTasks.$inferSelect>,
+  title: string,
+) {
+  const needle = normalizeTaskTitleForMatch(title);
+  return tasks.find((task) => taskTitleMatches(task, needle));
+}
+
+function findRemovedCustomTaskByTitle(
+  tasks: Array<typeof linkedTasks.$inferSelect>,
+  title: string,
+) {
+  const needle = normalizeTaskTitleForMatch(title);
+  return tasks.find((task) => {
+    const metadata = objectRecord(task.metadata);
+    return (
+      objectRecord(metadata.nativeChecklist).removedAt &&
+      metadata.customChecklistTask === true &&
+      taskTitleMatches(task, needle)
+    );
+  });
+}
+
+function findTaskForRemoval(
+  tasks: Array<typeof linkedTasks.$inferSelect>,
+  removal: { title: string; key: string | null },
+) {
+  if (removal.key) {
+    const task = tasks.find(
+      (row) =>
+        stringValue(objectRecord(row.metadata).checklistItemKey) ===
+        removal.key,
+    );
+    if (task) return task;
+  }
+  return findTaskByTitle(tasks, removal.title);
+}
+
+function taskTitleMatches(
+  task: typeof linkedTasks.$inferSelect,
+  normalizedTitle: string,
+): boolean {
+  const title = normalizeTaskTitleForMatch(task.title);
+  const cleanTitle = normalizeTaskTitleForMatch(
+    cleanChecklistTaskTitle(task.title),
+  );
+  return (
+    title === normalizedTitle ||
+    cleanTitle === normalizedTitle ||
+    title.includes(normalizedTitle) ||
+    normalizedTitle.includes(cleanTitle)
+  );
+}
+
+function normalizeTaskTitleForMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isRemovedChecklistTask(
+  task: typeof linkedTasks.$inferSelect,
+): boolean {
+  return Boolean(
+    objectRecord(objectRecord(task.metadata).nativeChecklist).removedAt,
+  );
+}
+
+function markChecklistTaskRemoved(input: {
+  current: unknown;
+  note: string;
+  updatedAt: Date;
+  updatedByUserId: string | null;
+}) {
+  const metadata = objectRecord(input.current);
+  const nativeChecklist = objectRecord(metadata.nativeChecklist);
+  return compactObject({
+    ...metadata,
+    nativeChecklist: compactObject({
+      ...nativeChecklist,
+      removedAt: input.updatedAt.toISOString(),
+      removedByUserId: input.updatedByUserId,
+      removedNote: input.note,
+      lastStatusNote: input.note,
+      lastStatusMetadata: {
+        source: "customer_onboarding_chat_update",
+        removed: true,
+      },
+      lastStatusUpdatedAt: input.updatedAt.toISOString(),
+      lastStatusUpdatedByUserId: input.updatedByUserId,
+    }),
+  });
+}
+
+function restoreRemovedChecklistMetadata(input: {
+  current: unknown;
+  note: string;
+  updatedAt: Date;
+  updatedByUserId: string | null;
+}) {
+  const metadata = objectRecord(input.current);
+  const nativeChecklist = objectRecord(metadata.nativeChecklist);
+  const { removedAt, removedByUserId, removedNote, ...activeNativeChecklist } =
+    nativeChecklist;
+  void removedAt;
+  void removedByUserId;
+  void removedNote;
+
+  return compactObject({
+    ...metadata,
+    nativeChecklist: compactObject({
+      ...activeNativeChecklist,
+      restoredAt: input.updatedAt.toISOString(),
+      restoredByUserId: input.updatedByUserId,
+      restoredNote: input.note,
+      lastStatusNote: input.note,
+      lastStatusMetadata: {
+        source: "customer_onboarding_chat_update",
+        restored: true,
+      },
+      lastStatusUpdatedAt: input.updatedAt.toISOString(),
+      lastStatusUpdatedByUserId: input.updatedByUserId,
     }),
   });
 }
@@ -707,6 +1131,9 @@ function buildAssistantSummary(input: {
   statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"];
   completedTaskKeys: string[];
   assignmentChanges: CustomerOnboardingChatUpdateResult["assignmentChanges"];
+  addedTasks: CustomerOnboardingChatUpdateResult["addedTasks"];
+  removedTasks: CustomerOnboardingChatUpdateResult["removedTasks"];
+  unmatchedTaskRemovals: CustomerOnboardingChatUpdateResult["unmatchedTaskRemovals"];
 }): string {
   const lines = ["Captured the onboarding update and refreshed Progress."];
   if (input.normalized.missingFields.length === 0) {
@@ -728,6 +1155,24 @@ function buildAssistantSummary(input: {
     lines.push("Assignment updates:");
     for (const change of input.assignmentChanges) {
       lines.push(`- ${change.title}: ${change.nextAssignee}`);
+    }
+  }
+  if (input.addedTasks.length > 0) {
+    lines.push("Added checklist tasks:");
+    for (const task of input.addedTasks) {
+      lines.push(`- ${task.title}`);
+    }
+  }
+  if (input.removedTasks.length > 0) {
+    lines.push("Removed checklist tasks:");
+    for (const task of input.removedTasks) {
+      lines.push(`- ${task.title}`);
+    }
+  }
+  if (input.unmatchedTaskRemovals.length > 0) {
+    lines.push("I did not find matching checklist tasks to remove:");
+    for (const task of input.unmatchedTaskRemovals) {
+      lines.push(`- ${task.title}`);
     }
   }
   return lines.join("\n");
