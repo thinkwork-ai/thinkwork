@@ -3,7 +3,7 @@ title: Admin - Spaces
 description: "Operator guide to Space Studio: the Spaces list plus Workspace, KBs, Triggers, Settings, and Members tabs."
 ---
 
-import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
+import { LinkCard, CardGrid, Aside } from "@astrojs/starlight/components";
 
 Admin Spaces is where operators create and configure contextual workrooms for the tenant platform agent. A Space can represent a team, customer, project, workflow, inbox, or channel-bound room with its own workspace context, knowledge, triggers, access, and local policy.
 
@@ -24,25 +24,42 @@ Space Studio tabs appear in this order: **Workspace**, **KBs**, **Triggers**, **
 Start with Spaces list if you are creating or finding a Space. Then open the page for the tab you are configuring.
 
 <CardGrid>
-  <Card title="Spaces list" icon="list" href="/applications/admin/spaces/list/">
-    The `/spaces` table, creating a Space, and opening Space Studio.
-  </Card>
-  <Card title="Workspace" icon="file" href="/applications/admin/spaces/workspace/">
-    Space-local files for procedures, customer context, project notes, and
-    workroom instructions.
-  </Card>
-  <Card title="KBs" icon="open-book" href="/applications/admin/spaces/kbs/">
-    Knowledge-base selection for the Space.
-  </Card>
-  <Card title="Triggers" icon="time" href="/applications/admin/spaces/triggers/">
-    Schedule, Webhook, and Email triggers that create or wake work in the Space.
-  </Card>
-  <Card title="Settings" icon="setting" href="/applications/admin/spaces/settings/">
-    Space name, access mode, and description.
-  </Card>
-  <Card title="Members" icon="user" href="/applications/admin/spaces/members/">
-    Private Space membership and access control.
-  </Card>
+  <LinkCard
+    title="Spaces list"
+    icon="list"
+    href="/applications/admin/spaces/list/"
+    description="The `/spaces` table, creating a Space, and opening Space Studio."
+  />
+  <LinkCard
+    title="Workspace"
+    icon="file"
+    href="/applications/admin/spaces/workspace/"
+    description="Space-local files for procedures, customer context, project notes, and workroom instructions."
+  />
+  <LinkCard
+    title="KBs"
+    icon="open-book"
+    href="/applications/admin/spaces/kbs/"
+    description="Knowledge-base selection for the Space."
+  />
+  <LinkCard
+    title="Triggers"
+    icon="time"
+    href="/applications/admin/spaces/triggers/"
+    description="Schedule, Webhook, and Email triggers that create or wake work in the Space."
+  />
+  <LinkCard
+    title="Settings"
+    icon="setting"
+    href="/applications/admin/spaces/settings/"
+    description="Space name, access mode, and description."
+  />
+  <LinkCard
+    title="Members"
+    icon="user"
+    href="/applications/admin/spaces/members/"
+    description="Private Space membership and access control."
+  />
 </CardGrid>
 
 ## What belongs here
