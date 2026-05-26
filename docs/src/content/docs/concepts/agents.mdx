@@ -58,8 +58,8 @@ A Space gives the platform agent the current workroom. It can carry:
 - Public or private membership.
 - Built-in tools and MCP server availability.
 - Knowledge bases and Space-scoped memory.
-- Automations and email triggers.
-- Runtime overrides.
+- Triggers and channels.
+- Runtime policy.
 
 When a thread starts in a Space, ThinkWork invokes the tenant platform agent with that Space context rendered into the runtime workspace. The turn still has one managed-agent identity for audit and cost accounting, but its behavior is shaped by the Space.
 
@@ -93,7 +93,7 @@ When a user message, email, automation, or integration event creates work:
 Thread event
   -> resolve tenant and Space
   -> load tenant platform agent
-  -> apply Space runtime overrides or inherit tenant defaults
+  -> apply Space runtime policy or inherit tenant defaults
   -> render root folder + Space context + specialist folder context
   -> invoke managed runtime
   -> run tools or skills if requested

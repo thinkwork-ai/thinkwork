@@ -10,13 +10,13 @@ The Tenant Agent page is the operator surface for the **one platform agent every
 **Route:** `/tenant-agent`
 **Legacy routes:** `/agents/*` routes are retired or redirect to the current platform-agent model.
 
-Use this page to set the tenant-wide agent baseline. Use [Spaces](/applications/admin/spaces/) to give that baseline different workrooms, tools, memory, automations, email addresses, and runtime overrides.
+Use this page to set the tenant-wide agent baseline. Use [Spaces](/applications/admin/spaces/) to give that baseline different workrooms, workspace context, knowledge, triggers, access, and local policy.
 
 <Aside type="note">
   ThinkWork no longer asks operators to maintain a fleet of top-level managed
   agents. A thread runs through the tenant platform agent, then receives its
-  context from the Space that owns the work. Space-specific model, guardrail,
-  budget, and sandbox overrides live on the Space configuration page.
+  context from the Space that owns the work. Space-specific controls live in
+  Space Studio when the current Admin UI exposes them.
 </Aside>
 
 ## What the tenant agent controls
@@ -75,8 +75,8 @@ Spaces are contextual workrooms. A Space supplies:
 
 - Membership and access mode.
 - Workspace files for that context.
-- Tools, MCP servers, knowledge bases, memory, and automations.
-- Optional runtime overrides for model, guardrail, monthly budget, paused state, and sandbox.
+- Tools, MCP servers, knowledge bases, memory, and triggers.
+- Local policy for the workroom when the current Admin UI exposes it.
 - A Space email address for inbound work.
 
 When a Space leaves a runtime override empty, it inherits from the tenant agent. This keeps common defaults in one place while still letting high-risk or high-volume Spaces tighten their own settings.
@@ -88,10 +88,10 @@ Per-agent vanity addresses have been retired. Inbound cold-contact email starts 
 Space email addresses use this format:
 
 ```text
-<tenant-slug>.<space-slug>@agents.thinkwork.ai
+<space-slug>@<tenant-slug>.thinkwork.ai
 ```
 
-Cold-contact delivery is accepted only when email triggers are enabled for that Space. Token-bearing replies to agent-initiated emails continue to work regardless of the toggle so existing conversations can continue.
+Cold-contact delivery is accepted only when email triggers are enabled for that Space and the sender email matches a registered tenant user. Private Spaces additionally require that user to be a Space member. Token-bearing replies to agent-initiated emails continue to work regardless of the toggle so existing conversations can continue.
 
 ## Known limits
 
@@ -101,7 +101,7 @@ Cold-contact delivery is accepted only when email triggers are enabled for that 
 
 ## Related pages
 
-- [Admin — Spaces](/applications/admin/spaces/) — Space configuration, workspace, tools, memory, automations, runtime overrides, and email triggers
+- [Admin — Spaces](/applications/admin/spaces/) — Space Studio overview, list, Workspace, KBs, Triggers, Settings, and Members
 - [Agents (concept)](/concepts/agents/) — the platform-agent model
 - [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) — why specialists are folders
 - [Spaces (concept)](/concepts/spaces/) — Spaces as contextual workrooms

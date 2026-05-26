@@ -83,7 +83,34 @@ export default defineConfig({
                       label: "Tenant Agent",
                       slug: "applications/admin/agents",
                     },
-                    { label: "Spaces", slug: "applications/admin/spaces" },
+                    {
+                      label: "Spaces",
+                      collapsed: true,
+                      items: [
+                        { label: "Overview", slug: "applications/admin/spaces" },
+                        {
+                          label: "Spaces list",
+                          slug: "applications/admin/spaces/list",
+                        },
+                        {
+                          label: "Workspace",
+                          slug: "applications/admin/spaces/workspace",
+                        },
+                        { label: "KBs", slug: "applications/admin/spaces/kbs" },
+                        {
+                          label: "Triggers",
+                          slug: "applications/admin/spaces/triggers",
+                        },
+                        {
+                          label: "Settings",
+                          slug: "applications/admin/spaces/settings",
+                        },
+                        {
+                          label: "Members",
+                          slug: "applications/admin/spaces/members",
+                        },
+                      ],
+                    },
                     {
                       label: "Agent Templates",
                       slug: "applications/admin/agent-templates",
@@ -216,7 +243,38 @@ export default defineConfig({
                 },
               ],
             },
-            { label: "Spaces", slug: "concepts/spaces" },
+            {
+              label: "Spaces",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "concepts/spaces" },
+                {
+                  label: "Workspace Context",
+                  slug: "concepts/spaces/workspace-context",
+                },
+                {
+                  label: "Access and Membership",
+                  slug: "concepts/spaces/access-and-membership",
+                },
+                {
+                  label: "Triggers and Channels",
+                  slug: "concepts/spaces/triggers-and-channels",
+                },
+                { label: "Tools", slug: "concepts/spaces/tools" },
+                {
+                  label: "Knowledge and Memory",
+                  slug: "concepts/spaces/knowledge-and-memory",
+                },
+                {
+                  label: "Runtime Policy",
+                  slug: "concepts/spaces/runtime-policy",
+                },
+                {
+                  label: "Spaces and Threads",
+                  slug: "concepts/spaces/spaces-and-threads",
+                },
+              ],
+            },
             {
               label: "Agents",
               collapsed: true,

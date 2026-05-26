@@ -1,0 +1,35 @@
+---
+title: Members
+description: The Space Studio Members tab for managing Private Space access.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Members is the Space Studio tab for Private Space access. It controls which tenant users can open the Space, participate in its threads, and send cold-contact inbound work to that Space.
+
+**Route:** `/spaces/:spaceId/members`
+
+## When the tab appears
+
+Members appears only for Private Spaces. Public Spaces do not show a Members tab because registered tenant users can use the Space without a per-Space member list.
+
+If a user opens `/spaces/:spaceId/members` for a Public Space, Admin redirects back to `/spaces/:spaceId/workspace`.
+
+## What members can do
+
+Space members can access the Private Space and its work. For inbound email, Private Spaces accept cold-contact email only from Space members when the Email trigger is enabled.
+
+The Members table separates name and email so operators can identify exactly who has access.
+
+<Aside type="caution">
+  Membership controls Space access. It does not store credentials or grant
+  personal OAuth tokens. User-level credentials still live in the mobile
+  integration flow.
+</Aside>
+
+## Related pages
+
+- [Access and Membership](/concepts/spaces/access-and-membership/) - Public and Private Spaces
+- [Admin - Space Settings](/applications/admin/spaces/settings/) - changing a Space's access mode
+- [Admin - Space Triggers](/applications/admin/spaces/triggers/) - Email trigger behavior
+- [Admin - Spaces](/applications/admin/spaces/) - Space Studio overview

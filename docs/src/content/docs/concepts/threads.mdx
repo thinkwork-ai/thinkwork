@@ -52,7 +52,7 @@ Thread
 
 **Metadata** holds channel-specific routing and replay context — the Slack thread id that lets outbound replies land in the right conversation, the GitHub issue number that identifies an issue, the email `Message-Id` that implements email threading standards.
 
-**Space context** identifies the workroom that shaped the turn. The Space determines local workspace files, tools, memory, automations, email trigger behavior, and runtime overrides. Historical records may still expose an `agent_id`, but after the platform-agent migration that id points to the tenant platform agent; the Space is the useful context boundary.
+**Space context** identifies the workroom that shaped the turn. The Space determines local workspace files, tools, knowledge, memory, triggers, email behavior, and local policy. Historical records may still expose an `agent_id`, but after the platform-agent migration that id points to the tenant platform agent; the Space is the useful context boundary.
 
 ### Messages vs. turns — why both exist
 
@@ -199,10 +199,10 @@ A different pattern: an inbound email should land in the Space named by its reci
 The Email integration handles this by reading the `To:` address:
 
 1. **Inbound email.** SES delivers the email to the inbound bucket; the integration Lambda reads the new object.
-2. **Route by recipient.** If `To:` matches `<tenant-slug>.<space-slug>@agents.thinkwork.ai`, the integration resolves the Space.
-3. **Check trigger policy.** Cold-contact delivery is accepted only when the Space's email triggers are enabled. Private Spaces additionally require the sender to be a Space member. Archived Spaces reject new cold-contact email.
+2. **Route by recipient.** If `To:` matches `<space-slug>@<tenant-slug>.thinkwork.ai`, the integration resolves the Space.
+3. **Check trigger policy.** Cold-contact delivery is accepted only when the Space's email triggers are enabled and the sender email matches a registered tenant user. Private Spaces additionally require that user to be a Space member. Archived Spaces reject new cold-contact email.
 4. **Create or reopen.** The integration creates an `EMAIL-<ULID>` thread in that Space, or reopens an existing one using the `Message-Id` / `In-Reply-To` / `References` chain.
-5. **Invoke in Space context.** The tenant platform agent runs with that Space's workspace, tools, memory, automations, and runtime overrides.
+5. **Invoke in Space context.** The tenant platform agent runs with that Space's workspace, tools, knowledge, memory, triggers, and local policy.
 
 The point: the same thread container carries the work whether the source is chat, email, automation, or an integration. Operators who want visibility read it from the same admin Threads view.
 

@@ -105,7 +105,7 @@ Worth being honest about:
 
 - **Cost capture.** The AgentCore runtime (in `packages/agentcore-strands/agent-container/`) instruments every turn with OpenTelemetry spans. A downstream reducer turns those spans into per-turn cost rows in the operational database.
 - **Budget enforcement.** The budget handler runs on a schedule, computes month-to-date spend against configured caps, and pauses over-budget scopes.
-- **Pause mechanism.** Space-level pause is stored with Space runtime overrides; tenant-level pause is stored with the platform-agent budget state. Admin and mobile surfaces react to the change via real-time subscriptions.
+- **Pause mechanism.** Space-level pause is part of Space runtime policy; tenant-level pause is stored with the platform-agent budget state. Admin and mobile surfaces react to the change via real-time subscriptions.
 - **Audit storage.** NDJSON records land in an append-only S3 bucket provisioned by the ThinkWork Terraform module, with IAM denying deletes on the writer role. Lifecycle + retention is configurable per deployment.
 
 For the admin operator views of analytics and budgets, see [Admin: Analytics](/applications/admin/analytics/) and [Admin: Security Center](/applications/admin/security-center/).

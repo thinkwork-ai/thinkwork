@@ -25,7 +25,7 @@ Templates propagate to linked agents via two distinct mechanisms depending on wh
 - **Configuration fields** (built-in tool opt-ins, KBs, MCP servers, guardrails, model, system prompt, budget) — propagated via the explicit **Sync** flow described later on this page. Operators review per-agent diffs and confirm.
 - **Workspace files** (`AGENTS.md`, `CONTEXT.md`, `GUARDRAILS.md`, `TOOLS.md`, `skills/<slug>/SKILL.md`, etc.) — propagated via [workspace composition](/concepts/agents/workspace-composition/). Live-class files update on next invocation with no sync step; pinned guardrail files require a per-agent **Accept update** review; `USER.md` is rewritten server-side on human reassignment.
 
-This is how template-backed authoring flows stay reusable. It is separate from Space runtime overrides, which are the current way to tune model, guardrail, budget, paused state, and sandbox for a workroom.
+This is how template-backed authoring flows stay reusable. It is separate from Space runtime policy, which is the current model for workroom-specific execution behavior.
 
 ## The template list
 
@@ -255,7 +255,7 @@ Template history is not currently versioned — rollback means editing forward. 
 ## Related pages
 
 - [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent defaults
-- [Spaces](/applications/admin/spaces/) — Space-specific context and runtime overrides
+- [Spaces](/applications/admin/spaces/) — Space-specific context, triggers, settings, and members
 - [Runtime Configuration](/concepts/agents/runtime-selection/) — tenant-agent defaults and Space overrides
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB agent registration
 - [Skills Catalog](/applications/admin/skills-catalog/) — the skills added to templates

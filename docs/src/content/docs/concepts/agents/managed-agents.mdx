@@ -22,7 +22,7 @@ The dispatcher resolves:
 - Tenant id and caller context.
 - The thread and Space.
 - The tenant platform agent.
-- Space runtime overrides.
+- Space runtime policy.
 - Tenant agent defaults for any unset override.
 
 See [Runtime Configuration](/concepts/agents/runtime-selection/) for the resolution model.
@@ -91,7 +91,7 @@ After the turn completes:
 ## Why this shape matters
 
 - **One platform-agent identity.** Operators do not need to manage a fleet of top-level managed-agent records.
-- **Space-local behavior.** Context, tools, memory, automations, email triggers, and runtime overrides live where the work happens.
+- **Space-local behavior.** Context, tools, memory, triggers, and runtime policy live where the work happens.
 - **Every turn resolves fresh config.** Tenant-agent changes and Space override changes apply to new turns without a redeploy.
 - **Audit stays unified.** Threads, turns, tool calls, cost, and channel metadata all attach to the same durable thread model.
 
@@ -112,7 +112,7 @@ Use [connected agents](/concepts/agents/) when you already run an external agent
 | Layer        | Examples                                                                      |
 | ------------ | ----------------------------------------------------------------------------- |
 | Tenant Agent | Name, role, default model, budget, sandbox, system prompt, baseline workspace |
-| Space        | Workspace files, tools, memory, automations, email trigger, runtime overrides |
+| Space        | Workspace files, tools, memory, triggers, email channel, runtime policy |
 | Deployment   | Runtime image, memory, networking, environment variables, Bedrock access      |
 
 Templates and older per-agent records can still appear in migration, authoring, or audit flows. For normal operation, start with Tenant Agent and Spaces.

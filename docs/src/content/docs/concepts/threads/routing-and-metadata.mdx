@@ -53,7 +53,7 @@ Every thread has a `metadata` JSON column. Channel determines what that column h
 ```json
 {
   "fromAddress": "customer@example.com",
-  "toAddress": "acme.support@agents.thinkwork.ai",
+  "toAddress": "support@acme.thinkwork.ai",
   "spaceId": "sp_123",
   "subject": "Re: Deploy failing",
   "messageId": "<abc@example.com>",
@@ -62,7 +62,7 @@ Every thread has a `metadata` JSON column. Channel determines what that column h
 }
 ```
 
-SES inbound lookup first resolves the Space from `<tenant-slug>.<space-slug>@agents.thinkwork.ai`, then uses `inReplyTo` and `references` to stitch replies into existing threads via standard email threading rules. A reply to a closed thread reopens it.
+SES inbound lookup first resolves the Space from `<space-slug>@<tenant-slug>.thinkwork.ai`, then uses `inReplyTo` and `references` to stitch replies into existing threads via standard email threading rules. A reply to a closed thread reopens it.
 
 ### `TASK`
 

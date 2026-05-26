@@ -1,118 +1,66 @@
 ---
-title: Admin — Spaces
-description: "Create and configure Spaces: contextual workrooms with workspace files, tools, memory, automations, email triggers, and runtime overrides."
+title: Admin - Spaces
+description: "Operator guide to Space Studio: the Spaces list plus Workspace, KBs, Triggers, Settings, and Members tabs."
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
-Spaces are the primary way operators shape how the tenant platform agent behaves in a particular context. A Space can represent a team, customer, project, workflow, inbox, or channel-bound workroom.
+Admin Spaces is where operators create and configure contextual workrooms for the tenant platform agent. A Space can represent a team, customer, project, workflow, inbox, or channel-bound room with its own workspace context, knowledge, triggers, access, and local policy.
 
-**List route:** `/spaces`  
-**Detail routes:** `/spaces/:spaceId/configuration`, `/spaces/:spaceId/workspace`, `/spaces/:spaceId/tools`, `/spaces/:spaceId/memory`, `/spaces/:spaceId/automations`
+The Admin UI has two levels:
 
-The Spaces list shows each Space's name, access mode, status, and last update time. The header includes:
+- **Spaces list:** `/spaces`
+- **Space Studio:** `/spaces/:spaceId`, which redirects to `/spaces/:spaceId/workspace`
 
-- **Configure agent** — opens [Tenant Agent](/applications/admin/agents/) for tenant-wide defaults.
-- **New Space** — creates a Space with name, description, and access mode.
+Space Studio tabs appear in this order: **Workspace**, **KBs**, **Triggers**, **Settings**, and **Members**. The Members tab appears only for Private Spaces.
 
-## Space configuration
-
-The Configuration tab controls the Space's identity and runtime behavior.
-
-| Field          | Meaning                                                                           |
-| -------------- | --------------------------------------------------------------------------------- |
-| Name           | Human-readable Space name                                                         |
-| Description    | Optional context shown to operators and used to orient the workroom               |
-| Access mode    | `Public` or `Private`                                                             |
-| Email triggers | Whether registered users can start new cold-contact threads by emailing the Space |
-
-Public Spaces can be used by registered tenant users. Private Spaces restrict access to Space members.
-
-### Runtime overrides
-
-The Advanced runtime section lets a Space override the tenant agent baseline for work that happens in that Space.
-
-| Override             | Behavior when empty                          |
-| -------------------- | -------------------------------------------- |
-| Model                | Inherits the tenant agent model              |
-| Guardrail id         | Inherits the tenant agent guardrail behavior |
-| Monthly budget cents | Inherits the tenant agent monthly budget     |
-| Budget paused        | Uses the tenant agent budget state           |
-| Sandbox              | Inherits the tenant agent sandbox setting    |
-
-Use Space overrides when a workroom needs a different risk or cost profile. Examples: a finance Space can use a stricter guardrail, an experimentation Space can use a cheaper model, or an internal compute Space can disable public-network sandbox access.
-
-<Aside type="tip">
-  Keep tenant-wide defaults broad and conservative. Use Space overrides for
-  local policy, cost, and model differences so the rest of the tenant remains
-  easy to reason about.
+<Aside type="note">
+  Workspace is the landing tab for a Space. If you open `/spaces/:spaceId`,
+  Admin redirects to `/spaces/:spaceId/workspace`.
 </Aside>
 
-## Workspace
+## Read this section
 
-The Workspace tab holds files that apply only inside this Space. Use it for procedures, customer context, team norms, runbooks, and domain notes that should not leak into other Spaces.
+Start with Spaces list if you are creating or finding a Space. Then open the page for the tab you are configuring.
 
-The tenant agent reads its own baseline workspace first, then Space context is rendered for the current turn. This gives you a shared platform-agent identity with local Space behavior.
+<CardGrid>
+  <Card title="Spaces list" icon="list" href="/applications/admin/spaces/list/">
+    The `/spaces` table, creating a Space, and opening Space Studio.
+  </Card>
+  <Card title="Workspace" icon="file" href="/applications/admin/spaces/workspace/">
+    Space-local files for procedures, customer context, project notes, and
+    workroom instructions.
+  </Card>
+  <Card title="KBs" icon="open-book" href="/applications/admin/spaces/kbs/">
+    Knowledge-base selection for the Space.
+  </Card>
+  <Card title="Triggers" icon="time" href="/applications/admin/spaces/triggers/">
+    Schedule, Webhook, and Email triggers that create or wake work in the Space.
+  </Card>
+  <Card title="Settings" icon="setting" href="/applications/admin/spaces/settings/">
+    Space name, access mode, and description.
+  </Card>
+  <Card title="Members" icon="user" href="/applications/admin/spaces/members/">
+    Private Space membership and access control.
+  </Card>
+</CardGrid>
 
-## Tools
+## What belongs here
 
-The Tools tab manages which built-in tools and MCP servers are available in the Space. Tenant-level registrations still live in [Tenant MCP Servers](/applications/admin/mcp-servers/) and [Built-in Tools](/applications/admin/builtin-tools/); the Space controls which of those capabilities are available for that workroom.
+Use Admin Spaces when the operator decision is local to a workroom:
 
-## Memory
+- local workspace files;
+- selected knowledge bases;
+- schedules, webhooks, or Space email triggers;
+- Public or Private access;
+- Private Space membership.
 
-The Memory tab shows memory scoped to the Space. Use it to inspect what the agent has learned or retained for that workroom without mixing unrelated tenant context.
-
-## Automations
-
-The Automations tab lists recurring or event-driven work tied to the Space. Use it when a workflow should wake the tenant agent in a specific context rather than at a tenant-wide default.
-
-## Email triggers
-
-Every Space has an address:
-
-```text
-<tenant-slug>.<space-slug>@agents.thinkwork.ai
-```
-
-Cold-contact inbound email follows these rules:
-
-- Email triggers must be enabled on the Space.
-- Archived Spaces cannot receive new cold-contact email.
-- Public Spaces accept cold-contact email from registered users in the tenant.
-- Private Spaces accept cold-contact email only from Space members.
-- Token-bearing replies to agent-initiated emails work even when cold-contact triggers are disabled.
-
-Legacy per-agent addresses such as `<agent-slug>@agents.thinkwork.ai` are retired. Send new inbound work to a Space address.
-
-## Common workflows
-
-### Create a Space
-
-1. Open `/spaces`.
-2. Click **New Space**.
-3. Enter a name and optional description.
-4. Choose Public or Private.
-5. Save, then configure workspace files, tools, memory, automations, and runtime overrides as needed.
-
-### Give a Space a stricter runtime profile
-
-1. Open the Space's Configuration tab.
-2. Expand Advanced runtime.
-3. Set the model, guardrail id, budget, paused state, or sandbox value that should differ from the tenant agent.
-4. Save overrides.
-5. Leave fields empty when the Space should inherit the tenant agent baseline.
-
-### Start work by email
-
-1. Open the Space's Configuration tab.
-2. Enable Email Triggers.
-3. Copy the Space email address.
-4. Share it with registered tenant users, or with Space members for a Private Space.
+Use [Tenant Agent](/applications/admin/agents/) for tenant-wide platform-agent defaults and baseline workspace behavior. Use tenant MCP and built-in tool pages for registration of capabilities that Spaces can make available.
 
 ## Related pages
 
-- [Admin — Tenant Agent](/applications/admin/agents/) — tenant-wide agent baseline
-- [Spaces (concept)](/concepts/spaces/) — conceptual model
-- [Threads](/applications/admin/threads/) — visible work created by chat, email, automations, and integrations
-- [Automations](/applications/admin/automations/) — tenant-wide automation management
-- [Tenant MCP Servers](/applications/admin/mcp-servers/) — MCP server registrations
+- [Spaces (concept)](/concepts/spaces/) - the contextual workroom model
+- [Admin - Tenant Agent](/applications/admin/agents/) - tenant-wide platform-agent baseline
+- [Admin - Threads](/applications/admin/threads/) - thread records created in Spaces
+- [Admin - Automations](/applications/admin/automations/) - tenant-wide routines, schedules, and webhooks
+- [Admin - Company Brain](/applications/admin/knowledge/) - memory, pages, knowledge bases, and sources

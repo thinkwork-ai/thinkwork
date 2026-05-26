@@ -1,0 +1,52 @@
+---
+title: Triggers
+description: The Space Studio Triggers tab for Schedule, Webhook, and Email entry points.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Triggers is the Space Studio tab for work that starts or wakes inside a Space. It shows Schedule, Webhook, and Email trigger rows in one table.
+
+**Route:** `/spaces/:spaceId/triggers`
+
+## Trigger types
+
+| Type | Purpose |
+| ---- | ------- |
+| Schedule | Recurring or one-time work in the Space |
+| Webhook | External POSTs that create or wake work in the Space |
+| Email | Cold-contact inbound email to the Space address |
+
+The table shows each trigger's name, type, description, status, and last run time when available.
+
+## Add menu
+
+Use the **Add** menu in the header:
+
+- **Schedule** opens the schedule form.
+- **Webhook** opens the webhook form.
+- **Email** enables the Space email trigger.
+
+Email is backed by a Space setting, not a separate backend entity. When disabled, it does not appear as a table row. When enabled, it appears as a single Email row with a copyable Space address. Clicking that row opens the disable confirmation.
+
+## Space email address
+
+Space cold-contact email uses:
+
+```text
+<space-slug>@<tenant-slug>.thinkwork.ai
+```
+
+Cold-contact delivery requires the Email trigger to be enabled and the sender email to match a registered tenant user. Private Spaces also require that user to be a Space member. Token-bearing replies to agent-initiated emails are not the same as cold-contact email and can continue existing conversations even when cold-contact email is disabled.
+
+<Aside type="note">
+  Legacy per-agent addresses and older Space address examples under the agents
+  subdomain are retired for new Space cold-contact work.
+</Aside>
+
+## Related pages
+
+- [Triggers and Channels](/concepts/spaces/triggers-and-channels/) - how work enters Spaces
+- [Admin - Automations](/applications/admin/automations/) - tenant-wide schedules, routines, and webhooks
+- [Threads: Routing and Metadata](/concepts/threads/routing-and-metadata/) - channel metadata
+- [Admin - Spaces](/applications/admin/spaces/) - Space Studio overview
