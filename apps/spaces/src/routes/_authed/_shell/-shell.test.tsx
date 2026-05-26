@@ -120,6 +120,7 @@ describe("_authed/_shell layout", () => {
     ).toBeTruthy();
     expect(screen.queryByTestId("app-top-bar")).toBeNull();
     expect(screen.getByTestId("sidebar-inset").className).not.toContain("pt-");
+    expect(screen.getByTestId("sidebar-inset").className).toContain("relative");
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 });

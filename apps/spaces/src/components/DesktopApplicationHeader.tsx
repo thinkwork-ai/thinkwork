@@ -1,4 +1,5 @@
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Button,
@@ -9,6 +10,10 @@ import {
 } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 import { DesktopUpdateBadge } from "@/components/update-banner";
+import {
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
 
 export function DesktopNavigationControls({
   className,
@@ -17,6 +22,31 @@ export function DesktopNavigationControls({
   className?: string;
   onBackFallback?: () => void;
 }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshFallbackRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    function stopRefreshing() {
+      setRefreshing(false);
+      if (refreshFallbackRef.current !== null) {
+        window.clearTimeout(refreshFallbackRef.current);
+        refreshFallbackRef.current = null;
+      }
+    }
+
+    window.addEventListener(
+      "thinkwork:desktop-refresh-complete",
+      stopRefreshing,
+    );
+    return () => {
+      window.removeEventListener(
+        "thinkwork:desktop-refresh-complete",
+        stopRefreshing,
+      );
+      stopRefreshing();
+    };
+  }, []);
+
   const handleHistoryBack = () => {
     if (window.history.length > 1) {
       window.history.back();
@@ -24,17 +54,47 @@ export function DesktopNavigationControls({
     }
     onBackFallback?.();
   };
+  const handleRefresh = () => {
+    setRefreshing(true);
+    if (refreshFallbackRef.current !== null) {
+      window.clearTimeout(refreshFallbackRef.current);
+    }
+
+    const handled = !window.dispatchEvent(
+      new CustomEvent("thinkwork:desktop-refresh", { cancelable: true }),
+    );
+    refreshFallbackRef.current = window.setTimeout(
+      () => {
+        setRefreshing(false);
+        refreshFallbackRef.current = null;
+      },
+      handled ? 10_000 : 600,
+    );
+  };
 
   return (
     <div
-      className={`flex min-w-0 items-center gap-1 text-sidebar-foreground ${className ?? ""}`}
+      className={`flex min-w-0 items-center ${desktopToolbarGapClassName} text-sidebar-foreground ${className ?? ""}`}
     >
-      <SidebarTrigger className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
+      <SidebarTrigger className={`size-8 ${desktopToolbarButtonClassName}`} />
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        className={`size-8 ${desktopToolbarButtonClassName}`}
+        aria-label="Refresh thread"
+        title="Refresh thread"
+        aria-busy={refreshing ? "true" : undefined}
+        onClick={handleRefresh}
+      >
+        <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+        <span className="sr-only">Refresh thread</span>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className={`size-8 ${desktopToolbarButtonClassName}`}
         onClick={handleHistoryBack}
       >
         <ArrowLeft className="size-4" />
@@ -44,7 +104,7 @@ export function DesktopNavigationControls({
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="size-8 text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        className={`size-8 ${desktopToolbarButtonClassName}`}
         onClick={() => window.history.forward()}
       >
         <ArrowRight className="size-4" />
@@ -70,7 +130,13 @@ export function DesktopApplicationHeader() {
       ?.to ?? "";
 
   if (open && !hasContent) {
-    return null;
+    return (
+      <div
+        aria-hidden="true"
+        className="desktop-app-header pointer-events-auto absolute left-0 right-0 top-0 z-10 h-[var(--desktop-app-header-height)] bg-transparent"
+        data-testid="desktop-hidden-drag-region"
+      />
+    );
   }
 
   return (
@@ -91,7 +157,7 @@ export function DesktopApplicationHeader() {
         className={`flex min-w-0 flex-1 items-center gap-2 ${headerActions || tabs.length > 0 ? "" : "pointer-events-none"}`}
       >
         {headerActions ? (
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1">
             <h1 className="truncate text-sm font-medium">
               {headerActions.title}
             </h1>
@@ -125,7 +191,9 @@ export function DesktopApplicationHeader() {
           </div>
         ) : null}
 
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div
+          className={`ml-auto flex shrink-0 items-center ${desktopToolbarGapClassName}`}
+        >
           {headerActions?.action ? headerActions.action : null}
         </div>
       </div>

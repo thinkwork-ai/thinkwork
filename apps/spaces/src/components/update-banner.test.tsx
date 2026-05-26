@@ -121,7 +121,10 @@ describe("DesktopUpdateBadge", () => {
     });
 
     expect(button.textContent).toContain("Update");
-    expect(button.className).toContain("bg-[#2f9bff]");
+    expect(button.className).toContain("h-[22px]");
+    expect(button.className).toContain("text-xs");
+    expect(button.className).toContain("font-medium");
+    expect(button.className).toContain("bg-white/[0.08]");
     fireEvent.click(button);
 
     expect(bridge.downloadUpdate).toHaveBeenCalledTimes(1);
@@ -157,6 +160,11 @@ describe("DesktopUpdateBadge", () => {
     );
 
     expect(screen.getByText("Restart")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Restart to install update v1.2.3",
+      }).className,
+    ).toContain("h-[22px]");
     expect(bridge.installUpdate).toHaveBeenCalledTimes(1);
   });
 

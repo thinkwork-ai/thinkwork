@@ -304,11 +304,75 @@ describe("SpacesThreadDetailRoute", () => {
     expect(usePageHeaderActions).toHaveBeenLastCalledWith(
       expect.objectContaining({
         action: expect.anything(),
+        titleTrailing: expect.anything(),
         actionKey: expect.stringContaining(
           ":1:artifact_123:info-closed:closed",
         ),
       }),
     );
+  });
+
+  it("anchors the thread actions menu next to the title", () => {
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderTitleTrailing();
+
+    expect(screen.getByRole("button", { name: "Thread actions" })).toBeTruthy();
+  });
+
+  it("refetches thread data for a manual desktop refresh event", () => {
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    window.dispatchEvent(new CustomEvent("thinkwork:desktop-refresh"));
+
+    expect(reexecuteThreadQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteProgressMarkdownQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  it("uses muted desktop chrome styling for thread header icon actions", () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Artifact thread",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "ASSISTANT",
+                content: "I created a dashboard app.",
+                durableArtifact: {
+                  id: "artifact_123",
+                  title: "CRM pipeline risk app",
+                  type: "DATA_VIEW",
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+
+    expect(
+      screen.getByRole("button", { name: "Open thread info" }).className,
+    ).toContain("text-muted-foreground/70");
+    expect(
+      screen.getByRole("button", { name: "Open artifact side panel" })
+        .className,
+    ).toContain("text-muted-foreground/70");
   });
 
   it("does not refetch the full thread for turn-only status updates", () => {
@@ -554,6 +618,13 @@ function renderHeaderAction() {
   const action = lastCall?.[0]?.action;
   if (!action) throw new Error("expected page header action");
   render(<>{action}</>);
+}
+
+function renderHeaderTitleTrailing() {
+  const lastCall = vi.mocked(usePageHeaderActions).mock.calls.at(-1);
+  const titleTrailing = lastCall?.[0]?.titleTrailing;
+  if (!titleTrailing) throw new Error("expected page header title trailing");
+  render(<>{titleTrailing}</>);
 }
 
 function queryState(data: unknown) {

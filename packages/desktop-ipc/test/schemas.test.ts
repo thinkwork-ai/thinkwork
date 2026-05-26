@@ -207,6 +207,24 @@ describe("desktop IPC handler guards", () => {
     ).toThrow(/untrusted sender frame/);
   });
 
+  it("allows the active Electron dev renderer URL", () => {
+    const previousRendererUrl = process.env.ELECTRON_RENDERER_URL;
+    process.env.ELECTRON_RENDERER_URL = "http://localhost:5176/";
+    try {
+      expect(() =>
+        assertSafeSenderFrame({
+          senderFrame: { url: "http://localhost:5176/sign-in?next=%2Fnew" },
+        }),
+      ).not.toThrow();
+    } finally {
+      if (previousRendererUrl === undefined) {
+        delete process.env.ELECTRON_RENDERER_URL;
+      } else {
+        process.env.ELECTRON_RENDERER_URL = previousRendererUrl;
+      }
+    }
+  });
+
   it("rate-limits repeated calls by key", () => {
     expect(() =>
       rateLimit({ key: "start-oauth", intervalMs: 2_000, now: () => 1_000 }),

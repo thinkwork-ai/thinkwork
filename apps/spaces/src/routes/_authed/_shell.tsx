@@ -45,7 +45,7 @@ function ShellLayout() {
     <>
       <SpacesSidebar />
       <SidebarInset
-        className={`min-h-0 min-w-0 flex flex-col ${isDesktop ? "h-full" : "h-svh"}`}
+        className={`min-h-0 min-w-0 flex flex-col ${isDesktop ? "relative h-full" : "h-svh"}`}
       >
         {isDesktop ? <DesktopApplicationHeader /> : <AppTopBar />}
         <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">

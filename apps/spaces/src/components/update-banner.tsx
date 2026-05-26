@@ -22,7 +22,7 @@ export function DesktopUpdateBadge({ className }: { className?: string }) {
       size="sm"
       variant={action?.variant ?? "secondary"}
       className={cn(
-        "h-[26px] min-h-0 rounded-full border-[#54a9ff]/60 bg-[#2f9bff] px-3 py-0 text-sm font-semibold leading-none text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] hover:bg-[#2388e6] disabled:border-[#3a3a3a] disabled:bg-[#2d2d2d] disabled:text-[#a5a5a5]",
+        "h-[22px] min-h-0 rounded-full border border-white/12 bg-white/[0.08] px-2.5 py-0 text-xs font-medium leading-none text-white/80 shadow-none hover:bg-white/[0.12] hover:text-white disabled:border-white/8 disabled:bg-white/[0.04] disabled:text-white/35",
         className,
       )}
       title={title}
@@ -206,9 +206,7 @@ function updateTitle(state: UpdateState): string {
     case "downloaded":
       return `Restart to install update ${formatVersion(state.downloadedVersion)}`;
     case "error":
-      return state.message
-        ? `Retry update: ${state.message}`
-        : "Retry update";
+      return state.message ? `Retry update: ${state.message}` : "Retry update";
     case "checking":
       return "Checking for updates";
     case "disabled":

@@ -26,6 +26,7 @@ import {
   DeleteThreadMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
+import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
 import { setThreadDeletePending } from "@/lib/pending-thread-deletes";
 
 export interface AttachedArtifactSummary {
@@ -80,12 +81,13 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
             variant="ghost"
             size="icon-sm"
             aria-label="Thread actions"
+            className={desktopToolbarButtonClassName}
             data-testid="thread-actions-trigger"
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[10rem]">
+        <DropdownMenuContent align="start" className="min-w-[10rem]">
           <DropdownMenuItem
             className="whitespace-nowrap"
             data-testid="thread-actions-archive"
