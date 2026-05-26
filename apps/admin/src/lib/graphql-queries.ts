@@ -595,6 +595,15 @@ export const ThreadSystemPromptQuery = graphql(`
   }
 `);
 
+export const ThreadProgressQuery = graphql(`
+  query ThreadProgress($tenantId: ID!, $threadId: ID!) {
+    threadProgress(tenantId: $tenantId, threadId: $threadId) {
+      threadId
+      markdown
+    }
+  }
+`);
+
 export const UpdateThreadMutation = graphql(`
   mutation UpdateThread($id: ID!, $input: UpdateThreadInput!) {
     updateThread(id: $id, input: $input) {

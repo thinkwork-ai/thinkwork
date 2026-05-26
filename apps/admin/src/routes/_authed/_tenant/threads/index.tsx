@@ -277,12 +277,27 @@ function ThreadsPage() {
   }, [turnSub.data, reexecuteThreads]);
 
   const agents = agentsResult.data?.agent ? [agentsResult.data.agent] : [];
-  const rawThreads: ThreadItem[] = (
-    threadsResult.data?.threadsPaged?.items ?? []
-  ).map((t: any) => ({
-    ...t,
-    status: t.status.toLowerCase(),
-  }));
+  const modelDisplayNameById = useMemo(
+    () =>
+      new Map(
+        (agentsResult.data?.modelCatalog ?? []).map((model) => [
+          model.modelId,
+          model.displayName,
+        ]),
+      ),
+    [agentsResult.data?.modelCatalog],
+  );
+  const rawThreads: ThreadItem[] = useMemo(
+    () =>
+      (threadsResult.data?.threadsPaged?.items ?? []).map((t: any) => ({
+        ...t,
+        status: t.status.toLowerCase(),
+        lastModelDisplayName: t.lastModel
+          ? (modelDisplayNameById.get(t.lastModel) ?? null)
+          : null,
+      })),
+    [threadsResult.data?.threadsPaged?.items, modelDisplayNameById],
+  );
 
   const agentName = useCallback(
     (id: string | null) => {

@@ -110,13 +110,15 @@ function SpacesPage() {
   });
 
   const rows = useMemo<SpaceRow[]>(() => {
-    return (result.data?.spaces ?? []).map((space) => ({
-      id: space.id,
-      name: space.name,
-      accessMode: space.accessMode,
-      status: space.status,
-      updatedAt: space.updatedAt,
-    }));
+    return (result.data?.spaces ?? [])
+      .map((space) => ({
+        id: space.id,
+        name: space.name,
+        accessMode: space.accessMode,
+        status: space.status,
+        updatedAt: space.updatedAt,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [result.data?.spaces]);
 
   if (!tenantId) return <PageSkeleton />;

@@ -4,6 +4,7 @@ import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, spaces, threads, threadToCamel } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
+import { toGraphqlLinkedTask } from "../linked-tasks/shared.js";
 import { hasSpaceMemberAccess } from "./shared.js";
 import {
   CUSTOMER_ONBOARDING_TEMPLATE_KEY,
@@ -50,7 +51,9 @@ export async function startCustomerOnboarding(
       threadId: result.thread.id,
       idempotent: result.idempotent,
       missingFields: result.missingFields,
-      linkedTasks: result.linkedTasks,
+      linkedTasks: result.linkedTasks.map((task) =>
+        toGraphqlLinkedTask(task as unknown as Record<string, unknown>),
+      ),
     };
   } catch (error) {
     if (error instanceof CustomerOnboardingWorkflowError) {

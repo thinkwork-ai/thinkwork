@@ -90,6 +90,11 @@ type ThreadsPage {
   totalCount: Int!
 }
 
+type ThreadProgress {
+  threadId: ID!
+  markdown: String!
+}
+
 type ThreadLabel {
   id: ID!
   tenantId: ID!
@@ -204,6 +209,7 @@ extend type Query {
   ): ThreadsPage!
   thread(id: ID!): Thread
   threadByNumber(tenantId: ID!, number: Int!): Thread
+  threadProgress(tenantId: ID!, threadId: ID!): ThreadProgress
   threadLabels(tenantId: ID!): [ThreadLabel!]!
   unreadThreadCount(tenantId: ID!, agentId: ID): Int!
 }

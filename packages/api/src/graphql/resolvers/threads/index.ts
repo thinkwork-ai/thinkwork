@@ -2,6 +2,7 @@ import { threads_query } from "./threads.query.js";
 import { threadsPaged_query } from "./threadsPaged.query.js";
 import { thread } from "./thread.query.js";
 import { threadByNumber } from "./threadByNumber.query.js";
+import { threadProgress } from "./threadProgress.query.js";
 import { threadLabels_query } from "./threadLabels.query.js";
 import { unreadThreadCount } from "./unreadThreadCount.query.js";
 import { threadMentionTargets } from "./threadMentionTargets.query.js";
@@ -26,6 +27,7 @@ export const threadQueries = {
   threadsPaged: threadsPaged_query,
   thread,
   threadByNumber,
+  threadProgress,
   threadLabels: threadLabels_query,
   threadMentionTargets,
   unreadThreadCount,

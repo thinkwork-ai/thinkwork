@@ -34,6 +34,7 @@ vi.mock("../../utils.js", () => ({
     status: String(row.status).toUpperCase(),
     channel: String(row.channel).toUpperCase(),
   }),
+  snakeToCamel: (row: Record<string, unknown>) => ({ ...row }),
 }));
 
 vi.mock("../core/authz.js", () => ({
@@ -58,8 +59,9 @@ vi.mock("../../../lib/spaces/customer-onboarding-workflow.js", async () => {
   };
 });
 
-const { startCustomerOnboarding } =
-  await import("./startCustomerOnboarding.mutation.js");
+const { startCustomerOnboarding } = await import(
+  "./startCustomerOnboarding.mutation.js"
+);
 
 const ctx = { auth: { authType: "cognito" } } as any;
 
@@ -84,7 +86,12 @@ beforeEach(() => {
       {
         checklistItemId: "item-1",
         provider: "thinkwork",
+        title: "Send and receive DocuSign package",
         externalTaskId: "thinkwork:thread-1:item-1",
+        externalTaskUrl: null,
+        status: "todo",
+        blocked: false,
+        syncStatus: "synced",
       },
     ],
     missingFields: ["documents"],
@@ -146,6 +153,18 @@ describe("startCustomerOnboarding mutation", () => {
         id: "thread-1",
         channel: "MANUAL",
       },
+      linkedTasks: [
+        {
+          checklistItemId: "item-1",
+          provider: "THINKWORK",
+          title: "Send and receive DocuSign package",
+          externalTaskId: "thinkwork:thread-1:item-1",
+          externalTaskUrl: null,
+          status: "TODO",
+          blocked: false,
+          syncStatus: "SYNCED",
+        },
+      ],
     });
   });
 

@@ -8,7 +8,11 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { UpdateThreadMutation } from "@/lib/graphql-queries";
+import {
+  ThreadLinkedTasksQuery,
+  ThreadProgressMarkdownQuery,
+  UpdateThreadMutation,
+} from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import {
   SpacesThreadDetailRoute,
@@ -71,6 +75,7 @@ vi.mock("@/lib/use-computer-thread-chunks", () => ({
 
 const reexecuteThreadQuery = vi.fn();
 const reexecuteLinkedTasksQuery = vi.fn();
+const reexecuteProgressMarkdownQuery = vi.fn();
 const reexecuteTasksQuery = vi.fn();
 const sendMessage = vi.fn();
 const updateThreadMock = vi.fn();
@@ -81,6 +86,7 @@ let taskData: unknown;
 let eventData: unknown;
 let mentionTargetsData: unknown;
 let linkedTasksData: unknown;
+let progressMarkdownData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
@@ -88,6 +94,7 @@ beforeEach(() => {
   vi.mocked(usePageHeaderActions).mockReset();
   reexecuteThreadQuery.mockReset();
   reexecuteLinkedTasksQuery.mockReset();
+  reexecuteProgressMarkdownQuery.mockReset();
   reexecuteTasksQuery.mockReset();
   sendMessage.mockReset();
   updateThreadMock.mockReset();
@@ -130,6 +137,7 @@ beforeEach(() => {
   eventData = { computerEvents: [] };
   mentionTargetsData = { threadMentionTargets: [] };
   linkedTasksData = { threadLinkedTasks: [] };
+  progressMarkdownData = { threadProgressMarkdown: null };
 
   sendMessage.mockResolvedValue({});
   updateThreadMock.mockResolvedValue({});
@@ -167,8 +175,11 @@ beforeEach(() => {
     if (variables?.messageLimit) {
       return [queryState(threadData), reexecuteThreadQuery];
     }
-    if (variables?.tenantId && variables?.threadId) {
+    if (options.query === ThreadLinkedTasksQuery) {
       return [queryState(linkedTasksData), reexecuteLinkedTasksQuery];
+    }
+    if (options.query === ThreadProgressMarkdownQuery) {
+      return [queryState(progressMarkdownData), reexecuteProgressMarkdownQuery];
     }
     if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
@@ -449,12 +460,28 @@ describe("SpacesThreadDetailRoute", () => {
         {
           id: "linked-1",
           provider: "THINKWORK",
-          title: "Get contract signed",
+          title: "Stale linked task title",
           required: true,
-          status: "TODO",
+          status: "NOT_APPLICABLE",
           syncStatus: "SYNCED",
         },
       ],
+    };
+    progressMarkdownData = {
+      threadProgressMarkdown: {
+        threadId: "thread-1",
+        key: "tenants/acme/threads/thread-1/PROGRESS.md",
+        content: [
+          "# PROGRESS",
+          "",
+          "Goal: Complete customer onboarding for E2E Progress MD 20260525201201 Co.",
+          "",
+          "## Tasks",
+          "| Task | Status | Owner | Required | Blocker/Notes |",
+          "| --- | --- | --- | --- | --- |",
+          "| Get contract signed - E2E Progress MD 20260525201201 Co | Completed | Sales | Yes | signed package received |",
+        ].join("\n"),
+      },
     };
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
@@ -463,6 +490,14 @@ describe("SpacesThreadDetailRoute", () => {
 
     expect(screen.getByText("Progress")).toBeTruthy();
     expect(screen.getByText("Get contract signed")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Get contract signed - E2E Progress MD 20260525201201 Co",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText("Sales")).toBeNull();
+    expect(screen.queryByText("signed package received")).toBeNull();
+    expect(screen.queryByText("Stale linked task title")).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "Update Get contract signed" }),
     );
@@ -502,7 +537,7 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
     renderHeaderAction();
     fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Thread" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark as completed" }));
 
     await waitFor(() => {
       expect(updateThreadMock).toHaveBeenCalledWith({

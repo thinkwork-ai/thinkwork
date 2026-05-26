@@ -102,13 +102,56 @@ Target branch: `main`
 
 ## Follow-Up Run: Customer Onboarding Chat Checklist Updates
 
-- Status: active
-- Active branch: `codex/customer-onboarding-chat-updates`
-- Active worktree: `.Codex/worktrees/customer-onboarding-chat-updates`
+- Status: merged
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-25
 - Root cause: live E2E after PR #1711 verified Thread creation, missing-question prompting, and Info Panel checklist rendering, but a human answer in chat did not update missing intake state or checklist statuses.
 - Scope: add a deterministic Customer Onboarding `sendMessage` hook that extracts intake answers and completion statements from same-thread chat, updates `threads.metadata.customerOnboarding`, updates ThinkWork linked checklist rows, records linked-task events, and writes an assistant summary message. Handled onboarding chat updates skip the generic default-agent turn so the demo path is deterministic.
-- Verification so far: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
+- PR: [#1713](https://github.com/thinkwork-ai/thinkwork/pull/1713)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy completed successfully.
+
+## Follow-Up Run: Customer Onboarding Start Enum Serialization
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: live Start onboarding GraphQL responses returned raw lowercase linked-task status/priority values, which violated the GraphQL enum contract after the native checklist rows were created.
+- Scope: serialize Start onboarding `linkedTasks` through the shared GraphQL linked-task mapper so status, priority, source, and provider values match the public schema.
+- Verification: focused Start onboarding resolver tests passed; `@thinkwork/api` typecheck passed; touched-file Prettier; `git diff --check`.
+- PR: [#1717](https://github.com/thinkwork-ai/thinkwork/pull/1717)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy completed successfully.
+
+## Follow-Up Run: Workspace Map Skills Regression
+
+- Status: merged
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: a later workspace-map refresh reintroduced the materialized `skills/` tree into AGENTS.md Folder Structure output, even though Skills are documented in the separate Skills & Tools section.
+- Scope: filter `skills/**` from generated Folder Structure trees while preserving Skills & Tools tables; update the repair script templates; hotfix the live fleet workspace AGENTS.md in S3.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts scripts/repair-agent-workspace-blueprint.test.ts`; `pnpm --filter @thinkwork/api typecheck`; touched-file Prettier; `git diff --check`.
+- PR: [#1718](https://github.com/thinkwork-ai/thinkwork/pull/1718)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy completed successfully.
+
+## Follow-Up Run: Thread Progress Markdown
+
+- Status: merged and live-verified
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-25
+- Root cause: the Info Panel checklist is the visible operational state, but the agent turn context does not yet receive a durable thread-level progress ledger. Status answers can drift unless every turn sees the current goal, tasks, owners, blockers, missing information, and next steps.
+- Scope: render a per-thread `PROGRESS.md` into S3 at `tenants/<tenant-slug>/threads/<thread-id>/PROGRESS.md`, refresh it after Customer Onboarding workflow creation, deterministic chat updates, and assistant finalization, then inject the file into future agent wakeup context when present.
+- Verification: `pnpm --filter @thinkwork/api test -- src/lib/thread-progress/storage.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/chat-finalize/process-finalize.test.ts src/handlers/wakeup-processor.system-prompt.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `git diff --check origin/main...HEAD`.
+- PR: [#1719](https://github.com/thinkwork-ai/thinkwork/pull/1719)
+- CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- Deploy: main deploy `26417425731` completed successfully.
+- Live E2E: created Customer Onboarding thread `14a71df7-0d6f-4ecf-a3cd-a314d55f0b09`; verified seven native checklist rows; verified S3 `tenants/sleek-squirrel-230/threads/14a71df7-0d6f-4ecf-a3cd-a314d55f0b09/PROGRESS.md`; sent chat updates that marked DocuSign, D&B, tax exemption, P21, and missing intake complete while blocking credit check; verified `PROGRESS.md` refreshed to 5/7 required complete with Finance blocker; asked status and verified response came from checklist progress; verified Spaces Info Panel shows 5/7 progress, owners, statuses, and task-click composer prefill.
 
 ### Active Unit Notes
 
@@ -1641,6 +1684,44 @@ Target branch: `main`
 
 None.
 
+# Customer Onboarding Progress Follow-Up - 2026-05-25
+
+## Status
+
+- Branch: `codex/customer-onboarding-credit-evidence`
+- Started: `2026-05-25T20:50:00Z`
+- Scope:
+  - Treat natural credit approval replies such as `Credit check and limit set at $10k` as Customer Onboarding workflow evidence.
+  - Read thread `PROGRESS.md` from S3 for the Spaces Info Panel and prefer it over stale linked-task rows.
+  - Tighten the Info Panel task presentation into a compact progress list.
+  - Update live dev Customer Onboarding source docs in S3 with the credit approval rule.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/lib/spaces/customer-onboarding-chat-updates.test.ts src/lib/thread-progress/storage.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/__tests__/graphql-contract.test.ts` - passed.
+- `pnpm --filter @thinkwork/spaces test -- src/components/workbench/SpacesThreadDetailRoute.test.tsx` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `pnpm --filter thinkwork-cli typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces build` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Opened [#1721](https://github.com/thinkwork-ai/thinkwork/pull/1721).
+- GitHub PR checks on [#1721](https://github.com/thinkwork-ai/thinkwork/pull/1721) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+- Squash merged [#1721](https://github.com/thinkwork-ai/thinkwork/pull/1721) as `bb3e0dfacfc8d8f0bda35bb94a3c47eb41b394ce`.
+- Deploy run `26419993441` passed, including GraphQL Lambda, Terraform apply, Admin, Spaces, Docs, Bootstrap, and Deploy Summary.
+
+## Blockers
+
+None.
+
 # Customer Onboarding Progress Workflow Refresh - 2026-05-25
 
 ## Status
@@ -1648,7 +1729,7 @@ None.
 - Branch: `codex/customer-onboarding-progress-refresh`
 - Plan: `docs/plans/2026-05-25-005-fix-customer-onboarding-progress-workflow-plan.md`
 - Started: `2026-05-25T18:35:00Z`
-- Active unit: PR/CI/deploy/E2E
+- Active unit: Live E2E follow-up fix
 
 ## Implemented
 
@@ -1669,7 +1750,9 @@ None.
 
 ## PR / Deploy
 
-- Pending.
+- [#1715](https://github.com/thinkwork-ai/thinkwork/pull/1715) merged to `main` as `47e1ce9514532872f98e5ff224288542c165b47d`.
+- Main deploy run `26415377371` passed, including Lambda, Terraform, Spaces, Admin, Bootstrap, and Deploy Summary.
+- Live E2E found a follow-up blocker in the manual Start onboarding mutation: linked-task status payloads were returned as lowercase internal tokens (`todo`, `synced`), which GraphQL rejected for enum fields. Follow-up branch `codex/customer-onboarding-start-status-enums` maps those mutation linked-task results through the shared GraphQL linked-task serializer.
 
 ## Blockers
 

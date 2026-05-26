@@ -40,8 +40,8 @@ describe("ThreadsTable shared component", () => {
   });
 
   it("renders runtime and model as separate columns instead of the old agent column", () => {
-    expect(source).toContain('header: "Runtime"');
-    expect(source).toContain('header: "Model"');
+    expect(source).toContain('<div className="text-center">Runtime</div>');
+    expect(source).toContain('<div className="text-center">Model</div>');
     expect(source).toContain('variant="outline"');
     expect(source).toContain("threadUserLabel(row.original)");
     expect(source).toContain("row.original.lastRuntimeType");
@@ -61,8 +61,10 @@ describe("ThreadsTable shared component", () => {
   it("renders named table headers for the thread list", () => {
     expect(source).toContain("hideHeader = false");
     expect(source).toContain('header: "Thread"');
-    expect(source).toContain('header: "User"');
-    expect(source).toContain('header: "Last Activity"');
+    expect(source).toContain('<div className="text-center">User</div>');
+    expect(source).toContain(
+      '<div className="text-center">Last Activity</div>',
+    );
     expect(source).not.toContain("flex-col items-end");
   });
 

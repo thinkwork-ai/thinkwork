@@ -12,6 +12,7 @@ import {
   normalizePersistedParts,
   type ComposerMention,
   type TaskThread,
+  type ThreadInfoChecklistTask,
   type TaskThreadInfoPanelState,
 } from "@/components/workbench/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
@@ -28,6 +29,7 @@ import {
   SendMessageMutation,
   ThreadArtifactsQuery,
   ThreadLinkedTasksQuery,
+  ThreadProgressMarkdownQuery,
   ThreadMentionTargetsQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
@@ -169,6 +171,14 @@ interface ThreadLinkedTasksResult {
   threadLinkedTasks?: LinkedTaskSummary[] | null;
 }
 
+interface ThreadProgressMarkdownResult {
+  threadProgressMarkdown?: {
+    threadId: string;
+    key?: string | null;
+    content: string;
+  } | null;
+}
+
 export function SpacesThreadDetailRoute({
   threadId,
   backHref,
@@ -255,6 +265,19 @@ export function SpacesThreadDetailRoute({
     pause: !tenantId || !threadId,
     requestPolicy: "cache-and-network",
   });
+  const [
+    {
+      data: progressMarkdownData,
+      fetching: progressMarkdownFetching,
+      error: progressMarkdownError,
+    },
+    reexecuteProgressMarkdownQuery,
+  ] = useQuery<ThreadProgressMarkdownResult>({
+    query: ThreadProgressMarkdownQuery,
+    variables: { tenantId: tenantId ?? "", threadId },
+    pause: !tenantId || !threadId,
+    requestPolicy: "cache-and-network",
+  });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const [{ fetching: completingThread }, updateThread] =
     useMutation(UpdateThreadMutation);
@@ -309,10 +332,12 @@ export function SpacesThreadDetailRoute({
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
     reexecuteLinkedTasksQuery,
+    reexecuteProgressMarkdownQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     threadId,
@@ -326,10 +351,12 @@ export function SpacesThreadDetailRoute({
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
     reexecuteLinkedTasksQuery,
+    reexecuteProgressMarkdownQuery,
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
@@ -345,6 +372,7 @@ export function SpacesThreadDetailRoute({
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
@@ -352,6 +380,7 @@ export function SpacesThreadDetailRoute({
     reexecuteEventsQuery,
     reexecuteLinkedTasksQuery,
     reexecuteMentionTargetsQuery,
+    reexecuteProgressMarkdownQuery,
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
@@ -418,11 +447,25 @@ export function SpacesThreadDetailRoute({
   );
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
+  const progressChecklistTasks = useMemo(
+    () =>
+      parseProgressMarkdownTasks(
+        progressMarkdownData?.threadProgressMarkdown?.content,
+      ),
+    [progressMarkdownData?.threadProgressMarkdown?.content],
+  );
+  const infoPanelChecklistTasks =
+    progressChecklistTasks.length > 0
+      ? progressChecklistTasks
+      : linkedTasks.map(toThreadInfoChecklistTask);
   const isCustomerOnboardingThread =
     hasCustomerOnboardingMetadata(data?.thread?.metadata) ||
-    linkedTasks.length > 0;
+    linkedTasks.length > 0 ||
+    Boolean(progressMarkdownData?.threadProgressMarkdown?.content);
   const showOnboardingChecklist =
-    isCustomerOnboardingThread || linkedTasksFetching;
+    isCustomerOnboardingThread ||
+    linkedTasksFetching ||
+    progressMarkdownFetching;
   const completionNotificationRef = useRef<{
     threadId: string;
     hasDurableAssistant: boolean;
@@ -526,9 +569,14 @@ export function SpacesThreadDetailRoute({
       checklist: showOnboardingChecklist
         ? {
             title: "Progress",
-            tasks: linkedTasks,
-            isLoading: linkedTasksFetching && linkedTasks.length === 0,
-            error: linkedTasksError?.message ?? null,
+            tasks: infoPanelChecklistTasks,
+            isLoading:
+              (linkedTasksFetching || progressMarkdownFetching) &&
+              infoPanelChecklistTasks.length === 0,
+            error:
+              progressMarkdownError?.message ??
+              linkedTasksError?.message ??
+              null,
             completedAt:
               normalizeThreadStatus(routeThread?.status) === "done"
                 ? routeThread?.updatedAt
@@ -540,9 +588,11 @@ export function SpacesThreadDetailRoute({
     }),
     [
       routeThread,
-      linkedTasks,
+      infoPanelChecklistTasks,
       linkedTasksError?.message,
       linkedTasksFetching,
+      progressMarkdownError?.message,
+      progressMarkdownFetching,
       showOnboardingChecklist,
       threadId,
       threadInfoOpen,
@@ -842,6 +892,92 @@ function hasCustomerOnboardingMetadata(metadata: unknown) {
   const root = parseSpaceRecord(metadata);
   const onboarding = parseSpaceRecord(root.customerOnboarding);
   return onboarding.workflow === "customer_onboarding";
+}
+
+function toThreadInfoChecklistTask(
+  task: LinkedTaskSummary,
+): ThreadInfoChecklistTask {
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    required: task.required,
+    roleKey: task.roleKey,
+    assigneeDisplay: task.assigneeDisplay,
+    blocked: task.blocked,
+    updatedAt: task.updatedAt,
+  };
+}
+
+function parseProgressMarkdownTasks(
+  content?: string | null,
+): ThreadInfoChecklistTask[] {
+  if (!content) return [];
+  const lines = content.split(/\r?\n/);
+  const tableStart = lines.findIndex((line) =>
+    /^\|\s*Task\s*\|\s*Status\s*\|\s*Owner\s*\|\s*Required\s*\|\s*Blocker\/Notes\s*\|/i.test(
+      line,
+    ),
+  );
+  if (tableStart < 0) return [];
+
+  const subject = extractProgressSubject(lines);
+  const tasks: ThreadInfoChecklistTask[] = [];
+  for (const line of lines.slice(tableStart + 2)) {
+    if (!line.trim().startsWith("|")) break;
+    const cells = splitMarkdownTableRow(line);
+    if (cells.length < 5) continue;
+    const [title, status, owner, required, notes] = cells;
+    if (!title || /^---+$/.test(title)) continue;
+    tasks.push({
+      id: `progress:${tasks.length}:${title}`,
+      title: displayProgressTaskTitle(title, subject),
+      status,
+      assigneeDisplay: owner || null,
+      required: !/^no$/i.test(required),
+      blocked:
+        status.toLowerCase() === "blocked" ||
+        /\bblocked|waiting on|hold\b/i.test(notes),
+      notes: notes || null,
+    });
+  }
+  return tasks;
+}
+
+function extractProgressSubject(lines: string[]): string | null {
+  for (const line of lines) {
+    const goalMatch = line.match(
+      /^Goal:\s*Complete customer onboarding for\s+(.+?)\.?\s*$/i,
+    );
+    if (goalMatch?.[1]) return goalMatch[1].trim();
+
+    const threadMatch = line.match(/^Thread:\s*(.+?)\s+onboarding\s*$/i);
+    if (threadMatch?.[1]) return threadMatch[1].trim();
+  }
+  return null;
+}
+
+function displayProgressTaskTitle(
+  title: string,
+  subject: string | null,
+): string {
+  const trimmed = title.trim();
+  if (!subject) return trimmed;
+  const suffix = ` - ${subject}`;
+  return trimmed.endsWith(suffix)
+    ? trimmed.slice(0, -suffix.length).trim()
+    : trimmed;
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return trimmed.split("|").map((cell) =>
+    cell
+      .replace(/\\\|/g, "|")
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
 }
 
 function normalizeThreadStatus(value?: string | null) {

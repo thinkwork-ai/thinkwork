@@ -13,6 +13,7 @@ import {
   type CustomerOnboardingSourceInput,
   type NormalizedCustomerOnboardingSource,
 } from "./customer-onboarding-workflow.js";
+import { refreshCustomerOnboardingProgressMarkdownSafely } from "./customer-onboarding-progress-md.js";
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
 
 interface ApplyCustomerOnboardingChatUpdateInput {
@@ -69,6 +70,9 @@ const TASK_KEY_ALIASES: Array<{
 
 const DONE_WORDS =
   /\b(?:done|complete|completed|checked|collected|received|signed|approved|entered|created|set up|setup)\b/i;
+const CREDIT_APPROVED_WORDS =
+  /\b(?:credit\s+(?:check|review)\s+)?(?:approved|complete|completed|done)\b|\blimit\s+(?:set|approved)\b|\bapproved\s+(?:for|at)\b/i;
+const MONEY_AMOUNT = /\$\s?\d[\d,]*(?:\.\d{2})?\s?(?:k|m)?\b/i;
 
 const STATUS_REQUEST =
   /\b(?:what(?:'s| is)?|show|give me|current|latest)?\s*(?:the\s+)?(?:onboarding\s+)?(?:status|progress|checklist)\b/i;
@@ -118,7 +122,7 @@ export async function applyCustomerOnboardingChatUpdate(
   const normalized = normalizeCustomerOnboardingSource(mergedOpportunity);
   const now = new Date();
 
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const nextMetadata = buildUpdatedThreadMetadata({
       current: threadMetadata,
       normalized,
@@ -249,6 +253,13 @@ export async function applyCustomerOnboardingChatUpdate(
       statusChanges,
     };
   });
+
+  await refreshCustomerOnboardingProgressMarkdownSafely({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+  });
+
+  return result;
 }
 
 export function extractCustomerOnboardingChatUpdate(content: string): {
@@ -312,6 +323,18 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
       facts.taxExempt = booleanFromText(segment);
     } else if (/\bcredit terms(?: requested)?\b/.test(lower)) {
       facts.creditTermsRequested = booleanFromText(segment);
+    } else if (
+      /\bcredit (?:check|review|limit)\b/.test(lower) ||
+      /\blimit (?:set|approved)\b/.test(lower)
+    ) {
+      facts.creditApprovalNotes = segment;
+      if (CREDIT_APPROVED_WORDS.test(segment)) {
+        facts.creditTermsRequested = true;
+        const amount = segment.match(MONEY_AMOUNT)?.[0];
+        if (amount) {
+          facts.requestedTerms = `Credit limit ${normalizeMoneyAmount(amount)}`;
+        }
+      }
     } else if (/\bdocusign recipient\b/.test(lower)) {
       facts.docusignRecipient = personAfterLabel(segment);
     } else if (/\bdun\s*&\s*bradstreet id\b|\bd&b id\b/.test(lower)) {
@@ -484,6 +507,14 @@ function desiredStatusForTask(input: {
 
 function statusFromSegment(segment: string): LinkedTaskStatus | null {
   if (NOT_APPLICABLE_WORDS.test(segment)) return "not_applicable";
+  if (
+    TASK_KEY_ALIASES.find((task) => task.key === "credit_check")?.patterns.some(
+      (pattern) => pattern.test(segment),
+    ) &&
+    CREDIT_APPROVED_WORDS.test(segment)
+  ) {
+    return "completed";
+  }
   if (DONE_WORDS.test(segment)) return "completed";
   if (BLOCKED_WORDS.test(segment)) return "blocked";
   if (IN_PROGRESS_WORDS.test(segment)) return "in_progress";
@@ -508,7 +539,7 @@ function buildAssistantSummary(input: {
   statusChanges: CustomerOnboardingChatUpdateResult["statusChanges"];
   completedTaskKeys: string[];
 }): string {
-  const lines = ["Captured the onboarding update."];
+  const lines = ["Captured the onboarding update and refreshed Progress."];
   if (input.normalized.missingFields.length === 0) {
     lines.push("All required intake fields are now captured.");
   } else {
@@ -525,6 +556,10 @@ function buildAssistantSummary(input: {
     lines.push("I did not find matching ThinkWork checklist rows to update.");
   }
   return lines.join("\n");
+}
+
+function normalizeMoneyAmount(value: string): string {
+  return value.replace(/\s+/g, "");
 }
 
 function buildProgressStatusSummary(input: {
