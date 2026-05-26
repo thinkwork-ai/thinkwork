@@ -386,11 +386,7 @@ describe("startCustomerOnboardingWorkflow", () => {
         }),
       ]),
     );
-    expect(coordinator.enqueueWakeup).toHaveBeenCalledWith(
-      expect.objectContaining({
-        summary: expect.stringContaining("ThinkWork checklist rows"),
-      }),
-    );
+    expect(coordinator.enqueueWakeup).not.toHaveBeenCalled();
   });
 
   it("repairs an existing native onboarding Space with missing checklist rows", async () => {
@@ -478,6 +474,54 @@ describe("startCustomerOnboardingWorkflow", () => {
     );
   });
 
+  it("keeps conditional native tasks visible while their intake answers are unknown", async () => {
+    const repository = makeRepository({ space: nativeSpace });
+
+    await startCustomerOnboardingWorkflow(
+      {
+        tenantId: "tenant-1",
+        source: "manual",
+        opportunity: {
+          opportunityId: "opp-unknown-conditional",
+          customerName: "Unknown Conditional Co",
+        },
+        startedBy: { type: "user", id: "user-1" },
+      },
+      {
+        repository,
+        taskAdapter: { createTask: vi.fn() },
+        coordinator: noopCoordinator,
+      },
+    );
+
+    expect(repository.linkedTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({ key: "credit_check" }),
+          required: false,
+          task: expect.objectContaining({ status: "todo" }),
+          metadata: expect.objectContaining({
+            applicability: expect.objectContaining({
+              pendingIntake: true,
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({
+            key: "tax_exemption_forms",
+          }),
+          required: false,
+          task: expect.objectContaining({ status: "todo" }),
+          metadata: expect.objectContaining({
+            applicability: expect.objectContaining({
+              pendingIntake: true,
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("runs the native checklist loop with a human-question request for missing intake", async () => {
     const repository = makeRepository({ space: nativeSpace });
 
@@ -556,6 +600,15 @@ describe("startCustomerOnboardingWorkflow", () => {
               ]),
             },
           },
+        },
+      },
+    });
+    expect(repository.createdCases[0]?.humanInput).toMatchObject({
+      questionCard: {
+        _type: "question_card",
+        schema: {
+          id: "customer_onboarding_missing_intake",
+          title: "Missing onboarding information",
         },
       },
     });
