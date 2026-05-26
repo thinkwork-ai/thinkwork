@@ -495,7 +495,8 @@ describe("SpacesThreadDetailRoute", () => {
         "Get contract signed - E2E Progress MD 20260525201201 Co",
       ),
     ).toBeNull();
-    expect(screen.queryByText("Sales")).toBeNull();
+    // Owner + status now render as a sublabel under the task title (Progress card style).
+    expect(screen.getByText("Sales · Completed")).toBeTruthy();
     expect(screen.queryByText("signed package received")).toBeNull();
     expect(screen.queryByText("Stale linked task title")).toBeNull();
     fireEvent.click(
