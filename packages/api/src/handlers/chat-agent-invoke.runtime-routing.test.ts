@@ -188,4 +188,37 @@ describe("chat-agent-invoke runtime routing", () => {
       finalize_callback_secret: "test-secret",
     });
   });
+
+  it("passes active Space context even when workspace rendering is skipped", async () => {
+    mocks.selectRows = [
+      [{ sender_id: "user-1", sender_type: "human" }],
+      [{ email: "user-1@example.com" }],
+      [{ spaceId: "space-1" }],
+      [{ slug: "customer-onboarding" }],
+      [{ count: 0 }],
+      [],
+    ];
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "email me the thread status",
+      messageId: "message-1",
+    });
+
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: {
+        Payload: Uint8Array;
+      };
+    };
+    const body = decodeInvokeBody(command);
+
+    expect(body.turn_context).toMatchObject({
+      spaceId: "space-1",
+      tenantSlug: "acme",
+      spaceSlug: "customer-onboarding",
+    });
+  });
 });

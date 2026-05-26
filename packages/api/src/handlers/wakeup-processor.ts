@@ -25,6 +25,7 @@ import {
   knowledgeBases,
   guardrails,
   messages,
+  spaces,
   artifacts,
   tenants,
   users,
@@ -137,9 +138,8 @@ async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -251,9 +251,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -358,9 +357,7 @@ export async function loadChatMessageAttachmentContext(input: {
     )
     .limit(1);
 
-  const currentIds = new Set(
-    parseAttachmentIdsFromMetadata(message?.metadata),
-  );
+  const currentIds = new Set(parseAttachmentIdsFromMetadata(message?.metadata));
   const rows = await db
     .select({
       id: threadAttachments.id,
@@ -1027,15 +1024,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -1321,9 +1315,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // resolution, and rendered workspace tuple selection for chat turns.
   let threadContext: PromptTemplateContext["thread"] | undefined;
   let runSpaceId = String(payload?.spaceId || "") || undefined;
+  let runSpaceSlug = String(payload?.spaceSlug || "") || undefined;
   if (runThreadId) {
     try {
-      const { threads } = await import("@thinkwork/database-pg/schema");
       const [threadRow] = await db
         .select({
           identifier: threads.identifier,
@@ -1345,6 +1339,21 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           channel: threadRow.channel,
         };
       }
+    } catch {}
+  }
+  if (runSpaceId && !runSpaceSlug) {
+    try {
+      const [spaceRow] = await db
+        .select({ slug: spaces.slug })
+        .from(spaces)
+        .where(
+          and(
+            eq(spaces.tenant_id, wakeup.tenant_id),
+            eq(spaces.id, runSpaceId),
+          ),
+        )
+        .limit(1);
+      runSpaceSlug = spaceRow?.slug ?? undefined;
     } catch {}
   }
 
@@ -1611,10 +1620,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         effectiveBlockedTools.length > 0 ? effectiveBlockedTools : undefined,
       browser_automation_enabled:
         effectiveBrowserAutomationEnabled || undefined,
-      turn_context: renderedWorkspace.rendered
+      turn_context: runSpaceId
         ? {
             spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
-            spaceSlug: renderedWorkspace.activeSpace?.slug ?? undefined,
+            tenantSlug: tenantSlug || undefined,
+            spaceSlug: renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
             renderedWorkspacePrefix,
           }
         : undefined,
@@ -2124,10 +2134,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 : undefined,
             browser_automation_enabled:
               effectiveBrowserAutomationEnabled || undefined,
-            turn_context: renderedWorkspace.rendered
+            turn_context: runSpaceId
               ? {
                   spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
-                  spaceSlug: renderedWorkspace.activeSpace?.slug ?? undefined,
+                  tenantSlug: tenantSlug || undefined,
+                  spaceSlug:
+                    renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
                   renderedWorkspacePrefix,
                 }
               : undefined,
@@ -2300,9 +2312,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
