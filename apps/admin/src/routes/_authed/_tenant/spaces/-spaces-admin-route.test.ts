@@ -11,39 +11,43 @@ describe("Spaces admin routes", () => {
   const detailChromeSource = readSource(
     "../../../../components/spaces/SpaceDetailChrome.tsx",
   );
-  const configurationRouteSource = readSource("./$spaceId_.configuration.tsx");
+  const settingsRouteSource = readSource("./$spaceId_.settings.tsx");
   const workspaceRouteSource = readSource("./$spaceId_.workspace.tsx");
-  const memoryRouteSource = readSource("./$spaceId_.memory.tsx");
-  const automationsRouteSource = readSource("./$spaceId_.automations.tsx");
+  const kbsRouteSource = readSource("./$spaceId_.kbs.tsx");
+  const triggersRouteSource = readSource("./$spaceId_.triggers.tsx");
+  const membersRouteSource = readSource("./$spaceId_.members.tsx");
+  const membersPanelSource = readSource(
+    "../../../../components/spaces/SpaceMembersPanel.tsx",
+  );
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
   const routeTreeSource = readSource("../../../../routeTree.gen.ts");
 
-  it("registers the simplified Space Studio routes", () => {
+  it("registers the renamed Space Studio routes", () => {
     expect(routeTreeSource).toContain("AuthedTenantSpacesIndexRouteImport");
     expect(routeTreeSource).toContain("AuthedTenantSpacesSpaceIdRouteImport");
-    expect(routeTreeSource).toContain(
-      "AuthedTenantSpacesSpaceIdConfigurationRouteImport",
-    );
     expect(routeTreeSource).toContain(
       "AuthedTenantSpacesSpaceIdWorkspaceRouteImport",
     );
     expect(routeTreeSource).toContain(
-      "AuthedTenantSpacesSpaceIdMemoryRouteImport",
+      "AuthedTenantSpacesSpaceIdKbsRouteImport",
     );
     expect(routeTreeSource).toContain(
-      "AuthedTenantSpacesSpaceIdAutomationsRouteImport",
+      "AuthedTenantSpacesSpaceIdTriggersRouteImport",
     );
-    expect(routeTreeSource).not.toContain(
-      "AuthedTenantSpacesSpaceIdConnectedDataRouteImport",
-    );
-    expect(routeTreeSource).not.toContain(
-      "AuthedTenantSpacesSpaceIdMcpRouteImport",
-    );
-    expect(routeTreeSource).not.toContain(
+    expect(routeTreeSource).toContain(
       "AuthedTenantSpacesSpaceIdSettingsRouteImport",
     );
+    expect(routeTreeSource).toContain(
+      "AuthedTenantSpacesSpaceIdMembersRouteImport",
+    );
     expect(routeTreeSource).not.toContain(
-      "AuthedTenantSpacesSpaceIdToolsRouteImport",
+      "AuthedTenantSpacesSpaceIdConfigurationRouteImport",
+    );
+    expect(routeTreeSource).not.toContain(
+      "AuthedTenantSpacesSpaceIdMemoryRouteImport",
+    );
+    expect(routeTreeSource).not.toContain(
+      "AuthedTenantSpacesSpaceIdAutomationsRouteImport",
     );
     expect(listRouteSource).toContain(
       'createFileRoute("/_authed/_tenant/spaces/")',
@@ -51,23 +55,23 @@ describe("Spaces admin routes", () => {
     expect(detailRouteSource).toContain(
       'createFileRoute("/_authed/_tenant/spaces/$spaceId")',
     );
-    expect(configurationRouteSource).toContain(
-      '"/_authed/_tenant/spaces/$spaceId_/configuration"',
-    );
     expect(workspaceRouteSource).toContain(
       'createFileRoute(\n  "/_authed/_tenant/spaces/$spaceId_/workspace"',
     );
-    expect(memoryRouteSource).toContain(
-      '"/_authed/_tenant/spaces/$spaceId_/memory"',
+    expect(kbsRouteSource).toContain(
+      '"/_authed/_tenant/spaces/$spaceId_/kbs"',
     );
-    expect(automationsRouteSource).toContain(
-      '"/_authed/_tenant/spaces/$spaceId_/automations"',
+    expect(triggersRouteSource).toContain(
+      '"/_authed/_tenant/spaces/$spaceId_/triggers"',
     );
-    expect(automationsRouteSource).toContain("SpaceAutomationsPanel");
-    expect(automationsRouteSource).toContain("space={space}");
+    expect(settingsRouteSource).toContain(
+      '"/_authed/_tenant/spaces/$spaceId_/settings"',
+    );
+    expect(triggersRouteSource).toContain("SpaceTriggersPanel");
+    expect(triggersRouteSource).toContain("SpaceTriggersAdd");
   });
 
-  it("renders a compact Spaces table that opens Configuration", () => {
+  it("renders a Spaces table with a Description column and routes to Workspace", () => {
     expect(listRouteSource).toContain("SpacesListQuery");
     expect(listRouteSource).toContain("CreateSpaceMutation");
     expect(listRouteSource).toContain("New Space");
@@ -76,27 +80,23 @@ describe("Spaces admin routes", () => {
       ".sort((a, b) => a.name.localeCompare(b.name))",
     );
     expect(listRouteSource).toContain('header: "Space"');
+    expect(listRouteSource).toContain('header: "Description"');
     expect(listRouteSource).toContain('header: "Access"');
     expect(listRouteSource).toContain('header: "Status"');
     expect(listRouteSource).toContain('header: "Updated"');
-    expect(listRouteSource).not.toContain(
-      "Configure contextual workrooms: workspace files, connected data, tools, MCP servers, and agent availability.",
-    );
+    expect(listRouteSource).toContain('to: "/spaces/$spaceId/workspace"');
+    expect(listRouteSource).not.toContain('to: "/spaces/$spaceId/configuration"');
     expect(listRouteSource).not.toContain('header: "Kind"');
     expect(listRouteSource).not.toContain('header: "Agents"');
-    expect(listRouteSource).not.toContain('header: "MCP"');
-    expect(listRouteSource).not.toContain('header: "Tools"');
-    expect(listRouteSource).not.toContain('header: "Connected Data"');
-    expect(listRouteSource).toContain('to: "/spaces/$spaceId/configuration"');
-    expect(listRouteSource).not.toContain("{row.original.slug}");
   });
 
-  it("mounts Space Studio tabs in the target order", () => {
+  it("mounts Space Studio tabs in Workspace · KBs · Triggers · Settings · Members order", () => {
     const tabOrder = [
-      'value="configuration"',
       'value="workspace"',
-      'value="memory"',
-      'value="automations"',
+      'value="kbs"',
+      'value="triggers"',
+      'value="settings"',
+      'value="members"',
     ];
 
     for (const tab of tabOrder) {
@@ -110,126 +110,83 @@ describe("Spaces admin routes", () => {
     }
 
     expect(detailChromeSource).toContain("<TabsList>");
-    expect(detailChromeSource).toContain("asChild");
-    expect(detailChromeSource).toContain('to="/spaces/$spaceId/configuration"');
     expect(detailChromeSource).toContain('to="/spaces/$spaceId/workspace"');
-    expect(detailChromeSource).toContain('to="/spaces/$spaceId/memory"');
-    expect(detailChromeSource).toContain('to="/spaces/$spaceId/automations"');
+    expect(detailChromeSource).toContain('to="/spaces/$spaceId/kbs"');
+    expect(detailChromeSource).toContain('to="/spaces/$spaceId/triggers"');
+    expect(detailChromeSource).toContain('to="/spaces/$spaceId/settings"');
+    expect(detailChromeSource).toContain('to="/spaces/$spaceId/members"');
     expect(detailChromeSource).toMatch(/>\s*Workspace\s*<\/Link>/);
-    expect(detailChromeSource).not.toMatch(/>\s*Files\s*<\/Link>/);
-    expect(detailRouteSource).toContain('to="/spaces/$spaceId/configuration"');
+    expect(detailChromeSource).toMatch(/>\s*KBs\s*<\/Link>/);
+    expect(detailChromeSource).toMatch(/>\s*Triggers\s*<\/Link>/);
+    expect(detailChromeSource).toMatch(/>\s*Settings\s*<\/Link>/);
+    expect(detailRouteSource).toContain('to="/spaces/$spaceId/workspace"');
     expect(workspaceRouteSource).toContain("SpaceWorkspacePanel");
-    expect(detailChromeSource).toContain("target={{ spaceId }}");
   });
 
-  it("does not expose retired Space detail tabs or raw configuration panels", () => {
-    expect(detailChromeSource).not.toContain('value="connected-data"');
-    expect(detailChromeSource).not.toContain('value="mcp"');
-    expect(detailChromeSource).not.toContain('value="settings"');
-    expect(detailChromeSource).not.toContain('value="tools"');
-    expect(detailChromeSource).not.toContain('to="/spaces/$spaceId/tools"');
-    expect(detailChromeSource).not.toContain('value="threads"');
-    expect(detailChromeSource).not.toContain('value="checklist"');
-    expect(detailChromeSource).not.toContain('value="integrations"');
-    expect(detailChromeSource).not.toContain("Context Config");
-    expect(detailChromeSource).not.toContain("Connected Data Config");
-    expect(detailChromeSource).not.toContain("Tool Policy");
-    expect(detailChromeSource).not.toContain("MCP Policy");
-    expect(detailChromeSource).not.toContain("Agent Availability");
-    expect(detailChromeSource).not.toContain("Trigger Config");
-    expect(detailChromeSource).not.toContain("Raw Config");
-    expect(detailChromeSource).not.toContain(">Slug<");
-    expect(detailChromeSource).not.toContain("Category");
-    expect(detailChromeSource).not.toContain("Created");
-    expect(detailChromeSource).not.toContain("JsonPanel");
-    expect(detailChromeSource).not.toContain("InfoPanel");
-    expect(detailChromeSource).not.toContain("Advanced runtime");
-    expect(detailChromeSource).not.toContain("Model override");
-    expect(detailChromeSource).not.toContain("Guardrail ID");
-    expect(detailChromeSource).not.toContain("Monthly budget cents");
-    expect(detailChromeSource).not.toContain("Budget paused");
-    expect(detailChromeSource).not.toContain("Sandbox");
-    expect(detailChromeSource).not.toContain("SetSpaceRuntimeOverrides");
-    expect(detailChromeSource).not.toContain("RuntimeOverrideSwitch");
+  it("does not expose retired tab labels or panel exports", () => {
+    expect(detailChromeSource).not.toContain('value="configuration"');
+    expect(detailChromeSource).not.toContain('value="memory"');
+    expect(detailChromeSource).not.toContain('value="automations"');
+    expect(detailChromeSource).not.toContain("SpaceConfigurationPanel");
+    expect(detailChromeSource).not.toContain("SpaceMemoryPanel");
+    expect(detailChromeSource).not.toContain("SpaceAutomationsPanel");
+    expect(detailChromeSource).not.toContain(
+      'import { SpaceEmailTriggersToggle }',
+    );
   });
 
-  it("keeps Configuration focused on editable user-facing fields", () => {
-    expect(detailChromeSource).toContain("SpaceConfigurationPanel");
+  it("keeps Settings focused on editable user-facing fields and uses the Description label", () => {
+    expect(detailChromeSource).toContain("SpaceSettingsPanel");
     expect(detailChromeSource).toContain("Name");
-    expect(detailChromeSource).toContain("Instructions");
-    expect(detailChromeSource).not.toContain(">Description<");
+    expect(detailChromeSource).toContain(">Description<");
+    expect(detailChromeSource).not.toContain(">Instructions<");
     expect(detailChromeSource).toContain("Access");
-    expect(detailChromeSource).toContain("SpaceEmailTriggersToggle");
-    expect(detailChromeSource).toContain("emailTriggersEnabled");
     expect(detailChromeSource).toContain("Save");
-    expect(detailChromeSource).not.toContain("space.kind");
-    expect(detailChromeSource).not.toContain("space.createdAt");
   });
 
-  it("keeps Memory scoped to knowledge-base selection", () => {
-    expect(memoryRouteSource).toContain("SpaceMemoryPanel");
+  it("renders Triggers with a single Add dropdown and a Description column with copy affordances", () => {
+    expect(detailChromeSource).toContain("SpaceTriggersPanel");
+    expect(detailChromeSource).toContain("SpaceTriggersAdd");
+    expect(detailChromeSource).toContain("CopyLinkButton");
+    expect(detailChromeSource).toContain("/api/scheduled-jobs?");
+    expect(detailChromeSource).toContain("/api/webhooks?");
+    expect(detailChromeSource).toContain("ScheduledJobFormDialog");
+    expect(detailChromeSource).toContain("WebhookFormDialog");
+    expect(detailChromeSource).toContain('header: "Name"');
+    expect(detailChromeSource).toContain('header: "Type"');
+    expect(detailChromeSource).toContain('header: "Description"');
+    expect(detailChromeSource).toContain('header: "Status"');
+    expect(detailChromeSource).toContain('header: "Last Run"');
+    expect(detailChromeSource).toContain('header: "Next Run / Last Delivery"');
+    expect(detailChromeSource).not.toContain('header: "Schedule / Trigger"');
+    expect(detailChromeSource).not.toContain("Add Schedule");
+    expect(detailChromeSource).not.toContain("Add Webhook");
+    expect(detailChromeSource).toContain("DropdownMenu");
+    expect(detailChromeSource).toContain("emailTriggersEnabled");
+    expect(detailChromeSource).toContain("deriveSpaceEmailAddress");
+    expect(detailChromeSource).toContain("deriveWebhookUrl");
+    expect(detailChromeSource).toContain("Disable email trigger?");
+    expect(triggersRouteSource).toContain("headerActions");
+  });
+
+  it("synthesizes an email trigger row when emailTriggersEnabled is true", () => {
+    expect(detailChromeSource).toContain('kind: "email"');
+    expect(detailChromeSource).toContain('typeLabel: "Email"');
+    expect(detailChromeSource).toContain("space.emailTriggersEnabled");
+    expect(detailChromeSource).toContain("SetSpaceEmailTriggersMutation");
+  });
+
+  it("keeps KBs scoped to knowledge-base selection (panel renamed from Memory)", () => {
+    expect(kbsRouteSource).toContain("SpaceKbsPanel");
     expect(detailChromeSource).toContain("MultiSelect");
     expect(detailChromeSource).toContain("KnowledgeBasesListQuery");
     expect(detailChromeSource).toContain("SpaceMemoryQuery");
     expect(detailChromeSource).toContain("SetSpaceKnowledgeBasesMutation");
     expect(detailChromeSource).toContain("Choose knowledge bases");
     expect(detailChromeSource).toContain("No knowledge bases selected.");
-    expect(detailChromeSource).not.toContain("Hindsight");
-    expect(detailChromeSource).not.toContain("Wiki");
-    expect(detailChromeSource).not.toContain("MemoryRecord");
-    expect(detailChromeSource).not.toContain("source adapter");
   });
 
-  it("does not expose the retired Space Tools UI", () => {
-    expect(detailChromeSource).not.toContain("SpaceToolsPanel");
-    expect(detailChromeSource).not.toContain("SpaceToolsQuery");
-    expect(detailChromeSource).not.toContain("SetSpaceToolsMutation");
-    expect(detailChromeSource).not.toContain("listBuiltinTools");
-    expect(detailChromeSource).not.toContain("listMcpServers");
-    expect(detailChromeSource).not.toContain("Built-in Tools");
-    expect(detailChromeSource).not.toContain("MCP Servers");
-    expect(detailChromeSource).not.toContain("Choose built-in tools");
-    expect(detailChromeSource).not.toContain("Choose MCP servers");
-    expect(detailChromeSource).not.toContain("No tools selected.");
-    expect(detailChromeSource).not.toContain("Tool Policy");
-    expect(detailChromeSource).not.toContain("MCP Policy");
-    expect(detailChromeSource).not.toContain("JsonPanel");
-  });
-
-  it("renders Space Automations as a scoped schedules and webhooks table", () => {
-    expect(detailChromeSource).toContain("SpaceAutomationsPanel");
-    expect(detailChromeSource).toContain("/api/scheduled-jobs?");
-    expect(detailChromeSource).toContain("/api/webhooks?");
-    expect(detailChromeSource).toContain(
-      "new URLSearchParams({ spaceId: space.id })",
-    );
-    expect(detailChromeSource).toContain("<DataTable");
-    expect(detailChromeSource).toContain("ScheduledJobFormDialog");
-    expect(detailChromeSource).toContain("WebhookFormDialog");
-    expect(detailChromeSource).toContain("Add Schedule");
-    expect(detailChromeSource).toContain("Add Webhook");
-    expect(detailChromeSource).toContain(
-      "JSON.stringify({ ...data, spaceId: space.id })",
-    );
-    expect(detailChromeSource).toContain('header: "Name"');
-    expect(detailChromeSource).toContain('header: "Type"');
-    expect(detailChromeSource).toContain('header: "Schedule / Trigger"');
-    expect(detailChromeSource).toContain('header: "Status"');
-    expect(detailChromeSource).toContain('header: "Last Run"');
-    expect(detailChromeSource).toContain('header: "Next Run / Last Delivery"');
-    expect(detailChromeSource).toContain(
-      'to: "/automations/schedules/$scheduledJobId"',
-    );
-    expect(detailChromeSource).toContain(
-      'to: "/automations/webhooks/$webhookId"',
-    );
-  });
-
-  it("queries only the Space fields needed by the simplified UI", () => {
-    const spacesListQuerySource = queriesSource.slice(
-      queriesSource.indexOf("query SpacesList"),
-      queriesSource.indexOf("export const CreateSpaceMutation"),
-    );
+  it("queries Space fields needed by the simplified UI", () => {
     expect(queriesSource).toContain("query SpacesList");
     expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("mutation UpdateSpace");
@@ -240,44 +197,35 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("includeAllForAdmin: true");
     expect(queriesSource).toContain("accessMode");
     expect(queriesSource).toContain("emailTriggersEnabled");
-    expect(queriesSource).toContain("setSpaceEmailTriggers");
-    expect(queriesSource).toContain("knowledgeBases");
-    expect(queriesSource).toContain("knowledgeBaseId");
-    expect(queriesSource).toContain("setSpaceKnowledgeBases");
-    expect(queriesSource).not.toContain("query SpaceTools");
-    expect(queriesSource).not.toContain("mutation SetSpaceTools");
-    expect(queriesSource).not.toContain("setSpaceTools(input");
-    expect(queriesSource).not.toContain("mutation SetSpaceRuntimeOverrides");
-    expect(queriesSource).not.toContain("setSpaceRuntimeOverrides");
-    expect(queriesSource).not.toContain("runtimeOverrides");
-    expect(spacesListQuerySource).not.toContain("agentAssignments");
-    expect(queriesSource).not.toContain("localInstructions");
-    expect(queriesSource).not.toContain("contextConfig");
-    expect(queriesSource).not.toContain("connectedDataConfig");
-    expect(queriesSource).not.toContain("toolPolicy");
-    expect(queriesSource).not.toContain("mcpPolicy");
-    expect(queriesSource).not.toContain("agentAvailabilityPolicy");
-    expect(queriesSource).not.toContain("triggerConfig");
-    expect(queriesSource).not.toContain("renderDiagnostics");
-    expect(queriesSource).not.toContain("checklistTemplates");
-    expect(queriesSource).not.toContain("integrations");
   });
 
-  it("registers the Members route and gates the tab to private Spaces", () => {
-    const membersRouteSource = readSource("./$spaceId_.members.tsx");
-    expect(routeTreeSource).toContain(
-      "AuthedTenantSpacesSpaceIdMembersRouteImport",
-    );
+  it("registers the Members route and gates the tab to private Spaces; redirects public Spaces to Workspace", () => {
     expect(membersRouteSource).toContain(
       'createFileRoute(\n  "/_authed/_tenant/spaces/$spaceId_/members"',
     );
     expect(membersRouteSource).toContain("SpaceMembersPanel");
     expect(membersRouteSource).toContain('accessMode === "PRIVATE"');
+    expect(membersRouteSource).toContain('to: "/spaces/$spaceId/workspace"');
+    expect(membersRouteSource).not.toContain(
+      'to: "/spaces/$spaceId/configuration"',
+    );
+    expect(membersRouteSource).toContain("headerActions");
     expect(detailChromeSource).toContain('space.accessMode === "PRIVATE"');
     expect(detailChromeSource).toContain('value="members"');
     expect(detailChromeSource).toMatch(/>\s*Members\s*<\/Link>/);
     expect(queriesSource).toContain("SpaceMembers");
     expect(queriesSource).toContain("AddSpaceMember");
     expect(queriesSource).toContain("RemoveSpaceMember");
+  });
+
+  it("renders Members with separate User and Email columns and no in-panel subheader", () => {
+    expect(membersPanelSource).toContain('header: "User"');
+    expect(membersPanelSource).toContain('header: "Email"');
+    expect(membersPanelSource).toContain('header: "Role"');
+    expect(membersPanelSource).toContain('header: "Joined"');
+    expect(membersPanelSource).not.toContain("People who can access this private Space.");
+    expect(membersPanelSource).not.toContain("Add member");
+    expect(membersPanelSource).toContain("addOpen");
+    expect(membersPanelSource).toContain("onAddOpenChange");
   });
 });

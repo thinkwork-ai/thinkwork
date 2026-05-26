@@ -1,5 +1,12 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
@@ -12,10 +19,28 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
+import { SetSpaceEmailTriggersMutation } from "@/lib/graphql-queries";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
-import { SpaceEmailTriggersToggle } from "@/components/spaces/SpaceEmailTriggersToggle";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Mail } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
@@ -48,10 +73,10 @@ import {
 import { relativeTime } from "@/lib/utils";
 
 type SpaceDetailTab =
-  | "configuration"
   | "workspace"
-  | "memory"
-  | "automations"
+  | "kbs"
+  | "triggers"
+  | "settings"
   | "members";
 type Space = NonNullable<SpaceAdminDetailQueryResult["space"]>;
 type SpaceAccessMode = "PUBLIC" | "PRIVATE";
@@ -71,12 +96,14 @@ interface SpaceDetailChromeContext {
 interface SpaceDetailChromeProps {
   spaceId: string;
   activeTab: SpaceDetailTab;
+  headerActions?: (context: SpaceDetailChromeContext) => ReactNode;
   children: (context: SpaceDetailChromeContext) => ReactNode;
 }
 
 export function SpaceDetailChrome({
   spaceId,
   activeTab,
+  headerActions,
   children,
 }: SpaceDetailChromeProps) {
   const { tenantId } = useTenant();
@@ -169,6 +196,13 @@ export function SpaceDetailChrome({
     );
   }
 
+  const chromeContext: SpaceDetailChromeContext = {
+    space,
+    draft,
+    setDraft,
+    refreshSpace: () => reexecuteSpaceQuery({ requestPolicy: "network-only" }),
+  };
+
   return (
     <PageLayout
       header={
@@ -179,27 +213,24 @@ export function SpaceDetailChrome({
           <div className="flex justify-start lg:justify-center">
             <Tabs value={activeTab}>
               <TabsList>
-                <TabsTrigger value="configuration" asChild className="px-4">
-                  <Link
-                    to="/spaces/$spaceId/configuration"
-                    params={{ spaceId }}
-                  >
-                    Configuration
-                  </Link>
-                </TabsTrigger>
                 <TabsTrigger value="workspace" asChild className="px-4">
                   <Link to="/spaces/$spaceId/workspace" params={{ spaceId }}>
                     Workspace
                   </Link>
                 </TabsTrigger>
-                <TabsTrigger value="memory" asChild className="px-4">
-                  <Link to="/spaces/$spaceId/memory" params={{ spaceId }}>
-                    Memory
+                <TabsTrigger value="kbs" asChild className="px-4">
+                  <Link to="/spaces/$spaceId/kbs" params={{ spaceId }}>
+                    KBs
                   </Link>
                 </TabsTrigger>
-                <TabsTrigger value="automations" asChild className="px-4">
-                  <Link to="/spaces/$spaceId/automations" params={{ spaceId }}>
-                    Automations
+                <TabsTrigger value="triggers" asChild className="px-4">
+                  <Link to="/spaces/$spaceId/triggers" params={{ spaceId }}>
+                    Triggers
+                  </Link>
+                </TabsTrigger>
+                <TabsTrigger value="settings" asChild className="px-4">
+                  <Link to="/spaces/$spaceId/settings" params={{ spaceId }}>
+                    Settings
                   </Link>
                 </TabsTrigger>
                 {space.accessMode === "PRIVATE" ? (
@@ -213,7 +244,9 @@ export function SpaceDetailChrome({
             </Tabs>
           </div>
           <div className="flex justify-start lg:justify-end">
-            {dirty ? (
+            {headerActions ? (
+              headerActions(chromeContext)
+            ) : dirty ? (
               <Button size="sm" onClick={handleSaveSpace} disabled={!canSave}>
                 {updateResult.fetching ? "Saving..." : "Save"}
               </Button>
@@ -222,31 +255,20 @@ export function SpaceDetailChrome({
         </div>
       }
     >
-      {children({
-        space,
-        draft,
-        setDraft,
-        refreshSpace: () =>
-          reexecuteSpaceQuery({ requestPolicy: "network-only" }),
-      })}
+      {children(chromeContext)}
     </PageLayout>
   );
 }
 
-export function SpaceConfigurationPanel({
-  space,
+export function SpaceSettingsPanel({
   draft,
   setDraft,
-  refreshSpace,
 }: {
   space: Space;
   draft: SpaceDraft;
   setDraft: Dispatch<SetStateAction<SpaceDraft>>;
   refreshSpace: () => void;
 }) {
-  const { tenant } = useTenant();
-  const tenantSlug = tenant?.slug ?? "";
-
   return (
     <div className="space-y-4">
       <section className="rounded-md border p-4">
@@ -285,7 +307,7 @@ export function SpaceConfigurationPanel({
             </Select>
           </div>
           <div className="space-y-1.5 lg:col-span-2">
-            <Label htmlFor="space-description">Instructions</Label>
+            <Label htmlFor="space-description">Description</Label>
             <Textarea
               id="space-description"
               value={draft.description}
@@ -299,17 +321,6 @@ export function SpaceConfigurationPanel({
           </div>
         </div>
       </section>
-      <SpaceEmailTriggersToggle
-        tenantSlug={tenantSlug}
-        space={{
-          id: space.id,
-          slug: space.slug,
-          status: space.status,
-          accessMode: space.accessMode,
-          emailTriggersEnabled: space.emailTriggersEnabled,
-        }}
-        onSaved={refreshSpace}
-      />
     </div>
   );
 }
@@ -325,7 +336,7 @@ export function SpaceWorkspacePanel({ spaceId }: { spaceId: string }) {
   );
 }
 
-export function SpaceMemoryPanel({ space }: { space: Space }) {
+export function SpaceKbsPanel({ space }: { space: Space }) {
   const { tenantId } = useTenant();
   const [spaceMemoryResult, reexecuteSpaceMemoryQuery] = useQuery({
     query: SpaceMemoryQuery,
@@ -476,18 +487,20 @@ type WebhookRow = {
   description: string | null;
   target_type: string;
   enabled: boolean;
+  token: string;
   last_invoked_at: string | null;
   invocation_count: number;
   created_at: string;
 };
 
-type SpaceAutomationRow = {
+type SpaceTriggerRow = {
   id: string;
-  kind: "schedule" | "webhook";
+  kind: "schedule" | "webhook" | "email";
   name: string;
-  description: string | null;
   typeLabel: string;
-  triggerLabel: string;
+  descriptionValue: string;
+  descriptionCopyable: boolean;
+  descriptionCopyLabel?: string;
   enabled: boolean;
   lastRunAt: string | null;
   nextRunOrDeliveryAt: string | null;
@@ -562,33 +575,29 @@ function estimateNextAutomationRun(
   return new Date(base + periods * intervalMs).toISOString();
 }
 
-function automationColumns(): ColumnDef<SpaceAutomationRow>[] {
+function triggerColumns(): ColumnDef<SpaceTriggerRow>[] {
   return [
     {
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate font-medium">{row.original.name}</span>
-          {row.original.description ? (
-            <span className="truncate text-xs text-muted-foreground">
-              {row.original.description}
-            </span>
-          ) : null}
-        </div>
+        <span className="truncate font-medium">{row.original.name}</span>
       ),
+      size: 200,
     },
     {
       accessorKey: "typeLabel",
       header: "Type",
       cell: ({ row }) => {
         const Icon =
-          row.original.kind === "webhook"
-            ? WebhookIcon
-            : row.original.typeLabel === "Routine" ||
-                row.original.typeLabel === "One-time"
-              ? Repeat
-              : Bot;
+          row.original.kind === "email"
+            ? Mail
+            : row.original.kind === "webhook"
+              ? WebhookIcon
+              : row.original.typeLabel === "Routine" ||
+                  row.original.typeLabel === "One-time"
+                ? Repeat
+                : Bot;
         return (
           <Badge variant="secondary" className="gap-1 text-xs">
             <Icon className="h-3.5 w-3.5" />
@@ -599,13 +608,24 @@ function automationColumns(): ColumnDef<SpaceAutomationRow>[] {
       size: 150,
     },
     {
-      accessorKey: "triggerLabel",
-      header: "Schedule / Trigger",
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {row.original.triggerLabel}
-        </span>
-      ),
+      accessorKey: "descriptionValue",
+      header: "Description",
+      cell: ({ row }) =>
+        row.original.descriptionCopyable ? (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <code className="truncate text-xs text-muted-foreground">
+              {row.original.descriptionValue}
+            </code>
+            <CopyLinkButton
+              text={row.original.descriptionValue}
+              ariaLabel={row.original.descriptionCopyLabel ?? "Copy"}
+            />
+          </div>
+        ) : (
+          <div className="text-muted-foreground text-sm truncate overflow-hidden">
+            {row.original.descriptionValue || "—"}
+          </div>
+        ),
     },
     {
       accessorKey: "enabled",
@@ -655,15 +675,91 @@ function automationColumns(): ColumnDef<SpaceAutomationRow>[] {
   ];
 }
 
-export function SpaceAutomationsPanel({ space }: { space: Space }) {
-  const { tenantId } = useTenant();
+function deriveSpaceEmailAddress(
+  tenantSlug: string,
+  spaceSlug: string,
+): string {
+  return `${spaceSlug}@${tenantSlug}.thinkwork.ai`;
+}
+
+function deriveWebhookUrl(token: string): string {
+  const base =
+    (import.meta.env.VITE_API_URL as string | undefined) ||
+    (typeof process !== "undefined"
+      ? (process.env?.VITE_API_URL as string | undefined)
+      : undefined) ||
+    "";
+  return `${base}/webhooks/${token}`;
+}
+
+interface SpaceTriggersHandle {
+  openSchedule: () => void;
+  openWebhook: () => void;
+  enableEmail: () => Promise<void>;
+  emailEnabled: boolean;
+  emailMutationFetching: boolean;
+}
+
+const SpaceTriggersContext = createContext<SpaceTriggersHandle | null>(null);
+
+export function useSpaceTriggers(): SpaceTriggersHandle | null {
+  return useContext(SpaceTriggersContext);
+}
+
+export function SpaceTriggersAdd() {
+  const handle = useSpaceTriggers();
+  if (!handle) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm">
+          <Plus className="h-4 w-4" />
+          Add
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => handle.openSchedule()}>
+          <Repeat className="h-4 w-4" />
+          Schedule
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => handle.openWebhook()}>
+          <WebhookIcon className="h-4 w-4" />
+          Webhook
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={handle.emailEnabled || handle.emailMutationFetching}
+          onSelect={() => {
+            void handle.enableEmail();
+          }}
+        >
+          <Mail className="h-4 w-4" />
+          Email
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function SpaceTriggersPanel({
+  space,
+  refreshSpace,
+}: {
+  space: Space;
+  refreshSpace: () => void;
+}) {
+  const { tenantId, tenant } = useTenant();
+  const tenantSlug = tenant?.slug ?? "";
   const navigate = useNavigate();
   const [scheduledJobs, setScheduledJobs] = useState<ScheduledJobRow[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [webhookDialogOpen, setWebhookDialogOpen] = useState(false);
+  const [disableEmailOpen, setDisableEmailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [emailMutationResult, setSpaceEmailTriggers] = useMutation(
+    SetSpaceEmailTriggersMutation,
+  );
 
   const fetchAutomations = useCallback(async () => {
     if (!tenantId) return;
@@ -691,123 +787,225 @@ export function SpaceAutomationsPanel({ space }: { space: Space }) {
     void fetchAutomations();
   }, [fetchAutomations]);
 
-  const rows = useMemo<SpaceAutomationRow[]>(
-    () =>
-      [
-        ...scheduledJobs.map((job) => ({
-          id: job.id,
-          kind: "schedule" as const,
-          name: job.name,
-          description: job.description,
-          typeLabel:
-            SPACE_AUTOMATION_TYPE_LABELS[job.trigger_type] ?? job.trigger_type,
-          triggerLabel: formatAutomationSchedule(job.schedule_expression),
-          enabled: job.enabled,
-          lastRunAt: job.last_run_at,
-          nextRunOrDeliveryAt:
-            job.next_run_at ??
-            estimateNextAutomationRun(job.schedule_expression, job.last_run_at),
-          createdAt: job.created_at,
-        })),
-        ...webhooks.map((webhook) => ({
-          id: webhook.id,
-          kind: "webhook" as const,
-          name: webhook.name,
-          description: webhook.description,
-          typeLabel: "Webhook",
-          triggerLabel:
-            webhook.target_type === "agent"
-              ? "Agent webhook"
-              : "Routine webhook",
-          enabled: webhook.enabled,
-          lastRunAt: null,
-          nextRunOrDeliveryAt: webhook.last_invoked_at,
-          createdAt: webhook.created_at,
-        })),
-      ].sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      ),
-    [scheduledJobs, webhooks],
+  const emailAddress = deriveSpaceEmailAddress(tenantSlug, space.slug);
+
+  const rows = useMemo<SpaceTriggerRow[]>(() => {
+    const scheduleRows: SpaceTriggerRow[] = scheduledJobs.map((job) => ({
+      id: `schedule:${job.id}`,
+      kind: "schedule",
+      name: job.name,
+      typeLabel:
+        SPACE_AUTOMATION_TYPE_LABELS[job.trigger_type] ?? job.trigger_type,
+      descriptionValue: formatAutomationSchedule(job.schedule_expression),
+      descriptionCopyable: false,
+      enabled: job.enabled,
+      lastRunAt: job.last_run_at,
+      nextRunOrDeliveryAt:
+        job.next_run_at ??
+        estimateNextAutomationRun(job.schedule_expression, job.last_run_at),
+      createdAt: job.created_at,
+    }));
+
+    const webhookRows: SpaceTriggerRow[] = webhooks.map((webhook) => ({
+      id: `webhook:${webhook.id}`,
+      kind: "webhook",
+      name: webhook.name,
+      typeLabel: "Webhook",
+      descriptionValue: deriveWebhookUrl(webhook.token),
+      descriptionCopyable: true,
+      descriptionCopyLabel: "Copy webhook URL",
+      enabled: webhook.enabled,
+      lastRunAt: null,
+      nextRunOrDeliveryAt: webhook.last_invoked_at,
+      createdAt: webhook.created_at,
+    }));
+
+    const emailRows: SpaceTriggerRow[] = space.emailTriggersEnabled
+      ? [
+          {
+            id: `email:${space.id}`,
+            kind: "email",
+            name: "Email trigger",
+            typeLabel: "Email",
+            descriptionValue: emailAddress,
+            descriptionCopyable: true,
+            descriptionCopyLabel: "Copy Space email address",
+            enabled: true,
+            lastRunAt: null,
+            nextRunOrDeliveryAt: null,
+            createdAt: new Date(0).toISOString(),
+          },
+        ]
+      : [];
+
+    return [...emailRows, ...scheduleRows, ...webhookRows].sort((a, b) => {
+      // Email row always sorts first for prominence; otherwise newest first.
+      if (a.kind === "email") return -1;
+      if (b.kind === "email") return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [
+    scheduledJobs,
+    webhooks,
+    space.emailTriggersEnabled,
+    space.id,
+    emailAddress,
+  ]);
+
+  const enableEmail = useCallback(async () => {
+    if (space.emailTriggersEnabled) return;
+    const response = await setSpaceEmailTriggers({
+      spaceId: space.id,
+      enabled: true,
+    });
+    if (response.error) {
+      toast.error(`Could not enable email trigger: ${response.error.message}`);
+      return;
+    }
+    toast.success("Email trigger enabled.");
+    refreshSpace();
+    await fetchAutomations();
+  }, [
+    space.emailTriggersEnabled,
+    space.id,
+    setSpaceEmailTriggers,
+    refreshSpace,
+    fetchAutomations,
+  ]);
+
+  const disableEmail = useCallback(async () => {
+    const response = await setSpaceEmailTriggers({
+      spaceId: space.id,
+      enabled: false,
+    });
+    if (response.error) {
+      toast.error(`Could not disable email trigger: ${response.error.message}`);
+      return;
+    }
+    toast.success("Email trigger disabled.");
+    setDisableEmailOpen(false);
+    refreshSpace();
+    await fetchAutomations();
+  }, [space.id, setSpaceEmailTriggers, refreshSpace, fetchAutomations]);
+
+  const handle: SpaceTriggersHandle = useMemo(
+    () => ({
+      openSchedule: () => setScheduleDialogOpen(true),
+      openWebhook: () => setWebhookDialogOpen(true),
+      enableEmail,
+      emailEnabled: space.emailTriggersEnabled,
+      emailMutationFetching: emailMutationResult.fetching,
+    }),
+    [enableEmail, space.emailTriggersEnabled, emailMutationResult.fetching],
   );
 
   if (loading) return <PageSkeleton />;
 
   if (errorMessage) {
     return (
-      <section className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">
-        {errorMessage}
-      </section>
+      <SpaceTriggersContext.Provider value={handle}>
+        <section className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">
+          {errorMessage}
+        </section>
+      </SpaceTriggersContext.Provider>
     );
   }
 
   return (
-    <section className="space-y-3">
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setWebhookDialogOpen(true)}
+    <SpaceTriggersContext.Provider value={handle}>
+      <section className="space-y-3">
+        {rows.length === 0 ? (
+          <EmptyPanel title="No triggers yet. Use the Add menu in the header to create a schedule, webhook, or email trigger." />
+        ) : (
+          <DataTable
+            columns={triggerColumns()}
+            data={rows}
+            pageSize={20}
+            onRowClick={(row) => {
+              if (row.kind === "email") {
+                setDisableEmailOpen(true);
+                return;
+              }
+              const rawId = row.id.split(":").slice(1).join(":");
+              if (row.kind === "schedule") {
+                navigate({
+                  to: "/automations/schedules/$scheduledJobId",
+                  params: { scheduledJobId: rawId },
+                });
+              } else {
+                navigate({
+                  to: "/automations/webhooks/$webhookId",
+                  params: { webhookId: rawId },
+                });
+              }
+            }}
+          />
+        )}
+        {tenantId ? (
+          <>
+            <ScheduledJobFormDialog
+              open={scheduleDialogOpen}
+              onOpenChange={setScheduleDialogOpen}
+              mode="create"
+              tenantId={tenantId}
+              onSubmit={async (data) => {
+                await spaceApiFetch("/api/scheduled-jobs", tenantId, {
+                  method: "POST",
+                  body: JSON.stringify({ ...data, spaceId: space.id }),
+                });
+                toast.success("Schedule added");
+                await fetchAutomations();
+              }}
+            />
+            <WebhookFormDialog
+              open={webhookDialogOpen}
+              onOpenChange={setWebhookDialogOpen}
+              mode="create"
+              tenantId={tenantId}
+              onSubmit={async (data) => {
+                await spaceApiFetch("/api/webhooks", tenantId, {
+                  method: "POST",
+                  body: JSON.stringify({ ...data, spaceId: space.id }),
+                });
+                toast.success("Webhook added");
+                await fetchAutomations();
+              }}
+            />
+          </>
+        ) : null}
+        <AlertDialog
+          open={disableEmailOpen}
+          onOpenChange={(open) => {
+            if (!emailMutationResult.fetching) setDisableEmailOpen(open);
+          }}
         >
-          <Plus className="mr-1 h-4 w-4" />
-          Add Webhook
-        </Button>
-        <Button size="sm" onClick={() => setScheduleDialogOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Add Schedule
-        </Button>
-      </div>
-      <DataTable
-        columns={automationColumns()}
-        data={rows}
-        pageSize={20}
-        onRowClick={(row) => {
-          if (row.kind === "schedule") {
-            navigate({
-              to: "/automations/schedules/$scheduledJobId",
-              params: { scheduledJobId: row.id },
-            });
-          } else {
-            navigate({
-              to: "/automations/webhooks/$webhookId",
-              params: { webhookId: row.id },
-            });
-          }
-        }}
-      />
-      {tenantId ? (
-        <>
-          <ScheduledJobFormDialog
-            open={scheduleDialogOpen}
-            onOpenChange={setScheduleDialogOpen}
-            mode="create"
-            tenantId={tenantId}
-            onSubmit={async (data) => {
-              await spaceApiFetch("/api/scheduled-jobs", tenantId, {
-                method: "POST",
-                body: JSON.stringify({ ...data, spaceId: space.id }),
-              });
-              toast.success("Schedule added");
-              await fetchAutomations();
-            }}
-          />
-          <WebhookFormDialog
-            open={webhookDialogOpen}
-            onOpenChange={setWebhookDialogOpen}
-            mode="create"
-            tenantId={tenantId}
-            onSubmit={async (data) => {
-              await spaceApiFetch("/api/webhooks", tenantId, {
-                method: "POST",
-                body: JSON.stringify({ ...data, spaceId: space.id }),
-              });
-              toast.success("Webhook added");
-              await fetchAutomations();
-            }}
-          />
-        </>
-      ) : null}
-    </section>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Disable email trigger?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The address <code className="text-xs">{emailAddress}</code> will
+                stop accepting cold-contact email. Token-bearing replies to
+                agent-initiated emails are unaffected.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={emailMutationResult.fetching}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault();
+                  void disableEmail();
+                }}
+                disabled={emailMutationResult.fetching}
+              >
+                {emailMutationResult.fetching ? "Disabling…" : "Disable"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </section>
+    </SpaceTriggersContext.Provider>
   );
 }
 
