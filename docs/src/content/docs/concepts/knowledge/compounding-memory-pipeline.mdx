@@ -1,11 +1,11 @@
 ---
-title: "Company Brain Compile Pipeline"
-description: How raw memories become durable Company Brain pages — step by step, in plain language, then in technical detail.
+title: "Memory Compile Pipeline"
+description: How raw memories become durable memory pages — step by step, in plain language, then in technical detail.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-This doc is a walking tour of how raw memories become Company Brain pages — the distillation layer that turns scattered observations into structured, queryable pages. It's written to be read top to bottom; each step covers one thing the pipeline does, why it does it, and what can go wrong. The pipeline is the load-bearing implementation of the page promise: reproducible outputs from the same input set and a complete provenance trail from every page back to the source memories that wrote it.
+This doc is a walking tour of how raw memories become Memory pages — the distillation layer that turns scattered observations into structured, queryable pages. It's written to be read top to bottom; each step covers one thing the pipeline does, why it does it, and what can go wrong. The pipeline is the load-bearing implementation of the page promise: reproducible outputs from the same input set and a complete provenance trail from every page back to the source memories that wrote it.
 
 The first half is plain-language narrative. The second half (["Under the hood"](#under-the-hood)) has the code paths, SQL, and prompt contracts for anyone who needs to modify or debug the pipeline itself.
 
@@ -264,10 +264,10 @@ Ontology reprocess jobs have their own metrics on `ontology_reprocess_jobs.metri
 
 ## Related pages
 
-- [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the overview
-- [Company Brain Page Model](/concepts/knowledge/compounding-memory-pages/) — the data model
+- [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the overview
+- [Memory Page Model](/concepts/knowledge/compounding-memory-pages/) — the data model
 - [Business Ontology](/concepts/knowledge/business-ontology/) — the governed business vocabulary that shapes tenant Brain materialization
-- [Operating Compiled Company Brain Pages](/guides/compounding-memory-operations/) — hands-on recipes
+- [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — hands-on recipes
 - [Operating Business Ontology](/guides/business-ontology-operations/) — change-set and reprocess recovery workflow
 - [Compiled Pages API](/api/compounding-memory/) — GraphQL reference
 

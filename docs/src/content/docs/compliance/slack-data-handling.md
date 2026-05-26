@@ -53,7 +53,7 @@ Slack bot tokens are not committed to the repo or stored in Terraform variables.
 
 ## Model and runtime use
 
-Slack content enters the same tenant-scoped Computer runtime as ordinary ThinkWork thread turns. The runtime can use the selected shared Computer's memory, Company Brain context, approved tools, and the requester's scoped personal context under the same tenant and user boundaries that apply outside Slack.
+Slack content enters the same tenant-scoped Computer runtime as ordinary ThinkWork thread turns. The runtime can use the selected shared Computer's memory context, approved tools, and the requester's scoped personal context under the same tenant and user boundaries that apply outside Slack.
 
 Slack content is not used to train foundation models. Provider-specific retention and no-training controls follow the deployed Bedrock/AgentCore configuration for the customer's AWS account.
 

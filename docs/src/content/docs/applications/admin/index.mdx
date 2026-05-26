@@ -1,6 +1,6 @@
 ---
 title: Admin Web App
-description: The ThinkWork admin web app — a Vite + React 19 dashboard for platform operators to manage the tenant agent, Spaces, threads, Company Brain, controls, analytics, and tenant configuration.
+description: The ThinkWork admin web app — a Vite + React 19 dashboard for platform operators to manage the tenant agent, Spaces, threads, Memory, controls, analytics, and tenant configuration.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -22,7 +22,7 @@ The admin app is a Vite + React 19 single-page application with file-based routi
 Three rough personas:
 
 - **Platform operators** — the people who stood up ThinkWork in AWS and configure the tenant. They live under Dashboard, Threads, Spaces, Tenant Agent, Webhooks, Settings, and Observability.
-- **Agent authors** — the people building and iterating on the tenant agent, Space workspaces, folder specialists, templates, skills, Company Brain sources, and guardrails. They live under Tenant Agent, Spaces, Agent Templates, Skills, Company Brain, and Security Center.
+- **Agent authors** — the people building and iterating on the tenant agent, Space workspaces, folder specialists, templates, skills, Memory sources, and guardrails. They live under Tenant Agent, Spaces, Agent Templates, Skills, Memory, and Security Center.
 - **Audit / observability owners** — the people watching usage, cost, and safety. They live under Analytics, Security Center, Inbox, and the thread audit view.
 
 All three are tenant-scoped. The admin app is multi-tenant at the routing level: the `_authed/_tenant` layout enforces a tenant selection before loading any tenant data.
@@ -44,7 +44,7 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Platform*
 
 ### Platform
 
-- [Company Brain](/applications/admin/knowledge/) — Memory, Pages, Knowledge Bases, and Sources verification/configuration in one tabbed surface
+- [Memory](/applications/admin/knowledge/) — Memory, Pages, Knowledge Bases, and Sources verification/configuration in one tabbed surface
 - [Tenant Agent](/applications/admin/agents/) — the platform agent baseline, workspace, and folder specialists for the tenant
 - [Spaces](/applications/admin/spaces/) — contextual workrooms with workspace files, KBs, triggers, settings, and Private Space members
 - [Agent Templates](/applications/admin/agent-templates/) — reusable and legacy template bundles for agent authoring infrastructure
@@ -75,7 +75,7 @@ The rule of thumb: **the admin app configures the tenant; the mobile app is wher
 | Grant your personal OAuth token to that MCP server                          | Mobile |
 | Configure guardrails, budgets, Space settings, and audit retention          | Admin  |
 | Chat with an agent, review threads, act on external tasks                   | Mobile |
-| Upload knowledge-base documents or inspect Company Brain                    | Admin  |
+| Upload knowledge-base documents or inspect Memory                          | Admin  |
 | Register a webhook with a signing secret                                    | Admin  |
 | See a push notification when you're assigned a task                         | Mobile |
 

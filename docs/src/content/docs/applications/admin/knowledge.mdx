@@ -1,26 +1,26 @@
 ---
-title: Admin — Company Brain
+title: Admin — Memory
 description: "The operator surface for inspecting and configuring the context agents can use: memory, compiled pages, knowledge bases, and source routing."
 ---
 
-The Company Brain page is the operator hub for the context an agent can use. It combines memory records, compiled pages, Bedrock Knowledge Bases, workspace/source routing, and provider verification under one tabbed module.
+The Memory page is the operator hub for the context an agent can use. It combines memory records, compiled pages, Bedrock Knowledge Bases, workspace/source routing, and provider verification under one tabbed module.
 
 **Route:** `/knowledge`  
 **Tabs:** Memory, Pages, Knowledge Bases, Sources
 
-The route path still uses `/knowledge` for compatibility. The visible product/module name is Company Brain.
+The route path still uses `/knowledge` for compatibility. The visible product/module name is Memory.
 
 ## Why It Exists
 
 Agents draw context from several places:
 
 - durable memory, including Hindsight-backed memory when enabled;
-- compiled Company Brain pages from the page compile pipeline;
+- compiled pages from the page compile pipeline;
 - Bedrock Knowledge Bases attached to the tenant, template, or agent;
 - workspace files scoped to an agent or template;
 - approved MCP context tools.
 
-Company Brain keeps source inspection and source routing close together. Operators can look at the raw source, then run the same backend query path agents use through `query_context`.
+Memory keeps source inspection and source routing close together. Operators can look at the raw source, then run the same backend query path agents use through `query_context`.
 
 ## Tabs
 
@@ -54,9 +54,9 @@ Results show provider statuses and top hits side by side. Clicking a hit opens a
 
 ## Template Configuration
 
-Agent Templates expose Company Brain as a built-in tool alongside Code Sandbox, Browser Automation, Web Search, and Send Email. Enabling it injects the platform-owned `query_context` tool into supported runtimes.
+Agent Templates expose Memory as a built-in tool alongside Code Sandbox, Browser Automation, Web Search, and Send Email. Enabling it injects the platform-owned `query_context` tool into supported runtimes.
 
-Template configuration can choose which tenant-approved sources participate by default and can expose source-specific options such as Hindsight strategy. Normal agent configuration should show Hindsight as a Company Brain source, not as a separate peer tool. Raw Hindsight tools may still exist for diagnostics, but the operator-facing path is Company Brain.
+Template configuration can choose which tenant-approved sources participate by default and can expose source-specific options such as Hindsight strategy. Normal agent configuration should show Hindsight as a Memory source, not as a separate peer tool. Raw Hindsight tools may still exist for diagnostics, but the operator-facing path is Memory.
 
 ## Operational Guidance
 
@@ -68,9 +68,9 @@ Template configuration can choose which tenant-approved sources participate by d
 
 ## Related Pages
 
-- [Company Brain](/concepts/knowledge/) — product model and source families
-- [Company Brain Context API](/api/context-engine/) — shared `query_context` contract and runtime tool behavior
-- [Memory Facet](/applications/admin/memory/) — details of the Memory tab behavior
+- [Memory](/concepts/knowledge/) — product model and source families
+- [Memory Context API](/api/context-engine/) — shared `query_context` contract and runtime tool behavior
+- [Retained Memory](/applications/admin/memory/) — details of the Memory tab behavior
 - [Knowledge Bases](/applications/admin/knowledge-bases/) — Bedrock KB management
 - [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent workspace
 - [Spaces](/applications/admin/spaces/) — Space-scoped workspace, tools, memory, and knowledge context

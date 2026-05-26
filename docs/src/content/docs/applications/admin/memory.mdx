@@ -1,11 +1,11 @@
 ---
-title: Admin — Company Brain Memory
-description: Browse, search, edit, and visualize the memory facet inside Company Brain across one agent or the whole tenant.
+title: Admin — Memory
+description: Browse, search, edit, and visualize retained memory across one agent or the whole tenant.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Memory tab is the raw retained-record view inside [Admin — Company Brain](/applications/admin/knowledge/). It covers both AgentCore managed memory and the optional Hindsight add-on. Use it when you need to inspect what was retained before it is routed into `query_context` or compiled into pages.
+The Memory tab is the raw retained-record view inside [Admin — Memory](/applications/admin/knowledge/). It covers both AgentCore managed memory and the optional Hindsight add-on. Use it when you need to inspect what was retained before it is routed into `query_context` or compiled into pages.
 
 **Route:** `/knowledge/memory`
 **Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/memory.tsx`
@@ -42,10 +42,10 @@ Clicking a row opens a detail sheet with full content, metadata, edit controls, 
 
 ## Graph View
 
-When Hindsight is enabled, the graph view renders memory entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). It is useful for seeing clusters and relationships, but the compiled Pages tab is the better operator view for durable Company Brain knowledge.
+When Hindsight is enabled, the graph view renders memory entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). It is useful for seeing clusters and relationships, but the compiled Pages tab is the better operator view for durable memory knowledge.
 
 <Aside type="note">
-The graph view is a memory-backend inspection tool. It is not the full Company Brain graph: compiled pages, aliases, links, and source citations live in the Pages surface.
+The graph view is a memory-backend inspection tool. It is not the full compiled-memory graph: compiled pages, aliases, links, and source citations live in the Pages surface.
 </Aside>
 
 ## Workflows
@@ -58,7 +58,7 @@ The graph view is a memory-backend inspection tool. It is not the full Company B
 4. Click a row to read the full content.
 5. If the tenant has Hindsight enabled, edit or delete stale records from the sheet.
 
-### Debug Company Brain Results
+### Debug Memory Results
 
 1. Run the query from `/knowledge/context-engine` in the Sources tab.
 2. If a memory hit looks wrong, open `/knowledge/memory`.
@@ -89,7 +89,7 @@ Deletes are hard deletes. For bulk redaction, operate at the SQL layer with a re
 
 ## Related Pages
 
-- [Admin — Company Brain](/applications/admin/knowledge/) — the combined operator surface
-- [Company Brain](/concepts/knowledge/) — the product model
-- [Memory Facet](/concepts/knowledge/memory/) — memory contract and backend behavior
+- [Admin — Memory](/applications/admin/knowledge/) — the combined operator surface
+- [Memory](/concepts/knowledge/) — the product model
+- [Retained Memory](/concepts/knowledge/memory/) — memory contract and backend behavior
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — how memory becomes durable pages

@@ -1,11 +1,11 @@
 ---
 title: Source Routing
-description: How thread history, knowledge bases, memory, compiled pages, workspace files, and approved tools come together through Company Brain at turn time.
+description: How thread history, knowledge bases, memory, compiled pages, workspace files, and approved tools come together through Memory at turn time.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, Company Brain assembles context from eligible sources, budgets them against the model's context window, and decides what to include vs. truncate. This source routing is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop): the moment the harness decides what the model gets to see.
+A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, Memory assembles context from eligible sources, budgets them against the model's context window, and decides what to include vs. truncate. This source routing is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop): the moment the harness decides what the model gets to see.
 
 ## Source families
 
@@ -14,7 +14,7 @@ Any given turn can draw from:
 - **Thread history.** The recent conversation in this thread — prior user messages, agent responses, tool calls, and their outputs. This is the short-term context.
 - **Knowledge bases.** Chunks retrieved from assigned Bedrock Knowledge Bases, based on semantic similarity to the user's message.
 - **Memory.** Facts and preferences recalled from the memory adapter (Hindsight or AgentCore Memory). These are carry-forward learnings, not chat history.
-- **Compiled pages.** Relevant entity, topic, and decision pages produced by the Company Brain compile pipeline.
+- **Compiled pages.** Relevant entity, topic, and decision pages produced by the Memory compile pipeline.
 - **Workspace files.** Files in the relevant agent, template, or tenant-default workspace.
 - **Approved MCP tools.** Search-safe external tools that an admin has made eligible.
 
@@ -99,10 +99,10 @@ Long-term memory should never masquerade as the thread record. If an operator as
 
 ## Related pages
 
-- [Company Brain](/concepts/knowledge/) — the umbrella
+- [Memory](/concepts/knowledge/) — the umbrella
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the authored retrieval source
-- [Memory Facet](/concepts/knowledge/memory/) — the recall source
-- [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the compiled page source
+- [Retained Memory](/concepts/knowledge/memory/) — the recall source
+- [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the compiled page source
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — where assembly sits in the invocation flow
 
 ## Under the hood

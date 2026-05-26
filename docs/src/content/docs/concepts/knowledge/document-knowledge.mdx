@@ -1,13 +1,13 @@
 ---
 title: Sources and Knowledge Bases
-description: How Company Brain uses authored documents — product docs, runbooks, policies — as retrievable context backed by Bedrock Knowledge Bases and pgvector.
+description: How Memory uses authored documents — product docs, runbooks, policies — as retrievable context backed by Bedrock Knowledge Bases and pgvector.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Sources and Knowledge Bases are the Company Brain facet that starts from material you already wrote. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess. The **Reliability** operating guarantee lives here in a specific form: grounding the agent on a corpus you control means responses are reproducible against a known source, not synthesized from training-set memory the operator can't audit.
+Sources and Knowledge Bases are the authored-source facet inside Memory. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess. The **Reliability** operating guarantee lives here in a specific form: grounding the agent on a corpus you control means responses are reproducible against a known source, not synthesized from training-set memory the operator can't audit.
 
-An agent with a knowledge base attached can retrieve the most relevant chunks and include them in Company Brain context before the model generates a response. The agent does not memorize the documents; it grounds on them.
+An agent with a knowledge base attached can retrieve the most relevant chunks and include them in Memory context before the model generates a response. The agent does not memorize the documents; it grounds on them.
 
 ## When to reach for it
 
@@ -65,7 +65,7 @@ ThinkWork configures the vector index to live in the same Aurora Postgres cluste
 
 ## Assigning a KB to an agent
 
-Knowledge bases are assigned to the relevant runtime scope in the admin app or via the GraphQL API. In current Space-aware flows, attach focused KBs to the Space that needs them; retrieval queries the allowed KBs and merges the top-K results. Tenant-level inspection and upload flows live in Company Brain → Knowledge Bases.
+Knowledge bases are assigned to the relevant runtime scope in the admin app or via the GraphQL API. In current Space-aware flows, attach focused KBs to the Space that needs them; retrieval queries the allowed KBs and merges the top-K results. Tenant-level inspection and upload flows live in Memory → Knowledge Bases.
 
 The agent template can specify a default KB assignment — new agents created from that template inherit it. That makes fleet-wide KB rotation a single update to the template.
 
@@ -78,8 +78,8 @@ The agent template can specify a default KB assignment — new agents created fr
 
 ## Related pages
 
-- [Company Brain](/concepts/knowledge/) — where authored sources sit relative to memory and compiled pages
-- [Memory Facet](/concepts/knowledge/memory/) — for agent-learned context, distinct from authored documents
+- [Memory](/concepts/knowledge/) — where authored sources sit relative to memory and compiled pages
+- [Retained Memory](/concepts/knowledge/memory/) — for agent-learned context, distinct from authored documents
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how retrieved chunks combine with thread history and recalled memories at turn time
 - [Admin: Knowledge Bases](/applications/admin/knowledge-bases/) — the operator surface for creating, syncing, and inspecting KBs
 - [Architecture](/architecture/) — where KBs fit in the data tier
