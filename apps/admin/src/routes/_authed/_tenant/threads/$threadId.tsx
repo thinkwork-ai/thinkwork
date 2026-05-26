@@ -46,7 +46,6 @@ import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
-  CheckCircle2,
   Circle,
   ExternalLink,
   FileText,
@@ -55,6 +54,7 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
+import { IconCircleCheckFilled } from "@tabler/icons-react";
 import { ThreadFormDialog } from "@/components/threads/CreateThreadDialog";
 import { ArtifactViewDialog } from "@/components/threads/ArtifactViewDialog";
 import { ExecutionTrace } from "@/components/threads/ExecutionTrace";
@@ -1036,7 +1036,7 @@ function ThreadProgressPanel({
 function ThreadProgressTaskRow({ task }: { task: ParsedProgressTask }) {
   const Icon =
     task.status === "completed"
-      ? CheckCircle2
+      ? IconCircleCheckFilled
       : task.status === "blocked"
         ? AlertCircle
         : Circle;
