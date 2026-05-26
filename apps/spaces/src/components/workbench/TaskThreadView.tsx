@@ -324,7 +324,7 @@ export function TaskThreadView({
           <ConversationContent
             data-testid="thread-conversation-content"
             className={cn(
-              "w-full gap-0 px-4 pt-10 sm:px-6",
+              "w-full gap-0 px-4 pt-4 sm:px-6",
               infoPanelOpen && "md:pr-[340px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
