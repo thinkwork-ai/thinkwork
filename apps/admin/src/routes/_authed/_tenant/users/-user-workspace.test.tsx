@@ -12,15 +12,29 @@ describe("Users detail Workspace", () => {
   );
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
 
-  it("uses top-level Configuration and Workspace tabs", () => {
+  it("uses top-level Workspace and Configuration tabs with Workspace first and default", () => {
     expect(routeSource).toContain(
-      'type UserDetailTab = "configuration" | "workspace"',
+      'type UserDetailTab = "workspace" | "configuration"',
+    );
+    expect(routeSource).toContain(
+      'useState<UserDetailTab>("workspace")',
     );
     expect(routeSource).toContain("Configuration");
     expect(routeSource).toContain("Workspace");
     expect(routeSource).toContain("WorkspaceEditor");
     expect(routeSource).toContain("target={{ userId: member.user.id }}");
     expect(routeSource).toContain('mode="context"');
+
+    // Workspace tab trigger appears before Configuration in source order.
+    const workspaceTriggerIdx = routeSource.indexOf(
+      'TabsTrigger value="workspace"',
+    );
+    const configTriggerIdx = routeSource.indexOf(
+      'TabsTrigger value="configuration"',
+    );
+    expect(workspaceTriggerIdx).toBeGreaterThan(-1);
+    expect(configTriggerIdx).toBeGreaterThan(-1);
+    expect(workspaceTriggerIdx).toBeLessThan(configTriggerIdx);
   });
 
   it("keeps configuration focused on profile and role", () => {

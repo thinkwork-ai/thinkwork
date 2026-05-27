@@ -18,14 +18,14 @@ export const Route = createFileRoute("/_authed/_tenant/users/$userId")({
   component: UserDetailPage,
 });
 
-type UserDetailTab = "configuration" | "workspace";
+type UserDetailTab = "workspace" | "configuration";
 
 function UserDetailPage() {
   const { userId } = Route.useParams();
   const { tenantId } = useTenant();
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<UserDetailTab>("configuration");
+  const [tab, setTab] = useState<UserDetailTab>("workspace");
 
   const [result, reexecute] = useQuery({
     query: TenantMembersListQuery,
@@ -98,11 +98,11 @@ function UserDetailPage() {
                 onValueChange={(value) => setTab(value as UserDetailTab)}
               >
                 <TabsList>
-                  <TabsTrigger value="configuration" className="px-4">
-                    Configuration
-                  </TabsTrigger>
                   <TabsTrigger value="workspace" className="px-4">
                     Workspace
+                  </TabsTrigger>
+                  <TabsTrigger value="configuration" className="px-4">
+                    Configuration
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -118,6 +118,14 @@ function UserDetailPage() {
         onValueChange={(value) => setTab(value as UserDetailTab)}
         className={tab === "workspace" ? "h-full min-h-0" : undefined}
       >
+        <TabsContent value="workspace" className="min-h-0">
+          <WorkspaceEditor
+            target={{ userId: member.user.id }}
+            mode="context"
+            defaultOpenFile="USER.md"
+            className="h-full min-h-0"
+          />
+        </TabsContent>
         <TabsContent value="configuration">
           <div className="max-w-[760px]">
             <HumanProfileSection
@@ -135,14 +143,6 @@ function UserDetailPage() {
               onRoleSaved={() => reexecute({ requestPolicy: "network-only" })}
             />
           </div>
-        </TabsContent>
-        <TabsContent value="workspace" className="min-h-0">
-          <WorkspaceEditor
-            target={{ userId: member.user.id }}
-            mode="context"
-            defaultOpenFile="USER.md"
-            className="h-full min-h-0"
-          />
         </TabsContent>
       </Tabs>
     </PageLayout>
