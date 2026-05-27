@@ -288,6 +288,41 @@ export const ThreadProgressMarkdownQuery = gql`
   }
 `;
 
+export const ThreadGoalFilesQuery = gql`
+  query ThreadGoalFiles($tenantId: ID!, $threadId: ID!) {
+    threadGoalFiles(tenantId: $tenantId, threadId: $threadId) {
+      goal {
+        id
+        tenantId
+        spaceId
+        threadId
+        templateKey
+        outcome
+        ownerType
+        ownerId
+        mode
+        status
+        progressModel
+        completionRule
+        reviewPolicy
+        reviewerType
+        reviewerId
+        startedAt
+        reviewedAt
+        completedAt
+        cancelledAt
+        metadata
+        updatedAt
+      }
+      files {
+        file
+        key
+        content
+      }
+    }
+  }
+`;
+
 export const UpdateLinkedTaskMutation = gql`
   mutation UpdateLinkedTask($input: UpdateLinkedTaskInput!) {
     updateLinkedTask(input: $input) {
@@ -306,6 +341,32 @@ export const UpdateLinkedTaskMutation = gql`
       lastSyncedAt
       metadata
       updatedAt
+    }
+  }
+`;
+
+export const ReviewGoalMutation = gql`
+  mutation ReviewGoal($input: ReviewGoalInput!) {
+    reviewGoal(input: $input) {
+      goal {
+        id
+        status
+        reviewerType
+        reviewerId
+        reviewedAt
+        completedAt
+        cancelledAt
+        metadata
+        updatedAt
+      }
+      thread {
+        id
+        status
+        completedAt
+        cancelledAt
+        closedAt
+        updatedAt
+      }
     }
   }
 `;

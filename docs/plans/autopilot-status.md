@@ -14,13 +14,13 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U4 in progress
-- Active unit: U4 Create and refresh Customer Onboarding Goal instances
-- Active branch: `codex/goals-u4-instances`
-- Active worktree: `.Codex/worktrees/goals-u4-instances`
+- Status: U5 in progress
+- Active unit: U5 Expose Goal files and lifecycle through GraphQL
+- Active branch: `codex/goals-u5-api`
+- Active worktree: `.Codex/worktrees/goals-u5-api`
 - Started: 2026-05-27
-- Latest merged PR: [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763)
-- Active PR: [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766)
+- Latest merged PR: [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766)
+- Active PR: [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768)
 - CI: PR checks pending
 
 ### Active Unit Notes
@@ -110,6 +110,31 @@ Target branch: `main`
   is not installed as a workspace dependency; used the established
   `pnpm dlx prettier@3.6.2` fallback.
 - Opened PR [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766).
+- PR [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` and deleted the remote/local U4 branch.
+- Started U5 from updated `origin/main`.
+- Implemented U5 Goal API surface: `threadGoalFiles` returns the visible
+  active Goal plus bounded v1 markdown files, `reviewGoal` lets authorized
+  owners/reviewers/Space admins/tenant admins confirm completion, request
+  changes, or cancel a Goal, and the Spaces GraphQL documents now include the
+  Goal files query plus review mutation.
+- U5 review pass caught generated-client formatting churn; restored the
+  generated clients to native codegen style before committing.
+- U5 review pass also tightened Thread lifecycle cleanup so review completion
+  clears cancellation timestamps, request-changes clears terminal timestamps,
+  and cancellation clears completion timestamps.
+- U5 verification passed:
+  `pnpm schema:build`, `pnpm --filter @thinkwork/admin codegen`,
+  `pnpm --filter thinkwork-cli codegen`,
+  `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/goals/threadGoalFiles.query.test.ts src/graphql/resolvers/goals/reviewGoal.mutation.test.ts src/graphql/resolvers/goals/threadGoal.query.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm --filter thinkwork-cli typecheck`, `pnpm --filter @thinkwork/mobile test`,
+  `pnpm --filter @thinkwork/api test`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `git diff --check`, and touched-file
+  `pnpm dlx prettier@3.6.2 --check`.
 
 ### Progress Log
 
@@ -118,8 +143,8 @@ Target branch: `main`
 | 2026-05-27 | U1   | `codex/goals-u1-ledger`    | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged  | Local and CI passed | Applied scoped dev migration after drift precheck failed. |
 | 2026-05-27 | U2   | `codex/goals-u2-storage`   | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | Merged  | Local and CI passed | Thread Goal file storage and prompt wrapper.              |
 | 2026-05-27 | U3   | `codex/goals-u3-templates` | [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763) | Merged  | Local and CI passed | Customer Onboarding Goal template source files.           |
-| 2026-05-27 | U4   | `codex/goals-u4-instances` | [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766) | PR open | Local checks passed | Customer Onboarding Goal rows and folder refresh.         |
-| 2026-05-27 | U5   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U4 merges.                                    |
+| 2026-05-27 | U4   | `codex/goals-u4-instances` | [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766) | Merged  | Local and CI passed | Customer Onboarding Goal rows and folder refresh.         |
+| 2026-05-27 | U5   | `codex/goals-u5-api`       | [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768) | Active  | CI pending          | Goal files query and review mutation.                     |
 | 2026-05-27 | U6   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U5 merges.                                    |
 | 2026-05-27 | U7   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U6 merges.                                    |
 | 2026-05-27 | U8   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U7 merges.                                    |

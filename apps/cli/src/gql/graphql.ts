@@ -1783,6 +1783,7 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
+  reviewGoal: ReviewGoalPayload;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
@@ -2417,6 +2418,11 @@ export type MutationResubmitInboxItemArgs = {
 export type MutationResumeAgentWorkspaceRunArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars['ID']['input'];
+};
+
+
+export type MutationReviewGoalArgs = {
+  input: ReviewGoalInput;
 };
 
 
@@ -3192,6 +3198,7 @@ export type Query = {
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadGoal?: Maybe<ThreadGoal>;
+  threadGoalFiles?: Maybe<ThreadGoalFiles>;
   threadIdleLearningRun?: Maybe<ThreadIdleLearningRun>;
   threadIdleLearningRuns: Array<ThreadIdleLearningRun>;
   threadLabels: Array<ThreadLabel>;
@@ -3810,6 +3817,12 @@ export type QueryThreadGoalArgs = {
 };
 
 
+export type QueryThreadGoalFilesArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+};
+
+
 export type QueryThreadIdleLearningRunArgs = {
   runId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -4057,6 +4070,25 @@ export type ResubmitInboxItemInput = {
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
+};
+
+export enum ReviewGoalAction {
+  Cancel = 'CANCEL',
+  ConfirmCompletion = 'CONFIRM_COMPLETION',
+  RequestChanges = 'REQUEST_CHANGES'
+}
+
+export type ReviewGoalInput = {
+  action: ReviewGoalAction;
+  goalId: Scalars['ID']['input'];
+  notes?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+export type ReviewGoalPayload = {
+  __typename?: 'ReviewGoalPayload';
+  goal: ThreadGoal;
+  thread: Thread;
 };
 
 export type RotateTenantCredentialInput = {
@@ -5122,6 +5154,27 @@ export type ThreadGoal = {
   threadId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   userId?: Maybe<Scalars['ID']['output']>;
+};
+
+export enum ThreadGoalFileKind {
+  Artifacts = 'ARTIFACTS',
+  Decisions = 'DECISIONS',
+  Goal = 'GOAL',
+  Handoffs = 'HANDOFFS',
+  Progress = 'PROGRESS'
+}
+
+export type ThreadGoalFiles = {
+  __typename?: 'ThreadGoalFiles';
+  files: Array<ThreadGoalMarkdownFile>;
+  goal: ThreadGoal;
+};
+
+export type ThreadGoalMarkdownFile = {
+  __typename?: 'ThreadGoalMarkdownFile';
+  content?: Maybe<Scalars['String']['output']>;
+  file: ThreadGoalFileKind;
+  key: Scalars['String']['output'];
 };
 
 export enum ThreadGoalMode {

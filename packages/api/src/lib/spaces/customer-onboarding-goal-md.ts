@@ -15,7 +15,11 @@ import {
   renderCustomerOnboardingProgressMarkdown,
 } from "./customer-onboarding-progress-md.js";
 
-type CustomerOnboardingGoalStatus = "active" | "in_review";
+export type CustomerOnboardingGoalStatus =
+  | "active"
+  | "in_review"
+  | "completed"
+  | "cancelled";
 
 export interface CustomerOnboardingGoalFolderFile {
   file: ThreadGoalFileName;
@@ -58,6 +62,7 @@ export interface RefreshCustomerOnboardingGoalFolderDeps {
   writer?: CustomerOnboardingGoalFolderWriter;
   statusUpdater?: CustomerOnboardingGoalStatusUpdater;
   storage?: ThreadGoalStorageDeps;
+  goalStatus?: CustomerOnboardingGoalStatus;
   now?: () => Date;
 }
 
@@ -74,7 +79,9 @@ export async function refreshCustomerOnboardingGoalFolder(
   const folder = renderCustomerOnboardingGoalFolder({
     ...state,
     updatedAt,
+    goalStatus: deps.goalStatus,
   });
+  const nextStatus = deps.goalStatus ?? folder.readiness.status;
 
   const statusUpdater =
     deps.statusUpdater ?? new DrizzleCustomerOnboardingGoalStatusUpdater();
@@ -82,7 +89,7 @@ export async function refreshCustomerOnboardingGoalFolder(
     tenantId: input.tenantId,
     threadId: input.threadId,
     state,
-    status: folder.readiness.status,
+    status: nextStatus,
     updatedAt,
   });
 
@@ -123,7 +130,10 @@ export async function refreshCustomerOnboardingGoalFolderSafely(
 }
 
 export function renderCustomerOnboardingGoalFolder(
-  input: CustomerOnboardingProgressState & { updatedAt: Date },
+  input: CustomerOnboardingProgressState & {
+    updatedAt: Date;
+    goalStatus?: CustomerOnboardingGoalStatus;
+  },
 ): CustomerOnboardingGoalFolder {
   const readiness = customerOnboardingGoalReadiness(input.tasks);
   return {
@@ -131,7 +141,7 @@ export function renderCustomerOnboardingGoalFolder(
     files: [
       {
         file: "GOAL.md",
-        content: renderGoalMarkdown(input, readiness),
+        content: renderGoalMarkdown(input, readiness, input.goalStatus),
       },
       {
         file: "PROGRESS.md",
@@ -208,6 +218,27 @@ class DrizzleCustomerOnboardingGoalStatusUpdater
       return;
     }
 
+    if (input.status === "completed" || input.status === "cancelled") {
+      const [terminal] = await db
+        .select({ id: goals.id })
+        .from(goals)
+        .where(
+          and(
+            eq(goals.tenant_id, input.tenantId),
+            eq(goals.thread_id, input.threadId),
+            eq(goals.status, input.status),
+          ),
+        )
+        .limit(1);
+      if (terminal) {
+        await db
+          .update(goals)
+          .set({ updated_at: input.updatedAt })
+          .where(eq(goals.id, terminal.id));
+      }
+      return;
+    }
+
     if (!input.state.spaceId) return;
 
     const customer = customerLabel(input.state);
@@ -260,8 +291,14 @@ class DrizzleCustomerOnboardingGoalStatusUpdater
 function renderGoalMarkdown(
   input: CustomerOnboardingProgressState & { updatedAt: Date },
   readiness: CustomerOnboardingGoalReadiness,
+  goalStatus?: CustomerOnboardingGoalStatus,
 ): string {
   const customer = customerLabel(input);
+  const statusLabel = goalStatus
+    ? goalStatusText(goalStatus)
+    : readiness.readyForReview
+      ? "Ready for human final review."
+      : "Active execution.";
   return [
     "# GOAL",
     "",
@@ -271,7 +308,7 @@ function renderGoalMarkdown(
     "Progress model: ThinkWork linked tasks",
     "Completion rule: all required applicable checklist rows must be completed.",
     "Review policy: human final review is required before this Thread can be marked done.",
-    `Status: ${readiness.readyForReview ? "Ready for human final review." : "Active execution."}`,
+    `Status: ${statusLabel}`,
     `Updated: ${input.updatedAt.toISOString()}`,
     "",
     "## Canonical Sources",
@@ -289,6 +326,13 @@ function renderGoalMarkdown(
       : "- Continue the listed handoffs until required applicable rows are complete.",
     "",
   ].join("\n");
+}
+
+function goalStatusText(status: CustomerOnboardingGoalStatus): string {
+  if (status === "completed") return "Completed after human review.";
+  if (status === "cancelled") return "Cancelled.";
+  if (status === "in_review") return "Ready for human final review.";
+  return "Active execution.";
 }
 
 function renderDecisionsMarkdown(
