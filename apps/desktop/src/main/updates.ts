@@ -37,13 +37,15 @@ export interface CreateDesktopUpdatesControllerOptions {
   runtimeInfo?: DesktopRuntimeInfo;
   channel?: string;
   checkOnStart?: boolean;
+  updateCheckIntervalMs?: number;
   updatesEnabled?: boolean;
   onStateChange?: (state: UpdateState) => void;
   onTelemetry?: (event: UpdateTelemetryEvent) => void;
   logger?: Pick<typeof console, "warn">;
 }
 
-export interface DesktopUpdatesControllerOptions extends CreateDesktopUpdatesControllerOptions {
+export interface DesktopUpdatesControllerOptions
+  extends CreateDesktopUpdatesControllerOptions {
   autoUpdater?: AutoUpdaterLike;
 }
 
@@ -52,12 +54,15 @@ export class DesktopUpdatesController {
   private readonly autoUpdater?: AutoUpdaterLike;
   private readonly now: () => Date;
   private readonly checkOnStart: boolean;
+  private readonly updateCheckIntervalMs: number;
   private readonly updatesEnabled: boolean;
   private readonly updateConfigPath: string | null;
   private readonly onStateChange: (state: UpdateState) => void;
   private readonly telemetry: UpdateTelemetry;
   private readonly logger: Pick<typeof console, "warn">;
   private started = false;
+  private checkInFlight = false;
+  private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
   private state: UpdateState;
 
   constructor(options: DesktopUpdatesControllerOptions) {
@@ -65,6 +70,8 @@ export class DesktopUpdatesController {
     this.autoUpdater = options.autoUpdater;
     this.now = options.now ?? (() => new Date());
     this.checkOnStart = options.checkOnStart ?? true;
+    this.updateCheckIntervalMs =
+      options.updateCheckIntervalMs ?? DEFAULT_UPDATE_CHECK_INTERVAL_MS;
     this.updateConfigPath = resolveUpdateConfigPath(this.app);
     this.updatesEnabled =
       options.updatesEnabled ?? shouldEnableUpdates(this.app);
@@ -104,6 +111,7 @@ export class DesktopUpdatesController {
     if (this.checkOnStart) {
       void this.checkForUpdates();
     }
+    this.startUpdatePolling();
   }
 
   getState(): UpdateState {
@@ -112,6 +120,8 @@ export class DesktopUpdatesController {
 
   async checkForUpdates(): Promise<void> {
     if (!this.updatesEnabled || !this.autoUpdater) return;
+    if (this.checkInFlight) return;
+    this.checkInFlight = true;
 
     this.dispatch({
       type: "checking-for-update",
@@ -125,6 +135,15 @@ export class DesktopUpdatesController {
         context: "check",
         message: errorMessage(error),
       });
+    } finally {
+      this.checkInFlight = false;
+    }
+  }
+
+  dispose(): void {
+    if (this.updateCheckTimer) {
+      clearInterval(this.updateCheckTimer);
+      this.updateCheckTimer = null;
     }
   }
 
@@ -215,12 +234,32 @@ export class DesktopUpdatesController {
     this.state = reduceUpdateState(this.state, action);
     this.onStateChange(this.state);
   }
+
+  private startUpdatePolling(): void {
+    if (this.updateCheckIntervalMs <= 0 || this.updateCheckTimer) return;
+
+    this.updateCheckTimer = setInterval(() => {
+      if (!this.shouldPollForUpdates()) return;
+      void this.checkForUpdates();
+    }, this.updateCheckIntervalMs);
+    this.updateCheckTimer.unref?.();
+  }
+
+  private shouldPollForUpdates(): boolean {
+    return !["available", "checking", "downloading", "downloaded"].includes(
+      this.state.status,
+    );
+  }
 }
+
+export const DEFAULT_UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 export async function createDesktopUpdatesController(
   options: Omit<CreateDesktopUpdatesControllerOptions, "autoUpdater">,
 ): Promise<DesktopUpdatesController> {
-  const autoUpdater = resolveImportedAutoUpdater(await import("electron-updater"));
+  const autoUpdater = resolveImportedAutoUpdater(
+    await import("electron-updater"),
+  );
   return new DesktopUpdatesController({ ...options, autoUpdater });
 }
 
@@ -288,7 +327,9 @@ function candidateUpdateConfigPaths(app: UpdatesAppLike): string[] {
   }
 
   if (process.execPath) {
-    paths.add(resolve(dirname(process.execPath), "../Resources/app-update.yml"));
+    paths.add(
+      resolve(dirname(process.execPath), "../Resources/app-update.yml"),
+    );
     addBundleResourceCandidates(paths, process.execPath);
   }
 
