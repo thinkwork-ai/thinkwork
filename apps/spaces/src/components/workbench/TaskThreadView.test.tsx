@@ -792,9 +792,8 @@ describe("TaskThreadView", () => {
     expect(within(panel).getByText("In Review")).toBeTruthy();
     expect(within(panel).getByText("Collaborate mode")).toBeTruthy();
     expect(within(panel).getByText("Human final review required")).toBeTruthy();
-    expect(
-      within(panel).getByText("Credit terms requested: yes."),
-    ).toBeTruthy();
+    expect(within(panel).queryByText("DECISIONS.md")).toBe(null);
+    expect(within(panel).queryByText("HANDOFFS.md")).toBe(null);
     fireEvent.click(
       within(panel).getByRole("button", { name: "Request Goal changes" }),
     );
@@ -826,13 +825,9 @@ describe("TaskThreadView", () => {
     );
     expect(onConfirmCompletion).not.toHaveBeenCalled();
 
-    fireEvent.click(
-      within(panel).getByRole("button", { name: "View DECISIONS.md" }),
-    );
     expect(
-      screen.getByRole("dialog", { name: "Goal files: DECISIONS.md" }),
-    ).toBeTruthy();
-    expect(screen.getByText("- Credit terms requested: yes.")).toBeTruthy();
+      within(panel).queryByRole("button", { name: "View DECISIONS.md" }),
+    ).toBe(null);
   });
 
   it("renders persisted attachment chips in user transcript messages", () => {

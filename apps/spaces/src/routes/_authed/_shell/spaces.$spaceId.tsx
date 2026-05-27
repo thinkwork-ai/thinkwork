@@ -5,13 +5,21 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
+import { useState } from "react";
 import { useQuery } from "urql";
 import { MessageCirclePlus } from "lucide-react";
+import { IconFiles } from "@tabler/icons-react";
 import { Button } from "@thinkwork/ui";
+import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { StartOnboardingDialog } from "@/components/spaces/StartOnboardingDialog";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
+import {
+  desktopToolbarActiveButtonClassName,
+  desktopToolbarButtonClassName,
+} from "@/lib/desktop-chrome";
 import { SpaceQuery, SpaceThreadsQuery } from "@/lib/graphql-queries";
+import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
   formatRelativeDate,
   threadTitle,
@@ -61,6 +69,7 @@ function SpaceWorkroomHome() {
   const { spaceId } = Route.useParams();
   const { tenantId } = useTenant();
   const navigate = useNavigate();
+  const [filesModeOpen, setFilesModeOpen] = useState(false);
   const [{ data: spaceData, fetching: spaceFetching, error: spaceError }] =
     useQuery<SpaceResult>({
       query: SpaceQuery,
@@ -83,12 +92,59 @@ function SpaceWorkroomHome() {
 
   const spaceName =
     spaceData?.space?.name?.trim() || (spaceFetching ? "Space" : "Space");
-  usePageHeaderActions({ title: `Spaces > ${spaceName}` });
+  usePageHeaderActions({
+    title: spaceName,
+    documentTitle: `Spaces > ${spaceName}`,
+    breadcrumbs: [
+      { label: "Spaces", href: "/new" },
+      { label: spaceName },
+    ],
+    action: (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={
+          filesModeOpen
+            ? "Close Space workspace files"
+            : "Open Space workspace files"
+        }
+        title={
+          filesModeOpen
+            ? "Close Space workspace files"
+            : "Open Space workspace files"
+        }
+        className={
+          filesModeOpen
+            ? desktopToolbarActiveButtonClassName
+            : desktopToolbarButtonClassName
+        }
+        onClick={() => setFilesModeOpen((current) => !current)}
+      >
+        <IconFiles className="size-4" />
+      </Button>
+    ),
+    actionKey: `space-files:${spaceId}:${filesModeOpen ? "open" : "closed"}`,
+  });
 
   const threads = threadsData?.threadsPaged?.items ?? [];
   const isCustomerOnboardingSpace = shouldShowCustomerOnboardingStart(
     spaceData?.space,
   );
+
+  if (filesModeOpen) {
+    return (
+      <main className="flex h-full min-h-0 w-full flex-col bg-background p-4">
+        <WorkspaceFileEditor
+          target={{ spaceId }}
+          targetKey={`space:${spaceId}`}
+          client={spacesWorkspaceFilesClient}
+          defaultOpenFile="CONTEXT.md"
+          className="min-h-0 flex-1"
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="flex w-full flex-1 flex-col gap-5 p-4">

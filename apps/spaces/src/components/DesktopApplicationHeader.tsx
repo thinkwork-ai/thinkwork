@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, RefreshCw } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Button,
@@ -158,9 +158,49 @@ export function DesktopApplicationHeader() {
       >
         {headerActions ? (
           <div className="flex min-w-0 items-center gap-1">
-            <h1 className="truncate text-sm font-medium">
-              {headerActions.title}
-            </h1>
+            {headerActions.breadcrumbs &&
+            headerActions.breadcrumbs.length > 0 ? (
+              <nav
+                aria-label="Breadcrumb"
+                className="flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium"
+              >
+                {headerActions.breadcrumbs.map((crumb, index) => {
+                  const isLast = index === headerActions.breadcrumbs!.length - 1;
+                  return (
+                    <span
+                      key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
+                      className="flex min-w-0 items-center gap-1"
+                    >
+                      {index > 0 ? (
+                        <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
+                      ) : null}
+                      {isLast || !crumb.href ? (
+                        <span
+                          className={
+                            isLast
+                              ? "truncate text-foreground"
+                              : "shrink-0 truncate text-muted-foreground"
+                          }
+                        >
+                          {crumb.label}
+                        </span>
+                      ) : (
+                        <Link
+                          to={crumb.href}
+                          className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          {crumb.label}
+                        </Link>
+                      )}
+                    </span>
+                  );
+                })}
+              </nav>
+            ) : (
+              <h1 className="truncate text-sm font-medium">
+                {headerActions.title}
+              </h1>
+            )}
             {headerActions.titleTrailing ? (
               <div className="flex shrink-0 items-center">
                 {headerActions.titleTrailing}

@@ -17,6 +17,7 @@ export * from "./components/ui/checkbox.js";
 export * from "./components/ui/collapsible.js";
 export * from "./components/ui/combobox.js";
 export * from "./components/ui/command.js";
+export * from "./components/ui/context-menu.js";
 export * from "./components/ui/copyable-row.js";
 export * from "./components/ui/data-table.js";
 export * from "./components/ui/data-table-column-header.js";
