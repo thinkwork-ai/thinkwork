@@ -1480,8 +1480,8 @@ function formatMessageTimestamp(value?: string | null) {
   const diffMs = Date.now() - time;
   if (diffMs >= 0 && diffMs < 86_400_000) {
     const minutes = Math.max(1, Math.floor(diffMs / 60_000));
-    if (minutes < 60) return `${minutes}min ago`;
-    return `${Math.floor(minutes / 60)}hr ago`;
+    if (minutes < 60) return `${minutes} min ago`;
+    return `${Math.floor(minutes / 60)} hr ago`;
   }
 
   const hours = date.getHours();
