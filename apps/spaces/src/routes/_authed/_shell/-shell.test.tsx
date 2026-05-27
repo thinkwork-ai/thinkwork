@@ -104,6 +104,9 @@ describe("_authed/_shell layout", () => {
     render(<ShellLayout />);
     expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
     expect(screen.getByTestId("app-top-bar")).toBeTruthy();
+    expect(
+      screen.getByRole("separator", { name: /resize sidebar/i }),
+    ).toBeTruthy();
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 

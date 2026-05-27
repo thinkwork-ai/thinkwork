@@ -342,7 +342,7 @@ describe("ChatSidebar", () => {
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Chats" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
-    expect(container.querySelector(".tabler-icon-planet")).toBeTruthy();
+    expect(container.querySelector(".tabler-icon-planet")).toBeNull();
     expect(container.querySelector(".lucide-folder")).toBeNull();
     expect(
       screen.getByRole("link", { name: /default chat/i }).getAttribute("href"),

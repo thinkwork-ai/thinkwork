@@ -12,6 +12,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist": "^5.2.8",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@hookform/resolvers": "^5.2.2",
@@ -22,11 +25,11 @@
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
+    "@tabler/icons-react": "^3.40.0",
     "@tanstack/react-router": "^1.154.14",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-devtools": "^1.154.14",
     "@tanstack/router-plugin": "^1.154.14",
-    "@tabler/icons-react": "^3.40.0",
     "@thinkwork/computer-stdlib": "workspace:*",
     "@thinkwork/desktop-ipc": "workspace:*",
     "@thinkwork/graph": "workspace:*",

@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { IconPlanet } from "@tabler/icons-react";
+import { IconPin } from "@tabler/icons-react";
+import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -93,7 +108,7 @@ export function ChatSidebar({
   settingsOpen: controlledSettingsOpen,
   onSettingsOpenChange,
 }: ChatSidebarProps = {}) {
-  const { tenantId } = useTenant();
+  const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
@@ -114,12 +129,31 @@ export function ChatSidebar({
   const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
   const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
   const persistedReadThreadIdsRef = useRef(new Set<string>());
+  const skipNextPinWriteRef = useRef(false);
   const [, updateThread] = useMutation(UpdateThreadMutation);
+  const pinStorageKey = useMemo(
+    () => threadPinsStorageKey(tenantId, userId),
+    [tenantId, userId],
+  );
+  const [pinnedThreadIds, setPinnedThreadIds] = useState<string[]>([]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
     return () => window.clearTimeout(timeout);
   }, [search]);
+
+  useEffect(() => {
+    skipNextPinWriteRef.current = true;
+    setPinnedThreadIds(readPinnedThreadIds(pinStorageKey));
+  }, [pinStorageKey]);
+
+  useEffect(() => {
+    if (skipNextPinWriteRef.current) {
+      skipNextPinWriteRef.current = false;
+      return;
+    }
+    writePinnedThreadIds(pinStorageKey, pinnedThreadIds);
+  }, [pinStorageKey, pinnedThreadIds]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -311,23 +345,42 @@ export function ChatSidebar({
       ),
     [orderedRecentThreads, pendingThreadDeletes],
   );
+  const recentThreadById = useMemo(
+    () => new Map(recentThreads.map((thread) => [thread.id, thread])),
+    [recentThreads],
+  );
+  const pinnedThreadIdSet = useMemo(
+    () => new Set(pinnedThreadIds),
+    [pinnedThreadIds],
+  );
+  const pinnedThreads = useMemo(
+    () =>
+      pinnedThreadIds
+        .map((threadId) => recentThreadById.get(threadId))
+        .filter((thread): thread is ChatThreadSummary => Boolean(thread)),
+    [pinnedThreadIds, recentThreadById],
+  );
+  const unpinnedRecentThreads = useMemo(
+    () => recentThreads.filter((thread) => !pinnedThreadIdSet.has(thread.id)),
+    [pinnedThreadIdSet, recentThreads],
+  );
   const genericThreads = useMemo(
     () =>
-      recentThreads.filter(
+      unpinnedRecentThreads.filter(
         (thread) => !thread.spaceId || defaultSpaceIds.has(thread.spaceId),
       ),
-    [defaultSpaceIds, recentThreads],
+    [defaultSpaceIds, unpinnedRecentThreads],
   );
   const spaceThreadsById = useMemo(() => {
     const grouped = new Map<string, ChatThreadSummary[]>();
-    for (const thread of recentThreads) {
+    for (const thread of unpinnedRecentThreads) {
       if (!thread.spaceId || defaultSpaceIds.has(thread.spaceId)) continue;
       const list = grouped.get(thread.spaceId) ?? [];
       list.push(thread);
       grouped.set(thread.spaceId, list);
     }
     return grouped;
-  }, [defaultSpaceIds, recentThreads]);
+  }, [defaultSpaceIds, unpinnedRecentThreads]);
   const contextualSpaces = useMemo(
     () =>
       spaces.filter(
@@ -344,6 +397,23 @@ export function ChatSidebar({
       ),
     [pendingThreadDeletes, searchData?.threadsPaged?.items],
   );
+
+  const pinThread = useCallback((threadId: string) => {
+    setPinnedThreadIds((current) =>
+      current.includes(threadId) ? current : [...current, threadId],
+    );
+  }, []);
+
+  const unpinThread = useCallback((threadId: string) => {
+    setPinnedThreadIds((current) => current.filter((id) => id !== threadId));
+  }, []);
+
+  const reorderPinnedThreads = useCallback((orderedVisibleIds: string[]) => {
+    setPinnedThreadIds((current) => [
+      ...orderedVisibleIds,
+      ...current.filter((id) => !orderedVisibleIds.includes(id)),
+    ]);
+  }, []);
 
   const settingsOpen = controlledSettingsOpen ?? localSettingsOpen;
   const setSettingsOpen = onSettingsOpenChange ?? setLocalSettingsOpen;
@@ -435,21 +505,21 @@ export function ChatSidebar({
             <div className="space-y-3">
               <ThreadListSection
                 label="Pinned"
-                threads={[]}
+                threads={pinnedThreads}
                 selectedThreadId={selectedThreadId}
-                defaultOpen={false}
-                emptyBehavior="hidden"
                 locallyReadThreadIds={locallyReadThreadIds}
                 onActivate={activateThread}
+                onUnpin={unpinThread}
+                onReorder={reorderPinnedThreads}
               />
               <ThreadListSection
                 label="Chats"
                 threads={genericThreads}
                 selectedThreadId={selectedThreadId}
                 defaultOpen
-                emptyBehavior="message"
                 locallyReadThreadIds={locallyReadThreadIds}
                 onActivate={activateThread}
+                onPin={pinThread}
               />
               <div className="space-y-1">
                 {spacesError ? (
@@ -474,6 +544,7 @@ export function ChatSidebar({
                       activeSpaceId={routeSpaceId}
                       locallyReadThreadIds={locallyReadThreadIds}
                       onActivate={activateThread}
+                      onPin={pinThread}
                     />
                   ))
                 )}
@@ -587,20 +658,36 @@ function ThreadListSection({
   threads,
   selectedThreadId,
   defaultOpen = true,
-  emptyBehavior,
   locallyReadThreadIds,
   onActivate,
+  onPin,
+  onUnpin,
+  onReorder,
 }: {
   label: string;
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
   defaultOpen?: boolean;
-  emptyBehavior: "hidden" | "message";
   locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
+  onPin?: (threadId: string) => void;
+  onUnpin?: (threadId: string) => void;
+  onReorder?: (threadIds: string[]) => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
-  if (threads.length === 0 && emptyBehavior === "hidden") return null;
+  if (label === "Pinned") {
+    return (
+      <PinnedThreadListSection
+        threads={threads}
+        selectedThreadId={selectedThreadId}
+        locallyReadThreadIds={locallyReadThreadIds}
+        onActivate={onActivate}
+        onUnpin={onUnpin}
+        onReorder={onReorder}
+      />
+    );
+  }
+
   const visibleThreads = threads.slice(0, visibleCount);
   const hiddenCount = threads.length - visibleThreads.length;
 
@@ -632,6 +719,7 @@ function ThreadListSection({
                   active={selectedThreadId === thread.id}
                   locallyRead={locallyReadThreadIds.has(thread.id)}
                   onActivate={() => onActivate(thread.id)}
+                  onPin={onPin ? () => onPin(thread.id) : undefined}
                 />
               ))}
               {hiddenCount > 0 ? (
@@ -655,6 +743,126 @@ function ThreadListSection({
   );
 }
 
+function PinnedThreadListSection({
+  threads,
+  selectedThreadId,
+  locallyReadThreadIds,
+  onActivate,
+  onUnpin,
+  onReorder,
+}: {
+  threads: ChatThreadSummary[];
+  selectedThreadId?: string;
+  locallyReadThreadIds: ReadonlySet<string>;
+  onActivate: (threadId: string) => void;
+  onUnpin?: (threadId: string) => void;
+  onReorder?: (threadIds: string[]) => void;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const threadIds = useMemo(
+    () => threads.map((thread) => thread.id),
+    [threads],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIndex = threadIds.indexOf(String(active.id));
+      const newIndex = threadIds.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return;
+      onReorder?.(arrayMove(threadIds, oldIndex, newIndex));
+    },
+    [onReorder, threadIds],
+  );
+
+  if (threads.length === 0) return null;
+
+  return (
+    <Collapsible defaultOpen className="group/thread-section">
+      <CollapsibleTrigger asChild>
+        <SidebarGroupLabel
+          asChild
+          className="cursor-pointer select-none px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
+        >
+          <button type="button" aria-label="Toggle Pinned">
+            <span>Pinned</span>
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=closed]/thread-section:-rotate-90" />
+          </button>
+        </SidebarGroupLabel>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <SidebarGroupContent>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={threadIds}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-0.5">
+                {threads.map((thread) => (
+                  <SortablePinnedThreadRow
+                    key={thread.id}
+                    thread={thread}
+                    active={selectedThreadId === thread.id}
+                    locallyRead={locallyReadThreadIds.has(thread.id)}
+                    onActivate={() => onActivate(thread.id)}
+                    onUnpin={onUnpin ? () => onUnpin(thread.id) : undefined}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </SidebarGroupContent>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function SortablePinnedThreadRow({
+  thread,
+  active,
+  locallyRead,
+  onActivate,
+  onUnpin,
+}: {
+  thread: ChatThreadSummary;
+  active: boolean;
+  locallyRead: boolean;
+  onActivate: () => void;
+  onUnpin?: () => void;
+}) {
+  const { listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: thread.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(isDragging && "relative z-10")}
+      {...listeners}
+    >
+      <ChatThreadRow
+        thread={thread}
+        active={active}
+        locallyRead={locallyRead}
+        pinned
+        onActivate={onActivate}
+        onUnpin={onUnpin}
+      />
+    </div>
+  );
+}
+
 function SpaceThreadSection({
   space,
   threads,
@@ -662,6 +870,7 @@ function SpaceThreadSection({
   activeSpaceId,
   locallyReadThreadIds,
   onActivate,
+  onPin,
 }: {
   space: SpaceNavSummary;
   threads: ChatThreadSummary[];
@@ -669,6 +878,7 @@ function SpaceThreadSection({
   activeSpaceId?: string;
   locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
+  onPin?: (threadId: string) => void;
 }) {
   const label = space.name ?? space.slug ?? "Space";
   const isActiveSpace = activeSpaceId === space.id;
@@ -690,7 +900,6 @@ function SpaceThreadSection({
           )}
         >
           <button type="button" aria-label={`Toggle ${label}`}>
-            <IconPlanet className="-ml-1 mr-2 h-4 w-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {space.unreadThreadCount ? (
               <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
@@ -725,6 +934,7 @@ function SpaceThreadSection({
                   spaceRouteId={space.id}
                   locallyRead={locallyReadThreadIds.has(thread.id)}
                   onActivate={() => onActivate(thread.id)}
+                  onPin={onPin ? () => onPin(thread.id) : undefined}
                 />
               ))}
               {hiddenCount > 0 ? (
@@ -801,12 +1011,18 @@ function ChatThreadRow({
   spaceRouteId,
   locallyRead,
   onActivate,
+  onPin,
+  onUnpin,
+  pinned = false,
 }: {
   thread: ChatThreadSummary;
   active: boolean;
   spaceRouteId?: string;
   locallyRead: boolean;
   onActivate: () => void;
+  onPin?: () => void;
+  onUnpin?: () => void;
+  pinned?: boolean;
 }) {
   const unread = isThreadUnread(thread) && !locallyRead;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -858,7 +1074,10 @@ function ChatThreadRow({
       <Link
         {...linkProps}
         className={cn(
-          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 pr-14 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-[color,padding] hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+          onPin || onUnpin
+            ? "pr-10 group-hover/thread-row:pr-16 group-focus-within/thread-row:pr-16"
+            : "pr-10",
           active && "bg-sidebar-accent text-sidebar-accent-foreground",
         )}
         onClick={onActivate}
@@ -897,7 +1116,7 @@ function ChatThreadRow({
           ) : null}
           <button
             type="button"
-            className="absolute right-0 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1.5 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
+            className="absolute right-1 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1.5 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
             aria-label={`Delete ${title}`}
             onClick={(event) => {
               event.preventDefault();
@@ -907,6 +1126,22 @@ function ChatThreadRow({
           >
             <Trash2 className="size-3.5" />
           </button>
+          {onPin || onUnpin ? (
+            <button
+              type="button"
+              className="absolute right-6 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/75 group-hover/thread-row:flex focus-visible:flex focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
+              title={pinned ? "Unpin thread" : "Pin thread"}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (pinned) onUnpin?.();
+                else onPin?.();
+              }}
+            >
+              <IconPin className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
         </>
       )}
     </div>
@@ -937,6 +1172,33 @@ function isDefaultSpace(space: SpaceNavSummary) {
     name === "default" ||
     name === "general"
   );
+}
+
+function threadPinsStorageKey(tenantId: string | null, userId: string | null) {
+  return `thinkwork:spaces:pinned-threads:${tenantId ?? "unknown-tenant"}:${userId ?? "unknown-user"}`;
+}
+
+function readPinnedThreadIds(key: string): string[] {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (value, index, values): value is string =>
+        typeof value === "string" && values.indexOf(value) === index,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writePinnedThreadIds(key: string, threadIds: readonly string[]) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(threadIds));
+  } catch {
+    // localStorage can be unavailable in hardened contexts; pinning remains usable in memory.
+  }
 }
 
 interface ThreadSelectedDetail {

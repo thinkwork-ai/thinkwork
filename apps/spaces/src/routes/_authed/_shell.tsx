@@ -1,5 +1,5 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { SidebarInset, SidebarProvider, useSidebar } from "@thinkwork/ui";
 import { AppTopBar } from "@/components/AppTopBar";
 import { DesktopApplicationHeader } from "@/components/DesktopApplicationHeader";
@@ -44,9 +44,7 @@ function ShellLayout() {
   const shellChrome = (
     <>
       <SpacesSidebar />
-      <SidebarInset
-        className={`min-h-0 min-w-0 flex flex-col ${isDesktop ? "relative h-full" : "h-svh"}`}
-      >
+      <SidebarInset className="relative flex h-full min-h-0 min-w-0 flex-col">
         {isDesktop ? <DesktopApplicationHeader /> : <AppTopBar />}
         <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
           <Outlet />
@@ -57,33 +55,23 @@ function ShellLayout() {
 
   return (
     <SidebarProvider
-      open={isDesktop ? sidebarOpen : undefined}
-      onOpenChange={isDesktop ? setSidebarOpen : undefined}
-      className={
-        isDesktop
-          ? "desktop-shell relative h-svh min-h-0 overflow-hidden"
-          : undefined
-      }
+      open={sidebarOpen}
+      onOpenChange={setSidebarOpen}
+      className={`relative h-svh min-h-0 overflow-hidden ${isDesktop ? "desktop-shell" : ""}`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
           "--desktop-sidebar-active-width": sidebarOpen
             ? `${sidebarWidth}px`
             : "0px",
-        } as React.CSSProperties
+        } as CSSProperties
       }
     >
-      {isDesktop ? (
-        <>
-          <DesktopSidebarResizeHandle
-            width={sidebarWidth}
-            onWidthChange={setSidebarWidth}
-          />
-          <div className="flex h-full min-h-0 w-full">{shellChrome}</div>
-        </>
-      ) : (
-        shellChrome
-      )}
+      <SidebarResizeHandle
+        width={sidebarWidth}
+        onWidthChange={setSidebarWidth}
+      />
+      <div className="flex h-full min-h-0 w-full">{shellChrome}</div>
     </SidebarProvider>
   );
 }
@@ -92,7 +80,7 @@ const DESKTOP_SIDEBAR_WIDTH = 300;
 const DESKTOP_SIDEBAR_MIN_WIDTH = 240;
 const DESKTOP_SIDEBAR_MAX_WIDTH = 520;
 
-function DesktopSidebarResizeHandle({
+function SidebarResizeHandle({
   width,
   onWidthChange,
 }: {
