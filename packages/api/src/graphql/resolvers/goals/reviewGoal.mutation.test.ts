@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   captures,
   mockDb,
+  mockFinalizeCompletedGoal,
   mockRefreshGoalFolder,
   mockRequireTenantAdmin,
   mockResolveCallerTenantId,
@@ -111,6 +112,7 @@ const {
   return {
     captures,
     mockDb: db,
+    mockFinalizeCompletedGoal: vi.fn(async () => null),
     mockRefreshGoalFolder: vi.fn(async () => null),
     mockRequireTenantAdmin: vi.fn(async () => "admin"),
     mockResolveCallerTenantId: vi.fn(async () => "tenant-1" as string | null),
@@ -163,6 +165,16 @@ vi.mock("../../../lib/spaces/customer-onboarding-goal-md.js", () => ({
   refreshCustomerOnboardingGoalFolderSafely: mockRefreshGoalFolder,
 }));
 
+vi.mock("../../../lib/thread-goals/completion.js", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../lib/thread-goals/completion.js")
+  >("../../../lib/thread-goals/completion.js");
+  return {
+    ...actual,
+    finalizeCompletedThreadGoal: mockFinalizeCompletedGoal,
+  };
+});
+
 import { reviewGoal } from "./reviewGoal.mutation.js";
 
 const ctx = { auth: { authType: "cognito" } } as any;
@@ -174,6 +186,8 @@ beforeEach(() => {
   captures.threadUpdates.length = 0;
   mockDb.select.mockClear();
   mockDb.update.mockClear();
+  mockFinalizeCompletedGoal.mockReset();
+  mockFinalizeCompletedGoal.mockResolvedValue(null);
   mockRefreshGoalFolder.mockReset();
   mockRefreshGoalFolder.mockResolvedValue(null);
   mockRequireTenantAdmin.mockReset();
@@ -215,6 +229,14 @@ describe("reviewGoal", () => {
         notes: "Looks complete.",
         reviewedByUserId: "user-1",
       },
+      completion: {
+        completedByUserId: "user-1",
+        source: "goal_review",
+        brainCandidate: {
+          sourceType: "completed_goal_folder",
+          status: "pending_eligibility",
+        },
+      },
     });
     expect(captures.threadUpdates[0]).toEqual(
       expect.objectContaining({
@@ -224,10 +246,11 @@ describe("reviewGoal", () => {
         closed_at: expect.any(Date),
       }),
     );
-    expect(mockRefreshGoalFolder).toHaveBeenCalledWith(
-      { tenantId: "tenant-1", threadId: "thread-1" },
-      { goalStatus: "completed" },
-    );
+    expect(mockFinalizeCompletedGoal).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+    });
+    expect(mockRefreshGoalFolder).not.toHaveBeenCalled();
     expect(result.goal).toMatchObject({ id: "goal-1", status: "COMPLETED" });
     expect(result.thread).toMatchObject({ id: "thread-1", status: "DONE" });
   });
@@ -280,6 +303,7 @@ describe("reviewGoal", () => {
       { tenantId: "tenant-1", threadId: "thread-1" },
       { goalStatus: "active" },
     );
+    expect(mockFinalizeCompletedGoal).not.toHaveBeenCalled();
     expect(result.goal).toMatchObject({ status: "ACTIVE" });
   });
 
