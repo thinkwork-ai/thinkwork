@@ -2,7 +2,7 @@
 title: "Vendor and extend AI Elements primitives locally when their slot model can't host folder or row actions"
 date: 2026-05-13
 category: design-patterns
-module: apps/admin/agent-builder/file-tree
+module: apps/admin and apps/spaces ai-elements primitives
 problem_type: design_pattern
 component: frontend_stimulus
 severity: medium
@@ -23,7 +23,7 @@ tags:
 
 ## Context
 
-Vercel AI Elements (`apps/admin/src/components/ai-elements/*`, `apps/computer/src/components/ai-elements/*`) follows the shadcn distribution model: source files are dropped into your repo, not consumed as a versioned npm dependency. That means when a component's slot structure doesn't fit your use case — no header-row actions slot, children rendered in the wrong place, etc. — there is no "upgrade and wait for a fix" path. The shadcn philosophy is explicit: **you own the source, you extend it locally**.
+Vercel AI Elements (`apps/admin/src/components/ai-elements/*`, `apps/spaces/src/components/ai-elements/*`) follows the shadcn distribution model: source files are dropped into your repo, not consumed as a versioned npm dependency. That means when a component's slot structure doesn't fit your use case — no header-row actions slot, children rendered in the wrong place, etc. — there is no "upgrade and wait for a fix" path. The shadcn philosophy is explicit: **you own the source, you extend it locally**.
 
 We hit this in PR #1193 with `FileTreeFolder`, which has no actions slot on the folder header row. Children render inside `<CollapsibleContent>` (i.e., nested files), with no prop or `children` position for trailing content on the header itself.
 
@@ -31,7 +31,7 @@ The same general pattern showed up across the prior `codex/computer-ai-elements-
 
 ## Guidance
 
-When an AI Elements / shadcn primitive is *almost* the right shape:
+When an AI Elements / shadcn primitive is _almost_ the right shape:
 
 1. **Vendor it** — the source is already in your repo. Treat the local file as the source of truth.
 2. **Extend the prop type** — widen `string` props to `ReactNode` when you need inline annotations; add new optional slot props (`trailing`, `leading`, `actions`, etc.) typed as `ReactNode`.
@@ -52,7 +52,7 @@ Vendor + extend keeps the extension discoverable (it's a typed prop on the compo
 
 ## When to Apply
 
-- Any AI Elements primitive that's *almost* the right shape
+- Any AI Elements primitive that's _almost_ the right shape
 - Same logic for shadcn primitives and any other source-in-repo component library (Tremor source, Aceternity, etc.)
 - **Pattern signal:** if you find yourself wanting to wrap a vendored component with an absolute-positioned overlay to put content "where the children prop doesn't render," that's a composability gap → vendor + extend instead
 - **Pattern signal:** if you find yourself wrapping an AI Elements component just to handle a TypeScript error or a missing utility import shim, fix it inline rather than wrap
@@ -94,8 +94,10 @@ The matching render-path change:
 >
   <FileTreeIcon>...</FileTreeIcon>
   <FileTreeName>{name}</FileTreeName>
-</button>
-{trailing ? trailing : null}  // the new slot
+</button>;
+{
+  trailing ? trailing : null;
+} // the new slot
 ```
 
 Callers now pass row actions and badges via `trailing={...}` instead of fighting the layout with overlays.

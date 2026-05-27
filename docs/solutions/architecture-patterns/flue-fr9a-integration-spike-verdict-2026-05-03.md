@@ -6,6 +6,9 @@ module: flue-aws
 problem_type: spike_verdict
 component: agent_runtime
 severity: medium
+status: stale
+stale_date: 2026-05-26
+stale_reason: "Flue was renamed back to Pi. Keep as historical connector spike evidence; current connector code lives in packages/pi-aws."
 applies_when:
   - Deciding whether to revise the 2026-04-26 Pi parallel plan + three follow-ups
   - Validating AgentCore Code Interpreter's BashLike compatibility for Flue
@@ -26,6 +29,8 @@ tags:
 
 # FR-9a integration spike verdict — AgentCore Code Interpreter SandboxFactory + Bedrock routing
 
+> Stale as current naming guidance. The Flue-branded runtime was renamed back to Pi. Keep this as historical connector spike evidence; the current AgentCore Code Interpreter connector code lives in `packages/pi-aws`.
+
 **Verdict: green.** Both gating questions resolved cleanly. The reframe described in `docs/brainstorms/2026-05-03-flue-framework-pi-parallel-reframe-requirements.md` is implementable as planned. /ce-plan can revise the 2026-04-26 plan + three follow-ups.
 
 ## What was tested
@@ -39,19 +44,19 @@ Built `@thinkwork/flue-aws` package at `packages/flue-aws/` with a `SandboxFacto
 
 All 11 probes returned `clean` (no shell-wrap workarounds needed beyond the connector's existing design). The AgentCore CI image is **Amazon Linux 2023 (aarch64), kernel 6.1.158** with a real shell — `/bin/sh` (likely bash-compatible).
 
-| SessionEnv operation | AgentCore CI tool | Status | Notes |
-|---|---|---|---|
-| `exec` (shell) | `executeCommand` | clean | `uname -a` returns full Linux kernel string; non-empty stdout, exitCode 0 |
-| `exec` echo | `executeCommand` | clean | `echo "hello fr9a"` round-trips |
-| `exec` write+read via shell | `executeCommand` | clean | `echo "x" > /tmp/f && cat /tmp/f` matches |
-| `exec` pipes | `executeCommand` | clean | `printf "a\nb\nc\n" \| wc -l` returns `3` |
-| `exec` compound | `executeCommand` | clean | `echo step1 && echo step2` runs both |
-| `exec` mkdir | `executeCommand` | clean | `mkdir -p /tmp/dir/sub` + `test -d` confirms |
-| `exec` listdir | `executeCommand` | clean | `ls -1 /tmp` returns entries |
-| `exec` stat | `executeCommand` | clean | `stat -c '%F\|%s'` returns `directory\|240` |
-| `exec` env | `executeCommand` | clean | `env \| grep '^HOME\|PATH\|USER'` returns 3+ vars |
-| `writeFile` (LLM tool path) | `writeFiles` (via SessionEnv) | clean | LLM `write` tool routes through SessionEnv → `writeFiles`; cat verify matches |
-| `readFile` (LLM tool path) | `readFiles` (via SessionEnv) | clean | LLM `read` tool routes through SessionEnv → `readFiles`; sentinel returned |
+| SessionEnv operation        | AgentCore CI tool             | Status | Notes                                                                         |
+| --------------------------- | ----------------------------- | ------ | ----------------------------------------------------------------------------- |
+| `exec` (shell)              | `executeCommand`              | clean  | `uname -a` returns full Linux kernel string; non-empty stdout, exitCode 0     |
+| `exec` echo                 | `executeCommand`              | clean  | `echo "hello fr9a"` round-trips                                               |
+| `exec` write+read via shell | `executeCommand`              | clean  | `echo "x" > /tmp/f && cat /tmp/f` matches                                     |
+| `exec` pipes                | `executeCommand`              | clean  | `printf "a\nb\nc\n" \| wc -l` returns `3`                                     |
+| `exec` compound             | `executeCommand`              | clean  | `echo step1 && echo step2` runs both                                          |
+| `exec` mkdir                | `executeCommand`              | clean  | `mkdir -p /tmp/dir/sub` + `test -d` confirms                                  |
+| `exec` listdir              | `executeCommand`              | clean  | `ls -1 /tmp` returns entries                                                  |
+| `exec` stat                 | `executeCommand`              | clean  | `stat -c '%F\|%s'` returns `directory\|240`                                   |
+| `exec` env                  | `executeCommand`              | clean  | `env \| grep '^HOME\|PATH\|USER'` returns 3+ vars                             |
+| `writeFile` (LLM tool path) | `writeFiles` (via SessionEnv) | clean  | LLM `write` tool routes through SessionEnv → `writeFiles`; cat verify matches |
+| `readFile` (LLM tool path)  | `readFiles` (via SessionEnv)  | clean  | LLM `read` tool routes through SessionEnv → `readFiles`; sentinel returned    |
 
 **Connector design notes from the spike:**
 
@@ -64,11 +69,11 @@ All 11 probes returned `clean` (no shell-wrap workarounds needed beyond the conn
 
 **Result: working via `amazon-bedrock/<full-arn-model-id>`.**
 
-| Path | Model string | Status | Notes |
-|---|---|---|---|
-| 1. `amazon-bedrock/<short-alias>` | `amazon-bedrock/claude-haiku-4-5` | failed | `[flue] Unknown model "amazon-bedrock/claude-haiku-4-5"` — Flue's model resolver rejects pi-ai's short alias |
-| 2. `amazon-bedrock/<full-id>` | `amazon-bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0` | **ok** | Round-trip "PONG" succeeded; production wiring uses this format |
-| 3. `providers.anthropic.baseUrl` override | `anthropic/claude-haiku-4-5` + `bedrock-runtime.us-east-1.amazonaws.com` | not attempted | Skipped after path 2 succeeded |
+| Path                                      | Model string                                                             | Status        | Notes                                                                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------ |
+| 1. `amazon-bedrock/<short-alias>`         | `amazon-bedrock/claude-haiku-4-5`                                        | failed        | `[flue] Unknown model "amazon-bedrock/claude-haiku-4-5"` — Flue's model resolver rejects pi-ai's short alias |
+| 2. `amazon-bedrock/<full-id>`             | `amazon-bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0`             | **ok**        | Round-trip "PONG" succeeded; production wiring uses this format                                              |
+| 3. `providers.anthropic.baseUrl` override | `anthropic/claude-haiku-4-5` + `bedrock-runtime.us-east-1.amazonaws.com` | not attempted | Skipped after path 2 succeeded                                                                               |
 
 **Production model strings** (for use in agent definitions and runtime selector):
 
@@ -85,7 +90,7 @@ Short aliases (`claude-haiku-4-5`) are pi-ai-internal and not exposed through Fl
 - AgentCore CI sessions are created via `StartCodeInterpreterSession` with a unique `sessionId` per call, scoped to a single `codeInterpreterIdentifier`. The connector's `cleanup: true` option (used in the spike) calls `StopCodeInterpreterSession` after the agent loop completes, ensuring no session reuse between invocations.
 - Within a single invocation, all `executeCommand`/`readFiles`/etc. calls share one session — this is desired (preserves filesystem state across the agent's tool calls).
 - Cross-tenant isolation between AWS accounts uses AgentCore CI's IAM permission boundaries: each account owns its `codeInterpreterIdentifier` resources; cross-account access requires explicit IAM grants. The dev-account interpreters (`thinkwork_dev_0015953e_int-5Wi3TRcVTJ`, `thinkwork_dev_0015953e_pub-5rETNEk2Vt`) are not accessible from any other AWS account without explicit policy.
-- For multi-tenant *within* a single ThinkWork enterprise account, /ce-plan must define how AgentCore CI sessions are scoped per `tenantId` — likely one interpreter resource per tenant (mirroring `terraform/modules/app/agentcore-code-interpreter/main.tf`'s pattern of per-stage interpreters), with the trusted handler resolving the right `codeInterpreterIdentifier` from the invocation's tenant context. Behavioral test for residual state leakage between two same-tenant sessions was not run at this tier; FR-4a (origin) and the brainstorm's tenant-isolation requirements address this in plan revision.
+- For multi-tenant _within_ a single ThinkWork enterprise account, /ce-plan must define how AgentCore CI sessions are scoped per `tenantId` — likely one interpreter resource per tenant (mirroring `terraform/modules/app/agentcore-code-interpreter/main.tf`'s pattern of per-stage interpreters), with the trusted handler resolving the right `codeInterpreterIdentifier` from the invocation's tenant context. Behavioral test for residual state leakage between two same-tenant sessions was not run at this tier; FR-4a (origin) and the brainstorm's tenant-isolation requirements address this in plan revision.
 
 No AWS documentation was located that names the per-tenant isolation guarantee directly; the IAM-bounded model is the operative one. Naming this explicitly in the connector docs and the productionization plan resolves the open question.
 

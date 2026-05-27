@@ -1,8 +1,8 @@
 ---
-title: Flue runtime supply-chain integrity — CVE response SLA, trust tiers, and graceful degradation
+title: Pi runtime supply-chain integrity — CVE response SLA, trust tiers, and graceful degradation
 date: 2026-05-04
 category: docs/solutions/integration-issues/
-module: agentcore-flue
+module: agentcore-pi
 problem_type: integration_issue
 component: supply_chain
 severity: medium
@@ -17,18 +17,18 @@ related:
   - scripts/verify-supply-chain.sh
   - scripts/supply-chain-baseline.txt
 tags:
-  - flue
+  - pi-runtime
   - supply-chain
   - fr-3a
   - cve-response
   - upgrade-review
 ---
 
-# Flue runtime supply-chain integrity — CVE response SLA, trust tiers, and graceful degradation
+# Pi runtime supply-chain integrity — CVE response SLA, trust tiers, and graceful degradation
 
 ## Problem
 
-Plan §005 FR-3a treats the Flue trusted handler as a security boundary: it brokers per-user OAuth bearers, signs completion callbacks with `API_AUTH_SECRET`, and arbitrates which agent tools touch tenant data. Any package on its critical path that ships a malicious version compromises every tenant's invocation. `pnpm install --frozen-lockfile` enforces lockfile integrity for every install, but a hand-edited lockfile or a fast-moving upgrade PR can re-pin a package without a maintainer noticing the rotation. We need a second gate: an explicit allow-list of the upstream agent-runtime packages with their pinned SHA512 hashes, plus a documented response procedure for the cases where that gate fires.
+Plan §005 FR-3a originally described the Flue trusted handler; the runtime has since been renamed back to Pi. The Pi trusted handler is still a security boundary: it brokers per-user OAuth bearers, signs completion callbacks with `API_AUTH_SECRET`, and arbitrates which agent tools touch tenant data. Any package on its critical path that ships a malicious version compromises every tenant's invocation. `pnpm install --frozen-lockfile` enforces lockfile integrity for every install, but a hand-edited lockfile or a fast-moving upgrade PR can re-pin a package without a maintainer noticing the rotation. We need a second gate: an explicit allow-list of the upstream agent-runtime packages with their pinned SHA512 hashes, plus a documented response procedure for the cases where that gate fires.
 
 ## Trust tiers
 
@@ -61,12 +61,12 @@ Every other package in `pnpm-lock.yaml`. `pnpm install --frozen-lockfile` is the
 
 When a CVE lands against a Tier-1 or Tier-2 package, the platform on-call engineer is responsible for the response.
 
-| Severity | Target response time | Action |
-|---|---|---|
-| Critical (CVSS 9.0+) | 4 hours | Pin the integrity hash to the patched version; ship a hotfix PR. If no patch exists, soft-pin to the last-known-good version with a posted incident note. |
-| High (CVSS 7.0-8.9) | 24 hours | Same as Critical. |
-| Medium (CVSS 4.0-6.9) | 48 hours | Patch via the normal upgrade-review gate. |
-| Low (CVSS < 4.0) | Next sprint | Bundle with the next planned upgrade. |
+| Severity              | Target response time | Action                                                                                                                                                    |
+| --------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critical (CVSS 9.0+)  | 4 hours              | Pin the integrity hash to the patched version; ship a hotfix PR. If no patch exists, soft-pin to the last-known-good version with a posted incident note. |
+| High (CVSS 7.0-8.9)   | 24 hours             | Same as Critical.                                                                                                                                         |
+| Medium (CVSS 4.0-6.9) | 48 hours             | Patch via the normal upgrade-review gate.                                                                                                                 |
+| Low (CVSS < 4.0)      | Next sprint          | Bundle with the next planned upgrade.                                                                                                                     |
 
 ### FR-1 / FR-3 carveout
 
@@ -91,18 +91,18 @@ If the CVE forensics indicate that a deployed credential may have been exfiltrat
 Some failure modes are not malicious but still trigger `verify-supply-chain.sh` — the most common are an upstream package losing provenance (maintainer change, signing rotation, registry takedown). The graceful path:
 
 1. **Hard-fail in CI.** The supply-chain workflow already does this; any drift surfaces as `integrity mismatch` with both hashes printed.
-2. **Soft-pin to last-known-good.** If the upstream re-publish is delayed (e.g., maintainer is mid-handover), commit the *previous* integrity hash to `scripts/supply-chain-baseline.txt` with a `# soft-pin: ...` comment naming the incident and the expected restoration date. CI passes; the team has a documented incident to track.
+2. **Soft-pin to last-known-good.** If the upstream re-publish is delayed (e.g., maintainer is mid-handover), commit the _previous_ integrity hash to `scripts/supply-chain-baseline.txt` with a `# soft-pin: ...` comment naming the incident and the expected restoration date. CI passes; the team has a documented incident to track.
 3. **Restore once upstream re-publishes.** Replace the soft-pin with the current upstream hash and remove the comment in the same PR that bumps the version.
 4. **Escalate** if the soft-pin is older than 30 days; either the package is genuinely abandoned (in which case we plan a migration) or the upstream rotation is in trouble (in which case we may need to fork — see the FR-1/FR-3 carveout).
 
 ## RACI
 
-| Role | Responsibility |
-|---|---|
-| **Responsible** | Any platform engineer can author a soft-pin PR and post the incident note in `#eng-platform`. |
-| **Accountable** | The platform on-call engineer for the week is accountable for any active incident; CVE SLA timers run from their pager. |
-| **Consulted** | Tier-1 upgrade-review approver. Cannot be the same person who authored the bump PR. |
-| **Informed** | `#eng-platform` Slack channel. Soft-pin PRs MUST include a one-line summary in the channel within 1 business hour of merging. |
+| Role            | Responsibility                                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Responsible** | Any platform engineer can author a soft-pin PR and post the incident note in `#eng-platform`.                                 |
+| **Accountable** | The platform on-call engineer for the week is accountable for any active incident; CVE SLA timers run from their pager.       |
+| **Consulted**   | Tier-1 upgrade-review approver. Cannot be the same person who authored the bump PR.                                           |
+| **Informed**    | `#eng-platform` Slack channel. Soft-pin PRs MUST include a one-line summary in the channel within 1 business hour of merging. |
 
 ## Verification
 

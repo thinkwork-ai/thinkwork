@@ -2,6 +2,9 @@
 title: "CopilotKit OSS package check for the AG-UI Computer spike"
 date: 2026-05-10
 category: architecture-patterns
+status: stale
+stale_date: 2026-05-26
+stale_reason: "The AG-UI Computer spike and apps/computer route were retired. Keep this as package-footprint research only."
 tags:
   - computer
   - ag-ui
@@ -10,6 +13,8 @@ tags:
 ---
 
 # CopilotKit OSS package check for the AG-UI Computer spike
+
+> Stale as current implementation guidance. The AG-UI Computer spike and `apps/computer` route were retired. Keep this as package-footprint research if CopilotKit or AG-UI is reconsidered later.
 
 ## Context
 

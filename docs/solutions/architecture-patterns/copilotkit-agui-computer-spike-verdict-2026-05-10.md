@@ -2,6 +2,9 @@
 title: "CopilotKit / AG-UI Computer spike verdict"
 date: 2026-05-10
 category: architecture-patterns
+status: stale
+stale_date: 2026-05-26
+stale_reason: "The Computer product surface and apps/computer route were retired in PR #1666. Keep this as AG-UI/CopilotKit research background only; do not treat it as current implementation guidance."
 tags:
   - computer
   - ag-ui
@@ -11,6 +14,8 @@ tags:
 ---
 
 # CopilotKit / AG-UI Computer Spike Verdict
+
+> Stale as current implementation guidance. The Computer product surface and `apps/computer` route were retired in PR #1666. This remains useful research background for AG-UI/CopilotKit protocol thinking, but current product work should start from Spaces and the active artifact/runtime surfaces.
 
 ## 2026-05-10 Follow-Up Decision
 

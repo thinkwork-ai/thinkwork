@@ -7,6 +7,9 @@ module: agentcore-flue
 problem_type: agent_launch
 component: agent_runtime
 severity: medium
+status: stale
+stale_date: 2026-05-26
+stale_reason: "The Flue runtime selector and Lambda naming were renamed back to Pi. Keep this as launch/smoke-gate history; current runtime work should use agentcore-pi."
 applies_when:
   - Validating Flue's end-to-end runtime path (LWA routing, Bedrock IAM, model id, workspace prompt loader, pi-agent-core loop)
   - Reading Plan §005 U14's actual closure state vs the originally-drafted spec
@@ -26,9 +29,11 @@ tags:
 
 # Flue runtime launch — Plan §005 U14 closure
 
+> Stale as current runtime guidance. The Flue runtime selector and Lambda naming were renamed back to Pi. Keep this as historical launch and smoke-gate evidence; current runtime work should start from `packages/agentcore-pi`, `packages/pi-aws`, and the `normalizeAgentRuntimeType('flue') -> 'pi'` compatibility path.
+
 Plan §005 U14 was originally framed as "deploy the first ThinkWork agent (Deep Researcher) on Flue and capture cold-start latency." On 2026-05-05 the validation half landed via Marco — the dev-tenant default-template agent — answering through Flue end-to-end with USER.md context. The "deploy the deep researcher" half was unwound: the deep researcher was an example agent the originating brainstorm used to motivate validation, not a real product priority. The cold-start instrumentation, eval-score comparison, and deep-researcher template seeding all went out of scope. See the plan body's U14 re-scope note for the full reasoning.
 
-This document is the durable record of what U14 *actually* validated.
+This document is the durable record of what U14 _actually_ validated.
 
 ---
 
@@ -38,21 +43,21 @@ This document is the durable record of what U14 *actually* validated.
 
 **A deploy-time smoke gate prevents silent regressions.** The `flue-smoke-test` job in `.github/workflows/deploy.yml` runs after `update-agentcore-runtimes` on every dev deploy. It invokes the deployed Flue Lambda with Marco's known IDs across three scenarios — `fresh-thread`, `multi-turn-history`, and `memory-bearing` — and fails the deploy workflow on any of these regressions:
 
-| Regression | Smoke detector | Scenario |
-|---|---|---|
-| LWA routing breaks (POST `/` not handled) | response is not JSON | all |
-| Bedrock IAM missing inference-profile coverage | `totalTokens === 0` (silent ValidationException) | all |
-| Sonnet 4.5 model ID missing the `us.` inference-profile prefix | `totalTokens === 0` | all |
-| `pi-agent-core` Agent loop swallowing an exception silently | `content` is empty even when tokens are non-zero | all |
-| Workspace prompt loader regressing (USER.md not inlined) | `content` does not contain `"Eric"` | `fresh-thread` |
-| `normalizeHistory` produces structurally invalid `AssistantMessage` | follow-up turn returns 0 tokens / empty content | `multi-turn-history` |
-| Auto-retain dispatch broken (missing `MEMORY_RETAIN_FN_NAME`, IAM revocation, LambdaClient throw, await semantics regressed) | `flue_retain.retained === false` despite `use_memory: true` | `memory-bearing` |
+| Regression                                                                                                                   | Smoke detector                                              | Scenario             |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | -------------------- |
+| LWA routing breaks (POST `/` not handled)                                                                                    | response is not JSON                                        | all                  |
+| Bedrock IAM missing inference-profile coverage                                                                               | `totalTokens === 0` (silent ValidationException)            | all                  |
+| Sonnet 4.5 model ID missing the `us.` inference-profile prefix                                                               | `totalTokens === 0`                                         | all                  |
+| `pi-agent-core` Agent loop swallowing an exception silently                                                                  | `content` is empty even when tokens are non-zero            | all                  |
+| Workspace prompt loader regressing (USER.md not inlined)                                                                     | `content` does not contain `"Eric"`                         | `fresh-thread`       |
+| `normalizeHistory` produces structurally invalid `AssistantMessage`                                                          | follow-up turn returns 0 tokens / empty content             | `multi-turn-history` |
+| Auto-retain dispatch broken (missing `MEMORY_RETAIN_FN_NAME`, IAM revocation, LambdaClient throw, await semantics regressed) | `flue_retain.retained === false` despite `use_memory: true` | `memory-bearing`     |
 
 The smoke is the structural reason this class of bugs no longer ships silently. Each of the regressions above shipped to dev on 2026-05-05 / 2026-05-06 and was caught only when an operator manually clicked through admin and saw a wrong answer; each cost roughly an hour of diagnostic. The smoke turns each into a deploy-blocker.
 
 **Operator memory-loop verification (post-deploy, manual):** the smoke pins dispatch but does NOT verify Hindsight reflection actually ingested the transcript and that recall surfaces the fact (Hindsight reflection is asynchronous, would balloon smoke runtime, and would introduce flakiness on reflection latency). The full memory loop is operator-driven:
 
-1. In admin chat, tell Marco a memorable fact: *"remember that I prefer rooibos tea"*
+1. In admin chat, tell Marco a memorable fact: _"remember that I prefer rooibos tea"_
 2. Confirm a `memory_retain_dispatched` log line appears in CloudWatch within 30s of the chat turn:
    ```
    aws logs filter-log-events \
@@ -61,20 +66,20 @@ The smoke is the structural reason this class of bugs no longer ships silently. 
      --filter-pattern '"memory_retain_dispatched"' \
      --start-time $(($(date +%s)*1000 - 60000))
    ```
-3. Open a fresh thread with Marco, ask: *"what kind of tea do I like?"*
+3. Open a fresh thread with Marco, ask: _"what kind of tea do I like?"_
 4. Marco's `hindsight_recall` should surface "rooibos" within a turn or two — Hindsight's reflection layer is asynchronous, allow up to a minute for fact extraction on the first call.
 
 If step 2 fires but step 4 returns "I don't have that information": the dispatch path is healthy but Hindsight ingestion or recall is broken — escalate to the Hindsight side, not the Flue side.
 
 **Real production-style data captured during validation:**
 
-| Metric | Value | Source |
-|---|---|---|
-| Model | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Marco's smoke run, 2026-05-05 |
-| Total tokens (single chat turn, "What is my name?") | 4,230 | Marco's smoke run |
-| Cost (single chat turn) | $0.0159 | Marco's smoke run |
-| End-to-end Lambda duration | 7,850 ms | Marco's smoke run, warm container |
-| Bare-Lambda probe duration (no Bedrock call) | ~2,000 ms | Pre-fix probe, 2026-05-05 morning |
+| Metric                                              | Value                                          | Source                            |
+| --------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
+| Model                                               | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Marco's smoke run, 2026-05-05     |
+| Total tokens (single chat turn, "What is my name?") | 4,230                                          | Marco's smoke run                 |
+| Cost (single chat turn)                             | $0.0159                                        | Marco's smoke run                 |
+| End-to-end Lambda duration                          | 7,850 ms                                       | Marco's smoke run, warm container |
+| Bare-Lambda probe duration (no Bedrock call)        | ~2,000 ms                                      | Pre-fix probe, 2026-05-05 morning |
 
 These numbers are the closest we have to "cold-start latency" without dedicated instrumentation; they capture Lambda dispatch + AgentCore runtime + Bedrock round-trip for a real chat turn. They are not the per-`session.task()` cold-start numbers the original U14 spec asked for — those required code instrumentation that was deferred.
 
