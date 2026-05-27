@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateState, UpdateTelemetryEvent } from "@thinkwork/desktop-ipc";
 import { UpdateTelemetry } from "../../src/main/telemetry";
 import {
@@ -286,6 +286,38 @@ describe("desktop updater controller", () => {
     });
   });
 
+  it("polls for updates while no update is waiting", async () => {
+    vi.useFakeTimers();
+    const updater = new FakeAutoUpdater();
+    updater.availableVersion = null;
+    const controller = new DesktopUpdatesController({
+      app: appLike(userDataDir),
+      autoUpdater: updater,
+      now: fixedClock(),
+      runtimeInfo,
+      updateCheckIntervalMs: 5_000,
+    });
+
+    try {
+      await controller.start();
+      expect(updater.checkForUpdatesCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(updater.checkForUpdatesCalls).toBe(2);
+
+      updater.availableVersion = "1.0.1";
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(updater.checkForUpdatesCalls).toBe(3);
+      expect(controller.getState()).toMatchObject({ status: "available" });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(updater.checkForUpdatesCalls).toBe(3);
+    } finally {
+      controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it("enables prerelease updates for canary builds", async () => {
     const updater = new FakeAutoUpdater();
     const controller = new DesktopUpdatesController({
@@ -336,9 +368,13 @@ describe("desktop updater controller", () => {
       "Resources",
     );
     await mkdir(resourcesDir, { recursive: true });
-    await writeFile(join(resourcesDir, "app-update.yml"), "provider: github\n", {
-      flag: "w",
-    });
+    await writeFile(
+      join(resourcesDir, "app-update.yml"),
+      "provider: github\n",
+      {
+        flag: "w",
+      },
+    );
     const controller = new DesktopUpdatesController({
       app: {
         ...appLike(userDataDir),
@@ -379,11 +415,13 @@ describe("desktop updater import", () => {
   it("resolves autoUpdater from CommonJS dynamic import shapes", () => {
     const updater = new FakeAutoUpdater();
 
-    expect(resolveImportedAutoUpdater({ default: { autoUpdater: updater } })).toBe(
-      updater,
-    );
     expect(
-      resolveImportedAutoUpdater({ "module.exports": { autoUpdater: updater } }),
+      resolveImportedAutoUpdater({ default: { autoUpdater: updater } }),
+    ).toBe(updater);
+    expect(
+      resolveImportedAutoUpdater({
+        "module.exports": { autoUpdater: updater },
+      }),
     ).toBe(updater);
   });
 });
@@ -412,13 +450,18 @@ class FakeAutoUpdater extends EventEmitter implements AutoUpdaterLike {
   forceDevUpdateConfig = false;
   channel: string | null = null;
   updateConfigPath: string | null = null;
+  availableVersion: string | null = "1.0.1";
   checkForUpdatesCalls = 0;
   quitAndInstallCalls = 0;
 
   async checkForUpdates(): Promise<unknown> {
     this.checkForUpdatesCalls += 1;
     this.emit("checking-for-update");
-    this.emit("update-available", { version: "1.0.1" });
+    if (this.availableVersion) {
+      this.emit("update-available", { version: this.availableVersion });
+    } else {
+      this.emit("update-not-available");
+    }
     return undefined;
   }
 

@@ -114,6 +114,7 @@ export async function registerDesktopIpcHandlers(
   });
 
   app.on("before-quit", () => {
+    updates.dispose();
     oauth.dispose();
   });
 

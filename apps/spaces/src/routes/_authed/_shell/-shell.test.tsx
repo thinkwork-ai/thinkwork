@@ -32,8 +32,16 @@ vi.mock("@thinkwork/ui", async () => {
     await vi.importActual<typeof import("@thinkwork/ui")>("@thinkwork/ui");
   return {
     ...actual,
-    SidebarProvider: ({ children }: { children: React.ReactNode }) => (
-      <div data-testid="sidebar-provider">{children}</div>
+    SidebarProvider: ({
+      children,
+      style,
+    }: {
+      children: React.ReactNode;
+      style?: React.CSSProperties;
+    }) => (
+      <div data-testid="sidebar-provider" style={style}>
+        {children}
+      </div>
     ),
     SidebarInset: ({
       children,
@@ -107,6 +115,14 @@ describe("_authed/_shell layout", () => {
     expect(
       screen.getByRole("separator", { name: /resize sidebar/i }),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("sidebar-provider")
+        .style.getPropertyValue("--sidebar-width"),
+    ).toBe("335px");
+    expect(
+      screen.getByRole("separator", { name: /resize sidebar/i }).style.left,
+    ).toBe("335px");
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 
