@@ -14,14 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U2 in progress
-- Active unit: U2 Generalize thread Goal folder storage
-- Active branch: `codex/goals-u2-storage`
-- Active worktree: `.Codex/worktrees/goals-u2-storage`
+- Status: U3 in progress
+- Active unit: U3 Seed Space-owned Goal templates for Customer Onboarding
+- Active branch: `codex/goals-u3-templates`
+- Active worktree: `.Codex/worktrees/goals-u3-templates`
 - Started: 2026-05-27
-- Latest merged PR: [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760)
-- Active PR: [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761)
-- CI: PR checks pending
+- Latest merged PR: [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761)
+- Active PR: none
+- CI: U3 local verification passed
 
 ### Active Unit Notes
 
@@ -78,19 +78,31 @@ Target branch: `main`
   `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, and
   `git diff --check`.
 - Opened PR [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761).
+- PR [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` and deleted the remote/local U2 branch.
+- Started U3 from updated `origin/main`.
+- Implemented the first U3 pass: expanded the Customer Onboarding Space source
+  catalog with a portable Goal template folder and updated seed/materialization
+  tests.
+- U3 verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/spaces/customer-onboarding-source-files.test.ts src/lib/spaces/customer-onboarding-seed.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/api test`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, and `git diff --check`.
 
 ### Progress Log
 
-| Date       | Unit | Branch                   | PR                                                           | Status    | Verification           | Notes                                                     |
-| ---------- | ---- | ------------------------ | ------------------------------------------------------------ | --------- | ---------------------- | --------------------------------------------------------- |
-| 2026-05-27 | U1   | `codex/goals-u1-ledger`  | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged    | Local and CI passed    | Applied scoped dev migration after drift precheck failed. |
-| 2026-05-27 | U2   | `codex/goals-u2-storage` | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | PR opened | API/repo checks passed | Thread Goal file storage and prompt wrapper.              |
-| 2026-05-27 | U3   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U2 merges.                                    |
-| 2026-05-27 | U4   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U3 merges.                                    |
-| 2026-05-27 | U5   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U4 merges.                                    |
-| 2026-05-27 | U6   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U5 merges.                                    |
-| 2026-05-27 | U7   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U6 merges.                                    |
-| 2026-05-27 | U8   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U7 merges.                                    |
+| Date       | Unit | Branch                     | PR                                                           | Status       | Verification           | Notes                                                     |
+| ---------- | ---- | -------------------------- | ------------------------------------------------------------ | ------------ | ---------------------- | --------------------------------------------------------- |
+| 2026-05-27 | U1   | `codex/goals-u1-ledger`    | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged       | Local and CI passed    | Applied scoped dev migration after drift precheck failed. |
+| 2026-05-27 | U2   | `codex/goals-u2-storage`   | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | Merged       | Local and CI passed    | Thread Goal file storage and prompt wrapper.              |
+| 2026-05-27 | U3   | `codex/goals-u3-templates` | TBD                                                          | Local passed | API/repo checks passed | Customer Onboarding Goal template source files.           |
+| 2026-05-27 | U4   | TBD                        | TBD                                                          | Pending      | TBD                    | Start after U3 merges.                                    |
+| 2026-05-27 | U5   | TBD                        | TBD                                                          | Pending      | TBD                    | Start after U4 merges.                                    |
+| 2026-05-27 | U6   | TBD                        | TBD                                                          | Pending      | TBD                    | Start after U5 merges.                                    |
+| 2026-05-27 | U7   | TBD                        | TBD                                                          | Pending      | TBD                    | Start after U6 merges.                                    |
+| 2026-05-27 | U8   | TBD                        | TBD                                                          | Pending      | TBD                    | Start after U7 merges.                                    |
 
 ### CI Failures
 
