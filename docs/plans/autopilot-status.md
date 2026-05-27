@@ -14,13 +14,13 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U1 locally verified
+- Status: U1 PR CI remediation
 - Active unit: U1 Add the Goal ledger
 - Active branch: `codex/goals-u1-ledger`
 - Active worktree: `.Codex/worktrees/goals-u1-ledger`
 - Started: 2026-05-27
 - Active PR: [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760)
-- CI: pending
+- CI: migration drift rerun pending
 
 ### Active Unit Notes
 
@@ -55,26 +55,33 @@ Target branch: `main`
   `@thinkwork/api` test suite, admin build, mobile tests, and `git diff
 --check`.
 - Opened PR [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760).
+- CI `Migration Drift Precheck (dev)` failed because the new hand-rolled
+  `0136_goal_ledger.sql` objects were not yet present in dev. Applied the
+  scoped migration to dev and verified it with
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0136_goal_ledger.sql`.
 - Direct `pnpm exec prettier` was unavailable in the fresh worktree because
   Prettier is not installed as a workspace dependency; used
   `pnpm dlx prettier@3.6.2` for changed-file formatting/checks.
 
 ### Progress Log
 
-| Date       | Unit | Branch                  | PR                                                           | Status    | Verification | Notes                  |
-| ---------- | ---- | ----------------------- | ------------------------------------------------------------ | --------- | ------------ | ---------------------- |
-| 2026-05-27 | U1   | `codex/goals-u1-ledger` | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | PR opened | Local passed | First substrate PR.    |
-| 2026-05-27 | U2   | TBD                     | TBD                                                          | Pending   | TBD          | Start after U1 merges. |
-| 2026-05-27 | U3   | TBD                     | TBD                                                          | Pending   | TBD          | Start after U2 merges. |
-| 2026-05-27 | U4   | TBD                     | TBD                                                          | Pending   | TBD          | Start after U3 merges. |
-| 2026-05-27 | U5   | TBD                     | TBD                                                          | Pending   | TBD          | Start after U4 merges. |
-| 2026-05-27 | U6   | TBD                     | TBD                                                          | Pending   | TBD          | Start after U5 merges. |
-| 2026-05-27 | U7   | TBD                     | TBD                                                          | Pending   | TBD          | Start after U6 merges. |
-| 2026-05-27 | U8   | TBD                     | TBD                                                          | Pending   | TBD          | Start after U7 merges. |
+| Date       | Unit | Branch                  | PR                                                           | Status           | Verification | Notes                                                     |
+| ---------- | ---- | ----------------------- | ------------------------------------------------------------ | ---------------- | ------------ | --------------------------------------------------------- |
+| 2026-05-27 | U1   | `codex/goals-u1-ledger` | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | CI rerun pending | Local passed | Applied scoped dev migration after drift precheck failed. |
+| 2026-05-27 | U2   | TBD                     | TBD                                                          | Pending          | TBD          | Start after U1 merges.                                    |
+| 2026-05-27 | U3   | TBD                     | TBD                                                          | Pending          | TBD          | Start after U2 merges.                                    |
+| 2026-05-27 | U4   | TBD                     | TBD                                                          | Pending          | TBD          | Start after U3 merges.                                    |
+| 2026-05-27 | U5   | TBD                     | TBD                                                          | Pending          | TBD          | Start after U4 merges.                                    |
+| 2026-05-27 | U6   | TBD                     | TBD                                                          | Pending          | TBD          | Start after U5 merges.                                    |
+| 2026-05-27 | U7   | TBD                     | TBD                                                          | Pending          | TBD          | Start after U6 merges.                                    |
+| 2026-05-27 | U8   | TBD                     | TBD                                                          | Pending          | TBD          | Start after U7 merges.                                    |
 
 ### CI Failures
 
-- None yet for this run.
+- PR [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760)
+  `Migration Drift Precheck (dev)` failed on 2026-05-27 because
+  `0136_goal_ledger.sql` had not been applied to dev. Applied only the scoped
+  migration and verified the drift reporter passes for that file.
 
 ### Blockers
 
