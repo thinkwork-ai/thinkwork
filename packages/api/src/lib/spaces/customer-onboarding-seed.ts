@@ -168,8 +168,9 @@ This Space coordinates customer onboarding from a ThinkWork-native checklist. A 
 ## Operating Contract
 
 - Keep the Thread as the case file for kickoff facts, missing answers, checklist status, blocker discussion, documents, and final summary.
+- Treat \`goals/customer-onboarding/GOAL.md\` as the portable Goal template for this workflow. It defines the outcome, Delegate/Collaborate mode, review policy, completion rule, and folder files that should be created for each promoted onboarding Thread.
 - Read \`docs/customer-onboarding-intake.md\` before creating or interpreting onboarding checklist work.
-- Treat the Info Panel \`Progress\` section as the canonical onboarding status. If a user asks "status", "progress", or "what is the status?", answer from the checklist rows and owners in Progress.
+- Treat the Info Panel Goal panel as the canonical onboarding status surface. Checklist progress is the v1 progress model inside the broader Goal. If a user asks "status", "progress", or "what is the status?", answer from the Goal outcome, checklist rows, owners, blockers, and review readiness.
 - Treat DocuSign, Dun & Bradstreet, credit review, tax exemption forms, and P21 setup as manual checklist steps until external integrations are enabled.
 - When required intake is missing, ask the human in the Thread using the Human Question skill pattern from \`docs/customer-onboarding-intake.md\`; keep the missing-information checklist row open until the answer is captured.
 - When a human gives a task update in chat, map it back to the matching Progress item. "Done" means completed; "sent", "started", or "submitted" means in progress unless the reply says it is waiting on someone; "waiting on", "blocked", or "on hold" means blocked; "not applicable" means not applicable.
@@ -182,13 +183,23 @@ This Space coordinates customer onboarding from a ThinkWork-native checklist. A 
 \`\`\`
 customer-onboarding/
 |-- CONTEXT.md <- You are here
-\`-- docs/
-    \`-- customer-onboarding-intake.md <- Intake questions and checklist rules
+|-- docs/
+|   \`-- customer-onboarding-intake.md <- Intake questions and checklist rules
+\`-- goals/
+    \`-- customer-onboarding/
+        |-- GOAL.md <- Portable Goal contract
+        |-- PROGRESS.md <- Rendered operational briefing shape
+        |-- DECISIONS.md <- Decision log template
+        |-- ARTIFACTS.md <- Artifact index template
+        |-- HANDOFFS.md <- Handoff notes template
+        \`-- stages/
+            |-- kickoff/CONTEXT.md
+            \`-- final-review/OUTPUT.md
 \`\`\`
 
 ## Token Management
 
-Load only this file and \`docs/customer-onboarding-intake.md\` for ordinary onboarding coordination. Do not load unrelated Space files unless the Thread asks for them.
+Load this file, \`docs/customer-onboarding-intake.md\`, and the relevant Goal template files under \`goals/customer-onboarding/\` for ordinary onboarding coordination. Do not load unrelated Space files unless the Thread asks for them.
 
 ## Skills & Human Input
 
@@ -203,6 +214,7 @@ Use the Human Question skill pattern when you need a human answer before the che
 
 When a user asks for status, respond with:
 
+- Goal outcome and current mode, if a Goal has been created.
 - Overall Progress, for example: \`3/6 required onboarding tasks complete\`.
 - Blockers and who owns them.
 - Required tasks still waiting, grouped by owner/role.
@@ -263,6 +275,8 @@ When a user asks for status, respond with:
 - Any account setup blockers
 
 ## Checklist Rules
+
+Checklist progress is the v1 progress model for the Customer Onboarding Goal. The Goal itself also tracks outcome, mode, review policy, decision notes, artifact references, and handoffs.
 
 - Always required: send/get DocuSign package, check Dun & Bradstreet information, enter customer information into P21, final onboarding review.
 - Required when \`creditTermsRequested = true\`: run credit check.
@@ -328,6 +342,182 @@ Question Card result shape:
   }
 }
 \`\`\`
+`,
+    },
+    {
+      path: "goals/customer-onboarding/GOAL.md",
+      content: `# Customer Onboarding Goal Template
+
+## Minimum Goal Contract
+
+- Outcome: onboard the customer after a closed-won opportunity so they can be billed, shipped to, and serviced without missing finance, accounting, sales, or operations steps.
+- Mode: Collaborate by default. The agent coordinates, asks for missing facts, keeps the checklist moving, and drafts next steps; humans remain accountable for external-system work and final review.
+- Owner: the requesting user or assigned onboarding owner in the Thread.
+- Progress model: ThinkWork linked checklist rows rendered into \`PROGRESS.md\`.
+- Completion rule: all required, applicable checklist rows are completed or marked not applicable with notes.
+- Review policy: human confirmation is required before the Goal is completed. The agent may recommend final review, but must not silently close the Goal.
+
+## Expected Instance Folder
+
+When a Thread is promoted into a Customer Onboarding Goal, create or refresh these files under the Thread folder:
+
+- \`GOAL.md\`: instance-specific outcome, mode, owner, completion rule, and review policy.
+- \`PROGRESS.md\`: current checklist progress rendered from Aurora state.
+- \`DECISIONS.md\`: decisions that changed onboarding handling.
+- \`ARTIFACTS.md\`: links or references to contracts, tax forms, screenshots, exports, and generated deliverables.
+- \`HANDOFFS.md\`: handoff notes between Sales, Finance, Accounting, Operations, and the customer-facing team.
+
+## Local / Portable Fallback
+
+If ThinkWork tools, GraphQL, or the Info Panel are unavailable, use the markdown folder as the working context:
+
+1. Read this file, \`PROGRESS.md\`, and \`docs/customer-onboarding-intake.md\`.
+2. Treat checklist rows in \`PROGRESS.md\` as a snapshot, not the authority of record.
+3. Ask humans for missing source information in the Thread or local session.
+4. Record durable decisions in \`DECISIONS.md\`, artifacts in \`ARTIFACTS.md\`, and handoffs in \`HANDOFFS.md\`.
+5. Flag any structured-state changes that must be reconciled back into ThinkWork when tools return.
+`,
+    },
+    {
+      path: "goals/customer-onboarding/PROGRESS.md",
+      content: `# Customer Onboarding Progress Template
+
+This file is a rendered operational briefing for a Customer Onboarding Goal. Structured task status stays canonical in ThinkWork/Aurora; this markdown helps agents and humans understand the current state.
+
+## Goal Snapshot
+
+- Outcome:
+- Mode: Collaborate
+- Owner:
+- Review policy: human final review required
+- Completion rule: all required applicable checklist rows complete or not applicable with notes
+
+## Required Progress
+
+List each required checklist row with status, owner, blocker notes, and source timestamp.
+
+## Missing Intake
+
+List unanswered fields from \`docs/customer-onboarding-intake.md\` that block progress.
+
+## Readiness
+
+State whether the Goal is ready for human final review and why.
+`,
+    },
+    {
+      path: "goals/customer-onboarding/DECISIONS.md",
+      content: `# Customer Onboarding Decisions Template
+
+Use this file for decisions that explain why onboarding proceeded a certain way. These notes are high-signal Company Brain inputs after completion.
+
+## Decision Log
+
+| Date | Decision | Made by | Evidence / Source | Follow-up |
+| ---- | -------- | ------- | ----------------- | --------- |
+
+## Examples
+
+- Credit terms approved, held, or changed.
+- Tax exemption accepted, rejected, or deferred.
+- P21 setup exception or special billing/shipping handling.
+- Human reviewer approved a not-applicable checklist item.
+
+## Local / Portable Fallback
+
+If ThinkWork tools are unavailable, write the decision here with enough evidence for a later operator to reconcile the structured Goal state.
+`,
+    },
+    {
+      path: "goals/customer-onboarding/ARTIFACTS.md",
+      content: `# Customer Onboarding Artifacts Template
+
+Use this file to index artifacts produced or collected during the Goal.
+
+## Artifact Index
+
+| Artifact | Type | Location | Status | Notes |
+| -------- | ---- | -------- | ------ | ----- |
+
+## Expected Artifacts
+
+- Contract or order form.
+- Completed DocuSign package.
+- Tax exemption forms, if applicable.
+- Credit approval or credit hold evidence.
+- P21/customer setup confirmation.
+
+## Local / Portable Fallback
+
+If ThinkWork artifact tools are unavailable, record stable links, filenames, or handoff notes here so the artifact can be reattached later.
+`,
+    },
+    {
+      path: "goals/customer-onboarding/HANDOFFS.md",
+      content: `# Customer Onboarding Handoffs Template
+
+Use this file when work moves between Sales, Finance, Accounting, Operations, or a customer-facing owner.
+
+## Current Handoff
+
+- From:
+- To:
+- Needed by:
+- Context:
+- Done when:
+
+## Handoff History
+
+| Date | From | To | Reason | Status |
+| ---- | ---- | -- | ------ | ------ |
+
+## Local / Portable Fallback
+
+If ThinkWork tools are unavailable, write handoff expectations here and call out which checklist rows need reconciliation later.
+`,
+    },
+    {
+      path: "goals/customer-onboarding/stages/kickoff/CONTEXT.md",
+      content: `# Kickoff Stage Context
+
+Purpose: convert closed-won opportunity facts into a Customer Onboarding Goal instance.
+
+## Inputs
+
+- Customer legal/display name.
+- Primary and accounts-payable contacts.
+- Contract or order-form link.
+- Billing and shipping details.
+- Tax exemption and credit terms answers.
+
+## Agent Behavior
+
+- Ask grouped, answerable questions for missing required intake.
+- Create or refresh checklist rows from the Goal progress model.
+- Keep the Thread factual and avoid marking completion.
+
+## Output
+
+Updated \`GOAL.md\`, \`PROGRESS.md\`, and any missing-intake questions needed to move the Goal forward.
+`,
+    },
+    {
+      path: "goals/customer-onboarding/stages/final-review/OUTPUT.md",
+      content: `# Final Review Stage Output
+
+Use this file shape when the Goal is ready for human final review.
+
+## Completion Evidence
+
+- Required checklist rows complete:
+- Not-applicable rows with notes:
+- Remaining blockers:
+- Artifact references:
+- Decisions that should compound into Company Brain:
+
+## Review Request
+
+Ask the human reviewer to confirm completion or request changes. The agent may summarize readiness, but the human reviewer decides whether the Goal can close.
 `,
     },
   ];

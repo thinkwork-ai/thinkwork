@@ -12,6 +12,10 @@ import {
 } from "./customer-onboarding-seed";
 
 describe("customer onboarding seed defaults", () => {
+  const sourceFilePaths = CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.map(
+    (file) => file.path,
+  );
+
   it("defines the required v1 onboarding checklist", () => {
     expect(CUSTOMER_ONBOARDING_CHECKLIST_ITEMS.map((item) => item.key)).toEqual(
       [
@@ -58,7 +62,7 @@ describe("customer onboarding seed defaults", () => {
       workflow: "customer_onboarding",
       version: 1,
       checklistSystemOfRecord: "thinkwork",
-      sourceFiles: ["CONTEXT.md", "docs/customer-onboarding-intake.md"],
+      sourceFiles: sourceFilePaths,
       roleAssignees: {
         accounting: {
           externalId: "lm-user-accounting",
@@ -98,9 +102,17 @@ describe("customer onboarding seed defaults", () => {
   });
 
   it("seeds ICM-style Space source files for editable intake guidance", () => {
-    expect(
-      CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.map((file) => file.path),
-    ).toEqual(["CONTEXT.md", "docs/customer-onboarding-intake.md"]);
+    expect(sourceFilePaths).toEqual([
+      "CONTEXT.md",
+      "docs/customer-onboarding-intake.md",
+      "goals/customer-onboarding/GOAL.md",
+      "goals/customer-onboarding/PROGRESS.md",
+      "goals/customer-onboarding/DECISIONS.md",
+      "goals/customer-onboarding/ARTIFACTS.md",
+      "goals/customer-onboarding/HANDOFFS.md",
+      "goals/customer-onboarding/stages/kickoff/CONTEXT.md",
+      "goals/customer-onboarding/stages/final-review/OUTPUT.md",
+    ]);
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
       "docs/customer-onboarding-intake.md",
     );
@@ -117,7 +129,10 @@ describe("customer onboarding seed defaults", () => {
       "Skills & Human Input",
     );
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
-      "Info Panel `Progress` section",
+      "Info Panel Goal panel",
+    );
+    expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
+      "goals/customer-onboarding/GOAL.md",
     );
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[0]?.content).toContain(
       "what is the status",
@@ -134,6 +149,29 @@ describe("customer onboarding seed defaults", () => {
     expect(CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES[1]?.content).toContain(
       '"_type": "question_card"',
     );
+
+    const goalTemplate = CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.find(
+      (file) => file.path === "goals/customer-onboarding/GOAL.md",
+    )?.content;
+    expect(goalTemplate).toContain("Minimum Goal Contract");
+    expect(goalTemplate).toContain("Mode: Collaborate");
+    expect(goalTemplate).toContain("Review policy");
+    expect(goalTemplate).toContain("Local / Portable Fallback");
+
+    const decisionsTemplate = CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.find(
+      (file) => file.path === "goals/customer-onboarding/DECISIONS.md",
+    )?.content;
+    expect(decisionsTemplate).toContain("Decision Log");
+
+    const artifactsTemplate = CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.find(
+      (file) => file.path === "goals/customer-onboarding/ARTIFACTS.md",
+    )?.content;
+    expect(artifactsTemplate).toContain("Artifact Index");
+
+    const handoffsTemplate = CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.find(
+      (file) => file.path === "goals/customer-onboarding/HANDOFFS.md",
+    )?.content;
+    expect(handoffsTemplate).toContain("Handoff History");
   });
 
   it("parses role assignee JSON for the seed script", () => {
