@@ -13,6 +13,8 @@ import {
   type ComposerMention,
   type TaskThread,
   type ThreadInfoChecklistTask,
+  type ThreadInfoGoalRecord,
+  type ThreadInfoGoalRecordGroup,
   type TaskThreadInfoPanelState,
 } from "@/components/workbench/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
@@ -765,6 +767,7 @@ export function SpacesThreadDetailRoute({
               handoffsSummary: goalRecords.handoffs.summary,
               artifactsCount: goalRecords.artifacts.count,
               artifactsSummary: goalRecords.artifacts.summary,
+              recordGroups: goalRecords.groups,
               isReviewing: reviewingGoal,
               reviewError: goalReviewError,
               onConfirmCompletion: () => handleReviewGoal("CONFIRM_COMPLETION"),
@@ -1174,17 +1177,74 @@ function summarizeGoalFiles(
   files: NonNullable<ThreadGoalFilesResult["threadGoalFiles"]>["files"],
   artifactFallbackCount: number,
 ) {
-  const decisions = summarizeMarkdownList(goalFileContent(files, "DECISIONS"));
-  const handoffs = summarizeMarkdownList(goalFileContent(files, "HANDOFFS"));
-  const artifacts = summarizeMarkdownList(goalFileContent(files, "ARTIFACTS"));
+  const decisions = summarizeMarkdownList(
+    goalFileContent(files, "DECISIONS"),
+    "decisions",
+    "Decisions",
+    "DECISIONS.md",
+  );
+  const handoffs = summarizeMarkdownList(
+    goalFileContent(files, "HANDOFFS"),
+    "handoffs",
+    "Handoffs",
+    "HANDOFFS.md",
+  );
+  const artifacts = summarizeMarkdownList(
+    goalFileContent(files, "ARTIFACTS"),
+    "artifacts",
+    "Artifacts",
+    "ARTIFACTS.md",
+  );
   if (artifacts.count === 0 && artifactFallbackCount > 0) {
     artifacts.count = artifactFallbackCount;
     artifacts.summary = `${artifactFallbackCount} thread artifact${artifactFallbackCount === 1 ? "" : "s"} attached`;
+    artifacts.content = `- ${artifacts.summary}`;
+    artifacts.items = [
+      {
+        id: "ARTIFACTS-0",
+        type: "artifacts",
+        typeLabel: "Artifacts",
+        sourceFile: "Thread artifacts",
+        text: artifacts.summary,
+      },
+    ];
   }
-  return { decisions, handoffs, artifacts };
+  return {
+    decisions,
+    handoffs,
+    artifacts,
+    groups: [
+      toGoalRecordGroup(
+        "decisions",
+        "Decisions",
+        "DECISIONS.md",
+        "No decisions recorded",
+        decisions,
+      ),
+      toGoalRecordGroup(
+        "handoffs",
+        "Handoffs",
+        "HANDOFFS.md",
+        "No handoffs recorded",
+        handoffs,
+      ),
+      toGoalRecordGroup(
+        "artifacts",
+        "Artifacts",
+        "ARTIFACTS.md",
+        "No artifacts summarized",
+        artifacts,
+      ),
+    ],
+  };
 }
 
-function summarizeMarkdownList(content?: string | null) {
+function summarizeMarkdownList(
+  content: string | null | undefined,
+  type: ThreadInfoGoalRecord["type"],
+  typeLabel: string,
+  sourceFile: string,
+) {
   const items = (content ?? "")
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -1198,6 +1258,38 @@ function summarizeMarkdownList(content?: string | null) {
   return {
     count: items.length,
     summary: items[0] ?? null,
+    content: content ?? null,
+    items: items.map((text, index) => ({
+      id: `${sourceFile}-${index}`,
+      type,
+      typeLabel,
+      sourceFile,
+      text,
+    })),
+  };
+}
+
+function toGoalRecordGroup(
+  id: ThreadInfoGoalRecordGroup["id"],
+  label: string,
+  sourceFile: string,
+  emptyLabel: string,
+  summary: {
+    count: number;
+    summary: string | null;
+    content: string | null;
+    items: ThreadInfoGoalRecord[];
+  },
+): ThreadInfoGoalRecordGroup {
+  return {
+    id,
+    label,
+    sourceFile,
+    count: summary.count,
+    summary: summary.summary,
+    content: summary.content,
+    emptyLabel,
+    records: summary.items,
   };
 }
 
@@ -1571,9 +1663,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 

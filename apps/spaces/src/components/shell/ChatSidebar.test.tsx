@@ -67,17 +67,21 @@ vi.mock("@tanstack/react-router", () => ({
     children: React.ReactNode;
     to: string;
     params?: Record<string, string>;
-    search?: Record<string, string>;
+    search?: Record<string, string | undefined>;
   }) => {
     const href = to
       .replace("$spaceId", params?.spaceId ?? "$spaceId")
       .replace("$threadId", params?.threadId ?? "$threadId")
       .replace("$id", params?.id ?? "$id");
+    const query = search
+      ? new URLSearchParams(
+          Object.entries(search).filter((entry): entry is [string, string] =>
+            Boolean(entry[1]),
+          ),
+        ).toString()
+      : "";
     return (
-      <a
-        href={`${href}${search?.spaceId ? `?spaceId=${search.spaceId}` : ""}`}
-        {...props}
-      >
+      <a href={`${href}${query ? `?${query}` : ""}`} {...props}>
         {children}
       </a>
     );
@@ -201,6 +205,30 @@ vi.mock("@thinkwork/ui", () => ({
   DialogTitle: ({ children }: { children: React.ReactNode }) => (
     <h2>{children}</h2>
   ),
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuItem: ({
+    children,
+    asChild,
+    ...props
+  }: {
+    children: React.ReactNode;
+    asChild?: boolean;
+  }) => (asChild ? children : <button {...props}>{children}</button>),
+  DropdownMenuLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuTrigger: ({
+    children,
+    asChild,
+  }: {
+    children: React.ReactNode;
+    asChild?: boolean;
+  }) => (asChild ? children : <button>{children}</button>),
   Input: (props: React.ComponentProps<"input">) => <input {...props} />,
   Collapsible: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -316,13 +344,21 @@ describe("ChatSidebar", () => {
     expect(screen.queryByText("Inbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /switch space/i })).toBeNull();
     expect(screen.queryByRole("option", { name: /all spaces/i })).toBeNull();
-    expect(screen.queryByText("Default")).toBeNull();
-    expect(screen.queryByText("General")).toBeNull();
     expect(screen.getByRole("link", { name: /new thread/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /open space menu/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Default" }).getAttribute("href"),
+    ).toBe("/spaces/space-default");
+    expect(
+      screen.getByRole("link", { name: "General" }).getAttribute("href"),
+    ).toBe("/spaces/space-general");
     expect(screen.getByRole("button", { name: /toggle chats/i })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /toggle customer onboarding/i }),
     ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /detail/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /settings/i })).toBeNull();
     expect(screen.getByRole("link", { name: /automations/i })).toBeTruthy();

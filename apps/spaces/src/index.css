@@ -22,6 +22,14 @@
   animation: tw-shimmer-character 1.68s ease-in-out infinite;
 }
 
+/* Scope sidebar action reveal to the exact row/header, not ancestor groups. */
+[data-new-thread-row]:hover > .tw-new-thread-space-menu,
+[data-new-thread-row]:focus-within > .tw-new-thread-space-menu,
+.tw-new-thread-space-menu[data-state="open"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* Streamdown's built-in code block wraps the highlighted body in a second
    rounded card and an empty-when-unspecified language header. Inside our
    prose host, collapse the chrome to the single inner card. */

@@ -21,6 +21,13 @@ import {
   Zap,
 } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@thinkwork/ui";
+import {
   Children,
   useEffect,
   useLayoutEffect,
@@ -213,10 +220,30 @@ export interface ThreadInfoGoalState {
   handoffsSummary?: string | null;
   artifactsCount?: number;
   artifactsSummary?: string | null;
+  recordGroups?: ThreadInfoGoalRecordGroup[];
   isReviewing?: boolean;
   reviewError?: string | null;
   onConfirmCompletion?: () => Promise<void> | void;
   onRequestChanges?: () => Promise<void> | void;
+}
+
+export interface ThreadInfoGoalRecordGroup {
+  id: "decisions" | "handoffs" | "artifacts";
+  label: string;
+  sourceFile: string;
+  count: number;
+  summary?: string | null;
+  content?: string | null;
+  emptyLabel: string;
+  records: ThreadInfoGoalRecord[];
+}
+
+export interface ThreadInfoGoalRecord {
+  id: string;
+  type: "decisions" | "handoffs" | "artifacts";
+  typeLabel: string;
+  sourceFile: string;
+  text: string;
 }
 
 export interface ThreadInfoAttachment {
@@ -331,9 +358,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-      !showStreamingBuffer &&
-      !showProcessingShimmer,
+    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+    !showStreamingBuffer &&
+    !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -373,7 +400,7 @@ export function TaskThreadView({
             data-testid="thread-conversation-content"
             className={cn(
               "w-full gap-0 px-4 pt-4 sm:px-6",
-              infoPanelOpen && "md:pr-[332px]",
+              infoPanelOpen && "md:pr-[336px]",
             )}
             style={{ paddingBottom: composerBottomInsetPx }}
           >
@@ -435,7 +462,7 @@ export function TaskThreadView({
           data-testid="follow-up-composer-dock"
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6",
-            infoPanelOpen && "md:pr-[332px]",
+            infoPanelOpen && "md:pr-[336px]",
           )}
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
@@ -561,7 +588,7 @@ function ThreadInfoPanel({
 
   return (
     <aside
-      className="absolute right-4 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
+      className="absolute right-6 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
       aria-label={hasGoal ? "Thread Goal info" : "Thread info"}
       data-testid="thread-info-panel"
     >
@@ -575,6 +602,8 @@ function ThreadInfoPanel({
               onTaskPrompt={onTaskPrompt}
             />
           ) : null}
+
+          {state.goal ? <ThreadInfoGoalFiles goal={state.goal} /> : null}
 
           {state.attachments.length > 0 ? (
             <section className="border-t border-white/10 pt-4">
@@ -618,16 +647,6 @@ function ThreadInfoGoal({ goal }: { goal: ThreadInfoGoalState }) {
   const canReview =
     status === "in_review" &&
     Boolean(goal.onConfirmCompletion && goal.onRequestChanges);
-  const hasNarrative =
-    goal.decisionsCount ||
-    goal.handoffsCount ||
-    goal.artifactsCount ||
-    goal.decisionsSummary ||
-    goal.handoffsSummary ||
-    goal.artifactsSummary ||
-    goal.filesLoading ||
-    goal.filesError ||
-    goal.filesPrepared === false;
 
   return (
     <>
@@ -712,48 +731,83 @@ function ThreadInfoGoal({ goal }: { goal: ThreadInfoGoalState }) {
           </div>
         ) : null}
       </section>
-
-      {hasNarrative ? (
-        <section className="border-t border-white/10 pt-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-white/55">
-            Records
-          </h2>
-          {goal.filesLoading ? (
-            <p className="mt-3 text-sm text-white/55">
-              Preparing Goal files...
-            </p>
-          ) : goal.filesError ? (
-            <p className="mt-3 rounded-lg border border-amber-300/30 px-3 py-2 text-xs text-amber-100">
-              Goal files unavailable. Structured progress is still current.
-            </p>
-          ) : goal.filesPrepared === false ? (
-            <p className="mt-3 text-sm text-white/55">
-              Goal files are still being prepared.
-            </p>
-          ) : null}
-          <div className="mt-3 space-y-2">
-            <GoalRecordLine
-              label="Decisions"
-              count={goal.decisionsCount ?? 0}
-              summary={goal.decisionsSummary}
-              emptyLabel="No decisions recorded"
-            />
-            <GoalRecordLine
-              label="Handoffs"
-              count={goal.handoffsCount ?? 0}
-              summary={goal.handoffsSummary}
-              emptyLabel="No handoffs recorded"
-            />
-            <GoalRecordLine
-              label="Artifacts"
-              count={goal.artifactsCount ?? 0}
-              summary={goal.artifactsSummary}
-              emptyLabel="No artifacts summarized"
-            />
-          </div>
-        </section>
-      ) : null}
     </>
+  );
+}
+
+function ThreadInfoGoalFiles({ goal }: { goal: ThreadInfoGoalState }) {
+  const [openRecordGroupId, setOpenRecordGroupId] = useState<
+    ThreadInfoGoalRecordGroup["id"] | null
+  >(null);
+  const recordGroups =
+    goal.recordGroups ?? fallbackGoalRecordGroupsFromLegacyCounts(goal);
+  const firstOpenableGroup = recordGroups.find(
+    (group) => group.records.length > 0 || Boolean(group.content?.trim()),
+  );
+  const hasNarrative =
+    recordGroups.some(
+      (group) =>
+        group.count > 0 ||
+        Boolean(group.summary?.trim()) ||
+        Boolean(group.content?.trim()),
+    ) ||
+    goal.filesLoading ||
+    goal.filesError ||
+    goal.filesPrepared === false;
+
+  if (!hasNarrative) return null;
+
+  return (
+    <section className="border-t border-white/10 pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-white/55">
+          Goal files
+        </h2>
+        {firstOpenableGroup ? (
+          <button
+            type="button"
+            aria-label="View Goal files"
+            className="inline-flex size-7 items-center justify-center rounded-md text-white/50 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35"
+            onClick={() => setOpenRecordGroupId(firstOpenableGroup.id)}
+          >
+            <FileText className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
+      {goal.filesLoading ? (
+        <p className="mt-3 text-sm text-white/55">Preparing Goal files...</p>
+      ) : goal.filesError ? (
+        <p className="mt-3 rounded-lg border border-amber-300/30 px-3 py-2 text-xs text-amber-100">
+          Goal files unavailable. Structured progress is still current.
+        </p>
+      ) : goal.filesPrepared === false ? (
+        <p className="mt-3 text-sm text-white/55">
+          Goal files are still being prepared.
+        </p>
+      ) : null}
+      <div className="mt-3 space-y-2">
+        {recordGroups.map((group) => (
+          <GoalRecordLine
+            key={group.id}
+            label={group.label}
+            count={group.count}
+            summary={group.summary}
+            emptyLabel={group.emptyLabel}
+            canOpen={group.records.length > 0 || Boolean(group.content?.trim())}
+            onOpen={() => setOpenRecordGroupId(group.id)}
+          />
+        ))}
+      </div>
+      <GoalFilesDialog
+        open={openRecordGroupId !== null}
+        onOpenChange={(open) => {
+          if (!open) setOpenRecordGroupId(null);
+        }}
+        activeGroupId={openRecordGroupId}
+        onActiveGroupChange={setOpenRecordGroupId}
+        groups={recordGroups}
+      />
+    </section>
   );
 }
 
@@ -762,23 +816,156 @@ function GoalRecordLine({
   count,
   summary,
   emptyLabel,
+  canOpen,
+  onOpen,
 }: {
   label: string;
   count: number;
   summary?: string | null;
   emptyLabel: string;
+  canOpen?: boolean;
+  onOpen?: () => void;
 }) {
-  return (
-    <div className="min-w-0">
+  const content = (
+    <>
       <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="text-white/75">{label}</span>
-        <span className="shrink-0 text-xs text-white/45">{count}</span>
+        <span className="font-mono text-white/75">
+          {sourceFileLabel(label)}
+        </span>
+        <span className="shrink-0 text-xs text-white/45">
+          {count} item{count === 1 ? "" : "s"}
+        </span>
       </div>
       <p className="mt-0.5 line-clamp-2 text-xs text-white/50">
         {summary?.trim() || emptyLabel}
       </p>
-    </div>
+    </>
   );
+
+  if (canOpen) {
+    return (
+      <button
+        type="button"
+        aria-label={`View ${sourceFileLabel(label)}`}
+        className="block w-full min-w-0 rounded-md px-1 py-1 text-left transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35"
+        onClick={onOpen}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="min-w-0">{content}</div>;
+}
+
+function GoalFilesDialog({
+  open,
+  onOpenChange,
+  activeGroupId,
+  onActiveGroupChange,
+  groups,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  activeGroupId: ThreadInfoGoalRecordGroup["id"] | null;
+  onActiveGroupChange: (groupId: ThreadInfoGoalRecordGroup["id"]) => void;
+  groups: ThreadInfoGoalRecordGroup[];
+}) {
+  const activeGroup =
+    groups.find((group) => group.id === activeGroupId) ?? groups[0] ?? null;
+  const markdown =
+    activeGroup?.content?.trim() ||
+    activeGroup?.records.map((record) => `- ${record.text}`).join("\n") ||
+    "This Goal file has not been prepared yet.";
+
+  const title = activeGroup?.sourceFile
+    ? `Goal files: ${activeGroup.sourceFile}`
+    : "Goal files";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="z-[1000] grid max-h-[min(86vh,720px)] grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-white/12 shadow-[0_18px_80px_rgba(0,0,0,0.65)] sm:max-w-3xl"
+        style={{ backgroundColor: "rgb(8, 8, 8)" }}
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            Markdown source files from this thread&apos;s portable Goal folder.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-wrap gap-2">
+          {groups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              aria-pressed={group.id === activeGroup?.id}
+              className={cn(
+                "inline-flex min-h-8 items-center gap-2 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35",
+                group.id === activeGroup?.id
+                  ? "border-white/22 bg-white/12 text-white"
+                  : "border-white/10 text-white/60 hover:bg-white/8 hover:text-white",
+              )}
+              onClick={() => onActiveGroupChange(group.id)}
+            >
+              <span className="font-mono">{group.sourceFile}</span>
+              <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[11px] text-white/55">
+                {group.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-0 overflow-hidden rounded-lg border border-white/10 bg-black">
+          <pre className="h-full overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-6 text-white/80">
+            {markdown}
+          </pre>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function sourceFileLabel(label: string) {
+  return `${label.toUpperCase()}.md`;
+}
+
+function fallbackGoalRecordGroupsFromLegacyCounts(
+  goal: ThreadInfoGoalState,
+): ThreadInfoGoalRecordGroup[] {
+  return [
+    {
+      id: "decisions",
+      label: "Decisions",
+      sourceFile: "DECISIONS.md",
+      count: goal.decisionsCount ?? 0,
+      summary: goal.decisionsSummary,
+      emptyLabel: "No decisions recorded",
+      content: goal.decisionsSummary ? `- ${goal.decisionsSummary}` : null,
+      records: [],
+    },
+    {
+      id: "handoffs",
+      label: "Handoffs",
+      sourceFile: "HANDOFFS.md",
+      count: goal.handoffsCount ?? 0,
+      summary: goal.handoffsSummary,
+      emptyLabel: "No handoffs recorded",
+      content: goal.handoffsSummary ? `- ${goal.handoffsSummary}` : null,
+      records: [],
+    },
+    {
+      id: "artifacts",
+      label: "Artifacts",
+      sourceFile: "ARTIFACTS.md",
+      count: goal.artifactsCount ?? 0,
+      summary: goal.artifactsSummary,
+      emptyLabel: "No artifacts summarized",
+      content: goal.artifactsSummary ? `- ${goal.artifactsSummary}` : null,
+      records: [],
+    },
+  ];
 }
 
 function InfoPanelAttachmentButton({

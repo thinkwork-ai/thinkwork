@@ -28,6 +28,7 @@ import {
   Keyboard,
   MessageCirclePlus,
   Monitor,
+  MoreHorizontal,
   Paperclip,
   Repeat,
   Search,
@@ -45,6 +46,11 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
   Input,
   SidebarGroup,
   SidebarGroupContent,
@@ -443,20 +449,23 @@ export function ChatSidebar({
         <SidebarGroupContent>
           <SidebarMenu className="gap-0.5" aria-label="Chat actions">
             <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={isNewThreadRoute}
-                tooltip="New thread"
-              >
-                <Link
-                  to="/new"
-                  search={{ spaceId: undefined }}
-                  onClick={requestSpacesComposerFocus}
+              <div className="relative" data-new-thread-row>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isNewThreadRoute}
+                  tooltip="New thread"
                 >
-                  <MessageCirclePlus />
-                  <span>New thread</span>
-                </Link>
-              </SidebarMenuButton>
+                  <Link
+                    to="/new"
+                    search={{ spaceId: undefined }}
+                    onClick={requestSpacesComposerFocus}
+                  >
+                    <MessageCirclePlus />
+                    <span>New thread</span>
+                  </Link>
+                </SidebarMenuButton>
+                <SpaceJumpMenu spaces={spaces} isLoading={spacesFetching} />
+              </div>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="Search">
@@ -863,6 +872,57 @@ function SortablePinnedThreadRow({
   );
 }
 
+function SpaceJumpMenu({
+  spaces,
+  isLoading,
+}: {
+  spaces: SpaceNavSummary[];
+  isLoading?: boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open Space menu"
+          className={cn(
+            "tw-new-thread-space-menu pointer-events-none absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+          )}
+        >
+          <MoreHorizontal className="size-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="right"
+        align="start"
+        sideOffset={8}
+        className="z-[1000] w-56"
+      >
+        <DropdownMenuLabel>Open Space</DropdownMenuLabel>
+        {isLoading && spaces.length === 0 ? (
+          <DropdownMenuItem disabled>Loading Spaces...</DropdownMenuItem>
+        ) : spaces.length === 0 ? (
+          <DropdownMenuItem disabled>No Spaces yet</DropdownMenuItem>
+        ) : (
+          spaces.map((space) => (
+            <DropdownMenuItem key={space.id} asChild>
+              <Link
+                to="/spaces/$spaceId"
+                params={{ spaceId: space.id }}
+                className="min-w-0"
+              >
+                <span className="truncate">
+                  {space.name ?? space.slug ?? "Space"}
+                </span>
+              </Link>
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function SpaceThreadSection({
   space,
   threads,
@@ -891,25 +951,27 @@ function SpaceThreadSection({
       defaultOpen={isActiveSpace || threads.length > 0}
       className="group/space"
     >
-      <CollapsibleTrigger asChild>
-        <SidebarGroupLabel
-          asChild
-          className={cn(
-            "cursor-pointer select-none px-2 text-xs font-medium text-sidebar-foreground/60 data-[state=open]:text-sidebar-foreground/80",
-            isActiveSpace && "text-sidebar-foreground",
-          )}
-        >
-          <button type="button" aria-label={`Toggle ${label}`}>
-            <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-            {space.unreadThreadCount ? (
-              <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
-                {space.unreadThreadCount}
-              </span>
-            ) : null}
-            <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=closed]/space:-rotate-90" />
-          </button>
-        </SidebarGroupLabel>
-      </CollapsibleTrigger>
+      <div className="flex items-center gap-1">
+        <CollapsibleTrigger asChild>
+          <SidebarGroupLabel
+            asChild
+            className={cn(
+              "w-auto min-w-0 cursor-pointer select-none gap-1 px-2 text-xs font-medium text-sidebar-foreground/60 data-[state=open]:text-sidebar-foreground/80",
+              isActiveSpace && "text-sidebar-foreground",
+            )}
+          >
+            <button type="button" aria-label={`Toggle ${label}`}>
+              <span className="min-w-0 truncate text-left">{label}</span>
+              {space.unreadThreadCount ? (
+                <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
+                  {space.unreadThreadCount}
+                </span>
+              ) : null}
+              <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=closed]/space:-rotate-90" />
+            </button>
+          </SidebarGroupLabel>
+        </CollapsibleTrigger>
+      </div>
       <CollapsibleContent>
         <SidebarGroupContent>
           {threads.length === 0 ? (
