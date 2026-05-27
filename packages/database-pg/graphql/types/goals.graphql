@@ -12,6 +12,20 @@ enum ThreadGoalStatus {
   CANCELLED
 }
 
+enum ThreadGoalFileKind {
+  GOAL
+  PROGRESS
+  DECISIONS
+  ARTIFACTS
+  HANDOFFS
+}
+
+enum ReviewGoalAction {
+  CONFIRM_COMPLETION
+  REQUEST_CHANGES
+  CANCEL
+}
+
 type ThreadGoal {
   id: ID!
   tenantId: ID!
@@ -39,6 +53,34 @@ type ThreadGoal {
   updatedAt: AWSDateTime!
 }
 
+type ThreadGoalMarkdownFile {
+  file: ThreadGoalFileKind!
+  key: String!
+  content: String
+}
+
+type ThreadGoalFiles {
+  goal: ThreadGoal!
+  files: [ThreadGoalMarkdownFile!]!
+}
+
+type ReviewGoalPayload {
+  goal: ThreadGoal!
+  thread: Thread!
+}
+
+input ReviewGoalInput {
+  tenantId: ID!
+  goalId: ID!
+  action: ReviewGoalAction!
+  notes: String
+}
+
 extend type Query {
   threadGoal(tenantId: ID!, threadId: ID!): ThreadGoal
+  threadGoalFiles(tenantId: ID!, threadId: ID!): ThreadGoalFiles
+}
+
+extend type Mutation {
+  reviewGoal(input: ReviewGoalInput!): ReviewGoalPayload!
 }
