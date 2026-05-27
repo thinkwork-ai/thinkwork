@@ -1,0 +1,171 @@
+---
+title: Goals
+description: Explicit outcome contracts that turn selected Threads into accountable, folder-native workflows.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A Goal is the outcome contract for structured work in ThinkWork.
+
+```text
+Agent acts in a Space on behalf of a User toward a Goal.
+```
+
+Threads still record what happened. Spaces still provide the workroom. The tenant platform agent still acts. A Goal adds the missing workflow object: what outcome is being pursued, who owns it, whether the agent should delegate or collaborate, how progress is measured, and how completion is reviewed.
+
+Use Goals when a Thread should become accountable work rather than open-ended conversation.
+
+## Why Goals exist
+
+ThinkWork has always had durable Threads, Space context, folder-native agent behavior, and Company Brain. Goals connect those pieces into an operating system for repeatable work.
+
+Without a Goal, a Thread can answer questions, investigate, draft, and coordinate. With a Goal, the same Thread has an explicit contract:
+
+| Contract field  | What it answers                                            |
+| --------------- | ---------------------------------------------------------- |
+| Outcome         | What are we trying to make true?                           |
+| Owner           | Who is accountable for the result?                         |
+| Mode            | Is the agent delegating work or collaborating with humans? |
+| Progress model  | How do we know the work is moving?                         |
+| Completion rule | What must be true before the Goal is ready?                |
+| Review policy   | Who, if anyone, must confirm completion?                   |
+
+This is the difference between "chat about onboarding Acme" and "complete customer onboarding for Acme, with required checklist tasks complete and a human final review."
+
+## Delegate and Collaborate
+
+Every Goal has a mode. The mode is a product promise to the people working in the Thread.
+
+| Mode        | Use it when                                                                                    | Good result                                                                                              |
+| ----------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Delegate    | The agent can drive the work and ask humans only for missing inputs, approvals, or exceptions. | The agent keeps the workflow moving and returns with a finished or review-ready result.                  |
+| Collaborate | The work is shared, judgment-heavy, or iterative.                                              | The agent maintains context, progress, and handoffs while humans make important decisions in the Thread. |
+
+Customer onboarding usually starts as Collaborate: humans provide contract details, finance answers credit questions, accounting handles tax status, operations enters system records, and the agent keeps the work coordinated. Lower-risk repeatable tasks can be Delegate when the owner wants the agent to run the playbook and come back with exceptions.
+
+## The maturity ladder
+
+Goals are the middle of the ThinkWork maturity path:
+
+1. **Ask in a Space.** A user starts with chat, email, schedule, webhook, or integration work in the right workroom.
+2. **Use context and tools.** The agent reads Space files, User context, memory, knowledge, skills, and tools.
+3. **Promote repeated work into Goals.** The Thread gains outcome, owner, mode, progress, completion, and review semantics.
+4. **Template the operating pattern.** Operators keep reusable Goal templates in Space-owned markdown folders.
+5. **Compound completed work.** Reviewed Goal folders become high-signal source material for Company Brain.
+
+The ladder matters because ThinkWork should not force every conversation into a workflow. Start loose, then promote the work that benefits from accountability.
+
+## Goal folders
+
+Goals are folder-native. A Thread-bound Goal renders a portable folder under the Thread prefix:
+
+```text
+tenants/{tenantSlug}/threads/{threadId}/
+  GOAL.md
+  PROGRESS.md
+  DECISIONS.md
+  ARTIFACTS.md
+  HANDOFFS.md
+  stages/
+    ...
+```
+
+The files are operational context:
+
+- `GOAL.md` records the outcome contract, owner, mode, completion rule, and review policy.
+- `PROGRESS.md` is the current operational briefing, usually rendered from structured state.
+- `DECISIONS.md` captures important decisions and rationale.
+- `ARTIFACTS.md` summarizes produced or referenced artifacts.
+- `HANDOFFS.md` records stage, team, or reviewer handoffs.
+
+These files are readable by agents and operators. They should also degrade gracefully outside ThinkWork: a local Codex or Claude Code session can open the folder and understand the work even when ThinkWork APIs, permissions, and automations are not available.
+
+<Aside type="caution">
+  Goal markdown is context, not authority. Permissions, lifecycle, review, and
+  structured progress are enforced by ThinkWork runtime state. Local tools can
+  read the folder, but they do not inherit ThinkWork credentials or approvals.
+</Aside>
+
+## Source of truth split
+
+Goals use two stores on purpose:
+
+| Layer         | Owns                                                                                                             | Why                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Aurora        | Goal lifecycle, owner/reviewer, completion state, permissions, structured checklist rows, audit-friendly indexes | Multi-player Threads need consistent, queryable, permissioned workflow state.         |
+| S3 markdown   | Portable narrative execution context: goal contract, progress briefing, decisions, artifacts, handoffs           | Folder-native work should be inspectable, movable, and readable by agents.            |
+| Company Brain | Distilled reusable learning from reviewed source material                                                        | Completed work should improve future work without making raw Threads the only source. |
+
+`PROGRESS.md` is not a second task database. It is a rendered briefing from the structured state. When structured task rows change, ThinkWork refreshes the Goal folder.
+
+## Customer Onboarding example
+
+Customer Onboarding is the reference Goal pattern.
+
+The Space owns a template under its source folder:
+
+```text
+tenants/{tenantSlug}/spaces/customer/source/
+  goals/customer-onboarding/
+    GOAL.md
+    PROGRESS.md
+    DECISIONS.md
+    ARTIFACTS.md
+    HANDOFFS.md
+```
+
+When a closed-won opportunity starts onboarding, ThinkWork creates a Thread, linked tasks, a Goal row, and the Thread Goal folder. The side panel shows the outcome, mode, review state, progress, decisions, handoffs, and artifacts. When required tasks are complete, the Goal moves to review instead of silently closing. An authorized owner, reviewer, Space admin, or tenant admin can confirm completion or request changes.
+
+The finished folder then gives Company Brain a better source than scattered chat messages: it has the outcome, final progress, decisions, handoffs, artifacts, and provenance.
+
+## Placement rules
+
+Use this table when deciding where something belongs:
+
+| Put it here     | When it is about                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| Agent folder    | Tenant-wide behavior, routing, specialist folders, skills, and baseline operating style.             |
+| Space workspace | Local workroom context: team, customer, project, channel, workflow, access, knowledge, and triggers. |
+| User context    | Requester preferences, profile details, personal OAuth connections, and user-specific working style. |
+| Thread          | The conversation, execution trace, messages, turns, tool events, and audit history.                  |
+| Goal            | A promoted workflow outcome with owner, mode, progress, completion rule, and review policy.          |
+| Goal folder     | Portable narrative execution state for the promoted workflow.                                        |
+| Aurora          | Structured state that must be queryable, permissioned, audited, or shared by multiple users.         |
+| Company Brain   | Reviewed reusable knowledge distilled from completed work.                                           |
+
+## Operator best practices
+
+- Name the outcome as a finished state, not as an activity.
+- Choose Delegate only when the agent can safely drive most of the work.
+- Choose Collaborate when humans own judgment, negotiation, approval, or cross-team handoff.
+- Keep Goal templates in Space source files so the workflow can travel with the Space.
+- Use structured task rows for status and ownership; use markdown for context, rationale, and handoffs.
+- Require human review for workflows with customer, credit, pricing, legal, or operational risk.
+- Treat completed Goal folders as source material, not automatic truth. Let Company Brain distill them through provenance and review.
+
+## End-user best practices
+
+- Start in the Space where the work belongs.
+- State the desired outcome plainly.
+- Answer missing-fact questions in the Thread so the agent can keep the folder current.
+- Watch the Goal panel for next action, review state, and blockers.
+- Use request-changes when the work is not actually complete. That preserves the Thread and sends the Goal back into active progress.
+
+## Export readiness
+
+ThinkWork does not need export UI for Goals to be portable. The architecture already keeps the important pieces in files:
+
+- Space source files describe the local operating pattern.
+- Agent folders describe durable behavior and specialist context.
+- User context is rendered into a managed file for the turn.
+- Goal folders carry the execution state for promoted work.
+
+That means an export path can be added without re-architecting the system. The folder tree is not a decorative report. It is the agent-readable operating substrate.
+
+## Related pages
+
+- [Spaces](/concepts/spaces/) - workrooms that own local context and Goal templates.
+- [Spaces and Threads](/concepts/spaces/spaces-and-threads/) - how Threads remain the durable record.
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folder-native behavior boundaries.
+- [Workspace Composition](/concepts/agents/workspace-composition/) - how agent, Space, User, and Goal context resolve.
+- [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) - how reviewed source material becomes Company Brain.
