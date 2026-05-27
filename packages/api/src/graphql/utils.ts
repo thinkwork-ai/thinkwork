@@ -111,6 +111,7 @@ import {
   spaceMcpServers,
   linkedTasks,
   linkedTaskEvents,
+  goals,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -201,6 +202,7 @@ export {
   spaceMcpServers,
   linkedTasks,
   linkedTaskEvents,
+  goals,
   checkAndFireUnblockWakeups,
   generateSlug,
 };

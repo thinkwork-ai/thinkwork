@@ -1,0 +1,44 @@
+# Goals: explicit outcome contracts for promoted Thread workflows.
+
+enum ThreadGoalMode {
+  DELEGATE
+  COLLABORATE
+}
+
+enum ThreadGoalStatus {
+  ACTIVE
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+type ThreadGoal {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  threadId: ID!
+  agentId: ID
+  userId: ID
+  templateKey: String
+  outcome: String!
+  ownerType: String
+  ownerId: ID
+  mode: ThreadGoalMode!
+  status: ThreadGoalStatus!
+  progressModel: String!
+  completionRule: AWSJSON
+  reviewPolicy: AWSJSON
+  reviewerType: String
+  reviewerId: ID
+  startedAt: AWSDateTime!
+  reviewedAt: AWSDateTime
+  completedAt: AWSDateTime
+  cancelledAt: AWSDateTime
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+extend type Query {
+  threadGoal(tenantId: ID!, threadId: ID!): ThreadGoal
+}

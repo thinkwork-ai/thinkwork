@@ -6,6 +6,79 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Folder-Native Goals
+
+Plan: `docs/plans/2026-05-27-003-feat-folder-native-goals-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: U1 locally verified
+- Active unit: U1 Add the Goal ledger
+- Active branch: `codex/goals-u1-ledger`
+- Active worktree: `.Codex/worktrees/goals-u1-ledger`
+- Started: 2026-05-27
+- Active PR: TBD
+- CI: not started
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the folder-native Goals plan.
+- Read relevant prior solution docs on staged runtime refactors and manual
+  Drizzle migration drift.
+- Created isolated U1 worktree from `origin/main`.
+- Implemented U1 database schema, manual migration, GraphQL schema, resolver,
+  generated clients, and resolver tests.
+- Verification passed: `pnpm schema:build`,
+  `pnpm --filter @thinkwork/admin codegen`,
+  `pnpm --filter thinkwork-cli codegen`,
+  `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/goals/threadGoal.query.test.ts`,
+  `pnpm --filter @thinkwork/database-pg typecheck`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter thinkwork-cli typecheck`, `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/database-pg build`, and changed-file
+  `pnpm dlx prettier@3.6.2 --check`.
+- Broader pre-PR checks passed: `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `pnpm --filter @thinkwork/admin build`, and
+  `git diff --check`.
+- Mobile generated-client smoke passed: `pnpm --filter @thinkwork/mobile test`.
+- Compound review found security hardening work: public `threadGoal` should be
+  Cognito/thread-visible only and should not expose the raw S3 folder prefix.
+  Applied those fixes and reran focused Goal resolver tests plus API/database
+  typechecks.
+- Rebased U1 onto current `origin/main` (`50d91c40`) after the target branch
+  advanced. Post-rebase verification passed: schema build, admin/CLI/mobile
+  codegen, focused Goal resolver tests, repo typecheck, repo lint, full
+  `@thinkwork/api` test suite, admin build, mobile tests, and `git diff
+--check`.
+- Direct `pnpm exec prettier` was unavailable in the fresh worktree because
+  Prettier is not installed as a workspace dependency; used
+  `pnpm dlx prettier@3.6.2` for changed-file formatting/checks.
+
+### Progress Log
+
+| Date       | Unit | Branch                  | PR  | Status           | Verification | Notes                  |
+| ---------- | ---- | ----------------------- | --- | ---------------- | ------------ | ---------------------- |
+| 2026-05-27 | U1   | `codex/goals-u1-ledger` | TBD | Locally verified | Local passed | First substrate PR.    |
+| 2026-05-27 | U2   | TBD                     | TBD | Pending          | TBD          | Start after U1 merges. |
+| 2026-05-27 | U3   | TBD                     | TBD | Pending          | TBD          | Start after U2 merges. |
+| 2026-05-27 | U4   | TBD                     | TBD | Pending          | TBD          | Start after U3 merges. |
+| 2026-05-27 | U5   | TBD                     | TBD | Pending          | TBD          | Start after U4 merges. |
+| 2026-05-27 | U6   | TBD                     | TBD | Pending          | TBD          | Start after U5 merges. |
+| 2026-05-27 | U7   | TBD                     | TBD | Pending          | TBD          | Start after U6 merges. |
+| 2026-05-27 | U8   | TBD                     | TBD | Pending          | TBD          | Start after U7 merges. |
+
+### CI Failures
+
+- None yet for this run.
+
+### Blockers
+
+- None.
+
 ## Current Run: Customer Onboarding Native Checklist Demo
 
 Plan: `docs/plans/2026-05-25-004-feat-customer-onboarding-native-checklist-plan.md`

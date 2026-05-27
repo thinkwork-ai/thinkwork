@@ -3191,11 +3191,13 @@ export type Query = {
   tenantToolInventory: TenantToolInventory;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
+  threadGoal?: Maybe<ThreadGoal>;
   threadIdleLearningRun?: Maybe<ThreadIdleLearningRun>;
   threadIdleLearningRuns: Array<ThreadIdleLearningRun>;
   threadLabels: Array<ThreadLabel>;
   threadLinkedTasks: Array<LinkedTask>;
   threadMentionTargets: Array<ThreadMentionTarget>;
+  threadProgress?: Maybe<ThreadProgress>;
   threadProgressMarkdown?: Maybe<ThreadProgressMarkdown>;
   threadTraces: Array<TraceEvent>;
   threadTurn?: Maybe<ThreadTurn>;
@@ -3802,6 +3804,12 @@ export type QueryThreadByNumberArgs = {
 };
 
 
+export type QueryThreadGoalArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+};
+
+
 export type QueryThreadIdleLearningRunArgs = {
   runId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -3829,6 +3837,12 @@ export type QueryThreadLinkedTasksArgs = {
 
 
 export type QueryThreadMentionTargetsArgs = {
+  threadId: Scalars['ID']['input'];
+};
+
+
+export type QueryThreadProgressArgs = {
+  tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
 };
 
@@ -5013,6 +5027,7 @@ export type Thread = {
   createdById?: Maybe<Scalars['String']['output']>;
   createdByType?: Maybe<Scalars['String']['output']>;
   dueAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  goal?: Maybe<ThreadGoal>;
   id: Scalars['ID']['output'];
   identifier?: Maybe<Scalars['String']['output']>;
   isBlocked: Scalars['Boolean']['output'];
@@ -5080,6 +5095,46 @@ export type ThreadDependency = {
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
 };
+
+export type ThreadGoal = {
+  __typename?: 'ThreadGoal';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  cancelledAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  completionRule?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  mode: ThreadGoalMode;
+  outcome: Scalars['String']['output'];
+  ownerId?: Maybe<Scalars['ID']['output']>;
+  ownerType?: Maybe<Scalars['String']['output']>;
+  progressModel: Scalars['String']['output'];
+  reviewPolicy?: Maybe<Scalars['AWSJSON']['output']>;
+  reviewedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  reviewerId?: Maybe<Scalars['ID']['output']>;
+  reviewerType?: Maybe<Scalars['String']['output']>;
+  spaceId: Scalars['ID']['output'];
+  startedAt: Scalars['AWSDateTime']['output'];
+  status: ThreadGoalStatus;
+  templateKey?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  userId?: Maybe<Scalars['ID']['output']>;
+};
+
+export enum ThreadGoalMode {
+  Collaborate = 'COLLABORATE',
+  Delegate = 'DELEGATE'
+}
+
+export enum ThreadGoalStatus {
+  Active = 'ACTIVE',
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  InReview = 'IN_REVIEW'
+}
 
 export type ThreadIdleLearningChangedFile = {
   __typename?: 'ThreadIdleLearningChangedFile';
@@ -5186,6 +5241,12 @@ export enum ThreadParticipantType {
   Agent = 'AGENT',
   User = 'USER'
 }
+
+export type ThreadProgress = {
+  __typename?: 'ThreadProgress';
+  markdown: Scalars['String']['output'];
+  threadId: Scalars['ID']['output'];
+};
 
 export type ThreadProgressMarkdown = {
   __typename?: 'ThreadProgressMarkdown';
