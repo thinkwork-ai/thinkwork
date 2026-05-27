@@ -125,7 +125,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   },
   spaces: {
     access_mode: "spaces.access_mode",
-    email_triggers_enabled: "spaces.email_triggers_enabled",
+    email_trigger_status: "spaces.email_trigger_status",
     id: "spaces.id",
     slug: "spaces.slug",
     status: "spaces.status",
@@ -182,7 +182,7 @@ describe("email-inbound routing", () => {
           spaceId: "space-finance",
           accessMode: "public",
           status: "active",
-          emailTriggersEnabled: true,
+          emailTriggerStatus: "enabled",
         },
       ],
       [{ id: "user-eric" }],
@@ -210,7 +210,24 @@ describe("email-inbound routing", () => {
         spaceId: "space-finance",
         accessMode: "public",
         status: "active",
-        emailTriggersEnabled: false,
+        emailTriggerStatus: "disabled",
+      },
+    ]);
+
+    await handler(emailEvent("finance@acme.thinkwork.ai"));
+
+    expect(createColdContactThread).not.toHaveBeenCalled();
+    expect(insertedRows).toHaveLength(0);
+  });
+
+  it("rejects cold-contact email when the Space trigger is deleted", async () => {
+    selectRows.push([
+      {
+        tenantId: "tenant-acme",
+        spaceId: "space-finance",
+        accessMode: "public",
+        status: "active",
+        emailTriggerStatus: "none",
       },
     ]);
 
@@ -228,7 +245,7 @@ describe("email-inbound routing", () => {
           spaceId: "space-finance",
           accessMode: "private",
           status: "active",
-          emailTriggersEnabled: true,
+          emailTriggerStatus: "enabled",
         },
       ],
       [{ id: "user-eric" }],

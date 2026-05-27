@@ -51,6 +51,9 @@ export const spaces = pgTable(
     email_triggers_enabled: boolean("email_triggers_enabled")
       .notNull()
       .default(false),
+    email_trigger_status: text("email_trigger_status")
+      .notNull()
+      .default("none"),
     model_override: text("model_override"),
     guardrail_id_override: uuid("guardrail_id_override").references(
       () => guardrails.id,
@@ -84,6 +87,10 @@ export const spaces = pgTable(
     check(
       "spaces_access_mode_allowed",
       sql`${table.access_mode} IN ('public','private')`,
+    ),
+    check(
+      "spaces_email_trigger_status_allowed",
+      sql`${table.email_trigger_status} IN ('none','disabled','enabled')`,
     ),
   ],
 );

@@ -17,6 +17,12 @@ enum SpaceAccessMode {
   PRIVATE
 }
 
+enum SpaceEmailTriggerStatus {
+  NONE
+  DISABLED
+  ENABLED
+}
+
 enum SpaceMemberRole {
   OWNER
   ADMIN
@@ -68,6 +74,7 @@ type Space {
   mcpPolicy: AWSJSON
   agentAvailabilityPolicy: AWSJSON
   triggerConfig: AWSJSON
+  emailTriggerStatus: SpaceEmailTriggerStatus!
   emailTriggersEnabled: Boolean!
   runtimeOverrides: SpaceRuntimeOverrides!
   renderDiagnostics: AWSJSON
@@ -211,6 +218,12 @@ input UpdateSpaceInput {
   accessMode: SpaceAccessMode
 }
 
+input UpdateSpaceEmailTriggerInput {
+  spaceId: ID!
+  status: SpaceEmailTriggerStatus!
+  emailPrefix: String
+}
+
 input SetSpaceKnowledgeBasesInput {
   tenantId: ID!
   spaceId: ID!
@@ -245,6 +258,7 @@ extend type Query {
 extend type Mutation {
   createSpace(input: CreateSpaceInput!): Space!
   updateSpace(input: UpdateSpaceInput!): Space!
+  updateSpaceEmailTrigger(input: UpdateSpaceEmailTriggerInput!): Space!
   setSpaceEmailTriggers(spaceId: ID!, enabled: Boolean!): Space!
   setSpaceRuntimeOverrides(
     spaceId: ID!

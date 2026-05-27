@@ -11,11 +11,11 @@ Triggers is the Space Studio tab for work that starts or wakes inside a Space. I
 
 ## Trigger types
 
-| Type | Purpose |
-| ---- | ------- |
-| Schedule | Recurring or one-time work in the Space |
-| Webhook | External POSTs that create or wake work in the Space |
-| Email | Cold-contact inbound email to the Space address |
+| Type     | Purpose                                              |
+| -------- | ---------------------------------------------------- |
+| Schedule | Recurring or one-time work in the Space              |
+| Webhook  | External POSTs that create or wake work in the Space |
+| Email    | Cold-contact inbound email to the Space address      |
 
 The table shows each trigger's name, type, description, status, and last run time when available.
 
@@ -25,9 +25,9 @@ Use the **Add** menu in the header:
 
 - **Schedule** opens the schedule form.
 - **Webhook** opens the webhook form.
-- **Email** enables the Space email trigger.
+- **Email** creates or recreates the Space email trigger.
 
-Email is backed by a Space setting, not a separate backend entity. When disabled, it does not appear as a table row. When enabled, it appears as a single Email row with a copyable Space address. Clicking that row opens the disable confirmation.
+Email is backed by a Space setting, not a separate backend entity. When deleted, it does not appear as a table row. When enabled or disabled, it appears as a single Email row with a copyable Space address. Clicking that row opens the management dialog for changing the address prefix, disabling or re-enabling the trigger, or deleting the trigger.
 
 ## Space email address
 
@@ -37,7 +37,9 @@ Space cold-contact email uses:
 <space-slug>@<tenant-slug>.thinkwork.ai
 ```
 
-Cold-contact delivery requires the Email trigger to be enabled and the sender email to match a registered tenant user. Private Spaces also require that user to be a Space member. Token-bearing replies to agent-initiated emails are not the same as cold-contact email and can continue existing conversations even when cold-contact email is disabled.
+Changing the prefix changes the Space slug-backed address and automatically preserves the Space source files under the new slug prefix. It does not require per-address SES rule changes.
+
+Cold-contact delivery requires the Email trigger to be enabled and the sender email to match a registered tenant user. Private Spaces also require that user to be a Space member. Disabled or deleted Email triggers do not accept cold-contact email. Token-bearing replies to agent-initiated emails are not the same as cold-contact email and can continue existing conversations even when cold-contact email is disabled or deleted.
 
 <Aside type="note">
   Legacy per-agent addresses and older Space address examples under the agents

@@ -170,6 +170,9 @@ describe("GraphQL Schema Contract", () => {
         "AWSJSON",
       );
       expect(space.getFields().triggerConfig.type.toString()).toBe("AWSJSON");
+      expect(space.getFields().emailTriggerStatus.type.toString()).toBe(
+        "SpaceEmailTriggerStatus!",
+      );
       expect(space.getFields().emailTriggersEnabled.type.toString()).toBe(
         "Boolean!",
       );
@@ -187,8 +190,35 @@ describe("GraphQL Schema Contract", () => {
 
     it("exposes the per-Space email trigger mutation", () => {
       const mutation = schema.getMutationType() as any;
+      const statusEnum = schema.getType("SpaceEmailTriggerStatus") as any;
+      const updateInput = schema.getType("UpdateSpaceEmailTriggerInput") as any;
+
+      expect(statusEnum.getValues().map((value: any) => value.name)).toEqual([
+        "NONE",
+        "DISABLED",
+        "ENABLED",
+      ]);
+      expect(updateInput.getFields().spaceId.type.toString()).toBe("ID!");
+      expect(updateInput.getFields().status.type.toString()).toBe(
+        "SpaceEmailTriggerStatus!",
+      );
+      expect(updateInput.getFields().emailPrefix.type.toString()).toBe(
+        "String",
+      );
 
       expect(mutation.getFields().setSpaceEmailTriggers.type.toString()).toBe(
+        "Space!",
+      );
+      expect(
+        mutation
+          .getFields()
+          .updateSpaceEmailTrigger.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([["input", "UpdateSpaceEmailTriggerInput!"]]);
+
+      expect(mutation.getFields().updateSpaceEmailTrigger.type.toString()).toBe(
         "Space!",
       );
       expect(

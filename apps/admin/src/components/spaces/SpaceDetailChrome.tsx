@@ -15,25 +15,23 @@ import {
   Play,
   Plus,
   Repeat,
+  Trash2,
   Webhook as WebhookIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import { SetSpaceEmailTriggersMutation } from "@/lib/graphql-queries";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,23 +59,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { WebhookFormDialog } from "@/components/webhooks/WebhookFormDialog";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
-import { type SpaceAdminDetailQuery as SpaceAdminDetailQueryResult } from "@/gql/graphql";
+import {
+  SpaceEmailTriggerStatus,
+  type SpaceAdminDetailQuery as SpaceAdminDetailQueryResult,
+} from "@/gql/graphql";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 import {
   KnowledgeBasesListQuery,
   SpaceMemoryQuery,
   SetSpaceKnowledgeBasesMutation,
   SpaceAdminDetailQuery,
+  UpdateSpaceEmailTriggerMutation,
   UpdateSpaceMutation,
 } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 
-type SpaceDetailTab =
-  | "workspace"
-  | "kbs"
-  | "triggers"
-  | "settings"
-  | "members";
+type SpaceDetailTab = "workspace" | "kbs" | "triggers" | "settings" | "members";
 type Space = NonNullable<SpaceAdminDetailQueryResult["space"]>;
 type SpaceAccessMode = "PUBLIC" | "PRIVATE";
 type SpaceDraft = {
@@ -690,12 +687,15 @@ interface SpaceTriggersHandle {
   setScheduleDialogOpen: (open: boolean) => void;
   webhookDialogOpen: boolean;
   setWebhookDialogOpen: (open: boolean) => void;
-  disableEmailOpen: boolean;
-  setDisableEmailOpen: (open: boolean) => void;
+  emailDialogOpen: boolean;
+  setEmailDialogOpen: (open: boolean) => void;
   // Email mutation
   emailMutationFetching: boolean;
   enableEmail: () => Promise<void>;
-  disableEmail: () => Promise<void>;
+  updateEmailTrigger: (input: {
+    status: Space["emailTriggerStatus"];
+    emailPrefix?: string | null;
+  }) => Promise<boolean>;
   // Plumbing
   fetchAutomations: () => Promise<void>;
 }
@@ -724,11 +724,11 @@ export function SpaceTriggersProvider({
   const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [webhookDialogOpen, setWebhookDialogOpen] = useState(false);
-  const [disableEmailOpen, setDisableEmailOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [emailMutationResult, setSpaceEmailTriggers] = useMutation(
-    SetSpaceEmailTriggersMutation,
+  const [emailMutationResult, updateSpaceEmailTrigger] = useMutation(
+    UpdateSpaceEmailTriggerMutation,
   );
 
   const fetchAutomations = useCallback(async () => {
@@ -757,26 +757,37 @@ export function SpaceTriggersProvider({
     void fetchAutomations();
   }, [fetchAutomations]);
 
+  const updateEmailTrigger = useCallback(
+    async (input: {
+      status: Space["emailTriggerStatus"];
+      emailPrefix?: string | null;
+    }) => {
+      const response = await updateSpaceEmailTrigger({
+        input: {
+          spaceId,
+          status: input.status,
+          emailPrefix: input.emailPrefix,
+        },
+      });
+      if (response.error) {
+        toast.error(
+          `Could not update email trigger: ${response.error.message}`,
+        );
+        return false;
+      }
+      return true;
+    },
+    [spaceId, updateSpaceEmailTrigger],
+  );
+
   const enableEmail = useCallback(async () => {
-    const response = await setSpaceEmailTriggers({ spaceId, enabled: true });
-    if (response.error) {
-      toast.error(`Could not enable email trigger: ${response.error.message}`);
-      return;
-    }
+    const ok = await updateEmailTrigger({
+      status: SpaceEmailTriggerStatus.Enabled,
+    });
+    if (!ok) return;
     toast.success("Email trigger enabled.");
     await fetchAutomations();
-  }, [spaceId, setSpaceEmailTriggers, fetchAutomations]);
-
-  const disableEmail = useCallback(async () => {
-    const response = await setSpaceEmailTriggers({ spaceId, enabled: false });
-    if (response.error) {
-      toast.error(`Could not disable email trigger: ${response.error.message}`);
-      return;
-    }
-    toast.success("Email trigger disabled.");
-    setDisableEmailOpen(false);
-    await fetchAutomations();
-  }, [spaceId, setSpaceEmailTriggers, fetchAutomations]);
+  }, [updateEmailTrigger, fetchAutomations]);
 
   const handle = useMemo<SpaceTriggersHandle>(
     () => ({
@@ -788,11 +799,11 @@ export function SpaceTriggersProvider({
       setScheduleDialogOpen,
       webhookDialogOpen,
       setWebhookDialogOpen,
-      disableEmailOpen,
-      setDisableEmailOpen,
+      emailDialogOpen,
+      setEmailDialogOpen,
       emailMutationFetching: emailMutationResult.fetching,
       enableEmail,
-      disableEmail,
+      updateEmailTrigger,
       fetchAutomations,
     }),
     [
@@ -802,10 +813,10 @@ export function SpaceTriggersProvider({
       errorMessage,
       scheduleDialogOpen,
       webhookDialogOpen,
-      disableEmailOpen,
+      emailDialogOpen,
       emailMutationResult.fetching,
       enableEmail,
-      disableEmail,
+      updateEmailTrigger,
       fetchAutomations,
     ],
   );
@@ -834,9 +845,7 @@ export function SpaceTriggersAdd({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          onSelect={() => handle.setScheduleDialogOpen(true)}
-        >
+        <DropdownMenuItem onSelect={() => handle.setScheduleDialogOpen(true)}>
           <Repeat className="h-4 w-4" />
           Schedule
         </DropdownMenuItem>
@@ -846,7 +855,8 @@ export function SpaceTriggersAdd({
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={
-            space.emailTriggersEnabled || handle.emailMutationFetching
+            space.emailTriggerStatus !== SpaceEmailTriggerStatus.None ||
+            handle.emailMutationFetching
           }
           onSelect={() => {
             void (async () => {
@@ -883,10 +893,10 @@ export function SpaceTriggersPanel({
     setScheduleDialogOpen,
     webhookDialogOpen,
     setWebhookDialogOpen,
-    disableEmailOpen,
-    setDisableEmailOpen,
+    emailDialogOpen,
+    setEmailDialogOpen,
     emailMutationFetching,
-    disableEmail,
+    updateEmailTrigger,
     fetchAutomations,
   } = handle;
 
@@ -923,23 +933,25 @@ export function SpaceTriggersPanel({
       createdAt: webhook.created_at,
     }));
 
-    const emailRows: SpaceTriggerRow[] = space.emailTriggersEnabled
-      ? [
-          {
-            id: `email:${space.id}`,
-            kind: "email",
-            name: "Email trigger",
-            typeLabel: "Email",
-            descriptionValue: emailAddress,
-            descriptionCopyable: true,
-            descriptionCopyLabel: "Copy Space email address",
-            enabled: true,
-            lastRunAt: null,
-            nextRunOrDeliveryAt: null,
-            createdAt: new Date(0).toISOString(),
-          },
-        ]
-      : [];
+    const emailRows: SpaceTriggerRow[] =
+      space.emailTriggerStatus !== SpaceEmailTriggerStatus.None
+        ? [
+            {
+              id: `email:${space.id}`,
+              kind: "email",
+              name: "Email trigger",
+              typeLabel: "Email",
+              descriptionValue: emailAddress,
+              descriptionCopyable: true,
+              descriptionCopyLabel: "Copy Space email address",
+              enabled:
+                space.emailTriggerStatus === SpaceEmailTriggerStatus.Enabled,
+              lastRunAt: null,
+              nextRunOrDeliveryAt: null,
+              createdAt: new Date(0).toISOString(),
+            },
+          ]
+        : [];
 
     return [...emailRows, ...scheduleRows, ...webhookRows].sort((a, b) => {
       // Email row always sorts first for prominence; otherwise newest first.
@@ -950,7 +962,7 @@ export function SpaceTriggersPanel({
   }, [
     scheduledJobs,
     webhooks,
-    space.emailTriggersEnabled,
+    space.emailTriggerStatus,
     space.id,
     emailAddress,
   ]);
@@ -967,96 +979,321 @@ export function SpaceTriggersPanel({
 
   return (
     <section className="space-y-3">
-        <DataTable
-          columns={triggerColumns()}
-          data={rows}
-          pageSize={20}
-          onRowClick={(row) => {
-            if (row.kind === "email") {
-              setDisableEmailOpen(true);
-              return;
-            }
-            const rawId = row.id.split(":").slice(1).join(":");
-            if (row.kind === "schedule") {
-              navigate({
-                to: "/automations/schedules/$scheduledJobId",
-                params: { scheduledJobId: rawId },
+      <DataTable
+        columns={triggerColumns()}
+        data={rows}
+        pageSize={20}
+        onRowClick={(row) => {
+          if (row.kind === "email") {
+            setEmailDialogOpen(true);
+            return;
+          }
+          const rawId = row.id.split(":").slice(1).join(":");
+          if (row.kind === "schedule") {
+            navigate({
+              to: "/automations/schedules/$scheduledJobId",
+              params: { scheduledJobId: rawId },
+            });
+          } else {
+            navigate({
+              to: "/automations/webhooks/$webhookId",
+              params: { webhookId: rawId },
+            });
+          }
+        }}
+      />
+      {tenantId ? (
+        <>
+          <ScheduledJobFormDialog
+            open={scheduleDialogOpen}
+            onOpenChange={setScheduleDialogOpen}
+            mode="create"
+            tenantId={tenantId}
+            onSubmit={async (data) => {
+              await spaceApiFetch("/api/scheduled-jobs", tenantId, {
+                method: "POST",
+                body: JSON.stringify({ ...data, spaceId: space.id }),
               });
-            } else {
-              navigate({
-                to: "/automations/webhooks/$webhookId",
-                params: { webhookId: rawId },
+              toast.success("Schedule added");
+              await fetchAutomations();
+            }}
+          />
+          <WebhookFormDialog
+            open={webhookDialogOpen}
+            onOpenChange={setWebhookDialogOpen}
+            mode="create"
+            tenantId={tenantId}
+            onSubmit={async (data) => {
+              await spaceApiFetch("/api/webhooks", tenantId, {
+                method: "POST",
+                body: JSON.stringify({ ...data, spaceId: space.id }),
               });
-            }
-          }}
-        />
-        {tenantId ? (
-          <>
-            <ScheduledJobFormDialog
-              open={scheduleDialogOpen}
-              onOpenChange={setScheduleDialogOpen}
-              mode="create"
-              tenantId={tenantId}
-              onSubmit={async (data) => {
-                await spaceApiFetch("/api/scheduled-jobs", tenantId, {
-                  method: "POST",
-                  body: JSON.stringify({ ...data, spaceId: space.id }),
-                });
-                toast.success("Schedule added");
-                await fetchAutomations();
-              }}
-            />
-            <WebhookFormDialog
-              open={webhookDialogOpen}
-              onOpenChange={setWebhookDialogOpen}
-              mode="create"
-              tenantId={tenantId}
-              onSubmit={async (data) => {
-                await spaceApiFetch("/api/webhooks", tenantId, {
-                  method: "POST",
-                  body: JSON.stringify({ ...data, spaceId: space.id }),
-                });
-                toast.success("Webhook added");
-                await fetchAutomations();
-              }}
-            />
-          </>
-        ) : null}
-        <AlertDialog
-          open={disableEmailOpen}
-          onOpenChange={(open) => {
-            if (!emailMutationFetching) setDisableEmailOpen(open);
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Disable email trigger?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The address <code className="text-xs">{emailAddress}</code> will
-                stop accepting cold-contact email. Token-bearing replies to
-                agent-initiated emails are unaffected.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={emailMutationFetching}>
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    await disableEmail();
-                    refreshSpace();
-                  })();
-                }}
-                disabled={emailMutationFetching}
-              >
-                {emailMutationFetching ? "Disabling…" : "Disable"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </section>
+              toast.success("Webhook added");
+              await fetchAutomations();
+            }}
+          />
+        </>
+      ) : null}
+      <SpaceEmailTriggerDialog
+        space={space}
+        tenantSlug={tenantSlug}
+        open={emailDialogOpen}
+        onOpenChange={(open) => {
+          if (!emailMutationFetching) setEmailDialogOpen(open);
+        }}
+        fetching={emailMutationFetching}
+        updateEmailTrigger={updateEmailTrigger}
+        refreshSpace={async () => {
+          refreshSpace();
+          await fetchAutomations();
+        }}
+      />
+    </section>
   );
 }
 
+function SpaceEmailTriggerDialog({
+  space,
+  tenantSlug,
+  open,
+  onOpenChange,
+  fetching,
+  updateEmailTrigger,
+  refreshSpace,
+}: {
+  space: Space;
+  tenantSlug: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  fetching: boolean;
+  updateEmailTrigger: (input: {
+    status: Space["emailTriggerStatus"];
+    emailPrefix?: string | null;
+  }) => Promise<boolean>;
+  refreshSpace: () => Promise<void>;
+}) {
+  const [prefixDraft, setPrefixDraft] = useState(space.slug);
+  const [confirmAction, setConfirmAction] = useState<
+    "disable" | "delete" | null
+  >(null);
+  const emailAddress = deriveSpaceEmailAddress(tenantSlug, space.slug);
+  const normalizedPrefix = normalizeSpaceEmailPrefix(prefixDraft);
+  const previewAddress = deriveSpaceEmailAddress(
+    tenantSlug,
+    normalizedPrefix || space.slug,
+  );
+  const prefixChanged =
+    normalizedPrefix !== "" && normalizedPrefix !== space.slug;
+  const canSavePrefix = prefixChanged && !fetching;
+  const isEnabled =
+    space.emailTriggerStatus === SpaceEmailTriggerStatus.Enabled;
+  const nextStatus = isEnabled
+    ? SpaceEmailTriggerStatus.Disabled
+    : SpaceEmailTriggerStatus.Enabled;
+
+  useEffect(() => {
+    if (!open) return;
+    setPrefixDraft(space.slug);
+    setConfirmAction(null);
+  }, [open, space.slug]);
+
+  async function savePrefix() {
+    if (!canSavePrefix) return;
+    const ok = await updateEmailTrigger({
+      status: space.emailTriggerStatus,
+      emailPrefix: prefixDraft,
+    });
+    if (!ok) return;
+    toast.success("Email address updated.");
+    onOpenChange(false);
+    await refreshSpace();
+  }
+
+  async function toggleStatus() {
+    if (isEnabled) {
+      setConfirmAction("disable");
+      return;
+    }
+    const ok = await updateEmailTrigger({ status: nextStatus });
+    if (!ok) return;
+    toast.success("Email trigger enabled.");
+    onOpenChange(false);
+    await refreshSpace();
+  }
+
+  async function disableTrigger() {
+    const ok = await updateEmailTrigger({
+      status: SpaceEmailTriggerStatus.Disabled,
+    });
+    if (!ok) return;
+    toast.success("Email trigger disabled.");
+    onOpenChange(false);
+    await refreshSpace();
+  }
+
+  async function deleteTrigger() {
+    const ok = await updateEmailTrigger({
+      status: SpaceEmailTriggerStatus.None,
+    });
+    if (!ok) return;
+    toast.success("Email trigger deleted.");
+    onOpenChange(false);
+    await refreshSpace();
+  }
+
+  if (confirmAction) {
+    const deleting = confirmAction === "delete";
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {deleting ? "Delete email trigger?" : "Disable email trigger?"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleting ? (
+                <>
+                  The Email row will be removed from this Space and{" "}
+                  <code className="text-xs">{emailAddress}</code> will stop
+                  accepting cold-contact email. The Space, source files,
+                  threads, and token-bearing replies are unaffected.
+                </>
+              ) : (
+                <>
+                  The address <code className="text-xs">{emailAddress}</code>{" "}
+                  will stop accepting cold-contact email. The Email row stays
+                  visible and can be re-enabled later. Token-bearing replies are
+                  unaffected.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmAction(null)}
+              disabled={fetching}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={deleting ? "destructive" : "default"}
+              onClick={() => {
+                void (deleting ? deleteTrigger() : disableTrigger());
+              }}
+              disabled={fetching}
+            >
+              {fetching ? "Working..." : deleting ? "Delete" : "Disable"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Email trigger</DialogTitle>
+          <DialogDescription>
+            <code className="text-xs">{emailAddress}</code>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">Status</div>
+              <div className="text-sm text-muted-foreground">
+                {isEnabled ? "Accepting cold-contact email" : "Paused"}
+              </div>
+            </div>
+            <Badge
+              variant="secondary"
+              className={
+                isEnabled
+                  ? "gap-1 bg-green-500/15 text-xs text-green-600 dark:text-green-400"
+                  : "gap-1 bg-muted text-xs text-muted-foreground"
+              }
+            >
+              {isEnabled ? (
+                <Play className="h-3 w-3 fill-current" />
+              ) : (
+                <Pause className="h-3 w-3" />
+              )}
+              {isEnabled ? "Enabled" : "Disabled"}
+            </Badge>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="space-email-prefix">Address</Label>
+            <div className="flex min-w-0 items-center gap-2">
+              <Input
+                id="space-email-prefix"
+                value={prefixDraft}
+                onChange={(event) => setPrefixDraft(event.target.value)}
+                disabled={fetching}
+              />
+              <span className="whitespace-nowrap text-sm text-muted-foreground">
+                @{tenantSlug}.thinkwork.ai
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+              <code className="min-w-0 truncate text-xs">{previewAddress}</code>
+              <CopyLinkButton
+                text={previewAddress}
+                ariaLabel="Copy Space email address"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="justify-between sm:justify-between">
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => setConfirmAction("delete")}
+            disabled={fetching}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={toggleStatus}
+              disabled={fetching}
+            >
+              {isEnabled ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              {isEnabled ? "Disable" : "Enable"}
+            </Button>
+            <Button
+              type="button"
+              onClick={savePrefix}
+              disabled={!canSavePrefix}
+            >
+              {fetching ? "Saving..." : "Save address"}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function normalizeSpaceEmailPrefix(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}

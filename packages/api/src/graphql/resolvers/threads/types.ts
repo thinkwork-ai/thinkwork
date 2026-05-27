@@ -25,13 +25,12 @@ import {
   modelFromTurn,
   runtimeTypeFromTurn,
 } from "../triggers/threadTurnRuntime.js";
+import { toGraphqlSpace } from "../spaces/shared.js";
 
 const THREAD_PARTICIPANT_ENUM_FIELDS = new Set([
   "participantType",
   "notificationPreference",
 ]);
-const SPACE_ENUM_FIELDS = new Set(["status", "kind"]);
-
 function uppercaseFields(
   row: Record<string, unknown>,
   fields: ReadonlySet<string>,
@@ -46,10 +45,6 @@ function uppercaseFields(
 
 function threadParticipantToCamel(row: Record<string, unknown>) {
   return uppercaseFields(snakeToCamel(row), THREAD_PARTICIPANT_ENUM_FIELDS);
-}
-
-function spaceToCamel(row: Record<string, unknown>) {
-  return uppercaseFields(snakeToCamel(row), SPACE_ENUM_FIELDS);
 }
 
 export const threadTypeResolvers = {
@@ -71,7 +66,7 @@ export const threadTypeResolvers = {
       .select()
       .from(spaces)
       .where(and(...conditions));
-    return row ? spaceToCamel(row) : null;
+    return row ? toGraphqlSpace(row) : null;
   },
   participants: async (thread: any) => {
     const threadTenantId = thread.tenantId ?? thread.tenant_id ?? null;

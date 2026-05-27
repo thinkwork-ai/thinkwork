@@ -40,6 +40,10 @@ const migration0123 = readFileSync(
   join(HERE, "..", "drizzle", "0123_single_platform_agent_and_overrides.sql"),
   "utf-8",
 );
+const migration0136 = readFileSync(
+  join(HERE, "..", "drizzle", "0136_space_email_trigger_status.sql"),
+  "utf-8",
+);
 
 describe("Spaces schema", () => {
   it("models tenant-scoped Spaces with contextual workroom metadata", () => {
@@ -64,6 +68,8 @@ describe("Spaces schema", () => {
     expect(columns.trigger_config.notNull).toBe(false);
     expect(columns.email_triggers_enabled.notNull).toBe(true);
     expect(columns.email_triggers_enabled.default).toBe(false);
+    expect(columns.email_trigger_status.notNull).toBe(true);
+    expect(columns.email_trigger_status.default).toBe("none");
     expect(columns.model_override.notNull).toBe(false);
     expect(columns.guardrail_id_override.notNull).toBe(false);
     expect(columns.budget_monthly_cents_override.notNull).toBe(false);
@@ -196,6 +202,49 @@ describe("Spaces schema", () => {
     expect(migration0122).toContain(
       "ALTER COLUMN email_triggers_enabled SET NOT NULL",
     );
+  });
+
+  it("declares manual migration drift markers for Space email trigger lifecycle", () => {
+    expect(migration0136).toMatch(
+      /--\s*creates-column:\s*public\.spaces\.email_trigger_status\b/,
+    );
+    expect(migration0136).toMatch(
+      /--\s*creates-constraint:\s*public\.spaces\.spaces_email_trigger_status_allowed\b/,
+    );
+    expect(migration0136).toMatch(
+      /--\s*creates-function:\s*public\.sync_space_email_trigger_status\b/,
+    );
+    expect(migration0136).toMatch(
+      /--\s*creates-trigger:\s*public\.spaces\.spaces_email_trigger_status_sync\b/,
+    );
+    expect(migration0136).toContain("\\set ON_ERROR_STOP on");
+    expect(migration0136).toContain("BEGIN;");
+    expect(migration0136).toContain("COMMIT;");
+    expect(migration0136).toMatch(
+      /ADD COLUMN IF NOT EXISTS email_trigger_status text\b/,
+    );
+    expect(migration0136).toContain(
+      "WHEN email_triggers_enabled IS TRUE THEN 'enabled'",
+    );
+    expect(migration0136).toContain(
+      "ALTER COLUMN email_trigger_status SET DEFAULT 'none'",
+    );
+    expect(migration0136).toContain(
+      "ALTER COLUMN email_trigger_status SET NOT NULL",
+    );
+    expect(migration0136).toContain(
+      "CHECK (email_trigger_status IN ('none','disabled','enabled'))",
+    );
+    expect(migration0136).toContain(
+      "CREATE OR REPLACE FUNCTION public.sync_space_email_trigger_status()",
+    );
+    expect(migration0136).toContain(
+      "CREATE TRIGGER spaces_email_trigger_status_sync",
+    );
+    expect(migration0136).toContain(
+      "WHEN NEW.email_triggers_enabled IS TRUE THEN 'enabled'",
+    );
+    expect(migration0136).toContain("ELSE 'disabled'");
   });
 
   it("declares manual migration drift markers for Space runtime overrides", () => {

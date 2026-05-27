@@ -3,6 +3,7 @@ import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, spaceMembers, spaces } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { normalizeSpaceSlug } from "../../../lib/spaces/space-slug.js";
 import { parseSpaceAccessMode, toGraphqlSpace } from "./shared.js";
 
 type CreateSpaceInput = {
@@ -28,7 +29,10 @@ export async function createSpace(
   const description = input.description?.trim() || null;
   const accessMode = parseSpaceAccessMode(input.accessMode) ?? "public";
   const callerUserId = await resolveCallerUserId(ctx);
-  const slug = await nextAvailableSpaceSlug(input.tenantId, slugify(name));
+  const slug = await nextAvailableSpaceSlug(
+    input.tenantId,
+    normalizeSpaceSlug(name),
+  );
 
   const [row] = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -83,14 +87,4 @@ async function nextAvailableSpaceSlug(tenantId: string, baseSlug: string) {
   }
 
   throw new GraphQLError("Could not generate a unique Space slug");
-}
-
-function slugify(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || "space"
-  );
 }
