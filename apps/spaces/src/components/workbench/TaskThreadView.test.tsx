@@ -137,7 +137,7 @@ describe("TaskThreadView", () => {
     );
     expect(screen.getByLabelText("Agent message")).toBeTruthy();
     expect(screen.getByText("Agent")).toBeTruthy();
-    expect(screen.getByText("5hr ago")).toBeTruthy();
+    expect(screen.getByText("5 hr ago")).toBeTruthy();
     const assistantMessage = document.querySelector(
       '[data-message-role="assistant"]',
     );
@@ -190,7 +190,7 @@ describe("TaskThreadView", () => {
     expect(avatar.textContent).toBe("RK");
     expect(screen.getByLabelText("Ricky Kwong message")).toBeTruthy();
     expect(screen.getByText("Ricky Kwong")).toBeTruthy();
-    expect(screen.getByText("5hr ago")).toBeTruthy();
+    expect(screen.getByText("5 hr ago")).toBeTruthy();
     const message = document.querySelector('[data-message-role="user"]');
     expect(message?.className ?? "").toContain("my-1");
     expect(message?.className ?? "").toContain("max-w-full");
@@ -231,7 +231,7 @@ describe("TaskThreadView", () => {
     }
 
     expect(screen.queryByTestId("message-avatar-user")).toBeNull();
-    expect(screen.getByText("5hr ago").className).toContain("pr-1");
+    expect(screen.getByText("5 hr ago").className).toContain("pr-1");
     const message = document.querySelector('[data-message-role="user"]');
     expect(message?.className ?? "").toContain("my-1");
     expect(message?.className ?? "").toContain("max-w-[78%]");
