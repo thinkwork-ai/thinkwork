@@ -17,6 +17,10 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 import { threadGoalToGraphql } from "./threadGoal.query.js";
+import {
+  finalizeCompletedThreadGoal,
+  withGoalCompletionMetadata,
+} from "../../../lib/thread-goals/completion.js";
 
 type ReviewGoalAction = "CONFIRM_COMPLETION" | "REQUEST_CHANGES" | "CANCEL";
 
@@ -46,7 +50,7 @@ export async function reviewGoal(
   }
 
   const callerUserId = await authorizeGoalReview(ctx, row);
-  const reviewMetadata = buildReviewMetadata(row.metadata, {
+  let reviewMetadata = buildReviewMetadata(row.metadata, {
     action,
     notes: cleanNotes(input.notes),
     reviewedAt: now,
@@ -58,6 +62,11 @@ export async function reviewGoal(
   if (action === "CONFIRM_COMPLETION") {
     assertInReview(row.status, action);
     nextGoalStatus = "completed";
+    reviewMetadata = withGoalCompletionMetadata({
+      current: reviewMetadata,
+      completedAt: now,
+      completedByUserId: callerUserId,
+    });
     threadUpdates = {
       status: "done",
       completed_at: now,
@@ -116,10 +125,17 @@ export async function reviewGoal(
     .where(eq(threads.id, row.thread_id))
     .returning();
 
-  await refreshCustomerOnboardingGoalFolderSafely(
-    { tenantId: row.tenant_id, threadId: row.thread_id },
-    { goalStatus: nextGoalStatus },
-  );
+  if (nextGoalStatus === "completed") {
+    await finalizeCompletedThreadGoal({
+      tenantId: row.tenant_id,
+      threadId: row.thread_id,
+    });
+  } else {
+    await refreshCustomerOnboardingGoalFolderSafely(
+      { tenantId: row.tenant_id, threadId: row.thread_id },
+      { goalStatus: nextGoalStatus },
+    );
+  }
 
   return {
     goal: threadGoalToGraphql({
