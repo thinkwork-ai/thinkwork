@@ -204,6 +204,9 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     const assigned = extractCustomerOnboardingChatUpdate(
       "add a new task: Get Tank Certifications, @Rebecca Odom will handle that task",
     );
+    const assignedToAgent = extractCustomerOnboardingChatUpdate(
+      "add a new task: Get Tank Certifications, assign it to the agent",
+    );
 
     expect(shorthand.taskAdditions).toEqual([
       {
@@ -217,6 +220,13 @@ describe("extractCustomerOnboardingChatUpdate", () => {
         title: "Get Tank Certifications",
         note: "add a new task: Get Tank Certifications, @Rebecca Odom will handle that task",
         assigneeDisplay: "Rebecca Odom",
+      },
+    ]);
+    expect(assignedToAgent.taskAdditions).toEqual([
+      {
+        title: "Get Tank Certifications",
+        note: "add a new task: Get Tank Certifications, assign it to the agent",
+        assigneeDisplay: "Agent",
       },
     ]);
   });
@@ -264,6 +274,9 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     const assigned = extractCustomerOnboardingChatUpdate(
       "Get Tank Certifications: assign to @Scott Hertel",
     );
+    const assignedToAgent = extractCustomerOnboardingChatUpdate(
+      "Get Tank Certifications: assign to agent",
+    );
 
     expect(removed.taskRemovals).toEqual([
       {
@@ -305,6 +318,40 @@ describe("extractCustomerOnboardingChatUpdate", () => {
         key: "custom_get_tank_certifications",
         assigneeDisplay: "Scott Hertel",
         note: "Get Tank Certifications: assign to @Scott Hertel",
+      },
+    ]);
+    expect(assignedToAgent.taskAssignments).toEqual([
+      {
+        key: "custom_get_tank_certifications",
+        assigneeDisplay: "Agent",
+        note: "Get Tank Certifications: assign to agent",
+      },
+    ]);
+  });
+
+  it("maps missing onboarding information prefill commands to the native checklist row", () => {
+    const completed = extractCustomerOnboardingChatUpdate(
+      "Resolve missing onboarding information: done",
+    );
+    const natural = extractCustomerOnboardingChatUpdate(
+      "The missing onboarding information is completed",
+    );
+
+    expect(completed.taskStatusUpdates).toEqual([
+      {
+        key: "missing_onboarding_information",
+        status: "completed",
+        note: "Resolve missing onboarding information: done",
+      },
+    ]);
+    expect(completed.completedTaskKeys).toEqual([
+      "missing_onboarding_information",
+    ]);
+    expect(natural.taskStatusUpdates).toEqual([
+      {
+        key: "missing_onboarding_information",
+        status: "completed",
+        note: "The missing onboarding information is completed",
       },
     ]);
   });
