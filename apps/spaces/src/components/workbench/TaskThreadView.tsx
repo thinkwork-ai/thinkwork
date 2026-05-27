@@ -4,6 +4,7 @@ import {
   AlertCircle,
   Bot,
   CalendarDays,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -14,6 +15,7 @@ import {
   FileText,
   ListChecks,
   Mic,
+  RotateCcw,
   Search,
   Sparkles,
   Zap,
@@ -76,7 +78,6 @@ import type {
 } from "@/lib/ui-message-types";
 import { useComposerState } from "@/lib/use-composer-state";
 import { cn } from "@/lib/utils";
-import { Button } from "@thinkwork/ui";
 import {
   GeneratedArtifactCard,
   GeneratedArtifactPreview,
@@ -188,7 +189,34 @@ export interface TaskThreadInfoPanelState {
   agents: string[];
   attachments: ThreadInfoAttachment[];
   onDownloadAttachment: (attachmentId: string) => void | Promise<void>;
+  goal?: ThreadInfoGoalState | null;
   checklist?: ThreadInfoChecklistState | null;
+}
+
+export interface ThreadInfoGoalState {
+  id?: string | null;
+  outcome?: string | null;
+  mode?: string | null;
+  status?: string | null;
+  ownerLabel?: string | null;
+  reviewPolicyLabel?: string | null;
+  reviewRequired?: boolean;
+  readyForReview?: boolean;
+  isLoading?: boolean;
+  error?: string | null;
+  filesLoading?: boolean;
+  filesError?: string | null;
+  filesPrepared?: boolean;
+  decisionsCount?: number;
+  decisionsSummary?: string | null;
+  handoffsCount?: number;
+  handoffsSummary?: string | null;
+  artifactsCount?: number;
+  artifactsSummary?: string | null;
+  isReviewing?: boolean;
+  reviewError?: string | null;
+  onConfirmCompletion?: () => Promise<void> | void;
+  onRequestChanges?: () => Promise<void> | void;
 }
 
 export interface ThreadInfoAttachment {
@@ -529,26 +557,17 @@ function ThreadInfoPanel({
 
   const startedAt = formatInfoDate(state.startedAt);
   const startedBy = state.startedBy?.trim() || "Unknown";
+  const hasGoal = Boolean(state.goal);
 
   return (
     <aside
       className="absolute right-4 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
-      aria-label="Thread info"
+      aria-label={hasGoal ? "Thread Goal info" : "Thread info"}
       data-testid="thread-info-panel"
     >
       <div className="min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
         <div className="space-y-5 p-5">
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium text-white/55">Thread</h2>
-            <InfoPanelInlineRow
-              icon={<CalendarDays className="size-4" />}
-              value={startedAt || "Unknown"}
-            />
-            <InfoPanelInlineRow
-              icon={<Zap className="size-4" />}
-              value={`Triggered by ${startedBy}`}
-            />
-          </section>
+          {state.goal ? <ThreadInfoGoal goal={state.goal} /> : null}
 
           {state.checklist ? (
             <ThreadInfoChecklist
@@ -573,9 +592,192 @@ function ThreadInfoPanel({
               </div>
             </section>
           ) : null}
+
+          <section className="border-t border-white/10 pt-4">
+            <h2 className="mb-3 text-sm font-medium text-white/55">Thread</h2>
+            <div className="space-y-3">
+              <InfoPanelInlineRow
+                icon={<CalendarDays className="size-4" />}
+                value={startedAt || "Unknown"}
+              />
+              <InfoPanelInlineRow
+                icon={<Zap className="size-4" />}
+                value={`Triggered by ${startedBy}`}
+              />
+            </div>
+          </section>
         </div>
       </div>
     </aside>
+  );
+}
+
+function ThreadInfoGoal({ goal }: { goal: ThreadInfoGoalState }) {
+  const status = normalizeInfoStatus(goal.status);
+  const reviewReady = goal.readyForReview || status === "in_review";
+  const canReview =
+    status === "in_review" &&
+    Boolean(goal.onConfirmCompletion && goal.onRequestChanges);
+  const hasNarrative =
+    goal.decisionsCount ||
+    goal.handoffsCount ||
+    goal.artifactsCount ||
+    goal.decisionsSummary ||
+    goal.handoffsSummary ||
+    goal.artifactsSummary ||
+    goal.filesLoading ||
+    goal.filesError ||
+    goal.filesPrepared === false;
+
+  return (
+    <>
+      <section className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-sm font-medium text-white/55">Goal</h2>
+          {goal.status ? (
+            <span className="shrink-0 rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-medium text-white/75">
+              {formatInfoStatus(goal.status)}
+            </span>
+          ) : null}
+        </div>
+        {goal.isLoading ? (
+          <p className="text-sm text-white/55">Loading Goal...</p>
+        ) : goal.error ? (
+          <p className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-100">
+            {goal.error}
+          </p>
+        ) : (
+          <>
+            <p className="text-sm font-medium leading-snug text-white/85">
+              {goal.outcome?.trim() || "Goal outcome unavailable"}
+            </p>
+            <div className="space-y-2">
+              {goal.mode ? (
+                <InfoPanelInlineRow
+                  icon={<Sparkles className="size-4" />}
+                  value={`${formatInfoStatus(goal.mode)} mode`}
+                />
+              ) : null}
+              {goal.ownerLabel ? (
+                <InfoPanelInlineRow
+                  icon={<Bot className="size-4" />}
+                  value={`Owner: ${goal.ownerLabel}`}
+                />
+              ) : null}
+              {goal.reviewPolicyLabel ? (
+                <InfoPanelInlineRow
+                  icon={<ListChecks className="size-4" />}
+                  value={goal.reviewPolicyLabel}
+                />
+              ) : null}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="border-t border-white/10 pt-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-white/55">
+          Review
+        </h2>
+        <p className="mt-2 text-sm text-white/70">
+          {goalReviewMessage(goal, reviewReady)}
+        </p>
+        {goal.reviewError ? (
+          <p className="mt-3 rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-100">
+            {goal.reviewError}
+          </p>
+        ) : null}
+        {canReview ? (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              aria-label="Confirm Goal completion"
+              className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md bg-white/12 px-2 text-xs font-medium text-white transition-colors hover:bg-white/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={goal.isReviewing}
+              onClick={() => void goal.onConfirmCompletion?.()}
+            >
+              <CheckCircle2 className="size-3.5" />
+              {goal.isReviewing ? "Reviewing" : "Confirm"}
+            </button>
+            <button
+              type="button"
+              aria-label="Request Goal changes"
+              className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-white/12 px-2 text-xs font-medium text-white/75 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={goal.isReviewing}
+              onClick={() => void goal.onRequestChanges?.()}
+            >
+              <RotateCcw className="size-3.5" />
+              Changes
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      {hasNarrative ? (
+        <section className="border-t border-white/10 pt-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-white/55">
+            Records
+          </h2>
+          {goal.filesLoading ? (
+            <p className="mt-3 text-sm text-white/55">
+              Preparing Goal files...
+            </p>
+          ) : goal.filesError ? (
+            <p className="mt-3 rounded-lg border border-amber-300/30 px-3 py-2 text-xs text-amber-100">
+              Goal files unavailable. Structured progress is still current.
+            </p>
+          ) : goal.filesPrepared === false ? (
+            <p className="mt-3 text-sm text-white/55">
+              Goal files are still being prepared.
+            </p>
+          ) : null}
+          <div className="mt-3 space-y-2">
+            <GoalRecordLine
+              label="Decisions"
+              count={goal.decisionsCount ?? 0}
+              summary={goal.decisionsSummary}
+              emptyLabel="No decisions recorded"
+            />
+            <GoalRecordLine
+              label="Handoffs"
+              count={goal.handoffsCount ?? 0}
+              summary={goal.handoffsSummary}
+              emptyLabel="No handoffs recorded"
+            />
+            <GoalRecordLine
+              label="Artifacts"
+              count={goal.artifactsCount ?? 0}
+              summary={goal.artifactsSummary}
+              emptyLabel="No artifacts summarized"
+            />
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function GoalRecordLine({
+  label,
+  count,
+  summary,
+  emptyLabel,
+}: {
+  label: string;
+  count: number;
+  summary?: string | null;
+  emptyLabel: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="text-white/75">{label}</span>
+        <span className="shrink-0 text-xs text-white/45">{count}</span>
+      </div>
+      <p className="mt-0.5 line-clamp-2 text-xs text-white/50">
+        {summary?.trim() || emptyLabel}
+      </p>
+    </div>
   );
 }
 
@@ -788,6 +990,20 @@ function ThreadInfoCompletionAction({
       </button>
     </div>
   );
+}
+
+function goalReviewMessage(goal: ThreadInfoGoalState, reviewReady: boolean) {
+  const status = normalizeInfoStatus(goal.status);
+  if (status === "completed") return "Completion has been confirmed.";
+  if (status === "cancelled") return "This Goal has been cancelled.";
+  if (reviewReady && goal.reviewRequired) {
+    return "Required work is complete. A human reviewer must confirm before closure.";
+  }
+  if (reviewReady) return "Required work is complete and ready to close.";
+  if (goal.reviewRequired) {
+    return "Human review is required after the remaining work is complete.";
+  }
+  return "Continue the workflow until the completion rule is met.";
 }
 
 function InfoPanelInlineRow({
