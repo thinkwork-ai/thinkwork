@@ -2,7 +2,10 @@ import { addSpaceMember } from "./addSpaceMember.mutation.js";
 import { customerOnboardingSpace } from "./customerOnboardingSpace.query.js";
 import { createSpace } from "./createSpace.mutation.js";
 import { removeSpaceMember } from "./removeSpaceMember.mutation.js";
-import { setSpaceEmailTriggers } from "./setSpaceEmailTriggers.mutation.js";
+import {
+  setSpaceEmailTriggers,
+  updateSpaceEmailTrigger,
+} from "./setSpaceEmailTriggers.mutation.js";
 import { setSpaceKnowledgeBases } from "./setSpaceKnowledgeBases.mutation.js";
 import { setSpaceRuntimeOverrides } from "./setSpaceRuntimeOverrides.mutation.js";
 import { setSpaceTools } from "./setSpaceTools.mutation.js";
@@ -27,6 +30,7 @@ export const spaceMutations = {
   setSpaceTools,
   startCustomerOnboarding,
   updateSpace,
+  updateSpaceEmailTrigger,
 };
 
 export {

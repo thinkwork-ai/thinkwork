@@ -58,9 +58,7 @@ describe("Spaces admin routes", () => {
     expect(workspaceRouteSource).toContain(
       'createFileRoute(\n  "/_authed/_tenant/spaces/$spaceId_/workspace"',
     );
-    expect(kbsRouteSource).toContain(
-      '"/_authed/_tenant/spaces/$spaceId_/kbs"',
-    );
+    expect(kbsRouteSource).toContain('"/_authed/_tenant/spaces/$spaceId_/kbs"');
     expect(triggersRouteSource).toContain(
       '"/_authed/_tenant/spaces/$spaceId_/triggers"',
     );
@@ -85,7 +83,9 @@ describe("Spaces admin routes", () => {
     expect(listRouteSource).toContain('header: "Status"');
     expect(listRouteSource).toContain('header: "Updated"');
     expect(listRouteSource).toContain('to: "/spaces/$spaceId/workspace"');
-    expect(listRouteSource).not.toContain('to: "/spaces/$spaceId/configuration"');
+    expect(listRouteSource).not.toContain(
+      'to: "/spaces/$spaceId/configuration"',
+    );
     expect(listRouteSource).not.toContain('header: "Kind"');
     expect(listRouteSource).not.toContain('header: "Agents"');
   });
@@ -131,7 +131,7 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).not.toContain("SpaceMemoryPanel");
     expect(detailChromeSource).not.toContain("SpaceAutomationsPanel");
     expect(detailChromeSource).not.toContain(
-      'import { SpaceEmailTriggersToggle }',
+      "import { SpaceEmailTriggersToggle }",
     );
   });
 
@@ -157,23 +157,27 @@ describe("Spaces admin routes", () => {
     expect(detailChromeSource).toContain('header: "Description"');
     expect(detailChromeSource).toContain('header: "Status"');
     expect(detailChromeSource).toContain('header: "Last Run"');
-    expect(detailChromeSource).not.toContain('header: "Next Run / Last Delivery"');
+    expect(detailChromeSource).not.toContain(
+      'header: "Next Run / Last Delivery"',
+    );
     expect(detailChromeSource).not.toContain('header: "Schedule / Trigger"');
     expect(detailChromeSource).not.toContain("Add Schedule");
     expect(detailChromeSource).not.toContain("Add Webhook");
     expect(detailChromeSource).toContain("DropdownMenu");
-    expect(detailChromeSource).toContain("emailTriggersEnabled");
+    expect(detailChromeSource).toContain("emailTriggerStatus");
     expect(detailChromeSource).toContain("deriveSpaceEmailAddress");
     expect(detailChromeSource).toContain("deriveWebhookUrl");
+    expect(detailChromeSource).toContain("SpaceEmailTriggerDialog");
+    expect(detailChromeSource).toContain("Delete email trigger?");
     expect(detailChromeSource).toContain("Disable email trigger?");
     expect(triggersRouteSource).toContain("headerActions");
   });
 
-  it("synthesizes an email trigger row when emailTriggersEnabled is true", () => {
+  it("synthesizes an email trigger row unless emailTriggerStatus is NONE", () => {
     expect(detailChromeSource).toContain('kind: "email"');
     expect(detailChromeSource).toContain('typeLabel: "Email"');
-    expect(detailChromeSource).toContain("space.emailTriggersEnabled");
-    expect(detailChromeSource).toContain("SetSpaceEmailTriggersMutation");
+    expect(detailChromeSource).toContain("SpaceEmailTriggerStatus.None");
+    expect(detailChromeSource).toContain("UpdateSpaceEmailTriggerMutation");
   });
 
   it("keeps KBs scoped to knowledge-base selection (panel renamed from Memory)", () => {
@@ -191,11 +195,12 @@ describe("Spaces admin routes", () => {
     expect(queriesSource).toContain("mutation CreateSpace");
     expect(queriesSource).toContain("mutation UpdateSpace");
     expect(queriesSource).toContain("query SpaceAdminDetail");
-    expect(queriesSource).toContain("mutation SetSpaceEmailTriggers");
+    expect(queriesSource).toContain("mutation UpdateSpaceEmailTrigger");
     expect(queriesSource).toContain("query SpaceMemory");
     expect(queriesSource).toContain("mutation SetSpaceKnowledgeBases");
     expect(queriesSource).toContain("includeAllForAdmin: true");
     expect(queriesSource).toContain("accessMode");
+    expect(queriesSource).toContain("emailTriggerStatus");
     expect(queriesSource).toContain("emailTriggersEnabled");
   });
 
@@ -223,7 +228,9 @@ describe("Spaces admin routes", () => {
     expect(membersPanelSource).toContain('header: "Email"');
     expect(membersPanelSource).toContain('header: "Role"');
     expect(membersPanelSource).toContain('header: "Joined"');
-    expect(membersPanelSource).not.toContain("People who can access this private Space.");
+    expect(membersPanelSource).not.toContain(
+      "People who can access this private Space.",
+    );
     expect(membersPanelSource).not.toContain("Add member");
     expect(membersPanelSource).toContain("addOpen");
     expect(membersPanelSource).toContain("onAddOpenChange");

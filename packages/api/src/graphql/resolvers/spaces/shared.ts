@@ -12,7 +12,12 @@ import {
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 
-const SPACE_ENUM_FIELDS = new Set(["status", "kind", "accessMode"]);
+const SPACE_ENUM_FIELDS = new Set([
+  "status",
+  "kind",
+  "accessMode",
+  "emailTriggerStatus",
+]);
 const SPACE_CHILD_ENUM_FIELDS = new Set([
   "role",
   "notificationPreference",
@@ -27,6 +32,12 @@ export function parseSpaceStatus(value: unknown): string | undefined {
 
 export function parseSpaceAccessMode(value: unknown): string | undefined {
   return parseSpaceEnum(value, ["public", "private"]);
+}
+
+export function parseSpaceEmailTriggerStatus(
+  value: unknown,
+): string | undefined {
+  return parseSpaceEnum(value, ["none", "disabled", "enabled"]);
 }
 
 export async function canReadTenantSpaces(
@@ -147,7 +158,20 @@ export function userAccessibleSpacePredicate(
 
 export function toGraphqlSpace(row: Record<string, unknown>) {
   const result = snakeToCamel(row);
+
+  if (
+    typeof result.emailTriggerStatus === "string" &&
+    result.emailTriggersEnabled === undefined
+  ) {
+    result.emailTriggersEnabled = result.emailTriggerStatus === "enabled";
+  }
+
   uppercaseFields(result, SPACE_ENUM_FIELDS);
+
+  if (typeof result.emailTriggerStatus === "string") {
+    result.emailTriggersEnabled = result.emailTriggerStatus === "ENABLED";
+  }
+
   return result;
 }
 

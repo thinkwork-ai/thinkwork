@@ -164,15 +164,18 @@ export const SpaceAdminDetailQuery = graphql(`
       description
       status
       accessMode
+      emailTriggerStatus
       emailTriggersEnabled
     }
   }
 `);
 
-export const SetSpaceEmailTriggersMutation = graphql(`
-  mutation SetSpaceEmailTriggers($spaceId: ID!, $enabled: Boolean!) {
-    setSpaceEmailTriggers(spaceId: $spaceId, enabled: $enabled) {
+export const UpdateSpaceEmailTriggerMutation = graphql(`
+  mutation UpdateSpaceEmailTrigger($input: UpdateSpaceEmailTriggerInput!) {
+    updateSpaceEmailTrigger(input: $input) {
       id
+      slug
+      emailTriggerStatus
       emailTriggersEnabled
       updatedAt
     }

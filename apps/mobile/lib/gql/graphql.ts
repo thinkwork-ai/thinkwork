@@ -1834,6 +1834,7 @@ export type Mutation = {
   updateRoutineDefinition: RoutineDefinition;
   updateScheduledJob: ScheduledJob;
   updateSpace: Space;
+  updateSpaceEmailTrigger: Space;
   updateTenant: Tenant;
   updateTenantAgent: Agent;
   updateTenantCredential: TenantCredential;
@@ -2648,6 +2649,11 @@ export type MutationUpdateScheduledJobArgs = {
 
 export type MutationUpdateSpaceArgs = {
   input: UpdateSpaceInput;
+};
+
+
+export type MutationUpdateSpaceEmailTriggerArgs = {
+  input: UpdateSpaceEmailTriggerInput;
 };
 
 
@@ -4554,6 +4560,7 @@ export type Space = {
   contextConfig?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   description?: Maybe<Scalars['String']['output']>;
+  emailTriggerStatus: SpaceEmailTriggerStatus;
   emailTriggersEnabled: Scalars['Boolean']['output'];
   icon?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
@@ -4613,6 +4620,12 @@ export type SpaceChecklistTemplate = {
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
+
+export enum SpaceEmailTriggerStatus {
+  Disabled = 'DISABLED',
+  Enabled = 'ENABLED',
+  None = 'NONE'
+}
 
 export enum SpaceExternalWritebackPolicy {
   Disabled = 'DISABLED',
@@ -5536,6 +5549,12 @@ export type UpdateScheduledJobInput = {
   scheduleType?: InputMaybe<Scalars['String']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;
   timezone?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateSpaceEmailTriggerInput = {
+  emailPrefix?: InputMaybe<Scalars['String']['input']>;
+  spaceId: Scalars['ID']['input'];
+  status: SpaceEmailTriggerStatus;
 };
 
 export type UpdateSpaceInput = {

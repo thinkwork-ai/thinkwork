@@ -96,6 +96,7 @@ describe("updateSpace", () => {
       description: "Shared onboarding",
       access_mode: "private",
     });
+    expect(updateSets[0]).not.toHaveProperty("slug");
     expect(result).toMatchObject({
       id: "space-1",
       name: "Customer Success",

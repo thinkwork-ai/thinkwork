@@ -288,7 +288,7 @@ async function processColdContact(input: {
       spaceId: spaces.id,
       accessMode: spaces.access_mode,
       status: spaces.status,
-      emailTriggersEnabled: spaces.email_triggers_enabled,
+      emailTriggerStatus: spaces.email_trigger_status,
     })
     .from(tenants)
     .innerJoin(
@@ -302,7 +302,7 @@ async function processColdContact(input: {
     logColdContactReject("space_not_found", input);
     return;
   }
-  if (!space.emailTriggersEnabled) {
+  if (space.emailTriggerStatus !== "enabled") {
     logColdContactReject("triggers_disabled", input);
     return;
   }

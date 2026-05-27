@@ -11,13 +11,13 @@ The result is still a [Thread](/concepts/threads/). The Space supplies the local
 
 ## Common entry points
 
-| Entry point | What happens |
-| ----------- | ------------ |
-| Chat | A user starts or resumes a thread in a selected Space |
-| Email | Cold-contact email from a registered tenant user to the Space address creates or reopens an email thread when enabled |
-| Schedule | A recurring or one-time schedule wakes work in the Space |
-| Webhook | An external POST creates or wakes work in the Space |
-| Integration | A connector routes Slack, GitHub, or other provider events into the selected Space |
+| Entry point | What happens                                                                                                          |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| Chat        | A user starts or resumes a thread in a selected Space                                                                 |
+| Email       | Cold-contact email from a registered tenant user to the Space address creates or reopens an email thread when enabled |
+| Schedule    | A recurring or one-time schedule wakes work in the Space                                                              |
+| Webhook     | An external POST creates or wakes work in the Space                                                                   |
+| Integration | A connector routes Slack, GitHub, or other provider events into the selected Space                                    |
 
 Each entry point keeps channel metadata so operators can tell where the work came from.
 
@@ -29,9 +29,9 @@ Space cold-contact email uses the current Space address format:
 <space-slug>@<tenant-slug>.thinkwork.ai
 ```
 
-Cold-contact email is accepted only when the Space email trigger is enabled and the sender email matches a registered tenant user. Private Spaces additionally require that user to be a Space member. Archived Spaces do not accept new cold-contact email.
+Cold-contact email is accepted only when the Space email trigger is enabled and the sender email matches a registered tenant user. Disabled or deleted Email triggers do not accept cold-contact email. Private Spaces additionally require that user to be a Space member. Archived Spaces do not accept new cold-contact email.
 
-Token-bearing replies to agent-initiated email are different. They continue an existing thread and can work even when cold-contact email is disabled.
+Token-bearing replies to agent-initiated email are different. They continue an existing thread and can work even when cold-contact email is disabled or deleted.
 
 <Aside type="note">
   Legacy per-agent and older Space address forms under the agents subdomain are
