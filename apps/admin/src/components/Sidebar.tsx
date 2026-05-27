@@ -238,6 +238,7 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agent", icon: Bot, label: "Agent" },
     { to: "/spaces", icon: IconPlanet, label: "Spaces" },
+    { to: "/users", icon: Users, label: "Users" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/ontology", icon: Network, label: "Ontology" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
@@ -249,7 +250,6 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/applets", icon: AppWindow, label: "Artifacts" },
-    { to: "/users", icon: Users, label: "Users" },
     ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),
