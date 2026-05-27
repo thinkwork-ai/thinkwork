@@ -14,13 +14,13 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U5 in progress
-- Active unit: U5 Expose Goal files and lifecycle through GraphQL
-- Active branch: `codex/goals-u5-api`
-- Active worktree: `.Codex/worktrees/goals-u5-api`
+- Status: U6 in progress
+- Active unit: U6 Evolve the Spaces info panel into a Goal panel
+- Active branch: `codex/goals-u6-panel`
+- Active worktree: `.Codex/worktrees/goals-u6-panel`
 - Started: 2026-05-27
-- Latest merged PR: [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766)
-- Active PR: [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768)
+- Latest merged PR: [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768)
+- Active PR: [#1770](https://github.com/thinkwork-ai/thinkwork/pull/1770)
 - CI: PR checks pending
 
 ### Active Unit Notes
@@ -135,6 +135,22 @@ Target branch: `main`
   `pnpm --filter @thinkwork/api test`, `pnpm -r --if-present typecheck`,
   `pnpm -r --if-present lint`, `git diff --check`, and touched-file
   `pnpm dlx prettier@3.6.2 --check`.
+- PR [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` and deleted the remote/local U5 branch.
+- Started U6 from updated `origin/main`.
+- Implemented the first U6 pass: Spaces now fetches `threadGoalFiles`, renders
+  a Goal-aware info panel with outcome/mode/review/record summaries, keeps the
+  legacy checklist fallback for Threads without Goals, and uses `reviewGoal`
+  for review-ready human-reviewed Goals instead of the generic Thread
+  completion action.
+- U6 focused verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/workbench/TaskThreadView.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx`
+  and `pnpm --filter @thinkwork/spaces typecheck`.
+- U6 broader verification passed: `pnpm --filter @thinkwork/spaces test`,
+  `pnpm --filter @thinkwork/spaces build`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `git diff --check`, and a local Vite smoke via
+  `curl -I http://localhost:5174/`.
 
 ### Progress Log
 
@@ -144,8 +160,8 @@ Target branch: `main`
 | 2026-05-27 | U2   | `codex/goals-u2-storage`   | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | Merged  | Local and CI passed | Thread Goal file storage and prompt wrapper.              |
 | 2026-05-27 | U3   | `codex/goals-u3-templates` | [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763) | Merged  | Local and CI passed | Customer Onboarding Goal template source files.           |
 | 2026-05-27 | U4   | `codex/goals-u4-instances` | [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766) | Merged  | Local and CI passed | Customer Onboarding Goal rows and folder refresh.         |
-| 2026-05-27 | U5   | `codex/goals-u5-api`       | [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768) | Active  | CI pending          | Goal files query and review mutation.                     |
-| 2026-05-27 | U6   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U5 merges.                                    |
+| 2026-05-27 | U5   | `codex/goals-u5-api`       | [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768) | Merged  | Local and CI passed | Goal files query and review mutation.                     |
+| 2026-05-27 | U6   | `codex/goals-u6-panel`     | [#1770](https://github.com/thinkwork-ai/thinkwork/pull/1770) | Active  | CI pending          | Spaces Goal panel and review actions.                     |
 | 2026-05-27 | U7   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U6 merges.                                    |
 | 2026-05-27 | U8   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U7 merges.                                    |
 

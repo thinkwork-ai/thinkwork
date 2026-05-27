@@ -676,6 +676,80 @@ describe("TaskThreadView", () => {
     expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
   });
 
+  it("renders Goal summary, review actions, and narrative record counts", () => {
+    const onConfirmCompletion = vi.fn();
+    const onRequestChanges = vi.fn();
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Acme onboarding",
+          lifecycleStatus: "IDLE",
+          messages: [],
+        }}
+        infoPanelState={{
+          isOpen: true,
+          onOpenChange: vi.fn(),
+          startedAt: "2026-05-18T20:50:00.000Z",
+          startedBy: "Eric Odom",
+          agents: [],
+          attachments: [],
+          onDownloadAttachment: vi.fn(),
+          goal: {
+            id: "goal-1",
+            outcome: "Complete customer onboarding for Acme.",
+            mode: "COLLABORATE",
+            status: "IN_REVIEW",
+            ownerLabel: "Customer onboarding team",
+            reviewPolicyLabel: "Human final review required",
+            reviewRequired: true,
+            readyForReview: true,
+            decisionsCount: 1,
+            decisionsSummary: "Credit terms requested: yes.",
+            handoffsCount: 1,
+            handoffsSummary: "Human reviewer: confirm final review.",
+            artifactsCount: 1,
+            artifactsSummary: "Contract link: https://example.com",
+            onConfirmCompletion,
+            onRequestChanges,
+          },
+          checklist: {
+            title: "Progress",
+            tasks: [
+              {
+                id: "linked-1",
+                title: "Get contract signed",
+                status: "COMPLETED",
+                required: true,
+              },
+            ],
+          },
+        }}
+      />,
+    );
+
+    const panel = screen.getByRole("complementary", {
+      name: "Thread Goal info",
+    });
+    expect(within(panel).getByText("Goal")).toBeTruthy();
+    expect(
+      within(panel).getByText("Complete customer onboarding for Acme."),
+    ).toBeTruthy();
+    expect(within(panel).getByText("In Review")).toBeTruthy();
+    expect(within(panel).getByText("Collaborate mode")).toBeTruthy();
+    expect(within(panel).getByText("Human final review required")).toBeTruthy();
+    expect(
+      within(panel).getByText("Credit terms requested: yes."),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Request Goal changes" }),
+    );
+    expect(onRequestChanges).toHaveBeenCalledTimes(1);
+    expect(onConfirmCompletion).not.toHaveBeenCalled();
+  });
+
   it("renders persisted attachment chips in user transcript messages", () => {
     const onDownloadAttachment = vi.fn();
 

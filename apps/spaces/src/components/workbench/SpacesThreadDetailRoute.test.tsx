@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  ReviewGoalMutation,
+  ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
   ThreadProgressMarkdownQuery,
   UpdateThreadMutation,
@@ -62,7 +64,7 @@ vi.mock("@tanstack/react-router", async () => {
 });
 
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({ tenantId: "tenant-1" }),
+  useTenant: () => ({ tenantId: "tenant-1", userId: "user-1" }),
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
@@ -76,9 +78,11 @@ vi.mock("@/lib/use-computer-thread-chunks", () => ({
 const reexecuteThreadQuery = vi.fn();
 const reexecuteLinkedTasksQuery = vi.fn();
 const reexecuteProgressMarkdownQuery = vi.fn();
+const reexecuteGoalFilesQuery = vi.fn();
 const reexecuteTasksQuery = vi.fn();
 const sendMessage = vi.fn();
 const updateThreadMock = vi.fn();
+const reviewGoalMock = vi.fn();
 const resetStreamingChunks = vi.fn();
 
 let threadData: unknown;
@@ -87,6 +91,7 @@ let eventData: unknown;
 let mentionTargetsData: unknown;
 let linkedTasksData: unknown;
 let progressMarkdownData: unknown;
+let goalFilesData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
@@ -95,9 +100,11 @@ beforeEach(() => {
   reexecuteThreadQuery.mockReset();
   reexecuteLinkedTasksQuery.mockReset();
   reexecuteProgressMarkdownQuery.mockReset();
+  reexecuteGoalFilesQuery.mockReset();
   reexecuteTasksQuery.mockReset();
   sendMessage.mockReset();
   updateThreadMock.mockReset();
+  reviewGoalMock.mockReset();
   resetStreamingChunks.mockReset();
   streamingChunks = [];
   threadData = {
@@ -138,14 +145,22 @@ beforeEach(() => {
   mentionTargetsData = { threadMentionTargets: [] };
   linkedTasksData = { threadLinkedTasks: [] };
   progressMarkdownData = { threadProgressMarkdown: null };
+  goalFilesData = { threadGoalFiles: null };
 
   sendMessage.mockResolvedValue({});
   updateThreadMock.mockResolvedValue({});
+  reviewGoalMock.mockResolvedValue({});
   vi.mocked(useMutation).mockImplementation((mutation) => {
     if (mutation === UpdateThreadMutation) {
       return [
         { fetching: false, stale: false, hasNext: false },
         updateThreadMock,
+      ];
+    }
+    if (mutation === ReviewGoalMutation) {
+      return [
+        { fetching: false, stale: false, hasNext: false },
+        reviewGoalMock,
       ];
     }
     return [{ fetching: false, stale: false, hasNext: false }, sendMessage];
@@ -180,6 +195,9 @@ beforeEach(() => {
     }
     if (options.query === ThreadProgressMarkdownQuery) {
       return [queryState(progressMarkdownData), reexecuteProgressMarkdownQuery];
+    }
+    if (options.query === ThreadGoalFilesQuery) {
+      return [queryState(goalFilesData), reexecuteGoalFilesQuery];
     }
     if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
@@ -334,6 +352,9 @@ describe("SpacesThreadDetailRoute", () => {
       requestPolicy: "network-only",
     });
     expect(reexecuteProgressMarkdownQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
   });
@@ -630,6 +651,117 @@ describe("SpacesThreadDetailRoute", () => {
         id: "thread-1",
         input: { status: "DONE" },
       });
+    });
+  });
+
+  it("renders a Goal panel and confirms a review-ready Goal", async () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Acme onboarding",
+        status: "OPEN",
+        metadata: {
+          customerOnboarding: { workflow: "customer_onboarding" },
+        },
+        messages: { edges: [] },
+      },
+    };
+    linkedTasksData = {
+      threadLinkedTasks: [
+        {
+          id: "linked-1",
+          provider: "THINKWORK",
+          title: "Get contract signed",
+          required: true,
+          status: "COMPLETED",
+          syncStatus: "SYNCED",
+        },
+      ],
+    };
+    goalFilesData = {
+      threadGoalFiles: {
+        goal: {
+          id: "goal-1",
+          outcome: "Complete customer onboarding for Acme.",
+          ownerType: null,
+          ownerId: null,
+          mode: "COLLABORATE",
+          status: "IN_REVIEW",
+          reviewPolicy: {
+            required: true,
+            type: "human_final_review",
+          },
+          updatedAt: "2026-05-27T15:00:00.000Z",
+        },
+        files: [
+          {
+            file: "GOAL",
+            content: [
+              "# GOAL",
+              "Outcome: Complete customer onboarding for Acme.",
+              "Owner: Customer onboarding team",
+            ].join("\n"),
+          },
+          {
+            file: "DECISIONS",
+            content:
+              "# DECISIONS\n\n## Intake Decisions\n- Credit terms requested: yes (Net 30).",
+          },
+          {
+            file: "HANDOFFS",
+            content:
+              "# HANDOFFS\n\n## Current Handoffs\n- Human reviewer: confirm final onboarding review.",
+          },
+          {
+            file: "ARTIFACTS",
+            content:
+              "# ARTIFACTS\n\n## Referenced Artifacts\n- Contract link: https://example.com/contract",
+          },
+        ],
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+    fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
+
+    expect(screen.getByText("Goal")).toBeTruthy();
+    expect(
+      screen.getByText("Complete customer onboarding for Acme."),
+    ).toBeTruthy();
+    expect(screen.getByText("Collaborate mode")).toBeTruthy();
+    expect(screen.getByText("Human final review required")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Required work is complete. A human reviewer must confirm before closure.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Mark as completed" })).toBe(
+      null,
+    );
+    expect(
+      screen.getByText("Credit terms requested: yes (Net 30)."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Human reviewer: confirm final onboarding review."),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm Goal completion" }),
+    );
+
+    await waitFor(() => {
+      expect(reviewGoalMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          goalId: "goal-1",
+          action: "CONFIRM_COMPLETION",
+        },
+      });
+    });
+    expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
     });
   });
 });

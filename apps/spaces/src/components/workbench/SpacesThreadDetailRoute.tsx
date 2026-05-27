@@ -28,11 +28,13 @@ import {
   RunbookRunsQuery,
   SendMessageMutation,
   ThreadArtifactsQuery,
+  ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
   ThreadProgressMarkdownQuery,
   ThreadMentionTargetsQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
+  ReviewGoalMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
@@ -184,6 +186,34 @@ interface ThreadProgressMarkdownResult {
   } | null;
 }
 
+interface ThreadGoalFilesResult {
+  threadGoalFiles?: {
+    goal: {
+      id: string;
+      outcome?: string | null;
+      ownerType?: string | null;
+      ownerId?: string | null;
+      mode?: string | null;
+      status?: string | null;
+      completionRule?: unknown;
+      reviewPolicy?: unknown;
+      reviewerType?: string | null;
+      reviewerId?: string | null;
+      startedAt?: string | null;
+      reviewedAt?: string | null;
+      completedAt?: string | null;
+      cancelledAt?: string | null;
+      metadata?: unknown;
+      updatedAt?: string | null;
+    };
+    files: Array<{
+      file: string;
+      key?: string | null;
+      content?: string | null;
+    }>;
+  } | null;
+}
+
 export function SpacesThreadDetailRoute({
   threadId,
   backHref,
@@ -196,6 +226,7 @@ export function SpacesThreadDetailRoute({
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
   const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
+  const [goalReviewError, setGoalReviewError] = useState<string | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
   );
@@ -292,9 +323,20 @@ export function SpacesThreadDetailRoute({
     pause: !tenantId || !threadId,
     requestPolicy: "cache-and-network",
   });
+  const [
+    { data: goalFilesData, fetching: goalFilesFetching, error: goalFilesError },
+    reexecuteGoalFilesQuery,
+  ] = useQuery<ThreadGoalFilesResult>({
+    query: ThreadGoalFilesQuery,
+    variables: { tenantId: tenantId ?? "", threadId },
+    pause: !tenantId || !threadId,
+    requestPolicy: "cache-and-network",
+  });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const [{ fetching: completingThread }, updateThread] =
     useMutation(UpdateThreadMutation);
+  const [{ fetching: reviewingGoal }, reviewGoal] =
+    useMutation(ReviewGoalMutation);
   const {
     chunks,
     streamState,
@@ -466,7 +508,8 @@ export function SpacesThreadDetailRoute({
     eventsFetching ||
     runbookRunsFetching ||
     linkedTasksFetching ||
-    progressMarkdownFetching;
+    progressMarkdownFetching ||
+    goalFilesFetching;
   const handleRefreshThread = useCallback(() => {
     setManualRefreshStartedAt(Date.now());
     setManualRefreshObservedFetching(false);
@@ -477,8 +520,10 @@ export function SpacesThreadDetailRoute({
     reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
     reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
     reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
+    reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
   }, [
     reexecuteEventsQuery,
+    reexecuteGoalFilesQuery,
     reexecuteLinkedTasksQuery,
     reexecuteMentionTargetsQuery,
     reexecuteProgressMarkdownQuery,
@@ -488,6 +533,8 @@ export function SpacesThreadDetailRoute({
   ]);
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
+  const goalFiles = goalFilesData?.threadGoalFiles ?? null;
+  const goal = goalFiles?.goal ?? null;
   const progressChecklistTasks = useMemo(
     () =>
       parseProgressMarkdownTasks(
@@ -499,14 +546,25 @@ export function SpacesThreadDetailRoute({
     progressChecklistTasks.length > 0
       ? progressChecklistTasks
       : linkedTasks.map(toThreadInfoChecklistTask);
+  const goalReadiness = useMemo(
+    () => deriveGoalReadiness(infoPanelChecklistTasks),
+    [infoPanelChecklistTasks],
+  );
+  const goalRecords = useMemo(
+    () => summarizeGoalFiles(goalFiles?.files ?? [], threadArtifacts.length),
+    [goalFiles?.files, threadArtifacts.length],
+  );
   const isCustomerOnboardingThread =
+    Boolean(goal) ||
+    goalFilesFetching ||
     hasCustomerOnboardingMetadata(data?.thread?.metadata) ||
     linkedTasks.length > 0 ||
     Boolean(progressMarkdownData?.threadProgressMarkdown?.content);
   const showOnboardingChecklist =
     isCustomerOnboardingThread ||
     linkedTasksFetching ||
-    progressMarkdownFetching;
+    progressMarkdownFetching ||
+    goalFilesFetching;
   const completionNotificationRef = useRef<{
     threadId: string;
     hasDurableAssistant: boolean;
@@ -631,6 +689,42 @@ export function SpacesThreadDetailRoute({
       threadArtifacts,
     ],
   );
+  const handleReviewGoal = useCallback(
+    async (action: "CONFIRM_COMPLETION" | "REQUEST_CHANGES") => {
+      if (!tenantId || !goal?.id) return;
+      setGoalReviewError(null);
+      const result = await reviewGoal({
+        input: {
+          tenantId,
+          goalId: goal.id,
+          action,
+        },
+      });
+      if (result.error) {
+        setGoalReviewError(result.error.message);
+        toast.error(result.error.message);
+        return;
+      }
+      toast.success(
+        action === "CONFIRM_COMPLETION"
+          ? "Goal completion confirmed"
+          : "Goal returned for changes",
+      );
+      reexecuteQuery({ requestPolicy: "network-only" });
+      reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
+      reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
+    },
+    [
+      goal?.id,
+      reexecuteGoalFilesQuery,
+      reexecuteLinkedTasksQuery,
+      reexecuteProgressMarkdownQuery,
+      reexecuteQuery,
+      reviewGoal,
+      tenantId,
+    ],
+  );
   const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
     () => ({
       isOpen: threadInfoOpen,
@@ -647,6 +741,36 @@ export function SpacesThreadDetailRoute({
       attachments: routeThread?.attachments ?? [],
       onDownloadAttachment: (attachmentId: string) =>
         downloadThreadAttachment(threadId, attachmentId),
+      goal:
+        goal || goalFilesFetching || goalFilesError
+          ? {
+              id: goal?.id ?? null,
+              outcome: goal?.outcome ?? extractGoalLine(goalFiles, "Outcome"),
+              mode: goal?.mode ?? null,
+              status: goal?.status ?? null,
+              ownerLabel: resolveGoalOwnerLabel(goal, userId, goalFiles),
+              reviewPolicyLabel: goalReviewPolicyLabel(goal?.reviewPolicy),
+              reviewRequired: goalReviewRequired(goal?.reviewPolicy),
+              readyForReview: goalReadiness.readyForReview,
+              isLoading: goalFilesFetching && !goal,
+              error: goalFilesError?.message ?? null,
+              filesLoading: goalFilesFetching,
+              filesError: goalFilesError?.message ?? null,
+              filesPrepared: goalFiles
+                ? goalFiles.files.some((file) => Boolean(file.content))
+                : undefined,
+              decisionsCount: goalRecords.decisions.count,
+              decisionsSummary: goalRecords.decisions.summary,
+              handoffsCount: goalRecords.handoffs.count,
+              handoffsSummary: goalRecords.handoffs.summary,
+              artifactsCount: goalRecords.artifacts.count,
+              artifactsSummary: goalRecords.artifacts.summary,
+              isReviewing: reviewingGoal,
+              reviewError: goalReviewError,
+              onConfirmCompletion: () => handleReviewGoal("CONFIRM_COMPLETION"),
+              onRequestChanges: () => handleReviewGoal("REQUEST_CHANGES"),
+            }
+          : null,
       checklist: showOnboardingChecklist
         ? {
             title: "Progress",
@@ -663,21 +787,33 @@ export function SpacesThreadDetailRoute({
                 ? routeThread?.updatedAt
                 : null,
             isCompleting: completingThread,
-            onCompleteThread: handleCompleteThread,
+            onCompleteThread: goalReviewRequired(goal?.reviewPolicy)
+              ? undefined
+              : handleCompleteThread,
           }
         : null,
     }),
     [
+      goal,
+      goalFiles,
+      goalFilesError,
+      goalFilesFetching,
+      goalRecords,
+      goalReviewError,
+      goalReadiness.readyForReview,
+      handleReviewGoal,
       routeThread,
       infoPanelChecklistTasks,
       linkedTasksError?.message,
       linkedTasksFetching,
       progressMarkdownError?.message,
       progressMarkdownFetching,
+      reviewingGoal,
       showOnboardingChecklist,
       threadId,
       threadInfoOpen,
       completingThread,
+      userId,
     ],
   );
 
@@ -822,6 +958,7 @@ export function SpacesThreadDetailRoute({
     toast.success("Thread completed");
     reexecuteQuery({ requestPolicy: "network-only" });
     reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+    reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
   }
 
   const threadView = (
@@ -917,6 +1054,7 @@ export function SpacesThreadDetailRoute({
         reexecuteEventsQuery({ requestPolicy: "network-only" });
         reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
         reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+        reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
       }}
       runbookQueues={runbookQueues}
     />
@@ -1013,6 +1151,115 @@ function toThreadInfoChecklistTask(
     blocked: task.blocked,
     updatedAt: task.updatedAt,
   };
+}
+
+function deriveGoalReadiness(tasks: ThreadInfoChecklistTask[]) {
+  const requiredTasks = tasks.filter(
+    (task) =>
+      task.required !== false &&
+      normalizeThreadStatus(task.status) !== "not_applicable",
+  );
+  const completedRequired = requiredTasks.filter(
+    (task) => normalizeThreadStatus(task.status) === "completed",
+  ).length;
+  return {
+    completedRequired,
+    totalRequired: requiredTasks.length,
+    readyForReview:
+      requiredTasks.length > 0 && completedRequired === requiredTasks.length,
+  };
+}
+
+function summarizeGoalFiles(
+  files: NonNullable<ThreadGoalFilesResult["threadGoalFiles"]>["files"],
+  artifactFallbackCount: number,
+) {
+  const decisions = summarizeMarkdownList(goalFileContent(files, "DECISIONS"));
+  const handoffs = summarizeMarkdownList(goalFileContent(files, "HANDOFFS"));
+  const artifacts = summarizeMarkdownList(goalFileContent(files, "ARTIFACTS"));
+  if (artifacts.count === 0 && artifactFallbackCount > 0) {
+    artifacts.count = artifactFallbackCount;
+    artifacts.summary = `${artifactFallbackCount} thread artifact${artifactFallbackCount === 1 ? "" : "s"} attached`;
+  }
+  return { decisions, handoffs, artifacts };
+}
+
+function summarizeMarkdownList(content?: string | null) {
+  const items = (content ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim())
+    .filter(
+      (line) =>
+        line && !/^none\b/i.test(line) && !/^none captured yet\.?$/i.test(line),
+    )
+    .map((line) => line.replace(/\s+/g, " "));
+  return {
+    count: items.length,
+    summary: items[0] ?? null,
+  };
+}
+
+function goalFileContent(
+  files: NonNullable<ThreadGoalFilesResult["threadGoalFiles"]>["files"],
+  kind: string,
+) {
+  return files.find((file) => file.file?.toUpperCase() === kind)?.content;
+}
+
+function extractGoalLine(
+  goalFiles: ThreadGoalFilesResult["threadGoalFiles"] | null,
+  label: string,
+) {
+  const content = goalFiles ? goalFileContent(goalFiles.files, "GOAL") : null;
+  if (!content) return null;
+  const pattern = new RegExp(`^${label}:\\s*(.+?)\\s*$`, "im");
+  return content.match(pattern)?.[1]?.trim() ?? null;
+}
+
+function resolveGoalOwnerLabel(
+  goal:
+    | NonNullable<ThreadGoalFilesResult["threadGoalFiles"]>["goal"]
+    | null
+    | undefined,
+  userId: string | null,
+  goalFiles: ThreadGoalFilesResult["threadGoalFiles"] | null,
+) {
+  const ownerType = goal?.ownerType?.toUpperCase();
+  if (ownerType === "USER" && goal?.ownerId) {
+    return userId && goal.ownerId === userId ? "You" : goal.ownerId;
+  }
+  const ownerLine = extractGoalLine(goalFiles, "Owner");
+  return ownerLine ?? "Customer onboarding team";
+}
+
+function goalReviewRequired(value: unknown) {
+  const policy = objectValue(value);
+  return policy?.required === true || policy?.type === "human_final_review";
+}
+
+function goalReviewPolicyLabel(value: unknown) {
+  return goalReviewRequired(value)
+    ? "Human final review required"
+    : "No final review required";
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function parseProgressMarkdownTasks(
