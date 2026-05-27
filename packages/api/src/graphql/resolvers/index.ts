@@ -2,6 +2,7 @@ import {
   tenantAgentMutations,
   tenantAgentQueries,
 } from "./tenant-agent/index.js";
+import { goalQueries } from "./goals/index.js";
 import { coreQueries } from "./core/index.js";
 import { threadQueries } from "./threads/index.js";
 import { inboxQueries } from "./inbox/index.js";
@@ -68,6 +69,7 @@ import {
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
   ...tenantAgentQueries,
+  ...goalQueries,
   ...coreQueries,
   ...threadQueries,
   ...inboxQueries,

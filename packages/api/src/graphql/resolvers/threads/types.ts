@@ -19,6 +19,7 @@ import {
   messageToCamel,
   snakeToCamel,
 } from "../../utils.js";
+import { findThreadGoalForVisibleThread } from "../goals/threadGoal.query.js";
 import { artifactToCamelWithPayload } from "../artifacts/payload.js";
 import {
   modelFromTurn,
@@ -168,6 +169,14 @@ export const threadTypeResolvers = {
   lastActivityAt: async (thread: any, _args: any, ctx: GraphQLContext) => {
     if (thread.lastActivityAt) return thread.lastActivityAt;
     return ctx.loaders.threadLastActivityAt.load(thread.id);
+  },
+  goal: async (thread: any, _args: any, ctx: GraphQLContext) => {
+    const threadTenantId = thread.tenantId ?? thread.tenant_id ?? null;
+    if (!threadTenantId || !thread.id) return null;
+    return findThreadGoalForVisibleThread(
+      { tenantId: threadTenantId, threadId: thread.id },
+      ctx,
+    );
   },
   lastRuntimeType: async (thread: any) => {
     const direct = thread.lastRuntimeType ?? thread.last_runtime_type;

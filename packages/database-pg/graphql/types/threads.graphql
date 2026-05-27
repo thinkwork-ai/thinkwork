@@ -62,6 +62,7 @@ type Thread {
   billingCode: String
   labels: AWSJSON
   metadata: AWSJSON
+  goal: ThreadGoal
   dueAt: AWSDateTime
   startedAt: AWSDateTime
   completedAt: AWSDateTime
