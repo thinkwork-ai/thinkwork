@@ -747,6 +747,24 @@ describe("SpacesThreadDetailRoute", () => {
       screen.getByText("Human reviewer: confirm final onboarding review."),
     ).toBeTruthy();
 
+    fireEvent.click(screen.getByRole("button", { name: "Request Goal changes" }));
+    fireEvent.change(screen.getByLabelText("Change request"), {
+      target: { value: "Need AP email before closure." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create follow-up" }));
+
+    await waitFor(() => {
+      expect(reviewGoalMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          goalId: "goal-1",
+          action: "REQUEST_CHANGES",
+          notes: "Need AP email before closure.",
+        },
+      });
+    });
+    reviewGoalMock.mockClear();
+
     fireEvent.click(
       screen.getByRole("button", { name: "Confirm Goal completion" }),
     );

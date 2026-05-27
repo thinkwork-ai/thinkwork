@@ -692,7 +692,10 @@ export function SpacesThreadDetailRoute({
     ],
   );
   const handleReviewGoal = useCallback(
-    async (action: "CONFIRM_COMPLETION" | "REQUEST_CHANGES") => {
+    async (
+      action: "CONFIRM_COMPLETION" | "REQUEST_CHANGES",
+      notes?: string,
+    ) => {
       if (!tenantId || !goal?.id) return;
       setGoalReviewError(null);
       const result = await reviewGoal({
@@ -700,6 +703,7 @@ export function SpacesThreadDetailRoute({
           tenantId,
           goalId: goal.id,
           action,
+          ...(notes ? { notes } : {}),
         },
       });
       if (result.error) {
@@ -771,7 +775,8 @@ export function SpacesThreadDetailRoute({
               isReviewing: reviewingGoal,
               reviewError: goalReviewError,
               onConfirmCompletion: () => handleReviewGoal("CONFIRM_COMPLETION"),
-              onRequestChanges: () => handleReviewGoal("REQUEST_CHANGES"),
+              onRequestChanges: (notes) =>
+                handleReviewGoal("REQUEST_CHANGES", notes),
             }
           : null,
       checklist: showOnboardingChecklist
