@@ -14,13 +14,13 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U3 in progress
-- Active unit: U3 Seed Space-owned Goal templates for Customer Onboarding
-- Active branch: `codex/goals-u3-templates`
-- Active worktree: `.Codex/worktrees/goals-u3-templates`
+- Status: U4 in progress
+- Active unit: U4 Create and refresh Customer Onboarding Goal instances
+- Active branch: `codex/goals-u4-instances`
+- Active worktree: `.Codex/worktrees/goals-u4-instances`
 - Started: 2026-05-27
-- Latest merged PR: [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761)
-- Active PR: [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763)
+- Latest merged PR: [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763)
+- Active PR: [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766)
 - CI: PR checks pending
 
 ### Active Unit Notes
@@ -91,19 +91,38 @@ Target branch: `main`
   `pnpm --filter @thinkwork/api test`, `pnpm -r --if-present typecheck`,
   `pnpm -r --if-present lint`, and `git diff --check`.
 - Opened PR [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763).
+- PR [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` and deleted the remote/local U3 branch.
+- Started U4 from updated `origin/main`.
+- Implemented U4 Customer Onboarding Goal instances: workflow start/idempotent
+  repair now ensures a Goal row, the Goal folder renderer writes
+  `GOAL.md`/`PROGRESS.md`/`DECISIONS.md`/`ARTIFACTS.md`/`HANDOFFS.md`, manual
+  linked-task/chat/finalize updates refresh the folder, refreshes can repair a
+  missing Goal row, and Thread completion respects the human review policy.
+- U4 verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/spaces/customer-onboarding-goal-md.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/linked-tasks/updateLinkedTask.mutation.test.ts src/graphql/resolvers/threads/updateThread.mutation.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/api test`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `git diff --check`, and touched-file
+  `pnpm dlx prettier@3.6.2 --check`.
+- `pnpm format:check` is still not usable in fresh worktrees because Prettier
+  is not installed as a workspace dependency; used the established
+  `pnpm dlx prettier@3.6.2` fallback.
+- Opened PR [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766).
 
 ### Progress Log
 
-| Date       | Unit | Branch                     | PR                                                           | Status    | Verification           | Notes                                                     |
-| ---------- | ---- | -------------------------- | ------------------------------------------------------------ | --------- | ---------------------- | --------------------------------------------------------- |
-| 2026-05-27 | U1   | `codex/goals-u1-ledger`    | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged    | Local and CI passed    | Applied scoped dev migration after drift precheck failed. |
-| 2026-05-27 | U2   | `codex/goals-u2-storage`   | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | Merged    | Local and CI passed    | Thread Goal file storage and prompt wrapper.              |
-| 2026-05-27 | U3   | `codex/goals-u3-templates` | [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763) | PR opened | API/repo checks passed | Customer Onboarding Goal template source files.           |
-| 2026-05-27 | U4   | TBD                        | TBD                                                          | Pending   | TBD                    | Start after U3 merges.                                    |
-| 2026-05-27 | U5   | TBD                        | TBD                                                          | Pending   | TBD                    | Start after U4 merges.                                    |
-| 2026-05-27 | U6   | TBD                        | TBD                                                          | Pending   | TBD                    | Start after U5 merges.                                    |
-| 2026-05-27 | U7   | TBD                        | TBD                                                          | Pending   | TBD                    | Start after U6 merges.                                    |
-| 2026-05-27 | U8   | TBD                        | TBD                                                          | Pending   | TBD                    | Start after U7 merges.                                    |
+| Date       | Unit | Branch                     | PR                                                           | Status  | Verification        | Notes                                                     |
+| ---------- | ---- | -------------------------- | ------------------------------------------------------------ | ------- | ------------------- | --------------------------------------------------------- |
+| 2026-05-27 | U1   | `codex/goals-u1-ledger`    | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged  | Local and CI passed | Applied scoped dev migration after drift precheck failed. |
+| 2026-05-27 | U2   | `codex/goals-u2-storage`   | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | Merged  | Local and CI passed | Thread Goal file storage and prompt wrapper.              |
+| 2026-05-27 | U3   | `codex/goals-u3-templates` | [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763) | Merged  | Local and CI passed | Customer Onboarding Goal template source files.           |
+| 2026-05-27 | U4   | `codex/goals-u4-instances` | [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766) | PR open | Local checks passed | Customer Onboarding Goal rows and folder refresh.         |
+| 2026-05-27 | U5   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U4 merges.                                    |
+| 2026-05-27 | U6   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U5 merges.                                    |
+| 2026-05-27 | U7   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U6 merges.                                    |
+| 2026-05-27 | U8   | TBD                        | TBD                                                          | Pending | TBD                 | Start after U7 merges.                                    |
 
 ### CI Failures
 

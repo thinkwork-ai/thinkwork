@@ -31,6 +31,7 @@ export interface CustomerOnboardingProgressTask {
 export interface CustomerOnboardingProgressState {
   tenantSlug: string;
   threadId: string;
+  spaceId: string | null;
   threadTitle: string;
   normalized: NormalizedCustomerOnboardingSource;
   tasks: CustomerOnboardingProgressTask[];
@@ -171,7 +172,9 @@ export function renderCustomerOnboardingProgressMarkdown(input: {
   ].join("\n");
 }
 
-export class DrizzleCustomerOnboardingProgressRepository implements CustomerOnboardingProgressRepository {
+export class DrizzleCustomerOnboardingProgressRepository
+  implements CustomerOnboardingProgressRepository
+{
   async load(input: {
     tenantId: string;
     threadId: string;
@@ -187,6 +190,7 @@ export class DrizzleCustomerOnboardingProgressRepository implements CustomerOnbo
     const [thread] = await db
       .select({
         id: threads.id,
+        spaceId: threads.space_id,
         title: threads.title,
         metadata: threads.metadata,
       })
@@ -220,6 +224,7 @@ export class DrizzleCustomerOnboardingProgressRepository implements CustomerOnbo
     return {
       tenantSlug: tenant.slug,
       threadId: thread.id,
+      spaceId: thread.spaceId,
       threadTitle: thread.title,
       normalized,
       tasks: taskRows
@@ -300,7 +305,7 @@ function nextStepLines(input: {
     return [`1. Advance ${active.title} with ${owner}.`];
   }
   return [
-    "1. All required onboarding tasks are complete; mark the Thread completed.",
+    "1. All required onboarding tasks are complete; request human final review before closing the Thread.",
   ];
 }
 

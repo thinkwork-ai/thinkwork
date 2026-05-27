@@ -6,6 +6,7 @@ import {
   LINKED_TASK_STATUSES,
   type LinkedTaskStatus,
 } from "../../../lib/linked-tasks/status.js";
+import { refreshCustomerOnboardingGoalFolderSafely } from "../../../lib/spaces/customer-onboarding-goal-md.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { hasSpaceMemberAccess } from "../spaces/shared.js";
 import { toGraphqlLinkedTask } from "./shared.js";
@@ -96,6 +97,11 @@ export async function updateLinkedTask(
       manualMetadata: parseAwsJson(input.metadata),
     }),
     occurred_at: now,
+  });
+
+  await refreshCustomerOnboardingGoalFolderSafely({
+    tenantId: task.tenant_id,
+    threadId: task.thread_id,
   });
 
   return toGraphqlLinkedTask(updated);

@@ -15,6 +15,7 @@ function state(
   return {
     tenantSlug: "acme",
     threadId: "thread-1",
+    spaceId: "space-1",
     threadTitle: "Onboard Acme Equipment",
     normalized: normalizeCustomerOnboardingSource({
       opportunityId: "opp-1",

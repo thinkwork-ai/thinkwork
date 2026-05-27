@@ -8,7 +8,9 @@ const {
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
   mockNotifyThreadUpdate,
+  mockRefreshGoalFolder,
   state,
+  updatedGoalValues,
 } = vi.hoisted(() => {
   const tableCol = (label: string) => ({ __col: label });
   const tableObjects = {
@@ -30,6 +32,14 @@ const {
       last_read_at: tableCol("thread_participants.last_read_at"),
       updated_at: tableCol("thread_participants.updated_at"),
     },
+    goals: {
+      __table__: "goals",
+      id: tableCol("goals.id"),
+      tenant_id: tableCol("goals.tenant_id"),
+      thread_id: tableCol("goals.thread_id"),
+      status: tableCol("goals.status"),
+      review_policy: tableCol("goals.review_policy"),
+    },
   };
   const mutableState = {
     threadRow: {
@@ -43,9 +53,11 @@ const {
     },
     participantRows: [{ id: "participant-1" }],
     userParticipantCount: 1,
+    goalRows: [] as Record<string, unknown>[],
   };
   const participantUpdates: Record<string, unknown>[] = [];
   const threadUpdates: Record<string, unknown>[] = [];
+  const goalUpdates: Record<string, unknown>[] = [];
 
   const db = {
     select: vi.fn((selection?: Record<string, unknown>) => ({
@@ -58,6 +70,7 @@ const {
             }
             return mutableState.participantRows;
           }
+          if (table === tableObjects.goals) return mutableState.goalRows;
           return [];
         }),
       })),
@@ -67,6 +80,10 @@ const {
         where: vi.fn(() => {
           if (table === tableObjects.threadParticipants) {
             participantUpdates.push(values);
+            return Promise.resolve([]);
+          }
+          if (table === tableObjects.goals) {
+            goalUpdates.push(values);
             return Promise.resolve([]);
           }
           threadUpdates.push(values);
@@ -86,9 +103,11 @@ const {
     tables: tableObjects,
     updatedParticipantValues: participantUpdates,
     updatedThreadValues: threadUpdates,
+    updatedGoalValues: goalUpdates,
     mockResolveCallerTenantId: vi.fn(async () => "tenant-1" as string | null),
     mockResolveCallerUserId: vi.fn(async () => "user-1" as string | null),
     mockNotifyThreadUpdate: vi.fn(async () => undefined),
+    mockRefreshGoalFolder: vi.fn(async () => null),
     state: mutableState,
   };
 });
@@ -100,6 +119,7 @@ vi.mock("../../utils.js", () => ({
   sql: vi.fn(() => ({ __sql: true })),
   threads: tables.threads,
   threadParticipants: tables.threadParticipants,
+  goals: tables.goals,
   agentWakeupRequests: { __table__: "agent_wakeup_requests" },
   inboxItems: { __table__: "inbox_items" },
   threadToCamel: (row: Record<string, unknown>) => ({
@@ -122,11 +142,16 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mockResolveCallerUserId,
 }));
 
+vi.mock("../../../lib/spaces/customer-onboarding-goal-md.js", () => ({
+  refreshCustomerOnboardingGoalFolderSafely: mockRefreshGoalFolder,
+}));
+
 import { updateThread } from "./updateThread.mutation.js";
 
 beforeEach(() => {
   updatedParticipantValues.length = 0;
   updatedThreadValues.length = 0;
+  updatedGoalValues.length = 0;
   state.threadRow = {
     id: "thread-1",
     tenant_id: "tenant-1",
@@ -138,9 +163,12 @@ beforeEach(() => {
   };
   state.participantRows = [{ id: "participant-1" }];
   state.userParticipantCount = 1;
+  state.goalRows = [];
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockResolvedValue("user-1");
   mockNotifyThreadUpdate.mockClear();
+  mockRefreshGoalFolder.mockReset();
+  mockRefreshGoalFolder.mockResolvedValue(null);
 });
 
 describe("updateThread participant-scoped read state", () => {
@@ -202,5 +230,35 @@ describe("updateThread participant-scoped read state", () => {
 
     expect(updatedParticipantValues).toHaveLength(0);
     expect(updatedThreadValues).toHaveLength(0);
+  });
+
+  it("routes done transitions for reviewed Goals through the Goal review policy", async () => {
+    state.goalRows = [
+      {
+        id: "goal-1",
+        status: "active",
+        review_policy: { required: true, type: "human_final_review" },
+      },
+    ];
+
+    await expect(
+      updateThread(
+        {},
+        {
+          id: "thread-1",
+          input: { status: "DONE" },
+        },
+        { auth: { authType: "cognito" } } as any,
+      ),
+    ).rejects.toThrow("Goal requires human final review");
+
+    expect(updatedThreadValues).toHaveLength(0);
+    expect(updatedGoalValues).toEqual([
+      expect.objectContaining({ status: "in_review" }),
+    ]);
+    expect(mockRefreshGoalFolder).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+    });
   });
 });
