@@ -24,6 +24,7 @@ export interface Tenant {
 interface TenantContextValue {
   tenant: Tenant | null;
   tenantId: string | null;
+  userId: string | null;
   isLoading: boolean;
   error: string | null;
   /**
@@ -62,14 +63,24 @@ const API_URL = import.meta.env.VITE_API_URL || "";
  * locked out. Solution: ask `/api/auth/me` for the caller's DB-backed tenant
  * membership. No tenant provisioning happens in this path; we only read.
  */
-async function discoverTenantViaAuthMe(): Promise<string | null> {
-  if (!API_URL) return null;
+async function discoverCallerViaAuthMe(): Promise<{
+  tenantId: string | null;
+  userId: string | null;
+}> {
+  const empty = { tenantId: null, userId: null };
+  if (!API_URL) return empty;
   try {
-    const data = await apiFetch<{ tenantId?: string | null }>("/api/auth/me");
-    return data.tenantId ?? null;
+    const data = await apiFetch<{
+      tenantId?: string | null;
+      userId?: string | null;
+    }>("/api/auth/me");
+    return {
+      tenantId: data.tenantId ?? null,
+      userId: data.userId ?? null,
+    };
   } catch (err) {
     if (err instanceof NotReadyError) throw err;
-    return null;
+    return empty;
   }
 }
 
@@ -82,6 +93,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [discoveredTenantId, setDiscoveredTenantId] = useState<string | null>(
     null,
   );
+  const [discoveredUserId, setDiscoveredUserId] = useState<string | null>(null);
   // Bumps to retry when apiFetch throws NotReadyError — the Cognito session
   // may be hydrated into AuthContext before the token cache is populated, and
   // AuthProvider wraps us so tenantId arrives before getIdToken() returns a
@@ -146,11 +158,12 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setTimeout(() => setAuthRetryTick((n) => n + 1), 100);
       return;
     }
-    const found = await discoverTenantViaAuthMe();
-    if (found) {
-      setDiscoveredTenantId(found);
+    const found = await discoverCallerViaAuthMe();
+    setDiscoveredUserId(found.userId);
+    if (found.tenantId) {
+      setDiscoveredTenantId(found.tenantId);
       setNoTenantAssigned(false);
-      await fetchTenant(found);
+      await fetchTenant(found.tenantId);
     } else {
       // The user is signed in but has no discoverable tenant membership.
       // Render the NoTenantAssigned page rather than auto-bootstrapping a
@@ -182,6 +195,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       value={{
         tenant,
         tenantId: effectiveTenantId || tenant?.id || null,
+        userId: discoveredUserId ?? user?.sub ?? null,
         isLoading,
         error,
         noTenantAssigned,

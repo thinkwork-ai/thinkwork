@@ -8,7 +8,7 @@
  * round-trip through the admin urql client. Both admin Sidebar and
  * mobile Settings consume this.
  *
- *   200 → { email, tenantId, role, name }
+ *   200 → { email, userId, tenantId, role, name }
  *   401 → unauthenticated
  *   403 → authenticated but no tenant resolved (pre-bootstrap state)
  *
@@ -60,6 +60,7 @@ export async function handler(
     return json(
       {
         email: auth.email,
+        userId: null,
         tenantId: null,
         role: null,
         name: null,
@@ -73,6 +74,7 @@ export async function handler(
   if (!tenantId) {
     return json({
       email: userRow.email,
+      userId: userRow.id,
       tenantId: null,
       role: null,
       name: userRow.name ?? null,
@@ -96,6 +98,7 @@ export async function handler(
 
   return json({
     email: userRow.email,
+    userId: userRow.id,
     tenantId,
     role: memberRow?.role ?? null,
     name: userRow.name ?? null,
