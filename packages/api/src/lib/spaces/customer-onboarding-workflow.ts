@@ -4,6 +4,7 @@ import {
   linkedTaskEvents,
   linkedTasks,
   messages,
+  goals,
   spaceChecklistItems,
   spaceChecklistTemplates,
   spaceIntegrations,
@@ -32,7 +33,7 @@ import {
   CUSTOMER_ONBOARDING_CHECKLIST_KEY,
   buildCustomerOnboardingChecklistConfig,
 } from "./customer-onboarding-seed.js";
-import { refreshCustomerOnboardingProgressMarkdownSafely } from "./customer-onboarding-progress-md.js";
+import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
 
 export const CUSTOMER_ONBOARDING_TEMPLATE_KEY = "customer_onboarding";
 
@@ -266,6 +267,17 @@ export interface CreateCustomerOnboardingLinkedTaskInput {
   metadata: Record<string, unknown>;
 }
 
+export interface EnsureCustomerOnboardingGoalInput {
+  tenantId: string;
+  spaceId: string;
+  thread: CustomerOnboardingThreadRef;
+  normalized: NormalizedCustomerOnboardingSource;
+  startedBy?: {
+    type: "user" | "system";
+    id?: string | null;
+  } | null;
+}
+
 export interface CustomerOnboardingWorkflowRepository {
   findSpace(input: {
     tenantId: string;
@@ -283,6 +295,7 @@ export interface CustomerOnboardingWorkflowRepository {
   createCase(
     input: CreateCustomerOnboardingCaseInput,
   ): Promise<CustomerOnboardingThreadRef>;
+  ensureGoal?(input: EnsureCustomerOnboardingGoalInput): Promise<void>;
   createLinkedTask(
     input: CreateCustomerOnboardingLinkedTaskInput,
   ): Promise<void>;
@@ -325,7 +338,7 @@ export async function startCustomerOnboardingWorkflow(
     deps.progressReporter ??
     (deps.repository
       ? null
-      : { refresh: refreshCustomerOnboardingProgressMarkdownSafely });
+      : { refresh: refreshCustomerOnboardingGoalFolderSafely });
   const taskAdapter =
     deps.taskAdapter ?? createUnavailableLastMileTaskAdapter();
   const coordinator = deps.coordinator ?? createCoordinatorAgentService();
@@ -378,6 +391,13 @@ export async function startCustomerOnboardingWorkflow(
     opportunityId: normalized.opportunityId,
   });
   if (existing) {
+    await repository.ensureGoal?.({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+      thread: existing,
+      normalized,
+      startedBy: input.startedBy ?? null,
+    });
     await progressReporter?.refresh({
       tenantId: input.tenantId,
       threadId: existing.id,
@@ -408,6 +428,13 @@ export async function startCustomerOnboardingWorkflow(
     kickoffMessage: buildKickoffMessage(normalized),
     humanInput,
     metadata,
+  });
+  await repository.ensureGoal?.({
+    tenantId: input.tenantId,
+    spaceId: space.id,
+    thread,
+    normalized,
+    startedBy: input.startedBy ?? null,
   });
 
   const useNativeChecklist = shouldUseNativeChecklist(input, space);
@@ -1230,6 +1257,114 @@ class DrizzleCustomerOnboardingRepository
     return toThreadRef(thread);
   }
 
+  async ensureGoal(input: EnsureCustomerOnboardingGoalInput): Promise<void> {
+    const [tenant] = await this.db
+      .select({ slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.id, input.tenantId))
+      .limit(1);
+    if (!tenant?.slug) {
+      throw new CustomerOnboardingWorkflowError(
+        "Tenant not found",
+        404,
+        "TENANT_NOT_FOUND",
+      );
+    }
+
+    const customer =
+      input.normalized.companyName ??
+      input.normalized.customerName ??
+      input.thread.title;
+    const now = new Date();
+    const values = {
+      tenant_id: input.tenantId,
+      space_id: input.spaceId,
+      thread_id: input.thread.id,
+      template_key: CUSTOMER_ONBOARDING_TEMPLATE_KEY,
+      outcome: `Complete customer onboarding for ${customer}.`,
+      owner_type: input.startedBy?.type ?? null,
+      owner_id: input.startedBy?.id ?? null,
+      mode: "collaborate",
+      status: "active",
+      progress_model: "linked_tasks",
+      completion_rule: {
+        type: "all_required_applicable_linked_tasks_complete",
+      },
+      review_policy: {
+        required: true,
+        type: "human_final_review",
+      },
+      folder_s3_prefix: `tenants/${tenant.slug}/threads/${input.thread.id}/`,
+      metadata: compactObject({
+        workflow: CUSTOMER_ONBOARDING_TEMPLATE_KEY,
+        opportunityId: input.normalized.opportunityId,
+        customerId: input.normalized.customerId,
+        customerName: input.normalized.customerName,
+        companyName: input.normalized.companyName,
+        source: "customer_onboarding_workflow",
+      }),
+      updated_at: now,
+    };
+    const updateValues = {
+      tenant_id: values.tenant_id,
+      space_id: values.space_id,
+      thread_id: values.thread_id,
+      template_key: values.template_key,
+      outcome: values.outcome,
+      owner_type: input.startedBy ? input.startedBy.type : undefined,
+      owner_id: input.startedBy ? (input.startedBy.id ?? null) : undefined,
+      mode: values.mode,
+      progress_model: values.progress_model,
+      completion_rule: values.completion_rule,
+      review_policy: values.review_policy,
+      folder_s3_prefix: values.folder_s3_prefix,
+      metadata: values.metadata,
+      updated_at: values.updated_at,
+    };
+
+    const [existing] = await this.db
+      .select({ id: goals.id })
+      .from(goals)
+      .where(
+        and(
+          eq(goals.tenant_id, input.tenantId),
+          eq(goals.thread_id, input.thread.id),
+          sql`${goals.status} IN ('active','in_review')`,
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await this.db
+        .update(goals)
+        .set(updateValues)
+        .where(eq(goals.id, existing.id));
+      return;
+    }
+
+    try {
+      await this.db.insert(goals).values(values);
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      const [raced] = await this.db
+        .select({ id: goals.id })
+        .from(goals)
+        .where(
+          and(
+            eq(goals.tenant_id, input.tenantId),
+            eq(goals.thread_id, input.thread.id),
+            sql`${goals.status} IN ('active','in_review')`,
+          ),
+        )
+        .limit(1);
+      if (!raced) throw error;
+      await this.db
+        .update(goals)
+        .set(updateValues)
+        .where(eq(goals.id, raced.id));
+    }
+  }
+
   async createLinkedTask(
     input: CreateCustomerOnboardingLinkedTaskInput,
   ): Promise<void> {
@@ -1374,4 +1509,13 @@ function compactObject(
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23505"
+  );
 }

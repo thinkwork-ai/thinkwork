@@ -4,6 +4,7 @@ const {
   captures,
   mockDb,
   mockHasSpaceMemberAccess,
+  mockRefreshGoalFolder,
   mockResolveCallerUserId,
   tables,
 } = vi.hoisted(() => {
@@ -54,6 +55,7 @@ const {
     captures,
     mockDb: db,
     mockHasSpaceMemberAccess: vi.fn(async () => true),
+    mockRefreshGoalFolder: vi.fn(async () => null),
     mockResolveCallerUserId: vi.fn(async () => "user-1"),
     tables,
   };
@@ -79,6 +81,10 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mockResolveCallerUserId,
 }));
 
+vi.mock("../../../lib/spaces/customer-onboarding-goal-md.js", () => ({
+  refreshCustomerOnboardingGoalFolderSafely: mockRefreshGoalFolder,
+}));
+
 import { updateLinkedTask } from "./updateLinkedTask.mutation.js";
 
 const ctx = { auth: { authType: "cognito" } } as any;
@@ -91,6 +97,8 @@ beforeEach(() => {
   mockHasSpaceMemberAccess.mockResolvedValue(true);
   mockResolveCallerUserId.mockReset();
   mockResolveCallerUserId.mockResolvedValue("user-1");
+  mockRefreshGoalFolder.mockReset();
+  mockRefreshGoalFolder.mockResolvedValue(null);
 });
 
 describe("updateLinkedTask", () => {
@@ -153,6 +161,10 @@ describe("updateLinkedTask", () => {
         syncStatus: "SYNCED",
       }),
     );
+    expect(mockRefreshGoalFolder).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+    });
   });
 
   it("rejects non-members before updating a native checklist row", async () => {
@@ -176,6 +188,7 @@ describe("updateLinkedTask", () => {
 
     expect(captures.updateSet).toBeNull();
     expect(captures.insertedEvents).toEqual([]);
+    expect(mockRefreshGoalFolder).not.toHaveBeenCalled();
   });
 
   it("rejects external-provider rows", async () => {

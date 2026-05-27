@@ -223,6 +223,15 @@ describe("startCustomerOnboardingWorkflow", () => {
         spaceId: "space-1",
       },
     });
+    expect(repository.ensuredGoals).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        thread: expect.objectContaining({ id: "thread-1" }),
+        normalized: expect.objectContaining({ opportunityId: "opp-123" }),
+        startedBy: { type: "system" },
+      }),
+    ]);
     expect(taskAdapter.createTask).toHaveBeenCalledWith(
       expect.objectContaining({
         idempotencyKey: "customer-onboarding:tenant-1:opp-123:sales-tax",
@@ -272,6 +281,15 @@ describe("startCustomerOnboardingWorkflow", () => {
       linkedTasks: [],
     });
     expect(repository.createdCases).toEqual([]);
+    expect(repository.ensuredGoals).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        thread: expect.objectContaining({ id: "thread-existing" }),
+        normalized: expect.objectContaining({ opportunityId: "opp-123" }),
+        startedBy: null,
+      }),
+    ]);
     expect(taskAdapter.createTask).not.toHaveBeenCalled();
   });
 
@@ -442,6 +460,15 @@ describe("startCustomerOnboardingWorkflow", () => {
       spaceId: "space-1",
     });
     expect(result.linkedTasks).toHaveLength(7);
+    expect(repository.ensuredGoals).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        thread: expect.objectContaining({ id: "thread-1" }),
+        normalized: expect.objectContaining({ opportunityId: "opp-123" }),
+        startedBy: { type: "user", id: "user-1" },
+      }),
+    ]);
     expect(repository.linkedTasks).toHaveLength(7);
   });
 
@@ -766,6 +793,9 @@ function makeRepository(
     linkedTasks: [] as Parameters<
       CustomerOnboardingWorkflowRepository["createLinkedTask"]
     >[0][],
+    ensuredGoals: [] as Parameters<
+      NonNullable<CustomerOnboardingWorkflowRepository["ensureGoal"]>
+    >[0][],
     async findSpace() {
       return options.space ?? baseSpace;
     },
@@ -783,6 +813,9 @@ function makeRepository(
         metadata: input.metadata,
       };
     },
+    async ensureGoal(input) {
+      repository.ensuredGoals.push(input);
+    },
     async createLinkedTask(input) {
       repository.linkedTasks.push(input);
     },
@@ -792,6 +825,9 @@ function makeRepository(
     >[0][];
     linkedTasks: Parameters<
       CustomerOnboardingWorkflowRepository["createLinkedTask"]
+    >[0][];
+    ensuredGoals: Parameters<
+      NonNullable<CustomerOnboardingWorkflowRepository["ensureGoal"]>
     >[0][];
   };
   return repository;

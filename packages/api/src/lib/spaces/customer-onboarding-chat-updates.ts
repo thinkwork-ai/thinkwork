@@ -13,7 +13,7 @@ import {
   type CustomerOnboardingSourceInput,
   type NormalizedCustomerOnboardingSource,
 } from "./customer-onboarding-workflow.js";
-import { refreshCustomerOnboardingProgressMarkdownSafely } from "./customer-onboarding-progress-md.js";
+import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
 
 interface ApplyCustomerOnboardingChatUpdateInput {
@@ -549,7 +549,7 @@ export async function applyCustomerOnboardingChatUpdate(
   });
 
   if (result.handled) {
-    await refreshCustomerOnboardingProgressMarkdownSafely({
+    await refreshCustomerOnboardingGoalFolderSafely({
       tenantId: input.tenantId,
       threadId: input.threadId,
     });

@@ -9,11 +9,13 @@ import {
   threadParticipants,
   agentWakeupRequests,
   inboxItems,
+  goals,
   threadToCamel,
   assertTransition,
   checkAndFireUnblockWakeups,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import { refreshCustomerOnboardingGoalFolderSafely } from "../../../lib/spaces/customer-onboarding-goal-md.js";
 import {
   resolveCallerTenantId,
   resolveCallerUserId,
@@ -33,11 +35,17 @@ export const updateThread = async (
     const newStatus = i.status.toLowerCase();
     // Fetch current status for transition validation
     const [current] = await db
-      .select({ status: threads.status })
+      .select({ status: threads.status, tenant_id: threads.tenant_id })
       .from(threads)
       .where(eq(threads.id, args.id));
     if (!current) throw new Error("Thread not found");
     assertTransition(current.status, newStatus);
+    if (newStatus === "done") {
+      await enforceGoalReviewPolicyBeforeThreadDone({
+        tenantId: current.tenant_id,
+        threadId: args.id,
+      });
+    }
     updates.status = newStatus;
     // Lifecycle timestamps
     if (newStatus === "in_progress" && current.status !== "in_progress") {
@@ -170,6 +178,42 @@ export const updateThread = async (
   });
 };
 
+async function enforceGoalReviewPolicyBeforeThreadDone(input: {
+  tenantId: string;
+  threadId: string;
+}) {
+  const [goal] = await db
+    .select({
+      id: goals.id,
+      status: goals.status,
+      review_policy: goals.review_policy,
+    })
+    .from(goals)
+    .where(
+      and(
+        eq(goals.tenant_id, input.tenantId),
+        eq(goals.thread_id, input.threadId),
+        sql`${goals.status} IN ('active','in_review')`,
+      ),
+    );
+  if (!goal || !reviewRequired(goal.review_policy)) return;
+
+  if (goal.status === "active") {
+    await db
+      .update(goals)
+      .set({ status: "in_review", updated_at: new Date() })
+      .where(eq(goals.id, goal.id));
+    await refreshCustomerOnboardingGoalFolderSafely(input);
+  }
+
+  throw new GraphQLError(
+    "Goal requires human final review before completing this Thread",
+    {
+      extensions: { code: "GOAL_REVIEW_REQUIRED" },
+    },
+  );
+}
+
 async function applyCallerReadState(
   threadId: string,
   rawLastReadAt: string | null,
@@ -241,4 +285,13 @@ async function applyCallerReadState(
   }
 
   return { handledByParticipant: false, lastReadAt };
+}
+
+function reviewRequired(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { required?: unknown }).required === true
+  );
 }
