@@ -46,6 +46,18 @@ const {
       started_at: column("threads.started_at"),
       __table__: "threads",
     },
+    linkedTasks: {
+      id: column("linked_tasks.id"),
+      __table__: "linkedTasks",
+    },
+    linkedTaskEvents: {
+      id: column("linked_task_events.id"),
+      __table__: "linkedTaskEvents",
+    },
+    messages: {
+      id: column("messages.id"),
+      __table__: "messages",
+    },
     spaceMembers: {
       tenant_id: column("space_members.tenant_id"),
       space_id: column("space_members.space_id"),
@@ -59,6 +71,9 @@ const {
     spaceMemberRows: [] as Record<string, any>[],
     goalUpdates: [] as Record<string, any>[],
     threadUpdates: [] as Record<string, any>[],
+    linkedTaskInserts: [] as Record<string, any>[],
+    linkedTaskEventInserts: [] as Record<string, any>[],
+    messageInserts: [] as Record<string, any>[],
   };
   const db = {
     select: vi.fn(() => ({
@@ -108,6 +123,26 @@ const {
         })),
       })),
     })),
+    insert: vi.fn((table: any) => ({
+      values: vi.fn((values: Record<string, any>) => {
+        if (table === tables.linkedTasks) {
+          captures.linkedTaskInserts.push(values);
+          return {
+            returning: vi.fn(async () => [
+              { id: "linked-task-review-changes", ...values },
+            ]),
+          };
+        }
+        if (table === tables.linkedTaskEvents) {
+          captures.linkedTaskEventInserts.push(values);
+        } else if (table === tables.messages) {
+          captures.messageInserts.push(values);
+        }
+        return {
+          returning: vi.fn(async () => []),
+        };
+      }),
+    })),
   };
   return {
     captures,
@@ -126,6 +161,9 @@ vi.mock("../../utils.js", () => ({
   db: mockDb,
   eq: vi.fn((field: unknown, value: unknown) => ({ field, value })),
   goals: tables.goals,
+  linkedTaskEvents: tables.linkedTaskEvents,
+  linkedTasks: tables.linkedTasks,
+  messages: tables.messages,
   spaceMembers: tables.spaceMembers,
   threads: tables.threads,
   threadToCamel: (row: Record<string, unknown>) => {
@@ -184,8 +222,12 @@ beforeEach(() => {
   captures.spaceMemberRows.length = 0;
   captures.goalUpdates.length = 0;
   captures.threadUpdates.length = 0;
+  captures.linkedTaskInserts.length = 0;
+  captures.linkedTaskEventInserts.length = 0;
+  captures.messageInserts.length = 0;
   mockDb.select.mockClear();
   mockDb.update.mockClear();
+  mockDb.insert.mockClear();
   mockFinalizeCompletedGoal.mockReset();
   mockFinalizeCompletedGoal.mockResolvedValue(null);
   mockRefreshGoalFolder.mockReset();
@@ -299,6 +341,50 @@ describe("reviewGoal", () => {
         closed_at: null,
       }),
     );
+    expect(captures.linkedTaskInserts[0]).toMatchObject({
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      thread_id: "thread-1",
+      provider: "thinkwork",
+      title: "Address review changes",
+      required: true,
+      assignee_display: "Agent",
+      status: "todo",
+      sync_status: "synced",
+      metadata: {
+        workflow: "customer_onboarding",
+        customChecklistTask: true,
+        reviewChangesTask: true,
+        nativeChecklist: {
+          createdFrom: "goal_review_request_changes",
+          createdNote: "Need AP email.",
+          createdByUserId: "user-1",
+        },
+      },
+    });
+    expect(captures.linkedTaskInserts[0]?.external_task_id).toMatch(
+      /^thinkwork:thread-1:review_changes_/,
+    );
+    expect(captures.linkedTaskEventInserts[0]).toMatchObject({
+      tenant_id: "tenant-1",
+      linked_task_id: "linked-task-review-changes",
+      event_type: "created",
+      new_status: "todo",
+    });
+    expect(captures.messageInserts[0]).toMatchObject({
+      thread_id: "thread-1",
+      tenant_id: "tenant-1",
+      role: "assistant",
+      sender_type: "system",
+      content:
+        "Reviewer requested changes before Goal completion.\n\nNeed AP email.",
+      metadata: {
+        kind: "goal_review_request_changes",
+        goalId: "goal-1",
+        notes: "Need AP email.",
+        createdTaskId: "linked-task-review-changes",
+      },
+    });
     expect(mockRefreshGoalFolder).toHaveBeenCalledWith(
       { tenantId: "tenant-1", threadId: "thread-1" },
       { goalStatus: "active" },

@@ -24,8 +24,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
+  Label,
+  Textarea,
 } from "@thinkwork/ui";
 import {
   Children,
@@ -224,7 +227,7 @@ export interface ThreadInfoGoalState {
   isReviewing?: boolean;
   reviewError?: string | null;
   onConfirmCompletion?: () => Promise<void> | void;
-  onRequestChanges?: () => Promise<void> | void;
+  onRequestChanges?: (notes: string) => Promise<void> | void;
 }
 
 export interface ThreadInfoGoalRecordGroup {
@@ -647,6 +650,17 @@ function ThreadInfoGoal({ goal }: { goal: ThreadInfoGoalState }) {
   const canReview =
     status === "in_review" &&
     Boolean(goal.onConfirmCompletion && goal.onRequestChanges);
+  const [changesDialogOpen, setChangesDialogOpen] = useState(false);
+  const [changesNotes, setChangesNotes] = useState("");
+  const changesNotesValue = changesNotes.trim();
+
+  async function handleRequestChangesSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!changesNotesValue || goal.isReviewing) return;
+    await goal.onRequestChanges?.(changesNotesValue);
+    setChangesDialogOpen(false);
+    setChangesNotes("");
+  }
 
   return (
     <>
@@ -723,14 +737,54 @@ function ThreadInfoGoal({ goal }: { goal: ThreadInfoGoalState }) {
               aria-label="Request Goal changes"
               className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-white/12 px-2 text-xs font-medium text-white/75 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={goal.isReviewing}
-              onClick={() => void goal.onRequestChanges?.()}
+              onClick={() => setChangesDialogOpen(true)}
             >
               <RotateCcw className="size-3.5" />
-              Changes
+              Request changes
             </button>
           </div>
         ) : null}
       </section>
+      <Dialog open={changesDialogOpen} onOpenChange={setChangesDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={(event) => void handleRequestChangesSubmit(event)}>
+            <DialogHeader>
+              <DialogTitle>Request changes</DialogTitle>
+              <DialogDescription>
+                Describe what needs to change before this Goal can be closed.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="goal-review-changes-notes">Change request</Label>
+              <Textarea
+                id="goal-review-changes-notes"
+                value={changesNotes}
+                onChange={(event) => setChangesNotes(event.target.value)}
+                rows={4}
+                placeholder="Example: final summary needs AP contact and updated handoff notes."
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="mt-4">
+              <button
+                type="button"
+                className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => setChangesDialogOpen(false)}
+                disabled={goal.isReviewing}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="inline-flex min-h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!changesNotesValue || goal.isReviewing}
+              >
+                {goal.isReviewing ? "Requesting..." : "Create follow-up"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -676,7 +676,7 @@ describe("TaskThreadView", () => {
     expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
   });
 
-  it("renders Goal summary, review actions, and narrative record counts", () => {
+  it("renders Goal summary, review actions, and narrative record counts", async () => {
     const onConfirmCompletion = vi.fn();
     const onRequestChanges = vi.fn();
 
@@ -798,7 +798,32 @@ describe("TaskThreadView", () => {
     fireEvent.click(
       within(panel).getByRole("button", { name: "Request Goal changes" }),
     );
-    expect(onRequestChanges).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog", { name: "Request changes" })).toBeTruthy();
+    expect(
+      screen.getByText("Describe what needs to change before this Goal can be closed."),
+    ).toBeTruthy();
+    const changeRequest = screen.getByLabelText(
+      "Change request",
+    ) as HTMLTextAreaElement;
+    const submit = screen.getByRole("button", {
+      name: "Create follow-up",
+    }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(changeRequest, {
+      target: { value: "Need AP email before closure." },
+    });
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(onRequestChanges).toHaveBeenCalledWith(
+        "Need AP email before closure.",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Request changes" }),
+      ).toBeNull(),
+    );
     expect(onConfirmCompletion).not.toHaveBeenCalled();
 
     fireEvent.click(

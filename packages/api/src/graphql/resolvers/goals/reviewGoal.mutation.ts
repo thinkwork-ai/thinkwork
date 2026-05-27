@@ -6,6 +6,9 @@ import {
   db,
   eq,
   goals,
+  linkedTaskEvents,
+  linkedTasks,
+  messages,
   spaceMembers,
   threadToCamel,
   threads,
@@ -50,9 +53,10 @@ export async function reviewGoal(
   }
 
   const callerUserId = await authorizeGoalReview(ctx, row);
+  const reviewNotes = cleanNotes(input.notes);
   let reviewMetadata = buildReviewMetadata(row.metadata, {
     action,
-    notes: cleanNotes(input.notes),
+    notes: reviewNotes,
     reviewedAt: now,
     reviewedByUserId: callerUserId,
   });
@@ -131,6 +135,14 @@ export async function reviewGoal(
       threadId: row.thread_id,
     });
   } else {
+    if (action === "REQUEST_CHANGES") {
+      await createReviewChangesFollowUp({
+        row,
+        notes: reviewNotes,
+        reviewedAt: now,
+        reviewedByUserId: callerUserId,
+      });
+    }
     await refreshCustomerOnboardingGoalFolderSafely(
       { tenantId: row.tenant_id, threadId: row.thread_id },
       { goalStatus: nextGoalStatus },
@@ -295,6 +307,95 @@ function buildReviewMetadata(
 function cleanNotes(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+async function createReviewChangesFollowUp(input: {
+  row: NonNullable<Awaited<ReturnType<typeof loadGoalForReview>>>;
+  notes: string | null;
+  reviewedAt: Date;
+  reviewedByUserId: string;
+}) {
+  const checklistItemKey = `review_changes_${input.reviewedAt
+    .toISOString()
+    .replace(/[^0-9a-z]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase()}`;
+  const taskTitle = "Address review changes";
+  const noteSuffix = input.notes ? `\n\n${input.notes}` : "";
+  const message = `Reviewer requested changes before Goal completion.${noteSuffix}`;
+
+  const [task] = await db
+    .insert(linkedTasks)
+    .values({
+      tenant_id: input.row.tenant_id,
+      space_id: input.row.space_id,
+      thread_id: input.row.thread_id,
+      checklist_item_id: null,
+      provider: "thinkwork",
+      external_task_id: `thinkwork:${input.row.thread_id}:${checklistItemKey}`,
+      external_task_url: null,
+      title: taskTitle,
+      required: true,
+      role_key: null,
+      assignee_display: "Agent",
+      assignee_external_id: null,
+      status: "todo",
+      blocked: false,
+      sync_status: "synced",
+      last_synced_at: input.reviewedAt,
+      metadata: {
+        workflow: "customer_onboarding",
+        systemOfRecord: "thinkwork",
+        checklistItemKey,
+        customChecklistTask: true,
+        reviewChangesTask: true,
+        nativeChecklist: {
+          createdFrom: "goal_review_request_changes",
+          createdNote: input.notes,
+          createdAt: input.reviewedAt.toISOString(),
+          createdByUserId: input.reviewedByUserId,
+        },
+      },
+      created_at: input.reviewedAt,
+      updated_at: input.reviewedAt,
+    })
+    .returning();
+
+  if (task) {
+    await db.insert(linkedTaskEvents).values({
+      tenant_id: input.row.tenant_id,
+      linked_task_id: task.id,
+      space_id: input.row.space_id,
+      thread_id: input.row.thread_id,
+      provider: "thinkwork",
+      event_type: "created",
+      new_status: "todo",
+      message: `${taskTitle} added from Goal review changes request.`,
+      metadata: {
+        source: "goal_review_request_changes",
+        checklistItemKey,
+        reviewedByUserId: input.reviewedByUserId,
+      },
+      occurred_at: input.reviewedAt,
+    });
+  }
+
+  await db.insert(messages).values({
+    thread_id: input.row.thread_id,
+    tenant_id: input.row.tenant_id,
+    role: "assistant",
+    content: message,
+    sender_type: "system",
+    sender_id: null,
+    metadata: {
+      kind: "goal_review_request_changes",
+      goalId: input.row.id,
+      notes: input.notes,
+      createdTaskId: task?.id ?? null,
+      checklistItemKey,
+    },
+    created_at: input.reviewedAt,
+  });
 }
 
 function compactObject(value: Record<string, unknown>) {
