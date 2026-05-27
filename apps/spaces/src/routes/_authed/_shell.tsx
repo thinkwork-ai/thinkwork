@@ -76,7 +76,7 @@ function ShellLayout() {
   );
 }
 
-const DESKTOP_SIDEBAR_WIDTH = 335;
+const DESKTOP_SIDEBAR_WIDTH = 300;
 const DESKTOP_SIDEBAR_MIN_WIDTH = 240;
 const DESKTOP_SIDEBAR_MAX_WIDTH = 520;
 

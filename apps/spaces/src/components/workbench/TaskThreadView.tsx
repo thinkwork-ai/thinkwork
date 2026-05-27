@@ -281,7 +281,7 @@ export function TaskThreadView({
   }, []);
 
   if (isLoading) {
-    return <TaskThreadState label="Loading thread" />;
+    return <TaskThreadState label="Loading..." />;
   }
   if (error || !thread) {
     return <TaskThreadState label={error ?? "Thread not found"} tone="error" />;

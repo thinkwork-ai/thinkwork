@@ -36,7 +36,7 @@ describe("TaskThreadView", () => {
   it("renders loading as the monospace shimmer state", () => {
     render(<TaskThreadView thread={null} isLoading />);
 
-    const status = screen.getByRole("status", { name: "Loading thread" });
+    const status = screen.getByRole("status", { name: "Loading..." });
     expect(status.querySelectorAll(".tw-shimmer-char").length).toBeGreaterThan(
       0,
     );

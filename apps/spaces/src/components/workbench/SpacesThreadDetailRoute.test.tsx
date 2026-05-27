@@ -426,7 +426,7 @@ describe("SpacesThreadDetailRoute", () => {
 
     render(<SpacesThreadDetailRoute threadId="next-thread" />);
 
-    expect(screen.getByText("Loading thread")).toBeTruthy();
+    expect(screen.getByText("Loading...")).toBeTruthy();
     expect(screen.queryByText("Previous thread title")).toBeNull();
     expect(screen.queryByText("Old thread body")).toBeNull();
     expect(usePageHeaderActions).toHaveBeenLastCalledWith(

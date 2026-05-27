@@ -119,10 +119,10 @@ describe("_authed/_shell layout", () => {
       screen
         .getByTestId("sidebar-provider")
         .style.getPropertyValue("--sidebar-width"),
-    ).toBe("335px");
+    ).toBe("300px");
     expect(
       screen.getByRole("separator", { name: /resize sidebar/i }).style.left,
-    ).toBe("335px");
+    ).toBe("300px");
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 
