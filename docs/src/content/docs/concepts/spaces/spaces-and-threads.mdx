@@ -9,6 +9,8 @@ Threads are the durable record of work. Spaces are the workrooms that shape thos
 
 This separation keeps the system understandable. The thread is the trace. The Space is the local context, access boundary, channel, and policy that shaped the trace.
 
+Some Threads are promoted into [Goals](/concepts/goals/). A Goal does not replace the Thread. It adds an outcome contract for workflow execution: owner, Delegate or Collaborate mode, progress model, completion rule, review policy, and a portable Goal folder.
+
 ## What the thread gets from the Space
 
 A Space can affect a thread's:
@@ -24,13 +26,26 @@ Historical records may still expose an agent id. In the current managed model, t
 
 ## Work entry examples
 
-| Source | Thread shape |
-| ------ | ------------ |
-| Mobile chat | A user starts or resumes a Space-scoped chat thread |
-| Email | Email from a registered tenant user to `space-slug@tenant-slug.thinkwork.ai` creates or reopens an email thread when enabled |
-| Schedule | A Space schedule wakes an automation thread in that Space |
-| Webhook | An external event creates or wakes a thread in the configured Space |
-| Integration | A provider event routes into the Space selected by integration rules |
+| Source      | Thread shape                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Mobile chat | A user starts or resumes a Space-scoped chat thread                                                                          |
+| Email       | Email from a registered tenant user to `space-slug@tenant-slug.thinkwork.ai` creates or reopens an email thread when enabled |
+| Schedule    | A Space schedule wakes an automation thread in that Space                                                                    |
+| Webhook     | An external event creates or wakes a thread in the configured Space                                                          |
+| Integration | A provider event routes into the Space selected by integration rules                                                         |
+
+## When a Thread becomes a Goal
+
+Most Threads can stay conversational. Promote the Thread into a Goal when the work needs an accountable outcome, visible progress, or explicit review.
+
+| Keep it as a Thread                                            | Promote it into a Goal                                                                                      |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| A question, draft, investigation, or quick coordination thread | A repeated workflow such as customer onboarding, renewal preparation, finance review, or incident follow-up |
+| The next step is conversational                                | The next step is task progress, handoff, approval, or completion review                                     |
+| Completion is obvious from the conversation                    | Completion needs a rule and often a named reviewer                                                          |
+| The output is mostly a response                                | The output is a stateful folder with progress, decisions, artifacts, and handoffs                           |
+
+Customer Onboarding is the reference pattern. The Space owns the onboarding template, the Thread carries the conversation and audit trail, and the Goal records what must be complete before the work can close.
 
 ## Audit value
 
@@ -41,16 +56,18 @@ When an operator audits a thread, the Space tells them where the work belonged. 
 - Which trigger or channel started the work?
 - Which knowledge and tools were available?
 - Which local policy applied?
+- Was there a Goal, and if so what outcome, owner, mode, completion rule, and review policy applied?
 
 <Aside type="tip">
-  If a thread's behavior looks surprising, inspect the Space before changing
-  the tenant platform agent. The Space is often where the local context or
-  trigger policy lives.
+  If a thread's behavior looks surprising, inspect the Space before changing the
+  tenant platform agent. The Space is often where the local context or trigger
+  policy lives.
 </Aside>
 
 ## Related pages
 
 - [Threads](/concepts/threads/) - the universal work container
+- [Goals](/concepts/goals/) - promoted workflow outcome contracts
 - [Threads: Routing and Metadata](/concepts/threads/routing-and-metadata/) - channel-specific routing
 - [Admin - Threads](/applications/admin/threads/) - operator thread views
 - [Admin - Spaces](/applications/admin/spaces/) - operator Space configuration

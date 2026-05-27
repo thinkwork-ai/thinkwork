@@ -9,11 +9,12 @@ A Space is the workroom around a piece of work. It tells the tenant platform age
 
 Spaces keep the tenant model small. Operators configure one [Tenant Agent](/applications/admin/agents/) as the baseline, then create Spaces for teams, customers, projects, workflows, inboxes, or channels that need their own context and controls. A thread still records the work, and the agent still acts, but the Space explains why that turn had a specific workspace, trigger, knowledge set, tool set, and access boundary.
 
-| Component | Responsibility |
-| --------- | -------------- |
-| Agents | The runtime actor that reads, reasons, calls tools, and responds |
-| Spaces | The workroom context, access boundary, channel, and local policy |
-| Threads | The durable record of what happened in that workroom |
+| Component | Responsibility                                                           |
+| --------- | ------------------------------------------------------------------------ |
+| Agents    | The runtime actor that reads, reasons, calls tools, and responds         |
+| Spaces    | The workroom context, access boundary, channel, and local policy         |
+| Threads   | The durable record of what happened in that workroom                     |
+| Goals     | The promoted outcome contract when a Thread becomes accountable workflow |
 
 <Aside type="note">
   Older ThinkWork docs described many top-level managed agents. The current
@@ -26,6 +27,7 @@ Spaces keep the tenant model small. Operators configure one [Tenant Agent](/appl
 A Space can supply several kinds of local behavior:
 
 - Workspace files for the project, customer, team, workflow, or channel.
+- Space-owned Goal templates for repeatable workflows.
 - Public or private access and membership.
 - Triggers that start or wake work in that Space.
 - Tool and capability availability for work in that context.
@@ -81,7 +83,28 @@ Start with Workspace Context and Access and Membership. Then read Triggers and C
     href="/concepts/spaces/spaces-and-threads/"
     description="How Spaces shape the durable Threads that chat, email, automations, and integrations create."
   />
+  <LinkCard
+    title="Goals"
+    icon="approve-check"
+    href="/concepts/goals/"
+    description="How selected Threads become accountable, folder-native workflows with outcome, owner, progress, and review."
+  />
 </CardGrid>
+
+## Spaces and Goals
+
+Use a Space for the workroom. Use a Goal when a Thread in that workroom should have an explicit outcome, owner, mode, progress model, completion rule, and review policy.
+
+In practice, the Space owns the reusable operating pattern. Customer Onboarding, for example, keeps its Goal template under the Space source folder as markdown files. When the workflow starts, ThinkWork creates a Thread, a Goal row, structured task rows, and a Thread Goal folder. The Thread remains the trace; the Goal explains what completion means.
+
+The sharp rule is:
+
+| Object      | Use it for                                                                              |
+| ----------- | --------------------------------------------------------------------------------------- |
+| Space       | Context, access, membership, triggers, knowledge, tools, and local policy               |
+| Thread      | Messages, turns, audit trail, channel metadata, and collaboration history               |
+| Goal        | Outcome, owner, Delegate/Collaborate mode, progress, completion, and review             |
+| Goal folder | Portable workflow context: `GOAL.md`, `PROGRESS.md`, decisions, artifacts, and handoffs |
 
 ## Spaces vs. folder specialists
 

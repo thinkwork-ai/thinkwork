@@ -124,6 +124,20 @@ Spaces and folders solve different problems:
 
 In practice, a Space may invoke the same platform agent, which delegates to the same `workspaces/expenses/` folder, while supplying different customer or project context.
 
+## Relationship to Goals
+
+Goals extend the same folder-native idea into workflow execution. The agent folder defines reusable behavior. The Space supplies the workroom. The Goal folder records the state of one promoted Thread.
+
+```text
+Agent folder          -> durable behavior
+Space source folder   -> local operating pattern
+Thread Goal folder    -> execution record for one outcome
+```
+
+A Customer Onboarding Space, for example, can keep a reusable template under `goals/customer-onboarding/`. When a new customer onboarding Thread starts, ThinkWork renders a Thread-owned Goal folder with `GOAL.md`, `PROGRESS.md`, `DECISIONS.md`, `ARTIFACTS.md`, and `HANDOFFS.md`.
+
+This preserves the core rule: the folder tree is the architecture. Aurora still owns permissions, lifecycle, review, and structured progress. The markdown folder owns portable context that an operator or local agent can inspect.
+
 ## Relationship to Skills
 
 Skills are folders too, but they are capability folders rather than agent folders:
@@ -150,6 +164,7 @@ ThinkWork adapts that pattern to a multi-tenant AWS agent harness. The folder tr
 ## Related pages
 
 - [Agents](/concepts/agents/) - the tenant platform-agent model.
+- [Goals](/concepts/goals/) - folder-native outcome contracts for promoted Threads.
 - [Workspace Composition](/concepts/agents/workspace-composition/) - how inherited files resolve.
 - [Inheritance Rules](/concepts/agents/inheritance-rules/) - folder-level file lookup.
 - [Template Authoring](/concepts/agents/templates/) - reusable folder trees.

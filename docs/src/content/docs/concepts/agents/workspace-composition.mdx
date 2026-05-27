@@ -5,7 +5,7 @@ description: How ThinkWork resolves agent folders, Space files, templates, defau
 
 import { Aside } from "@astrojs/starlight/components";
 
-Workspace composition is the read-time process that turns a tenant platform agent, a Space, a target folder, and reusable defaults into the file tree the runtime sees for a turn.
+Workspace composition is the read-time process that turns a tenant platform agent, a Space, a User, an optional Goal, a target folder, and reusable defaults into the file tree the runtime sees for a turn.
 
 ThinkWork does not fork a complete copy of every file for every agent. It resolves files from the most specific layer that applies, then renders placeholders and file classes. That keeps defaults reusable while still allowing a Space or specialist folder to carry local context.
 
@@ -24,6 +24,7 @@ Composition starts with the target being invoked and walks outward:
 | Target folder             | `workspaces/<slug>/CONTEXT.md`, local `AGENTS.md`, local memory, local skills |
 | Root agent workspace      | Tenant platform-agent identity, routing, guardrails, tools, memory notes      |
 | Active Space workspace    | Project, customer, channel, workflow, membership, and Space-local policy      |
+| Thread Goal folder        | Outcome contract, progress briefing, decisions, artifacts, and handoffs       |
 | Template or import source | Reusable starting files for supported authoring and migration flows           |
 | Defaults                  | Canonical baseline files from `@thinkwork/workspace-defaults`                 |
 | Managed user context      | `USER.md` rendered from requester and profile data                            |
@@ -72,6 +73,8 @@ Most files are live. The highest matching layer wins, and edits are visible on t
 
 `SPACE.md` is replaced with the active Space context for the turn. Space-specific procedures should live on the Space workspace so they do not leak into unrelated Spaces.
 
+Goal folders are rendered operational records for promoted Threads. `GOAL.md` and `PROGRESS.md` are highest-priority Goal context for a Goal-backed Thread; `DECISIONS.md`, `ARTIFACTS.md`, and `HANDOFFS.md` are narrative context and Company Brain source material. The runtime treats these files as data about the work, not as permission grants or higher-priority instructions.
+
 ## Folder lookup
 
 For a target such as `workspaces/expenses/`, the runtime composes the baseline files, then narrows context to the target folder. A local file in the target folder can specialize behavior without copying the entire root:
@@ -117,11 +120,39 @@ tenants/{tenantSlug}/agents/
 
 Space files are stored in the Space workspace and rendered into the active turn as Space context. The runtime should treat Space context as current workroom context, not as a replacement for the tenant agent's root folder.
 
+Space-owned Goal templates live under the Space source folder:
+
+```text
+tenants/{tenantSlug}/spaces/{spaceSlug}/source/
+└── goals/
+    └── customer-onboarding/
+        ├── GOAL.md
+        ├── PROGRESS.md
+        ├── DECISIONS.md
+        ├── ARTIFACTS.md
+        └── HANDOFFS.md
+```
+
+Thread-owned Goal instances live under the Thread folder:
+
+```text
+tenants/{tenantSlug}/threads/{threadId}/
+├── GOAL.md
+├── PROGRESS.md
+├── DECISIONS.md
+├── ARTIFACTS.md
+└── HANDOFFS.md
+```
+
+This split is intentional. The Space template explains the reusable workflow. The Thread Goal folder records one execution of that workflow.
+
 ## Editing rules
 
 - Edit root files for tenant-wide behavior.
 - Edit Space files for project, team, customer, channel, or workflow context.
+- Edit Space-owned Goal templates for reusable outcome workflows.
 - Edit `workspaces/<slug>/` for durable specialist behavior.
+- Treat Thread Goal folders as execution records. Structured status, ownership, and review changes should go through ThinkWork workflow actions, not hand edits.
 - Install capabilities under `skills/<slug>/`.
 - Write workspace notes only under `memory/`.
 - Keep secrets out of markdown; use credential and MCP configuration surfaces.
@@ -130,6 +161,7 @@ Space files are stored in the Space workspace and rendered into the active turn 
 ## Related pages
 
 - [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folders as the behavior boundary.
+- [Goals](/concepts/goals/) - how promoted Threads get portable Goal folders.
 - [Inheritance Rules](/concepts/agents/inheritance-rules/) - path-specific lookup.
 - [Agents](/concepts/agents/) - tenant platform-agent overview.
 - [Spaces](/concepts/spaces/) - Space workrooms.

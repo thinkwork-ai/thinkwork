@@ -14,13 +14,13 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U7 in progress
-- Active unit: U7 Add completion and Company Brain ingestion seam
-- Active branch: `codex/goals-u7-completion`
-- Active worktree: `.Codex/worktrees/goals-u7-completion`
+- Status: U8 in progress
+- Active unit: U8 Document the Goal doctrine and best practices
+- Active branch: `codex/goals-u8-docs`
+- Active worktree: `.Codex/worktrees/goals-u8-docs`
 - Started: 2026-05-27
-- Latest merged PR: [#1770](https://github.com/thinkwork-ai/thinkwork/pull/1770)
-- Active PR: [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771)
+- Latest merged PR: [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771)
+- Active PR: [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772)
 - CI: PR checks pending
 
 ### Active Unit Notes
@@ -172,19 +172,33 @@ Target branch: `main`
   `pnpm --filter @thinkwork/api typecheck`, and touched-file
   `pnpm dlx prettier@3.6.2 --check`.
 - Opened PR [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771).
+- PR [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` and deleted the remote/local U7 branch.
+- Started U8 from updated `origin/main`.
+- Implemented the first U8 pass: added a Goals concept page and updated Spaces,
+  Spaces and Threads, Folder Is the Agent, Workspace Composition, and Admin
+  Spaces docs with Goal doctrine, placement rules, folder-native portability,
+  Delegate/Collaborate guidance, and Customer Onboarding as the reference
+  pattern.
+- U8 verification passed: `pnpm --filter @thinkwork/docs build`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`,
+  `git diff --check`, and touched-file
+  `pnpm dlx prettier@3.6.2 --check`.
+- Opened PR [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772).
 
 ### Progress Log
 
-| Date       | Unit | Branch                      | PR                                                           | Status  | Verification        | Notes                                                     |
-| ---------- | ---- | --------------------------- | ------------------------------------------------------------ | ------- | ------------------- | --------------------------------------------------------- |
-| 2026-05-27 | U1   | `codex/goals-u1-ledger`     | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged  | Local and CI passed | Applied scoped dev migration after drift precheck failed. |
-| 2026-05-27 | U2   | `codex/goals-u2-storage`    | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | Merged  | Local and CI passed | Thread Goal file storage and prompt wrapper.              |
-| 2026-05-27 | U3   | `codex/goals-u3-templates`  | [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763) | Merged  | Local and CI passed | Customer Onboarding Goal template source files.           |
-| 2026-05-27 | U4   | `codex/goals-u4-instances`  | [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766) | Merged  | Local and CI passed | Customer Onboarding Goal rows and folder refresh.         |
-| 2026-05-27 | U5   | `codex/goals-u5-api`        | [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768) | Merged  | Local and CI passed | Goal files query and review mutation.                     |
-| 2026-05-27 | U6   | `codex/goals-u6-panel`      | [#1770](https://github.com/thinkwork-ai/thinkwork/pull/1770) | Merged  | Local and CI passed | Spaces Goal panel and review actions.                     |
-| 2026-05-27 | U7   | `codex/goals-u7-completion` | [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771) | Active  | Local passed        | Completion metadata and Brain candidate seam.             |
-| 2026-05-27 | U8   | TBD                         | TBD                                                          | Pending | TBD                 | Start after U7 merges.                                    |
+| Date       | Unit | Branch                      | PR                                                           | Status | Verification        | Notes                                                     |
+| ---------- | ---- | --------------------------- | ------------------------------------------------------------ | ------ | ------------------- | --------------------------------------------------------- |
+| 2026-05-27 | U1   | `codex/goals-u1-ledger`     | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged | Local and CI passed | Applied scoped dev migration after drift precheck failed. |
+| 2026-05-27 | U2   | `codex/goals-u2-storage`    | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | Merged | Local and CI passed | Thread Goal file storage and prompt wrapper.              |
+| 2026-05-27 | U3   | `codex/goals-u3-templates`  | [#1763](https://github.com/thinkwork-ai/thinkwork/pull/1763) | Merged | Local and CI passed | Customer Onboarding Goal template source files.           |
+| 2026-05-27 | U4   | `codex/goals-u4-instances`  | [#1766](https://github.com/thinkwork-ai/thinkwork/pull/1766) | Merged | Local and CI passed | Customer Onboarding Goal rows and folder refresh.         |
+| 2026-05-27 | U5   | `codex/goals-u5-api`        | [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768) | Merged | Local and CI passed | Goal files query and review mutation.                     |
+| 2026-05-27 | U6   | `codex/goals-u6-panel`      | [#1770](https://github.com/thinkwork-ai/thinkwork/pull/1770) | Merged | Local and CI passed | Spaces Goal panel and review actions.                     |
+| 2026-05-27 | U7   | `codex/goals-u7-completion` | [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771) | Merged | Local and CI passed | Completion metadata and Brain candidate seam.             |
+| 2026-05-27 | U8   | `codex/goals-u8-docs`       | [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772) | Active | Local passed        | Goal doctrine and best-practice docs.                     |
 
 ### CI Failures
 
