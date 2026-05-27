@@ -88,9 +88,6 @@ function UserDetailPage() {
               <h1 className="truncate text-2xl font-bold leading-tight tracking-tight text-foreground">
                 {userName}
               </h1>
-              <p className="truncate text-sm text-muted-foreground">
-                {member.user.email}
-              </p>
             </div>
             <div className="flex justify-start lg:justify-center">
               <Tabs
@@ -107,7 +104,14 @@ function UserDetailPage() {
                 </TabsList>
               </Tabs>
             </div>
-            <div />
+            <div className="min-w-0 lg:justify-self-end">
+              <p
+                className="truncate text-sm text-muted-foreground lg:text-right"
+                title={member.user.email}
+              >
+                {member.user.email}
+              </p>
+            </div>
           </div>
         </div>
       }
