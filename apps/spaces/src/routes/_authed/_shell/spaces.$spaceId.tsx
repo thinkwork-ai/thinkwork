@@ -83,7 +83,7 @@ function SpaceWorkroomHome() {
 
   const spaceName =
     spaceData?.space?.name?.trim() || (spaceFetching ? "Space" : "Space");
-  usePageHeaderActions({ title: spaceName });
+  usePageHeaderActions({ title: `Spaces > ${spaceName}` });
 
   const threads = threadsData?.threadsPaged?.items ?? [];
   const isCustomerOnboardingSpace = shouldShowCustomerOnboardingStart(
@@ -91,7 +91,7 @@ function SpaceWorkroomHome() {
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 p-4 md:p-8">
+    <main className="flex w-full flex-1 flex-col gap-5 p-4">
       {spaceError ? (
         <div className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">
           {spaceError.message}
@@ -103,11 +103,6 @@ function SpaceWorkroomHome() {
             <h1 className="truncate text-2xl font-semibold tracking-normal">
               {spaceName}
             </h1>
-            {spaceData?.space?.description ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {spaceData.space.description}
-              </p>
-            ) : null}
           </div>
           {isCustomerOnboardingSpace && tenantId ? (
             <StartOnboardingDialog

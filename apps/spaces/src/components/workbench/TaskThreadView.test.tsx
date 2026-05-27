@@ -613,7 +613,7 @@ describe("TaskThreadView", () => {
 
     expect(
       screen.getByTestId("thread-conversation-content").className,
-    ).toContain("md:pr-[332px]");
+    ).toContain("md:pr-[336px]");
     expect(
       screen.getByTestId("thread-conversation-content").className,
     ).toContain("pt-4");
@@ -627,12 +627,12 @@ describe("TaskThreadView", () => {
       screen.getByTestId("thread-conversation-column").className,
     ).toContain("px-3");
     expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
-      "md:pr-[332px]",
+      "md:pr-[336px]",
     );
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
     expect(panel.className).toContain("absolute");
-    expect(panel.className).toContain("right-4");
+    expect(panel.className).toContain("right-6");
     expect(panel.className).toContain("top-4");
     expect(panel.className).toContain("max-h-[calc(100%-2rem)]");
     expect(panel.className).toContain("overflow-hidden");
@@ -711,6 +711,59 @@ describe("TaskThreadView", () => {
             handoffsSummary: "Human reviewer: confirm final review.",
             artifactsCount: 1,
             artifactsSummary: "Contract link: https://example.com",
+            recordGroups: [
+              {
+                id: "decisions",
+                label: "Decisions",
+                sourceFile: "DECISIONS.md",
+                count: 1,
+                summary: "Credit terms requested: yes.",
+                emptyLabel: "No decisions recorded",
+                records: [
+                  {
+                    id: "decision-1",
+                    type: "decisions",
+                    typeLabel: "Decisions",
+                    sourceFile: "DECISIONS.md",
+                    text: "Credit terms requested: yes.",
+                  },
+                ],
+              },
+              {
+                id: "handoffs",
+                label: "Handoffs",
+                sourceFile: "HANDOFFS.md",
+                count: 1,
+                summary: "Human reviewer: confirm final review.",
+                emptyLabel: "No handoffs recorded",
+                records: [
+                  {
+                    id: "handoff-1",
+                    type: "handoffs",
+                    typeLabel: "Handoffs",
+                    sourceFile: "HANDOFFS.md",
+                    text: "Human reviewer: confirm final review.",
+                  },
+                ],
+              },
+              {
+                id: "artifacts",
+                label: "Artifacts",
+                sourceFile: "ARTIFACTS.md",
+                count: 1,
+                summary: "Contract link: https://example.com",
+                emptyLabel: "No artifacts summarized",
+                records: [
+                  {
+                    id: "artifact-1",
+                    type: "artifacts",
+                    typeLabel: "Artifacts",
+                    sourceFile: "ARTIFACTS.md",
+                    text: "Contract link: https://example.com",
+                  },
+                ],
+              },
+            ],
             onConfirmCompletion,
             onRequestChanges,
           },
@@ -742,12 +795,19 @@ describe("TaskThreadView", () => {
     expect(
       within(panel).getByText("Credit terms requested: yes."),
     ).toBeTruthy();
-
     fireEvent.click(
       within(panel).getByRole("button", { name: "Request Goal changes" }),
     );
     expect(onRequestChanges).toHaveBeenCalledTimes(1);
     expect(onConfirmCompletion).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "View DECISIONS.md" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Goal files: DECISIONS.md" }),
+    ).toBeTruthy();
+    expect(screen.getByText("- Credit terms requested: yes.")).toBeTruthy();
   });
 
   it("renders persisted attachment chips in user transcript messages", () => {
