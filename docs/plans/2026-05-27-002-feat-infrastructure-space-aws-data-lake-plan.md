@@ -13,7 +13,7 @@ deepened: 2026-05-27
 
 Build the first customer-owned AWS infrastructure delegation path for ThinkWork: an Infrastructure Space where the agent can inspect the same AWS account that hosts the customer ThinkWork install, propose a full data lake plan, request approval once, and execute the approved plan through brokered AWS access.
 
-The proof target is a customer data lake: Aurora, S3 import and Iceberg storage, Dagster on ECS, AWS Glue, Athena, scheduled extraction automation, monitoring, and ongoing management. This plan keeps v1 install-local, approval-first, and broker-mediated. It does not put raw AWS credentials in the agent runtime.
+The proof target is a customer data lake: Aurora, S3 import and Iceberg storage, Dagster on ECS, AWS Glue, Athena, scheduled extraction automation, monitoring, and ongoing management. This plan keeps v1 install-local, approval-first, broker-mediated, and Goal-native. It does not put raw AWS credentials in the agent runtime.
 
 | Mode | v1 behavior |
 | --- | --- |
@@ -27,7 +27,7 @@ The proof target is a customer data lake: Aurora, S3 import and Iceberg storage,
 
 ThinkWork customers run their own install in their own AWS account. They want the agent to handle AWS work for that account without exposing credentials to the model and without forcing a human to approve each low-level AWS API call. The first dogfood customer needs a complete data lake setup and an operating surface for scheduled extraction, monitoring, and management.
 
-The current repo already has most of the product primitives: Spaces carry local policy and context, MCP servers expose tenant tools, routines run multi-step Step Functions workflows, Inbox items handle human approvals, and Terraform modules define install-time AWS resources. This plan combines those pieces into a governed Infrastructure Space path.
+The current repo already has most of the product primitives: Spaces carry local policy and context, MCP servers expose tenant tools, routines run multi-step Step Functions workflows, Inbox items handle human approvals, Terraform modules define install-time AWS resources, and folder-native Goals are being planned as the accountable execution record. This plan combines those pieces into a governed Infrastructure Space path.
 
 ---
 
@@ -50,6 +50,7 @@ The current repo already has most of the product primitives: Spaces carry local 
 - R15. Preserve deployed resource inventory, runbooks, schedules, known failure modes, and repair notes in the Infrastructure Space.
 - R16. Make high-risk changes obvious in approval UI.
 - R17. Let operators inspect what was approved, executed, differed, and evidenced by AWS.
+- R18. Represent data lake setup and management work as folder-native Goals when the Goals substrate is available, with `GOAL.md`, `PROGRESS.md`, `DECISIONS.md`, `ARTIFACTS.md`, and `HANDOFFS.md` carrying the portable narrative execution record.
 
 **Origin actors:** A1 (tenant operator), A2 (Infrastructure Space agent), A3 (ThinkWork deployment), A4 (AWS account), A5 (customer data team)
 **Origin flows:** F1 (initial data lake setup), F2 (scheduled extractions), F3 (health monitoring and incident response), F4 (ongoing management)
@@ -74,6 +75,7 @@ The current repo already has most of the product primitives: Spaces carry local 
 - Customer-owned infrastructure repository PR mode.
 - Lake Formation governance and fine-grained data access as a first-class product surface. The v1 module can leave room for it, but the first proof should not depend on it.
 - Generic AWS service coverage beyond the data lake services named in R11-R14.
+- Multi-Goal orchestration for complex infrastructure programs. The first proof can use one data lake setup Goal plus follow-up management Goals after the folder-native Goals substrate exists.
 
 ---
 
@@ -92,6 +94,7 @@ The current repo already has most of the product primitives: Spaces carry local 
 - `packages/api/src/handlers/seed-workspace-defaults.ts` and `packages/api/src/lib/spaces/customer-onboarding-seed.ts` - existing seeded Space source-file pattern to mirror for Infrastructure Space.
 - `apps/spaces/src/components/approvals/*` and `packages/database-pg/graphql/types/inbox-items.graphql` - end-user approval detail and generic Inbox item decision contracts.
 - `apps/cli/src/terraform.ts` and `apps/cli/src/commands/enterprise/templates/deploy-repo/terraform/backend-dev.hcl` - existing Terraform wrapper and customer state backend conventions.
+- `docs/plans/2026-05-27-003-feat-folder-native-goals-plan.md` - planned Agentic OS substrate for explicit Goals, Space-owned Goal templates, thread-owned Goal folders, and Aurora/S3 source-of-truth split.
 
 ### Institutional Learnings
 
@@ -128,6 +131,7 @@ The current repo already has most of the product primitives: Spaces carry local 
 - **Data lake catalog first, generic AWS later:** The initial catalog contains one data lake module and a small operational-tool set. Generic AWS SDK execution is not exposed.
 - **Metadata-only diagnostics by default:** Health checks inspect resource configuration, status, metrics, logs pointers, and object metadata. They do not read customer row data or S3 object bodies unless a later explicit, approved data-access policy allows it.
 - **Infrastructure Space seeded as first-class Space kind:** Add `infrastructure` as a Space kind rather than overloading `custom`, so policies, UI, docs, and seed files can target it explicitly.
+- **Goal-native infrastructure work:** The Infrastructure Space should seed Space-owned Goal templates such as `goals/data-lake-setup/` and create thread-owned Goal folders for data lake setup, scheduled extraction updates, monitoring reviews, and approved management work. Aurora remains canonical for change-set lifecycle and approvals; Goal markdown is canonical for narrative context, decisions, handoffs, artifact summaries, and operator briefing.
 - **CloudTrail evidence, not CloudTrail Lake dependency:** Capture broker execution ids, CodeBuild build ids, AWS request ids where available, and CloudTrail lookup pointers. Do not require CloudTrail Lake for the proof.
 
 ---
@@ -137,6 +141,7 @@ The current repo already has most of the product primitives: Spaces carry local 
 ### Resolved During Planning
 
 - **Which data lake deployment artifact is source of truth?** A hybrid: curated Terraform modules are the durable infra source; generated per-Space plan bundles and summaries are the working artifacts; Aurora stores change-set lifecycle; the Space stores runbooks and inventory.
+- **How does this map to folder-native Goals?** The initial data lake setup is a delegated Infrastructure Goal. The approved Terraform plan, broker evidence, inventory snapshots, decisions, handoffs, and runbooks should refresh the Goal folder while structured approval/change-set state stays in Aurora.
 - **Which operations are first-class broker tools versus Terraform-only?** Terraform owns resource creation and structural changes. Broker tools own read-only diagnostics and narrow operations: start/stop Glue crawler, inspect Glue job/crawler state, inspect Athena query status, inspect ECS service/task health, inspect RDS metrics, create RDS snapshot when approved, and run approved schema/table operations.
 - **Which first health signals matter?** RDS CloudWatch/Database Insights signals, Glue job/crawler runs and metrics, ECS service/task health for Dagster, Athena query failures and workgroup usage, S3 object freshness/size signals, and CodeBuild/Terraform plan/apply status.
 - **What approval diff format should v1 use?** A structured risk summary plus artifact links: resource changes, IAM changes, destructive actions, public/network exposure, encryption changes, cost-bearing resources, policy-boundary status, plan hash, and rollback notes.
@@ -158,26 +163,29 @@ flowchart TB
   Space["Infrastructure Space"]
   Agent["Infrastructure Space agent"]
   MCP["admin-ops MCP infra tools"]
+  Goal["Data lake Goal\ncontract + progress"]
   Broker["Infrastructure broker Lambda"]
   DB["Aurora change sets and events"]
   Inbox["Inbox approval item"]
   SFN["Step Functions apply routine"]
   CodeBuild["CodeBuild Terraform runner"]
   AWS["Customer AWS account resources"]
-  Workspace["Space files: runbooks, inventory, plan summaries"]
+  GoalFolder["Thread Goal folder\nGOAL/PROGRESS/DECISIONS/ARTIFACTS/HANDOFFS"]
 
   Space --> Agent
   Agent --> MCP
+  Agent --> Goal
+  Goal --> GoalFolder
   MCP --> Broker
   Broker --> DB
-  Broker --> Workspace
+  Broker --> GoalFolder
   Broker --> Inbox
   Inbox --> SFN
   SFN --> Broker
   SFN --> CodeBuild
   CodeBuild --> AWS
   CodeBuild --> DB
-  CodeBuild --> Workspace
+  CodeBuild --> GoalFolder
 ```
 
 ### Change-Set Lifecycle
@@ -231,9 +239,9 @@ flowchart TB
 
 - U1. **Infrastructure change-set domain model**
 
-**Goal:** Add the durable database and GraphQL contract for Infrastructure Space autonomy mode, AWS connection metadata, change sets, change events, plan artifacts, approval envelopes, and resource inventory snapshots.
+**Goal:** Add the durable database and GraphQL contract for Infrastructure Space autonomy mode, AWS connection metadata, change sets, change events, plan artifacts, approval envelopes, Goal linkage, and resource inventory snapshots.
 
-**Requirements:** R1, R2, R3, R4, R5, R8, R9, R15, R17; F1, F4; AE1, AE5
+**Requirements:** R1, R2, R3, R4, R5, R8, R9, R15, R17, R18; F1, F4; AE1, AE5
 
 **Dependencies:** None
 
@@ -264,6 +272,7 @@ flowchart TB
   - change-set lifecycle,
   - immutable plan/apply artifact keys,
   - approved plan hash and envelope,
+  - optional `goal_id` / `thread_id` linkage when folder-native Goals are enabled,
   - event log rows for plan, approval, apply, failure, and drift,
   - inventory snapshots keyed by Space and service family.
 - Store secret-free metadata only. Any future customer credential or external integration secret goes through the existing tenant credential pattern.
@@ -271,6 +280,7 @@ flowchart TB
 - Require tenant-admin or service-principal authorization for change-set creation, cancellation, approval mutation, and apply dispatch. Non-admin Space members may read allowed summaries only when existing Space/tenant membership rules permit it.
 - Use check constraints for autonomy modes, change-set statuses, change source types, and event types.
 - Keep approval metadata in the change-set row, but continue to use Inbox items as the operator decision surface.
+- If the Goals schema is already present, use a real foreign key from infrastructure change sets to the Goal row. If the infrastructure substrate lands first, keep a forward-compatible nullable metadata field and add the foreign key in the Goals integration slice.
 
 **Execution note:** Start with schema and resolver tests before wiring broker calls.
 
@@ -282,6 +292,7 @@ flowchart TB
 
 **Test scenarios:**
 - Happy path: creating a draft change set stores tenant, Space, source type, artifact references, autonomy mode, risk summary, and plan hash without secret values.
+- Happy path: creating a draft change set for a data lake setup Goal links the change set to the Goal/Thread execution record.
 - Happy path: querying a change set returns events and linked Inbox item metadata for the same tenant.
 - Edge case: an omitted autonomy mode inherits `approve_plan` from the Space/default deployment setting.
 - Error path: a non-member cannot query another tenant's change set.
@@ -432,11 +443,11 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 
 ---
 
-- U4. **Infrastructure Space seed and agent-facing MCP tools**
+- U4. **Infrastructure Space seed, Goal templates, and agent-facing MCP tools**
 
-**Goal:** Add Infrastructure Space creation/seed behavior and expose safe broker tools to the tenant platform agent through the existing admin-ops MCP path.
+**Goal:** Add Infrastructure Space creation/seed behavior, folder-native Goal templates, and safe broker tools to the tenant platform agent through the existing admin-ops MCP path.
 
-**Requirements:** R1, R2, R3, R6, R7, R12, R15; F1, F2, F3, F4; AE1, AE3, AE4
+**Requirements:** R1, R2, R3, R6, R7, R12, R15, R18; F1, F2, F3, F4; AE1, AE3, AE4
 
 **Dependencies:** U1, U3
 
@@ -467,6 +478,14 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
   - `docs/change-approval-policy.md`
   - `docs/monitoring-signals.md`
   - `inventory/README.md`
+- Seed Space-owned Goal templates when the Goals substrate is available:
+  - `goals/data-lake-setup/GOAL.md`
+  - `goals/data-lake-setup/PROGRESS.md`
+  - `goals/data-lake-setup/DECISIONS.md`
+  - `goals/data-lake-setup/ARTIFACTS.md`
+  - `goals/data-lake-setup/HANDOFFS.md`
+  - optional `goals/data-lake-setup/stages/01-plan/`, `02-apply/`, and `03-operate/` context/output files.
+- Make `CONTEXT.md` point agents at the Goal template as the portable operating contract. Keep the root docs as reusable Space doctrine and runbook material, not the live execution record for a specific data lake setup.
 - Assign the Infrastructure Space to the infrastructure broker/admin-ops MCP server and store Space policy:
   - autonomy default,
   - allowed regions,
@@ -490,6 +509,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 
 **Test scenarios:**
 - Happy path: enabling the feature seeds exactly one active Infrastructure Space with `approve_plan` policy.
+- Happy path: enabling the feature seeds a portable data lake setup Goal template without overwriting operator-authored files.
 - Happy path: re-running the seed is idempotent and does not overwrite operator-authored source files.
 - Happy path: admin-ops MCP lists infrastructure tools only when the tenant/Space policy enables them.
 - Edge case: a tenant with an archived Infrastructure Space gets a new active Space with a disambiguated slug.
@@ -503,11 +523,11 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 
 ---
 
-- U5. **Approve Plan bridge and approval surfaces**
+- U5. **Approve Plan bridge, Goal updates, and approval surfaces**
 
-**Goal:** Add an operator approval path for infrastructure change plans, including high-risk diff rendering, idempotent decision handling, and Step Functions apply dispatch.
+**Goal:** Add an operator approval path for infrastructure change plans, including high-risk diff rendering, idempotent decision handling, Goal folder updates, and Step Functions apply dispatch.
 
-**Requirements:** R2, R4, R5, R8, R10, R16, R17; F1, F4; AE1, AE2, AE5
+**Requirements:** R2, R4, R5, R8, R10, R16, R17, R18; F1, F4; AE1, AE2, AE5
 
 **Dependencies:** U1, U3
 
@@ -542,6 +562,8 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 - The bridge should:
   - conditionally mark a change set approved/rejected once,
   - store approver, approval timestamp, approved hash, and decision notes,
+  - append approval/rejection rationale and risk summary to the linked Goal folder's `DECISIONS.md` when present,
+  - refresh `PROGRESS.md` with the change-set state and next operator action,
   - invoke the apply Step Functions bridge through the broker with `RequestResponse` for immediate validation errors,
   - treat duplicate decisions as idempotent no-ops.
 - The UI should render a compact but explicit risk view:
@@ -562,6 +584,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 
 **Test scenarios:**
 - Happy path: approving an infrastructure change item marks the linked change set approved and dispatches apply once.
+- Happy path: approving or rejecting a Goal-linked change item updates the Goal folder with the decision and current status.
 - Happy path: rejecting an item marks the change set rejected and does not dispatch apply.
 - Edge case: duplicate approve after a successful approve returns without a second dispatch.
 - Error path: approval with mismatched plan hash refuses and records an approval error.
@@ -601,7 +624,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 - Test: `apps/cli/__tests__/terraform-enterprise-artifact-fixture.test.ts`
 
 **Approach:**
-- Create a catalog package that describes the data lake module input schema, required/optional values, risk annotations, output inventory mapping, and Space documentation templates.
+- Create a catalog package that describes the data lake module input schema, required/optional values, risk annotations, output inventory mapping, Goal template metadata, and Space documentation templates.
 - Create a Terraform module for:
   - S3 imported-data/raw bucket,
   - S3 Iceberg/curated bucket or prefixes,
@@ -618,6 +641,12 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
   - variable file,
   - buildspec for plan/apply,
   - metadata manifest with expected resources and risk rules.
+- Render Goal-aware narrative outputs alongside the Terraform bundle:
+  - `GOAL.md` outcome, owner, mode, review policy, and completion rule,
+  - `PROGRESS.md` current plan/apply/operate stage,
+  - `ARTIFACTS.md` plan summary, inventory snapshots, artifact keys, and CodeBuild links,
+  - `DECISIONS.md` approved envelope and rationale,
+  - `HANDOFFS.md` operator/customer handoff notes.
 - Start minimal: one data lake profile that satisfies the dogfood customer, not a universal configurator.
 
 **Patterns to follow:**
@@ -635,6 +664,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 - Error path: missing required customer data lake values return field-level errors before CodeBuild starts.
 - Error path: a configuration that targets the ThinkWork operational database is rejected before plan generation.
 - Covers AE4. Integration: plan metadata includes extraction schedule hooks and Space docs entries for a nightly extraction.
+- Covers AE4. Integration: plan metadata includes extraction schedule hooks and Goal folder entries for nightly extraction setup and later handoff.
 
 **Verification:**
 - Catalog tests prove render determinism and risk classification.
@@ -681,9 +711,10 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
   - create RDS snapshot when approved,
   - cancel Athena query,
   - run approved schema/table operation through the same change-set approval path,
-  - update ThinkWork Space docs/inventory after execution.
+  - update the linked Goal folder and Space inventory after execution.
 - Read-only diagnostics can run under `read_only` and `approve_plan`. Mutations must check autonomy mode and approval envelope.
 - Have scheduled monitors use existing Space automations. If the current automation surface cannot express a needed schedule, add only the minimum connector from Infrastructure Space policy to scheduled jobs/routines.
+- Monitoring summaries should refresh `PROGRESS.md` for the active operations Goal and append durable incidents/remediations to `DECISIONS.md` or `HANDOFFS.md` when they matter beyond a transient health check.
 
 **Patterns to follow:**
 - `packages/api/src/graphql/resolvers/triggers/triggerRoutineRun.mutation.ts`
@@ -699,7 +730,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 - Error path: mutation operation in `read_only` mode is refused before AWS SDK call.
 - Error path: operational action touching resources outside the change-set envelope is refused.
 - Covers AE3. Integration: scheduled monitor can run read-only and produce a Space-visible finding without an approval item.
-- Covers AE4. Integration: scheduled extraction change creates/updates automation metadata and records it in Space docs.
+- Covers AE4. Integration: scheduled extraction change creates/updates automation metadata and records it in the linked Goal folder and Space inventory.
 
 **Verification:**
 - Mocked AWS SDK tests prove diagnostic aggregation and operation gating.
@@ -735,9 +766,16 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
   - broker-mediated access,
   - `approve_plan` default,
   - ThinkWork-managed IAM only.
+- Document how Infrastructure work maps onto the Agentic OS model:
+  - the Infrastructure Space carries AWS operating doctrine and Goal templates,
+  - each data lake setup or management effort runs as a Goal-backed Thread,
+  - Aurora owns change-set/approval state,
+  - Terraform owns durable infrastructure state,
+  - Goal markdown owns portable narrative execution context.
 - Add a dogfood runbook for the next customer:
   - enable capability in install,
   - verify Infrastructure Space seed,
+  - start the data lake setup Goal,
   - ask the agent to plan the data lake,
   - approve the plan,
   - verify data lake resources,
@@ -745,7 +783,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
   - run health monitor,
   - exercise one management operation.
 - Add an operator checklist for approval review, including IAM, public exposure, destructive changes, encryption, cost, and rollback notes.
-- Add a contract test that ties together seed files, Space kind, MCP tool availability, approval item shape, and docs links.
+- Add a contract test that ties together seed files, Space kind, Goal template paths, MCP tool availability, approval item shape, and docs links.
 
 **Patterns to follow:**
 - `docs/src/content/docs/concepts/spaces/tools.mdx`
@@ -755,6 +793,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 
 **Test scenarios:**
 - Happy path: dogfood contract test verifies the Infrastructure Space seed files and MCP tool slugs referenced in docs match code constants.
+- Happy path: dogfood contract test verifies the data lake setup Goal template files match the paths referenced by docs and broker/catalog code.
 - Happy path: docs reference only supported v1 autonomy modes.
 - Edge case: docs make cross-account access and arbitrary IAM editing explicit non-goals.
 - Covers AE1-AE5. Integration: runbook describes the full plan -> approve -> apply -> monitor -> manage loop without requiring raw AWS credentials.
@@ -767,9 +806,9 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 
 ## System-Wide Impact
 
-- **Interaction graph:** Space thread -> admin-ops MCP -> infrastructure broker -> Aurora change sets -> Inbox approval -> Step Functions -> CodeBuild -> AWS resources -> Space docs/audit.
+- **Interaction graph:** Goal-backed Space thread -> admin-ops MCP -> infrastructure broker -> Aurora change sets -> Inbox approval -> Step Functions -> CodeBuild -> AWS resources -> Goal folder + Space inventory/audit.
 - **Error propagation:** Broker validation errors return synchronously to MCP/GraphQL callers. CodeBuild plan/apply failures become change-set events and Space-visible findings. Approval bridge errors must surface to the approving operator, matching routine approval behavior.
-- **State lifecycle risks:** Change-set status, Inbox status, CodeBuild status, and Terraform state can diverge. U1/U3/U5 must make idempotent transitions and record reconciliation events.
+- **State lifecycle risks:** Goal status, Goal files, change-set status, Inbox status, CodeBuild status, and Terraform state can diverge. U1/U3/U5/U7 must make idempotent transitions, refresh Goal files from structured state where possible, and record reconciliation events.
 - **API surface parity:** Admin configuration, apps/spaces approvals, MCP tools, GraphQL codegen, and docs must agree on autonomy modes and change-set status names.
 - **Integration coverage:** Unit tests alone will not prove the path. Dogfood verification needs at least one deployed plan that reaches CodeBuild plan, approval, apply, and health monitor.
 - **Unchanged invariants:** Existing routine execution, tenant credential vault, generic Inbox items, and non-Infrastructure Spaces must continue working. The broker is opt-in and should not add AWS mutation rights to existing tenants by default.
@@ -798,6 +837,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 | Monitoring reads become noisy or expensive | U7 starts with focused health summaries and stores evidence links, not high-volume metric mirrors. |
 | CloudTrail evidence is incomplete in a new account | U3 records broker/CodeBuild/AWS SDK metadata directly; CloudTrail enrichment is additive rather than required. |
 | Existing Spaces or routine approvals regress | U4/U5 feature-gate Infrastructure Space behavior and add targeted regression tests around generic Space/MCP/Inbox paths. |
+| Goal folders drift from infrastructure state | Link change sets to Goals, keep Aurora/Terraform canonical for structured state, and refresh Goal markdown from broker/change-set events instead of hand-editing it as authority. |
 
 ---
 
@@ -807,7 +847,7 @@ operation.requested -> policy check -> approval check -> AWS SDK call -> operati
 - The first dogfood rollout should use a non-prod customer stage or an explicit customer-approved prod window.
 - Runbooks should include a manual break-glass path: disable the Infrastructure Space tools, pause the Space, and revoke/disable the broker runner role if needed.
 - Rollback is approval-driven in v1. The system can present rollback notes and generate a follow-up Terraform plan, but it must not automatically destroy or revert customer infrastructure after failure without a new approved change set.
-- The data lake Space should preserve inventory and plan summaries under Space source files so the customer can understand the system without reading Terraform state.
+- The data lake Space should preserve reusable doctrine and inventory under Space source files, while live setup/management execution state should live in the thread Goal folder so the customer can understand the work without reading Terraform state.
 - Keep generated Terraform resource descriptions ASCII-only to avoid AWS validation failures seen elsewhere in the repo.
 
 ---
