@@ -1,6 +1,9 @@
 import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, tenants, threads } from "../../utils.js";
-import { readThreadProgressMarkdown } from "../../../lib/thread-progress/storage.js";
+import {
+  readThreadProgressMarkdown,
+  threadProgressKey,
+} from "../../../lib/thread-progress/storage.js";
 import { canReadTenantSpaces, hasSpaceMemberAccess } from "../spaces/shared.js";
 
 export async function threadProgressMarkdown(
@@ -42,7 +45,10 @@ export async function threadProgressMarkdown(
     tenantId: row.tenantId,
     tenantSlug: row.tenantSlug,
     threadId: row.threadId,
-    key: `tenants/${row.tenantSlug}/threads/${row.threadId}/PROGRESS.md`,
+    key: threadProgressKey({
+      tenantSlug: row.tenantSlug,
+      threadId: row.threadId,
+    }),
     content,
   };
 }

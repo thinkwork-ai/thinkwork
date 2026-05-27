@@ -81,6 +81,11 @@ import {
   prependThreadProgressPromptBlock,
   readThreadProgressMarkdown,
 } from "../lib/thread-progress/storage.js";
+import {
+  prependThreadGoalPromptBlock,
+  readThreadGoalFile,
+  readThreadGoalPromptFiles,
+} from "../lib/thread-goals/storage.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
@@ -2480,6 +2485,22 @@ async function prependThreadProgressForAgentTurn(
 ): Promise<string> {
   if (!input.tenantSlug || !input.threadId) return agentMessage;
   try {
+    const goal = await readThreadGoalFile(
+      {
+        tenantSlug: input.tenantSlug,
+        threadId: input.threadId,
+        file: "GOAL.md",
+      },
+      { bucket: WORKSPACE_BUCKET || process.env.WORKSPACE_BUCKET },
+    );
+    if (goal?.trim()) {
+      const goalFiles = await readThreadGoalPromptFiles(
+        { tenantSlug: input.tenantSlug, threadId: input.threadId },
+        { bucket: WORKSPACE_BUCKET || process.env.WORKSPACE_BUCKET },
+      );
+      return prependThreadGoalPromptBlock(agentMessage, goalFiles);
+    }
+
     const content = await readThreadProgressMarkdown(
       { tenantSlug: input.tenantSlug, threadId: input.threadId },
       { bucket: WORKSPACE_BUCKET || process.env.WORKSPACE_BUCKET },
