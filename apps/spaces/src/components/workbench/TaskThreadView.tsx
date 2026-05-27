@@ -606,8 +606,6 @@ function ThreadInfoPanel({
             />
           ) : null}
 
-          {state.goal ? <ThreadInfoGoalFiles goal={state.goal} /> : null}
-
           {state.attachments.length > 0 ? (
             <section className="border-t border-white/10 pt-4">
               <h2 className="mb-2 text-sm font-medium text-white/55">
@@ -740,7 +738,7 @@ function ThreadInfoGoal({ goal }: { goal: ThreadInfoGoalState }) {
               onClick={() => setChangesDialogOpen(true)}
             >
               <RotateCcw className="size-3.5" />
-              Request changes
+              Changes
             </button>
           </div>
         ) : null}

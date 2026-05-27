@@ -324,7 +324,7 @@ describe("SpacesThreadDetailRoute", () => {
         action: expect.anything(),
         titleTrailing: expect.anything(),
         actionKey: expect.stringContaining(
-          ":1:artifact_123:info-closed:closed",
+          ":1:artifact_123:files-closed:info-closed:closed",
         ),
       }),
     );
@@ -740,12 +740,8 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.queryByRole("button", { name: "Mark as completed" })).toBe(
       null,
     );
-    expect(
-      screen.getByText("Credit terms requested: yes (Net 30)."),
-    ).toBeTruthy();
-    expect(
-      screen.getByText("Human reviewer: confirm final onboarding review."),
-    ).toBeTruthy();
+    expect(screen.queryByText("DECISIONS.md")).toBe(null);
+    expect(screen.queryByText("HANDOFFS.md")).toBe(null);
 
     fireEvent.click(screen.getByRole("button", { name: "Request Goal changes" }));
     fireEvent.change(screen.getByLabelText("Change request"), {

@@ -10,6 +10,10 @@ import {
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
+  WorkspaceFileEditor,
+  type WorkspaceFilesClient,
+} from "@thinkwork/workspace-editor";
+import {
   Bot,
   Pause,
   Play,
@@ -20,7 +24,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
 import { Badge } from "@/components/ui/badge";
 import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
@@ -72,6 +75,15 @@ import {
   UpdateSpaceEmailTriggerMutation,
   UpdateSpaceMutation,
 } from "@/lib/graphql-queries";
+import {
+  deleteWorkspaceFile,
+  getWorkspaceFile,
+  listWorkspaceFiles,
+  moveWorkspaceFile,
+  putWorkspaceFile,
+  renameWorkspacePath,
+  type Target,
+} from "@/lib/workspace-files-api";
 import { relativeTime } from "@/lib/utils";
 
 type SpaceDetailTab = "workspace" | "kbs" | "triggers" | "settings" | "members";
@@ -81,6 +93,15 @@ type SpaceDraft = {
   name: string;
   description: string;
   accessMode: SpaceAccessMode;
+};
+
+const spaceWorkspaceFilesClient: WorkspaceFilesClient<Target> = {
+  listFiles: listWorkspaceFiles,
+  getFile: getWorkspaceFile,
+  putFile: putWorkspaceFile,
+  deleteFile: deleteWorkspaceFile,
+  movePath: moveWorkspaceFile,
+  renamePath: renameWorkspacePath,
 };
 
 interface SpaceDetailChromeContext {
@@ -324,9 +345,10 @@ export function SpaceSettingsPanel({
 
 export function SpaceWorkspacePanel({ spaceId }: { spaceId: string }) {
   return (
-    <WorkspaceEditor
+    <WorkspaceFileEditor
       target={{ spaceId }}
-      mode="context"
+      targetKey={`space:${spaceId}`}
+      client={spaceWorkspaceFilesClient}
       defaultOpenFile="CONTEXT.md"
       className="min-h-[620px]"
     />

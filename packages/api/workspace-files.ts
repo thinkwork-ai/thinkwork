@@ -7,10 +7,10 @@
  *
  * Request shape (Unit 5):
  *   { action: "get" | "list" | "put" | "delete" | "generate-folder-structure" | "regenerate-map" | "normalize-map" | "update-identity-field",
- *     agentId?: string, templateId?: string, spaceId?: string, userId?: string, defaults?: true, catalog?: true,
+ *     agentId?: string, templateId?: string, spaceId?: string, threadId?: string, userId?: string, defaults?: true, catalog?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
- *   Exactly one of agentId / templateId / spaceId / userId / defaults:true / catalog:true
+ *   Exactly one of agentId / templateId / spaceId / threadId / userId / defaults:true / catalog:true
  *   identifies the target surface. Tenant identity is derived from the
  *   caller's JWT via `resolveCallerFromAuth` — the handler NEVER trusts a
  *   tenantSlug body field. Requests that still include one are rejected
@@ -84,7 +84,9 @@ import {
   spaces,
   tenantMembers,
   tenants,
+  threads,
 } from "./src/graphql/utils.js";
+import { callerVisibleThreadPredicate } from "./src/graphql/resolvers/threads/access.js";
 import { emitAuditEvent } from "./src/lib/compliance/emit.js";
 import {
   CatalogInstallError,
@@ -236,6 +238,15 @@ function catalogPrefix(tenantSlug: string): string {
   return `tenants/${tenantSlug}/skill-catalog/`;
 }
 
+function threadKey(tenantSlug: string, threadId: string, path: string): string {
+  const clean = path.replace(/^\/+/, "");
+  return `tenants/${tenantSlug}/threads/${threadId}/${clean}`;
+}
+
+function threadPrefix(tenantSlug: string, threadId: string): string {
+  return `tenants/${tenantSlug}/threads/${threadId}/`;
+}
+
 // ---------------------------------------------------------------------------
 // Target resolution
 // ---------------------------------------------------------------------------
@@ -266,6 +277,14 @@ interface SpaceTarget {
   key: (path: string) => string;
 }
 
+interface ThreadTarget {
+  kind: "thread";
+  tenantSlug: string;
+  threadId: string;
+  prefix: string;
+  key: (path: string) => string;
+}
+
 interface DefaultsTarget {
   kind: "defaults";
   tenantSlug: string;
@@ -292,6 +311,7 @@ type Target =
   | AgentTarget
   | TemplateTarget
   | SpaceTarget
+  | ThreadTarget
   | DefaultsTarget
   | UserContextTarget
   | CatalogTarget;
@@ -389,6 +409,40 @@ async function resolveSpaceTarget(
     spaceId: space.id,
     prefix,
     key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
+  };
+}
+
+async function resolveThreadTarget(
+  tenantId: string,
+  threadId: string,
+  userId: string | null,
+): Promise<ThreadTarget | null> {
+  const conditions = [eq(threads.id, threadId), eq(threads.tenant_id, tenantId)];
+  if (userId) {
+    conditions.push(callerVisibleThreadPredicate(tenantId, userId));
+  }
+  const [thread] = await db
+    .select({
+      id: threads.id,
+      tenant_id: threads.tenant_id,
+    })
+    .from(threads)
+    .where(and(...conditions))
+    .limit(1);
+  if (!thread || thread.tenant_id !== tenantId) return null;
+
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  if (!tenant?.slug) return null;
+
+  return {
+    kind: "thread",
+    tenantSlug: tenant.slug,
+    threadId: thread.id,
+    prefix: threadPrefix(tenant.slug, thread.id),
+    key: (path) => threadKey(tenant.slug, thread.id, path),
   };
 }
 
@@ -844,6 +898,18 @@ async function handlePut(
   }
 
   if (target.kind === "catalog") {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(cleanPath),
+        Body: content,
+        ContentType: "text/plain; charset=utf-8",
+      }),
+    );
+    return json(200, { ok: true });
+  }
+
+  if (target.kind === "thread") {
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket(),
@@ -2278,6 +2344,7 @@ interface RequestBody {
   agentId?: string;
   templateId?: string;
   spaceId?: string;
+  threadId?: string;
   userId?: string;
   defaults?: boolean;
   catalog?: boolean;
@@ -2364,6 +2431,7 @@ export async function handler(
     (body.agentId ? 1 : 0) +
     (body.templateId ? 1 : 0) +
     (body.spaceId ? 1 : 0) +
+    (body.threadId ? 1 : 0) +
     (body.userId ? 1 : 0) +
     (body.defaults ? 1 : 0) +
     (body.catalog ? 1 : 0);
@@ -2371,7 +2439,7 @@ export async function handler(
     return json(400, {
       ok: false,
       error:
-        "Exactly one of agentId, templateId, spaceId, userId, defaults, catalog is required",
+        "Exactly one of agentId, templateId, spaceId, threadId, userId, defaults, catalog is required",
     });
   }
 
@@ -2382,6 +2450,8 @@ export async function handler(
     target = await resolveTemplateTarget(tenantId, body.templateId);
   } else if (body.spaceId) {
     target = await resolveSpaceTarget(tenantId, body.spaceId);
+  } else if (body.threadId) {
+    target = await resolveThreadTarget(tenantId, body.threadId, userId);
   } else if (body.userId) {
     target = await resolveUserContextTarget(tenantId, body.userId);
   } else if (body.defaults) {

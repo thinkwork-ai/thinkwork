@@ -893,9 +893,9 @@ function SpaceJumpMenu({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        side="right"
+        side="bottom"
         align="start"
-        sideOffset={8}
+        sideOffset={4}
         className="z-[1000] w-56"
       >
         <DropdownMenuLabel>Open Space</DropdownMenuLabel>

@@ -4,6 +4,7 @@
 @import "@fontsource-variable/geist";
 @import "@xyflow/react/dist/style.css";
 @plugin "@tailwindcss/typography";
+@source "../../../packages/workspace-editor/src/**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
 
