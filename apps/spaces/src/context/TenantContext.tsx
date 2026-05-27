@@ -174,9 +174,23 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function discoverCallerThenFetchTenant(targetTenantId: string) {
+    setIsLoading(true);
+    setError(null);
+    setNoTenantAssigned(false);
+    const token = await getToken();
+    if (!token) {
+      setTimeout(() => setAuthRetryTick((n) => n + 1), 100);
+      return;
+    }
+    const found = await discoverCallerViaAuthMe();
+    setDiscoveredUserId(found.userId);
+    await fetchTenant(targetTenantId);
+  }
+
   useEffect(() => {
     if (isAuthenticated && jwtTenantId) {
-      fetchTenant(jwtTenantId);
+      discoverCallerThenFetchTenant(jwtTenantId);
     } else if (isAuthenticated && !jwtTenantId) {
       // No tenant claim on the JWT (Google-federated user, pre-token trigger
       // hasn't landed). Try tenant-discovery before falling back to
@@ -184,6 +198,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       discoverTenantThenFetch();
     } else {
       setTenant(null);
+      setDiscoveredUserId(null);
       setNoTenantAssigned(false);
       setIsLoading(false);
     }
