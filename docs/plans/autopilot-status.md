@@ -14,13 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U1 ready to merge
-- Active unit: U1 Add the Goal ledger
-- Active branch: `codex/goals-u1-ledger`
-- Active worktree: `.Codex/worktrees/goals-u1-ledger`
+- Status: U2 in progress
+- Active unit: U2 Generalize thread Goal folder storage
+- Active branch: `codex/goals-u2-storage`
+- Active worktree: `.Codex/worktrees/goals-u2-storage`
 - Started: 2026-05-27
-- Active PR: [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760)
-- CI: passed after scoped migration remediation
+- Latest merged PR: [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760)
+- Active PR: [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761)
+- CI: PR checks pending
 
 ### Active Unit Notes
 
@@ -61,22 +62,35 @@ Target branch: `main`
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0136_goal_ledger.sql`.
 - PR CI passed after rerun: `cla`, `lint`, `test`, `typecheck`, `verify`, and
   `Migration Drift Precheck (dev)`.
+- Squash-merged PR [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760)
+  into `main` and deleted the remote/local U1 branch.
 - Direct `pnpm exec prettier` was unavailable in the fresh worktree because
   Prettier is not installed as a workspace dependency; used
   `pnpm dlx prettier@3.6.2` for changed-file formatting/checks.
+- Started U2 from updated `origin/main`.
+- Implemented the first U2 pass: new Thread Goal file storage, progress
+  compatibility wrappers, Goal-aware wakeup prompt context, and focused storage
+  tests.
+- U2 focused verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/thread-goals/storage.test.ts src/lib/thread-progress/storage.test.ts src/graphql/resolvers/threads/threadProgress.query.test.ts`
+  and `pnpm --filter @thinkwork/api typecheck`.
+- U2 broader verification passed: `pnpm --filter @thinkwork/api test`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, and
+  `git diff --check`.
+- Opened PR [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761).
 
 ### Progress Log
 
-| Date       | Unit | Branch                  | PR                                                           | Status         | Verification        | Notes                                                     |
-| ---------- | ---- | ----------------------- | ------------------------------------------------------------ | -------------- | ------------------- | --------------------------------------------------------- |
-| 2026-05-27 | U1   | `codex/goals-u1-ledger` | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Ready to merge | Local and CI passed | Applied scoped dev migration after drift precheck failed. |
-| 2026-05-27 | U2   | TBD                     | TBD                                                          | Pending        | TBD                 | Start after U1 merges.                                    |
-| 2026-05-27 | U3   | TBD                     | TBD                                                          | Pending        | TBD                 | Start after U2 merges.                                    |
-| 2026-05-27 | U4   | TBD                     | TBD                                                          | Pending        | TBD                 | Start after U3 merges.                                    |
-| 2026-05-27 | U5   | TBD                     | TBD                                                          | Pending        | TBD                 | Start after U4 merges.                                    |
-| 2026-05-27 | U6   | TBD                     | TBD                                                          | Pending        | TBD                 | Start after U5 merges.                                    |
-| 2026-05-27 | U7   | TBD                     | TBD                                                          | Pending        | TBD                 | Start after U6 merges.                                    |
-| 2026-05-27 | U8   | TBD                     | TBD                                                          | Pending        | TBD                 | Start after U7 merges.                                    |
+| Date       | Unit | Branch                   | PR                                                           | Status    | Verification           | Notes                                                     |
+| ---------- | ---- | ------------------------ | ------------------------------------------------------------ | --------- | ---------------------- | --------------------------------------------------------- |
+| 2026-05-27 | U1   | `codex/goals-u1-ledger`  | [#1760](https://github.com/thinkwork-ai/thinkwork/pull/1760) | Merged    | Local and CI passed    | Applied scoped dev migration after drift precheck failed. |
+| 2026-05-27 | U2   | `codex/goals-u2-storage` | [#1761](https://github.com/thinkwork-ai/thinkwork/pull/1761) | PR opened | API/repo checks passed | Thread Goal file storage and prompt wrapper.              |
+| 2026-05-27 | U3   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U2 merges.                                    |
+| 2026-05-27 | U4   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U3 merges.                                    |
+| 2026-05-27 | U5   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U4 merges.                                    |
+| 2026-05-27 | U6   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U5 merges.                                    |
+| 2026-05-27 | U7   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U6 merges.                                    |
+| 2026-05-27 | U8   | TBD                      | TBD                                                          | Pending   | TBD                    | Start after U7 merges.                                    |
 
 ### CI Failures
 
