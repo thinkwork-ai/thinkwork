@@ -280,6 +280,7 @@ describe("email-inbound routing", () => {
           space_id: "space-finance",
         },
       ],
+      [{ id: "user-eric" }],
     );
 
     await handler(emailEvent("finance@acme.thinkwork.ai"));
@@ -291,6 +292,7 @@ describe("email-inbound routing", () => {
           values: expect.objectContaining({
             content: "Hello from email",
             role: "user",
+            sender_id: "user-eric",
             thread_id: "thread-finance",
             metadata: expect.objectContaining({
               source: "email_reply",

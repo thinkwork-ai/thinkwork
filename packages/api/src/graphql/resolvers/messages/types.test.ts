@@ -55,4 +55,28 @@ describe("message owner identity", () => {
       displayName: "Eric",
     });
   });
+
+  it("uses email metadata for unresolved email reply senders", async () => {
+    const sender = await messageTypeResolvers.sender(
+      {
+        role: "USER",
+        senderType: "user",
+        senderId: null,
+        metadata: { source: "email_reply", senderEmail: "customer@acme.com" },
+      },
+      null,
+      {
+        loaders: {
+          user: { load: async () => null },
+          agent: { load: async () => null },
+        },
+      } as any,
+    );
+
+    expect(sender).toMatchObject({
+      type: "user",
+      id: null,
+      displayName: "customer@acme.com",
+    });
+  });
 });

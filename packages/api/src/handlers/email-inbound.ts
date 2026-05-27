@@ -379,6 +379,17 @@ async function appendReplyToThread(input: {
     return true;
   }
 
+  const [sender] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.tenant_id, thread.tenant_id),
+        sql`lower(${users.email}) = ${input.senderEmail}`,
+      ),
+    )
+    .limit(1);
+
   const createdAt = new Date();
   const [message] = await db
     .insert(messages)
@@ -388,7 +399,7 @@ async function appendReplyToThread(input: {
       role: "user",
       content: input.textBody || "(empty email)",
       sender_type: "user",
-      sender_id: null,
+      sender_id: sender?.id ?? null,
       metadata: {
         source: "email_reply",
         senderEmail: input.senderEmail,
