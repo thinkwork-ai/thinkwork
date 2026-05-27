@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_authed/_tenant/users/$userId")({
   component: UserDetailPage,
 });
 
-type UserDetailTab = "configuration" | "files";
+type UserDetailTab = "configuration" | "workspace";
 
 function UserDetailPage() {
   const { userId } = Route.useParams();
@@ -101,8 +101,8 @@ function UserDetailPage() {
                   <TabsTrigger value="configuration" className="px-4">
                     Configuration
                   </TabsTrigger>
-                  <TabsTrigger value="files" className="px-4">
-                    Files
+                  <TabsTrigger value="workspace" className="px-4">
+                    Workspace
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -111,12 +111,12 @@ function UserDetailPage() {
           </div>
         </div>
       }
-      contentClassName={tab === "files" ? "overflow-hidden pb-4" : undefined}
+      contentClassName={tab === "workspace" ? "overflow-hidden pb-4" : undefined}
     >
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as UserDetailTab)}
-        className={tab === "files" ? "h-full min-h-0" : undefined}
+        className={tab === "workspace" ? "h-full min-h-0" : undefined}
       >
         <TabsContent value="configuration">
           <div className="max-w-[760px]">
@@ -136,7 +136,7 @@ function UserDetailPage() {
             />
           </div>
         </TabsContent>
-        <TabsContent value="files" className="min-h-0">
+        <TabsContent value="workspace" className="min-h-0">
           <WorkspaceEditor
             target={{ userId: member.user.id }}
             mode="context"
