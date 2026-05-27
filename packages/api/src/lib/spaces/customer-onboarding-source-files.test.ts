@@ -10,6 +10,9 @@ import { CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES } from "./customer-onboarding-se
 import { ensureCustomerOnboardingSourceFiles } from "./customer-onboarding-source-files.js";
 
 const s3Mock = mockClient(S3Client);
+const SOURCE_FILE_PATHS = CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.map(
+  (file) => file.path,
+);
 
 function noSuchKey() {
   const err = new Error("NoSuchKey");
@@ -36,23 +39,20 @@ describe("ensureCustomerOnboardingSourceFiles", () => {
     expect(result).toEqual({
       targetPrefix: "tenants/acme/spaces/customer-onboarding/source/",
       total: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.length,
-      written: ["CONTEXT.md", "docs/customer-onboarding-intake.md"],
+      written: SOURCE_FILE_PATHS,
       skipped: [],
     });
     expect(
       s3Mock.commandCalls(PutObjectCommand).map((call) => call.args[0].input),
-    ).toEqual([
-      expect.objectContaining({
-        Bucket: "workspace-bucket",
-        Key: "tenants/acme/spaces/customer-onboarding/source/CONTEXT.md",
-        ContentType: "text/markdown; charset=utf-8",
-      }),
-      expect.objectContaining({
-        Bucket: "workspace-bucket",
-        Key: "tenants/acme/spaces/customer-onboarding/source/docs/customer-onboarding-intake.md",
-        ContentType: "text/markdown; charset=utf-8",
-      }),
-    ]);
+    ).toEqual(
+      SOURCE_FILE_PATHS.map((path) =>
+        expect.objectContaining({
+          Bucket: "workspace-bucket",
+          Key: `tenants/acme/spaces/customer-onboarding/source/${path}`,
+          ContentType: "text/markdown; charset=utf-8",
+        }),
+      ),
+    );
   });
 
   it("preserves existing operator-authored source files by default", async () => {
@@ -67,10 +67,7 @@ describe("ensureCustomerOnboardingSourceFiles", () => {
     });
 
     expect(result.written).toEqual([]);
-    expect(result.skipped).toEqual([
-      "CONTEXT.md",
-      "docs/customer-onboarding-intake.md",
-    ]);
+    expect(result.skipped).toEqual(SOURCE_FILE_PATHS);
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 });
