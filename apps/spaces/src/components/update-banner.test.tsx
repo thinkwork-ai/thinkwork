@@ -108,7 +108,7 @@ describe("UpdateBanner", () => {
 });
 
 describe("DesktopUpdateBadge", () => {
-  it("renders a Codex-style available update badge and downloads on click", async () => {
+  it("renders a compact blue available update badge and downloads on click", async () => {
     const bridge = createBridge(
       updateState({ status: "available", availableVersion: "1.2.3" }),
     );
@@ -124,7 +124,7 @@ describe("DesktopUpdateBadge", () => {
     expect(button.className).toContain("h-[22px]");
     expect(button.className).toContain("text-xs");
     expect(button.className).toContain("font-medium");
-    expect(button.className).toContain("bg-white/[0.08]");
+    expect(button.className).toContain("bg-[#2f9bff]");
     fireEvent.click(button);
 
     expect(bridge.downloadUpdate).toHaveBeenCalledTimes(1);
@@ -165,6 +165,11 @@ describe("DesktopUpdateBadge", () => {
         name: "Restart to install update v1.2.3",
       }).className,
     ).toContain("h-[22px]");
+    expect(
+      screen.getByRole("button", {
+        name: "Restart to install update v1.2.3",
+      }).className,
+    ).toContain("bg-[#2f9bff]");
     expect(bridge.installUpdate).toHaveBeenCalledTimes(1);
   });
 
