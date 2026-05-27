@@ -588,7 +588,7 @@ function ThreadInfoPanel({
 
   return (
     <aside
-      className="absolute right-6 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
+      className="absolute right-5 top-4 z-20 hidden max-h-[calc(100%-2rem)] w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
       aria-label={hasGoal ? "Thread Goal info" : "Thread info"}
       data-testid="thread-info-panel"
     >

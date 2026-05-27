@@ -86,6 +86,10 @@ const TASK_KEY_ALIASES: Array<{
     ],
   },
   {
+    key: "missing_onboarding_information",
+    patterns: [/\bmissing onboarding information\b/i, /\bmissing intake\b/i],
+  },
+  {
     key: "final_onboarding_review",
     patterns: [/\bfinal onboarding review\b/i, /\bfinal review\b/i],
   },
@@ -1028,6 +1032,14 @@ function taskKeyFromPrefilledTitle(title: string): string | null {
       ],
     ],
     [
+      "missing_onboarding_information",
+      [
+        /\bresolve missing onboarding information\b/i,
+        /\bmissing onboarding information\b/i,
+        /\bmissing intake\b/i,
+      ],
+    ],
+    [
       "final_onboarding_review",
       [/\bcomplete final onboarding review\b/i, /\bfinal onboarding review\b/i],
     ],
@@ -1047,6 +1059,10 @@ function cleanTaskMutationTitle(value: string | undefined): string | null {
     )
     .replace(
       /\s*,?\s*@[^,.;:]+?\s+\b(?:will|is|was|can|should|shall|would|could|going|handling|handle|handles|handled|assigned|owns?|responsible|taking|take)\b.*$/i,
+      "",
+    )
+    .replace(
+      /\s*,?\s*(?:assign(?:ed)?|owner|owned|handled|handle|take|taking)\s+(?:it\s+|this\s+|the\s+task\s+)?(?:to|by)?\s*(?:the\s+)?(?:agent|thinkwork|computer)\b.*$/i,
       "",
     )
     .replace(/\b(?:task|checklist item|todo|to-do)$/i, "")
@@ -1273,7 +1289,15 @@ function assignmentDisplayFromSegment(segment: string): string | null {
   const match = segment.match(
     /@([A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*)?)/,
   );
-  return match?.[1]?.trim() || null;
+  const mentionedAssignee = match?.[1]?.trim();
+  if (mentionedAssignee) return mentionedAssignee;
+  if (
+    ASSIGNMENT_WORDS.test(segment) &&
+    /\b(?:agent|thinkwork|computer)\b/i.test(segment)
+  ) {
+    return "Agent";
+  }
+  return null;
 }
 
 function isStatusRequest(content: string): boolean {

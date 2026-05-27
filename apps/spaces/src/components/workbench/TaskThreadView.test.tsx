@@ -632,7 +632,7 @@ describe("TaskThreadView", () => {
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
     expect(panel.className).toContain("absolute");
-    expect(panel.className).toContain("right-6");
+    expect(panel.className).toContain("right-5");
     expect(panel.className).toContain("top-4");
     expect(panel.className).toContain("max-h-[calc(100%-2rem)]");
     expect(panel.className).toContain("overflow-hidden");
