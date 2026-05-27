@@ -100,6 +100,180 @@ describe("TaskThreadView", () => {
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
   });
 
+  it("renders an agent avatar rail for assistant messages only", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-26T20:00:00Z"));
+    try {
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Identity rail",
+            lifecycleStatus: "COMPLETED",
+            messages: [
+              {
+                id: "message-1",
+                role: "USER",
+                content: "Send me a status email",
+              },
+              {
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "I sent the status email.",
+                createdAt: "2026-05-26T15:00:00Z",
+              },
+            ],
+          }}
+        />,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const avatar = screen.getByTestId("message-avatar-agent");
+    expect(avatar).toBeTruthy();
+    expect(avatar.querySelector("svg")?.getAttribute("class") ?? "").toContain(
+      "text-[#54a9ff]",
+    );
+    expect(screen.getByLabelText("Agent message")).toBeTruthy();
+    expect(screen.getByText("Agent")).toBeTruthy();
+    expect(screen.getByText("5hr ago")).toBeTruthy();
+    const assistantMessage = document.querySelector(
+      '[data-message-role="assistant"]',
+    );
+    expect(assistantMessage?.className ?? "").toContain("my-1");
+    expect(assistantMessage?.querySelector('[class*="py-1"]')).toBeTruthy();
+    const assistantContent = screen.getByText("Agent").closest(".grid");
+    expect(assistantContent?.className ?? "").toContain("gap-0.5");
+    expect(assistantContent?.className ?? "").not.toContain("gap-3");
+    const bylineName = screen.getByText("Agent");
+    expect(bylineName.className).toContain("text-muted-foreground");
+    expect(bylineName.className).not.toContain("text-foreground");
+    const userMessage = document.querySelector('[data-message-role="user"]');
+    expect(userMessage?.querySelector("[data-testid^='message-avatar-']")).toBe(
+      null,
+    );
+  });
+
+  it("renders initials for another user's message", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-26T20:00:00Z"));
+    try {
+      render(
+        <TaskThreadView
+          currentUser={{ id: "user-current", name: "Eric Odom" }}
+          thread={{
+            id: "thread-1",
+            title: "Other user",
+            lifecycleStatus: "COMPLETED",
+            messages: [
+              {
+                id: "message-1",
+                role: "USER",
+                content: "I updated the customer record.",
+                createdAt: "2026-05-26T15:00:00Z",
+                sender: {
+                  type: "USER",
+                  id: "user-other",
+                  displayName: "Ricky Kwong",
+                },
+              },
+            ],
+          }}
+        />,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const avatar = screen.getByTestId("message-avatar-user");
+    expect(avatar.textContent).toBe("RK");
+    expect(screen.getByLabelText("Ricky Kwong message")).toBeTruthy();
+    expect(screen.getByText("Ricky Kwong")).toBeTruthy();
+    expect(screen.getByText("5hr ago")).toBeTruthy();
+    const message = document.querySelector('[data-message-role="user"]');
+    expect(message?.className ?? "").toContain("my-1");
+    expect(message?.className ?? "").toContain("max-w-full");
+    expect(message?.className ?? "").not.toContain("ml-auto");
+    expect(message?.querySelector('[class*="py-1"]')).toBeTruthy();
+    expect(message?.querySelector('[class*="bg-muted"]')).toBeNull();
+  });
+
+  it("does not render an avatar for the current user's persisted message", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-26T20:00:00Z"));
+    try {
+      render(
+        <TaskThreadView
+          currentUser={{ id: "user-current", name: "Eric Odom" }}
+          thread={{
+            id: "thread-1",
+            title: "Current user",
+            lifecycleStatus: "COMPLETED",
+            messages: [
+              {
+                id: "message-1",
+                role: "USER",
+                content: "Send me a status email",
+                createdAt: "2026-05-26T15:00:00Z",
+                sender: {
+                  type: "USER",
+                  id: "user-current",
+                  displayName: "Eric Odom",
+                },
+              },
+            ],
+          }}
+        />,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(screen.queryByTestId("message-avatar-user")).toBeNull();
+    expect(screen.getByText("5hr ago").className).toContain("pr-1");
+    const message = document.querySelector('[data-message-role="user"]');
+    expect(message?.className ?? "").toContain("my-1");
+    expect(message?.className ?? "").toContain("max-w-[78%]");
+  });
+
+  it("uses compact absolute message timestamps after 24 hours", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-26T20:00:00Z"));
+    const createdAt = "2026-05-24T15:07:00Z";
+    try {
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Old timestamp",
+            lifecycleStatus: "COMPLETED",
+            messages: [
+              {
+                id: "message-1",
+                role: "ASSISTANT",
+                content: "Older status.",
+                createdAt,
+              },
+            ],
+          }}
+        />,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const date = new Date(createdAt);
+    const hours = date.getHours();
+    const expected = `${date.getMonth() + 1}/${date.getDate()} ${
+      hours % 12 || 12
+    }:${String(date.getMinutes()).padStart(2, "0")} ${
+      hours < 12 ? "am" : "pm"
+    }`;
+    expect(screen.getByText(expected)).toBeTruthy();
+    expect(screen.queryByText(/hr ago/)).toBeNull();
+  });
+
   it("renders question card tool results as an intake form instead of raw JSON", () => {
     render(
       <TaskThreadView
@@ -2554,6 +2728,15 @@ describe("TaskThreadView", () => {
       renderUserMessage("Tiny prompt");
 
       const wrapper = screen.getByTestId("collapsible-user-body");
+      const bubble = wrapper.closest('[class*="bg-muted"]');
+      const message = wrapper.closest('[data-message-role="user"]');
+      expect(message?.className ?? "").toContain("my-1");
+      expect(bubble?.className ?? "").toContain("!px-3");
+      expect(bubble?.className ?? "").toContain("!py-2");
+      expect(bubble?.className ?? "").toContain("text-[15px]");
+      expect(bubble?.className ?? "").toContain("leading-5");
+      expect(bubble?.className ?? "").not.toContain("px-5");
+      expect(bubble?.className ?? "").not.toContain("text-base");
       expect(wrapper.getAttribute("data-collapsed")).toBe("false");
       expect(wrapper.style.maxHeight).toBe("");
       expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
@@ -2565,7 +2748,7 @@ describe("TaskThreadView", () => {
 
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
-      expect(wrapper.style.maxHeight).toBe("280px");
+      expect(wrapper.style.maxHeight).toBe("200px");
       expect(wrapper.className).toContain("overflow-hidden");
       expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
     });
@@ -2595,7 +2778,7 @@ describe("TaskThreadView", () => {
 
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
-      expect(wrapper.style.maxHeight).toBe("280px");
+      expect(wrapper.style.maxHeight).toBe("200px");
       expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
       expect(screen.queryByRole("button", { name: /show less/i })).toBeNull();
     });
@@ -2624,7 +2807,7 @@ describe("TaskThreadView", () => {
 
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
-      expect(wrapper.style.maxHeight).toBe("280px");
+      expect(wrapper.style.maxHeight).toBe("200px");
       expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
     });
 

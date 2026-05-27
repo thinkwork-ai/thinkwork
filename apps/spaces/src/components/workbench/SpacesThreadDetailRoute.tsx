@@ -189,7 +189,7 @@ export function SpacesThreadDetailRoute({
   backHref,
   documentTitlePrefix = "Thread",
 }: SpacesThreadDetailRouteProps) {
-  const { tenantId } = useTenant();
+  const { tenantId, userId } = useTenant();
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(
     null,
   );
@@ -833,6 +833,9 @@ export function SpacesThreadDetailRoute({
       streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
       mentionTargets={mentionTargetsData?.threadMentionTargets ?? []}
+      currentUser={{
+        id: userId,
+      }}
       artifactPanelState={artifactPanelState}
       infoPanelState={threadInfoPanelState}
       onSendFollowUp={async (content, files, mentions = []) => {
@@ -1173,6 +1176,7 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
       id: node.id,
       role: node.role,
       content: node.content,
+      sender: node.sender,
       parts: normalizePersistedParts(node.parts),
       createdAt: node.createdAt,
       metadata: node.metadata,
@@ -1320,9 +1324,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

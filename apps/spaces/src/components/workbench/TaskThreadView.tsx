@@ -99,12 +99,26 @@ export interface TaskThreadMessage {
   id: string;
   role: string;
   content?: string | null;
+  sender?: TaskThreadMessageSender | null;
   createdAt?: string | null;
   metadata?: unknown;
   toolCalls?: unknown;
   toolResults?: unknown;
   parts?: AccumulatedPart[];
   durableArtifact?: GeneratedArtifact | null;
+}
+
+export interface TaskThreadMessageSender {
+  type?: string | null;
+  id?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface CurrentUserIdentity {
+  id?: string | null;
+  name?: string | null;
+  email?: string | null;
 }
 
 export interface TaskThread {
@@ -147,6 +161,7 @@ interface TaskThreadViewProps {
   runbookQueues?: RunbookQueueData[];
   isSending?: boolean;
   mentionTargets?: MentionTarget[];
+  currentUser?: CurrentUserIdentity | null;
   onSendFollowUp?: (
     content: string,
     files?: File[],
@@ -222,6 +237,7 @@ export function TaskThreadView({
   runbookQueues = [],
   isSending = false,
   mentionTargets = [],
+  currentUser,
   onSendFollowUp,
   artifactPanelState,
   infoPanelState,
@@ -364,6 +380,7 @@ export function TaskThreadView({
                     isSending={isSending}
                     threadAttachments={infoPanelState?.attachments ?? []}
                     onDownloadAttachment={infoPanelState?.onDownloadAttachment}
+                    currentUser={currentUser}
                     showProcessingShimmer={
                       index === latestUserIndex && showProcessingShimmer
                     }
@@ -890,6 +907,7 @@ function TranscriptSegment({
   isSending,
   threadAttachments,
   onDownloadAttachment,
+  currentUser,
   showProcessingShimmer,
 }: {
   message: TaskThreadMessage;
@@ -906,6 +924,7 @@ function TranscriptSegment({
   isSending?: boolean;
   threadAttachments: ThreadInfoAttachment[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
+  currentUser?: CurrentUserIdentity | null;
   showProcessingShimmer: boolean;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
@@ -923,6 +942,7 @@ function TranscriptSegment({
         isSending={isSending}
         threadAttachments={threadAttachments}
         onDownloadAttachment={onDownloadAttachment}
+        currentUser={currentUser}
       />
       {turn ? <ThreadTurnActivity turn={turn} /> : null}
       {isLatestUser ? (
@@ -1153,8 +1173,8 @@ function ProcessingShimmer() {
   );
 }
 
-// 10 lines × leading-7 (28px) of the user bubble's text rhythm.
-const COLLAPSE_MAX_HEIGHT_PX = 280;
+// 10 lines x leading-5 (20px) of the user bubble's text rhythm.
+const COLLAPSE_MAX_HEIGHT_PX = 200;
 
 function CollapsibleUserMessageBody({ body }: { body: string }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -1225,6 +1245,7 @@ function TranscriptMessage({
   isSending,
   threadAttachments,
   onDownloadAttachment,
+  currentUser,
 }: {
   message: TaskThreadMessage;
   onOpenArtifact?: (artifactId: string) => void;
@@ -1236,9 +1257,12 @@ function TranscriptMessage({
   isSending?: boolean;
   threadAttachments: ThreadInfoAttachment[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
+  currentUser?: CurrentUserIdentity | null;
 }) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
+  const isOwnMessage = isCurrentUserMessage(message, currentUser);
+  const avatarKind = messageAvatarKind(message, isOwnMessage);
   const actions = actionRowsForMessage(message);
   const questionCards = !isUser ? questionCardsForMessage(message) : [];
   const body = message.content?.trim() ?? "";
@@ -1253,79 +1277,218 @@ function TranscriptMessage({
     typedParts.length > 0
       ? renderTypedParts(typedParts, { keyPrefix: message.id }).filter(Boolean)
       : [];
+  const transcriptContentClassName =
+    "grid w-full grid-cols-[minmax(0,1fr)] gap-0.5 overflow-visible py-1";
+  const userBubbleClassName =
+    "rounded-2xl bg-muted/70 !px-3 !py-2 text-[15px] leading-5 text-foreground";
+  const timestamp = formatMessageTimestamp(message.createdAt);
+  const senderName = messageSenderName(message);
 
   return (
     <Message
-      from={toAiMessageRole(message.role)}
-      className={isUser ? "max-w-[78%]" : "max-w-full"}
+      from={isOwnMessage ? "user" : "assistant"}
+      className={isOwnMessage ? "my-1 max-w-[78%]" : "my-1 max-w-full"}
       data-message-role={isUser ? "user" : "assistant"}
     >
-      <MessageContent
-        className={
-          isUser
-            ? "rounded-2xl bg-muted/70 px-5 py-3 text-base leading-7 text-foreground"
-            : "grid w-full grid-cols-[minmax(0,1fr)] gap-3 overflow-visible"
-        }
-      >
-        {isUser ? (
-          <div className="grid min-w-0 gap-2">
-            {body ? <CollapsibleUserMessageBody body={body} /> : null}
-            {attachments.length > 0 ? (
-              <MessageAttachmentList
-                attachments={attachments}
-                onDownloadAttachment={onDownloadAttachment}
-              />
-            ) : null}
-            {!body && attachments.length === 0 ? (
-              <>(No message content)</>
-            ) : null}
-          </div>
-        ) : (
-          <>
-            {actions.length > 0 ? (
-              <div className="grid gap-2">
-                {actions.map((action) => (
-                  <ActionRow
-                    key={`${message.id}-${action.title}`}
-                    {...action}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {questionCards.length > 0 ? (
-              <div className="grid gap-3">
-                {questionCards.map((card) => (
-                  <QuestionCard
-                    key={`${message.id}-${card.id}`}
-                    card={card}
-                    disabled={!onSendFollowUp || isSending}
-                    onSubmit={(content) => onSendFollowUp?.(content, [], [])}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {renderedTypedParts.length > 0 ? (
-              renderedTypedParts
-            ) : body ? (
-              <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
-                {body}
-              </Response>
-            ) : (
-              <p className="text-sm leading-5 text-foreground">
-                (No message content)
-              </p>
-            )}
-            {message.durableArtifact ? (
-              <GeneratedArtifactCard
-                artifact={message.durableArtifact}
-                onOpenArtifact={onOpenArtifact}
-              />
-            ) : null}
-          </>
+      <div
+        className={cn(
+          "min-w-0",
+          isOwnMessage && "grid gap-1",
+          avatarKind && "grid grid-cols-[2rem_minmax(0,1fr)] gap-3",
         )}
-      </MessageContent>
+      >
+        {avatarKind ? (
+          <MessageSenderAvatar sender={message.sender} kind={avatarKind} />
+        ) : null}
+        {isOwnMessage && timestamp ? (
+          <p className="justify-self-end pr-1 text-[11px] font-medium leading-none text-muted-foreground">
+            {timestamp}
+          </p>
+        ) : null}
+        <MessageContent
+          className={
+            isOwnMessage ? userBubbleClassName : transcriptContentClassName
+          }
+        >
+          {isOwnMessage ? (
+            <div className="grid min-w-0 gap-2">
+              {body ? <CollapsibleUserMessageBody body={body} /> : null}
+              {attachments.length > 0 ? (
+                <MessageAttachmentList
+                  attachments={attachments}
+                  onDownloadAttachment={onDownloadAttachment}
+                />
+              ) : null}
+              {!body && attachments.length === 0 ? (
+                <>(No message content)</>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <MessageByline name={senderName} timestamp={timestamp} />
+              {actions.length > 0 ? (
+                <div className="grid gap-2">
+                  {actions.map((action) => (
+                    <ActionRow
+                      key={`${message.id}-${action.title}`}
+                      {...action}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {questionCards.length > 0 ? (
+                <div className="grid gap-3">
+                  {questionCards.map((card) => (
+                    <QuestionCard
+                      key={`${message.id}-${card.id}`}
+                      card={card}
+                      disabled={!onSendFollowUp || isSending}
+                      onSubmit={(content) => onSendFollowUp?.(content, [], [])}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {renderedTypedParts.length > 0 ? (
+                renderedTypedParts
+              ) : body ? (
+                <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
+                  {body}
+                </Response>
+              ) : (
+                <p className="text-sm leading-5 text-foreground">
+                  (No message content)
+                </p>
+              )}
+              {attachments.length > 0 ? (
+                <MessageAttachmentList
+                  attachments={attachments}
+                  onDownloadAttachment={onDownloadAttachment}
+                />
+              ) : null}
+              {!isUser && message.durableArtifact ? (
+                <GeneratedArtifactCard
+                  artifact={message.durableArtifact}
+                  onOpenArtifact={onOpenArtifact}
+                />
+              ) : null}
+            </>
+          )}
+        </MessageContent>
+      </div>
     </Message>
   );
+}
+
+function MessageByline({
+  name,
+  timestamp,
+}: {
+  name: string;
+  timestamp: string | null;
+}) {
+  return (
+    <p className="text-xs leading-none text-muted-foreground">
+      <span className="font-semibold text-muted-foreground">{name}</span>
+      {timestamp ? <span className="ml-1">{timestamp}</span> : null}
+    </p>
+  );
+}
+
+function MessageSenderAvatar({
+  sender,
+  kind,
+}: {
+  sender?: TaskThreadMessageSender | null;
+  kind: "agent" | "user";
+}) {
+  const name = sender?.displayName?.trim() || "Agent";
+  const initials = initialsForName(name);
+
+  return (
+    <div
+      aria-label={`${name} message`}
+      data-testid={`message-avatar-${kind}`}
+      className="mt-0.5 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.06] text-[11px] font-semibold text-white/65"
+    >
+      {kind === "agent" ? (
+        <Bot className="size-4 text-[#54a9ff]" aria-hidden="true" />
+      ) : sender?.avatarUrl ? (
+        <img
+          src={sender.avatarUrl}
+          alt=""
+          className="size-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        <span aria-hidden="true">{initials}</span>
+      )}
+    </div>
+  );
+}
+
+function messageAvatarKind(
+  message: TaskThreadMessage,
+  isOwnMessage: boolean,
+): "agent" | "user" | null {
+  if (isOwnMessage) return null;
+  const role = message.role.toUpperCase();
+  if (role !== "USER") return "agent";
+  return message.sender ? "user" : null;
+}
+
+function messageSenderName(message: TaskThreadMessage) {
+  const fallback = message.role.toUpperCase() === "USER" ? "User" : "Agent";
+  return message.sender?.displayName?.trim() || fallback;
+}
+
+function isCurrentUserMessage(
+  message: TaskThreadMessage,
+  currentUser?: CurrentUserIdentity | null,
+) {
+  if (message.role.toUpperCase() !== "USER") return false;
+  const sender = message.sender;
+  if (!sender) return true;
+
+  const senderType = sender.type?.trim().toLowerCase();
+  if (!senderType && !sender.id) return true;
+  if (senderType && senderType !== "user") return false;
+
+  if (sameIdentity(sender.id, currentUser?.id)) return true;
+  return false;
+}
+
+function sameIdentity(left?: string | null, right?: string | null) {
+  return Boolean(left?.trim() && right?.trim() && left.trim() === right.trim());
+}
+
+function initialsForName(name: string) {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function formatMessageTimestamp(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  const time = date.getTime();
+  if (Number.isNaN(time)) return null;
+
+  const diffMs = Date.now() - time;
+  if (diffMs >= 0 && diffMs < 86_400_000) {
+    const minutes = Math.max(1, Math.floor(diffMs / 60_000));
+    if (minutes < 60) return `${minutes}min ago`;
+    return `${Math.floor(minutes / 60)}hr ago`;
+  }
+
+  const hours = date.getHours();
+  const hour12 = hours % 12 || 12;
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const meridiem = hours < 12 ? "am" : "pm";
+  return `${date.getMonth() + 1}/${date.getDate()} ${hour12}:${minute} ${meridiem}`;
 }
 
 function MessageAttachmentList({
@@ -1394,12 +1557,6 @@ export function normalizePersistedParts(value: unknown): AccumulatedPart[] {
     }
   }
   return parts;
-}
-
-function toAiMessageRole(role: string): "user" | "assistant" | "system" {
-  const normalized = role.toLowerCase();
-  if (normalized === "user" || normalized === "system") return normalized;
-  return "assistant";
 }
 
 /**
