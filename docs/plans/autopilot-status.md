@@ -14,14 +14,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: U8 in progress
-- Active unit: U8 Document the Goal doctrine and best practices
-- Active branch: `codex/goals-u8-docs`
-- Active worktree: `.Codex/worktrees/goals-u8-docs`
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-27
-- Latest merged PR: [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771)
-- Active PR: [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772)
-- CI: PR checks pending
+- Latest merged PR: [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772)
+- Active PR: none
+- CI: U1 through U8 passed required checks; all implementation units merged
 
 ### Active Unit Notes
 
@@ -186,6 +186,11 @@ Target branch: `main`
   `git diff --check`, and touched-file
   `pnpm dlx prettier@3.6.2 --check`.
 - Opened PR [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772).
+- PR [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` and deleted the remote/local U8 branch.
+- Completed all implementation units for
+  `docs/plans/2026-05-27-003-feat-folder-native-goals-plan.md`.
 
 ### Progress Log
 
@@ -198,7 +203,7 @@ Target branch: `main`
 | 2026-05-27 | U5   | `codex/goals-u5-api`        | [#1768](https://github.com/thinkwork-ai/thinkwork/pull/1768) | Merged | Local and CI passed | Goal files query and review mutation.                     |
 | 2026-05-27 | U6   | `codex/goals-u6-panel`      | [#1770](https://github.com/thinkwork-ai/thinkwork/pull/1770) | Merged | Local and CI passed | Spaces Goal panel and review actions.                     |
 | 2026-05-27 | U7   | `codex/goals-u7-completion` | [#1771](https://github.com/thinkwork-ai/thinkwork/pull/1771) | Merged | Local and CI passed | Completion metadata and Brain candidate seam.             |
-| 2026-05-27 | U8   | `codex/goals-u8-docs`       | [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772) | Active | Local passed        | Goal doctrine and best-practice docs.                     |
+| 2026-05-27 | U8   | `codex/goals-u8-docs`       | [#1772](https://github.com/thinkwork-ai/thinkwork/pull/1772) | Merged | Local and CI passed | Goal doctrine and best-practice docs.                     |
 
 ### CI Failures
 
