@@ -1,10 +1,9 @@
-export interface ToolCostRecord {
-  provider: string;
-  event_type: string;
-  amount_usd: number | string;
-  duration_ms?: number;
-  metadata?: Record<string, unknown>;
-}
+export {
+  collectToolCosts,
+  type ToolCostRecord,
+} from "@thinkwork/pi-runtime-core";
+
+import type { ToolCostRecord } from "@thinkwork/pi-runtime-core";
 
 const AGENTCORE_BROWSER_VCPU_HOUR_USD = 0.0895;
 const AGENTCORE_BROWSER_GB_HOUR_USD = 0.00945;
@@ -91,33 +90,4 @@ export function buildAgentCoreBrowserCost(args: {
       ...(args.error ? { error: args.error.slice(0, 200) } : {}),
     },
   };
-}
-
-function isToolCostRecord(value: unknown): value is ToolCostRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.provider === "string" &&
-    typeof record.event_type === "string" &&
-    (typeof record.amount_usd === "string" ||
-      typeof record.amount_usd === "number")
-  );
-}
-
-export function collectToolCosts(value: unknown): ToolCostRecord[] {
-  if (!value || typeof value !== "object") return [];
-  const record = value as Record<string, unknown>;
-  const candidates = [
-    record.tool_costs,
-    (record.details as Record<string, unknown> | undefined)?.tool_costs,
-    (record.result as Record<string, unknown> | undefined)?.tool_costs,
-  ];
-  const costs: ToolCostRecord[] = [];
-  for (const candidate of candidates) {
-    if (!Array.isArray(candidate)) continue;
-    for (const item of candidate) {
-      if (isToolCostRecord(item)) costs.push(item);
-    }
-  }
-  return costs;
 }

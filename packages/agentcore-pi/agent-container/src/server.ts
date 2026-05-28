@@ -42,21 +42,22 @@
  */
 
 import http from "node:http";
-import {
-  Agent,
-  type AgentEvent,
-  type AgentTool,
-} from "@mariozechner/pi-agent-core";
-import type {
-  AssistantMessage,
-  Message,
-  TextContent,
-  Usage,
-} from "@mariozechner/pi-ai";
-import { getModel, streamSimple } from "@mariozechner/pi-ai";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
+import {
+  collectToolCosts,
+  isFinalizeCallbackConfigured,
+  normalizeHistory,
+  postFinalizeCallback,
+  runAgentLoop,
+  type InvocationResponse,
+  type PiRetainStatus,
+  type RunAgentLoopResult,
+  type ToolCostRecord,
+  type ToolInvocationRecord,
+} from "@thinkwork/pi-runtime-core";
 
 import {
   InvocationValidationError,
@@ -112,10 +113,6 @@ import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
 import { buildSendEmailTool } from "./runtime/tools/send-email.js";
 import {
-  collectToolCosts,
-  type ToolCostRecord,
-} from "./runtime/tools/tool-costs.js";
-import {
   discoverWorkspaceSkills,
   formatWorkspaceSkills,
   type WorkspaceSkill,
@@ -123,188 +120,23 @@ import {
 
 const PORT = Number(process.env.PORT || 8080);
 
-// ---------------------------------------------------------------------------
-// Types — payload + response shapes the handler exposes.
-// ---------------------------------------------------------------------------
-
-/**
- * Tool-invocation record. Mirrors `PiToolInvocation` from the deleted
- * pi-mono runtime — `chat-agent-invoke.ts:721/754` reads these fields off
- * the response and persists them onto `thread_turns.tool_invocations`. The
- * Pi runtime must keep emitting them or the admin UI / eval-runner /
- * thread inspector all lose tool visibility.
- */
-export interface ToolInvocationRecord {
-  id: string;
-  name: string;
-  tool_name: string;
-  args?: unknown;
-  result?: unknown;
-  is_error?: boolean;
-  started_at?: string;
-  finished_at?: string;
-  runtime: "pi";
-}
-
-export interface PiRetainStatus {
-  /** True when the per-turn auto-retain Lambda invoke was dispatched. */
-  retained: boolean;
-  /** Present when the invoke was attempted but failed; absent otherwise. */
-  error?: string;
-}
-
-export interface InvocationResponse {
-  response: {
-    role: "assistant";
-    content: string;
-    runtime: "pi";
-    model: string;
-    usage?: Usage;
-    tools_called?: string[];
-    tool_invocations?: ToolInvocationRecord[];
-    tool_costs?: ToolCostRecord[];
-    hindsight_usage?: unknown[];
-  };
-  runtime: "pi";
-  /**
-   * The composed system prompt the agent loop ran against (workspace files
-   * + runtime tool policy + attachment preamble). Eval invocations capture
-   * this for the result-detail "View System Prompt" sheet so operators can
-   * audit exactly what the LLM saw, not just the per-case override stored
-   * on the test case. Present on every response — there is no opt-in.
-   */
-  composed_system_prompt: string;
-  pi_usage?: Usage;
-  /**
-   * End-of-turn auto-retain dispatch status. Surfaces whether the
-   * runtime invoked the `memory-retain` Lambda for this turn. Used by
-   * the post-deploy smoke to pin the auto-retain wiring against
-   * regressions where the response is otherwise healthy but retain
-   * silently no-ops.
-   */
-  pi_retain?: PiRetainStatus;
-  /**
-   * Plan §006 U4 — pinning field for the MCP proxy substrate. True when
-   * the inert (or future live) `mcp` AgentTool was registered for this
-   * invocation. The post-deploy smoke asserts this field is a boolean so
-   * a regression that drops the field (e.g., a response-builder rewrite
-   * that forgets to surface it) fails the smoke even before U5 makes
-   * the proxy actually useful. The full transition path is:
-   *   - PR-1 (U3 + U4): field present, value tracks proxy registration
-   *   - PR-2 (U5):      value is true on every invocation with MCP configs,
-   *                     and a sibling `mcp_proxy_used: true` lands when the
-   *                     proxy's call mode was exercised at least once.
-   */
-  mcp_proxy_registered?: boolean;
-  tools_called?: string[];
-  tool_invocations?: ToolInvocationRecord[];
-  tool_costs?: ToolCostRecord[];
-  hindsight_usage?: unknown[];
-}
-
-interface HistoryMessage {
-  role?: unknown;
-  content?: unknown;
-}
+export {
+  collectToolCosts,
+  isFinalizeCallbackConfigured,
+  normalizeHistory,
+  postFinalizeCallback,
+  runAgentLoop,
+};
+export type {
+  InvocationResponse,
+  PiRetainStatus,
+  RunAgentLoopResult,
+  ToolCostRecord,
+  ToolInvocationRecord,
+};
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-/**
- * Build a zero-valued Usage stub for synthesized history messages.
- * The history rows came from chat-agent-invoke's DB load; the original
- * per-turn token usage was not preserved across the wire. pi-ai requires
- * `usage` on every AssistantMessage but doesn't read these fields when
- * serializing history back to Bedrock — they're TypeScript metadata.
- */
-function emptyUsage(): Usage {
-  return {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    totalTokens: 0,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  };
-}
-
-/**
- * Convert chat-agent-invoke's wire-format history into the shape pi-ai's
- * `Agent.initialState.messages` requires.
- *
- * Wire format (from `packages/api/src/handlers/chat-agent-invoke.ts:300`):
- *   `[{ role: "user" | "assistant", content: string }, ...]`
- *
- * pi-ai's `UserMessage` accepts `content: string`. pi-ai's
- * `AssistantMessage` does NOT — it requires
- * `content: (TextContent | ThinkingContent | ToolCall)[]` plus required
- * metadata fields (`api`, `provider`, `model`, `usage`, `stopReason`,
- * `timestamp`). The original implementation passed `content` as a
- * string for both roles, which produced a structurally-invalid
- * `AssistantMessage`. pi-ai's Agent silently swallowed the malformed
- * input and returned an empty assistant turn — every multi-turn chat
- * with non-empty `messages_history` produced `content === ""` until
- * this fix.
- *
- * For the assistant fields that aren't carried over the wire (api,
- * provider, model, usage, stopReason), use the current invocation's
- * model and zero-valued metadata. These fields are not load-bearing
- * during pi-ai's history → Bedrock serialization; the Bedrock Messages
- * API only reads `role` and `content`.
- */
-export function normalizeHistory(
-  history: unknown,
-  currentModelId: string,
-): Message[] {
-  if (!Array.isArray(history)) return [];
-  return history.flatMap((entry: HistoryMessage) => {
-    if (typeof entry.content !== "string" || !entry.content.trim()) return [];
-
-    if (entry.role === "user") {
-      return [
-        {
-          role: "user",
-          content: entry.content,
-          timestamp: Date.now(),
-        } as Message,
-      ];
-    }
-
-    if (entry.role === "assistant") {
-      const textPart: TextContent = { type: "text", text: entry.content };
-      return [
-        {
-          role: "assistant",
-          content: [textPart],
-          api: "bedrock-converse-stream",
-          provider: "amazon-bedrock",
-          model: currentModelId,
-          usage: emptyUsage(),
-          stopReason: "stop",
-          timestamp: Date.now(),
-        } as Message,
-      ];
-    }
-
-    return [];
-  });
-}
-
-function resolveModel(modelId: unknown) {
-  const id =
-    typeof modelId === "string" && modelId.trim()
-      ? modelId.trim()
-      : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
-  return getModel("amazon-bedrock", id as never);
-}
-
-function textFromAssistant(message: AssistantMessage | undefined): string {
-  if (!message) return "";
-  return message.content
-    .filter((part): part is TextContent => part.type === "text")
-    .map((part) => part.text)
-    .join("");
 }
 
 function parseMcpConfigs(value: unknown): McpServerConfig[] {
@@ -686,114 +518,6 @@ export async function assembleTools(
 }
 
 // ---------------------------------------------------------------------------
-// Agent loop — placeholder dispatch (per U9 plan note: in-process Agent;
-// worker_thread.spawn arrives in U16).
-// ---------------------------------------------------------------------------
-
-export interface RunAgentLoopArgs {
-  message: string;
-  history: Message[];
-  systemPrompt: string;
-  tools: AgentTool<any>[];
-  modelId: unknown;
-  threadId: string;
-  gitSha: string;
-  identity: IdentitySnapshot;
-}
-
-export interface RunAgentLoopResult {
-  content: string;
-  usage?: Usage;
-  modelId: string;
-  toolsCalled: string[];
-  toolInvocations: ToolInvocationRecord[];
-  toolCosts?: ToolCostRecord[];
-}
-
-export async function runAgentLoop(
-  args: RunAgentLoopArgs,
-): Promise<RunAgentLoopResult> {
-  const model = resolveModel(args.modelId);
-  const toolsCalled = new Set<string>();
-  const toolInvocations: ToolInvocationRecord[] = [];
-
-  const agent = new Agent({
-    initialState: {
-      systemPrompt: args.systemPrompt,
-      model,
-      messages: args.history,
-      tools: args.tools,
-    },
-    streamFn: streamSimple,
-    sessionId: args.threadId || undefined,
-    onPayload: (bedrockPayload) => ({
-      ...(bedrockPayload as Record<string, unknown>),
-      requestMetadata: {
-        runtime: "pi",
-        git_sha: args.gitSha,
-        thread_id: args.threadId,
-      },
-    }),
-  });
-
-  agent.subscribe((event: AgentEvent) => {
-    if (event.type === "tool_execution_start") {
-      toolsCalled.add(event.toolName);
-      toolInvocations.push({
-        id: event.toolCallId,
-        name: event.toolName,
-        tool_name: event.toolName,
-        args: event.args,
-        started_at: new Date().toISOString(),
-        runtime: "pi",
-      });
-    }
-    if (event.type === "tool_execution_end") {
-      const existing = toolInvocations.find(
-        (item) => item.id === event.toolCallId,
-      );
-      const finished = new Date().toISOString();
-      if (existing) {
-        existing.result = event.result;
-        existing.is_error = event.isError;
-        existing.finished_at = finished;
-      } else {
-        // Defensive — start event was lost (out-of-order delivery / mock test);
-        // record what we have so the response shape stays consistent with
-        // chat-agent-invoke's expectations.
-        toolInvocations.push({
-          id: event.toolCallId,
-          name: event.toolName,
-          tool_name: event.toolName,
-          result: event.result,
-          is_error: event.isError,
-          finished_at: finished,
-          runtime: "pi",
-        });
-      }
-    }
-  });
-
-  await agent.prompt(args.message);
-  const assistant = [...agent.state.messages]
-    .reverse()
-    .find(
-      (message): message is AssistantMessage => message.role === "assistant",
-    );
-
-  return {
-    content: textFromAssistant(assistant),
-    usage: assistant?.usage,
-    modelId: model.id,
-    toolsCalled: [...toolsCalled],
-    toolInvocations,
-    toolCosts: toolInvocations.flatMap((invocation) =>
-      collectToolCosts(invocation.result),
-    ),
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Completion callback — POST /api/skills/complete with snapshotted secret.
 //
 // IMPORTANT contract (mirrored from
@@ -1026,231 +750,6 @@ export async function postCompletion(
     runId: runContext.runId,
     attempts: totalAttempts,
   });
-}
-
-export interface FinalizeCallbackArgs {
-  payload: Record<string, unknown>;
-  identity: IdentitySnapshot;
-  systemPrompt?: string;
-  result:
-    | { status: "ok"; runResult: RunAgentLoopResult; latencyMs: number }
-    | { status: "error"; error: unknown; latencyMs: number };
-  fetchImpl: typeof fetch;
-  attemptTimeoutMs?: number;
-}
-
-function usageNumber(usage: unknown, ...keys: string[]): number {
-  if (!usage || typeof usage !== "object") return 0;
-  const obj = usage as Record<string, unknown>;
-  for (const key of keys) {
-    const value = obj[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return 0;
-}
-
-function buildFinalizeBody(
-  args: FinalizeCallbackArgs,
-): Record<string, unknown> {
-  const { payload, identity, result } = args;
-  const runResult = result.status === "ok" ? result.runResult : null;
-  const usage = runResult?.usage;
-  const toolCosts =
-    runResult?.toolCosts ??
-    runResult?.toolInvocations.flatMap((invocation) =>
-      collectToolCosts(invocation.result),
-    ) ??
-    [];
-  const errorMessage =
-    result.status === "error"
-      ? result.error instanceof Error
-        ? result.error.message
-        : String(result.error)
-      : undefined;
-
-  return {
-    thread_turn_id: asString(payload.thread_turn_id),
-    tenant_id: identity.tenantId,
-    agent_id: identity.agentId,
-    thread_id: identity.threadId,
-    trace_id: asString(payload.trace_id) || undefined,
-    user_message: asString(payload.message),
-    agent_model: runResult?.modelId || asString(payload.model) || null,
-    runtime_type: "pi",
-    composed_system_prompt: args.systemPrompt || null,
-    agent_slug: asString(payload.instance_id) || null,
-    agent_name: asString(payload.agent_name) || null,
-    duration_ms: result.latencyMs,
-    status: result.status === "ok" ? "completed" : "failed",
-    error_message: errorMessage,
-    computer_id: asString(payload.computer_id) || null,
-    computer_task_id: asString(payload.computer_task_id) || null,
-    usage: {
-      model: runResult?.modelId || asString(payload.model) || null,
-      input_tokens: usageNumber(usage, "inputTokens", "input", "prompt_tokens"),
-      output_tokens: usageNumber(
-        usage,
-        "outputTokens",
-        "output",
-        "completion_tokens",
-      ),
-      cached_read_tokens: usageNumber(
-        usage,
-        "cachedReadTokens",
-        "cacheRead",
-        "cached_read_tokens",
-      ),
-    },
-    response: runResult
-      ? {
-          composed_system_prompt: args.systemPrompt || null,
-          content: runResult.content,
-          runtime: "pi",
-          model: runResult.modelId,
-          usage: runResult.usage,
-          tools_called: runResult.toolsCalled,
-          tool_invocations: runResult.toolInvocations,
-          tool_costs: toolCosts,
-          hindsight_usage: [],
-        }
-      : {
-          composed_system_prompt: args.systemPrompt || null,
-          runtime: "pi",
-          tools_called: [],
-          tool_invocations: [],
-          hindsight_usage: [],
-        },
-  };
-}
-
-function callbackUrlAllowed(
-  callbackUrl: string,
-  apiUrl: string,
-): { ok: true } | { ok: false; reason: string } {
-  let parsed: URL;
-  try {
-    parsed = new URL(callbackUrl);
-  } catch {
-    return { ok: false, reason: "invalid-url" };
-  }
-
-  const isLocalhost =
-    parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-  if (parsed.protocol !== "https:" && !isLocalhost) {
-    return { ok: false, reason: "insecure-url" };
-  }
-
-  const trimmedApiUrl = apiUrl.trim();
-  if (!trimmedApiUrl) return { ok: false, reason: "missing-api-url" };
-
-  try {
-    const parsedApiUrl = new URL(trimmedApiUrl);
-    const apiIsLocalhost =
-      parsedApiUrl.hostname === "localhost" ||
-      parsedApiUrl.hostname === "127.0.0.1";
-    if (parsedApiUrl.protocol !== "https:" && !apiIsLocalhost) {
-      return { ok: false, reason: "insecure-api-url" };
-    }
-    if (!apiIsLocalhost && parsed.origin !== parsedApiUrl.origin) {
-      return { ok: false, reason: "origin-mismatch" };
-    }
-  } catch {
-    return { ok: false, reason: "invalid-api-url" };
-  }
-
-  return { ok: true };
-}
-
-function isFinalizeCallbackConfigured(
-  payload: Record<string, unknown>,
-): boolean {
-  return Boolean(
-    asString(payload.finalize_callback_url) &&
-      asString(payload.finalize_callback_secret) &&
-      asString(payload.thread_turn_id),
-  );
-}
-
-export async function postFinalizeCallback(
-  args: FinalizeCallbackArgs,
-): Promise<boolean> {
-  const { payload, identity, fetchImpl } = args;
-  const callbackUrl = asString(payload.finalize_callback_url);
-  const callbackSecret = asString(payload.finalize_callback_secret);
-  const threadTurnId = asString(payload.thread_turn_id);
-  const attemptTimeoutMs =
-    args.attemptTimeoutMs ?? DEFAULT_COMPLETION_ATTEMPT_TIMEOUT_MS;
-
-  if (!callbackUrl || !callbackSecret || !threadTurnId) return false;
-
-  const urlCheck = callbackUrlAllowed(
-    callbackUrl,
-    asString(payload.thinkwork_api_url),
-  );
-  if (!urlCheck.ok) {
-    logStructured({
-      level: "error",
-      event:
-        urlCheck.reason === "invalid-url"
-          ? "finalize_callback_invalid_url"
-          : "finalize_callback_rejected_url",
-      tenantId: identity.tenantId,
-      threadId: identity.threadId,
-      reason: urlCheck.reason,
-    });
-    return false;
-  }
-
-  const body = JSON.stringify(buildFinalizeBody(args));
-  const totalAttempts = COMPLETION_RETRY_DELAYS_MS.length + 1;
-  for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
-    try {
-      const response = await fetchImpl(callbackUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${callbackSecret}`,
-        },
-        body,
-        signal: AbortSignal.timeout(attemptTimeoutMs),
-      });
-      if (response.ok) return true;
-      logStructured({
-        level: response.status >= 500 ? "warn" : "error",
-        event: "finalize_callback_non_2xx",
-        tenantId: identity.tenantId,
-        threadId: identity.threadId,
-        statusCode: response.status,
-        attempt,
-      });
-      if (response.status >= 400 && response.status < 500) return false;
-    } catch (err) {
-      logStructured({
-        level: "warn",
-        event: "finalize_callback_failed",
-        tenantId: identity.tenantId,
-        threadId: identity.threadId,
-        attempt,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    if (attempt < totalAttempts - 1) {
-      const baseDelay = COMPLETION_RETRY_DELAYS_MS[attempt] ?? 0;
-      const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1);
-      const delay = Math.max(0, Math.round(baseDelay + jitter));
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-
-  logStructured({
-    level: "error",
-    event: "finalize_callback_exhausted",
-    tenantId: identity.tenantId,
-    threadId: identity.threadId,
-    threadTurnId,
-    attempts: totalAttempts,
-  });
-  return false;
 }
 
 /**
@@ -1629,6 +1128,7 @@ export async function handleInvocation(
         systemPrompt,
         result: { status: "error", error: runError, latencyMs },
         fetchImpl,
+        logger: logStructured,
       });
       if (finalized) {
         return {
@@ -1703,6 +1203,7 @@ export async function handleInvocation(
       systemPrompt,
       result: { status: "ok", runResult, latencyMs },
       fetchImpl,
+      logger: logStructured,
     });
     if (finalized) {
       return {
