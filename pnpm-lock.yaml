@@ -337,6 +337,9 @@ importers:
       electron-updater:
         specifier: 6.8.3
         version: 6.8.3
+      typebox:
+        specifier: ^1.1.38
+        version: 1.1.38
     devDependencies:
       '@electron/notarize':
         specifier: 3.1.1
@@ -20739,7 +20742,7 @@ snapshots:
   '@mariozechner/pi-agent-core@0.70.2(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
     dependencies:
       '@mariozechner/pi-ai': 0.70.2(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
-      typebox: 1.1.33
+      typebox: 1.1.38
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt
@@ -20759,7 +20762,7 @@ snapshots:
       openai: 6.26.0(ws@8.20.0)(zod@4.3.6)
       partial-json: 0.1.7
       proxy-agent: 6.5.0
-      typebox: 1.1.33
+      typebox: 1.1.38
       undici: 7.24.7
       zod-to-json-schema: 3.25.2(zod@4.3.6)
     transitivePeerDependencies:

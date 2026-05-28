@@ -140,6 +140,9 @@ build_handler "chat-agent-invoke" \
 build_handler "desktop-runtime-session" \
   "$REPO_ROOT/packages/api/src/handlers/desktop-runtime-session.ts"
 
+build_handler "managed-delegation" \
+  "$REPO_ROOT/packages/api/src/handlers/managed-delegation.ts"
+
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
 

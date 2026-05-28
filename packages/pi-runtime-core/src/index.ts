@@ -1,4 +1,5 @@
 export * from "./agent-loop.js";
+export * from "./delegation.js";
 export * from "./desktop-session.js";
 export * from "./finalize-client.js";
 export * from "./history.js";

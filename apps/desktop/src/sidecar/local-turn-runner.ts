@@ -4,10 +4,13 @@ import {
   PI_APPLICATION_SDK_MIN_VERSION,
   PI_APPLICATION_SDK_PACKAGE,
   postFinalizeCallback,
+  type DelegationProvider,
   type DesktopPiRuntimeInvocation,
   type PreparedDesktopPiRuntimeSession,
   type RunAgentLoopResult,
 } from "@thinkwork/pi-runtime-core";
+import { Type } from "typebox";
+import { createManagedDelegationClient } from "./managed-delegation-client.js";
 import { createBedrockRuntimeAdapter } from "./runtime-adapters/bedrock.js";
 import { createHindsightRuntimeAdapter } from "./runtime-adapters/hindsight.js";
 import {
@@ -33,6 +36,7 @@ export interface PiSdkSessionLike {
 }
 
 export interface PiSdkModuleLike {
+  defineTool?: (definition: Record<string, unknown>) => unknown;
   createAgentSession(options?: Record<string, unknown>): Promise<{
     session: PiSdkSessionLike;
     modelFallbackMessage?: string;
@@ -222,10 +226,20 @@ async function createSdkSession(
 
   const bedrock = createBedrockRuntimeAdapter(prepared);
   const hindsight = createHindsightRuntimeAdapter(prepared);
+  const managedDelegation = createManagedDelegationClient({
+    apiUrl: invocation.thinkwork_api_url,
+    parentThreadTurnId: invocation.thread_turn_id,
+    finalizeCallbackSecret: invocation.finalize_callback_secret,
+  });
+  const delegationTools = createDelegationTools(sdk, managedDelegation);
 
   return sdk.createAgentSession({
     cwd: workspaceDir,
-    tools: [...READ_ONLY_WORKSPACE_TOOLS],
+    tools: [
+      ...READ_ONLY_WORKSPACE_TOOLS,
+      ...(delegationTools.length > 0 ? ["delegate_to_managed_agent"] : []),
+    ],
+    customTools: delegationTools,
     resourceLoader,
     sessionManager: sdk.SessionManager?.inMemory(),
     settingsManager,
@@ -241,6 +255,66 @@ async function createSdkSession(
   });
 }
 
+function createDelegationTools(
+  sdk: PiSdkModuleLike,
+  delegationProvider: DelegationProvider,
+): unknown[] {
+  if (typeof sdk.defineTool !== "function") return [];
+  return [
+    sdk.defineTool({
+      name: "delegate_to_managed_agent",
+      label: "Delegate",
+      description:
+        "Ask a managed AWS ThinkWork agent worker to perform hosted, long-running, risky, or cloud-isolated work.",
+      parameters: Type.Object({
+        task: Type.String({
+          description: "Concrete work for the managed agent to perform.",
+        }),
+        visibility: Type.Optional(
+          Type.Union([Type.Literal("hidden"), Type.Literal("visible")], {
+            description:
+              "Use hidden for routine helper work; visible for consequential, long-running, risky, or user-steerable work.",
+          }),
+        ),
+        reason: Type.Optional(
+          Type.String({
+            description: "Short reason the work should run in AWS.",
+          }),
+        ),
+        timeoutMs: Type.Optional(
+          Type.Number({
+            description:
+              "How long to wait for a hidden delegation result before returning accepted status.",
+          }),
+        ),
+      }),
+      execute: async (_toolCallId: string, params: Record<string, unknown>) => {
+        const task = typeof params.task === "string" ? params.task : "";
+        const visibility =
+          params.visibility === "visible" || params.visibility === "hidden"
+            ? params.visibility
+            : "hidden";
+        const result = await delegationProvider.delegate({
+          task,
+          visibility,
+          reason: typeof params.reason === "string" ? params.reason : undefined,
+          timeoutMs:
+            typeof params.timeoutMs === "number" ? params.timeoutMs : undefined,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result),
+            },
+          ],
+          details: result,
+        };
+      },
+    }),
+  ];
+}
+
 function buildSystemPrompt(invocation: DesktopPiRuntimeInvocation): string {
   const base = invocation.system_prompt?.trim() || "You are ThinkWork Pi.";
   return `${base}
@@ -248,6 +322,7 @@ function buildSystemPrompt(invocation: DesktopPiRuntimeInvocation): string {
 You are running inside the ThinkWork desktop local Pi sidecar.
 Use only the rendered app workspace mounted as the current working directory.
 Do not attempt to read arbitrary local folders, shell out, access the clipboard, use screenshots, or operate the local browser.
+When work needs hosted isolation, long runtime, cloud-only tools, or consequential user-visible execution, use delegate_to_managed_agent instead of trying to perform that work locally.
 If the user asks for local filesystem or OS access outside the rendered app workspace, refuse briefly and explain that desktop local Pi v1 is limited to the approved ThinkWork app workspace.`;
 }
 
@@ -315,9 +390,7 @@ async function finalizeTurn(args: {
 }
 
 async function loadDefaultPiSdk(): Promise<PiSdkModuleLike> {
-  return (await import(
-    "@earendil-works/pi-coding-agent"
-  )) as unknown as PiSdkModuleLike;
+  return (await import("@earendil-works/pi-coding-agent")) as unknown as PiSdkModuleLike;
 }
 
 function bindAbortSignal(

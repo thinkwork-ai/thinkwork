@@ -241,6 +241,41 @@ describe("runLocalDesktopTurn", () => {
     expect(fetchImpl).toHaveBeenCalled();
   });
 
+  it("registers the managed delegation custom tool when the Pi SDK supports custom tools", async () => {
+    let optionsSeen: Record<string, unknown> | undefined;
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Done" }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ ok: true }, { status: 200 }),
+    );
+
+    await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(optionsSeen?.tools).toContain("delegate_to_managed_agent");
+    expect(optionsSeen?.customTools).toHaveLength(1);
+    expect(sdk.defineTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "delegate_to_managed_agent" }),
+    );
+  });
+
   it("rejects unsupported Pi SDK contracts", () => {
     expect(() =>
       validatePreparedSession({

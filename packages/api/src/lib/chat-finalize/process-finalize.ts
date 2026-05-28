@@ -115,7 +115,11 @@ export async function processFinalize(
     .update(threadTurns)
     .set({ finalized_at: new Date() })
     .where(and(eq(threadTurns.id, turnId), isNull(threadTurns.finalized_at)))
-    .returning({ id: threadTurns.id, runtimeType: threadTurns.runtime_type });
+    .returning({
+      id: threadTurns.id,
+      runtimeType: threadTurns.runtime_type,
+      contextSnapshot: threadTurns.context_snapshot,
+    });
   if (claimed.length === 0) {
     console.log(
       `[chat-finalize] Idempotent — turn ${turnId} already finalized; skipping`,
@@ -124,6 +128,10 @@ export async function processFinalize(
   }
 
   // ---- Failed-turn fast path ------------------------------------------
+  const hiddenDesktopDelegation = isHiddenDesktopDelegation(
+    claimed[0]?.contextSnapshot,
+  );
+
   if (status === "failed") {
     await handleFailedTurn({
       turnId,
@@ -134,6 +142,7 @@ export async function processFinalize(
       computerTaskId,
       errorMessage,
       systemPrompt: capturedSystemPromptFromFinalizePayload(payload),
+      suppressAssistantMessage: hiddenDesktopDelegation,
     });
     return { finalized: true, messageId: null };
   }
@@ -331,6 +340,13 @@ export async function processFinalize(
     return { finalized: true, messageId: null };
   }
 
+  if (hiddenDesktopDelegation) {
+    console.log(
+      `[chat-finalize] Hidden desktop delegation ${turnId} finalized without inserting an assistant message`,
+    );
+    return { finalized: true, messageId: null };
+  }
+
   // 6. Compute downstream signals
   const displayResponse = responseText;
   const toolInvocations = invokeResult.tool_invocations ?? [];
@@ -457,6 +473,14 @@ export async function processFinalize(
   return { finalized: true, messageId: assistantMsg?.id ?? null };
 }
 
+export function isHiddenDesktopDelegation(contextSnapshot: unknown): boolean {
+  if (!contextSnapshot || typeof contextSnapshot !== "object") return false;
+  const snapshot = contextSnapshot as Record<string, unknown>;
+  const delegation = snapshot.desktop_managed_delegation;
+  if (!delegation || typeof delegation !== "object") return false;
+  return (delegation as Record<string, unknown>).visibility === "hidden";
+}
+
 interface HandleFailedTurnInput {
   turnId: string;
   tenantId: string;
@@ -466,6 +490,7 @@ interface HandleFailedTurnInput {
   computerTaskId?: string | null;
   errorMessage?: string;
   systemPrompt?: string | null;
+  suppressAssistantMessage?: boolean;
 }
 
 async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
@@ -481,6 +506,8 @@ async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
     message: errMessage,
     code: "agent_runtime_failed",
   });
+
+  if (input.suppressAssistantMessage) return;
 
   try {
     await db

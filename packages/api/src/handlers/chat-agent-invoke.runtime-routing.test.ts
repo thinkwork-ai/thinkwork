@@ -222,4 +222,40 @@ describe("chat-agent-invoke runtime routing", () => {
     });
     expect(body.current_user_email).toBe("user-1@example.com");
   });
+
+  it("marks desktop managed delegation turns with parent provenance and returns the child turn id", async () => {
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    const result = await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "Run hosted work",
+      messageId: "message-1",
+      desktopDelegation: {
+        parentThreadTurnId: "parent-turn-1",
+        requestedVisibility: "hidden",
+        effectiveVisibility: "hidden",
+        reason: "needs hosted worker",
+      },
+    });
+
+    expect(result).toEqual({ ok: true, threadTurnId: "turn-pi-1" });
+    expect(mocks.insertValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          invocation_source: "desktop_managed_delegation",
+          origin_turn_id: "parent-turn-1",
+          trigger_detail: "needs hosted worker",
+          context_snapshot: expect.objectContaining({
+            dispatcher: "desktop-managed-delegation",
+            desktop_managed_delegation: expect.objectContaining({
+              parent_thread_turn_id: "parent-turn-1",
+              visibility: "hidden",
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
 });
