@@ -720,11 +720,11 @@ function ThreadListSection({
       <CollapsibleTrigger asChild>
         <SidebarGroupLabel
           asChild
-          className="cursor-pointer select-none px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
+          className="cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
         >
           <button type="button" aria-label={`Toggle ${label}`}>
             <span>{label}</span>
-            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=closed]/thread-section:-rotate-90" />
+            <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-all duration-150 ease-out group-hover/thread-section:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
           </button>
         </SidebarGroupLabel>
       </CollapsibleTrigger>
@@ -809,11 +809,11 @@ function PinnedThreadListSection({
       <CollapsibleTrigger asChild>
         <SidebarGroupLabel
           asChild
-          className="cursor-pointer select-none px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
+          className="cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
         >
           <button type="button" aria-label="Toggle Pinned">
             <span>Pinned</span>
-            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=closed]/thread-section:-rotate-90" />
+            <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-all duration-150 ease-out group-hover/thread-section:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
           </button>
         </SidebarGroupLabel>
       </CollapsibleTrigger>
@@ -971,8 +971,8 @@ function SpaceThreadSection({
           <SidebarGroupLabel
             asChild
             className={cn(
-              "w-auto min-w-0 cursor-pointer select-none gap-1 px-2 text-xs font-medium text-sidebar-foreground/60 data-[state=open]:text-sidebar-foreground/80",
-              isActiveSpace && "text-sidebar-foreground",
+              "w-auto min-w-0 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/60",
+              isActiveSpace && "text-sidebar-foreground/70",
             )}
           >
             <button type="button" aria-label={`Toggle ${label}`}>
@@ -982,7 +982,7 @@ function SpaceThreadSection({
                   {space.unreadThreadCount}
                 </span>
               ) : null}
-              <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=closed]/space:-rotate-90" />
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/space:opacity-100 group-data-[state=closed]/space:-rotate-90" />
             </button>
           </SidebarGroupLabel>
         </CollapsibleTrigger>
