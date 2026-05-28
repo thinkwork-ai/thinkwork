@@ -1,0 +1,131 @@
+---
+title: Goals and Files
+description: How Spaces use Goals, Goal folders, and Space Workspace files to turn Threads into accountable workflows.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Goals are how ThinkWork turns selected Threads into accountable workflow. Files are how that workflow stays readable by humans and agents.
+
+Use this page when a Thread has structured progress, a review step, a Files button, or a Customer Onboarding-style workflow. For the formal concept definition, see [Goals](/concepts/goals/).
+
+## The Goal contract
+
+A Goal should be clear enough that a reviewer can decide whether the work is actually done.
+
+| Field | What it should say | Weak version |
+| --- | --- | --- |
+| Outcome | The finished state. | "Work on onboarding." |
+| Owner | The person or role accountable for completion. | "Someone from ops." |
+| Mode | Delegate or Collaborate. | Not specified. |
+| Progress model | How status is measured. | "Keep me updated." |
+| Completion rule | What must be true before review. | "When it feels done." |
+| Review policy | Who confirms or requests changes. | "The agent will close it." |
+
+For Customer Onboarding, the outcome might be: "Complete onboarding for Acme so they can be billed, shipped to, and serviced without missing finance, accounting, sales, or operations steps."
+
+## Delegate vs. Collaborate
+
+Mode is the promise between the user and the agent.
+
+| Mode | Use it when | What the agent should do |
+| --- | --- | --- |
+| Delegate | The work is repeatable and the agent can safely drive most steps. | Run the playbook, ask only for missing facts or approvals, and return with a finished or review-ready result. |
+| Collaborate | The work needs human judgment, negotiation, cross-team handoffs, or ongoing decisions. | Maintain context, progress, questions, and handoffs while humans make important calls. |
+
+Most customer-facing operational workflows should start as Collaborate. Move toward Delegate only when the Space has enough context, tools, and review rules to make that safe.
+
+## Thread files and Space files
+
+There are two file scopes users commonly inspect from the Spaces app:
+
+| File scope | Default file | Purpose |
+| --- | --- | --- |
+| Space Workspace | `CONTEXT.md` | Parent operating context for the Space: instructions, examples, docs, and reusable workflow templates. |
+| Thread Goal Folder | `GOAL.md` | Instance-specific workflow context for one promoted Thread. |
+
+Open the Space Workspace from the Space detail header Files button. Open the Thread Goal Folder from the Thread detail header Files button.
+
+<Aside type="note">
+  <strong>Current behavior:</strong> The file editor is shared with the Admin
+  workspace editor. Space Workspace and Thread Goal Folder views use the same
+  file tree and editor surface, but they load different targets.
+</Aside>
+
+## What belongs in Goal files
+
+A typical Goal Folder contains:
+
+| File | Job |
+| --- | --- |
+| `GOAL.md` | Outcome, owner, mode, progress model, completion rule, review policy, and canonical sources. |
+| `PROGRESS.md` | Current operational briefing, usually rendered from structured workflow state. |
+| `DECISIONS.md` | Important decisions, rationale, evidence, and follow-up. |
+| `ARTIFACTS.md` | Produced or referenced artifacts such as contracts, exports, screenshots, reports, and deliverables. |
+| `HANDOFFS.md` | Team, stage, reviewer, or owner handoffs. |
+| `stages/` | Optional staged workflow context when a Goal has meaningful phases. |
+
+These files should help a person or agent understand the work without reading every message in the Thread.
+
+## Source of truth
+
+ThinkWork intentionally splits structured state from narrative context.
+
+| Layer | Owns | Why |
+| --- | --- | --- |
+| Structured state | lifecycle, permissions, status, task rows, owner/reviewer, audit-friendly indexes | Multi-player Threads need consistent state that can be queried and permissioned. |
+| Markdown files | goal contract, progress briefing, decisions, artifacts, handoffs, local context | Agents and operators need readable, portable context. |
+| Company Brain | distilled learning from reviewed source material | Completed work should improve future work. |
+
+`PROGRESS.md` is not a second task database. Treat it as the readable briefing that helps humans and agents understand the structured state.
+
+<Aside type="tip">
+  <strong>North Star:</strong> A Goal folder should be useful even outside
+  ThinkWork. A local Codex or Claude Code session should be able to open the
+  folder and understand the work. That does not give the local tool ThinkWork
+  permissions, approval authority, or live database state.
+</Aside>
+
+## Review and closure
+
+When required progress is complete, a Goal can move into review. Review is where the system asks a human to decide whether the work is truly ready.
+
+Use **Confirm** when:
+
+- required work is complete;
+- not-applicable items are intentionally skipped;
+- decisions and handoffs are clear enough;
+- the Goal can close.
+
+Use **Changes** when:
+
+- a required fact is missing;
+- a task is marked done but the evidence is weak;
+- the wrong owner or team is assigned;
+- the final summary, decision, artifact, or handoff is incomplete.
+
+Human review exists because team workflows have consequences. The agent can coordinate and draft, but the workflow owner remains accountable for closing the Goal.
+
+## Customer Onboarding pattern
+
+Customer Onboarding is the reference workflow because it shows the full shape:
+
+1. Operator defines the Customer Space and its onboarding context.
+2. User starts onboarding from the Space.
+3. ThinkWork creates a Thread and a Goal.
+4. The Goal panel tracks progress and review.
+5. The Goal Folder carries the workflow files.
+6. Humans answer missing intake questions and complete manual external steps.
+7. The reviewer confirms or requests changes.
+8. Reviewed work can become better source material for Company Brain.
+
+The checklist is not the whole workflow. It is one progress model inside the Goal.
+
+## Related pages
+
+- [Work in a Space](/guides/spaces/work-in-a-space/) - end-user workflow guide.
+- [Best Practices](/guides/spaces/best-practices/) - examples and troubleshooting.
+- [Goals](/concepts/goals/) - formal Goal concept reference.
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folder-native architecture.
+- [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) - how reviewed source material becomes Company Brain.
+

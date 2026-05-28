@@ -1,0 +1,128 @@
+---
+title: Work in a Space
+description: How users choose Spaces, start Threads, read progress, inspect files, and review Goal completion.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Working in a Space means the agent is not starting from a blank chat box. It is acting inside a workroom with local files, people, history, tools, knowledge, and rules.
+
+Your job as a user is to choose the right Space, state the outcome clearly, provide source facts, answer missing-information questions, and review the work when human judgment is required.
+
+## Choose the right Space first
+
+The Space changes what the agent knows and can do. A Customer Onboarding request belongs in the Customer Space. A credit question may belong in Finance. A project status question may belong in that project's Space.
+
+Before starting work, ask:
+
+- Which team, customer, project, workflow, inbox, or channel owns this?
+- Which Space has the files and rules the agent should follow?
+- Does this work need a special composer or form, such as **Start onboarding**?
+- Should other people in that Space be able to see the Thread?
+
+If you start in the wrong Space, the agent may miss important files, use the wrong assumptions, or ask for context the right Space already had.
+
+## Start the right kind of work
+
+Most Spaces support ordinary chat. On the Space detail page, use **New chat** to start a Thread in that Space.
+
+Some Spaces expose a workflow-specific action. Customer Onboarding, for example, can show **Start onboarding**. Use that when the Space has a structured intake path or workflow template. The form gives the agent a better starting point than a free-form message.
+
+<Aside type="note">
+  <strong>Current behavior:</strong> The Spaces web and desktop app share the
+  same product surface. Desktop receives these Spaces changes when a desktop
+  build packages the updated Spaces app.
+</Aside>
+
+## Thread vs. Goal
+
+A Thread is the collaboration record. It contains the messages, agent responses, tool activity, attachments, and history.
+
+A Goal is the outcome contract when the Thread becomes structured work. A Goal explains what should be true when the work is done, who owns it, how progress is measured, and whether a human must review completion.
+
+| If you need | Look at |
+| --- | --- |
+| What happened in the conversation | Thread |
+| What the agent is trying to complete | Goal |
+| Which tasks or steps are done | Progress |
+| Why a decision was made | Decisions or Thread history |
+| Who needs to take over next | Handoffs |
+| Whether the work can close | Review state |
+
+## Read the Goal panel
+
+When a Thread has a Goal, the right-side info panel summarizes the workflow. It is the quickest way to answer "where are we?"
+
+| Panel area | What it means |
+| --- | --- |
+| Goal | The outcome, status, mode, owner, and review policy. |
+| Review | Whether the work is ready for human review and what action is expected. |
+| Progress | Required steps, completion percentage, status, owner or role, and not-applicable items. |
+| Thread | Basic metadata such as start time and trigger source. |
+
+The panel is not just decoration. It is a working dashboard for the Thread. If it says required work is missing, the agent should keep asking for or coordinating the missing pieces.
+
+## Confirm or request changes
+
+Some Goals require human review before completion. That is intentional. The agent can coordinate work, but high-risk team workflows should not silently close themselves.
+
+Use **Confirm** when the required work is complete and the Goal can close.
+
+Use **Changes** when the work is not actually complete. The change request should say what needs to happen before closure. For example:
+
+```text
+Final summary needs the AP contact, and the handoff should name the operations owner.
+```
+
+The point is not to punish the agent. The point is to keep the workflow honest and preserve the Thread as the record of what still needs attention.
+
+## Inspect files
+
+Spaces have two important file surfaces:
+
+| Surface | Where you open it | What it shows |
+| --- | --- | --- |
+| Space Workspace | Files button on the Space detail header | Parent operating context for that Space, such as `CONTEXT.md`, docs, examples, and Goal templates. |
+| Thread Goal Folder | Files button on the Thread detail header | Thread-local workflow state, usually starting with `GOAL.md` and including progress, decisions, artifacts, and handoffs when present. |
+
+Use the Space Workspace when you want to know what rules or context govern the workroom. Use the Thread Goal Folder when you want to inspect the files for this specific workflow instance.
+
+<Aside type="tip">
+  <strong>North Star:</strong> Files should make the work understandable outside
+  the chat transcript. A future operator, support teammate, or local agent
+  runner should be able to open the folder and understand the outcome, progress,
+  important decisions, artifacts, and handoffs.
+</Aside>
+
+## What to tell the agent
+
+Good Space messages are outcome-first and source-backed.
+
+Instead of:
+
+```text
+Handle this.
+```
+
+Write:
+
+```text
+Start onboarding for Acme. The signed order form is attached. They want Net 30 terms, shipping is to Dallas, and the AP contact is Priya Shah at priya@example.com. Collaborate with me if anything is missing.
+```
+
+That message gives the agent the outcome, source material, known facts, and collaboration expectation.
+
+## Mobile expectations
+
+The mobile app is strongest for participating in Threads, choosing a Space from the composer, responding to human-in-the-loop cards, and keeping up with work while away from the desk.
+
+Use web or desktop when you need the full Space detail page, Files mode, or a larger workspace editor surface.
+
+## Related pages
+
+- [Build a Space](/guides/spaces/build-a-space/) - how operators create the workroom users enter.
+- [Goals and Files](/guides/spaces/goals-and-files/) - how Goal folders and Space Workspace files work.
+- [Best Practices](/guides/spaces/best-practices/) - examples and troubleshooting.
+- [Desktop App](/applications/desktop/) - installed Spaces app behavior.
+- [Mobile - Threads & Chat](/applications/mobile/threads-and-chat/) - mobile thread participation.
+

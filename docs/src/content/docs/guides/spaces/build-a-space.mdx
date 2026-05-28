@@ -1,0 +1,150 @@
+---
+title: Build a Space
+description: How operators decide when a Space is warranted and write the local context that makes it useful.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Build a Space when the agent needs a local workroom, not just a better prompt. A good Space gives ThinkWork the people, context, files, triggers, and rules it needs to behave consistently for a team, customer, project, workflow, inbox, or channel.
+
+The best Spaces are small enough to have a clear purpose and rich enough that the agent can stop asking the same setup questions every time.
+
+## When to create a Space
+
+Create a Space when at least one of these is true:
+
+| Signal | Example |
+| --- | --- |
+| The work has a distinct audience | Finance review, Customer Success, implementation team |
+| The work has its own source material | Customer contracts, onboarding intake, project notes |
+| The work enters through its own channel | Support inbox, customer onboarding email, scheduled digest |
+| The work needs a different access boundary | Private executive planning, customer-specific room |
+| The work repeats enough to become a pattern | Closed-won customer onboarding, renewal review, credit approval |
+| The agent should follow local rules | Use this checklist, ask these intake questions, escalate to this role |
+
+Do not create a Space just because a user asked a one-off question. Start in an existing Space when the work already belongs there. Create a new Space when the workroom itself is different.
+
+## Write the Space in plain language
+
+The Space Workspace is where operators write local files. A typical Space starts with a `CONTEXT.md` file that answers five questions:
+
+1. What work happens here?
+2. Who participates?
+3. What source information should the agent trust?
+4. What should the agent ask when information is missing?
+5. What should never happen automatically?
+
+Good Space context sounds like an experienced teammate explaining how the work runs. It should not sound like a generic prompt library.
+
+### Put this in Space files
+
+- The purpose of the Space.
+- Roles and owners.
+- Intake questions.
+- Required source links or documents.
+- Local procedures and checklists.
+- Examples of good requests and good responses.
+- Escalation and review rules.
+- Tool-specific instructions for this workroom.
+- Goal templates for repeated workflows.
+- Known exclusions and "do not do this" rules.
+
+### Leave this out
+
+- Tenant-wide rules that belong in the [Tenant Agent](/applications/admin/agents/).
+- Private user preferences that belong to User context.
+- Reusable specialist behavior that should live in a folder specialist.
+- Secrets, passwords, API keys, or raw customer credentials.
+- Long reference dumps that belong in a knowledge base.
+
+<Aside type="note">
+  <strong>Current behavior:</strong> Operators edit Space files in Admin under
+  Space Studio > Workspace. In the Spaces app, users can inspect the same Space
+  Workspace from the Space detail header Files button.
+</Aside>
+
+## Space vs. folder specialist
+
+Spaces and folder specialists are easy to confuse because both use files. They solve different problems.
+
+| Use | When the difference is |
+| --- | --- |
+| Space | The workroom: customer, team, project, workflow, inbox, channel, access, triggers, knowledge, or local policy. |
+| Folder specialist | Reusable delegated behavior: research, finance review, triage, QA, drafting, onboarding, or another capability the agent may call from many Spaces. |
+
+A Finance Space can make the tenant platform agent work inside a finance context. A finance folder specialist can provide reusable finance-review behavior that the same agent may call from Customer Onboarding, Sales, or Support.
+
+## Turn repeated work into a Goal pattern
+
+When a Space starts to run the same workflow repeatedly, define a Goal pattern. A Goal is not just a checklist. It is an outcome contract:
+
+| Contract field | Question it answers |
+| --- | --- |
+| Outcome | What should be true when this is done? |
+| Owner | Who is accountable? |
+| Mode | Should the agent Delegate or Collaborate? |
+| Progress model | How do we know work is moving? |
+| Completion rule | What must be true before the work is ready? |
+| Review policy | Who must confirm or request changes? |
+
+Customer Onboarding is the reference pattern. The Space owns the onboarding instructions and reusable files. Each onboarding case creates a Thread. When the work needs accountability, ThinkWork represents the outcome as a Goal with progress, review, and a thread-local Goal Folder.
+
+<Aside type="tip">
+  <strong>North Star:</strong> A mature Space should carry enough folder-native
+  context that another agent runtime could inspect the files and understand the
+  work. That does not mean every database-backed state field lives in markdown.
+  Structured status, permissions, and review remain ThinkWork runtime state.
+</Aside>
+
+## A useful Space file starter
+
+```markdown
+# Customer Onboarding
+
+## What This Space Does
+
+This Space coordinates customer onboarding after a closed-won opportunity.
+The agent keeps the Thread factual, asks humans for missing source information,
+and keeps required checklist tasks moving.
+
+## Intake We Need
+
+- Contract or order-form link
+- Primary contact name and email
+- Accounts payable contact name and email
+- Billing and shipping address
+- Tax exemption status
+- Credit terms request
+- DocuSign recipient
+
+## Operating Rules
+
+- Do not mark onboarding complete automatically.
+- Ask the human in the Thread when required intake is missing.
+- Keep finance, accounting, sales, and operations handoffs visible.
+- Require human final review before closure.
+```
+
+The file does not need to be long. It needs to be specific.
+
+## Operator checklist
+
+Before inviting users into a Space, check:
+
+- The Space has a clear name and purpose.
+- `CONTEXT.md` explains what the agent should do here.
+- Intake questions are written down.
+- Access is public or private intentionally.
+- Knowledge bases are attached only when useful.
+- Triggers create work in the right Space.
+- Repeated workflows have a Goal contract or a clear path toward one.
+- Review rules are explicit for risky work.
+
+## Related pages
+
+- [Spaces Guide](/guides/spaces/) - the full practical guide.
+- [Work in a Space](/guides/spaces/work-in-a-space/) - what users experience after the Space exists.
+- [Goals and Files](/guides/spaces/goals-and-files/) - how repeated work becomes structured workflow.
+- [Admin - Spaces](/applications/admin/spaces/) - Space Studio reference.
+- [Workspace Context](/concepts/spaces/workspace-context/) - how Space files enter the agent turn.
+
