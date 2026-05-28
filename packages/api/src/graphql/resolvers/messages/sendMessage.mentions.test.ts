@@ -108,6 +108,40 @@ describe("sendMessage agent handling", () => {
     ).toBe(false);
   });
 
+  it("suppresses server-owned automatic agent work when desktop local owns dispatch", () => {
+    expect(
+      shouldApplyCustomerOnboardingChatUpdate({
+        isUserMessage: true,
+        senderType: "user",
+        dispatchMode: "DESKTOP_LOCAL",
+        hasAgentMentions: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        dispatchMode: "DESKTOP_LOCAL",
+        hasAgentMentions: false,
+        hasComputerThread: false,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps managed dispatch as the default dispatch mode", () => {
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        dispatchMode: "MANAGED_DEFAULT",
+        hasAgentMentions: false,
+        hasComputerThread: false,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(true);
+  });
+
   it("lets explicit agent mentions own dispatch even when default handling is suppressed", () => {
     expect(
       shouldApplyCustomerOnboardingChatUpdate({

@@ -217,7 +217,11 @@ beforeEach(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  delete window.thinkworkBridge;
+});
 
 describe("SpacesThreadDetailRoute", () => {
   it("derives thread artifacts in message order and deduplicates repeated ids", () => {
@@ -896,6 +900,34 @@ describe("SpacesThreadDetailRoute", () => {
       expect(screen.getByText("Ask the agent for help")).toBeTruthy();
     });
     expect(screen.getByLabelText("Processing request")).toBeTruthy();
+  });
+
+  it("marks follow-up sends for desktop-local dispatch when local Pi is ready", async () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: { status: "healthy" },
+      },
+    });
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "Run this on the desktop sidecar" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "Run this on the desktop sidecar",
+          dispatchMode: "DESKTOP_LOCAL",
+        },
+      });
+    });
   });
 });
 

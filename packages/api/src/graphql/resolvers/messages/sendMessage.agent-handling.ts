@@ -2,6 +2,7 @@ export interface SendMessageAgentHandlingInput {
   isUserMessage: boolean;
   senderType: string;
   agentRequested?: boolean | null;
+  dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL" | null;
   hasAgentMentions: boolean;
 }
 
@@ -15,7 +16,8 @@ function canRequestAgentHandling(input: SendMessageAgentHandlingInput) {
   return (
     input.isUserMessage &&
     input.senderType === "user" &&
-    input.agentRequested !== false
+    input.agentRequested !== false &&
+    input.dispatchMode !== "DESKTOP_LOCAL"
   );
 }
 

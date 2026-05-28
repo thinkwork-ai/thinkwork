@@ -247,6 +247,7 @@ export const sendMessage = async (
       isUserMessage,
       senderType,
       agentRequested: i.agentRequested,
+      dispatchMode: i.dispatchMode,
       hasAgentMentions,
     })
   ) {
@@ -297,6 +298,7 @@ export const sendMessage = async (
       isUserMessage,
       senderType,
       agentRequested: i.agentRequested,
+      dispatchMode: i.dispatchMode,
       hasAgentMentions,
       hasComputerThread: Boolean(thread.computer_id),
       customerOnboardingHandled,

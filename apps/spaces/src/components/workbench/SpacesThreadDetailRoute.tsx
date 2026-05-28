@@ -45,6 +45,7 @@ import {
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
+import { shouldUseDesktopLocalPiDispatch } from "@/lib/desktop-runtime";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { notifyAgentCompletion } from "@/lib/desktop-notifications";
@@ -1111,6 +1112,7 @@ export function SpacesThreadDetailRoute({
             rawText: string;
           }>;
           agentRequested?: boolean;
+          dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL";
         } = {
           threadId,
           role: "USER",
@@ -1124,6 +1126,9 @@ export function SpacesThreadDetailRoute({
         }
         if (agentRequested === false) {
           sendInput.agentRequested = false;
+        }
+        if (agentRequested !== false && shouldUseDesktopLocalPiDispatch()) {
+          sendInput.dispatchMode = "DESKTOP_LOCAL";
         }
         const result = await sendMessage({ input: sendInput });
         if (result.error) {
