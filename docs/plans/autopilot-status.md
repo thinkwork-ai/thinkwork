@@ -76,16 +76,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active
-- Active unit: Grouped U3/U4 follow-up composer toggle and route wiring
-- Active branch: `codex/follow-up-agent-toggle-u3`
-- Active worktree:
-  `.Codex/worktrees/follow-up-agent-toggle-u3`
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-28
-- Latest merged PR: [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790)
-- Active PR: [#1792](https://github.com/thinkwork-ai/thinkwork/pull/1792)
-- CI: U1 and U2 passed required checks and merged; grouped U3/U4 local
-  verification in progress
+- Latest merged PR: [#1792](https://github.com/thinkwork-ai/thinkwork/pull/1792)
+- Active PR: none
+- CI: U1, U2, and grouped U3/U4 passed required checks and merged
 
 ### Active Unit Notes
 
@@ -159,6 +157,12 @@ Target branch: `main`
   `http://localhost:5177/new` rendered the Spaces shell; the available local
   account had no assigned workspace, so in-thread footer visuals remain covered
   by component tests rather than a live tenant-backed route.
+- PR [#1792](https://github.com/thinkwork-ai/thinkwork/pull/1792) passed CI,
+  needed one clean rebase because `main` advanced, passed CI again,
+  squash-merged into `main`, deleted the remote branch, and removed the local
+  grouped U3/U4 worktree/branch.
+- Follow-Up Agent Toggle run complete: all implementation units merged into
+  `main`.
 
 ### Progress Log
 
@@ -166,7 +170,7 @@ Target branch: `main`
 | ---------- | ----- | --------------------------------- | ------------------------------------------------------------ | ------ | ------------------- | ---------------------------------------------------------------------------------------- |
 | 2026-05-28 | U1    | `codex/follow-up-agent-toggle-u1` | [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789) | Merged | Local and CI passed | Backend send contract and dispatch gating.                                               |
 | 2026-05-28 | U2    | `codex/follow-up-agent-toggle-u2` | [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790) | Merged | Local and CI passed | Default agent alias normalization.                                                       |
-| 2026-05-28 | U3/U4 | `codex/follow-up-agent-toggle-u3` | [#1792](https://github.com/thinkwork-ai/thinkwork/pull/1792) | Active | Local passed        | Composer toggle, special picker item, and route wiring grouped to avoid a half-wired UI. |
+| 2026-05-28 | U3/U4 | `codex/follow-up-agent-toggle-u3` | [#1792](https://github.com/thinkwork-ai/thinkwork/pull/1792) | Merged | Local and CI passed | Composer toggle, special picker item, and route wiring grouped to avoid a half-wired UI. |
 
 ### CI Failures
 
