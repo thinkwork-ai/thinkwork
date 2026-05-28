@@ -264,6 +264,7 @@ type ThreadMentionTarget {
 
 extend type Query {
   threadMentionTargets(threadId: ID!): [ThreadMentionTarget!]!
+  tenantMentionTargets(tenantId: ID!): [ThreadMentionTarget!]!
 }
 
 extend type Mutation {

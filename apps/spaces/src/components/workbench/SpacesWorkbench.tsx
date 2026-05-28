@@ -57,25 +57,15 @@ interface SendMessageVars {
 }
 
 interface NewThreadMentionTargetsData {
-  tenantMembers?: Array<{
+  tenantMentionTargets?: Array<{
     id: string;
-    principalType: string;
-    principalId: string;
-    role: string;
-    status: string;
-    user?: {
-      id: string;
-      name?: string | null;
-      email: string;
-      image?: string | null;
-    } | null;
-  }>;
-  allTenantAgents?: Array<{
-    id: string;
-    name: string;
+    targetType: "USER" | "AGENT";
+    targetId: string;
+    displayName: string;
+    aliases?: string[] | null;
+    isDefaultAgent?: boolean | null;
     avatarUrl?: string | null;
     role?: string | null;
-    status: string;
   }>;
 }
 
@@ -111,7 +101,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   const [, sendMessage] = useMutation<SendMessageResult, SendMessageVars>(
     SendMessageMutation,
   );
-  const [{ data: mentionTargetData }] = useQuery<
+  const [{ data: mentionTargetData, error: mentionTargetError }] = useQuery<
     NewThreadMentionTargetsData,
     { tenantId: string }
   >({
@@ -119,6 +109,17 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  // Surface a failed mention-targets fetch instead of silently rendering an
+  // empty @-menu — a swallowed GraphQL error here previously hid a broken
+  // query for the entire new-thread composer.
+  useEffect(() => {
+    if (mentionTargetError) {
+      console.warn(
+        "[SpacesWorkbench] failed to load mention targets:",
+        mentionTargetError,
+      );
+    }
+  }, [mentionTargetError]);
   const [{ data: spacesData, fetching: spacesFetching }] = useQuery<
     SpacesResult,
     { tenantId: string }
@@ -441,41 +442,16 @@ function isPrimaryDefaultSpace(space: SpaceSummary) {
 function buildNewThreadMentionTargets(
   data: NewThreadMentionTargetsData | undefined,
 ): MentionTarget[] {
-  if (!data) return [];
-  const byKey = new Map<string, MentionTarget>();
+  const targets = (data?.tenantMentionTargets ?? []).map((target) => ({
+    id: target.id,
+    targetType: target.targetType,
+    targetId: target.targetId,
+    displayName: target.displayName,
+    avatarUrl: target.avatarUrl,
+    role: target.role,
+  }));
 
-  for (const member of data.tenantMembers ?? []) {
-    if (
-      member.status.toLowerCase() !== "active" ||
-      member.principalType.toLowerCase() !== "user" ||
-      !member.user
-    ) {
-      continue;
-    }
-    const displayName = member.user.name || member.user.email || "User";
-    byKey.set(`USER:${member.user.id}`, {
-      id: `user:${member.user.id}`,
-      targetType: "USER",
-      targetId: member.user.id,
-      displayName,
-      avatarUrl: member.user.image,
-      role: member.role,
-    });
-  }
-
-  for (const agent of data.allTenantAgents ?? []) {
-    if (agent.status.toLowerCase() === "archived") continue;
-    byKey.set(`AGENT:${agent.id}`, {
-      id: `agent:${agent.id}`,
-      targetType: "AGENT",
-      targetId: agent.id,
-      displayName: agent.name,
-      avatarUrl: agent.avatarUrl,
-      role: agent.role,
-    });
-  }
-
-  return [...byKey.values()].sort((a, b) => {
+  return targets.sort((a, b) => {
     const typeOrder =
       a.targetType === b.targetType ? 0 : a.targetType === "USER" ? -1 : 1;
     if (typeOrder !== 0) return typeOrder;
