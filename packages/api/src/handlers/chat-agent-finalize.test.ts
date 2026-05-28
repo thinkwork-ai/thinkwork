@@ -10,12 +10,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "crypto";
 
 const mocks = vi.hoisted(() => ({
   selectResult: [] as Array<{
     id: string;
     tenant_id: string;
     thread_id: string | null;
+    context_snapshot?: unknown;
   }>,
   updateClaim: [] as Array<{ id: string }>,
   processFinalize: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: { name: "id" },
     tenant_id: { name: "tenant_id" },
     thread_id: { name: "thread_id" },
+    context_snapshot: { name: "context_snapshot" },
     finalized_at: { name: "finalized_at" },
   },
 }));
@@ -71,7 +74,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.API_AUTH_SECRET = VALID_SECRET;
   mocks.selectResult = [
-    { id: TURN_ID, tenant_id: TENANT_ID, thread_id: THREAD_ID },
+    {
+      id: TURN_ID,
+      tenant_id: TENANT_ID,
+      thread_id: THREAD_ID,
+      context_snapshot: null,
+    },
   ];
   mocks.updateClaim = [{ id: TURN_ID }];
   mocks.processFinalize.mockResolvedValue({
@@ -220,6 +228,7 @@ describe("chat-agent-finalize — turn lookup", () => {
         id: TURN_ID,
         tenant_id: "99999999-9999-9999-9999-999999999999",
         thread_id: THREAD_ID,
+        context_snapshot: null,
       },
     ];
     const res = await handler(mockEvent());
@@ -232,6 +241,7 @@ describe("chat-agent-finalize — turn lookup", () => {
         id: TURN_ID,
         tenant_id: TENANT_ID,
         thread_id: "99999999-9999-9999-9999-999999999999",
+        context_snapshot: null,
       },
     ];
     const res = await handler(mockEvent());
@@ -284,6 +294,28 @@ describe("chat-agent-finalize — happy paths", () => {
         },
       }),
     );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("accepts a short-lived desktop finalize token from turn context", async () => {
+    const token = "dps_test-token";
+    mocks.selectResult = [
+      {
+        id: TURN_ID,
+        tenant_id: TENANT_ID,
+        thread_id: THREAD_ID,
+        context_snapshot: {
+          desktop_runtime_session: {
+            finalize_token_sha256: createHash("sha256")
+              .update(token, "utf8")
+              .digest("hex"),
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+          },
+        },
+      },
+    ];
+
+    const res = await handler(mockEvent({ authorization: `Bearer ${token}` }));
     expect(res.statusCode).toBe(200);
   });
 });

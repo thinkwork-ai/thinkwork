@@ -10,6 +10,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/src/index.js"
+    },
+    "./desktop-session": {
+      "types": "./src/desktop-session.ts",
+      "import": "./dist/src/desktop-session.js"
     }
   },
   "scripts": {

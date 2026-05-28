@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U1 Extract a host-agnostic Pi runtime core
-- Active branch: `codex/local-pi-u1-runtime-core`
+- Active unit: U2 Add a desktop runtime session preparation API
+- Active branch: `codex/local-pi-u2-runtime-session`
 - Active worktree:
-  `.Codex/worktrees/local-pi-u1-runtime-core`
+  `.Codex/worktrees/local-pi-u2-runtime-session`
 - Started: 2026-05-28
-- Latest merged PR: none
-- Active PR: [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791)
+- Latest merged PR: [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791)
+- Active PR: [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794)
 - CI: pending
 
 ### Active Unit Notes
@@ -46,23 +46,65 @@ Target branch: `main`
 - Broader Pi verification passed: `pnpm --filter @thinkwork/agentcore-pi test`
   and `pnpm --filter @thinkwork/pi-runtime-core build && pnpm --filter @thinkwork/agentcore-pi build`.
 - Opened PR [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791).
+- PR [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` and deleted the remote/local U1 branch.
+- Started U2 from updated `origin/main`.
+- Implemented U2 first pass: added Cognito-authenticated
+  `POST /api/desktop/runtime-session`, a desktop runtime preparation library,
+  no-static-secret sidecar credential envelope, per-turn desktop finalizer
+  token hashing in `thread_turns.context_snapshot`, and API Gateway/Lambda
+  build wiring for `desktop-runtime-session`.
+- U2 focused verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/desktop-runtime/prepare-local-turn.test.ts src/handlers/desktop-runtime-session.test.ts src/handlers/chat-agent-finalize.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and
+  `bash scripts/build-lambdas.sh desktop-runtime-session`.
+- U2 broader verification passed: `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/api build`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`,
+  `git diff --check`, and
+  `pnpm -r --workspace-concurrency=1 --if-present test`.
+- U2 note: an unconstrained `pnpm -r --if-present test` run hit five API test
+  timeouts under local monorepo concurrency; the failed files immediately
+  passed in isolation, and the sequential full workspace test passed.
+- U2 follow-up from product direction: reviewed Pi's current SDK embedding docs
+  at `https://pi.dev/docs/latest/sdk`, recorded the desktop-sidecar pivot toward
+  `@earendil-works/pi-coding-agent`, and added a shared `pi_sdk` contract to the
+  prepared invocation so later Electron units embed Pi through the SDK instead
+  of relying on a lookalike payload shape.
+- U2 SDK-contract verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/desktop-runtime/prepare-local-turn.test.ts src/handlers/desktop-runtime-session.test.ts src/handlers/chat-agent-finalize.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`,
+  `pnpm --filter @thinkwork/pi-runtime-core build`,
+  `pnpm --filter @thinkwork/api build`,
+  `bash scripts/build-lambdas.sh desktop-runtime-session`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`,
+  `git diff --check`, touched-file Prettier check, and
+  `pnpm -r --workspace-concurrency=1 --if-present test`.
+- Opened PR [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794).
 
 ### Progress Log
 
-| Date       | Unit | Branch                           | PR                                                           | Status     | Verification | Notes                                          |
-| ---------- | ---- | -------------------------------- | ------------------------------------------------------------ | ---------- | ------------ | ---------------------------------------------- |
-| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core` | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | CI pending | Local passed | Extract shared Pi runtime core.                |
-| 2026-05-28 | U2   | pending                          | pending                                                      | Pending    | pending      | Desktop runtime session preparation API.       |
-| 2026-05-28 | U3   | pending                          | pending                                                      | Pending    | pending      | Desktop-local sendMessage dispatch ownership.  |
-| 2026-05-28 | U4   | pending                          | pending                                                      | Pending    | pending      | Electron sidecar supervision and typed IPC.    |
-| 2026-05-28 | U5   | pending                          | pending                                                      | Pending    | pending      | Execute local desktop turns in sidecar.        |
-| 2026-05-28 | U6   | pending                          | pending                                                      | Pending    | pending      | Managed delegation from local Pi to AgentCore. |
-| 2026-05-28 | U7   | pending                          | pending                                                      | Pending    | pending      | Local runtime and delegation state in Spaces.  |
-| 2026-05-28 | U8   | pending                          | pending                                                      | Pending    | pending      | Diagnostics, redaction, packaging, rollout.    |
+| Date       | Unit | Branch                              | PR                                                           | Status     | Verification | Notes                                          |
+| ---------- | ---- | ----------------------------------- | ------------------------------------------------------------ | ---------- | ------------ | ---------------------------------------------- |
+| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core`    | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | Merged     | CI passed    | Extract shared Pi runtime core.                |
+| 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session` | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | CI pending | Local passed | Desktop runtime session preparation API.       |
+| 2026-05-28 | U3   | pending                             | pending                                                      | Pending    | pending      | Desktop-local sendMessage dispatch ownership.  |
+| 2026-05-28 | U4   | pending                             | pending                                                      | Pending    | pending      | Electron sidecar supervision and typed IPC.    |
+| 2026-05-28 | U5   | pending                             | pending                                                      | Pending    | pending      | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U6   | pending                             | pending                                                      | Pending    | pending      | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U7   | pending                             | pending                                                      | Pending    | pending      | Local runtime and delegation state in Spaces.  |
+| 2026-05-28 | U8   | pending                             | pending                                                      | Pending    | pending      | Diagnostics, redaction, packaging, rollout.    |
 
 ### CI Failures
 
-- None yet.
+- U2 local-only: unconstrained `pnpm -r --if-present test` hit five API test
+  timeouts during monorepo-concurrent execution. Retried the failed files with
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/artifact-resolvers-payloads.test.ts src/__tests__/messages-artifact-payloads.test.ts src/__tests__/messages-tenant-scoping.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts`;
+  all passed. `pnpm -r --workspace-concurrency=1 --if-present test` then
+  passed.
 
 ### Blockers
 

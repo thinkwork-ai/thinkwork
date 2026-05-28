@@ -109,6 +109,12 @@ refusal, AE5 sidecar crash fallback and diagnostics.
   Hindsight memory adapters, MCP bridge setup, finalizer callback handling, and
   response evidence. It currently mixes reusable runtime behavior with the
   AgentCore container/HTTP host.
+- Pi's application embedding docs now point to
+  `@earendil-works/pi-coding-agent` as the supported SDK package for custom
+  web/desktop/mobile interfaces. Desktop sidecar units should embed Pi through
+  this SDK surface (`createAgentSession` / `createAgentSessionRuntime`) and
+  adapt ThinkWork workspace, model, tool, memory, and finalizer contracts into
+  that surface instead of building a parallel agent runner.
 - `packages/agentcore-pi/agent-container/src/runtime/bootstrap-workspace.ts`
   downloads and validates rendered S3 workspace prefixes. The desktop sidecar
   should reuse this behavior with a desktop cache root and stricter cleanup
@@ -257,6 +263,10 @@ refusal, AE5 sidecar crash fallback and diagnostics.
 - **Runtime split:** create a shared Pi runtime core consumed by AgentCore and
   desktop hosts rather than importing the AgentCore container file directly into
   Electron.
+- **Pi SDK embedding:** desktop execution should use
+  `@earendil-works/pi-coding-agent` as the application SDK. The shared runtime
+  core owns ThinkWork-specific contracts and adapters; the Electron sidecar
+  should prefer SDK session APIs over direct low-level loop construction.
 - **Workspace strategy:** reuse rendered S3 prefix bootstrap with a desktop
   cache root and tuple-based partitioning. No arbitrary local paths in v1.
 - **Credential strategy:** use a backend broker for short-lived sidecar
@@ -283,6 +293,10 @@ refusal, AE5 sidecar crash fallback and diagnostics.
 - Exact cancellation semantics for hidden delegated subtasks. V1 can start with
   visible-worker cancellation and make hidden subtasks best-effort cancelable if
   existing AgentCore paths support it.
+- Exact `@earendil-works/pi-coding-agent` supply-chain baseline treatment. When
+  the desktop package adds the SDK dependency, update the Pi supply-chain
+  baseline/documentation in the same PR if it becomes part of the trusted local
+  sidecar critical path.
 
 ## Output Structure
 
@@ -439,6 +453,7 @@ short-lived authority.
 - `packages/api/src/lib/desktop-runtime/prepare-local-turn.ts` (new)
 - `packages/api/src/lib/desktop-runtime/sidecar-credentials.ts` (new)
 - `packages/api/src/lib/desktop-runtime/dispatch-mode.ts` (new)
+- `packages/pi-runtime-core/src/desktop-session.ts` (new or modify)
 - `packages/api/src/lib/resolve-agent-runtime-config.ts` (reuse or minor modify)
 - `packages/api/src/handlers/chat-agent-invoke.ts` (minor extraction only if needed)
 - `scripts/build-lambdas.sh` (modify)
@@ -457,7 +472,7 @@ short-lived authority.
 - Create the `thread_turns` row and return `thread_turn_id`,
   `finalize_callback_url`, a short-lived `finalize_callback_secret` or scoped
   callback token, rendered workspace prefix, model/memory/tool policy fields,
-  and sidecar credentials.
+  a `pi_sdk` embedding contract, and sidecar credentials.
 - Keep credentials in the response scoped and short-lived. Prefer STS
   credentials with session policy for approved S3 prefix and Bedrock model
   calls; include source identity/session tags for audit.
@@ -623,9 +638,9 @@ renderer.
 
 ### U5. Execute local desktop turns in the sidecar
 
-**Goal:** run a prepared desktop invocation through Pi runtime core, sync only
-the approved rendered workspace, call Bedrock/Hindsight, and finalize through
-the platform.
+**Goal:** run a prepared desktop invocation through the Pi application SDK, sync
+only the approved rendered workspace, call Bedrock/Hindsight, and finalize
+through the platform.
 
 **Files:**
 
@@ -634,6 +649,8 @@ the platform.
 - `apps/desktop/src/sidecar/runtime-adapters/bedrock.ts` (new)
 - `apps/desktop/src/sidecar/runtime-adapters/hindsight.ts` (new)
 - `apps/desktop/src/sidecar/redacted-logger.ts` (new)
+- `apps/desktop/package.json` (modify; add
+  `@earendil-works/pi-coding-agent` with an explicit version pin)
 - `apps/desktop/test/sidecar/local-turn-runner.test.ts` (new)
 - `apps/desktop/test/sidecar/workspace-cache.test.ts` (new)
 - `packages/pi-runtime-core/src/model-provider.ts` (modify as needed)
@@ -644,6 +661,11 @@ the platform.
 
 - Sidecar receives only a prepared invocation envelope from Electron main; it
   does not self-resolve tenant/Space/agent policy.
+- Use Pi's SDK session API (`createAgentSession`, and
+  `createAgentSessionRuntime` if session replacement/cwd-bound state is needed)
+  as the orchestration substrate. Configure SDK session state from the prepared
+  invocation with in-memory session management, runtime API-key overrides, and a
+  ThinkWork resource loader over the rendered workspace cache.
 - Build runtime core providers around the short-lived session authority:
   Bedrock model calls, Hindsight memory calls, S3 workspace sync, finalizer
   POST, and managed-delegation calls.
