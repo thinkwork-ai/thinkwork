@@ -91,6 +91,12 @@ type ThreadsPage {
   totalCount: Int!
 }
 
+type PinnedThread {
+  thread: Thread!
+  pinnedAt: AWSDateTime!
+  pinOrder: Int!
+}
+
 type ThreadProgress {
   threadId: ID!
   markdown: String!
@@ -208,6 +214,7 @@ extend type Query {
     unreadOnly: Boolean
     spaceId: ID
   ): ThreadsPage!
+  pinnedThreads(tenantId: ID!, limit: Int): [PinnedThread!]!
   thread(id: ID!): Thread
   threadByNumber(tenantId: ID!, number: Int!): Thread
   threadProgress(tenantId: ID!, threadId: ID!): ThreadProgress
@@ -261,6 +268,9 @@ extend type Mutation {
   createThread(input: CreateThreadInput!): Thread!
   updateThread(id: ID!, input: UpdateThreadInput!): Thread!
   deleteThread(id: ID!): Boolean!
+  pinThread(tenantId: ID!, threadId: ID!): PinnedThread!
+  unpinThread(tenantId: ID!, threadId: ID!): Boolean!
+  reorderPinnedThreads(tenantId: ID!, threadIds: [ID!]!): [PinnedThread!]!
 
   checkoutThread(id: ID!, input: CheckoutThreadInput!): Thread!
   releaseThread(id: ID!, input: ReleaseThreadInput!): Thread!

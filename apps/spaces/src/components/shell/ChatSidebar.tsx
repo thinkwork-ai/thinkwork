@@ -71,8 +71,12 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   DeleteThreadMutation,
+  PinThreadMutation,
+  PinnedThreadsQuery,
+  ReorderPinnedThreadsMutation,
   SpacesQuery,
   ThreadsPagedQuery,
+  UnpinThreadMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
@@ -99,6 +103,14 @@ interface ThreadsPagedResult {
   } | null;
 }
 
+interface PinnedThreadsResult {
+  pinnedThreads?: Array<{
+    pinnedAt?: string | null;
+    pinOrder?: number | null;
+    thread?: ChatThreadSummary | null;
+  }> | null;
+}
+
 interface SpaceNavSummary {
   id: string;
   slug?: string | null;
@@ -112,6 +124,7 @@ interface SpacesResult {
 
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
+const PINNED_LIMIT = 100;
 const SECTION_THREAD_LIMIT = 5;
 
 interface ChatSidebarProps {
@@ -144,31 +157,29 @@ export function ChatSidebar({
   const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
   const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
   const persistedReadThreadIdsRef = useRef(new Set<string>());
-  const skipNextPinWriteRef = useRef(false);
+  const pinMigrationInFlightRef = useRef<string | null>(null);
   const [, updateThread] = useMutation(UpdateThreadMutation);
+  const [, executePinThread] = useMutation(PinThreadMutation);
+  const [, executeUnpinThread] = useMutation(UnpinThreadMutation);
+  const [, executeReorderPinnedThreads] = useMutation(
+    ReorderPinnedThreadsMutation,
+  );
   const pinStorageKey = useMemo(
     () => threadPinsStorageKey(tenantId, userId),
     [tenantId, userId],
   );
-  const [pinnedThreadIds, setPinnedThreadIds] = useState<string[]>([]);
+  const pinMigrationStorageKey = useMemo(
+    () => threadPinsMigrationStorageKey(tenantId, userId),
+    [tenantId, userId],
+  );
+  const [optimisticPinnedOrder, setOptimisticPinnedOrder] = useState<
+    string[] | null
+  >(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
     return () => window.clearTimeout(timeout);
   }, [search]);
-
-  useEffect(() => {
-    skipNextPinWriteRef.current = true;
-    setPinnedThreadIds(readPinnedThreadIds(pinStorageKey));
-  }, [pinStorageKey]);
-
-  useEffect(() => {
-    if (skipNextPinWriteRef.current) {
-      skipNextPinWriteRef.current = false;
-      return;
-    }
-    writePinnedThreadIds(pinStorageKey, pinnedThreadIds);
-  }, [pinStorageKey, pinnedThreadIds]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -208,6 +219,19 @@ export function ChatSidebar({
       sortDir: "desc",
       limit: RECENT_LIMIT,
       offset: 0,
+    },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+
+  const [
+    { data: pinnedData, fetching: pinnedFetching, error: pinnedError },
+    reexecutePinnedThreadsQuery,
+  ] = useQuery<PinnedThreadsResult>({
+    query: PinnedThreadsQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      limit: PINNED_LIMIT,
     },
     pause: !tenantId,
     requestPolicy: "cache-and-network",
@@ -309,6 +333,7 @@ export function ChatSidebar({
         : null;
 
       reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+      reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
       reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
 
       if (nextThreadId) {
@@ -336,6 +361,7 @@ export function ChatSidebar({
 
     function handleThreadRenamed() {
       reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+      reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
       reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
     }
 
@@ -359,6 +385,7 @@ export function ChatSidebar({
   }, [
     activateThread,
     navigate,
+    reexecutePinnedThreadsQuery,
     reexecuteRecentThreadsQuery,
     reexecuteSearchThreadsQuery,
   ]);
@@ -370,20 +397,25 @@ export function ChatSidebar({
       ),
     [orderedRecentThreads, pendingThreadDeletes],
   );
-  const recentThreadById = useMemo(
-    () => new Map(recentThreads.map((thread) => [thread.id, thread])),
-    [recentThreads],
+  const serverPinnedThreads = useMemo(
+    () =>
+      (pinnedData?.pinnedThreads ?? [])
+        .map((entry) => entry.thread)
+        .filter((thread): thread is ChatThreadSummary => Boolean(thread))
+        .filter((thread) => !pendingThreadDeletes.has(thread.id)),
+    [pendingThreadDeletes, pinnedData?.pinnedThreads],
+  );
+  const pinnedThreads = useMemo(
+    () => orderPinnedThreads(serverPinnedThreads, optimisticPinnedOrder),
+    [optimisticPinnedOrder, serverPinnedThreads],
+  );
+  const pinnedThreadIds = useMemo(
+    () => pinnedThreads.map((thread) => thread.id),
+    [pinnedThreads],
   );
   const pinnedThreadIdSet = useMemo(
     () => new Set(pinnedThreadIds),
     [pinnedThreadIds],
-  );
-  const pinnedThreads = useMemo(
-    () =>
-      pinnedThreadIds
-        .map((threadId) => recentThreadById.get(threadId))
-        .filter((thread): thread is ChatThreadSummary => Boolean(thread)),
-    [pinnedThreadIds, recentThreadById],
   );
   const unpinnedRecentThreads = useMemo(
     () => recentThreads.filter((thread) => !pinnedThreadIdSet.has(thread.id)),
@@ -423,6 +455,10 @@ export function ChatSidebar({
     [pendingThreadDeletes, searchData?.threadsPaged?.items],
   );
 
+  useEffect(() => {
+    setOptimisticPinnedOrder(null);
+  }, [pinnedData?.pinnedThreads]);
+
   const openSearchThread = useCallback(
     (thread: ChatThreadSummary) => {
       activateThread(thread.id);
@@ -444,22 +480,112 @@ export function ChatSidebar({
     [activateThread, defaultSpaceIds, navigate],
   );
 
-  const pinThread = useCallback((threadId: string) => {
-    setPinnedThreadIds((current) =>
-      current.includes(threadId) ? current : [...current, threadId],
+  const refreshThreadPins = useCallback(() => {
+    reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
+    reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+    reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+  }, [
+    reexecutePinnedThreadsQuery,
+    reexecuteRecentThreadsQuery,
+    reexecuteSearchThreadsQuery,
+  ]);
+
+  const pinThread = useCallback(
+    (threadId: string) => {
+      if (!tenantId) return;
+      void executePinThread({ tenantId, threadId }).then((result) => {
+        if (result.error) {
+          toast.error(result.error.message);
+          return;
+        }
+        refreshThreadPins();
+      });
+    },
+    [executePinThread, refreshThreadPins, tenantId],
+  );
+
+  const unpinThread = useCallback(
+    (threadId: string) => {
+      if (!tenantId) return;
+      void executeUnpinThread({ tenantId, threadId }).then((result) => {
+        if (result.error) {
+          toast.error(result.error.message);
+          return;
+        }
+        refreshThreadPins();
+      });
+    },
+    [executeUnpinThread, refreshThreadPins, tenantId],
+  );
+
+  const reorderPinnedThreads = useCallback(
+    (orderedVisibleIds: string[]) => {
+      if (!tenantId) return;
+      setOptimisticPinnedOrder(orderedVisibleIds);
+      void executeReorderPinnedThreads({
+        tenantId,
+        threadIds: orderedVisibleIds,
+      }).then((result) => {
+        if (result.error) {
+          setOptimisticPinnedOrder(null);
+          toast.error(result.error.message);
+          refreshThreadPins();
+          return;
+        }
+        refreshThreadPins();
+      });
+    },
+    [executeReorderPinnedThreads, refreshThreadPins, tenantId],
+  );
+
+  useEffect(() => {
+    if (!tenantId || !pinnedData || pinnedFetching) return;
+    if (readPinMigrationCompleted(pinMigrationStorageKey)) return;
+    if (pinMigrationInFlightRef.current === pinMigrationStorageKey) return;
+
+    const localPinnedIds = readPinnedThreadIds(pinStorageKey);
+    const serverPinnedIds = new Set(
+      serverPinnedThreads.map((thread) => thread.id),
     );
-  }, []);
+    const missingIds = localPinnedIds.filter(
+      (threadId) => !serverPinnedIds.has(threadId),
+    );
 
-  const unpinThread = useCallback((threadId: string) => {
-    setPinnedThreadIds((current) => current.filter((id) => id !== threadId));
-  }, []);
+    if (missingIds.length === 0) {
+      writePinMigrationCompleted(pinMigrationStorageKey);
+      return;
+    }
 
-  const reorderPinnedThreads = useCallback((orderedVisibleIds: string[]) => {
-    setPinnedThreadIds((current) => [
-      ...orderedVisibleIds,
-      ...current.filter((id) => !orderedVisibleIds.includes(id)),
-    ]);
-  }, []);
+    pinMigrationInFlightRef.current = pinMigrationStorageKey;
+    void (async () => {
+      for (const threadId of missingIds) {
+        const result = await executePinThread({ tenantId, threadId });
+        if (result.error) {
+          throw result.error;
+        }
+      }
+      writePinMigrationCompleted(pinMigrationStorageKey);
+      refreshThreadPins();
+    })()
+      .catch((error) => {
+        console.warn(
+          "[ChatSidebar] failed to migrate local pinned threads:",
+          error,
+        );
+      })
+      .finally(() => {
+        pinMigrationInFlightRef.current = null;
+      });
+  }, [
+    executePinThread,
+    pinMigrationStorageKey,
+    pinStorageKey,
+    pinnedData,
+    pinnedFetching,
+    refreshThreadPins,
+    serverPinnedThreads,
+    tenantId,
+  ]);
 
   const settingsOpen = controlledSettingsOpen ?? localSettingsOpen;
   const setSettingsOpen = onSettingsOpenChange ?? setLocalSettingsOpen;
@@ -547,6 +673,7 @@ export function ChatSidebar({
               Loading threads...
             </p>
           ) : recentThreads.length === 0 &&
+            pinnedThreads.length === 0 &&
             contextualSpaces.length === 0 &&
             !spacesFetching ? (
             <p className="px-2 py-2 text-xs text-sidebar-foreground/55">
@@ -554,6 +681,11 @@ export function ChatSidebar({
             </p>
           ) : (
             <div className="space-y-3">
+              {pinnedError ? (
+                <p className="px-2 py-1 text-xs text-destructive">
+                  {pinnedError.message}
+                </p>
+              ) : null}
               <ThreadListSection
                 label="Pinned"
                 threads={pinnedThreads}
@@ -761,6 +893,22 @@ function groupSearchThreads(
   }
 
   return Array.from(groups.values());
+}
+
+function orderPinnedThreads(
+  threads: ChatThreadSummary[],
+  optimisticOrder: readonly string[] | null,
+) {
+  if (!optimisticOrder || optimisticOrder.length === 0) return threads;
+  const byId = new Map(threads.map((thread) => [thread.id, thread]));
+  const ordered = optimisticOrder
+    .map((threadId) => byId.get(threadId))
+    .filter((thread): thread is ChatThreadSummary => Boolean(thread));
+  const orderedIds = new Set(ordered.map((thread) => thread.id));
+  return [
+    ...ordered,
+    ...threads.filter((thread) => !orderedIds.has(thread.id)),
+  ];
 }
 
 function ThreadListSection({
@@ -1480,6 +1628,13 @@ function threadPinsStorageKey(tenantId: string | null, userId: string | null) {
   return `thinkwork:spaces:pinned-threads:${tenantId ?? "unknown-tenant"}:${userId ?? "unknown-user"}`;
 }
 
+function threadPinsMigrationStorageKey(
+  tenantId: string | null,
+  userId: string | null,
+) {
+  return `${threadPinsStorageKey(tenantId, userId)}:server-migrated:v1`;
+}
+
 function readPinnedThreadIds(key: string): string[] {
   try {
     const raw = window.localStorage.getItem(key);
@@ -1495,11 +1650,19 @@ function readPinnedThreadIds(key: string): string[] {
   }
 }
 
-function writePinnedThreadIds(key: string, threadIds: readonly string[]) {
+function readPinMigrationCompleted(key: string): boolean {
   try {
-    window.localStorage.setItem(key, JSON.stringify(threadIds));
+    return window.localStorage.getItem(key) === "true";
   } catch {
-    // localStorage can be unavailable in hardened contexts; pinning remains usable in memory.
+    return false;
+  }
+}
+
+function writePinMigrationCompleted(key: string) {
+  try {
+    window.localStorage.setItem(key, "true");
+  } catch {
+    // localStorage can be unavailable in hardened contexts; server pins still work.
   }
 }
 

@@ -6,6 +6,7 @@ import { threadProgress } from "./threadProgress.query.js";
 import { threadLabels_query } from "./threadLabels.query.js";
 import { unreadThreadCount } from "./unreadThreadCount.query.js";
 import { threadMentionTargets } from "./threadMentionTargets.query.js";
+import { pinnedThreads } from "./pinnedThreads.query.js";
 
 import { createThread } from "./createThread.mutation.js";
 import { updateThread } from "./updateThread.mutation.js";
@@ -21,6 +22,9 @@ import { addThreadDependency } from "./addThreadDependency.mutation.js";
 import { removeThreadDependency } from "./removeThreadDependency.mutation.js";
 import { escalateThread } from "./escalateThread.mutation.js";
 import { delegateThread } from "./delegateThread.mutation.js";
+import { pinThread } from "./pinThread.mutation.js";
+import { unpinThread } from "./unpinThread.mutation.js";
+import { reorderPinnedThreads } from "./reorderPinnedThreads.mutation.js";
 
 export const threadQueries = {
   threads: threads_query,
@@ -31,6 +35,7 @@ export const threadQueries = {
   threadLabels: threadLabels_query,
   threadMentionTargets,
   unreadThreadCount,
+  pinnedThreads,
 };
 
 export const threadMutations = {
@@ -48,4 +53,7 @@ export const threadMutations = {
   removeThreadDependency,
   escalateThread,
   delegateThread,
+  pinThread,
+  unpinThread,
+  reorderPinnedThreads,
 };

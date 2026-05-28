@@ -65,6 +65,72 @@ export const ThreadsPagedQuery = gql`
   }
 `;
 
+export const PinnedThreadsQuery = gql`
+  query PinnedThreads($tenantId: ID!, $limit: Int) {
+    pinnedThreads(tenantId: $tenantId, limit: $limit) {
+      pinnedAt
+      pinOrder
+      thread {
+        id
+        userId
+        number
+        identifier
+        spaceId
+        title
+        status
+        assigneeType
+        assigneeId
+        agentId
+        space {
+          id
+          slug
+          name
+          kind
+        }
+        checkoutRunId
+        channel
+        costSummary
+        lastActivityAt
+        lastTurnCompletedAt
+        lastReadAt
+        archivedAt
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const PinThreadMutation = gql`
+  mutation PinThread($tenantId: ID!, $threadId: ID!) {
+    pinThread(tenantId: $tenantId, threadId: $threadId) {
+      pinnedAt
+      pinOrder
+      thread {
+        id
+      }
+    }
+  }
+`;
+
+export const UnpinThreadMutation = gql`
+  mutation UnpinThread($tenantId: ID!, $threadId: ID!) {
+    unpinThread(tenantId: $tenantId, threadId: $threadId)
+  }
+`;
+
+export const ReorderPinnedThreadsMutation = gql`
+  mutation ReorderPinnedThreads($tenantId: ID!, $threadIds: [ID!]!) {
+    reorderPinnedThreads(tenantId: $tenantId, threadIds: $threadIds) {
+      pinnedAt
+      pinOrder
+      thread {
+        id
+      }
+    }
+  }
+`;
+
 export const SpacesQuery = gql`
   query Spaces($tenantId: ID!) {
     spaces(tenantId: $tenantId, status: ACTIVE) {
