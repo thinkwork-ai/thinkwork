@@ -6,6 +6,9 @@ describe("snapshotDesktopEnv", () => {
     const snapshot = snapshotDesktopEnv({
       NODE_ENV: "production",
       THINKWORK_STAGE: "canary",
+      THINKWORK_DESKTOP_CHANNEL: "canary",
+      THINKWORK_DESKTOP_PRODUCT_NAME: "ThinkWork Spaces (Canary)",
+      THINKWORK_DESKTOP_APP_ID: "ai.thinkwork.spaces.desktop.canary",
       THINKWORK_DESKTOP_SCHEME: "thinkwork-canary",
       ELECTRON_RENDERER_URL: "http://localhost:5174",
       VITE_COGNITO_USER_POOL_ID: "us-east-1_test",
@@ -16,6 +19,9 @@ describe("snapshotDesktopEnv", () => {
     expect(snapshot).toEqual({
       nodeEnv: "production",
       stage: "canary",
+      desktopChannel: "canary",
+      desktopProductName: "ThinkWork Spaces (Canary)",
+      desktopAppId: "ai.thinkwork.spaces.desktop.canary",
       desktopLocalPiEnabled: true,
       deepLinkScheme: "thinkwork-canary",
       rendererUrl: "http://localhost:5174",
@@ -43,6 +49,9 @@ describe("snapshotDesktopEnv", () => {
     env.ELECTRON_RENDERER_URL = "http://localhost:9999";
 
     expect(snapshot.rendererUrl).toBe("http://localhost:5174");
+    expect(snapshot.desktopChannel).toBe("dev");
+    expect(snapshot.desktopProductName).toBe("ThinkWork Spaces");
+    expect(snapshot.desktopAppId).toBe("ai.thinkwork.spaces.desktop.dev");
     expect(snapshot.deepLinkScheme).toBeNull();
     expect(snapshot.desktopLocalPiEnabled).toBe(true);
   });

@@ -6,6 +6,14 @@ import spacesConfig from "../spaces/vite.config";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 const spacesDir = resolve(rootDir, "../spaces");
+const DESKTOP_BUILD_ENV_KEYS = [
+  "THINKWORK_DESKTOP_APP_ID",
+  "THINKWORK_DESKTOP_CHANNEL",
+  "THINKWORK_DESKTOP_LOCAL_PI_ENABLED",
+  "THINKWORK_DESKTOP_PRODUCT_NAME",
+  "THINKWORK_DESKTOP_SCHEME",
+  "THINKWORK_DESKTOP_VERSION",
+] as const;
 
 async function resolveSpacesConfig(env: {
   command: "build" | "serve";
@@ -37,8 +45,9 @@ function loadSpacesEnv(mode: string): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("VITE_") && value) env[key] = value;
   }
-  if (process.env.THINKWORK_DESKTOP_SCHEME) {
-    env.THINKWORK_DESKTOP_SCHEME = process.env.THINKWORK_DESKTOP_SCHEME;
+  for (const key of DESKTOP_BUILD_ENV_KEYS) {
+    const value = process.env[key];
+    if (value) env[key] = value;
   }
   return env;
 }

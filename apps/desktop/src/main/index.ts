@@ -32,7 +32,13 @@ if (!desktopEnvValidation.configured) {
   );
 }
 configureDevUserDataPath(app);
-void configureDesktopBranding({ app, nativeImage, rootDir: __dirname });
+void configureDesktopBranding({
+  app,
+  nativeImage,
+  rootDir: __dirname,
+  productName: desktopEnv.desktopProductName,
+  appId: desktopEnv.desktopAppId,
+});
 const deepLinkController = createDeepLinkController({
   scheme: deepLinkScheme,
   logger: console,
@@ -108,7 +114,7 @@ if (!app.requestSingleInstanceLock()) {
       installMenus: (handlers) =>
         installDesktopMenu({
           ...handlers,
-          appName: "ThinkWork Spaces",
+          appName: desktopEnv.desktopProductName,
           isDev: !app.isPackaged,
         }),
       registerIpcHandlers: (env) =>

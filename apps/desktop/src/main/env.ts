@@ -7,6 +7,9 @@ export interface CognitoEnvSnapshot {
 export interface DesktopEnvSnapshot {
   nodeEnv: string;
   stage: string;
+  desktopChannel: string;
+  desktopProductName: string;
+  desktopAppId: string;
   desktopLocalPiEnabled: boolean;
   deepLinkScheme: string | null;
   rendererUrl: string | null;
@@ -35,10 +38,19 @@ export function snapshotDesktopEnv(
     optionalEnv(mergedEnv.THINKWORK_STAGE) ??
     optionalEnv(mergedEnv.VITE_THINKWORK_STAGE) ??
     "dev";
+  const desktopChannel =
+    optionalEnv(mergedEnv.THINKWORK_DESKTOP_CHANNEL) ?? stage;
 
   return Object.freeze({
     nodeEnv: optionalEnv(mergedEnv.NODE_ENV) ?? "development",
     stage,
+    desktopChannel,
+    desktopProductName:
+      optionalEnv(mergedEnv.THINKWORK_DESKTOP_PRODUCT_NAME) ??
+      "ThinkWork Spaces",
+    desktopAppId:
+      optionalEnv(mergedEnv.THINKWORK_DESKTOP_APP_ID) ??
+      "ai.thinkwork.spaces.desktop.dev",
     desktopLocalPiEnabled: resolveDesktopLocalPiEnabled(mergedEnv, stage),
     deepLinkScheme: optionalEnv(mergedEnv.THINKWORK_DESKTOP_SCHEME),
     rendererUrl: optionalEnv(mergedEnv.ELECTRON_RENDERER_URL),
