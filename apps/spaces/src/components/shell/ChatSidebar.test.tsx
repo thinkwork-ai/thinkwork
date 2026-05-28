@@ -62,12 +62,14 @@ vi.mock("@tanstack/react-router", () => ({
     to,
     params,
     search,
+    state: _state,
     ...props
   }: {
     children: React.ReactNode;
     to: string;
     params?: Record<string, string>;
     search?: Record<string, string | undefined>;
+    state?: unknown;
   }) => {
     const href = to
       .replace("$spaceId", params?.spaceId ?? "$spaceId")
@@ -229,6 +231,31 @@ vi.mock("@thinkwork/ui", () => ({
     children: React.ReactNode;
     asChild?: boolean;
   }) => (asChild ? children : <button>{children}</button>),
+  ContextMenu: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  ContextMenuTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  ContextMenuContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  ContextMenuItem: ({
+    children,
+    onSelect,
+  }: {
+    children: React.ReactNode;
+    onSelect?: (event: Event) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onSelect?.({ preventDefault: vi.fn() } as unknown as Event)
+      }
+    >
+      {children}
+    </button>
+  ),
   Input: (props: React.ComponentProps<"input">) => <input {...props} />,
   Collapsible: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>

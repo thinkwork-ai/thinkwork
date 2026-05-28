@@ -30,6 +30,7 @@ import {
   Monitor,
   MoreHorizontal,
   Paperclip,
+  Pencil,
   Repeat,
   Search,
   Settings,
@@ -43,6 +44,10 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -325,8 +330,14 @@ export function ChatSidebar({
       activateThread(detail.threadId);
     }
 
+    function handleThreadRenamed() {
+      reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+      reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+    }
+
     window.addEventListener("thinkwork:thread-deleted", handleThreadDeleted);
     window.addEventListener("thinkwork:thread-selected", handleThreadSelected);
+    window.addEventListener("thinkwork:thread-renamed", handleThreadRenamed);
     return () => {
       window.removeEventListener(
         "thinkwork:thread-deleted",
@@ -335,6 +346,10 @@ export function ChatSidebar({
       window.removeEventListener(
         "thinkwork:thread-selected",
         handleThreadSelected,
+      );
+      window.removeEventListener(
+        "thinkwork:thread-renamed",
+        handleThreadRenamed,
       );
     };
   }, [
@@ -1087,18 +1102,97 @@ function ChatThreadRow({
   pinned?: boolean;
 }) {
   const unread = isThreadUnread(thread) && !locallyRead;
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [{ fetching: deleting }, deleteThread] =
-    useMutation(DeleteThreadMutation);
   const activity = threadActivityAt(thread);
   const relativeDate = formatTinyRelativeDate(activity);
   const title = threadTitle(thread);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [renamingTitle, setRenamingTitle] = useState(false);
+  const [renameDraft, setRenameDraft] = useState(title);
+  const [renamingCommitting, setRenamingCommitting] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const renameFocusTimerRef = useRef<number | null>(null);
+  const renamingCommittingRef = useRef(false);
+  const [{ fetching: deleting }, deleteThread] =
+    useMutation(DeleteThreadMutation);
+  const [, updateThreadTitle] = useMutation(UpdateThreadMutation);
   const linkProps = spaceRouteId
     ? ({
         to: "/spaces/$spaceId/threads/$threadId",
         params: { spaceId: spaceRouteId, threadId: thread.id },
       } as const)
     : ({ to: "/threads/$id", params: { id: thread.id } } as const);
+
+  useEffect(() => {
+    if (!renamingTitle) setRenameDraft(title);
+  }, [renamingTitle, title]);
+
+  useEffect(() => {
+    if (!renamingTitle) return;
+    renameFocusTimerRef.current = window.setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+      renameFocusTimerRef.current = null;
+    }, 0);
+    return () => {
+      if (renameFocusTimerRef.current !== null) {
+        window.clearTimeout(renameFocusTimerRef.current);
+        renameFocusTimerRef.current = null;
+      }
+    };
+  }, [renamingTitle]);
+
+  const startRename = useCallback(() => {
+    if (renamingCommitting) return;
+    setRenameDraft(title);
+    setRenamingTitle(true);
+  }, [renamingCommitting, title]);
+
+  const cancelRename = useCallback(() => {
+    setRenameDraft(title);
+    setRenamingTitle(false);
+  }, [title]);
+
+  const commitRename = useCallback(async () => {
+    if (renamingCommittingRef.current) return;
+
+    const nextTitle = renameDraft.trim();
+    if (!nextTitle) {
+      toast.error("Thread title can't be blank.");
+      setRenameDraft(title);
+      setRenamingTitle(false);
+      return;
+    }
+
+    if (nextTitle === title.trim()) {
+      setRenameDraft(title);
+      setRenamingTitle(false);
+      return;
+    }
+
+    renamingCommittingRef.current = true;
+    setRenamingCommitting(true);
+    const result = await updateThreadTitle({
+      id: thread.id,
+      input: { title: nextTitle },
+    });
+    renamingCommittingRef.current = false;
+    setRenamingCommitting(false);
+
+    if (result.error) {
+      toast.error(`Could not rename thread: ${result.error.message}`);
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+      return;
+    }
+
+    toast.success("Thread renamed.");
+    setRenamingTitle(false);
+    window.dispatchEvent(
+      new CustomEvent("thinkwork:thread-renamed", {
+        detail: { threadId: thread.id, title: nextTitle },
+      }),
+    );
+  }, [renameDraft, thread.id, title, updateThreadTitle]);
 
   async function handleConfirmDelete() {
     setThreadDeletePending(thread.id, true);
@@ -1130,28 +1224,86 @@ function ChatThreadRow({
     <div
       className={cn(
         "group/thread-row relative flex h-8 min-w-0 items-center rounded-md outline-none transition-colors hover:bg-sidebar-accent",
-        active && "bg-sidebar-accent",
+        (active || renamingTitle) && "bg-sidebar-accent",
       )}
     >
-      <Link
-        {...linkProps}
-        className={cn(
-          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-[color,padding] hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-          onPin || onUnpin
-            ? "pr-10 group-hover/thread-row:pr-16 group-focus-within/thread-row:pr-16"
-            : "pr-10",
-          active && "bg-sidebar-accent text-sidebar-accent-foreground",
-        )}
-        onClick={onActivate}
-      >
+      {renamingTitle ? (
         <span
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            unread ? "bg-blue-500" : "bg-transparent",
-          )}
-        />
-        <span className="min-w-0 flex-1 truncate text-sm">{title}</span>
-      </Link>
+          className="absolute inset-0 z-10 flex h-full w-full items-center"
+          data-thread-title-rename
+        >
+          <input
+            ref={renameInputRef}
+            value={renameDraft}
+            disabled={renamingCommitting}
+            type="text"
+            aria-label="Rename thread title"
+            className="h-full w-full min-w-0 border-0 bg-transparent px-2 text-sm text-foreground outline-none focus-visible:ring-0 disabled:opacity-60"
+            onChange={(event) => setRenameDraft(event.target.value)}
+            onBlur={() => void commitRename()}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void commitRename();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancelRename();
+              }
+            }}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+          />
+        </span>
+      ) : (
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <Link
+              {...linkProps}
+              state={(previous) => ({
+                ...previous,
+                threadTitleFallback: { threadId: thread.id, title },
+              })}
+              className={cn(
+                "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-[color,padding] hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                onPin || onUnpin
+                  ? "pr-10 group-hover/thread-row:pr-16 group-focus-within/thread-row:pr-16"
+                  : "pr-10",
+                active && "bg-sidebar-accent text-sidebar-accent-foreground",
+              )}
+              onClick={onActivate}
+            >
+              <span
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  unread ? "bg-blue-500" : "bg-transparent",
+                )}
+              />
+              <span
+                className="min-w-0 flex-1 truncate text-sm"
+                data-thread-title-rename
+              >
+                {title}
+              </span>
+            </Link>
+          </ContextMenuTrigger>
+          <ContextMenuContent alignOffset={2} className="w-44">
+            <ContextMenuItem
+              onSelect={() => {
+                window.setTimeout(startRename, 0);
+              }}
+            >
+              <Pencil className="size-4" />
+              Rename
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      )}
       {confirmingDelete ? (
         <button
           type="button"
@@ -1168,7 +1320,7 @@ function ChatThreadRow({
         </button>
       ) : (
         <>
-          {relativeDate ? (
+          {!renamingTitle && relativeDate ? (
             <span
               className="absolute right-2 top-1/2 -translate-y-1/2 text-xs tabular-nums text-sidebar-foreground/45 group-hover/thread-row:hidden"
               title={activity ?? undefined}
@@ -1176,19 +1328,21 @@ function ChatThreadRow({
               {relativeDate}
             </span>
           ) : null}
-          <button
-            type="button"
-            className="absolute right-1 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1.5 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
-            aria-label={`Delete ${title}`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setConfirmingDelete(true);
-            }}
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-          {onPin || onUnpin ? (
+          {!renamingTitle ? (
+            <button
+              type="button"
+              className="absolute right-1 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-end rounded-md pr-1.5 text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/70 group-hover/thread-row:flex"
+              aria-label={`Delete ${title}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setConfirmingDelete(true);
+              }}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          ) : null}
+          {!renamingTitle && (onPin || onUnpin) ? (
             <button
               type="button"
               className="absolute right-6 top-1/2 hidden size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 hover:bg-sidebar-accent hover:text-sidebar-foreground/75 group-hover/thread-row:flex focus-visible:flex focus-visible:ring-2 focus-visible:ring-sidebar-ring"

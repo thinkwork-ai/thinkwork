@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { IconFiles } from "@tabler/icons-react";
@@ -20,6 +21,7 @@ import {
 } from "@/components/workbench/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
+import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -244,9 +246,17 @@ export function SpacesThreadDetailRoute({
     query: ComputerThreadQuery,
     variables: { id: threadId, messageLimit: 100 },
   });
+  const fallbackThreadTitle = useRouterState({
+    select: (state) =>
+      threadTitleFallbackFromState(state.location.state, threadId),
+  });
   const routeThread = data?.thread?.id === threadId ? data.thread : null;
   const hasMismatchedThreadData = Boolean(data?.thread && !routeThread);
-  const threadTitle = routeThread?.title?.trim() || "Thread";
+  const isThreadTitlePending = fetching || hasMismatchedThreadData;
+  const threadTitle =
+    routeThread?.title?.trim() ||
+    fallbackThreadTitle ||
+    (isThreadTitlePending ? "Loading..." : "Thread");
 
   // Attached artifacts feed the cascade-delete checkbox in ThreadDetailActions.
   // Paused until tenant is known.
@@ -838,6 +848,16 @@ export function SpacesThreadDetailRoute({
     // in-page header keeps the bare thread title — no need to repeat
     // "Thread" inside the page the user is already on.
     documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
+    titleContent: routeThread ? (
+      <ThreadTitleInlineRename
+        threadId={threadId}
+        title={threadTitle}
+        className="min-w-0 max-w-[min(28rem,55vw)]"
+        textClassName="text-sm font-medium"
+        inputClassName="h-7 min-w-[12rem]"
+        onRenamed={() => reexecuteQuery({ requestPolicy: "network-only" })}
+      />
+    ) : undefined,
     titleTrailing: (
       <ThreadDetailActions
         threadId={threadId}
@@ -1726,6 +1746,16 @@ function taskErrorMessage(value: unknown): string | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function threadTitleFallbackFromState(state: unknown, threadId: string) {
+  if (!state || typeof state !== "object") return null;
+  const fallback = (state as { threadTitleFallback?: unknown })
+    .threadTitleFallback;
+  if (!fallback || typeof fallback !== "object") return null;
+  const record = fallback as { threadId?: unknown; title?: unknown };
+  if (record.threadId !== threadId) return null;
+  return stringValue(record.title);
 }
 
 function hasPersistedUserMessage(

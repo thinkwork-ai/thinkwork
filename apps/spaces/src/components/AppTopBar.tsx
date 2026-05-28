@@ -95,6 +95,8 @@ export function AppTopBar() {
                 );
               })}
             </nav>
+          ) : actions.titleContent ? (
+            <div className="min-w-0">{actions.titleContent}</div>
           ) : (
             <h1 className="truncate text-sm font-medium">{actions.title}</h1>
           )}

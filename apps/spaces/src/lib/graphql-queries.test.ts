@@ -133,6 +133,7 @@ describe("computer GraphQL queries", () => {
     );
     expect(print(StartCustomerOnboardingMutation)).toContain("missingFields");
     expect(print(UpdateThreadMutation)).toContain("status");
+    expect(print(UpdateThreadMutation)).toContain("title");
   });
 
   it("requests global Inbox rows with Space identity and unread filter", () => {
