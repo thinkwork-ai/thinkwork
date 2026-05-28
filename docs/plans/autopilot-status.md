@@ -22,8 +22,8 @@ Target branch: `main`
   `.Codex/worktrees/local-pi-u7-state`
 - Started: 2026-05-28
 - Latest merged PR: [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800)
-- Active PR: none
-- CI: not started for U7; local verification passed
+- Active PR: [#1801](https://github.com/thinkwork-ai/thinkwork/pull/1801)
+- CI: pending for U7; local verification passed
 
 ### Active Unit Notes
 
@@ -225,6 +225,7 @@ Target branch: `main`
   `git diff --check`, `pnpm --filter @thinkwork/spaces test`,
   `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, and
   `pnpm --filter @thinkwork/api test`.
+- Opened PR [#1801](https://github.com/thinkwork-ai/thinkwork/pull/1801).
 
 ### Progress Log
 
@@ -236,7 +237,7 @@ Target branch: `main`
 | 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged      | CI passed    | Electron sidecar supervision and typed IPC.    |
 | 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | Merged      | CI passed    | Execute local desktop turns in sidecar.        |
 | 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) | Merged      | CI passed    | Managed delegation from local Pi to AgentCore. |
-| 2026-05-28 | U7   | `codex/local-pi-u7-state`               | pending                                                      | In progress | Local passed | Local runtime and delegation state in Spaces.  |
+| 2026-05-28 | U7   | `codex/local-pi-u7-state`               | [#1801](https://github.com/thinkwork-ai/thinkwork/pull/1801) | In progress | CI pending   | Local runtime and delegation state in Spaces.  |
 | 2026-05-28 | U8   | pending                                 | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
 
 ### CI Failures
