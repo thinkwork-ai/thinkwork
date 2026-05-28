@@ -2980,6 +2980,16 @@ describe("TaskThreadView", () => {
         threadTurnId: "turn-1",
       });
       diagnosticListener?.({
+        level: "info",
+        message:
+          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1"}',
+        emittedAt: "2026-05-28T20:53:00.000Z",
+        source: "sidecar",
+        requestId: "request-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+      });
+      diagnosticListener?.({
         level: "warn",
         message: "other thread event",
         emittedAt: "2026-05-28T20:53:01.000Z",
@@ -2996,6 +3006,9 @@ describe("TaskThreadView", () => {
     });
     expect(output.textContent).toContain("local Pi sidecar received turn");
     expect(output.textContent).not.toContain("other thread event");
+    expect(
+      output.textContent?.match(/local Pi sidecar received turn/g),
+    ).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: /Local Pi console/i }));
     expect(

@@ -26,9 +26,13 @@ import {
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
+import {
+  getDesktopBridge,
+  shouldUseDesktopLocalPiDispatchNow,
+} from "@/lib/desktop-runtime";
 
 interface CreateThreadResult {
-  createThread: { id: string };
+  createThread: { id: string; agentId?: string | null };
 }
 
 interface CreateThreadVars {
@@ -166,6 +170,14 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     () => buildNewThreadMentionTargets(mentionTargetData),
     [mentionTargetData],
   );
+  const defaultAgentId = useMemo(
+    () =>
+      mentionTargets.find(
+        (target) =>
+          target.targetType === "AGENT" && target.isDefaultAgent === true,
+      )?.targetId ?? null,
+    [mentionTargets],
+  );
 
   useEffect(() => {
     if (spaceId && spaces.some((space) => space.id === spaceId)) {
@@ -215,7 +227,16 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       // Text-only path (no files): keep the existing atomic
       // createThread-with-firstMessage flow so we don't regress the
       // one-RT happy path.
-      if (files.length === 0 && agentRequested !== false) {
+      const shouldAttemptDesktopLocalPi =
+        agentRequested !== false &&
+        runtimePreference !== "managed" &&
+        (await shouldUseDesktopLocalPiDispatchNow());
+
+      if (
+        files.length === 0 &&
+        agentRequested !== false &&
+        !shouldAttemptDesktopLocalPi
+      ) {
         const result = await createThread({
           input: {
             tenantId,
@@ -264,6 +285,12 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         setError("Thread created but no id returned");
         return;
       }
+      const desktopLocalAgentId =
+        created.data?.createThread?.agentId ?? defaultAgentId;
+      if (shouldAttemptDesktopLocalPi && !desktopLocalAgentId) {
+        setError("Local Pi could not start because the thread has no agent.");
+        return;
+      }
 
       let attachmentRefs: { attachmentId: string }[] = [];
       if (files.length > 0) {
@@ -307,6 +334,8 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       }
       if (agentRequested === false) {
         sendInput.agentRequested = false;
+      } else if (shouldAttemptDesktopLocalPi && desktopLocalAgentId) {
+        sendInput.dispatchMode = "DESKTOP_LOCAL";
       } else if (runtimePreference === "managed") {
         sendInput.dispatchMode = "MANAGED_DEFAULT";
       }
@@ -320,6 +349,25 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
             : (sent.error.message ?? "Failed to send the first message"),
         );
         return;
+      }
+
+      if (sendInput.dispatchMode === "DESKTOP_LOCAL" && desktopLocalAgentId) {
+        dispatchDesktopLocalPiEvent("running");
+        try {
+          await getDesktopBridge()?.pi?.startTurn({
+            agentId: desktopLocalAgentId,
+            threadId,
+            messageId: sent.data?.sendMessage?.id,
+            userMessage: trimmed,
+          });
+        } catch (err) {
+          dispatchDesktopLocalPiEvent("fallback");
+          setError(
+            "Local Pi could not start. The message was saved; use cloud fallback for the next turn.",
+          );
+          console.warn("[desktop-local-pi] startTurn failed:", err);
+          return;
+        }
       }
 
       navigateToCreatedThread(
@@ -452,6 +500,8 @@ function buildNewThreadMentionTargets(
     targetType: target.targetType,
     targetId: target.targetId,
     displayName: target.displayName,
+    aliases: target.aliases ?? undefined,
+    isDefaultAgent: target.isDefaultAgent ?? undefined,
     avatarUrl: target.avatarUrl,
     role: target.role,
   }));
@@ -462,4 +512,12 @@ function buildNewThreadMentionTargets(
     if (typeOrder !== 0) return typeOrder;
     return a.displayName.localeCompare(b.displayName);
   });
+}
+
+function dispatchDesktopLocalPiEvent(status: "running" | "idle" | "fallback") {
+  window.dispatchEvent(
+    new CustomEvent("thinkwork:desktop-local-pi-turn", {
+      detail: { status },
+    }),
+  );
 }

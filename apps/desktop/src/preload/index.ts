@@ -50,6 +50,31 @@ import {
   UpdateTelemetryEventSchema,
 } from "@thinkwork/desktop-ipc";
 
+type PiDiagnosticListener =
+  NonNullable<NonNullable<ThinkworkBridge["pi"]>["onDiagnostic"]> extends (
+    listener: infer Listener,
+  ) => unknown
+    ? Listener
+    : never;
+
+const MAX_BUFFERED_PI_DIAGNOSTICS = 200;
+const piDiagnosticBuffer: Parameters<PiDiagnosticListener>[0][] = [];
+const piDiagnosticListeners = new Set<PiDiagnosticListener>();
+
+ipcRenderer.on(PI_DIAGNOSTIC_EVENT_CHANNEL, (_event, payload: unknown) => {
+  const diagnostic = PiDiagnosticEventSchema.parse(payload);
+  piDiagnosticBuffer.push(diagnostic);
+  if (piDiagnosticBuffer.length > MAX_BUFFERED_PI_DIAGNOSTICS) {
+    piDiagnosticBuffer.splice(
+      0,
+      piDiagnosticBuffer.length - MAX_BUFFERED_PI_DIAGNOSTICS,
+    );
+  }
+  for (const listener of piDiagnosticListeners) {
+    listener(diagnostic);
+  }
+});
+
 const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
   status: "unavailable",
   async getStatus() {
@@ -89,15 +114,13 @@ const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
       ipcRenderer.removeListener(PI_STATUS_EVENT_CHANNEL, wrappedListener);
   },
   onDiagnostic(listener) {
-    const wrappedListener = (
-      _event: Electron.IpcRendererEvent,
-      payload: unknown,
-    ) => {
-      listener(PiDiagnosticEventSchema.parse(payload));
+    piDiagnosticListeners.add(listener);
+    for (const diagnostic of piDiagnosticBuffer) {
+      listener(diagnostic);
+    }
+    return () => {
+      piDiagnosticListeners.delete(listener);
     };
-    ipcRenderer.on(PI_DIAGNOSTIC_EVENT_CHANNEL, wrappedListener);
-    return () =>
-      ipcRenderer.removeListener(PI_DIAGNOSTIC_EVENT_CHANNEL, wrappedListener);
   },
 };
 

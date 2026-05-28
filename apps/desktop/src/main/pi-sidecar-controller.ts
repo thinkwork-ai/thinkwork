@@ -360,7 +360,7 @@ export class PiSidecarController {
     const text = redactPiDiagnosticLine(line.trim());
     if (!text) return;
     this.logger[level](`[pi-sidecar] ${text}`);
-    const requestId = extractRequestId(text);
+    const requestId = extractRequestId(text) ?? this.onlyActiveRequestId();
     this.emitDiagnostic({
       level,
       message: text,
@@ -399,6 +399,12 @@ export class PiSidecarController {
     );
   }
 
+  private onlyActiveRequestId(): string | null {
+    return this.activeTurns.size === 1
+      ? (this.activeTurns.keys().next().value ?? null)
+      : null;
+  }
+
   private updateState(patch: Partial<PiSidecarState>): void {
     this.state = {
       ...this.state,
@@ -425,7 +431,9 @@ function formatDiagnosticMessage(
 function extractRequestId(text: string): string | null {
   const jsonMatch = text.match(/"requestId":"([^"]+)"/);
   if (jsonMatch) return jsonMatch[1];
-  const turnMatch = text.match(/\bturn\s+([^\s;]+)\s+/);
+  const turnMatch = text.match(
+    /\bturn\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s+/i,
+  );
   return turnMatch?.[1] ?? null;
 }
 

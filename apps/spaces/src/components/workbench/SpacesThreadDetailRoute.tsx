@@ -49,7 +49,7 @@ import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import {
   getDesktopBridge,
-  shouldUseDesktopLocalPiDispatch,
+  shouldUseDesktopLocalPiDispatchNow,
 } from "@/lib/desktop-runtime";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
@@ -1187,7 +1187,7 @@ export function SpacesThreadDetailRoute({
           agentRequested !== false &&
           runtimePreference !== "managed" &&
           Boolean(desktopLocalAgentId) &&
-          shouldUseDesktopLocalPiDispatch();
+          (await shouldUseDesktopLocalPiDispatchNow());
         if (shouldStartDesktopLocalPi) {
           sendInput.dispatchMode = "DESKTOP_LOCAL";
         } else if (

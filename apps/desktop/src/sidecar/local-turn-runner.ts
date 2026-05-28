@@ -20,6 +20,7 @@ import {
 } from "./redacted-logger.js";
 import {
   WorkspaceCache,
+  createS3WorkspaceObjectStore,
   type WorkspaceObjectStore,
   type WorkspaceSyncResult,
 } from "./workspace-cache.js";
@@ -36,8 +37,23 @@ export interface PiSdkSessionLike {
   abort?: () => Promise<void>;
 }
 
+export interface PiSdkAuthStorageLike {
+  setRuntimeApiKey?: (provider: string, apiKey: string) => void;
+}
+
 export interface PiSdkModuleLike {
   defineTool?: (definition: Record<string, unknown>) => unknown;
+  AuthStorage?: {
+    create(path?: string): PiSdkAuthStorageLike;
+  };
+  ModelRegistry?: {
+    create(
+      authStorage: unknown,
+      modelsPath?: string,
+    ): {
+      find(provider: string, modelId: string): unknown;
+    };
+  };
   createAgentSession(options?: Record<string, unknown>): Promise<{
     session: PiSdkSessionLike;
     modelFallbackMessage?: string;
@@ -73,6 +89,8 @@ export interface LocalTurnRunnerResult {
 
 const READ_ONLY_WORKSPACE_TOOLS = ["read", "grep", "find", "ls"] as const;
 const PROMPT_SOURCE_FILENAMES = new Set(["AGENTS.md", "SPACE.md", "USER.md"]);
+const LOCAL_PI_AGENT_DIR = ".thinkwork-pi";
+const DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
 
 export async function runLocalDesktopTurn(
   payload: LocalDesktopTurnPayload,
@@ -102,6 +120,7 @@ export async function runLocalDesktopTurn(
       deleted: workspace.deleted,
       total: workspace.total,
       hasWorkspace: Boolean(workspace.prefix),
+      cacheHit: workspace.cacheHit === true,
     });
     const systemPrompt = buildSystemPrompt(payload.session.invocation);
     await maybeWriteDebugBundle({
@@ -241,7 +260,13 @@ async function prepareWorkspace(
 
   const cache = new WorkspaceCache(
     payload.workspaceCacheRoot,
-    deps.workspaceStore,
+    deps.workspaceStore ??
+      createS3WorkspaceObjectStore({
+        region: resolveAwsRegion(
+          invocation,
+          payload.session.sidecarCredentials,
+        ),
+      }),
   );
   return cache.sync({
     bucket,
@@ -254,6 +279,20 @@ async function prepareWorkspace(
       userId: invocation.user_id,
     },
   });
+}
+
+function resolveAwsRegion(
+  invocation: PreparedDesktopPiRuntimeSession["invocation"],
+  sidecarCredentials: unknown,
+): string {
+  const aws = readRecord(readRecord(sidecarCredentials)?.aws);
+  return (
+    stringValue(aws?.region) ??
+    stringValue(invocation.aws_region) ??
+    stringValue(process.env.AWS_REGION) ??
+    stringValue(process.env.AWS_DEFAULT_REGION) ??
+    "us-east-1"
+  );
 }
 
 async function createSdkSession(
@@ -273,10 +312,18 @@ async function createSdkSession(
     compaction: { enabled: false },
     retry: { enabled: true, maxRetries: 1 },
   });
+  const agentDir = path.join(workspaceDir, LOCAL_PI_AGENT_DIR);
+  await syncLocalPiAgentPromptFiles({
+    invocation,
+    workspaceDir,
+    agentDir,
+    systemPrompt,
+    logger,
+  });
   const resourceLoader = sdk.DefaultResourceLoader
     ? new sdk.DefaultResourceLoader({
         cwd: workspaceDir,
-        agentDir: path.join(workspaceDir, ".thinkwork-pi"),
+        agentDir,
         settingsManager,
         systemPromptOverride: () => systemPrompt,
       })
@@ -284,6 +331,7 @@ async function createSdkSession(
   await resourceLoader?.reload?.();
 
   const bedrock = createBedrockRuntimeAdapter(prepared);
+  const modelConfig = createPiSdkModelConfig(sdk, invocation, logger);
   const hindsight = createHindsightRuntimeAdapter(prepared);
   const managedDelegation = createManagedDelegationClient({
     apiUrl: invocation.thinkwork_api_url,
@@ -297,21 +345,32 @@ async function createSdkSession(
     logger,
     deps.fetchImpl ?? fetch,
   );
+  const browserTools = createBrowserAutomationTools(
+    sdk,
+    invocation,
+    logger,
+    deps.fetchImpl ?? fetch,
+  );
   const tools = [
     ...READ_ONLY_WORKSPACE_TOOLS,
     ...(webSearchTools.length > 0 ? ["web_search"] : []),
+    ...(browserTools.length > 0 ? ["browser_automation"] : []),
     ...(delegationTools.length > 0 ? ["delegate_to_managed_agent"] : []),
   ];
-  const customTools = [...webSearchTools, ...delegationTools];
+  const customTools = [...webSearchTools, ...browserTools, ...delegationTools];
 
   logger.info("local Pi SDK session creating", {
     tools,
     customToolCount: customTools.length,
     webSearchEnabled: webSearchTools.length > 0,
+    browserAutomationEnabled: browserTools.length > 0,
     mcpConfigCount: Array.isArray(invocation.mcp_configs)
       ? invocation.mcp_configs.length
       : 0,
     hasResourceLoader: Boolean(resourceLoader),
+    agentDir,
+    modelProvider: readRecord(modelConfig.model)?.provider ?? null,
+    modelId: readRecord(modelConfig.model)?.id ?? invocation.model ?? null,
   });
 
   return sdk.createAgentSession({
@@ -321,6 +380,7 @@ async function createSdkSession(
     resourceLoader,
     sessionManager: sdk.SessionManager?.inMemory(),
     settingsManager,
+    ...modelConfig,
     sessionStartEvent: {
       source: "thinkwork-desktop-local-pi",
       metadata: {
@@ -331,6 +391,179 @@ async function createSdkSession(
       },
     },
   });
+}
+
+function createPiSdkModelConfig(
+  sdk: PiSdkModuleLike,
+  invocation: PreparedDesktopPiRuntimeSession["invocation"],
+  logger: RedactedLogger,
+): Record<string, unknown> {
+  if (!sdk.AuthStorage?.create || !sdk.ModelRegistry?.create) return {};
+  const authStorage = sdk.AuthStorage.create();
+  primeBedrockRuntimeAuth(authStorage, logger);
+  const modelRegistry = sdk.ModelRegistry.create(authStorage);
+  const requestedModelId = stringValue(invocation.model);
+  const requestedBedrockModel =
+    requestedModelId && isLikelyBedrockModelId(requestedModelId)
+      ? modelRegistry.find("amazon-bedrock", requestedModelId)
+      : undefined;
+  const model =
+    requestedBedrockModel ??
+    modelRegistry.find("amazon-bedrock", DEFAULT_BEDROCK_MODEL_ID);
+
+  if (!model) {
+    logger.warn("local Pi Bedrock model unavailable in SDK registry", {
+      requestedModelId: requestedModelId ?? null,
+      fallbackModelId: DEFAULT_BEDROCK_MODEL_ID,
+    });
+    return { authStorage, modelRegistry };
+  }
+
+  if (!requestedBedrockModel && requestedModelId) {
+    logger.info("local Pi model routed to Bedrock fallback", {
+      requestedModelId,
+      fallbackModelId: DEFAULT_BEDROCK_MODEL_ID,
+    });
+  }
+
+  return { authStorage, modelRegistry, model };
+}
+
+function primeBedrockRuntimeAuth(
+  authStorage: PiSdkAuthStorageLike,
+  logger: RedactedLogger,
+): void {
+  if (typeof authStorage.setRuntimeApiKey !== "function") return;
+  authStorage.setRuntimeApiKey(
+    "amazon-bedrock",
+    stringValue(process.env.AWS_BEARER_TOKEN_BEDROCK) ??
+      "aws-sdk-default-credential-chain",
+  );
+  logger.info("local Pi Bedrock runtime auth primed", {
+    source: process.env.AWS_BEARER_TOKEN_BEDROCK
+      ? "bearer-token-env"
+      : "aws-sdk-default-credential-chain",
+  });
+}
+
+function isLikelyBedrockModelId(modelId: string): boolean {
+  const normalized = modelId.trim();
+  return (
+    normalized.startsWith("arn:aws:bedrock:") ||
+    normalized.startsWith("amazon.") ||
+    normalized.startsWith("anthropic.") ||
+    normalized.startsWith("cohere.") ||
+    normalized.startsWith("deepseek.") ||
+    normalized.startsWith("meta.") ||
+    normalized.startsWith("mistral.") ||
+    normalized.startsWith("us.") ||
+    normalized.startsWith("eu.") ||
+    normalized.startsWith("apac.") ||
+    normalized.startsWith("global.")
+  );
+}
+
+async function syncLocalPiAgentPromptFiles(args: {
+  invocation: DesktopPiRuntimeInvocation;
+  workspaceDir: string;
+  agentDir: string;
+  systemPrompt: string;
+  logger: RedactedLogger;
+}): Promise<void> {
+  await mkdir(args.agentDir, { recursive: true });
+  const promptFiles = await collectPromptSourceFiles(args.workspaceDir);
+  const byBasename = new Map<string, PromptSourceFile>();
+  for (const filename of PROMPT_SOURCE_FILENAMES) {
+    const exact = promptFiles.find((file) => file.relativePath === filename);
+    const nested = promptFiles.find(
+      (file) => path.basename(file.relativePath) === filename,
+    );
+    const selected = exact ?? nested;
+    if (selected) byBasename.set(filename, selected);
+  }
+
+  const filesToWrite: Record<string, string> = {
+    "AGENTS.md":
+      byBasename.get("AGENTS.md")?.content ??
+      renderFallbackAgentsMd(args.systemPrompt),
+    "SPACE.md":
+      byBasename.get("SPACE.md")?.content ?? renderFallbackSpaceMd(args),
+    "USER.md": byBasename.get("USER.md")?.content ?? renderFallbackUserMd(args),
+    "PROMPT_SOURCES.md": renderPromptSourceIndex(promptFiles),
+  };
+
+  for (const [filename, content] of Object.entries(filesToWrite)) {
+    await writeFile(path.join(args.agentDir, filename), content, "utf8");
+  }
+
+  args.logger.info("local Pi agent prompt files synced", {
+    agentDir: args.agentDir,
+    promptFileCount: promptFiles.length,
+    agentFiles: Object.keys(filesToWrite),
+    selectedPromptFiles: [...byBasename.values()].map(
+      (file) => file.relativePath,
+    ),
+  });
+}
+
+function renderFallbackAgentsMd(systemPrompt: string): string {
+  return [
+    "# AGENTS.md",
+    "",
+    "This file was generated for the desktop local Pi runtime from the composed ThinkWork system prompt because no rendered AGENTS.md file was available in the local workspace.",
+    "",
+    "## Composed System Prompt",
+    "",
+    "```text",
+    systemPrompt,
+    "```",
+    "",
+  ].join("\n");
+}
+
+function renderFallbackSpaceMd(args: {
+  invocation: DesktopPiRuntimeInvocation;
+}): string {
+  const context = readRecord(args.invocation.turn_context);
+  return [
+    "# SPACE.md",
+    "",
+    "No rendered SPACE.md file was available in the local workspace.",
+    "",
+    `- Space: ${stringValue(context?.spaceSlug) ?? stringValue(context?.spaceId) ?? "unknown"}`,
+    `- Agent: ${args.invocation.agent_name ?? args.invocation.instance_id ?? "unknown"}`,
+    "",
+  ].join("\n");
+}
+
+function renderFallbackUserMd(args: {
+  invocation: DesktopPiRuntimeInvocation;
+}): string {
+  return [
+    "# USER.md",
+    "",
+    "No rendered USER.md file was available in the local workspace.",
+    "",
+    `- Human: ${args.invocation.human_name ?? "unknown"}`,
+    `- Email: ${args.invocation.current_user_email ?? "unknown"}`,
+    "",
+  ].join("\n");
+}
+
+function renderPromptSourceIndex(promptFiles: PromptSourceFile[]): string {
+  return [
+    "# Prompt Sources",
+    "",
+    "Prompt source files discovered in the rendered workspace and mirrored into the local Pi agent directory.",
+    "",
+    ...(promptFiles.length > 0
+      ? promptFiles.map(
+          (file) =>
+            `- ${file.relativePath} (${file.content.length} chars, sha256 ${file.sha256})`,
+        )
+      : ["- No AGENTS.md, SPACE.md, or USER.md files were found."]),
+    "",
+  ].join("\n");
 }
 
 function createWebSearchTools(
@@ -470,13 +703,77 @@ function createDelegationTools(
   ];
 }
 
+function createBrowserAutomationTools(
+  sdk: PiSdkModuleLike,
+  invocation: DesktopPiRuntimeInvocation,
+  logger: RedactedLogger,
+  fetchImpl: typeof fetch,
+): unknown[] {
+  if (typeof sdk.defineTool !== "function") return [];
+  if (invocation.browser_automation_enabled !== true) return [];
+
+  return [
+    sdk.defineTool({
+      name: "browser_automation",
+      label: "Browser Automation",
+      description:
+        "Open a public web page locally and extract text relevant to the task. Use web_search first for current facts; use browser_automation when a specific page needs inspection.",
+      parameters: Type.Object({
+        url: Type.String({
+          description: "Absolute http(s) URL to inspect.",
+        }),
+        task: Type.String({
+          description: "What information to extract from the page.",
+        }),
+      }),
+      execute: async (_toolCallId: string, params: Record<string, unknown>) => {
+        const url = typeof params.url === "string" ? params.url.trim() : "";
+        const task = typeof params.task === "string" ? params.task.trim() : "";
+        if (!isHttpUrl(url)) {
+          throw new Error("browser_automation requires an http(s) URL");
+        }
+        if (!task) {
+          throw new Error("browser_automation requires a non-empty task");
+        }
+
+        logger.info("local Pi browser automation started", {
+          url,
+          taskChars: task.length,
+          engine: "desktop_fetch",
+        });
+        const result = await runLocalBrowserAutomation({
+          url,
+          task,
+          fetchImpl,
+        });
+        logger.info("local Pi browser automation completed", {
+          url,
+          title: result.title,
+          textChars: result.text.length,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result),
+            },
+          ],
+          details: result,
+        };
+      },
+    }),
+  ];
+}
+
 function buildSystemPrompt(invocation: DesktopPiRuntimeInvocation): string {
   const base = invocation.system_prompt?.trim() || "You are ThinkWork Pi.";
   return `${base}
 
 You are running inside the ThinkWork desktop local Pi sidecar.
 Use only the rendered app workspace mounted as the current working directory.
-Do not attempt to read arbitrary local folders, shell out, access the clipboard, use screenshots, or operate the local browser.
+The SDK agent directory is .thinkwork-pi; it contains local copies of AGENTS.md, SPACE.md, USER.md, and PROMPT_SOURCES.md for this turn.
+Do not attempt to read arbitrary local folders, shell out, access the clipboard, or use screenshots.
+Use web_search for current facts and browser_automation for inspecting a specific public page when those tools are available.
 When work needs hosted isolation, long runtime, cloud-only tools, or consequential user-visible execution, use delegate_to_managed_agent instead of trying to perform that work locally.
 If the user asks for local filesystem or OS access outside the rendered app workspace, refuse briefly and explain that desktop local Pi v1 is limited to the approved ThinkWork app workspace.`;
 }
@@ -539,6 +836,7 @@ async function visitPromptSourceFiles(
   for (const entry of entries) {
     const absolutePath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (entry.name === LOCAL_PI_AGENT_DIR) continue;
       await visitPromptSourceFiles(root, absolutePath, depth + 1, files);
       continue;
     }
@@ -690,6 +988,41 @@ interface LocalWebSearchResult {
   score: number;
 }
 
+interface LocalBrowserAutomationResult {
+  url: string;
+  title: string;
+  task: string;
+  text: string;
+}
+
+async function runLocalBrowserAutomation(args: {
+  url: string;
+  task: string;
+  fetchImpl: typeof fetch;
+}): Promise<LocalBrowserAutomationResult> {
+  const response = await args.fetchImpl(args.url, {
+    headers: { "User-Agent": "Thinkwork/1.0" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `Browser Automation ${response.status}: ${raw.slice(0, 200)}`,
+    );
+  }
+  const title = extractHtmlTitle(raw) ?? args.url;
+  const text = contentType.includes("html")
+    ? extractReadableHtmlText(raw)
+    : cleanSearchText(raw);
+  return {
+    url: args.url,
+    title,
+    task: args.task,
+    text: (text ?? "").slice(0, 8_000),
+  };
+}
+
 async function runLocalWebSearch(args: {
   provider: WebSearchProvider;
   apiKey: string;
@@ -831,6 +1164,43 @@ function cleanSearchText(text: string | undefined): string | undefined {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return cleaned || undefined;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function extractHtmlTitle(html: string): string | null {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match ? decodeHtmlEntities(stripTags(match[1]).trim()) : null;
+}
+
+function extractReadableHtmlText(html: string): string | undefined {
+  const withoutNoise = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+  return cleanSearchText(decodeHtmlEntities(stripTags(withoutNoise)));
+}
+
+function stripTags(value: string): string {
+  return value.replace(/<[^>]+>/g, " ");
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'");
 }
 
 function safePathSegment(value: string): string {

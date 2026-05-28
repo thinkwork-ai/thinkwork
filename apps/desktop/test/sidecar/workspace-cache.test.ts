@@ -17,12 +17,16 @@ const PARTITION = {
 };
 
 class FakeStore implements WorkspaceObjectStore {
+  listCalls = 0;
+  getCalls = 0;
+
   constructor(private readonly files: Record<string, string>) {}
 
   async listObjects(input: {
     bucket: string;
     prefix: string;
   }): Promise<Array<{ key: string }>> {
+    this.listCalls++;
     expect(input.bucket).toBe("workspace-bucket");
     return Object.keys(this.files)
       .filter((key) => key.startsWith(input.prefix))
@@ -33,6 +37,7 @@ class FakeStore implements WorkspaceObjectStore {
     bucket: string;
     key: string;
   }): Promise<Uint8Array> {
+    this.getCalls++;
     expect(input.bucket).toBe("workspace-bucket");
     return new TextEncoder().encode(this.files[input.key] ?? "");
   }
@@ -84,6 +89,37 @@ describe("WorkspaceCache", () => {
     await expect(
       readFile(join(localDir, "stale.md"), "utf8"),
     ).rejects.toThrow();
+  });
+
+  it("reuses a fresh local workspace cache without redownloading every file", async () => {
+    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    const store = new FakeStore({
+      [`${prefix}AGENTS.md`]: "# Agent",
+    });
+    const cache = new WorkspaceCache(root, store, {
+      now: () => new Date("2026-05-28T12:00:00.000Z"),
+    });
+
+    await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+    const cached = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+
+    expect(cached).toMatchObject({
+      prefix,
+      synced: 0,
+      deleted: 0,
+      total: 1,
+      cacheHit: true,
+    });
+    expect(store.listCalls).toBe(1);
+    expect(store.getCalls).toBe(1);
   });
 
   it("rejects rendered prefixes outside the tenant and agent scope", async () => {

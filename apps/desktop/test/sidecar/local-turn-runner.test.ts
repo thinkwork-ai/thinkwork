@@ -26,7 +26,7 @@ const BASE_INVOCATION = {
   messages_history: [{ role: "user" as const, content: "Earlier" }],
   runtime_type: "pi",
   runtime_host: "desktop-local" as const,
-  model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+  model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
   trigger_channel: "desktop" as const,
   finalize_callback_secret: "dps_secret",
   thread_turn_id: "turn-1",
@@ -276,6 +276,63 @@ describe("runLocalDesktopTurn", () => {
     );
   });
 
+  it("routes unsupported hosted models through the Bedrock SDK model fallback", async () => {
+    let optionsSeen: Record<string, unknown> | undefined;
+    const authStorage = { setRuntimeApiKey: vi.fn() };
+    const sdk: PiSdkModuleLike = {
+      AuthStorage: { create: vi.fn(() => authStorage) },
+      ModelRegistry: {
+        create: vi.fn(() => ({
+          find: vi.fn((provider: string, modelId: string) =>
+            provider === "amazon-bedrock"
+              ? { provider, id: modelId }
+              : undefined,
+          ),
+        })),
+      },
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Done" }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            model: "moonshotai.kimi-k2.5",
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: vi.fn(async () =>
+          Response.json({ ok: true }),
+        ) as typeof fetch,
+      },
+    );
+
+    expect(optionsSeen?.model).toEqual({
+      provider: "amazon-bedrock",
+      id: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    });
+    expect(optionsSeen?.authStorage).toBeTruthy();
+    expect(optionsSeen?.modelRegistry).toBeTruthy();
+    expect(authStorage.setRuntimeApiKey).toHaveBeenCalledWith(
+      "amazon-bedrock",
+      "aws-sdk-default-credential-chain",
+    );
+  });
+
   it("registers web_search from the prepared Exa config and executes it locally", async () => {
     let optionsSeen: Record<string, unknown> | undefined;
     const sdk: PiSdkModuleLike = {
@@ -350,6 +407,115 @@ describe("runLocalDesktopTurn", () => {
       }),
     );
     expect(JSON.stringify(result)).toContain("Austin weather");
+  });
+
+  it("mirrors prompt source files into the Pi SDK agent directory", async () => {
+    let agentDir = "";
+    const sdk: PiSdkModuleLike = {
+      DefaultResourceLoader: class {
+        constructor(options: Record<string, unknown>) {
+          agentDir = String(options.agentDir);
+        }
+
+        async reload() {
+          expect(await readFile(join(agentDir, "AGENTS.md"), "utf8")).toBe(
+            "# Agent",
+          );
+          expect(
+            await readFile(join(agentDir, "PROMPT_SOURCES.md"), "utf8"),
+          ).toContain("AGENTS.md");
+        }
+      },
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [{ role: "assistant", content: "Done" }],
+          prompt: vi.fn(async () => {}),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ ok: true }, { status: 200 }),
+    );
+
+    await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(agentDir).toContain(".thinkwork-pi");
+  });
+
+  it("registers browser_automation when enabled and executes it locally", async () => {
+    let optionsSeen: Record<string, unknown> | undefined;
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Browsed." }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url) === "https://example.com") {
+        return new Response(
+          "<html><head><title>Example Domain</title></head><body><h1>Example Domain</h1><p>This domain is for examples.</p></body></html>",
+          { headers: { "content-type": "text/html" } },
+        );
+      }
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            browser_automation_enabled: true,
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(optionsSeen?.tools).toContain("browser_automation");
+    const browserTool = (
+      optionsSeen?.customTools as Array<{
+        name?: string;
+        execute?: (
+          toolCallId: string,
+          params: Record<string, unknown>,
+        ) => Promise<unknown>;
+      }>
+    ).find((tool) => tool.name === "browser_automation");
+    expect(browserTool).toBeTruthy();
+
+    const result = await browserTool!.execute!("call-1", {
+      url: "https://example.com",
+      task: "Read the title",
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://example.com",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "User-Agent": "Thinkwork/1.0" }),
+      }),
+    );
+    expect(JSON.stringify(result)).toContain("Example Domain");
   });
 
   it("writes a local debug bundle with the composed prompt and prompt source files", async () => {

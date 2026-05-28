@@ -1,4 +1,11 @@
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import {
   GetObjectCommand,
@@ -7,7 +14,13 @@ import {
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
 
-const SKIP_FILES = new Set(["manifest.json", "_defaults_version"]);
+const CACHE_MANIFEST_FILE = ".thinkwork-workspace-cache.json";
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const SKIP_FILES = new Set([
+  "manifest.json",
+  "_defaults_version",
+  CACHE_MANIFEST_FILE,
+]);
 const MAX_CACHE_PARTITIONS = 12;
 
 export interface WorkspaceCachePartition {
@@ -42,6 +55,18 @@ export interface WorkspaceSyncResult {
   synced: number;
   deleted: number;
   total: number;
+  cacheHit?: boolean;
+}
+
+export interface WorkspaceCacheOptions {
+  cacheTtlMs?: number;
+  now?: () => Date;
+}
+
+interface WorkspaceCacheManifest {
+  prefix: string;
+  syncedAt: string;
+  total: number;
 }
 
 export class WorkspaceBoundaryError extends Error {
@@ -55,6 +80,7 @@ export class WorkspaceCache {
   constructor(
     private readonly rootDir: string,
     private readonly store: WorkspaceObjectStore = createS3WorkspaceObjectStore(),
+    private readonly options: WorkspaceCacheOptions = {},
   ) {}
 
   async sync(input: WorkspaceSyncInput): Promise<WorkspaceSyncResult> {
@@ -65,6 +91,19 @@ export class WorkspaceCache {
     );
     const localDir = this.partitionPath(input.partition);
     await mkdir(localDir, { recursive: true });
+
+    const cached = await this.readFreshCacheManifest(localDir, prefix);
+    if (cached) {
+      await this.evictOldPartitions(input.partition.stage);
+      return {
+        localDir,
+        prefix,
+        synced: 0,
+        deleted: 0,
+        total: cached.total,
+        cacheHit: true,
+      };
+    }
 
     const remote = (
       await this.store.listObjects({
@@ -98,6 +137,19 @@ export class WorkspaceCache {
       deleted++;
     }
     await pruneEmptyDirs(localDir, localDir);
+    await writeFile(
+      path.join(localDir, CACHE_MANIFEST_FILE),
+      JSON.stringify(
+        {
+          prefix,
+          syncedAt: (this.options.now?.() ?? new Date()).toISOString(),
+          total: remote.length,
+        } satisfies WorkspaceCacheManifest,
+        null,
+        2,
+      ),
+      "utf8",
+    );
     await this.evictOldPartitions(input.partition.stage);
 
     return { localDir, prefix, synced, deleted, total: remote.length };
@@ -132,6 +184,34 @@ export class WorkspaceCache {
     for (const stale of tenants.slice(MAX_CACHE_PARTITIONS)) {
       await rm(stale.abs, { recursive: true, force: true });
     }
+  }
+
+  private async readFreshCacheManifest(
+    localDir: string,
+    prefix: string,
+  ): Promise<WorkspaceCacheManifest | null> {
+    const cacheTtlMs = this.options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+    if (cacheTtlMs <= 0) return null;
+
+    let manifest: WorkspaceCacheManifest;
+    try {
+      manifest = JSON.parse(
+        await readFile(path.join(localDir, CACHE_MANIFEST_FILE), "utf8"),
+      ) as WorkspaceCacheManifest;
+    } catch {
+      return null;
+    }
+    if (manifest.prefix !== prefix || !Number.isFinite(manifest.total)) {
+      return null;
+    }
+    const syncedAt = Date.parse(manifest.syncedAt);
+    if (!Number.isFinite(syncedAt)) return null;
+    const ageMs = (this.options.now?.() ?? new Date()).getTime() - syncedAt;
+    if (ageMs < 0 || ageMs > cacheTtlMs) return null;
+
+    const files = await listLocalFiles(localDir);
+    files.delete(CACHE_MANIFEST_FILE);
+    return files.size > 0 ? manifest : null;
   }
 }
 

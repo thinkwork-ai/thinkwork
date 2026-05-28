@@ -227,6 +227,9 @@ describe("PiSidecarController", () => {
     child.stdout.write(
       `[pi-sidecar] local Pi sidecar received turn {"requestId":"${response.requestId}","threadTurnId":"turn-1","secret":"hide-me"}\n`,
     );
+    child.stdout.write(
+      `[pi-sidecar] local Pi turn starting {"threadTurnId":"turn-1","runtimeHost":"desktop-local"}\n`,
+    );
 
     const diagnostics = sentMessages.filter(
       (message) => message.channel === PI_DIAGNOSTIC_EVENT_CHANNEL,
@@ -240,6 +243,18 @@ describe("PiSidecarController", () => {
           threadId: "thread-1",
           threadTurnId: "turn-1",
           message: expect.stringContaining("local Pi sidecar received turn"),
+        }),
+      }),
+    );
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          level: "info",
+          source: "sidecar",
+          requestId: response.requestId,
+          threadId: "thread-1",
+          threadTurnId: "turn-1",
+          message: expect.stringContaining("local Pi turn starting"),
         }),
       }),
     );
