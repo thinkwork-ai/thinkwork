@@ -287,6 +287,17 @@ export const PiCancelTurnResponseSchema = z
 export const GetPiStatusRequestSchema = EmptyRequestSchema;
 export const GetPiStatusResponseSchema = PiSidecarStateSchema;
 export const PiStatusEventSchema = PiSidecarStateSchema;
+export const PiDiagnosticEventSchema = z
+  .object({
+    level: z.enum(["info", "warn", "error"]),
+    message: z.string().min(1),
+    emittedAt: z.string().min(1),
+    source: z.enum(["main", "sidecar"]),
+    requestId: z.string().min(1).nullable(),
+    threadId: z.string().min(1).nullable(),
+    threadTurnId: z.string().min(1).nullable(),
+  })
+  .strict();
 
 export const ChannelSchemas = {
   getSessionTokens: {
@@ -381,6 +392,7 @@ export type ReportInstallOutcomeRequest = z.infer<
 >;
 export type PiSidecarStatus = z.infer<typeof PiSidecarStatusSchema>;
 export type PiSidecarState = z.infer<typeof PiSidecarStateSchema>;
+export type PiDiagnosticEvent = z.infer<typeof PiDiagnosticEventSchema>;
 export type PiStartTurnRequest = z.infer<typeof PiStartTurnRequestSchema>;
 export type PiStartTurnResponse = z.infer<typeof PiStartTurnResponseSchema>;
 export type PiCancelTurnRequest = z.infer<typeof PiCancelTurnRequestSchema>;

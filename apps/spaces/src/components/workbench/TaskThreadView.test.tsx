@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -2922,6 +2923,84 @@ describe("TaskThreadView", () => {
         "managed",
       );
     });
+  });
+
+  it("streams local Pi diagnostic events into a collapsible console", async () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    let diagnosticListener:
+      | ((event: {
+          level: "info" | "warn" | "error";
+          message: string;
+          emittedAt: string;
+          source: "main" | "sidecar";
+          requestId: string | null;
+          threadId: string | null;
+          threadTurnId: string | null;
+        }) => void)
+      | null = null;
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: {
+          status: "healthy",
+          getStatus: vi.fn(async () => ({ status: "healthy" })),
+          onStatusChanged: vi.fn(() => () => {}),
+          onDiagnostic: vi.fn((listener) => {
+            diagnosticListener = listener;
+            return () => {};
+          }),
+        },
+      },
+    });
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Local Pi console thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Local Pi console")).toBeNull();
+    await waitFor(() => expect(diagnosticListener).not.toBeNull());
+
+    act(() => {
+      diagnosticListener?.({
+        level: "info",
+        message:
+          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1"}',
+        emittedAt: "2026-05-28T20:53:00.000Z",
+        source: "sidecar",
+        requestId: "request-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+      });
+      diagnosticListener?.({
+        level: "warn",
+        message: "other thread event",
+        emittedAt: "2026-05-28T20:53:01.000Z",
+        source: "main",
+        requestId: "request-2",
+        threadId: "thread-2",
+        threadTurnId: "turn-2",
+      });
+    });
+
+    expect(screen.getByLabelText("Local Pi console")).toBeTruthy();
+    const output = screen.getByRole("log", {
+      name: "Local Pi console output",
+    });
+    expect(output.textContent).toContain("local Pi sidecar received turn");
+    expect(output.textContent).not.toContain("other thread event");
+
+    fireEvent.click(screen.getByRole("button", { name: /Local Pi console/i }));
+    expect(
+      screen.queryByRole("log", { name: "Local Pi console output" }),
+    ).toBeNull();
   });
 
   it("renders voice input next to the send button", () => {

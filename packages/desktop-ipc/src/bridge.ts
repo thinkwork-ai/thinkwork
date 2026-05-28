@@ -5,6 +5,7 @@ import type {
   OAuthErrorEvent,
   PiCancelTurnRequest,
   PiCancelTurnResponse,
+  PiDiagnosticEvent,
   PiSidecarState,
   PiSidecarStatus,
   PiStartTurnRequest,
@@ -28,6 +29,7 @@ export interface PiBridge {
   startTurn(request: PiStartTurnRequest): Promise<PiStartTurnResponse>;
   cancelTurn(request: PiCancelTurnRequest): Promise<PiCancelTurnResponse>;
   onStatusChanged(listener: (state: PiSidecarState) => void): Unsubscribe;
+  onDiagnostic?(listener: (event: PiDiagnosticEvent) => void): Unsubscribe;
 }
 
 export interface ThinkworkBridge {

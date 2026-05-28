@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import { PI_DIAGNOSTIC_EVENT_CHANNEL } from "@thinkwork/desktop-ipc";
 import { describe, expect, it, vi } from "vitest";
 import {
   PiSidecarController,
@@ -30,6 +31,7 @@ class FakeUtilityProcess extends EventEmitter {
 
 function createController(processes: FakeUtilityProcess[] = []) {
   const sentStates: unknown[] = [];
+  const sentMessages: Array<{ channel: string; payload: unknown }> = [];
   const logger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -46,7 +48,8 @@ function createController(processes: FakeUtilityProcess[] = []) {
       [
         {
           webContents: {
-            send: (_channel: string, payload: unknown) => {
+            send: (channel: string, payload: unknown) => {
+              sentMessages.push({ channel, payload });
               sentStates.push(payload);
             },
           },
@@ -98,7 +101,7 @@ function createController(processes: FakeUtilityProcess[] = []) {
     }),
     logger,
   });
-  return { controller, processes, sentStates, logger };
+  return { controller, processes, sentStates, sentMessages, logger };
 }
 
 describe("PiSidecarController", () => {
@@ -205,6 +208,43 @@ describe("PiSidecarController", () => {
     ).toBe(
       'authorization=[redacted] secretAccessKey=[redacted] [redacted-aws-key] {"message":"[redacted-message]"} https://s3.test/key?X-Amz-Signature=[redacted]',
     );
+  });
+
+  it("streams sidecar diagnostics to renderer windows with turn context", async () => {
+    const { controller, processes, sentMessages } = createController();
+
+    controller.start();
+    const child = processes[0];
+    child.emit("spawn");
+    child.emit("message", { type: "ready", version: "0.1.0" });
+
+    const response = await controller.startTurn({
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      userMessage: "Run locally",
+    });
+    child.stdout.write(
+      `[pi-sidecar] local Pi sidecar received turn {"requestId":"${response.requestId}","threadTurnId":"turn-1","secret":"hide-me"}\n`,
+    );
+
+    const diagnostics = sentMessages.filter(
+      (message) => message.channel === PI_DIAGNOSTIC_EVENT_CHANNEL,
+    );
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          level: "info",
+          source: "sidecar",
+          requestId: response.requestId,
+          threadId: "thread-1",
+          threadTurnId: "turn-1",
+          message: expect.stringContaining("local Pi sidecar received turn"),
+        }),
+      }),
+    );
+    expect(JSON.stringify(diagnostics)).toContain("[redacted]");
+    expect(JSON.stringify(diagnostics)).not.toContain("hide-me");
   });
 
   it("resolves the sidecar entry when imported from a code-split chunk", () => {

@@ -13,6 +13,7 @@ import {
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   OAUTH_ERROR_EVENT_CHANNEL,
+  PI_DIAGNOSTIC_EVENT_CHANNEL,
   PI_STATUS_EVENT_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
@@ -34,6 +35,7 @@ import {
   OAuthErrorEventSchema,
   PiCancelTurnRequestSchema,
   PiCancelTurnResponseSchema,
+  PiDiagnosticEventSchema,
   PiStartTurnRequestSchema,
   PiStartTurnResponseSchema,
   PiStatusEventSchema,
@@ -85,6 +87,17 @@ const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
     ipcRenderer.on(PI_STATUS_EVENT_CHANNEL, wrappedListener);
     return () =>
       ipcRenderer.removeListener(PI_STATUS_EVENT_CHANNEL, wrappedListener);
+  },
+  onDiagnostic(listener) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ) => {
+      listener(PiDiagnosticEventSchema.parse(payload));
+    };
+    ipcRenderer.on(PI_DIAGNOSTIC_EVENT_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(PI_DIAGNOSTIC_EVENT_CHANNEL, wrappedListener);
   },
 };
 
