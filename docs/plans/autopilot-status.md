@@ -22,8 +22,8 @@ Target branch: `main`
   `.Codex/worktrees/local-pi-u1-runtime-core`
 - Started: 2026-05-28
 - Latest merged PR: none
-- Active PR: none
-- CI: not started
+- Active PR: [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791)
+- CI: pending
 
 ### Active Unit Notes
 
@@ -45,19 +45,20 @@ Target branch: `main`
   `pnpm --filter @thinkwork/agentcore-pi typecheck`.
 - Broader Pi verification passed: `pnpm --filter @thinkwork/agentcore-pi test`
   and `pnpm --filter @thinkwork/pi-runtime-core build && pnpm --filter @thinkwork/agentcore-pi build`.
+- Opened PR [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791).
 
 ### Progress Log
 
-| Date       | Unit | Branch                           | PR      | Status      | Verification | Notes                                          |
-| ---------- | ---- | -------------------------------- | ------- | ----------- | ------------ | ---------------------------------------------- |
-| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core` | pending | In progress | Local passed | Extract shared Pi runtime core.                |
-| 2026-05-28 | U2   | pending                          | pending | Pending     | pending      | Desktop runtime session preparation API.       |
-| 2026-05-28 | U3   | pending                          | pending | Pending     | pending      | Desktop-local sendMessage dispatch ownership.  |
-| 2026-05-28 | U4   | pending                          | pending | Pending     | pending      | Electron sidecar supervision and typed IPC.    |
-| 2026-05-28 | U5   | pending                          | pending | Pending     | pending      | Execute local desktop turns in sidecar.        |
-| 2026-05-28 | U6   | pending                          | pending | Pending     | pending      | Managed delegation from local Pi to AgentCore. |
-| 2026-05-28 | U7   | pending                          | pending | Pending     | pending      | Local runtime and delegation state in Spaces.  |
-| 2026-05-28 | U8   | pending                          | pending | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
+| Date       | Unit | Branch                           | PR                                                           | Status     | Verification | Notes                                          |
+| ---------- | ---- | -------------------------------- | ------------------------------------------------------------ | ---------- | ------------ | ---------------------------------------------- |
+| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core` | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | CI pending | Local passed | Extract shared Pi runtime core.                |
+| 2026-05-28 | U2   | pending                          | pending                                                      | Pending    | pending      | Desktop runtime session preparation API.       |
+| 2026-05-28 | U3   | pending                          | pending                                                      | Pending    | pending      | Desktop-local sendMessage dispatch ownership.  |
+| 2026-05-28 | U4   | pending                          | pending                                                      | Pending    | pending      | Electron sidecar supervision and typed IPC.    |
+| 2026-05-28 | U5   | pending                          | pending                                                      | Pending    | pending      | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U6   | pending                          | pending                                                      | Pending    | pending      | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U7   | pending                          | pending                                                      | Pending    | pending      | Local runtime and delegation state in Spaces.  |
+| 2026-05-28 | U8   | pending                          | pending                                                      | Pending    | pending      | Diagnostics, redaction, packaging, rollout.    |
 
 ### CI Failures
 
