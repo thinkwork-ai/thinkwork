@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   ChannelSchemas,
   DeepLinkCallbackSchema,
+  PiSidecarStatusSchema,
   UpdateStateSchema,
   UpdateStatusSchema,
   UpdateTelemetryEventSchema,
@@ -130,6 +131,60 @@ describe("desktop IPC schemas", () => {
     expect(
       ChannelSchemas.reportInstallOutcome.response.parse(undefined),
     ).toBeUndefined();
+
+    expect(
+      ChannelSchemas.getPiStatus.response.parse({
+        status: "healthy",
+        pid: 12345,
+        version: "0.1.0",
+        restartCount: 0,
+        startedAt: "2026-05-28T00:00:00.000Z",
+        updatedAt: "2026-05-28T00:00:01.000Z",
+        lastExitCode: null,
+        lastError: null,
+      }),
+    ).toMatchObject({
+      status: "healthy",
+      pid: 12345,
+      version: "0.1.0",
+    });
+    expect(
+      ChannelSchemas.startPiTurn.request.parse({
+        agentId: "agent-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        userMessage: "Plan the next step",
+        messageAttachments: [
+          {
+            attachmentId: "attachment-1",
+            s3Key: "tenants/t/attachments/a",
+            name: "brief.md",
+            mimeType: "text/markdown",
+            sizeBytes: 42,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      agentId: "agent-1",
+      threadId: "thread-1",
+      userMessage: "Plan the next step",
+    });
+    expect(
+      ChannelSchemas.startPiTurn.response.parse({
+        accepted: true,
+        requestId: "request-1",
+      }),
+    ).toEqual({ accepted: true, requestId: "request-1" });
+    expect(
+      ChannelSchemas.cancelPiTurn.request.parse({
+        requestId: "request-1",
+      }),
+    ).toEqual({ requestId: "request-1" });
+    expect(
+      ChannelSchemas.cancelPiTurn.response.parse({
+        cancelled: true,
+      }),
+    ).toEqual({ cancelled: true });
   });
 
   it("rejects empty objects where fields are required", () => {
@@ -140,6 +195,14 @@ describe("desktop IPC schemas", () => {
     ).toThrow();
     expect(() =>
       ChannelSchemas.reportInstallOutcome.request.parse({}),
+    ).toThrow();
+    expect(() =>
+      ChannelSchemas.startPiTurn.request.parse({
+        agentId: "agent-1",
+        threadId: "thread-1",
+        userMessage: "hello",
+        sidecarCredentials: { accessKeyId: "nope" },
+      }),
     ).toThrow();
   });
 
@@ -157,6 +220,23 @@ describe("desktop IPC schemas", () => {
     for (const status of UpdateStatusSchema.options) {
       const state: UpdateState = { ...updateState, status };
       expect(UpdateStateSchema.parse(state)).toEqual(state);
+    }
+  });
+
+  it("accepts every Pi sidecar status", () => {
+    for (const status of PiSidecarStatusSchema.options) {
+      expect(
+        ChannelSchemas.getPiStatus.response.parse({
+          status,
+          pid: null,
+          version: null,
+          restartCount: 1,
+          startedAt: null,
+          updatedAt: "2026-05-28T00:00:00.000Z",
+          lastExitCode: null,
+          lastError: null,
+        }).status,
+      ).toBe(status);
     }
   });
 

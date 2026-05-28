@@ -3,18 +3,24 @@ import { SafeStorageCognitoStorage } from "./cognito-storage.js";
 import { registerAuthBridgeHandlers } from "./auth-bridge.js";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
+  CANCEL_PI_TURN_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
   GET_DESKTOP_CONFIG_CHANNEL,
+  GET_PI_STATUS_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
+  START_PI_TURN_CHANNEL,
   UPDATE_STATE_EVENT_CHANNEL,
   UPDATE_TELEMETRY_EVENT_CHANNEL,
   CheckForUpdatesRequestSchema,
   DownloadUpdateRequestSchema,
   GetDesktopConfigRequestSchema,
+  GetPiStatusRequestSchema,
   GetUpdateStateRequestSchema,
   InstallUpdateRequestSchema,
+  PiCancelTurnRequestSchema,
+  PiStartTurnRequestSchema,
   ReportInstallOutcomeRequestSchema,
   assertSafeSenderFrame,
   type DeepLinkCallback,
@@ -25,12 +31,17 @@ import type { DesktopEnvSnapshot } from "./env.js";
 import { validateDesktopEnv } from "./env.js";
 import type { DesktopMenuCommandHandlers } from "./menus.js";
 import { DesktopOAuthController } from "./oauth.js";
+import {
+  createPiSidecarController,
+  type PiSidecarController,
+} from "./pi-sidecar-controller.js";
 import { createDesktopUpdatesController } from "./updates.js";
 
 export interface RegisterDesktopIpcHandlersOptions {
   env: DesktopEnvSnapshot;
   consumePendingOAuthDeepLink: () => DeepLinkCallback | null;
   markDeepLinkIpcReady: (dispatcher: DeepLinkDispatcher) => void;
+  piSidecar?: PiSidecarController;
 }
 
 export async function registerDesktopIpcHandlers(
@@ -65,6 +76,8 @@ export async function registerDesktopIpcHandlers(
     logger: console,
   });
   await updates.start();
+  const piSidecar = options.piSidecar ?? createPiSidecarController();
+  piSidecar.start();
 
   ipcMain.handle(GET_DESKTOP_CONFIG_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
@@ -112,8 +125,24 @@ export async function registerDesktopIpcHandlers(
     const outcome = ReportInstallOutcomeRequestSchema.parse(payload);
     await updates.reportInstallOutcome(outcome);
   });
+  ipcMain.handle(GET_PI_STATUS_CHANNEL, (event, payload) => {
+    assertSafeSenderFrame(event);
+    GetPiStatusRequestSchema.parse(payload);
+    return piSidecar.getStatus();
+  });
+  ipcMain.handle(START_PI_TURN_CHANNEL, (event, payload) => {
+    assertSafeSenderFrame(event);
+    const request = PiStartTurnRequestSchema.parse(payload);
+    return piSidecar.startTurn(request);
+  });
+  ipcMain.handle(CANCEL_PI_TURN_CHANNEL, (event, payload) => {
+    assertSafeSenderFrame(event);
+    const request = PiCancelTurnRequestSchema.parse(payload);
+    return piSidecar.cancelTurn(request);
+  });
 
   app.on("before-quit", () => {
+    void piSidecar.stop();
     updates.dispose();
     oauth.dispose();
   });
