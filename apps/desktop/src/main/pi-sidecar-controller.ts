@@ -1,7 +1,9 @@
 import { BrowserWindow, utilityProcess } from "electron";
 import { randomUUID } from "node:crypto";
 import {
+  PI_DIAGNOSTIC_EVENT_CHANNEL,
   PI_STATUS_EVENT_CHANNEL,
+  type PiDiagnosticEvent,
   type PiCancelTurnRequest,
   type PiCancelTurnResponse,
   type PiSidecarState,
@@ -70,6 +72,13 @@ export class PiSidecarController {
   private readonly prepareTurn: PreparePiRuntimeSession;
   private readonly workspaceCacheRoot: string;
   private readonly logger: Pick<Console, "info" | "warn" | "error">;
+  private readonly activeTurns = new Map<
+    string,
+    {
+      threadId: string;
+      threadTurnId: string | null;
+    }
+  >();
   private process: UtilityProcessLike | null = null;
   private restartTimer: unknown = null;
   private stopping = false;
@@ -148,7 +157,57 @@ export class PiSidecarController {
       throw new Error("Pi sidecar is not healthy");
     }
     const requestId = randomUUID();
-    const session = await this.prepareTurn(request);
+    this.activeTurns.set(requestId, {
+      threadId: request.threadId,
+      threadTurnId: null,
+    });
+    this.logger.info("[pi-sidecar] preparing local Pi turn", {
+      requestId,
+      hasMessageId: Boolean(request.messageId),
+      hasUserMessage: request.userMessage.length > 0,
+    });
+    this.emitDiagnostic({
+      level: "info",
+      message: formatDiagnosticMessage("preparing local Pi turn", {
+        requestId,
+        hasMessageId: Boolean(request.messageId),
+        hasUserMessage: request.userMessage.length > 0,
+      }),
+      source: "main",
+      requestId,
+      threadId: request.threadId,
+      threadTurnId: null,
+    });
+    let session: Awaited<ReturnType<PreparePiRuntimeSession>>;
+    try {
+      session = await this.prepareTurn(request);
+    } catch (error) {
+      this.activeTurns.delete(requestId);
+      throw error;
+    }
+    this.activeTurns.set(requestId, {
+      threadId: request.threadId,
+      threadTurnId: session.threadTurnId,
+    });
+    this.logger.info("[pi-sidecar] local Pi turn prepared", {
+      requestId,
+      threadTurnId: session.threadTurnId,
+      runtimeHost: session.invocation.runtime_host,
+      sdkPackage: session.invocation.pi_sdk.packageName,
+    });
+    this.emitDiagnostic({
+      level: "info",
+      message: formatDiagnosticMessage("local Pi turn prepared", {
+        requestId,
+        threadTurnId: session.threadTurnId,
+        runtimeHost: session.invocation.runtime_host,
+        sdkPackage: session.invocation.pi_sdk.packageName,
+      }),
+      source: "main",
+      requestId,
+      threadId: request.threadId,
+      threadTurnId: session.threadTurnId,
+    });
     const payload: PiSidecarTurnPayload = {
       session,
       workspaceCacheRoot: this.workspaceCacheRoot,
@@ -157,6 +216,21 @@ export class PiSidecarController {
       type: "start-turn",
       requestId,
       payload,
+    });
+    this.logger.info("[pi-sidecar] local Pi turn sent to sidecar", {
+      requestId,
+      threadTurnId: session.threadTurnId,
+    });
+    this.emitDiagnostic({
+      level: "info",
+      message: formatDiagnosticMessage("local Pi turn sent to sidecar", {
+        requestId,
+        threadTurnId: session.threadTurnId,
+      }),
+      source: "main",
+      requestId,
+      threadId: request.threadId,
+      threadTurnId: session.threadTurnId,
     });
     return { accepted: true, requestId };
   }
@@ -204,12 +278,36 @@ export class PiSidecarController {
         });
         return;
       case "diagnostic":
-        this.logger[message.level](
-          `[pi-sidecar] ${redactPiDiagnosticLine(message.message)}`,
-        );
+        this.writeDiagnosticLine(message.level, message.message, "sidecar");
         return;
       case "turn-accepted":
+        this.logger.info("[pi-sidecar] local Pi turn accepted", {
+          requestId: message.requestId,
+        });
+        this.emitDiagnostic({
+          level: "info",
+          message: formatDiagnosticMessage("local Pi turn accepted", {
+            requestId: message.requestId,
+          }),
+          source: "main",
+          requestId: message.requestId,
+          ...this.contextForRequest(message.requestId),
+        });
+        return;
       case "turn-cancelled":
+        this.logger.warn("[pi-sidecar] local Pi turn cancelled", {
+          requestId: message.requestId,
+        });
+        this.emitDiagnostic({
+          level: "warn",
+          message: formatDiagnosticMessage("local Pi turn cancelled", {
+            requestId: message.requestId,
+          }),
+          source: "main",
+          requestId: message.requestId,
+          ...this.contextForRequest(message.requestId),
+        });
+        this.activeTurns.delete(message.requestId);
         return;
     }
   }
@@ -248,9 +346,63 @@ export class PiSidecarController {
     level: "info" | "error",
   ): void {
     stream?.on("data", (chunk: Buffer | string) => {
-      const text = redactPiDiagnosticLine(String(chunk).trim());
-      if (text) this.logger[level](`[pi-sidecar] ${text}`);
+      for (const line of String(chunk).split(/\r?\n/)) {
+        this.writeDiagnosticLine(level, line, "sidecar");
+      }
     });
+  }
+
+  private writeDiagnosticLine(
+    level: "info" | "warn" | "error",
+    line: string,
+    source: PiDiagnosticEvent["source"],
+  ): void {
+    const text = redactPiDiagnosticLine(line.trim());
+    if (!text) return;
+    this.logger[level](`[pi-sidecar] ${text}`);
+    const requestId = extractRequestId(text) ?? this.onlyActiveRequestId();
+    this.emitDiagnostic({
+      level,
+      message: text,
+      source,
+      requestId,
+      ...this.contextForRequest(requestId),
+    });
+    if (requestId && /^turn [^\s]+ /.test(text)) {
+      this.activeTurns.delete(requestId);
+    }
+  }
+
+  private emitDiagnostic(event: Omit<PiDiagnosticEvent, "emittedAt">): void {
+    const payload: PiDiagnosticEvent = {
+      ...event,
+      message: redactPiDiagnosticLine(event.message),
+      emittedAt: this.timestamp(),
+    };
+    for (const window of this.getWindows()) {
+      window.webContents.send(PI_DIAGNOSTIC_EVENT_CHANNEL, payload);
+    }
+  }
+
+  private contextForRequest(requestId: string | null): {
+    threadId: string | null;
+    threadTurnId: string | null;
+  } {
+    if (!requestId) {
+      return { threadId: null, threadTurnId: null };
+    }
+    return (
+      this.activeTurns.get(requestId) ?? {
+        threadId: null,
+        threadTurnId: null,
+      }
+    );
+  }
+
+  private onlyActiveRequestId(): string | null {
+    return this.activeTurns.size === 1
+      ? (this.activeTurns.keys().next().value ?? null)
+      : null;
   }
 
   private updateState(patch: Partial<PiSidecarState>): void {
@@ -267,6 +419,22 @@ export class PiSidecarController {
   private timestamp(): string {
     return this.now().toISOString();
   }
+}
+
+function formatDiagnosticMessage(
+  message: string,
+  extra: Record<string, unknown>,
+): string {
+  return `${message} ${JSON.stringify(extra)}`;
+}
+
+function extractRequestId(text: string): string | null {
+  const jsonMatch = text.match(/"requestId":"([^"]+)"/);
+  if (jsonMatch) return jsonMatch[1];
+  const turnMatch = text.match(
+    /\bturn\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s+/i,
+  );
+  return turnMatch?.[1] ?? null;
 }
 
 function isSidecarChildMessage(

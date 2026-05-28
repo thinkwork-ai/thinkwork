@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   ChannelSchemas,
   DeepLinkCallbackSchema,
+  PiDiagnosticEventSchema,
   PiSidecarStatusSchema,
   UpdateStateSchema,
   UpdateStatusSchema,
@@ -185,6 +186,21 @@ describe("desktop IPC schemas", () => {
         cancelled: true,
       }),
     ).toEqual({ cancelled: true });
+    expect(
+      PiDiagnosticEventSchema.parse({
+        level: "info",
+        message: "local Pi turn sent to sidecar",
+        emittedAt: "2026-05-28T20:53:00.000Z",
+        source: "sidecar",
+        requestId: "request-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+      }),
+    ).toMatchObject({
+      level: "info",
+      source: "sidecar",
+      threadId: "thread-1",
+    });
   });
 
   it("rejects empty objects where fields are required", () => {

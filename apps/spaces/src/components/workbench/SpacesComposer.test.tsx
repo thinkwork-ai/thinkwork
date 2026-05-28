@@ -11,7 +11,11 @@ import { useState } from "react";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  delete window.thinkworkBridge;
+});
 
 const mentionTargets: MentionTarget[] = [
   {
@@ -184,6 +188,64 @@ describe("SpacesComposer", () => {
     expect(startButton.parentElement?.contains(voiceInput)).toBe(true);
   });
 
+  it("shows the cloud runtime state next to the agent toggle", () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: {
+          status: "healthy",
+          getStatus: vi.fn(async () => ({ status: "healthy" })),
+          onStatusChanged: vi.fn(() => () => {}),
+        },
+      },
+    });
+
+    render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
+
+    expect(
+      screen.getByLabelText("Local Pi will handle this turn"),
+    ).toBeTruthy();
+  });
+
+  it("lets the cloud toggle force managed AgentCore for the next start", async () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: {
+          status: "healthy",
+          getStatus: vi.fn(async () => ({ status: "healthy" })),
+          onStatusChanged: vi.fn(() => () => {}),
+        },
+      },
+    });
+    const onSubmit = vi.fn();
+    render(
+      <SpacesComposer
+        value="Start in cloud"
+        onChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const cloudToggle = await screen.findByRole("button", {
+      name: "Local Pi will handle this turn",
+    });
+    fireEvent.click(cloudToggle);
+    expect(
+      screen.getByRole("button", {
+        name: "Managed AgentCore will handle this turn",
+      }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith([], [], true, "managed");
+    });
+  });
+
   it("submits a non-empty prompt", async () => {
     // Plan-012 U13: PromptInput's form submit goes through an async
     // Promise.all chain (file blob → data URL conversion before
@@ -202,7 +264,7 @@ describe("SpacesComposer", () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
-    expect(onSubmit).toHaveBeenCalledWith([], [], true);
+    expect(onSubmit).toHaveBeenCalledWith([], [], true, "local");
   });
 
   it("passes agent opt-out through submit", async () => {
@@ -219,7 +281,7 @@ describe("SpacesComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
 
     await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith([], [], false);
+      expect(onSubmit).toHaveBeenCalledWith([], [], false, "local");
     });
   });
 

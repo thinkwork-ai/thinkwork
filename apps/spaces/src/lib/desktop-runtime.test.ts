@@ -4,6 +4,7 @@ import {
   desktopLocalPiDisplayStatus,
   isDesktopBuild,
   shouldUseDesktopLocalPiDispatch,
+  shouldUseDesktopLocalPiDispatchNow,
 } from "./desktop-runtime";
 
 afterEach(() => {
@@ -26,6 +27,20 @@ describe("desktop runtime detection", () => {
       pi: { status: "unavailable" },
     } as unknown as ThinkworkBridge;
     expect(shouldUseDesktopLocalPiDispatch(unavailableBridge)).toBe(false);
+  });
+
+  it("hydrates desktop-local dispatch readiness from the bridge before sending", async () => {
+    const bridge = {
+      pi: {
+        status: "unavailable",
+        getStatus: vi.fn(async () => ({ status: "healthy" })),
+      },
+    } as unknown as ThinkworkBridge;
+
+    await expect(shouldUseDesktopLocalPiDispatchNow(bridge)).resolves.toBe(
+      true,
+    );
+    expect(bridge.pi?.getStatus).toHaveBeenCalled();
   });
 
   it("summarizes local Pi display states for compact desktop chrome", () => {

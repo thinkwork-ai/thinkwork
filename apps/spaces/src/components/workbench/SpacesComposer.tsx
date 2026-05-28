@@ -33,6 +33,10 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import {
+  AgentRuntimeIndicator,
+  type AgentRuntimePreference,
+} from "@/components/workbench/AgentRuntimeIndicator";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +64,7 @@ interface SpacesComposerProps {
     files: File[],
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
+    runtimePreference: AgentRuntimePreference,
   ) => void;
   mentionTargets?: MentionTarget[];
   spaces?: SpacesComposerSpaceOption[];
@@ -116,6 +121,8 @@ export function SpacesComposer({
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [agentEnabled, setAgentEnabled] = useState(true);
+  const [runtimePreference, setRuntimePreference] =
+    useState<AgentRuntimePreference>("local");
   const agentForcedOn = hasDefaultAgentMentionAlias(value);
   const effectiveAgentEnabled = agentForcedOn || agentEnabled;
 
@@ -170,7 +177,12 @@ export function SpacesComposer({
     const submittedMentions = mentions.filter((mention) =>
       value.includes(mention.rawText),
     );
-    onSubmit(files, submittedMentions, effectiveAgentEnabled);
+    onSubmit(
+      files,
+      submittedMentions,
+      effectiveAgentEnabled,
+      runtimePreference,
+    );
     setMentions([]);
   }
 
@@ -285,6 +297,12 @@ export function SpacesComposer({
               >
                 <Bot className="size-5" />
               </button>
+              <AgentRuntimeIndicator
+                agentEnabled={effectiveAgentEnabled}
+                disabled={isComposerDisabled}
+                preference={runtimePreference}
+                onPreferenceChange={setRuntimePreference}
+              />
               {spaces.length > 0 && selectedSpaceId && onSelectedSpaceChange ? (
                 <Select
                   value={selectedSpaceId}

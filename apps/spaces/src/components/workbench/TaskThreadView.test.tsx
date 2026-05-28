@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -16,7 +17,11 @@ vi.mock("@/components/apps/InlineAppletEmbed", () => ({
 
 import { TaskThreadView } from "./TaskThreadView";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  delete window.thinkworkBridge;
+});
 
 function getThinkingDisclosure(): HTMLElement {
   const el = screen.getByLabelText("Thinking and tool activity");
@@ -477,6 +482,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         true,
+        "local",
       ),
     );
   });
@@ -2737,7 +2743,13 @@ describe("TaskThreadView", () => {
       // (empty when no attachments) alongside the text. The route
       // uploads files before sendMessage and embeds attachmentId refs
       // in metadata.attachments.
-      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", [], [], true);
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "Add detail",
+        [],
+        [],
+        true,
+        "local",
+      );
     });
   });
 
@@ -2771,6 +2783,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        "local",
       );
     });
     expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
@@ -2786,6 +2799,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        "local",
       );
     });
   });
@@ -2841,6 +2855,9 @@ describe("TaskThreadView", () => {
 
     const agentToggle = screen.getByRole("button", { name: "Send to agent" });
     const agentIcon = agentToggle.querySelector("svg");
+    expect(
+      screen.getByLabelText("Managed AgentCore will handle this turn"),
+    ).toBeTruthy();
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-[#54a9ff]");
     expect(agentIcon?.getAttribute("class")).toContain("size-5");
@@ -2852,6 +2869,151 @@ describe("TaskThreadView", () => {
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-white/60");
     expect(agentToggle.className).not.toContain("bg-white/15");
+    expect(
+      screen.getByLabelText("Agent is off; cloud runtime disabled"),
+    ).toBeTruthy();
+  });
+
+  it("lets the cloud toggle force the follow-up onto managed AgentCore", async () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: {
+          status: "healthy",
+          getStatus: vi.fn(async () => ({ status: "healthy" })),
+          onStatusChanged: vi.fn(() => () => {}),
+        },
+      },
+    });
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runtime preference thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const cloudToggle = await screen.findByRole("button", {
+      name: "Local Pi will handle this turn",
+    });
+    fireEvent.click(cloudToggle);
+    expect(
+      screen.getByRole("button", {
+        name: "Managed AgentCore will handle this turn",
+      }),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "Use cloud for this" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "Use cloud for this",
+        [],
+        [],
+        true,
+        "managed",
+      );
+    });
+  });
+
+  it("streams local Pi diagnostic events into a collapsible console", async () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    let diagnosticListener:
+      | ((event: {
+          level: "info" | "warn" | "error";
+          message: string;
+          emittedAt: string;
+          source: "main" | "sidecar";
+          requestId: string | null;
+          threadId: string | null;
+          threadTurnId: string | null;
+        }) => void)
+      | null = null;
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: {
+          status: "healthy",
+          getStatus: vi.fn(async () => ({ status: "healthy" })),
+          onStatusChanged: vi.fn(() => () => {}),
+          onDiagnostic: vi.fn((listener) => {
+            diagnosticListener = listener;
+            return () => {};
+          }),
+        },
+      },
+    });
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Local Pi console thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Local Pi console")).toBeNull();
+    await waitFor(() => expect(diagnosticListener).not.toBeNull());
+
+    act(() => {
+      diagnosticListener?.({
+        level: "info",
+        message:
+          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1"}',
+        emittedAt: "2026-05-28T20:53:00.000Z",
+        source: "sidecar",
+        requestId: "request-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+      });
+      diagnosticListener?.({
+        level: "info",
+        message:
+          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1"}',
+        emittedAt: "2026-05-28T20:53:00.000Z",
+        source: "sidecar",
+        requestId: "request-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+      });
+      diagnosticListener?.({
+        level: "warn",
+        message: "other thread event",
+        emittedAt: "2026-05-28T20:53:01.000Z",
+        source: "main",
+        requestId: "request-2",
+        threadId: "thread-2",
+        threadTurnId: "turn-2",
+      });
+    });
+
+    expect(screen.getByLabelText("Local Pi console")).toBeTruthy();
+    const output = screen.getByRole("log", {
+      name: "Local Pi console output",
+    });
+    expect(output.textContent).toContain("local Pi sidecar received turn");
+    expect(output.textContent).not.toContain("other thread event");
+    expect(
+      output.textContent?.match(/local Pi sidecar received turn/g),
+    ).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Local Pi console/i }));
+    expect(
+      screen.queryByRole("log", { name: "Local Pi console output" }),
+    ).toBeNull();
   });
 
   it("renders voice input next to the send button", () => {
@@ -2908,6 +3070,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        "local",
       );
     });
   });
@@ -2972,6 +3135,7 @@ describe("TaskThreadView", () => {
           },
         ],
         true,
+        "local",
       );
     });
   });
@@ -3028,6 +3192,7 @@ describe("TaskThreadView", () => {
           },
         ],
         true,
+        "local",
       );
     });
   });

@@ -702,6 +702,7 @@ export const CreateThreadMutation = gql`
   mutation CreateThread($input: CreateThreadInput!) {
     createThread(input: $input) {
       id
+      agentId
       number
       identifier
       title

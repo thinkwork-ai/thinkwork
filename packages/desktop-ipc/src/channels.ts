@@ -22,6 +22,7 @@ export const GET_PI_STATUS_CHANNEL = "desktop:pi:get-status";
 export const START_PI_TURN_CHANNEL = "desktop:pi:start-turn";
 export const CANCEL_PI_TURN_CHANNEL = "desktop:pi:cancel-turn";
 export const PI_STATUS_EVENT_CHANNEL = "desktop:pi:status";
+export const PI_DIAGNOSTIC_EVENT_CHANNEL = "desktop:pi:diagnostic";
 
 export const IPC_CHANNELS = {
   GET_SESSION_TOKENS: GET_SESSION_TOKENS_CHANNEL,
@@ -47,4 +48,5 @@ export const IPC_CHANNELS = {
   START_PI_TURN: START_PI_TURN_CHANNEL,
   CANCEL_PI_TURN: CANCEL_PI_TURN_CHANNEL,
   PI_STATUS_EVENT: PI_STATUS_EVENT_CHANNEL,
+  PI_DIAGNOSTIC_EVENT: PI_DIAGNOSTIC_EVENT_CHANNEL,
 } as const;

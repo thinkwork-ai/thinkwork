@@ -20,6 +20,7 @@ import {
   type ThreadInfoGoalRecordGroup,
   type TaskThreadInfoPanelState,
 } from "@/components/workbench/TaskThreadView";
+import type { AgentRuntimePreference } from "@/components/workbench/AgentRuntimeIndicator";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
@@ -48,7 +49,7 @@ import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import {
   getDesktopBridge,
-  shouldUseDesktopLocalPiDispatch,
+  shouldUseDesktopLocalPiDispatchNow,
 } from "@/lib/desktop-runtime";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
@@ -1108,6 +1109,7 @@ export function SpacesThreadDetailRoute({
         files,
         mentions = [],
         agentRequested = true,
+        runtimePreference: AgentRuntimePreference = "local",
       ) => {
         setOptimisticMessage({
           content,
@@ -1183,10 +1185,16 @@ export function SpacesThreadDetailRoute({
         const desktopLocalAgentId = routeThread?.agentId ?? null;
         const shouldStartDesktopLocalPi =
           agentRequested !== false &&
+          runtimePreference !== "managed" &&
           Boolean(desktopLocalAgentId) &&
-          shouldUseDesktopLocalPiDispatch();
+          (await shouldUseDesktopLocalPiDispatchNow());
         if (shouldStartDesktopLocalPi) {
           sendInput.dispatchMode = "DESKTOP_LOCAL";
+        } else if (
+          agentRequested !== false &&
+          runtimePreference === "managed"
+        ) {
+          sendInput.dispatchMode = "MANAGED_DEFAULT";
         }
         const result = await sendMessage({ input: sendInput });
         if (result.error) {

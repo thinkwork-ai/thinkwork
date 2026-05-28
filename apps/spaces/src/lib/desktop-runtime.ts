@@ -26,6 +26,19 @@ export function shouldUseDesktopLocalPiDispatch(
   return isDesktopLocalPiReady(bridge.pi?.status);
 }
 
+export async function shouldUseDesktopLocalPiDispatchNow(
+  bridge: ThinkworkBridge | null = getDesktopBridge(),
+): Promise<boolean> {
+  if (!bridge?.pi) return false;
+  if (isDesktopLocalPiReady(bridge.pi.status)) return true;
+  try {
+    const state = await bridge.pi.getStatus();
+    return isDesktopLocalPiReady(state.status);
+  } catch {
+    return false;
+  }
+}
+
 export function isDesktopLocalPiReady(
   status: PiSidecarStatus | undefined,
 ): boolean {

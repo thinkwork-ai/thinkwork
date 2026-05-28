@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PreparedDesktopPiRuntimeSession } from "@thinkwork/pi-runtime-core";
 
@@ -77,7 +77,7 @@ const OAUTH_TOKEN_RE =
   /\b(?:ya29\.[a-z0-9._-]+|gh[opsu]_[a-z0-9_]+|xox[baprs]-[a-z0-9-]+)\b/gi;
 
 export function resolvePiSidecarEntryPath(mainDir = currentMainDir()): string {
-  return join(mainDir, "pi-sidecar.js");
+  return join(normalizeMainDir(mainDir), "pi-sidecar.js");
 }
 
 export function redactPiDiagnosticLine(line: string): string {
@@ -109,4 +109,8 @@ function isPiSidecarTurnPayload(
 
 function currentMainDir(): string {
   return dirname(fileURLToPath(import.meta.url));
+}
+
+function normalizeMainDir(mainDir: string): string {
+  return basename(mainDir) === "chunks" ? dirname(mainDir) : mainDir;
 }

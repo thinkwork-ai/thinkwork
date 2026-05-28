@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Search,
   Sparkles,
+  SquareTerminal,
   Zap,
 } from "lucide-react";
 import {
@@ -99,6 +100,14 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import {
+  AgentRuntimeIndicator,
+  type AgentRuntimePreference,
+} from "@/components/workbench/AgentRuntimeIndicator";
+import {
+  useDesktopLocalPiConsole,
+  type DesktopLocalPiConsoleEntry,
+} from "@/lib/use-desktop-local-pi-console";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const SHIMMER_TEXT = "Processing...";
@@ -178,6 +187,7 @@ interface TaskThreadViewProps {
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    runtimePreference?: AgentRuntimePreference,
   ) => Promise<void> | void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
@@ -339,6 +349,8 @@ export function TaskThreadView({
     };
   }, []);
 
+  const localPiConsoleEntries = useDesktopLocalPiConsole(thread?.id ?? null);
+
   if (isLoading) {
     return <TaskThreadState label="Loading..." />;
   }
@@ -447,6 +459,7 @@ export function TaskThreadView({
                 ))
               )}
               {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
+              <LocalPiConsole entries={localPiConsoleEntries} />
             </div>
           </ConversationContent>
         </Conversation>
@@ -2059,12 +2072,15 @@ function FollowUpComposer({
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    runtimePreference?: AgentRuntimePreference,
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
   const [agentEnabled, setAgentEnabled] = useState(true);
+  const [runtimePreference, setRuntimePreference] =
+    useState<AgentRuntimePreference>("local");
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
@@ -2168,7 +2184,13 @@ function FollowUpComposer({
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
-      await onSubmit(content, files, submittedMentions, effectiveAgentEnabled);
+      await onSubmit(
+        content,
+        files,
+        submittedMentions,
+        effectiveAgentEnabled,
+        runtimePreference,
+      );
       composer.clear();
       setMentions([]);
     } catch (err) {
@@ -2306,6 +2328,13 @@ function FollowUpComposer({
               >
                 <Bot className="size-5" />
               </button>
+              <AgentRuntimeIndicator
+                agentEnabled={effectiveAgentEnabled}
+                disabled={disabled || isSending}
+                preference={runtimePreference}
+                onPreferenceChange={setRuntimePreference}
+                tone="dark"
+              />
               <PromptInputButton
                 type="button"
                 variant="ghost"
@@ -2623,6 +2652,82 @@ function ThinkingRow({
       ) : null}
     </Reasoning>
   );
+}
+
+function LocalPiConsole({
+  entries,
+}: {
+  entries: DesktopLocalPiConsoleEntry[];
+}) {
+  const [open, setOpen] = useState(true);
+  const outputRef = useRef<HTMLPreElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const output = outputRef.current;
+    if (!output) return;
+    output.scrollTop = output.scrollHeight;
+  }, [entries, open]);
+
+  if (entries.length === 0) return null;
+
+  const latest = entries.at(-1);
+  const summary = `${entries.length} event${entries.length === 1 ? "" : "s"}`;
+
+  return (
+    <section
+      className="w-full max-w-2xl rounded-lg border border-white/10 bg-muted/20 px-4 py-3 text-muted-foreground"
+      aria-label="Local Pi console"
+    >
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 text-left text-sm transition-colors hover:text-foreground"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <SquareTerminal className="size-4 shrink-0" />
+        <span className="font-medium">Local Pi console</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground/70">
+          {latest ? `${summary} · ${latest.message}` : summary}
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 transition-transform",
+            !open && "-rotate-90",
+          )}
+        />
+      </button>
+      {open ? (
+        <pre
+          ref={outputRef}
+          role="log"
+          aria-label="Local Pi console output"
+          aria-live="polite"
+          className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground/80"
+        >
+          {entries.map((entry) => formatLocalPiConsoleEntry(entry)).join("\n")}
+        </pre>
+      ) : null}
+    </section>
+  );
+}
+
+function formatLocalPiConsoleEntry(entry: DesktopLocalPiConsoleEntry): string {
+  const timestamp = shortTime(entry.emittedAt);
+  const prefix = [timestamp, entry.level, entry.source]
+    .filter(Boolean)
+    .join(" ");
+  return `${prefix} ${entry.message}`;
+}
+
+function shortTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function ActionRow({

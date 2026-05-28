@@ -13,6 +13,7 @@ import {
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   OAUTH_ERROR_EVENT_CHANNEL,
+  PI_DIAGNOSTIC_EVENT_CHANNEL,
   PI_STATUS_EVENT_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
@@ -34,6 +35,7 @@ import {
   OAuthErrorEventSchema,
   PiCancelTurnRequestSchema,
   PiCancelTurnResponseSchema,
+  PiDiagnosticEventSchema,
   PiStartTurnRequestSchema,
   PiStartTurnResponseSchema,
   PiStatusEventSchema,
@@ -47,6 +49,31 @@ import {
   UpdateStateEventSchema,
   UpdateTelemetryEventSchema,
 } from "@thinkwork/desktop-ipc";
+
+type PiDiagnosticListener =
+  NonNullable<NonNullable<ThinkworkBridge["pi"]>["onDiagnostic"]> extends (
+    listener: infer Listener,
+  ) => unknown
+    ? Listener
+    : never;
+
+const MAX_BUFFERED_PI_DIAGNOSTICS = 200;
+const piDiagnosticBuffer: Parameters<PiDiagnosticListener>[0][] = [];
+const piDiagnosticListeners = new Set<PiDiagnosticListener>();
+
+ipcRenderer.on(PI_DIAGNOSTIC_EVENT_CHANNEL, (_event, payload: unknown) => {
+  const diagnostic = PiDiagnosticEventSchema.parse(payload);
+  piDiagnosticBuffer.push(diagnostic);
+  if (piDiagnosticBuffer.length > MAX_BUFFERED_PI_DIAGNOSTICS) {
+    piDiagnosticBuffer.splice(
+      0,
+      piDiagnosticBuffer.length - MAX_BUFFERED_PI_DIAGNOSTICS,
+    );
+  }
+  for (const listener of piDiagnosticListeners) {
+    listener(diagnostic);
+  }
+});
 
 const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
   status: "unavailable",
@@ -85,6 +112,15 @@ const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
     ipcRenderer.on(PI_STATUS_EVENT_CHANNEL, wrappedListener);
     return () =>
       ipcRenderer.removeListener(PI_STATUS_EVENT_CHANNEL, wrappedListener);
+  },
+  onDiagnostic(listener) {
+    piDiagnosticListeners.add(listener);
+    for (const diagnostic of piDiagnosticBuffer) {
+      listener(diagnostic);
+    }
+    return () => {
+      piDiagnosticListeners.delete(listener);
+    };
   },
 };
 
