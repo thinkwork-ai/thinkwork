@@ -1522,6 +1522,11 @@ export type MessageConnection = {
   pageInfo: PageInfo;
 };
 
+export enum MessageDispatchMode {
+  DesktopLocal = 'DESKTOP_LOCAL',
+  ManagedDefault = 'MANAGED_DEFAULT'
+}
+
 export type MessageEdge = {
   __typename?: 'MessageEdge';
   cursor: Scalars['String']['output'];
@@ -4479,6 +4484,7 @@ export type ScheduledJob = {
 export type SendMessageInput = {
   agentRequested?: InputMaybe<Scalars['Boolean']['input']>;
   content?: InputMaybe<Scalars['String']['input']>;
+  dispatchMode?: InputMaybe<MessageDispatchMode>;
   mentions?: InputMaybe<Array<SendMessageMentionInput>>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   role: MessageRole;

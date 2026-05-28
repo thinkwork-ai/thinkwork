@@ -13,6 +13,11 @@ enum MessageMentionTargetType {
   AGENT
 }
 
+enum MessageDispatchMode {
+  MANAGED_DEFAULT
+  DESKTOP_LOCAL
+}
+
 type Message {
   id: ID!
   threadId: ID!
@@ -101,6 +106,7 @@ input SendMessageInput {
   role: MessageRole!
   content: String
   agentRequested: Boolean
+  dispatchMode: MessageDispatchMode
   senderType: String
   senderId: ID
   toolCalls: AWSJSON
