@@ -14,6 +14,7 @@ import {
   normalizePersistedParts,
   type ComposerMention,
   type TaskThread,
+  type TaskThreadTurn,
   type ThreadInfoChecklistTask,
   type ThreadInfoGoalRecord,
   type ThreadInfoGoalRecordGroup,
@@ -45,10 +46,14 @@ import {
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
-import { shouldUseDesktopLocalPiDispatch } from "@/lib/desktop-runtime";
+import {
+  getDesktopBridge,
+  shouldUseDesktopLocalPiDispatch,
+} from "@/lib/desktop-runtime";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { notifyAgentCompletion } from "@/lib/desktop-notifications";
+import { apiFetch } from "@/lib/api-fetch";
 import {
   desktopToolbarActiveButtonClassName,
   desktopToolbarButtonClassName,
@@ -69,6 +74,7 @@ interface OptimisticMessage {
 interface ThreadResult {
   thread: {
     id: string;
+    agentId?: string | null;
     userId?: string | null;
     computerId?: string | null;
     user?: {
@@ -226,6 +232,22 @@ interface ThreadGoalFilesResult {
   } | null;
 }
 
+interface ThreadTurnRow {
+  id: string;
+  thread_id?: string | null;
+  trigger_id?: string | null;
+  agent_id?: string | null;
+  invocation_source?: string | null;
+  status?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: string | null;
+  result_json?: unknown;
+  usage_json?: unknown;
+  context_snapshot?: unknown;
+  created_at?: string | null;
+}
+
 export function SpacesThreadDetailRoute({
   threadId,
   backHref,
@@ -247,6 +269,7 @@ export function SpacesThreadDetailRoute({
   >(null);
   const [manualRefreshObservedFetching, setManualRefreshObservedFetching] =
     useState(false);
+  const [threadTurnRows, setThreadTurnRows] = useState<ThreadTurnRow[]>([]);
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<ThreadResult>({
     query: ComputerThreadQuery,
     variables: { id: threadId, messageLimit: 100 },
@@ -402,6 +425,26 @@ export function SpacesThreadDetailRoute({
     pause: !threadId,
   });
 
+  const refreshThreadTurns = useCallback(async () => {
+    if (!tenantId || !threadId) {
+      setThreadTurnRows([]);
+      return;
+    }
+    try {
+      const rows = await apiFetch<ThreadTurnRow[]>(
+        `/api/thread-turns?limit=50&thread_id=${encodeURIComponent(threadId)}`,
+        { extraHeaders: { "x-tenant-id": tenantId } },
+      );
+      setThreadTurnRows(rows);
+    } catch {
+      setThreadTurnRows([]);
+    }
+  }, [tenantId, threadId]);
+
+  useEffect(() => {
+    void refreshThreadTurns();
+  }, [refreshThreadTurns]);
+
   useEffect(() => {
     if (turnUpdate?.onThreadTurnUpdated?.threadId === threadId) {
       reexecuteTasksQuery({ requestPolicy: "network-only" });
@@ -409,6 +452,7 @@ export function SpacesThreadDetailRoute({
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
+      void refreshThreadTurns();
     }
   }, [
     reexecuteEventsQuery,
@@ -416,6 +460,7 @@ export function SpacesThreadDetailRoute({
     reexecuteProgressMarkdownQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
+    refreshThreadTurns,
     threadId,
     turnUpdate?.onThreadTurnUpdated?.threadId,
   ]);
@@ -428,6 +473,7 @@ export function SpacesThreadDetailRoute({
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
+      void refreshThreadTurns();
     }
   }, [
     reexecuteEventsQuery,
@@ -436,6 +482,7 @@ export function SpacesThreadDetailRoute({
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
+    refreshThreadTurns,
     threadId,
     threadUpdate?.onThreadUpdated?.threadId,
   ]);
@@ -449,6 +496,8 @@ export function SpacesThreadDetailRoute({
       reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
+      dispatchDesktopLocalPiEvent("idle");
+      void refreshThreadTurns();
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
@@ -460,6 +509,7 @@ export function SpacesThreadDetailRoute({
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
+    refreshThreadTurns,
     threadId,
   ]);
 
@@ -501,10 +551,13 @@ export function SpacesThreadDetailRoute({
 
   const thread = routeThread ? toTaskThread(routeThread) : null;
   if (thread) {
-    thread.turns = toTaskThreadTurns(
-      tasksData?.computerTasks,
-      eventsData?.computerEvents,
-    );
+    thread.turns = [
+      ...toTaskThreadTurns(
+        tasksData?.computerTasks,
+        eventsData?.computerEvents,
+      ),
+      ...toTaskThreadTurnsFromRows(threadTurnRows),
+    ];
   }
   const visibleThread = optimisticMessage
     ? withOptimisticUserTurn(thread, optimisticMessage.content, {
@@ -1127,7 +1180,12 @@ export function SpacesThreadDetailRoute({
         if (agentRequested === false) {
           sendInput.agentRequested = false;
         }
-        if (agentRequested !== false && shouldUseDesktopLocalPiDispatch()) {
+        const desktopLocalAgentId = routeThread?.agentId ?? null;
+        const shouldStartDesktopLocalPi =
+          agentRequested !== false &&
+          Boolean(desktopLocalAgentId) &&
+          shouldUseDesktopLocalPiDispatch();
+        if (shouldStartDesktopLocalPi) {
           sendInput.dispatchMode = "DESKTOP_LOCAL";
         }
         const result = await sendMessage({ input: sendInput });
@@ -1140,12 +1198,37 @@ export function SpacesThreadDetailRoute({
           }
           throw result.error;
         }
+        if (sendInput.dispatchMode === "DESKTOP_LOCAL" && desktopLocalAgentId) {
+          dispatchDesktopLocalPiEvent("running");
+          try {
+            await getDesktopBridge()?.pi?.startTurn({
+              agentId: desktopLocalAgentId,
+              threadId,
+              messageId:
+                stringValue(
+                  (
+                    result.data as
+                      | { sendMessage?: { id?: unknown } }
+                      | undefined
+                  )?.sendMessage?.id,
+                ) ?? undefined,
+              userMessage: content,
+            });
+          } catch (err) {
+            dispatchDesktopLocalPiEvent("fallback");
+            toast.error(
+              "Local Pi could not start. The message was saved; use cloud fallback for the next turn.",
+            );
+            console.warn("[desktop-local-pi] startTurn failed:", err);
+          }
+        }
         reexecuteQuery({ requestPolicy: "network-only" });
         reexecuteTasksQuery({ requestPolicy: "network-only" });
         reexecuteEventsQuery({ requestPolicy: "network-only" });
         reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
         reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
         reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
+        void refreshThreadTurns();
       }}
       runbookQueues={runbookQueues}
     />
@@ -1598,6 +1681,14 @@ function withOptimisticUserTurn(
   };
 }
 
+function dispatchDesktopLocalPiEvent(status: "running" | "idle" | "fallback") {
+  window.dispatchEvent(
+    new CustomEvent("thinkwork:desktop-local-pi-turn", {
+      detail: { status },
+    }),
+  );
+}
+
 function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
   return {
     id: thread.id,
@@ -1685,6 +1776,32 @@ function toTaskThreadTurns(
   });
 }
 
+function toTaskThreadTurnsFromRows(rows: ThreadTurnRow[]): TaskThreadTurn[] {
+  return rows
+    .filter((row) => !isHiddenDesktopDelegationRow(row))
+    .map((row) => ({
+      id: row.id,
+      status: row.status,
+      invocationSource: row.invocation_source ?? "chat_message",
+      startedAt: row.started_at ?? row.created_at,
+      finishedAt: row.finished_at,
+      model: stringValue(
+        metadataObject(row.context_snapshot)?.model ??
+          metadataObject(row.result_json)?.model,
+      ),
+      usageJson: row.usage_json,
+      resultJson: row.result_json,
+      error: row.error ?? null,
+      events: [],
+    }));
+}
+
+function isHiddenDesktopDelegationRow(row: ThreadTurnRow): boolean {
+  const snapshot = metadataObject(row.context_snapshot);
+  const delegation = metadataObject(snapshot?.desktop_managed_delegation);
+  return delegation?.visibility === "hidden";
+}
+
 function toRunbookQueues(runs: RunbookRunsResult["runbookRuns"]) {
   return (runs ?? []).map((run) => {
     const displayName =
@@ -1757,9 +1874,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 

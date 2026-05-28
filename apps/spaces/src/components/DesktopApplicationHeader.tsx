@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronRight, RefreshCw } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import type { PiSidecarState } from "@thinkwork/desktop-ipc";
 import {
   Button,
   SidebarTrigger,
@@ -14,6 +15,11 @@ import {
   desktopToolbarButtonClassName,
   desktopToolbarGapClassName,
 } from "@/lib/desktop-chrome";
+import {
+  desktopLocalPiDisplayStatus,
+  getDesktopBridge,
+  type DesktopLocalPiDisplayStatus,
+} from "@/lib/desktop-runtime";
 
 export function DesktopNavigationControls({
   className,
@@ -165,7 +171,8 @@ export function DesktopApplicationHeader() {
                 className="flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium"
               >
                 {headerActions.breadcrumbs.map((crumb, index) => {
-                  const isLast = index === headerActions.breadcrumbs!.length - 1;
+                  const isLast =
+                    index === headerActions.breadcrumbs!.length - 1;
                   return (
                     <span
                       key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
@@ -236,9 +243,132 @@ export function DesktopApplicationHeader() {
         <div
           className={`ml-auto flex shrink-0 items-center ${desktopToolbarGapClassName}`}
         >
+          <DesktopPiStatusBadge />
           {headerActions?.action ? headerActions.action : null}
         </div>
       </div>
     </header>
   );
 }
+
+function DesktopPiStatusBadge() {
+  const status = useDesktopLocalPiStatus();
+  if (status === "hidden") return null;
+  const copy = DESKTOP_PI_STATUS_COPY[status];
+  return (
+    <span
+      aria-label={copy.ariaLabel}
+      title={copy.title}
+      className="inline-flex h-7 max-w-[9rem] items-center gap-1 rounded border border-border bg-muted/40 px-2 text-[11px] font-medium text-muted-foreground"
+    >
+      <span
+        aria-hidden="true"
+        className={`size-1.5 rounded-full ${copy.dotClassName}`}
+      />
+      <span className="truncate">{copy.label}</span>
+    </span>
+  );
+}
+
+function useDesktopLocalPiStatus(): DesktopLocalPiDisplayStatus {
+  const bridge = getDesktopBridge();
+  const [state, setState] = useState<PiSidecarState | null>(null);
+  const [localTurnRunning, setLocalTurnRunning] = useState(false);
+  const [fallbackActive, setFallbackActive] = useState(false);
+
+  useEffect(() => {
+    if (!bridge?.pi) return;
+    let mounted = true;
+    bridge.pi
+      .getStatus()
+      .then((next) => {
+        if (mounted) setState(next);
+      })
+      .catch(() => {
+        if (mounted) setFallbackActive(true);
+      });
+    const unsubscribe = bridge.pi.onStatusChanged((next) => {
+      setState(next);
+      if (next.status === "healthy" || next.status === "starting") {
+        setFallbackActive(false);
+      }
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [bridge]);
+
+  useEffect(() => {
+    function handleLocalPiTurn(event: Event) {
+      const detail = (event as CustomEvent<{ status?: unknown }>).detail;
+      if (detail?.status === "running") {
+        setLocalTurnRunning(true);
+        setFallbackActive(false);
+      } else if (detail?.status === "fallback") {
+        setLocalTurnRunning(false);
+        setFallbackActive(true);
+      } else if (detail?.status === "idle") {
+        setLocalTurnRunning(false);
+      }
+    }
+
+    window.addEventListener(
+      "thinkwork:desktop-local-pi-turn",
+      handleLocalPiTurn,
+    );
+    return () =>
+      window.removeEventListener(
+        "thinkwork:desktop-local-pi-turn",
+        handleLocalPiTurn,
+      );
+  }, []);
+
+  return desktopLocalPiDisplayStatus({
+    bridge,
+    state,
+    localTurnRunning,
+    fallbackActive,
+  });
+}
+
+const DESKTOP_PI_STATUS_COPY: Record<
+  Exclude<DesktopLocalPiDisplayStatus, "hidden">,
+  {
+    label: string;
+    title: string;
+    ariaLabel: string;
+    dotClassName: string;
+  }
+> = {
+  healthy: {
+    label: "Pi local",
+    title: "Local Pi sidecar is ready",
+    ariaLabel: "Local Pi sidecar ready",
+    dotClassName: "bg-emerald-500",
+  },
+  starting: {
+    label: "Pi starting",
+    title: "Local Pi sidecar is starting",
+    ariaLabel: "Local Pi sidecar starting",
+    dotClassName: "bg-amber-500",
+  },
+  running: {
+    label: "Pi running",
+    title: "Local Pi is handling this turn",
+    ariaLabel: "Local Pi handling current turn",
+    dotClassName: "bg-sky-500",
+  },
+  fallback: {
+    label: "Pi cloud",
+    title: "Local Pi is unavailable; managed cloud runtime is available",
+    ariaLabel: "Local Pi unavailable, cloud fallback active",
+    dotClassName: "bg-orange-500",
+  },
+  unavailable: {
+    label: "Pi off",
+    title: "Local Pi sidecar is unavailable",
+    ariaLabel: "Local Pi sidecar unavailable",
+    dotClassName: "bg-muted-foreground/50",
+  },
+};

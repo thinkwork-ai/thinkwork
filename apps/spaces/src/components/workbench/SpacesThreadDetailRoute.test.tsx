@@ -25,6 +25,9 @@ import {
 const routerLocationStateMock = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
 }));
+const apiFetchMock = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+}));
 
 vi.mock("urql", async (importOriginal) => {
   const actual = await importOriginal<typeof import("urql")>();
@@ -81,6 +84,10 @@ vi.mock("@/lib/use-computer-thread-chunks", () => ({
   useComputerThreadChunks: vi.fn(),
 }));
 
+vi.mock("@/lib/api-fetch", () => ({
+  apiFetch: apiFetchMock.apiFetch,
+}));
+
 const reexecuteThreadQuery = vi.fn();
 const reexecuteLinkedTasksQuery = vi.fn();
 const reexecuteProgressMarkdownQuery = vi.fn();
@@ -113,6 +120,8 @@ beforeEach(() => {
   updateThreadMock.mockReset();
   reviewGoalMock.mockReset();
   resetStreamingChunks.mockReset();
+  apiFetchMock.apiFetch.mockReset();
+  apiFetchMock.apiFetch.mockResolvedValue([]);
   streamingChunks = [];
   threadData = {
     thread: {
@@ -904,11 +913,27 @@ describe("SpacesThreadDetailRoute", () => {
 
   it("marks follow-up sends for desktop-local dispatch when local Pi is ready", async () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
+    const startTurn = vi.fn(async () => ({
+      accepted: true,
+      requestId: "local-turn-1",
+    }));
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
       value: {
-        pi: { status: "healthy" },
+        pi: { status: "healthy", startTurn },
       },
+    });
+    threadData = {
+      thread: {
+        id: "thread-1",
+        agentId: "agent-1",
+        title: "Agent thread",
+        lifecycleStatus: "COMPLETED",
+        messages: { edges: [] },
+      },
+    };
+    sendMessage.mockResolvedValue({
+      data: { sendMessage: { id: "message-local-1" } },
     });
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
@@ -928,6 +953,85 @@ describe("SpacesThreadDetailRoute", () => {
         },
       });
     });
+    await waitFor(() => {
+      expect(startTurn).toHaveBeenCalledWith({
+        agentId: "agent-1",
+        threadId: "thread-1",
+        messageId: "message-local-1",
+        userMessage: "Run this on the desktop sidecar",
+      });
+    });
+  });
+
+  it("renders visible managed delegation turns in the existing activity row", async () => {
+    taskData = { computerTasks: [] };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        title: "Agent thread",
+        lifecycleStatus: "RUNNING",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content: "Delegate visible work",
+              },
+            },
+          ],
+        },
+      },
+    };
+    apiFetchMock.apiFetch.mockResolvedValue([
+      {
+        id: "turn-visible-worker",
+        thread_id: "thread-1",
+        invocation_source: "desktop_managed_delegation",
+        status: "running",
+        started_at: "2026-05-28T12:00:00.000Z",
+        context_snapshot: {
+          desktop_managed_delegation: { visibility: "visible" },
+        },
+      },
+    ]);
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Thinking and tool activity")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Thinking/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Managed delegation/)).toBeTruthy();
+    });
+  });
+
+  it("does not render hidden managed delegation turns as extra chrome", async () => {
+    taskData = { computerTasks: [] };
+    apiFetchMock.apiFetch.mockResolvedValue([
+      {
+        id: "turn-hidden-worker",
+        thread_id: "thread-1",
+        invocation_source: "desktop_managed_delegation",
+        status: "running",
+        started_at: "2026-05-28T12:00:00.000Z",
+        context_snapshot: {
+          desktop_managed_delegation: { visibility: "hidden" },
+        },
+      },
+    ]);
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(apiFetchMock.apiFetch).toHaveBeenCalledWith(
+        "/api/thread-turns?limit=50&thread_id=thread-1",
+        { extraHeaders: { "x-tenant-id": "tenant-1" } },
+      );
+    });
+    expect(screen.queryByText(/Managed delegation/)).toBeNull();
   });
 });
 

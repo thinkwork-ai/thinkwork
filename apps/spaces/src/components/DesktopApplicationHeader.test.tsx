@@ -75,6 +75,8 @@ afterEach(() => {
   cleanup();
   pageHeaderMock.actions = null;
   sidebarMock.open = true;
+  vi.unstubAllGlobals();
+  delete window.thinkworkBridge;
 });
 
 describe("DesktopApplicationHeader", () => {
@@ -181,5 +183,36 @@ describe("DesktopApplicationHeader", () => {
       ).not.toContain("animate-spin");
     });
     window.removeEventListener("thinkwork:desktop-refresh", onRefresh);
+  });
+
+  it("renders compact local Pi status in the desktop header", async () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    pageHeaderMock.actions = { title: "Thread" };
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: {
+          status: "healthy",
+          getStatus: vi.fn(async () => ({
+            status: "healthy",
+            pid: 123,
+            version: "0.1.0",
+            restartCount: 0,
+            startedAt: "2026-05-28T12:00:00.000Z",
+            updatedAt: "2026-05-28T12:00:01.000Z",
+            lastExitCode: null,
+            lastError: null,
+          })),
+          onStatusChanged: vi.fn(() => () => {}),
+        },
+      },
+    });
+
+    render(<DesktopApplicationHeader />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Local Pi sidecar ready")).toBeTruthy();
+    });
+    expect(screen.getByText("Pi local")).toBeTruthy();
   });
 });

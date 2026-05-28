@@ -362,9 +362,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-      !showStreamingBuffer &&
-      !showProcessingShimmer,
+    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+    !showStreamingBuffer &&
+    !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -3164,6 +3164,9 @@ function formatInvocationSource(source: unknown) {
   const labels: Record<string, string> = {
     chat: "Manual chat",
     chat_message: "Manual chat",
+    desktop_managed_delegation: "Managed delegation",
+    "desktop-local": "Local Pi",
+    desktop_local: "Local Pi",
     manual: "Manual chat",
     schedule: "Schedule",
     webhook: "Webhook",

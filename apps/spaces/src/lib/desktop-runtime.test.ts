@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import {
+  desktopLocalPiDisplayStatus,
   isDesktopBuild,
   shouldUseDesktopLocalPiDispatch,
 } from "./desktop-runtime";
@@ -25,5 +26,35 @@ describe("desktop runtime detection", () => {
       pi: { status: "unavailable" },
     } as unknown as ThinkworkBridge;
     expect(shouldUseDesktopLocalPiDispatch(unavailableBridge)).toBe(false);
+  });
+
+  it("summarizes local Pi display states for compact desktop chrome", () => {
+    const bridge = {
+      pi: { status: "healthy" },
+    } as unknown as ThinkworkBridge;
+
+    expect(desktopLocalPiDisplayStatus({ bridge })).toBe("healthy");
+    expect(
+      desktopLocalPiDisplayStatus({ bridge, localTurnRunning: true }),
+    ).toBe("running");
+    expect(desktopLocalPiDisplayStatus({ bridge, fallbackActive: true })).toBe(
+      "fallback",
+    );
+    expect(
+      desktopLocalPiDisplayStatus({
+        bridge,
+        state: {
+          status: "unavailable",
+          pid: null,
+          version: null,
+          restartCount: 0,
+          startedAt: null,
+          updatedAt: "2026-05-28T12:00:00.000Z",
+          lastExitCode: null,
+          lastError: null,
+        },
+      }),
+    ).toBe("unavailable");
+    expect(desktopLocalPiDisplayStatus({ bridge: null })).toBe("hidden");
   });
 });
