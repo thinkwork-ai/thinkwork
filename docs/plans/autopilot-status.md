@@ -15,15 +15,15 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active
-- Active unit: U8 Diagnostics, redaction, packaging, and rollout gates
-- Active branch: `codex/local-pi-u8-diagnostics`
-- Active worktree:
-  `.Codex/worktrees/local-pi-u8-diagnostics`
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-28
-- Latest merged PR: [#1801](https://github.com/thinkwork-ai/thinkwork/pull/1801)
-- Active PR: [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802)
-- CI: pending for U8; local verification passed
+- Completed: 2026-05-28
+- Latest merged PR: [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802)
+- Active PR: none
+- CI: all desktop-local Pi sidecar units passed required checks
 
 ### Active Unit Notes
 
@@ -255,19 +255,24 @@ Target branch: `main`
   `/node_modules/@earendil-works/pi-coding-agent` are present, with the disabled
   build baking `VITE_DESKTOP_LOCAL_PI_ENABLED: "false"`.
 - Opened PR [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802).
+- PR [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main`, deleted the remote/local U8 branch, and removed the U8 worktree.
+- Desktop Local Pi Sidecar run complete: U1 through U8 are implemented, locally
+  verified, CI-verified, merged to `main`, and cleaned up.
 
 ### Progress Log
 
-| Date       | Unit | Branch                                  | PR                                                           | Status      | Verification | Notes                                          |
-| ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | ----------- | ------------ | ---------------------------------------------- |
-| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core`        | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | Merged      | CI passed    | Extract shared Pi runtime core.                |
-| 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session`     | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | Merged      | CI passed    | Desktop runtime session preparation API.       |
-| 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged      | CI passed    | Desktop-local sendMessage dispatch ownership.  |
-| 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged      | CI passed    | Electron sidecar supervision and typed IPC.    |
-| 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | Merged      | CI passed    | Execute local desktop turns in sidecar.        |
-| 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) | Merged      | CI passed    | Managed delegation from local Pi to AgentCore. |
-| 2026-05-28 | U7   | `codex/local-pi-u7-state`               | [#1801](https://github.com/thinkwork-ai/thinkwork/pull/1801) | Merged      | CI passed    | Local runtime and delegation state in Spaces.  |
-| 2026-05-28 | U8   | `codex/local-pi-u8-diagnostics`         | [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802) | In progress | CI pending   | Diagnostics, redaction, packaging, rollout.    |
+| Date       | Unit | Branch                                  | PR                                                           | Status | Verification | Notes                                          |
+| ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | ------ | ------------ | ---------------------------------------------- |
+| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core`        | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | Merged | CI passed    | Extract shared Pi runtime core.                |
+| 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session`     | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | Merged | CI passed    | Desktop runtime session preparation API.       |
+| 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged | CI passed    | Desktop-local sendMessage dispatch ownership.  |
+| 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged | CI passed    | Electron sidecar supervision and typed IPC.    |
+| 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | Merged | CI passed    | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) | Merged | CI passed    | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U7   | `codex/local-pi-u7-state`               | [#1801](https://github.com/thinkwork-ai/thinkwork/pull/1801) | Merged | CI passed    | Local runtime and delegation state in Spaces.  |
+| 2026-05-28 | U8   | `codex/local-pi-u8-diagnostics`         | [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802) | Merged | CI passed    | Diagnostics, redaction, packaging, rollout.    |
 
 ### CI Failures
 
