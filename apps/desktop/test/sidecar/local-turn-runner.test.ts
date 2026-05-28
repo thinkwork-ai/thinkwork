@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -274,6 +274,116 @@ describe("runLocalDesktopTurn", () => {
     expect(sdk.defineTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "delegate_to_managed_agent" }),
     );
+  });
+
+  it("registers web_search from the prepared Exa config and executes it locally", async () => {
+    let optionsSeen: Record<string, unknown> | undefined;
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Searched." }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url) === "https://api.exa.ai/search") {
+        return Response.json({
+          results: [
+            {
+              id: "exa-1",
+              title: "Austin weather",
+              url: "https://example.com/austin",
+              summary: "Current weather in Austin is warm.",
+              score: 0.91,
+            },
+          ],
+        });
+      }
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            web_search_config: { provider: "exa", apiKey: "exa_key" },
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(optionsSeen?.tools).toContain("web_search");
+    const webSearchTool = (
+      optionsSeen?.customTools as Array<{
+        name?: string;
+        execute?: (
+          toolCallId: string,
+          params: Record<string, unknown>,
+        ) => Promise<unknown>;
+      }>
+    ).find((tool) => tool.name === "web_search");
+    expect(webSearchTool).toBeTruthy();
+
+    const result = await webSearchTool!.execute!("call-1", {
+      query: "weather in Austin",
+      limit: 1,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.exa.ai/search",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "x-api-key": "exa_key" }),
+      }),
+    );
+    expect(JSON.stringify(result)).toContain("Austin weather");
+  });
+
+  it("writes a local debug bundle with the composed prompt and prompt source files", async () => {
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [{ role: "assistant", content: "Done" }],
+          prompt: vi.fn(async () => {}),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ ok: true }, { status: 200 }),
+    );
+
+    await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+        debug: true,
+      },
+    );
+
+    const bundle = await readFile(
+      join(root, "debug", "turn-1", "system-prompt.md"),
+      "utf8",
+    );
+    expect(bundle).toContain("## Composed System Prompt");
+    expect(bundle).toContain("You are running inside the ThinkWork desktop");
+    expect(bundle).toContain("### AGENTS.md");
+    expect(bundle).toContain("# Agent");
   });
 
   it("rejects unsupported Pi SDK contracts", () => {

@@ -13,6 +13,7 @@ interface ParentPort {
 const parentPort =
   (process as NodeJS.Process & { parentPort?: ParentPort | null }).parentPort ??
   null;
+const DEFAULT_TURN_TIMEOUT_MS = 90_000;
 
 if (!parentPort) {
   console.error("[pi-sidecar] missing Electron parentPort");
@@ -36,6 +37,10 @@ if (!parentPort) {
         });
         return;
       case "start-turn":
+        logger.info("local Pi sidecar received turn", {
+          requestId: message.requestId,
+          threadTurnId: message.payload.session.threadTurnId,
+        });
         parentPort.postMessage({
           type: "turn-accepted",
           requestId: message.requestId,
@@ -59,10 +64,20 @@ if (!parentPort) {
   ): Promise<void> {
     const abortController = new AbortController();
     turns.set(requestId, abortController);
+    const timeoutMs = resolveTurnTimeoutMs();
+    const timeout = setTimeout(() => {
+      logger.warn("local Pi turn watchdog timeout", {
+        requestId,
+        timeoutMs,
+      });
+      abortController.abort();
+    }, timeoutMs);
     try {
       const result = await runLocalDesktopTurn(payload, {
         signal: abortController.signal,
         logger,
+        turnTimeoutMs: timeoutMs,
+        debug: isLocalPiDebugEnabled(),
       });
       parentPort?.postMessage({
         type: "diagnostic",
@@ -79,7 +94,21 @@ if (!parentPort) {
             : `local turn failed: ${String(error)}`,
       });
     } finally {
+      clearTimeout(timeout);
       turns.delete(requestId);
     }
   }
+}
+
+function resolveTurnTimeoutMs(): number {
+  const raw = process.env.THINKWORK_DESKTOP_LOCAL_PI_TURN_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_TURN_TIMEOUT_MS;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_TURN_TIMEOUT_MS;
+}
+
+function isLocalPiDebugEnabled(): boolean {
+  const raw = process.env.THINKWORK_DESKTOP_LOCAL_PI_DEBUG;
+  return raw === "1" || raw?.toLowerCase() === "true";
 }

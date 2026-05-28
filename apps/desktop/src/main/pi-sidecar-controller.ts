@@ -148,7 +148,18 @@ export class PiSidecarController {
       throw new Error("Pi sidecar is not healthy");
     }
     const requestId = randomUUID();
+    this.logger.info("[pi-sidecar] preparing local Pi turn", {
+      requestId,
+      hasMessageId: Boolean(request.messageId),
+      hasUserMessage: request.userMessage.length > 0,
+    });
     const session = await this.prepareTurn(request);
+    this.logger.info("[pi-sidecar] local Pi turn prepared", {
+      requestId,
+      threadTurnId: session.threadTurnId,
+      runtimeHost: session.invocation.runtime_host,
+      sdkPackage: session.invocation.pi_sdk.packageName,
+    });
     const payload: PiSidecarTurnPayload = {
       session,
       workspaceCacheRoot: this.workspaceCacheRoot,
@@ -157,6 +168,10 @@ export class PiSidecarController {
       type: "start-turn",
       requestId,
       payload,
+    });
+    this.logger.info("[pi-sidecar] local Pi turn sent to sidecar", {
+      requestId,
+      threadTurnId: session.threadTurnId,
     });
     return { accepted: true, requestId };
   }
@@ -209,7 +224,14 @@ export class PiSidecarController {
         );
         return;
       case "turn-accepted":
+        this.logger.info("[pi-sidecar] local Pi turn accepted", {
+          requestId: message.requestId,
+        });
+        return;
       case "turn-cancelled":
+        this.logger.warn("[pi-sidecar] local Pi turn cancelled", {
+          requestId: message.requestId,
+        });
         return;
     }
   }

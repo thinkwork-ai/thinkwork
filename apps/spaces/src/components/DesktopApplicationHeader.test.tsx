@@ -185,7 +185,7 @@ describe("DesktopApplicationHeader", () => {
     window.removeEventListener("thinkwork:desktop-refresh", onRefresh);
   });
 
-  it("renders compact local Pi status in the desktop header", async () => {
+  it("keeps local Pi status out of the desktop header", async () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
     pageHeaderMock.actions = { title: "Thread" };
     Object.defineProperty(window, "thinkworkBridge", {
@@ -210,9 +210,7 @@ describe("DesktopApplicationHeader", () => {
 
     render(<DesktopApplicationHeader />);
 
-    await waitFor(() => {
-      expect(screen.getByLabelText("Local Pi sidecar ready")).toBeTruthy();
-    });
-    expect(screen.getByText("Pi local")).toBeTruthy();
+    expect(screen.queryByLabelText("Local Pi sidecar ready")).toBeNull();
+    expect(screen.queryByText("Pi local")).toBeNull();
   });
 });

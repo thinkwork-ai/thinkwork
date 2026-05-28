@@ -99,6 +99,10 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import {
+  AgentRuntimeIndicator,
+  type AgentRuntimePreference,
+} from "@/components/workbench/AgentRuntimeIndicator";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const SHIMMER_TEXT = "Processing...";
@@ -178,6 +182,7 @@ interface TaskThreadViewProps {
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    runtimePreference?: AgentRuntimePreference,
   ) => Promise<void> | void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
@@ -2059,12 +2064,15 @@ function FollowUpComposer({
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    runtimePreference?: AgentRuntimePreference,
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
   const [agentEnabled, setAgentEnabled] = useState(true);
+  const [runtimePreference, setRuntimePreference] =
+    useState<AgentRuntimePreference>("local");
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
@@ -2168,7 +2176,13 @@ function FollowUpComposer({
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
-      await onSubmit(content, files, submittedMentions, effectiveAgentEnabled);
+      await onSubmit(
+        content,
+        files,
+        submittedMentions,
+        effectiveAgentEnabled,
+        runtimePreference,
+      );
       composer.clear();
       setMentions([]);
     } catch (err) {
@@ -2306,6 +2320,13 @@ function FollowUpComposer({
               >
                 <Bot className="size-5" />
               </button>
+              <AgentRuntimeIndicator
+                agentEnabled={effectiveAgentEnabled}
+                disabled={disabled || isSending}
+                preference={runtimePreference}
+                onPreferenceChange={setRuntimePreference}
+                tone="dark"
+              />
               <PromptInputButton
                 type="button"
                 variant="ghost"

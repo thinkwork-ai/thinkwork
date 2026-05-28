@@ -12,6 +12,7 @@ import {
   SpacesComposer,
   type SpacesComposerMention,
 } from "@/components/workbench/SpacesComposer";
+import type { AgentRuntimePreference } from "@/components/workbench/AgentRuntimeIndicator";
 import { StarterCardGrid } from "@/components/workbench/StarterCardGrid";
 import type { SpaceSummary } from "@/components/spaces/space-types";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
@@ -53,6 +54,7 @@ interface SendMessageVars {
     metadata?: string;
     mentions?: SpacesComposerMention[];
     agentRequested?: boolean;
+    dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL";
   };
 }
 
@@ -185,6 +187,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     files: File[],
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
+    runtimePreference: AgentRuntimePreference = "local",
   ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
@@ -304,6 +307,8 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       }
       if (agentRequested === false) {
         sendInput.agentRequested = false;
+      } else if (runtimePreference === "managed") {
+        sendInput.dispatchMode = "MANAGED_DEFAULT";
       }
       const sent = await sendMessage({
         input: sendInput,
