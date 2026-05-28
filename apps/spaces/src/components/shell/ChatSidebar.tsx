@@ -724,7 +724,7 @@ function ThreadListSection({
         >
           <button type="button" aria-label={`Toggle ${label}`}>
             <span>{label}</span>
-            <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-[opacity,transform] group-hover/thread-section:opacity-100 group-focus-within/thread-section:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
+            <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-all duration-150 ease-out group-hover/thread-section:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
           </button>
         </SidebarGroupLabel>
       </CollapsibleTrigger>
@@ -813,7 +813,7 @@ function PinnedThreadListSection({
         >
           <button type="button" aria-label="Toggle Pinned">
             <span>Pinned</span>
-            <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-[opacity,transform] group-hover/thread-section:opacity-100 group-focus-within/thread-section:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
+            <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-all duration-150 ease-out group-hover/thread-section:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
           </button>
         </SidebarGroupLabel>
       </CollapsibleTrigger>
@@ -982,7 +982,7 @@ function SpaceThreadSection({
                   {space.unreadThreadCount}
                 </span>
               ) : null}
-              <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-[opacity,transform] group-hover/space:opacity-100 group-focus-within/space:opacity-100 group-data-[state=closed]/space:-rotate-90" />
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/space:opacity-100 group-data-[state=closed]/space:-rotate-90" />
             </button>
           </SidebarGroupLabel>
         </CollapsibleTrigger>
