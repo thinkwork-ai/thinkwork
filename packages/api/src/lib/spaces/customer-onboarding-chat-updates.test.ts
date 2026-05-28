@@ -398,8 +398,8 @@ describe("sendMessage customer onboarding hook", () => {
     expect(
       source.indexOf("await applyCustomerOnboardingChatUpdate"),
     ).toBeLessThan(source.indexOf("await dispatchDefaultAgentTurn"));
-    expect(source).toContain("!hasAgentMentions");
-    expect(source).toContain("!customerOnboardingHandled");
+    expect(source).toContain("shouldApplyCustomerOnboardingChatUpdate");
+    expect(source).toContain("shouldDispatchDefaultAgentTurn");
   });
 
   it("does not return generic-agent fallback before checking onboarding workflow metadata", () => {

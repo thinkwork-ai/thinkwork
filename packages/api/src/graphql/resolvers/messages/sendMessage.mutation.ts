@@ -29,6 +29,10 @@ import {
   canonicalizeMessageAttachmentMetadata,
   MessageAttachmentRefsError,
 } from "../../../lib/thread-attachments/message-attachment-refs.js";
+import {
+  shouldApplyCustomerOnboardingChatUpdate,
+  shouldDispatchDefaultAgentTurn,
+} from "./sendMessage.agent-handling.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -238,7 +242,14 @@ export const sendMessage = async (
     (mention) => mention.targetType === "agent",
   );
   let customerOnboardingHandled = false;
-  if (isUserMessage && senderType === "user" && !hasAgentMentions) {
+  if (
+    shouldApplyCustomerOnboardingChatUpdate({
+      isUserMessage,
+      senderType,
+      agentRequested: i.agentRequested,
+      hasAgentMentions,
+    })
+  ) {
     try {
       const onboardingUpdate = await applyCustomerOnboardingChatUpdate({
         tenantId: thread.tenant_id,
@@ -282,11 +293,14 @@ export const sendMessage = async (
     }
   }
   if (
-    isUserMessage &&
-    senderType === "user" &&
-    parsedMentions.length === 0 &&
-    !thread.computer_id &&
-    !customerOnboardingHandled
+    shouldDispatchDefaultAgentTurn({
+      isUserMessage,
+      senderType,
+      agentRequested: i.agentRequested,
+      hasAgentMentions,
+      hasComputerThread: Boolean(thread.computer_id),
+      customerOnboardingHandled,
+    })
   ) {
     try {
       await dispatchDefaultAgentTurn({

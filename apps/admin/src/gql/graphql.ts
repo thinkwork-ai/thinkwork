@@ -4477,6 +4477,7 @@ export type ScheduledJob = {
 };
 
 export type SendMessageInput = {
+  agentRequested?: InputMaybe<Scalars['Boolean']['input']>;
   content?: InputMaybe<Scalars['String']['input']>;
   mentions?: InputMaybe<Array<SendMessageMentionInput>>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;

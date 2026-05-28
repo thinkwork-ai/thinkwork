@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import {
+  shouldApplyCustomerOnboardingChatUpdate,
+  shouldDispatchDefaultAgentTurn,
+} from "./sendMessage.agent-handling.js";
 
 const source = readFileSync(
   new URL("./sendMessage.mutation.ts", import.meta.url),
@@ -21,9 +25,9 @@ describe("sendMessage mention collaboration path", () => {
     );
   });
 
-  it("routes no-mention messages to the default agent without double-dispatching mentioned messages", () => {
+  it("routes eligible messages to the default agent without double-dispatching agent mentions", () => {
     expect(source).toContain("dispatchDefaultAgentTurn");
-    expect(source).toContain("parsedMentions.length === 0");
+    expect(source).toContain("shouldDispatchDefaultAgentTurn");
     expect(source).toContain("hasAgentMentions");
   });
 
@@ -40,9 +44,9 @@ describe("sendMessage mention collaboration path", () => {
 
   it("validates attachment references before persisting message metadata", () => {
     expect(source).toContain("canonicalizeMessageAttachmentMetadata");
-    expect(source.indexOf("await canonicalizeMessageAttachmentMetadata")).toBeLessThan(
-      source.indexOf(".insert(messages)"),
-    );
+    expect(
+      source.indexOf("await canonicalizeMessageAttachmentMetadata"),
+    ).toBeLessThan(source.indexOf(".insert(messages)"));
     expect(source).toContain('extensions: { code: "BAD_USER_INPUT" }');
     expect(source).toContain("metadata: canonicalMetadata");
   });
@@ -60,5 +64,111 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("readAt: messageActivityAt");
     expect(source).toContain("updated_at: messageActivityAt");
     expect(source).toContain("notifyThreadUpdate");
+  });
+});
+
+describe("sendMessage agent handling", () => {
+  it("defaults user follow-ups into agent handling", () => {
+    expect(
+      shouldApplyCustomerOnboardingChatUpdate({
+        isUserMessage: true,
+        senderType: "user",
+        hasAgentMentions: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        hasAgentMentions: false,
+        hasComputerThread: false,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("suppresses default agent handling when agentRequested is explicitly false", () => {
+    expect(
+      shouldApplyCustomerOnboardingChatUpdate({
+        isUserMessage: true,
+        senderType: "user",
+        agentRequested: false,
+        hasAgentMentions: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        agentRequested: false,
+        hasAgentMentions: false,
+        hasComputerThread: false,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("lets explicit agent mentions own dispatch even when default handling is suppressed", () => {
+    expect(
+      shouldApplyCustomerOnboardingChatUpdate({
+        isUserMessage: true,
+        senderType: "user",
+        agentRequested: false,
+        hasAgentMentions: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        agentRequested: false,
+        hasAgentMentions: true,
+        hasComputerThread: false,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not treat collaborator mentions as a reason to skip default dispatch", () => {
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        agentRequested: true,
+        hasAgentMentions: false,
+        hasComputerThread: false,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps non-user senders, computer threads, and handled onboarding out of default dispatch", () => {
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "agent",
+        hasAgentMentions: false,
+        hasComputerThread: false,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        hasAgentMentions: false,
+        hasComputerThread: true,
+        customerOnboardingHandled: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage: true,
+        senderType: "user",
+        hasAgentMentions: false,
+        hasComputerThread: false,
+        customerOnboardingHandled: true,
+      }),
+    ).toBe(false);
   });
 });
