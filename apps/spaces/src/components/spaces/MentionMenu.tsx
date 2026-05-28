@@ -18,6 +18,14 @@ interface MentionMenuProps {
   query: string;
   activeIndex?: number;
   includeDefaultAgentShortcut?: boolean;
+  /**
+   * Where the menu opens relative to the composer. "top" (default) grows
+   * upward — correct for composers pinned to the bottom of the viewport
+   * (in-thread follow-up). "bottom" grows downward — for the vertically
+   * centered new-thread composer, which has more room below than above, so
+   * an upward menu would clip off the top of the screen.
+   */
+  placement?: "top" | "bottom";
   onSelect: (target: MentionTarget) => void;
 }
 
@@ -86,6 +94,7 @@ export function MentionMenu({
   query,
   activeIndex = 0,
   includeDefaultAgentShortcut = false,
+  placement = "top",
   onSelect,
 }: MentionMenuProps) {
   const filtered = filterMentionTargets(targets, query, {
@@ -96,7 +105,10 @@ export function MentionMenu({
 
   return (
     <div
-      className="absolute bottom-full left-0 z-20 mb-2 w-full max-w-md rounded-md border bg-popover p-2 text-popover-foreground shadow-md"
+      className={cn(
+        "absolute left-0 z-20 max-h-[40vh] w-full max-w-md overflow-y-auto rounded-md border bg-popover p-2 text-popover-foreground shadow-md",
+        placement === "bottom" ? "top-full mt-2" : "bottom-full mb-2",
+      )}
       role="listbox"
       aria-label="Mention suggestions"
     >

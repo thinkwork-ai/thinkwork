@@ -235,6 +235,7 @@ export function SpacesComposer({
             targets={mentionTargets}
             query={mentionQuery}
             activeIndex={activeMentionIndex}
+            placement="bottom"
             onSelect={selectMention}
           />
         ) : null}

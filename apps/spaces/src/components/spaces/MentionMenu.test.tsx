@@ -56,6 +56,29 @@ describe("MentionMenu", () => {
     expect(screen.getByRole("listbox").className).toContain("p-2");
   });
 
+  it("opens upward by default and downward when placement is bottom", () => {
+    const { rerender } = render(
+      <MentionMenu targets={targets} query="" onSelect={vi.fn()} />,
+    );
+    const upward = screen.getByRole("listbox").className;
+    expect(upward).toContain("bottom-full");
+    expect(upward).not.toContain("top-full");
+    expect(upward).toContain("max-h-[40vh]");
+    expect(upward).toContain("overflow-y-auto");
+
+    rerender(
+      <MentionMenu
+        targets={targets}
+        query=""
+        placement="bottom"
+        onSelect={vi.fn()}
+      />,
+    );
+    const downward = screen.getByRole("listbox").className;
+    expect(downward).toContain("top-full");
+    expect(downward).not.toContain("bottom-full");
+  });
+
   it("pins the default agent shortcut first only when explicitly enabled", () => {
     expect(filterMentionTargets(targets, "")[0]?.displayName).toBe(
       "Coordinator",
