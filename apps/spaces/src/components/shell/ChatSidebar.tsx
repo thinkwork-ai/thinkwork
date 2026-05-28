@@ -720,7 +720,7 @@ function ThreadListSection({
       <CollapsibleTrigger asChild>
         <SidebarGroupLabel
           asChild
-          className="group/section-trigger w-full cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
+          className="group/section-trigger w-full cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
         >
           <button type="button" aria-label={`Toggle ${label}`}>
             <span>{label}</span>
@@ -809,7 +809,7 @@ function PinnedThreadListSection({
       <CollapsibleTrigger asChild>
         <SidebarGroupLabel
           asChild
-          className="group/section-trigger w-full cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/70"
+          className="group/section-trigger w-full cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
         >
           <button type="button" aria-label="Toggle Pinned">
             <span>Pinned</span>
@@ -971,7 +971,7 @@ function SpaceThreadSection({
           <SidebarGroupLabel
             asChild
             className={cn(
-              "group/space-trigger w-full min-w-0 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50 data-[state=open]:text-sidebar-foreground/60",
+              "group/space-trigger w-full min-w-0 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50",
               isActiveSpace && "text-sidebar-foreground/70",
             )}
           >
