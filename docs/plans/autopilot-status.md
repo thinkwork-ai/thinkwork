@@ -23,8 +23,8 @@ Target branch: `main`
 - Completed:
 - Latest merged PR: [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802)
 - Active PR: [#1803](https://github.com/thinkwork-ai/thinkwork/pull/1803)
-- CI: PR #1803 passed CI before the end-to-end dogfood proof changes; updated
-  CI is pending after the next push
+- CI: PR #1803 passed `cla`, `lint`, `test`, `typecheck`, and `verify` on
+  proof SHA `3cdca9cc`.
 
 ### Active Unit Notes
 
