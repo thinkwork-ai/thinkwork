@@ -99,7 +99,9 @@
 }
 
 .desktop-app-header button,
-.desktop-app-header a {
+.desktop-app-header a,
+.desktop-app-header input,
+.desktop-app-header [data-thread-title-rename] {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }

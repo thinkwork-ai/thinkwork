@@ -1024,6 +1024,7 @@ export const UpdateThreadMutation = gql`
   mutation UpdateThread($id: ID!, $input: UpdateThreadInput!) {
     updateThread(id: $id, input: $input) {
       id
+      title
       status
       archivedAt
       updatedAt

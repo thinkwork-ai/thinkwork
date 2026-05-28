@@ -22,6 +22,10 @@ import {
   resolveThreadArtifactSelection,
 } from "./SpacesThreadDetailRoute";
 
+const routerLocationStateMock = vi.hoisted(() => ({
+  state: {} as Record<string, unknown>,
+}));
+
 vi.mock("urql", async (importOriginal) => {
   const actual = await importOriginal<typeof import("urql")>();
   return {
@@ -60,6 +64,8 @@ vi.mock("@tanstack/react-router", async () => {
       <a href={params?.id ? to.replace("$id", params.id) : to}>{children}</a>
     ),
     useNavigate: () => vi.fn(),
+    useRouterState: ({ select }: { select: (state: unknown) => unknown }) =>
+      select({ location: { state: routerLocationStateMock.state } }),
   };
 });
 
@@ -97,6 +103,7 @@ let streamingChunks: Array<{ seq: number; text: string }> = [];
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(usePageHeaderActions).mockReset();
+  routerLocationStateMock.state = {};
   reexecuteThreadQuery.mockReset();
   reexecuteLinkedTasksQuery.mockReset();
   reexecuteProgressMarkdownQuery.mockReset();
@@ -425,7 +432,47 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 
-  it("does not render a previous thread while the route thread is loading", () => {
+  it("uses the navigated thread title while the route thread is loading", () => {
+    threadData = {
+      thread: {
+        id: "previous-thread",
+        computerId: "computer-1",
+        title: "Previous thread title",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content: "Old thread body",
+              },
+            },
+          ],
+        },
+      },
+    };
+    routerLocationStateMock.state = {
+      threadTitleFallback: {
+        threadId: "next-thread",
+        title: "Side nav title",
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="next-thread" />);
+
+    expect(screen.getByText("Loading...")).toBeTruthy();
+    expect(screen.queryByText("Previous thread title")).toBeNull();
+    expect(screen.queryByText("Old thread body")).toBeNull();
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: "Side nav title",
+        documentTitle: "Thread · Side nav title",
+        titleContent: undefined,
+      }),
+    );
+  });
+
+  it("shows Loading as the header title without a navigated title", () => {
     threadData = {
       thread: {
         id: "previous-thread",
@@ -447,13 +494,11 @@ describe("SpacesThreadDetailRoute", () => {
 
     render(<SpacesThreadDetailRoute threadId="next-thread" />);
 
-    expect(screen.getByText("Loading...")).toBeTruthy();
-    expect(screen.queryByText("Previous thread title")).toBeNull();
-    expect(screen.queryByText("Old thread body")).toBeNull();
     expect(usePageHeaderActions).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        title: "Thread",
-        documentTitle: "Thread · Thread",
+        title: "Loading...",
+        documentTitle: "Thread · Loading...",
+        titleContent: undefined,
       }),
     );
   });

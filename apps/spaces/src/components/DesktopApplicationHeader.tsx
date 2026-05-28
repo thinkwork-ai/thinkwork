@@ -196,6 +196,8 @@ export function DesktopApplicationHeader() {
                   );
                 })}
               </nav>
+            ) : headerActions.titleContent ? (
+              <div className="min-w-0">{headerActions.titleContent}</div>
             ) : (
               <h1 className="truncate text-sm font-medium">
                 {headerActions.title}

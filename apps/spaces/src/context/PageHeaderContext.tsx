@@ -25,6 +25,8 @@ export interface PageHeaderActions {
   subtitle?: string;
   /** Optional breadcrumb trail rendered in place of the plain title. */
   breadcrumbs?: { label: string; href?: string }[];
+  /** Optional title renderer for inline title affordances such as rename inputs. */
+  titleContent?: ReactNode;
   /**
    * Optional inline content rendered immediately to the right of the
    * title (before the subtitle). Use for compact title-anchored
@@ -88,7 +90,7 @@ export function usePageHeaderActions(actions: PageHeaderActions | null) {
     actions?.breadcrumbs?.map((b) => `${b.href ?? ""}:${b.label}`).join(",") ??
     "";
   const key = actions
-    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.backBehavior ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${breadcrumbsKey}|${actions.actionKey ?? ""}|${actions.titleTrailing ? "tt1" : "tt0"}`
+    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.backBehavior ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${breadcrumbsKey}|${actions.actionKey ?? ""}|${actions.titleContent ? "tc1" : "tc0"}|${actions.titleTrailing ? "tt1" : "tt0"}`
     : null;
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
