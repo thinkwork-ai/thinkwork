@@ -52,6 +52,7 @@ interface SendMessageVars {
     content: string;
     metadata?: string;
     mentions?: SpacesComposerMention[];
+    agentRequested?: boolean;
   };
 }
 
@@ -182,6 +183,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   async function handleSubmit(
     files: File[],
     mentions: SpacesComposerMention[],
+    agentRequested: boolean,
   ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
@@ -209,7 +211,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       // Text-only path (no files): keep the existing atomic
       // createThread-with-firstMessage flow so we don't regress the
       // one-RT happy path.
-      if (files.length === 0) {
+      if (files.length === 0 && agentRequested !== false) {
         const result = await createThread({
           input: {
             tenantId,
@@ -238,7 +240,8 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         return;
       }
 
-      // Files present: 3-call sequence.
+      // Files present, or human-only text: create first, then send the first
+      // message through sendMessage so agentRequested can be honored.
       const created = await createThread({
         input: {
           tenantId,
@@ -258,42 +261,51 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         return;
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      const token = await getIdToken();
-      if (!apiUrl || !token) {
-        setError("Sign-in required to upload attachments");
-        return;
-      }
-      const uploadResult = await uploadThreadAttachments({
-        endpoints: { apiUrl, token },
-        threadId,
-        files,
-      });
-      if (
-        uploadResult.uploaded.length === 0 &&
-        uploadResult.failures.length > 0
-      ) {
-        const first = uploadResult.failures[0]!;
-        setError(`Upload failed (${first.stage}): ${first.message}`);
-        return;
-      }
-      if (uploadResult.failures.length > 0) {
-        setError(
-          `${uploadResult.failures.length} attachment${uploadResult.failures.length === 1 ? "" : "s"} could not be uploaded. Sending the files that finished.`,
-        );
-      }
-
-      const attachmentRefs = uploadResult.uploaded.map((a) => ({
-        attachmentId: a.attachmentId,
-      }));
-      const sent = await sendMessage({
-        input: {
+      let attachmentRefs: { attachmentId: string }[] = [];
+      if (files.length > 0) {
+        const apiUrl = import.meta.env.VITE_API_URL || "";
+        const token = await getIdToken();
+        if (!apiUrl || !token) {
+          setError("Sign-in required to upload attachments");
+          return;
+        }
+        const uploadResult = await uploadThreadAttachments({
+          endpoints: { apiUrl, token },
           threadId,
-          role: "USER",
-          content: trimmed,
-          metadata: JSON.stringify({ attachments: attachmentRefs }),
-          mentions,
-        },
+          files,
+        });
+        if (
+          uploadResult.uploaded.length === 0 &&
+          uploadResult.failures.length > 0
+        ) {
+          const first = uploadResult.failures[0]!;
+          setError(`Upload failed (${first.stage}): ${first.message}`);
+          return;
+        }
+        if (uploadResult.failures.length > 0) {
+          setError(
+            `${uploadResult.failures.length} attachment${uploadResult.failures.length === 1 ? "" : "s"} could not be uploaded. Sending the files that finished.`,
+          );
+        }
+
+        attachmentRefs = uploadResult.uploaded.map((a) => ({
+          attachmentId: a.attachmentId,
+        }));
+      }
+      const sendInput: SendMessageVars["input"] = {
+        threadId,
+        role: "USER",
+        content: trimmed,
+        mentions,
+      };
+      if (attachmentRefs.length > 0) {
+        sendInput.metadata = JSON.stringify({ attachments: attachmentRefs });
+      }
+      if (agentRequested === false) {
+        sendInput.agentRequested = false;
+      }
+      const sent = await sendMessage({
+        input: sendInput,
       });
       if (sent.error) {
         setError(

@@ -5,6 +5,7 @@ import {
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
+  PromptInputSpeechButton,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
@@ -12,8 +13,14 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { AtSign } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import { AtSign, Bot } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -49,7 +56,11 @@ interface SpacesComposerProps {
    * (.xlsx / .xls / .csv only — `accept` constrains the picker).
    * Empty array when no files attached.
    */
-  onSubmit: (files: File[], mentions: SpacesComposerMention[]) => void;
+  onSubmit: (
+    files: File[],
+    mentions: SpacesComposerMention[],
+    agentRequested: boolean,
+  ) => void;
   mentionTargets?: MentionTarget[];
   spaces?: SpacesComposerSpaceOption[];
   selectedSpaceId?: string | null;
@@ -88,6 +99,7 @@ export function SpacesComposer({
   error,
 }: SpacesComposerProps) {
   const [mentions, setMentions] = useState<SpacesComposerMention[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const spacePickerColorClass = selectedSpaceIsDefault
     ? "text-muted-foreground hover:text-foreground"
     : "text-foreground hover:text-foreground/80";
@@ -103,10 +115,17 @@ export function SpacesComposer({
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const [agentEnabled, setAgentEnabled] = useState(true);
+  const agentForcedOn = hasDefaultAgentMentionAlias(value);
+  const effectiveAgentEnabled = agentForcedOn || agentEnabled;
 
   useEffect(() => {
     setActiveMentionIndex(0);
   }, [mentionQuery, mentionOptions.length]);
+
+  useEffect(() => {
+    if (agentForcedOn) setAgentEnabled(true);
+  }, [agentForcedOn]);
 
   // Re-runs when the textarea's disabled flag flips. Mount-time focus
   // (autoFocus + the rAF/setTimeout pair) silently no-ops while the
@@ -151,7 +170,7 @@ export function SpacesComposer({
     const submittedMentions = mentions.filter((mention) =>
       value.includes(mention.rawText),
     );
-    onSubmit(files, submittedMentions);
+    onSubmit(files, submittedMentions, effectiveAgentEnabled);
     setMentions([]);
   }
 
@@ -202,6 +221,12 @@ export function SpacesComposer({
     }
   }
 
+  const agentToggleTitle = agentForcedOn
+    ? "Agent handling is required by @agent or @think"
+    : effectiveAgentEnabled
+      ? "Agent will respond"
+      : "Send without waking the agent";
+
   return (
     <div className="grid gap-2">
       <div className="relative">
@@ -231,6 +256,7 @@ export function SpacesComposer({
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
             <PromptInputTextarea
+              ref={textareaRef}
               aria-label="Send message"
               value={value}
               onChange={(event) => onChange(event.target.value)}
@@ -242,6 +268,22 @@ export function SpacesComposer({
           </PromptInputBody>
           <PromptInputFooter className="px-2 pb-2">
             <PromptInputTools>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!agentForcedOn) setAgentEnabled((value) => !value);
+                }}
+                aria-label="Send to agent"
+                aria-pressed={effectiveAgentEnabled}
+                title={agentToggleTitle}
+                disabled={isComposerDisabled || agentForcedOn}
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-80",
+                  effectiveAgentEnabled && "text-[#54a9ff]",
+                )}
+              >
+                <Bot className="size-5" />
+              </button>
               {spaces.length > 0 && selectedSpaceId && onSelectedSpaceChange ? (
                 <Select
                   value={selectedSpaceId}
@@ -283,11 +325,21 @@ export function SpacesComposer({
               </PromptInputButton>
               <PromptInputAttachButton />
             </PromptInputTools>
-            <ConditionalSubmit
-              hasText={value.trim().length > 0}
-              disabled={disabled}
-              isSubmitting={isSubmitting}
-            />
+            <div className="flex items-center gap-1">
+              <PromptInputSpeechButton
+                textareaRef={textareaRef}
+                onTranscriptionChange={onChange}
+                aria-label="Voice input"
+                title="Voice input"
+                className="text-muted-foreground hover:text-foreground"
+                disabled={disabled || isSubmitting}
+              />
+              <ConditionalSubmit
+                hasText={value.trim().length > 0}
+                disabled={disabled}
+                isSubmitting={isSubmitting}
+              />
+            </div>
           </PromptInputFooter>
         </PromptInput>
       </div>
@@ -378,4 +430,8 @@ async function fileUiPartsToFiles(
 function currentMentionQuery(content: string) {
   const match = /(?:^|\s)@([\w.'-]*)$/u.exec(content);
   return match ? match[1] : null;
+}
+
+function hasDefaultAgentMentionAlias(content: string) {
+  return /(?:^|\s)@(agent|think)\b/iu.test(content);
 }

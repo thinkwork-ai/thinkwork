@@ -175,6 +175,15 @@ describe("SpacesComposer", () => {
     expect(submit.disabled).toBe(true);
   });
 
+  it("renders voice input next to the start button", () => {
+    render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
+
+    const voiceInput = screen.getByRole("button", { name: "Voice input" });
+    const startButton = screen.getByRole("button", { name: "Start" });
+    expect(voiceInput).toBeTruthy();
+    expect(startButton.parentElement?.contains(voiceInput)).toBe(true);
+  });
+
   it("submits a non-empty prompt", async () => {
     // Plan-012 U13: PromptInput's form submit goes through an async
     // Promise.all chain (file blob → data URL conversion before
@@ -193,6 +202,55 @@ describe("SpacesComposer", () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
+    expect(onSubmit).toHaveBeenCalledWith([], [], true);
+  });
+
+  it("passes agent opt-out through submit", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <SpacesComposer
+        value="Keep this human-only"
+        onChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith([], [], false);
+    });
+  });
+
+  it("forces agent handling on for @agent and @think aliases", () => {
+    const { rerender } = render(
+      <SpacesComposer
+        value="@agent help with this"
+        onChange={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+
+    let agentToggle = screen.getByRole("button", {
+      name: "Send to agent",
+    }) as HTMLButtonElement;
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(agentToggle.disabled).toBe(true);
+
+    rerender(
+      <SpacesComposer
+        value="@think help with this"
+        onChange={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+
+    agentToggle = screen.getByRole("button", {
+      name: "Send to agent",
+    }) as HTMLButtonElement;
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(agentToggle.disabled).toBe(true);
   });
 
   it("submits a non-empty prompt when Enter is pressed", async () => {
