@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U3 Add desktop-local dispatch ownership to `sendMessage`
-- Active branch: `codex/local-pi-u3-dispatch-ownership`
+- Active unit: U4 Add Electron sidecar supervision and typed IPC
+- Active branch: `codex/local-pi-u4-sidecar-supervision`
 - Active worktree:
-  `.Codex/worktrees/local-pi-u3-dispatch-ownership`
+  `.Codex/worktrees/local-pi-u4-sidecar-supervision`
 - Started: 2026-05-28
-- Latest merged PR: [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794)
-- Active PR: [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796)
+- Latest merged PR: [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796)
+- Active PR: [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797)
 - CI: in progress
 
 ### Active Unit Notes
@@ -108,19 +108,47 @@ Target branch: `main`
 - U3 full sequential workspace verification passed:
   `pnpm -r --workspace-concurrency=1 --if-present test`.
 - Opened PR [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796).
+- PR [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) initially
+  passed CI, then needed a rebase because `main` advanced. The rebase conflict
+  was limited to `SpacesThreadDetailRoute.test.tsx`; kept both the new
+  optimistic-shimmer assertions from `main` and the desktop-local dispatch
+  assertion, reran focused API/Spaces tests and typechecks, passed CI again,
+  squash-merged into `main`, and deleted the remote/local U3 branch.
+- Started U4 from updated `origin/main`.
+- U4 implementation in progress: adding typed Pi sidecar IPC, a supervised
+  Electron utility-process controller, and a packaged sidecar entrypoint.
+- U4 focused verification passed: `pnpm --filter @thinkwork/desktop-ipc test`,
+  `pnpm --filter @thinkwork/desktop test -- test/main/pi-sidecar-controller.test.ts`,
+  `pnpm --filter @thinkwork/desktop-ipc typecheck`,
+  `pnpm --filter @thinkwork/desktop typecheck`, and
+  `pnpm --filter @thinkwork/desktop run build`.
+- U4 broader verification passed: touched-file Prettier check,
+  `git diff --check`, `pnpm --filter @thinkwork/desktop test`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`,
+  `DESKTOP_SKIP_TERRAFORM=1 bash scripts/build-desktop.sh dev --dir --publish never`,
+  and packaged `app.asar` inspection confirming `/out/main/pi-sidecar.js` is
+  present.
+- U4 full sequential workspace verification passed:
+  `pnpm -r --workspace-concurrency=1 --if-present test`.
+- U4 review hardening added a sidecar parent-message guard; focused
+  post-change verification passed:
+  `pnpm --filter @thinkwork/desktop test -- test/main/pi-sidecar-controller.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/desktop run build`, and `git diff --check`.
+- Opened PR [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797).
 
 ### Progress Log
 
-| Date       | Unit | Branch                                 | PR                                                           | Status      | Verification | Notes                                          |
-| ---------- | ---- | -------------------------------------- | ------------------------------------------------------------ | ----------- | ------------ | ---------------------------------------------- |
-| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core`       | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | Merged      | CI passed    | Extract shared Pi runtime core.                |
-| 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session`    | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | Merged      | CI passed    | Desktop runtime session preparation API.       |
-| 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership` | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | In progress | Local passed | Desktop-local sendMessage dispatch ownership.  |
-| 2026-05-28 | U4   | pending                                | pending                                                      | Pending     | pending      | Electron sidecar supervision and typed IPC.    |
-| 2026-05-28 | U5   | pending                                | pending                                                      | Pending     | pending      | Execute local desktop turns in sidecar.        |
-| 2026-05-28 | U6   | pending                                | pending                                                      | Pending     | pending      | Managed delegation from local Pi to AgentCore. |
-| 2026-05-28 | U7   | pending                                | pending                                                      | Pending     | pending      | Local runtime and delegation state in Spaces.  |
-| 2026-05-28 | U8   | pending                                | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
+| Date       | Unit | Branch                                  | PR                                                           | Status      | Verification | Notes                                          |
+| ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | ----------- | ------------ | ---------------------------------------------- |
+| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core`        | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | Merged      | CI passed    | Extract shared Pi runtime core.                |
+| 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session`     | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | Merged      | CI passed    | Desktop runtime session preparation API.       |
+| 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged      | CI passed    | Desktop-local sendMessage dispatch ownership.  |
+| 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | In progress | Local passed | Electron sidecar supervision and typed IPC.    |
+| 2026-05-28 | U5   | pending                                 | pending                                                      | Pending     | pending      | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U6   | pending                                 | pending                                                      | Pending     | pending      | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U7   | pending                                 | pending                                                      | Pending     | pending      | Local runtime and delegation state in Spaces.  |
+| 2026-05-28 | U8   | pending                                 | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
 
 ### CI Failures
 

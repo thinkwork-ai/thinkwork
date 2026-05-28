@@ -3,6 +3,12 @@ import type {
   DesktopConfig,
   PendingOAuthCallback,
   OAuthErrorEvent,
+  PiCancelTurnRequest,
+  PiCancelTurnResponse,
+  PiSidecarState,
+  PiSidecarStatus,
+  PiStartTurnRequest,
+  PiStartTurnResponse,
   RemoveTokenStorageItemRequest,
   ReportInstallOutcomeRequest,
   SessionTokens,
@@ -15,6 +21,14 @@ import type {
 } from "./schemas.js";
 
 export type Unsubscribe = () => void;
+
+export interface PiBridge {
+  status: PiSidecarStatus;
+  getStatus(): Promise<PiSidecarState>;
+  startTurn(request: PiStartTurnRequest): Promise<PiStartTurnResponse>;
+  cancelTurn(request: PiCancelTurnRequest): Promise<PiCancelTurnResponse>;
+  onStatusChanged(listener: (state: PiSidecarState) => void): Unsubscribe;
+}
 
 export interface ThinkworkBridge {
   getSessionTokens(): Promise<SessionTokens | null>;
@@ -38,4 +52,5 @@ export interface ThinkworkBridge {
     listener: (event: UpdateTelemetryEvent) => void,
   ): Unsubscribe;
   reportInstallOutcome(outcome: ReportInstallOutcomeRequest): Promise<void>;
+  pi?: PiBridge;
 }

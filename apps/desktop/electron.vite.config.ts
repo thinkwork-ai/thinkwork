@@ -62,7 +62,10 @@ export default defineConfig(async (env) => {
         },
         outDir: "out/main",
         rollupOptions: {
-          input: resolve(rootDir, "src/main/index.ts"),
+          input: {
+            index: resolve(rootDir, "src/main/index.ts"),
+            "pi-sidecar": resolve(rootDir, "src/sidecar/index.ts"),
+          },
         },
       },
     },

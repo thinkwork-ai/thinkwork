@@ -2,19 +2,23 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
+  CANCEL_PI_TURN_CHANNEL,
   CLEAR_TOKEN_STORAGE_CHANNEL,
   CONSUME_PENDING_OAUTH_CHANNEL,
   DEEP_LINK_EVENT_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
   GET_DESKTOP_CONFIG_CHANNEL,
+  GET_PI_STATUS_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   OAUTH_ERROR_EVENT_CHANNEL,
+  PI_STATUS_EVENT_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SIGN_OUT_CHANNEL,
   SIGNED_OUT_EVENT_CHANNEL,
+  START_PI_TURN_CHANNEL,
   START_OAUTH_CHANNEL,
   SET_TOKEN_STORAGE_ITEM_CHANNEL,
   TOKENS_CHANGED_EVENT_CHANNEL,
@@ -22,11 +26,17 @@ import {
   UPDATE_TELEMETRY_EVENT_CHANNEL,
   DeepLinkEventSchema,
   GetDesktopConfigResponseSchema,
+  GetPiStatusResponseSchema,
   GetSessionTokensResponseSchema,
   GetUpdateStateResponseSchema,
   ConsumePendingOAuthResponseSchema,
   RemoveTokenStorageItemRequestSchema,
   OAuthErrorEventSchema,
+  PiCancelTurnRequestSchema,
+  PiCancelTurnResponseSchema,
+  PiStartTurnRequestSchema,
+  PiStartTurnResponseSchema,
+  PiStatusEventSchema,
   ReportInstallOutcomeRequestSchema,
   SetTokenStorageItemRequestSchema,
   SignOutResponseSchema,
@@ -37,6 +47,46 @@ import {
   UpdateStateEventSchema,
   UpdateTelemetryEventSchema,
 } from "@thinkwork/desktop-ipc";
+
+const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
+  status: "unavailable",
+  async getStatus() {
+    const state = GetPiStatusResponseSchema.parse(
+      await ipcRenderer.invoke(GET_PI_STATUS_CHANNEL),
+    );
+    piBridge.status = state.status;
+    return state;
+  },
+  async startTurn(request) {
+    return PiStartTurnResponseSchema.parse(
+      await ipcRenderer.invoke(
+        START_PI_TURN_CHANNEL,
+        PiStartTurnRequestSchema.parse(request),
+      ),
+    );
+  },
+  async cancelTurn(request) {
+    return PiCancelTurnResponseSchema.parse(
+      await ipcRenderer.invoke(
+        CANCEL_PI_TURN_CHANNEL,
+        PiCancelTurnRequestSchema.parse(request),
+      ),
+    );
+  },
+  onStatusChanged(listener) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ) => {
+      const state = PiStatusEventSchema.parse(payload);
+      piBridge.status = state.status;
+      listener(state);
+    };
+    ipcRenderer.on(PI_STATUS_EVENT_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(PI_STATUS_EVENT_CHANNEL, wrappedListener);
+  },
+};
 
 const bridge = {
   async getSessionTokens() {
@@ -171,6 +221,11 @@ const bridge = {
       ReportInstallOutcomeRequestSchema.parse(outcome),
     );
   },
+  pi: piBridge,
 } satisfies ThinkworkBridge;
+
+void piBridge.getStatus().catch(() => {
+  piBridge.status = "unavailable";
+});
 
 contextBridge.exposeInMainWorld("thinkworkBridge", bridge);

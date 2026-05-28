@@ -214,6 +214,80 @@ export const ReportInstallOutcomeRequestSchema = z
   .strict();
 export const ReportInstallOutcomeResponseSchema = VoidResponseSchema;
 
+export const PiSidecarStatusSchema = z.enum([
+  "unavailable",
+  "starting",
+  "healthy",
+  "restarting",
+  "stopping",
+  "stopped",
+  "crashed",
+  "error",
+]);
+
+export const PiSidecarErrorSchema = z
+  .object({
+    message: z.string().min(1),
+    code: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const PiSidecarStateSchema = z
+  .object({
+    status: PiSidecarStatusSchema,
+    pid: z.number().int().positive().nullable(),
+    version: z.string().min(1).nullable(),
+    restartCount: z.number().int().nonnegative(),
+    startedAt: z.string().min(1).nullable(),
+    updatedAt: z.string().min(1),
+    lastExitCode: z.number().int().nullable(),
+    lastError: PiSidecarErrorSchema.nullable(),
+  })
+  .strict();
+
+export const PiTurnAttachmentSchema = z
+  .object({
+    attachmentId: z.string().min(1),
+    s3Key: z.string().min(1),
+    name: z.string().min(1),
+    mimeType: z.string().min(1),
+    sizeBytes: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const PiStartTurnRequestSchema = z
+  .object({
+    agentId: z.string().min(1),
+    threadId: z.string().min(1),
+    messageId: z.string().min(1).optional(),
+    userMessage: z.string().min(1),
+    messageAttachments: z.array(PiTurnAttachmentSchema).optional(),
+  })
+  .strict();
+
+export const PiStartTurnResponseSchema = z
+  .object({
+    accepted: z.literal(true),
+    requestId: z.string().min(1),
+  })
+  .strict();
+
+export const PiCancelTurnRequestSchema = z
+  .object({
+    requestId: z.string().min(1),
+  })
+  .strict();
+
+export const PiCancelTurnResponseSchema = z
+  .object({
+    cancelled: z.boolean(),
+  })
+  .strict();
+
+export const GetPiStatusRequestSchema = EmptyRequestSchema;
+export const GetPiStatusResponseSchema = PiSidecarStateSchema;
+export const PiStatusEventSchema = PiSidecarStateSchema;
+
 export const ChannelSchemas = {
   getSessionTokens: {
     request: GetSessionTokensRequestSchema,
@@ -267,6 +341,18 @@ export const ChannelSchemas = {
     request: ReportInstallOutcomeRequestSchema,
     response: ReportInstallOutcomeResponseSchema,
   },
+  getPiStatus: {
+    request: GetPiStatusRequestSchema,
+    response: GetPiStatusResponseSchema,
+  },
+  startPiTurn: {
+    request: PiStartTurnRequestSchema,
+    response: PiStartTurnResponseSchema,
+  },
+  cancelPiTurn: {
+    request: PiCancelTurnRequestSchema,
+    response: PiCancelTurnResponseSchema,
+  },
 } as const;
 
 export type TokenStorageSnapshot = z.infer<typeof TokenStorageSnapshotSchema>;
@@ -293,3 +379,9 @@ export type UpdateTelemetryEvent = z.infer<typeof UpdateTelemetryEventSchema>;
 export type ReportInstallOutcomeRequest = z.infer<
   typeof ReportInstallOutcomeRequestSchema
 >;
+export type PiSidecarStatus = z.infer<typeof PiSidecarStatusSchema>;
+export type PiSidecarState = z.infer<typeof PiSidecarStateSchema>;
+export type PiStartTurnRequest = z.infer<typeof PiStartTurnRequestSchema>;
+export type PiStartTurnResponse = z.infer<typeof PiStartTurnResponseSchema>;
+export type PiCancelTurnRequest = z.infer<typeof PiCancelTurnRequestSchema>;
+export type PiCancelTurnResponse = z.infer<typeof PiCancelTurnResponseSchema>;
