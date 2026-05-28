@@ -16,6 +16,7 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "./access.js";
+import { threadSearchPredicate } from "./search.js";
 
 export const threadsPaged_query = async (
   _parent: any,
@@ -79,10 +80,9 @@ export const threadsPaged_query = async (
   }
 
   // Filter: search
-  if (args.search) {
-    conditions.push(
-      sql`search_vector @@ plainto_tsquery('english', ${args.search})`,
-    );
+  const search = typeof args.search === "string" ? args.search.trim() : "";
+  if (search) {
+    conditions.push(threadSearchPredicate(search));
   }
 
   const whereClause = and(...conditions);

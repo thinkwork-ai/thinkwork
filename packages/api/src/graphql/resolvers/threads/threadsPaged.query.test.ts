@@ -34,6 +34,7 @@ const {
   const sql = Object.assign(
     (_strings: TemplateStringsArray, ...values: unknown[]) => ({
       __sql: true,
+      __strings: Array.from(_strings),
       __values: values,
     }),
     {},
@@ -50,6 +51,8 @@ const {
     user_id: tableCol("threads.user_id"),
     status: tableCol("threads.status"),
     title: tableCol("threads.title"),
+    identifier: tableCol("threads.identifier"),
+    description: tableCol("threads.description"),
     created_at: tableCol("threads.created_at"),
     updated_at: tableCol("threads.updated_at"),
     last_turn_completed_at: tableCol("threads.last_turn_completed_at"),
@@ -241,6 +244,28 @@ describe("threadsPaged filter assembly", () => {
         c?.__eq?.value === "space-onboarding",
     );
     expect(hasSpace).toBe(true);
+  });
+
+  it("searches real thread fields instead of a missing search_vector column", async () => {
+    await threadsPaged_query(
+      {},
+      { tenantId: TENANT, search: "bill" },
+      {} as any,
+    );
+
+    const allConditions = capturedConditions.flat();
+    const searchCondition = allConditions.find(
+      (c: any) => c?.__sql && c.__values?.includes("bill"),
+    ) as { __strings?: string[]; __values?: unknown[] } | undefined;
+
+    expect(searchCondition).toBeTruthy();
+    expect(searchCondition?.__strings?.join(" ")).toContain("to_tsvector");
+    expect(searchCondition?.__strings?.join(" ")).not.toContain(
+      "search_vector",
+    );
+    expect(searchCondition?.__values).toContain(threadsTable.title);
+    expect(searchCondition?.__values).toContain(threadsTable.identifier);
+    expect(searchCondition?.__values).toContain(threadsTable.description);
   });
 
   it("scopes contextual workroom threads to the caller's visible participants", async () => {
