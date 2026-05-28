@@ -7,6 +7,7 @@ export interface CognitoEnvSnapshot {
 export interface DesktopEnvSnapshot {
   nodeEnv: string;
   stage: string;
+  desktopLocalPiEnabled: boolean;
   deepLinkScheme: string | null;
   rendererUrl: string | null;
   apiUrl: string | null;
@@ -30,13 +31,15 @@ export function snapshotDesktopEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): DesktopEnvSnapshot {
   const mergedEnv = mergeDesktopEnv(env);
+  const stage =
+    optionalEnv(mergedEnv.THINKWORK_STAGE) ??
+    optionalEnv(mergedEnv.VITE_THINKWORK_STAGE) ??
+    "dev";
 
   return Object.freeze({
     nodeEnv: optionalEnv(mergedEnv.NODE_ENV) ?? "development",
-    stage:
-      optionalEnv(mergedEnv.THINKWORK_STAGE) ??
-      optionalEnv(mergedEnv.VITE_THINKWORK_STAGE) ??
-      "dev",
+    stage,
+    desktopLocalPiEnabled: resolveDesktopLocalPiEnabled(mergedEnv, stage),
     deepLinkScheme: optionalEnv(mergedEnv.THINKWORK_DESKTOP_SCHEME),
     rendererUrl: optionalEnv(mergedEnv.ELECTRON_RENDERER_URL),
     apiUrl: optionalEnv(mergedEnv.VITE_API_URL),
@@ -64,9 +67,7 @@ export function validateDesktopEnv(
     ["VITE_COGNITO_CLIENT_ID", env.cognito.clientId],
     ["VITE_COGNITO_DOMAIN", env.cognito.domain],
   ];
-  const missing = required
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
+  const missing = required.filter(([, value]) => !value).map(([key]) => key);
 
   return Object.freeze({
     configured: missing.length === 0,
@@ -90,4 +91,19 @@ function optionalEnv(value: string | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function resolveDesktopLocalPiEnabled(
+  env: NodeJS.ProcessEnv,
+  stage: string,
+): boolean {
+  const explicit =
+    optionalEnv(env.THINKWORK_DESKTOP_LOCAL_PI_ENABLED) ??
+    optionalEnv(env.VITE_DESKTOP_LOCAL_PI_ENABLED);
+  if (explicit) return parseBooleanEnv(explicit);
+  return stage === "dev" || stage === "canary";
+}
+
+function parseBooleanEnv(value: string): boolean {
+  return /^(1|true|yes|on|enabled)$/i.test(value.trim());
 }

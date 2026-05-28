@@ -8,6 +8,7 @@ import type { DesktopEnvSnapshot } from "../../src/main/env";
 const env: DesktopEnvSnapshot = {
   nodeEnv: "test",
   stage: "dev",
+  desktopLocalPiEnabled: true,
   deepLinkScheme: null,
   rendererUrl: null,
   apiUrl: "https://api.test/",
