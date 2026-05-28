@@ -22,8 +22,8 @@ Target branch: `main`
   `.Codex/worktrees/local-pi-u6-managed-delegation`
 - Started: 2026-05-28
 - Latest merged PR: [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798)
-- Active PR: none
-- CI: not started; local verification passed
+- Active PR: [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800)
+- CI: pending; local verification passed
 
 ### Active Unit Notes
 
@@ -207,6 +207,7 @@ Target branch: `main`
   `pnpm --filter @thinkwork/api typecheck`, `pnpm --filter @thinkwork/api test`,
   `pnpm -r --if-present typecheck`, `bash scripts/build-lambdas.sh managed-delegation`,
   touched-file Prettier check, and `git diff --check`.
+- Opened PR [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800).
 
 ### Progress Log
 
@@ -217,7 +218,7 @@ Target branch: `main`
 | 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged      | CI passed    | Desktop-local sendMessage dispatch ownership.  |
 | 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged      | CI passed    | Electron sidecar supervision and typed IPC.    |
 | 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | Merged      | CI passed    | Execute local desktop turns in sidecar.        |
-| 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | pending                                                      | In progress | Local passed | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) | In progress | Local passed | Managed delegation from local Pi to AgentCore. |
 | 2026-05-28 | U7   | pending                                 | pending                                                      | Pending     | pending      | Local runtime and delegation state in Spaces.  |
 | 2026-05-28 | U8   | pending                                 | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
 
