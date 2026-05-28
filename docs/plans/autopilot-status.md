@@ -15,16 +15,15 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: in progress
-- Active unit: end-to-end local Pi dogfood proof
-- Active branch: `codex/local-pi-status-closeout`
-- Active worktree: `.Codex/worktrees/local-pi-status-closeout`
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-28
-- Completed:
-- Latest merged PR: [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802)
-- Active PR: [#1803](https://github.com/thinkwork-ai/thinkwork/pull/1803)
-- CI: PR #1803 passed `cla`, `lint`, `test`, `typecheck`, and `verify` on
-  proof SHA `3cdca9cc`.
+- Completed: 2026-05-28
+- Latest merged PR: [#1803](https://github.com/thinkwork-ai/thinkwork/pull/1803)
+- Active PR: none
+- CI: U1 through U8 and dogfood hardening passed required PR checks and merged.
 
 ### Active Unit Notes
 
@@ -343,6 +342,11 @@ Target branch: `main`
   `pnpm --filter @thinkwork/desktop typecheck`,
   `pnpm --filter @thinkwork/spaces typecheck`,
   `pnpm --filter @thinkwork/desktop run build`, and `git diff --check`.
+- PR [#1803](https://github.com/thinkwork-ai/thinkwork/pull/1803) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main` as `f66138bc6695d82e02854de11529cc8051b1bf45`, deleted the remote
+  branch, deleted the local `codex/local-pi-status-closeout` branch, and
+  removed the dogfood hardening worktree.
 
 ### Progress Log
 
@@ -356,7 +360,7 @@ Target branch: `main`
 | 2026-05-28 | U6                | `codex/local-pi-u6-managed-delegation`  | [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) | Merged | CI passed    | Managed delegation from local Pi to AgentCore.                                                                                                                                     |
 | 2026-05-28 | U7                | `codex/local-pi-u7-state`               | [#1801](https://github.com/thinkwork-ai/thinkwork/pull/1801) | Merged | CI passed    | Local runtime and delegation state in Spaces.                                                                                                                                      |
 | 2026-05-28 | U8                | `codex/local-pi-u8-diagnostics`         | [#1802](https://github.com/thinkwork-ai/thinkwork/pull/1802) | Merged | CI passed    | Diagnostics, redaction, packaging, rollout.                                                                                                                                        |
-| 2026-05-28 | Dogfood hardening | `codex/local-pi-status-closeout`        | [#1803](https://github.com/thinkwork-ai/thinkwork/pull/1803) | Active | Local passed | Sidecar resolver, debug trace/prompt bundle, cached workspace sync, local web search/browser tools, prompt-file mirroring, composer runtime indicator, streaming local Pi console. |
+| 2026-05-28 | Dogfood hardening | `codex/local-pi-status-closeout`        | [#1803](https://github.com/thinkwork-ai/thinkwork/pull/1803) | Merged | CI passed    | Sidecar resolver, debug trace/prompt bundle, cached workspace sync, local web search/browser tools, prompt-file mirroring, composer runtime indicator, streaming local Pi console. |
 
 ### CI Failures
 
