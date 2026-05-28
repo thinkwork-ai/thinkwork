@@ -14,7 +14,6 @@ import {
   Download,
   FileText,
   ListChecks,
-  Mic,
   RotateCcw,
   Search,
   Sparkles,
@@ -53,6 +52,7 @@ import {
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
+  PromptInputSpeechButton,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
@@ -471,6 +471,7 @@ export function TaskThreadView({
         >
           <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
             <FollowUpComposer
+              threadId={thread.id}
               taskQueue={promptTaskQueue}
               disabled={!onSendFollowUp || isSending}
               isSending={isSending}
@@ -2039,6 +2040,7 @@ function PromptInputAttachButton() {
 }
 
 function FollowUpComposer({
+  threadId,
   taskQueue,
   disabled,
   isSending,
@@ -2046,6 +2048,7 @@ function FollowUpComposer({
   prefill,
   onSubmit,
 }: {
+  threadId: string;
   taskQueue?: ActiveTaskQueue | null;
   disabled?: boolean;
   isSending?: boolean;
@@ -2101,6 +2104,10 @@ function FollowUpComposer({
   useEffect(() => {
     if (agentForcedOn) setAgentEnabled(true);
   }, [agentForcedOn]);
+
+  useEffect(() => {
+    setAgentEnabled(true);
+  }, [threadId]);
 
   useEffect(() => {
     setActiveMentionIndex(0);
@@ -2164,7 +2171,6 @@ function FollowUpComposer({
       await onSubmit(content, files, submittedMentions, effectiveAgentEnabled);
       composer.clear();
       setMentions([]);
-      setAgentEnabled(true);
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
     } finally {
@@ -2284,9 +2290,8 @@ function FollowUpComposer({
           </PromptInputBody>
           <PromptInputFooter className="px-2 pb-2">
             <PromptInputTools>
-              <PromptInputButton
+              <button
                 type="button"
-                variant="ghost"
                 onClick={() => {
                   if (!agentForcedOn) setAgentEnabled((value) => !value);
                 }}
@@ -2295,14 +2300,12 @@ function FollowUpComposer({
                 title={agentToggleTitle}
                 disabled={disabled || isSending || agentForcedOn}
                 className={cn(
-                  "text-white hover:bg-white/10 disabled:opacity-80",
-                  effectiveAgentEnabled
-                    ? "bg-white/15 text-white"
-                    : "text-white/60",
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-80",
+                  effectiveAgentEnabled && "text-[#54a9ff]",
                 )}
               >
-                <Bot className="h-4 w-4" />
-              </PromptInputButton>
+                <Bot className="size-5" />
+              </button>
               <PromptInputButton
                 type="button"
                 variant="ghost"
@@ -2315,12 +2318,22 @@ function FollowUpComposer({
               </PromptInputButton>
               <PromptInputAttachButton />
             </PromptInputTools>
-            <PromptInputSubmit
-              className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
-              disabled={!canSubmit}
-              status={isSending ? "submitted" : undefined}
-              aria-label={isSending ? "Sending" : "Send"}
-            />
+            <div className="flex items-center gap-1">
+              <PromptInputSpeechButton
+                textareaRef={textareaRef}
+                onTranscriptionChange={composer.setText}
+                aria-label="Voice input"
+                title="Voice input"
+                className="text-white/60 hover:bg-white/10"
+                disabled={disabled || isSending}
+              />
+              <PromptInputSubmit
+                className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
+                disabled={!canSubmit}
+                status={isSending ? "submitted" : undefined}
+                aria-label={isSending ? "Sending" : "Send"}
+              />
+            </div>
           </PromptInputFooter>
         </PromptInput>
       </div>
