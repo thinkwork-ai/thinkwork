@@ -846,6 +846,57 @@ describe("SpacesThreadDetailRoute", () => {
       });
     });
   });
+
+  it("does not show the processing shimmer for agent opt-out follow-ups", async () => {
+    taskData = { computerTasks: [] };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Human-only thread",
+        lifecycleStatus: "COMPLETED",
+        messages: { edges: [] },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "Visible to collaborators only" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Visible to collaborators only")).toBeTruthy();
+    });
+    expect(screen.queryByLabelText("Processing request")).toBeNull();
+  });
+
+  it("shows the processing shimmer for agent-bound optimistic follow-ups", async () => {
+    taskData = { computerTasks: [] };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Agent thread",
+        lifecycleStatus: "COMPLETED",
+        messages: { edges: [] },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "Ask the agent for help" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Ask the agent for help")).toBeTruthy();
+    });
+    expect(screen.getByLabelText("Processing request")).toBeTruthy();
+  });
 });
 
 function renderHeaderAction() {

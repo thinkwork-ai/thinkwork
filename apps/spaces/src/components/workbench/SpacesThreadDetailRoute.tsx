@@ -60,6 +60,11 @@ interface SpacesThreadDetailRouteProps {
   documentTitlePrefix?: string;
 }
 
+interface OptimisticMessage {
+  content: string;
+  expectAssistantResponse: boolean;
+}
+
 interface ThreadResult {
   thread: {
     id: string;
@@ -226,9 +231,8 @@ export function SpacesThreadDetailRoute({
   documentTitlePrefix = "Thread",
 }: SpacesThreadDetailRouteProps) {
   const { tenantId, userId } = useTenant();
-  const [optimisticMessage, setOptimisticMessage] = useState<string | null>(
-    null,
-  );
+  const [optimisticMessage, setOptimisticMessage] =
+    useState<OptimisticMessage | null>(null);
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
   const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
@@ -461,7 +465,10 @@ export function SpacesThreadDetailRoute({
   useEffect(() => {
     if (
       optimisticMessage &&
-      hasPersistedUserMessage(routeThread?.messages?.edges, optimisticMessage)
+      hasPersistedUserMessage(
+        routeThread?.messages?.edges,
+        optimisticMessage.content,
+      )
     ) {
       setOptimisticMessage(null);
     }
@@ -499,7 +506,9 @@ export function SpacesThreadDetailRoute({
     );
   }
   const visibleThread = optimisticMessage
-    ? withOptimisticUserTurn(thread, optimisticMessage)
+    ? withOptimisticUserTurn(thread, optimisticMessage.content, {
+        expectAssistantResponse: optimisticMessage.expectAssistantResponse,
+      })
     : thread;
   const threadArtifacts = useMemo(
     () => deriveThreadArtifacts(visibleThread),
@@ -1046,7 +1055,10 @@ export function SpacesThreadDetailRoute({
         mentions = [],
         agentRequested = true,
       ) => {
-        setOptimisticMessage(content);
+        setOptimisticMessage({
+          content,
+          expectAssistantResponse: agentRequested !== false,
+        });
         resetStreamingChunks();
 
         // Upload attached files before sendMessage so persisted messages only
@@ -1544,6 +1556,7 @@ async function downloadThreadAttachment(
 function withOptimisticUserTurn(
   thread: TaskThread | null,
   content: string,
+  options: { expectAssistantResponse?: boolean } = {},
 ): TaskThread | null {
   if (!thread) return null;
   const alreadyPersisted = thread.messages.some(
@@ -1552,6 +1565,19 @@ function withOptimisticUserTurn(
       message.content?.trim() === content.trim(),
   );
   if (alreadyPersisted) return thread;
+
+  const turns =
+    options.expectAssistantResponse === false
+      ? (thread.turns ?? [])
+      : [
+          {
+            id: "optimistic-computer-turn",
+            status: "running",
+            invocationSource: "chat_message",
+            startedAt: new Date().toISOString(),
+          },
+          ...(thread.turns ?? []),
+        ];
 
   return {
     ...thread,
@@ -1563,15 +1589,7 @@ function withOptimisticUserTurn(
         content,
       },
     ],
-    turns: [
-      {
-        id: "optimistic-computer-turn",
-        status: "running",
-        invocationSource: "chat_message",
-        startedAt: new Date().toISOString(),
-      },
-      ...(thread.turns ?? []),
-    ],
+    turns,
   };
 }
 

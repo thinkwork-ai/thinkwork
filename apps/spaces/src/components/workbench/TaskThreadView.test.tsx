@@ -2741,7 +2741,7 @@ describe("TaskThreadView", () => {
     });
   });
 
-  it("sends one follow-up without agent handling and resets the toggle after success", async () => {
+  it("keeps the agent toggle off after a successful human-only send", async () => {
     const onSendFollowUp = vi.fn();
     render(
       <TaskThreadView
@@ -2773,7 +2773,104 @@ describe("TaskThreadView", () => {
         false,
       );
     });
-    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "Still just humans" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenLastCalledWith(
+        "Still just humans",
+        [],
+        [],
+        false,
+      );
+    });
+  });
+
+  it("resets the agent toggle on when switching threads", () => {
+    const { rerender } = render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "First thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    const agentToggle = screen.getByRole("button", { name: "Send to agent" });
+    fireEvent.click(agentToggle);
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
+
+    rerender(
+      <TaskThreadView
+        thread={{
+          id: "thread-2",
+          title: "Second thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-2", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("keeps the agent toggle footprint stable and avoids an enabled background", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Stable toggle thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    const agentToggle = screen.getByRole("button", { name: "Send to agent" });
+    const agentIcon = agentToggle.querySelector("svg");
+    expect(agentToggle.className).toContain("size-8");
+    expect(agentToggle.className).toContain("text-[#54a9ff]");
+    expect(agentIcon?.getAttribute("class")).toContain("size-5");
+    expect(agentIcon?.getAttribute("class")).not.toContain("text-[#54a9ff]");
+    expect(agentToggle.className).not.toContain("bg-white/15");
+
+    fireEvent.click(agentToggle);
+
+    expect(agentToggle.className).toContain("size-8");
+    expect(agentToggle.className).toContain("text-white/60");
+    expect(agentToggle.className).not.toContain("bg-white/15");
+  });
+
+  it("renders voice input next to the send button", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Voice composer thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    const voiceInput = screen.getByRole("button", { name: "Voice input" });
+    const sendButton = screen.getByRole("button", { name: "Send" });
+    expect(voiceInput).toBeTruthy();
+    expect(sendButton.parentElement?.contains(voiceInput)).toBe(true);
   });
 
   it("preserves a disabled agent toggle after send failure for retry", async () => {

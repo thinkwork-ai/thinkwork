@@ -1121,6 +1121,7 @@ export type PromptInputSpeechButtonProps = ComponentProps<
 
 export const PromptInputSpeechButton = ({
   className,
+  disabled,
   textareaRef,
   onTranscriptionChange,
   ...props
@@ -1209,7 +1210,7 @@ export const PromptInputSpeechButton = ({
         isListening && "animate-pulse bg-accent text-accent-foreground",
         className,
       )}
-      disabled={!recognition}
+      disabled={disabled || !recognition}
       onClick={toggleListening}
       {...props}
     >
