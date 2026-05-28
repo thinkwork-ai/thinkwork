@@ -60,6 +60,7 @@ describe("buildFinalizeBody", () => {
         message: "hello",
         instance_id: "agent-slug",
         agent_name: "Pi",
+        runtime_host: "desktop-local",
       },
       identity,
       systemPrompt: "system",
@@ -78,6 +79,7 @@ describe("buildFinalizeBody", () => {
       response: {
         content: "done",
         runtime: "pi",
+        runtime_host: "desktop-local",
         tools_called: ["lookup"],
         tool_costs: [
           { provider: "test", event_type: "tool", amount_usd: "0.001" },

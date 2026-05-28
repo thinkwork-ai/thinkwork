@@ -88,6 +88,7 @@ export function buildFinalizeBody(
           composed_system_prompt: args.systemPrompt || null,
           content: runResult.content,
           runtime: "pi",
+          runtime_host: asString(payload.runtime_host) || null,
           model: runResult.modelId,
           usage: runResult.usage,
           tools_called: runResult.toolsCalled,
@@ -98,6 +99,7 @@ export function buildFinalizeBody(
       : {
           composed_system_prompt: args.systemPrompt || null,
           runtime: "pi",
+          runtime_host: asString(payload.runtime_host) || null,
           tools_called: [],
           tool_invocations: [],
           hindsight_usage: [],

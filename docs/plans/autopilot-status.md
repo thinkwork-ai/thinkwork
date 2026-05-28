@@ -16,14 +16,14 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U4 Add Electron sidecar supervision and typed IPC
-- Active branch: `codex/local-pi-u4-sidecar-supervision`
+- Active unit: U5 Execute local desktop turns in the sidecar
+- Active branch: `codex/local-pi-u5-sidecar-turns`
 - Active worktree:
-  `.Codex/worktrees/local-pi-u4-sidecar-supervision`
+  `.Codex/worktrees/local-pi-u5-sidecar-turns`
 - Started: 2026-05-28
-- Latest merged PR: [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796)
-- Active PR: [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797)
-- CI: in progress
+- Latest merged PR: [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797)
+- Active PR: none
+- CI: not started
 
 ### Active Unit Notes
 
@@ -136,6 +136,35 @@ Target branch: `main`
   `pnpm --filter @thinkwork/desktop typecheck`,
   `pnpm --filter @thinkwork/desktop run build`, and `git diff --check`.
 - Opened PR [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797).
+- PR [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main`, and deleted the remote/local U4 branch.
+- Started U5 from updated `origin/main`.
+- U5 implementation in progress: wiring the supervised Electron sidecar to run
+  backend-prepared desktop turns through the Pi SDK, rendered workspace cache,
+  runtime adapters, and finalizer callback.
+- U5 local implementation complete: Electron main now prepares desktop runtime
+  sessions through the narrow backend API, the sidecar runs prepared turns via
+  `@earendil-works/pi-coding-agent`, rendered S3 workspaces sync into an
+  app-owned cache, Pi SDK cancellation calls `session.abort()`, diagnostics are
+  redacted, and finalize payloads carry `runtime_host: "desktop-local"`.
+- U5 focused verification passed:
+  `bash scripts/verify-supply-chain.sh`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar test/main/pi-sidecar-controller.test.ts test/main/pi-runtime-session-client.test.ts`,
+  `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/desktop run build`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`, and
+  `pnpm --filter @thinkwork/api typecheck`.
+- U5 broader verification passed: `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `pnpm -r --workspace-concurrency=1 --if-present test`,
+  touched-file Prettier check, and `git diff --check`.
+- U5 packaged desktop verification passed:
+  `DESKTOP_SKIP_TERRAFORM=1 bash scripts/build-desktop.sh dev --dir --publish never`;
+  inspected the packaged `app.asar` and confirmed `/out/main/pi-sidecar.js`,
+  `/out/main/index.js`, sidecar chunks, and
+  `/node_modules/@earendil-works/pi-coding-agent` are present.
 
 ### Progress Log
 
@@ -144,8 +173,8 @@ Target branch: `main`
 | 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core`        | [#1791](https://github.com/thinkwork-ai/thinkwork/pull/1791) | Merged      | CI passed    | Extract shared Pi runtime core.                |
 | 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session`     | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | Merged      | CI passed    | Desktop runtime session preparation API.       |
 | 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged      | CI passed    | Desktop-local sendMessage dispatch ownership.  |
-| 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | In progress | Local passed | Electron sidecar supervision and typed IPC.    |
-| 2026-05-28 | U5   | pending                                 | pending                                                      | Pending     | pending      | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged      | CI passed    | Electron sidecar supervision and typed IPC.    |
+| 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | pending                                                      | In progress | Local passed | Execute local desktop turns in sidecar.        |
 | 2026-05-28 | U6   | pending                                 | pending                                                      | Pending     | pending      | Managed delegation from local Pi to AgentCore. |
 | 2026-05-28 | U7   | pending                                 | pending                                                      | Pending     | pending      | Local runtime and delegation state in Spaces.  |
 | 2026-05-28 | U8   | pending                                 | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |

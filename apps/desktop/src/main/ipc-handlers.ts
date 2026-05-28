@@ -1,4 +1,5 @@
 import { BrowserWindow, app, ipcMain, safeStorage, shell } from "electron";
+import { join } from "node:path";
 import { SafeStorageCognitoStorage } from "./cognito-storage.js";
 import { registerAuthBridgeHandlers } from "./auth-bridge.js";
 import {
@@ -35,6 +36,7 @@ import {
   createPiSidecarController,
   type PiSidecarController,
 } from "./pi-sidecar-controller.js";
+import { createPiRuntimeSessionPreparer } from "./pi-runtime-session-client.js";
 import { createDesktopUpdatesController } from "./updates.js";
 
 export interface RegisterDesktopIpcHandlersOptions {
@@ -76,7 +78,15 @@ export async function registerDesktopIpcHandlers(
     logger: console,
   });
   await updates.start();
-  const piSidecar = options.piSidecar ?? createPiSidecarController();
+  const piSidecar =
+    options.piSidecar ??
+    createPiSidecarController({
+      prepareTurn: createPiRuntimeSessionPreparer({
+        env: options.env,
+        tokenSnapshot: () => storage.snapshot(),
+      }),
+      workspaceCacheRoot: join(app.getPath("userData"), "pi-workspaces"),
+    });
   piSidecar.start();
 
   ipcMain.handle(GET_DESKTOP_CONFIG_CHANNEL, (event, payload) => {
@@ -130,7 +140,7 @@ export async function registerDesktopIpcHandlers(
     GetPiStatusRequestSchema.parse(payload);
     return piSidecar.getStatus();
   });
-  ipcMain.handle(START_PI_TURN_CHANNEL, (event, payload) => {
+  ipcMain.handle(START_PI_TURN_CHANNEL, async (event, payload) => {
     assertSafeSenderFrame(event);
     const request = PiStartTurnRequestSchema.parse(payload);
     return piSidecar.startTurn(request);

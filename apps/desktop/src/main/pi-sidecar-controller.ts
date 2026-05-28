@@ -12,9 +12,11 @@ import {
   PI_SIDECAR_PROTOCOL_VERSION,
   redactPiDiagnosticLine,
   resolvePiSidecarEntryPath,
+  type PiSidecarTurnPayload,
   type PiSidecarChildMessage,
   type PiSidecarParentMessage,
 } from "./pi-sidecar-session.js";
+import type { PreparePiRuntimeSession } from "./pi-runtime-session-client.js";
 
 export interface UtilityProcessLike {
   pid?: number;
@@ -51,6 +53,8 @@ export interface PiSidecarControllerOptions {
   clearTimeout?: (handle: unknown) => void;
   restartDelayMs?: number;
   maxRestarts?: number;
+  prepareTurn?: PreparePiRuntimeSession;
+  workspaceCacheRoot?: string;
   logger?: Pick<Console, "info" | "warn" | "error">;
 }
 
@@ -63,6 +67,8 @@ export class PiSidecarController {
   private readonly clearTimer: (handle: unknown) => void;
   private readonly restartDelayMs: number;
   private readonly maxRestarts: number;
+  private readonly prepareTurn: PreparePiRuntimeSession;
+  private readonly workspaceCacheRoot: string;
   private readonly logger: Pick<Console, "info" | "warn" | "error">;
   private process: UtilityProcessLike | null = null;
   private restartTimer: unknown = null;
@@ -81,6 +87,12 @@ export class PiSidecarController {
       ((handle) => clearTimeout(handle as NodeJS.Timeout));
     this.restartDelayMs = options.restartDelayMs ?? 1_000;
     this.maxRestarts = options.maxRestarts ?? 3;
+    this.prepareTurn =
+      options.prepareTurn ??
+      (async () => {
+        throw new Error("Pi runtime session preparation is not configured");
+      });
+    this.workspaceCacheRoot = options.workspaceCacheRoot ?? "";
     this.logger = options.logger ?? console;
     this.state = {
       status: "unavailable",
@@ -131,15 +143,20 @@ export class PiSidecarController {
     this.updateState({ status: "stopped", pid: null });
   }
 
-  startTurn(request: PiStartTurnRequest): PiStartTurnResponse {
+  async startTurn(request: PiStartTurnRequest): Promise<PiStartTurnResponse> {
     if (!this.process || this.state.status !== "healthy") {
       throw new Error("Pi sidecar is not healthy");
     }
     const requestId = randomUUID();
+    const session = await this.prepareTurn(request);
+    const payload: PiSidecarTurnPayload = {
+      session,
+      workspaceCacheRoot: this.workspaceCacheRoot,
+    };
     this.post({
       type: "start-turn",
       requestId,
-      payload: request,
+      payload,
     });
     return { accepted: true, requestId };
   }

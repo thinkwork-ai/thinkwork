@@ -47,6 +47,7 @@ export interface FinalizePayload {
     output?: string;
     text?: string;
     runtime?: string;
+    runtime_host?: string | null;
     choices?: unknown;
     /** Tool invocations with optional genui_data for UI render. */
     tool_invocations?: Array<Record<string, unknown>>;
