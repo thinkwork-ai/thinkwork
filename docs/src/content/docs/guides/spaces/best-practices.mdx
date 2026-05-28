@@ -1,0 +1,160 @@
+---
+title: Spaces Best Practices
+description: Practical habits, examples, and troubleshooting for getting better results from Spaces.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Most poor Spaces results come from one of five causes: the wrong Space, missing source facts, vague outcomes, unclear ownership, or a workflow that has not been written down. The fix is usually not a longer prompt. The fix is better context in the right place.
+
+Use this page when a Space feels confusing, inconsistent, or too much like generic chat.
+
+## For users
+
+### Start in the right Space
+
+The Space is part of the instruction. If the work belongs to Customer Onboarding, start there. If it belongs to Finance, use Finance. If the Space has a special action such as **Start onboarding**, use it instead of typing a generic request.
+
+### Name the outcome
+
+Say what should be true when the work is done.
+
+| Weak | Better |
+| --- | --- |
+| "Can you look at this?" | "Review this renewal packet and tell me what is missing before finance approval." |
+| "Handle onboarding." | "Start onboarding for Acme and keep the missing-information task open until the AP contact is confirmed." |
+| "Update the status." | "Summarize current onboarding progress and identify the next owner." |
+
+### Provide source facts
+
+Give the agent the facts it cannot infer safely:
+
+- names and emails;
+- contract or source-document links;
+- dates, amounts, addresses, and IDs;
+- who owns the next step;
+- whether a task is done, blocked, waiting, or not applicable;
+- evidence for decisions.
+
+### Tell the agent how to share responsibility
+
+Use Delegate when you want the agent to run a known playbook and return with exceptions.
+
+Use Collaborate when the work needs your judgment.
+
+```text
+Delegate this renewal checklist. Ask me only if a required source is missing.
+```
+
+```text
+Collaborate with me on this onboarding. Keep track of missing facts and draft the final review, but do not close it without me.
+```
+
+### Answer missing-information prompts in the Thread
+
+If the agent asks for missing intake, answer in the Thread. That keeps the source fact attached to the work record and lets the Goal Folder stay current.
+
+## For operators
+
+### Keep Space files short and specific
+
+A Space file should help the agent act in this workroom. It should not be an encyclopedia.
+
+Good Space files:
+
+- state what work happens here;
+- identify roles and owners;
+- list required intake;
+- include examples;
+- name escalation paths;
+- explain what not to do automatically.
+
+### Write examples
+
+Examples are often more useful than abstract rules.
+
+```markdown
+## Good user request
+
+"Start onboarding for Acme. Order form is attached. Credit terms requested: Net 30.
+AP contact is Priya Shah at priya@example.com."
+
+## Bad user request
+
+"Set up Acme."
+```
+
+### Encode repeated work as Goals
+
+If users keep asking the same kind of work and the agent keeps asking the same setup questions, the Space probably needs a Goal pattern. Write the outcome, progress model, completion rule, and review policy.
+
+### Keep review policy honest
+
+Require human review for customer, credit, pricing, legal, compliance, or operational risk. Let low-risk work close with lighter review only when the Space has enough context and guardrails.
+
+<Aside type="tip">
+  <strong>North Star:</strong> A strong Space should make the easy path the
+  correct path. Users should not need to remember the hidden process if the
+  Space files, triggers, composer, and Goal pattern already encode it.
+</Aside>
+
+## Ad hoc tasks
+
+Users can create or mention ad hoc tasks in a Thread:
+
+```text
+Add a follow-up task for Eric to confirm the billing address.
+```
+
+That is fine. But when the Thread has a Goal, try to tie the task back to the Goal's progress model:
+
+- Is it a missing intake item?
+- Is it a blocker?
+- Is it a handoff?
+- Does it change the completion rule?
+- Should it be captured in `HANDOFFS.md`, `DECISIONS.md`, or `PROGRESS.md`?
+
+ThinkWork should support ad hoc work without becoming a generic project-management clone. The Goal remains the workflow object.
+
+## Common failure modes
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| The agent asks for context the team already has. | Wrong Space or stale Space Workspace. | Move to the right Space or update Space files. |
+| The answer is generic. | The request did not name a real outcome or source facts. | State the desired end state and attach or cite the source. |
+| Progress looks stuck. | Required intake, owner, or evidence is missing. | Answer the missing-information prompt in the Thread. |
+| The wrong person owns the next step. | The Space does not define owner rules clearly. | Update the Space file or tell the agent the owner in the Thread. |
+| The agent tries to close too soon. | Completion rule or review policy is weak. | Use **Changes** and clarify the rule in the Space or Goal files. |
+| Files and panel disagree. | Structured state has changed and narrative files may be catching up, or a file was edited without changing structured state. | Trust the structured progress panel for status; use files for context and rationale. |
+
+## Good and bad examples
+
+| Situation | Weak message | Better message |
+| --- | --- | --- |
+| Start workflow | "New customer." | "Start onboarding for Northwind. Signed order form attached. They want Net 30, tax exempt is unknown, AP contact is missing." |
+| Update status | "What's going on?" | "Give me onboarding status for Northwind. Highlight blockers, owner, and what I need to answer next." |
+| Complete task | "Done." | "Run credit check is complete. Credit limit approved at $10k. Mark that item complete and record the decision." |
+| Ask for changes | "Not right." | "Changes needed: final review should mention the missing tax exemption form and assign Accounting as owner." |
+| Delegate | "Do the thing." | "Delegate the weekly finance digest. Use the existing Space rules and ask only if a source report is missing." |
+| Collaborate | "Help me." | "Collaborate with me on this renewal review. Track open questions and wait for my decision before final recommendation." |
+
+## Troubleshooting checklist
+
+When a Space result feels off, check in this order:
+
+1. Are you in the right Space?
+2. Did you state the outcome?
+3. Did you provide the source facts?
+4. Did the Space files contain the right instructions?
+5. Is this really a Goal workflow, not ordinary chat?
+6. Is ownership clear?
+7. Is completion and review policy clear?
+8. Are you expecting the agent to use a tool or integration that is not available yet?
+
+## Related pages
+
+- [Spaces Guide](/guides/spaces/) - start of the practical guide.
+- [Build a Space](/guides/spaces/build-a-space/) - operator authoring guidance.
+- [Work in a Space](/guides/spaces/work-in-a-space/) - user workflow guidance.
+- [Goals and Files](/guides/spaces/goals-and-files/) - how workflow state is represented.
+- [Admin - Spaces](/applications/admin/spaces/) - operator UI reference.

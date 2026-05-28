@@ -1,0 +1,101 @@
+---
+title: Spaces Guide
+description: How operators build Spaces and how users work with agents, Threads, Goals, and files inside them.
+---
+
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+A Space is the workroom where ThinkWork knows what context, people, tools, files, and rules apply to a piece of work. This guide teaches the working practice: how to build a Space, how users should work inside it, and how repeated work becomes a Goal-driven workflow.
+
+The short model is:
+
+```text
+Agent acts in a Space on behalf of a User toward a Goal.
+```
+
+That sentence is the map. The agent is the actor. The Space is the workroom. The User supplies intent, context, judgment, and approval. The Goal is the explicit outcome when the work needs structure.
+
+## What this guide is for
+
+Use this guide when you need the practical version of the Spaces docs. The concept pages explain the system model. The Admin pages explain the operator UI. This guide explains how to use those pieces well.
+
+It is written for two audiences:
+
+- **Operators and Space authors** who create the workroom, write the instructions, configure access, and decide when repeated work should become a Goal.
+- **End users and reviewers** who start Threads, give the agent source information, follow progress, inspect files, and confirm or request changes.
+
+<Aside type="note">
+  <strong>Current behavior:</strong> Spaces are available in the web and
+  desktop Spaces app. Operators configure Space files, access, knowledge, and
+  triggers in Admin. Users work in Threads, and some Spaces can create
+  structured Goals such as Customer Onboarding.
+</Aside>
+
+<Aside type="tip">
+  <strong>North Star:</strong> Space files, Goal folders, and agent folders are
+  not decorative exports. They are the portable operating substrate for the
+  work. ThinkWork should be able to explain its behavior from these files even
+  as models and runtimes improve.
+</Aside>
+
+## The objects
+
+| Object | Plain-language job | When you care |
+| --- | --- | --- |
+| Agent | Reads context, reasons, calls tools, asks questions, and writes back. | You want work done or coordinated. |
+| Space | Gives the agent the local workroom: team, customer, workflow, channel, access, files, knowledge, and policy. | You need the agent to behave differently for this context. |
+| User | Starts work, provides source facts, makes judgments, and approves risky steps. | You need accountability and context from a person. |
+| Thread | Records the messages, tool events, decisions, and collaboration history. | You need to see what happened. |
+| Goal | Names the outcome, owner, mode, progress model, completion rule, and review policy. | A Thread has become accountable workflow. |
+| Workspace files | Store local instructions, examples, runbooks, source links, templates, and workflow context. | The agent needs durable context that travels with the Space or Goal. |
+| Company Brain | Distills reviewed work into reusable organizational memory. | Completed work should improve future work. |
+
+## The maturity ladder
+
+Not every Thread should become a workflow. Spaces let work mature only when the structure earns its keep.
+
+1. **Ask in a Space.** Start in the workroom that already knows the right context.
+2. **Use context and tools.** Let the agent read Space files, User context, memory, knowledge, skills, and available tools.
+3. **Promote repeated work into Goals.** Add owner, outcome, progress, completion, and review semantics when chat is not enough.
+4. **Template the pattern.** Keep reusable workflow files in the Space Workspace.
+5. **Compound completed work.** Use reviewed Goal folders as high-signal source material for Company Brain.
+
+## Read this section
+
+Start with **Build a Space** if you are designing or improving a Space. Start with **Work in a Space** if you are an end user joining a Thread. Read **Goals and Files** when a Thread has structured progress, review, or a Files icon. Keep **Best Practices** nearby when results feel vague, blocked, or surprising.
+
+<CardGrid>
+  <LinkCard
+    title="Build a Space"
+    icon="setting"
+    href="/guides/spaces/build-a-space/"
+    description="How operators decide when a Space is warranted and what to put in Space workspace files."
+  />
+  <LinkCard
+    title="Work in a Space"
+    icon="user"
+    href="/guides/spaces/work-in-a-space/"
+    description="How users choose the right Space, start Threads, read the info panel, inspect files, and review completion."
+  />
+  <LinkCard
+    title="Goals and Files"
+    icon="file"
+    href="/guides/spaces/goals-and-files/"
+    description="How structured workflows use Goals, Goal folders, Space Workspace files, progress, decisions, artifacts, and handoffs."
+  />
+  <LinkCard
+    title="Best Practices"
+    icon="approve-check"
+    href="/guides/spaces/best-practices/"
+    description="Practical examples, anti-patterns, troubleshooting, and habits for getting better results from Spaces."
+  />
+</CardGrid>
+
+## Related pages
+
+- [Spaces](/concepts/spaces/) - the concept reference for Spaces as workrooms.
+- [Goals](/concepts/goals/) - the outcome contract for structured work.
+- [Threads](/concepts/threads/) - the durable record of work.
+- [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - why folders are part of the agent architecture.
+- [Admin - Spaces](/applications/admin/spaces/) - operator UI reference.
+

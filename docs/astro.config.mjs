@@ -443,6 +443,29 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { label: "Skill Packs", slug: "guides/skill-packs" },
+                {
+                  label: "Spaces",
+                  collapsed: true,
+                  items: [
+                    { label: "Overview", slug: "guides/spaces" },
+                    {
+                      label: "Build a Space",
+                      slug: "guides/spaces/build-a-space",
+                    },
+                    {
+                      label: "Work in a Space",
+                      slug: "guides/spaces/work-in-a-space",
+                    },
+                    {
+                      label: "Goals and Files",
+                      slug: "guides/spaces/goals-and-files",
+                    },
+                    {
+                      label: "Best Practices",
+                      slug: "guides/spaces/best-practices",
+                    },
+                  ],
+                },
                 { label: "Evaluations", slug: "guides/evaluations" },
                 {
                   label: "Operating Compiled Pages",
