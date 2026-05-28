@@ -923,6 +923,9 @@ importers:
       '@thinkwork/lambda':
         specifier: workspace:*
         version: link:../lambda
+      '@thinkwork/pi-runtime-core':
+        specifier: workspace:*
+        version: link:../pi-runtime-core
       '@thinkwork/ui':
         specifier: workspace:*
         version: link:../ui

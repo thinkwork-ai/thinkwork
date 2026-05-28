@@ -137,6 +137,9 @@ build_handler "agentcore-invoke" \
 build_handler "chat-agent-invoke" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-invoke.ts"
 
+build_handler "desktop-runtime-session" \
+  "$REPO_ROOT/packages/api/src/handlers/desktop-runtime-session.ts"
+
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
 

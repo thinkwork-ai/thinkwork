@@ -34,6 +34,7 @@
     "@smithy/node-http-handler": "^4.5.2",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/lambda": "workspace:*",
+    "@thinkwork/pi-runtime-core": "workspace:*",
     "@thinkwork/ui": "workspace:*",
     "@thinkwork/workspace-defaults": "workspace:*",
     "ajv": "^8.18.0",

@@ -34,6 +34,10 @@ import {
   toFinalizeResponse,
 } from "../lib/chat-finalize/process-finalize.js";
 import type { FinalizePayload } from "../lib/chat-finalize/types.js";
+import {
+  DESKTOP_FINALIZE_TOKEN_PREFIX,
+  verifyDesktopFinalizeToken,
+} from "../lib/desktop-runtime/sidecar-credentials.js";
 
 const db = getDb();
 
@@ -60,7 +64,17 @@ export async function handler(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   // ---- Auth -----------------------------------------------------------
   const token = extractBearerToken(event);
-  if (!token || !validateApiSecret(token)) {
+  if (!token) {
+    return json(401, {
+      ok: false,
+      error: "Missing or invalid Bearer token",
+      code: "UNAUTHORIZED",
+    });
+  }
+  if (
+    !validateApiSecret(token) &&
+    !token.startsWith(DESKTOP_FINALIZE_TOKEN_PREFIX)
+  ) {
     return json(401, {
       ok: false,
       error: "Missing or invalid Bearer token",
@@ -118,6 +132,7 @@ export async function handler(
       id: threadTurns.id,
       tenant_id: threadTurns.tenant_id,
       thread_id: threadTurns.thread_id,
+      context_snapshot: threadTurns.context_snapshot,
     })
     .from(threadTurns)
     .where(eq(threadTurns.id, payload.thread_turn_id))
@@ -141,6 +156,14 @@ export async function handler(
     );
   }
 
+  if (!token || !isAuthorizedFinalizeToken(token, turn.context_snapshot)) {
+    return json(401, {
+      ok: false,
+      error: "Missing or invalid Bearer token",
+      code: "UNAUTHORIZED",
+    });
+  }
+
   // ---- Run the finalize chain ----------------------------------------
   try {
     const result = await processFinalize(payload);
@@ -153,4 +176,35 @@ export async function handler(
       code: "INTERNAL",
     });
   }
+}
+
+function isAuthorizedFinalizeToken(
+  token: string,
+  contextSnapshot: unknown,
+): boolean {
+  if (validateApiSecret(token)) return true;
+  if (!token.startsWith(DESKTOP_FINALIZE_TOKEN_PREFIX)) return false;
+
+  const session = readDesktopRuntimeSession(contextSnapshot);
+  if (!session) return false;
+  if (Date.parse(session.expires_at) <= Date.now()) return false;
+  return verifyDesktopFinalizeToken(token, session.finalize_token_sha256);
+}
+
+function readDesktopRuntimeSession(
+  contextSnapshot: unknown,
+): { finalize_token_sha256: string; expires_at: string } | null {
+  if (!contextSnapshot || typeof contextSnapshot !== "object") return null;
+  const session = (contextSnapshot as Record<string, unknown>)[
+    "desktop_runtime_session"
+  ];
+  if (!session || typeof session !== "object") return null;
+  const finalizeHash = (session as Record<string, unknown>)[
+    "finalize_token_sha256"
+  ];
+  const expiresAt = (session as Record<string, unknown>)["expires_at"];
+  if (typeof finalizeHash !== "string" || typeof expiresAt !== "string") {
+    return null;
+  }
+  return { finalize_token_sha256: finalizeHash, expires_at: expiresAt };
 }
