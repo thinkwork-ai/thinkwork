@@ -85,12 +85,13 @@ describe("DesktopApplicationHeader", () => {
       action: <button type="button">Thread menu</button>,
     };
 
-    render(<DesktopApplicationHeader />);
+    const { container } = render(<DesktopApplicationHeader />);
 
     expect(screen.getByText("Build me a quick dashboard")).toBeTruthy();
     expect(screen.getByText("Thread")).toBeTruthy();
     expect(screen.getByText("Thread menu")).toBeTruthy();
     expect(screen.queryByText("ThinkWork Spaces")).toBeNull();
+    expect(container.firstElementChild?.className).toContain("border-b");
   });
 
   it("keeps a hidden drag region when the route hides the top bar and the sidebar is open", () => {

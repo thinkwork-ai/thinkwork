@@ -633,8 +633,9 @@ describe("TaskThreadView", () => {
     expect(panel.className).toContain("w-[300px]");
     expect(panel.className).toContain("absolute");
     expect(panel.className).toContain("right-5");
-    expect(panel.className).toContain("top-4");
-    expect(panel.className).toContain("max-h-[calc(100%-2rem)]");
+    expect(panel.className).toContain("top-2.5");
+    expect(panel.className).toContain("bottom-4");
+    expect(panel.className).not.toContain("max-h-[calc(");
     expect(panel.className).toContain("overflow-hidden");
     expect(panel.className).toContain("md:grid");
     expect(within(panel).getByText(/May 18, 2026/)).toBeTruthy();

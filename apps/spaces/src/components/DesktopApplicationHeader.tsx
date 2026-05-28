@@ -141,7 +141,7 @@ export function DesktopApplicationHeader() {
 
   return (
     <header
-      className={`desktop-app-header flex h-11 shrink-0 items-center gap-2 pr-3 text-foreground ${open ? "bg-background pl-3" : "bg-background/95 pl-20"}`}
+      className={`desktop-app-header flex h-11 shrink-0 items-center gap-2 border-b border-border pr-3 text-foreground ${open ? "bg-background pl-3" : "bg-background/95 pl-20"}`}
     >
       {open ? null : (
         <DesktopNavigationControls
