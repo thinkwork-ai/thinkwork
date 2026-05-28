@@ -197,10 +197,10 @@ describe("PiSidecarController", () => {
   it("redacts sensitive diagnostic lines", () => {
     expect(
       redactPiDiagnosticLine(
-        "authorization=Bearer abc.def secretAccessKey=top AKIAABCDEFGHIJKLMNOP",
+        'authorization=Bearer abc.def secretAccessKey=top AKIAABCDEFGHIJKLMNOP {"message":"summarize private customer data"} https://s3.test/key?X-Amz-Signature=sig',
       ),
     ).toBe(
-      "authorization=[redacted] secretAccessKey=[redacted] [redacted-aws-key]",
+      'authorization=[redacted] secretAccessKey=[redacted] [redacted-aws-key] {"message":"[redacted-message]"} https://s3.test/key?X-Amz-Signature=[redacted]',
     );
   });
 

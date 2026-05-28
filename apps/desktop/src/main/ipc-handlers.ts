@@ -36,6 +36,10 @@ import {
   createPiSidecarController,
   type PiSidecarController,
 } from "./pi-sidecar-controller.js";
+import {
+  createPiSidecarDiagnostics,
+  disabledPiSidecarState,
+} from "./pi-sidecar-diagnostics.js";
 import { createPiRuntimeSessionPreparer } from "./pi-runtime-session-client.js";
 import { createDesktopUpdatesController } from "./updates.js";
 
@@ -78,16 +82,31 @@ export async function registerDesktopIpcHandlers(
     logger: console,
   });
   await updates.start();
+  const piDiagnostics = createPiSidecarDiagnostics({
+    userDataPath: app.getPath("userData"),
+    appVersion: app.getVersion(),
+    stage: options.env.stage,
+    runtimeEnabled: options.env.desktopLocalPiEnabled,
+    hostType: app.isPackaged ? "packaged" : "development",
+  });
+  piDiagnostics.logger.info("desktop local pi runtime configured", {
+    runtimeEnabled: options.env.desktopLocalPiEnabled,
+    stage: options.env.stage,
+    hostType: app.isPackaged ? "packaged" : "development",
+  });
   const piSidecar =
     options.piSidecar ??
-    createPiSidecarController({
-      prepareTurn: createPiRuntimeSessionPreparer({
-        env: options.env,
-        tokenSnapshot: () => storage.snapshot(),
-      }),
-      workspaceCacheRoot: join(app.getPath("userData"), "pi-workspaces"),
-    });
-  piSidecar.start();
+    (options.env.desktopLocalPiEnabled
+      ? createPiSidecarController({
+          prepareTurn: createPiRuntimeSessionPreparer({
+            env: options.env,
+            tokenSnapshot: () => storage.snapshot(),
+          }),
+          workspaceCacheRoot: join(app.getPath("userData"), "pi-workspaces"),
+          logger: piDiagnostics.logger,
+        })
+      : null);
+  piSidecar?.start();
 
   ipcMain.handle(GET_DESKTOP_CONFIG_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
@@ -138,21 +157,24 @@ export async function registerDesktopIpcHandlers(
   ipcMain.handle(GET_PI_STATUS_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
     GetPiStatusRequestSchema.parse(payload);
-    return piSidecar.getStatus();
+    return piSidecar?.getStatus() ?? disabledPiSidecarState();
   });
   ipcMain.handle(START_PI_TURN_CHANNEL, async (event, payload) => {
     assertSafeSenderFrame(event);
     const request = PiStartTurnRequestSchema.parse(payload);
+    if (!piSidecar) {
+      throw new Error("Desktop local Pi is disabled for this stage");
+    }
     return piSidecar.startTurn(request);
   });
   ipcMain.handle(CANCEL_PI_TURN_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
     const request = PiCancelTurnRequestSchema.parse(payload);
-    return piSidecar.cancelTurn(request);
+    return piSidecar?.cancelTurn(request) ?? { cancelled: false };
   });
 
   app.on("before-quit", () => {
-    void piSidecar.stop();
+    void piSidecar?.stop();
     updates.dispose();
     oauth.dispose();
   });

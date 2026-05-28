@@ -12,6 +12,7 @@ import type { ICognitoStorage } from "../../src/main/cognito-storage";
 const env = {
   nodeEnv: "test",
   stage: "dev",
+  desktopLocalPiEnabled: true,
   deepLinkScheme: null,
   rendererUrl: null,
   apiUrl: "https://api.example.test",

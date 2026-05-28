@@ -1,4 +1,5 @@
 import { redactPiDiagnosticLine } from "../main/pi-sidecar-session.js";
+import { redactDiagnosticValue } from "../main/pi-sidecar-diagnostics.js";
 
 export interface RedactedLogger {
   info(message: string, extra?: Record<string, unknown>): void;
@@ -14,7 +15,9 @@ export function createRedactedLogger(
     message: string,
     extra?: Record<string, unknown>,
   ): void {
-    const suffix = extra ? ` ${JSON.stringify(redactRecord(extra))}` : "";
+    const suffix = extra
+      ? ` ${JSON.stringify(redactDiagnosticValue(extra))}`
+      : "";
     logger[level](`[pi-sidecar] ${redactPiDiagnosticLine(message + suffix)}`);
   }
 
@@ -23,20 +26,4 @@ export function createRedactedLogger(
     warn: (message, extra) => write("warn", message, extra),
     error: (message, extra) => write("error", message, extra),
   };
-}
-
-function redactRecord(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactRecord);
-  if (!value || typeof value !== "object") return value;
-
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-      key,
-      isSecretKey(key) ? "[redacted]" : redactRecord(entry),
-    ]),
-  );
-}
-
-function isSecretKey(key: string): boolean {
-  return /token|secret|authorization|api[-_]?key|access[-_]?key/i.test(key);
 }

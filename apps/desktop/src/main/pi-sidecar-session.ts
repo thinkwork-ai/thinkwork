@@ -67,6 +67,14 @@ const AUTHORIZATION_BEARER_VALUE_RE =
   /(authorization[=:]\s*)bearer\s+[^\s,;]+/gi;
 const BEARER_TOKEN_RE = /(bearer\s+)[a-z0-9._~+/=-]+/gi;
 const AWS_KEY_RE = /AKIA[0-9A-Z]{16}/g;
+const JSON_SECRET_VALUE_RE =
+  /("(?:access[_-]?key|secret|session[_-]?token|authorization|finalize[_-]?callback[_-]?secret|api[_-]?key|oauth[_-]?token|refresh[_-]?token)"\s*:\s*)"[^"]*"/gi;
+const JSON_MESSAGE_VALUE_RE =
+  /("(?:message|user[_-]?message|prompt|content)"\s*:\s*)"[^"]{12,}"/gi;
+const S3_SIGNED_QUERY_RE =
+  /([?&](?:X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token|X-Amz-Date|X-Amz-Expires|X-Amz-SignedHeaders)=)[^&\s"]+/gi;
+const OAUTH_TOKEN_RE =
+  /\b(?:ya29\.[a-z0-9._-]+|gh[opsu]_[a-z0-9_]+|xox[baprs]-[a-z0-9-]+)\b/gi;
 
 export function resolvePiSidecarEntryPath(mainDir = currentMainDir()): string {
   return join(mainDir, "pi-sidecar.js");
@@ -74,6 +82,10 @@ export function resolvePiSidecarEntryPath(mainDir = currentMainDir()): string {
 
 export function redactPiDiagnosticLine(line: string): string {
   return line
+    .replace(JSON_SECRET_VALUE_RE, '$1"[redacted]"')
+    .replace(JSON_MESSAGE_VALUE_RE, '$1"[redacted-message]"')
+    .replace(S3_SIGNED_QUERY_RE, "$1[redacted]")
+    .replace(OAUTH_TOKEN_RE, "[redacted-oauth-token]")
     .replace(AUTHORIZATION_BEARER_VALUE_RE, "$1[redacted]")
     .replace(BEARER_TOKEN_RE, "$1[redacted]")
     .replace(SECRET_VALUE_RE, "$1[redacted]")

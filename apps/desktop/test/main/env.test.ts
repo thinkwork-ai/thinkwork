@@ -16,6 +16,7 @@ describe("snapshotDesktopEnv", () => {
     expect(snapshot).toEqual({
       nodeEnv: "production",
       stage: "canary",
+      desktopLocalPiEnabled: true,
       deepLinkScheme: "thinkwork-canary",
       rendererUrl: "http://localhost:5174",
       apiUrl: null,
@@ -43,6 +44,27 @@ describe("snapshotDesktopEnv", () => {
 
     expect(snapshot.rendererUrl).toBe("http://localhost:5174");
     expect(snapshot.deepLinkScheme).toBeNull();
+    expect(snapshot.desktopLocalPiEnabled).toBe(true);
+  });
+
+  it("stage-gates desktop local Pi with explicit env overrides", () => {
+    expect(
+      snapshotDesktopEnv({
+        VITE_THINKWORK_STAGE: "prod",
+      }).desktopLocalPiEnabled,
+    ).toBe(false);
+    expect(
+      snapshotDesktopEnv({
+        VITE_THINKWORK_STAGE: "prod",
+        VITE_DESKTOP_LOCAL_PI_ENABLED: "true",
+      }).desktopLocalPiEnabled,
+    ).toBe(true);
+    expect(
+      snapshotDesktopEnv({
+        VITE_THINKWORK_STAGE: "dev",
+        THINKWORK_DESKTOP_LOCAL_PI_ENABLED: "false",
+      }).desktopLocalPiEnabled,
+    ).toBe(false);
   });
 
   it("treats blank packaged values as missing configuration", () => {
