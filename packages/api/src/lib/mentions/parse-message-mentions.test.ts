@@ -6,7 +6,8 @@ const targets = [
     targetType: "agent" as const,
     targetId: "11111111-1111-4111-8111-111111111111",
     displayName: "Coordinator",
-    aliases: ["coordinator", "coord"],
+    aliases: ["agent", "think", "coordinator", "coord"],
+    isDefaultAgent: true,
   },
   {
     targetType: "user" as const,
@@ -71,6 +72,56 @@ describe("parseMessageMentions", () => {
         targetId: "22222222-2222-4222-8222-222222222222",
         displayName: "Alex Finance",
         rawText: "@alex",
+      },
+    ]);
+  });
+
+  it("resolves reserved default-agent aliases before generic target names", () => {
+    expect(
+      parseMessageMentions({
+        content: "@agent can you help @think through the next step?",
+        targets: [
+          ...targets,
+          {
+            targetType: "user" as const,
+            targetId: "33333333-3333-4333-8333-333333333333",
+            displayName: "Agent",
+            aliases: ["agent"],
+          },
+        ],
+      }).map((mention) => ({
+        targetType: mention.targetType,
+        targetId: mention.targetId,
+        displayName: mention.displayName,
+        rawText: mention.rawText,
+      })),
+    ).toEqual([
+      {
+        targetType: "agent",
+        targetId: "11111111-1111-4111-8111-111111111111",
+        displayName: "agent",
+        rawText: "@agent",
+      },
+    ]);
+  });
+
+  it("matches default-agent aliases case-insensitively with mention boundaries", () => {
+    expect(
+      parseMessageMentions({
+        content: "Loop in @Think, but not @thinking or email@agent",
+        targets,
+      }).map((mention) => ({
+        targetType: mention.targetType,
+        targetId: mention.targetId,
+        displayName: mention.displayName,
+        rawText: mention.rawText,
+      })),
+    ).toEqual([
+      {
+        targetType: "agent",
+        targetId: "11111111-1111-4111-8111-111111111111",
+        displayName: "agent",
+        rawText: "@Think",
       },
     ]);
   });

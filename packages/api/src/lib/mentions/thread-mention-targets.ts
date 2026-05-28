@@ -9,26 +9,31 @@ import {
   threads,
   users,
 } from "@thinkwork/database-pg/schema";
-import type {
-  MentionTarget,
-  MentionTargetType,
-} from "./parse-message-mentions.js";
+import type { MentionTarget } from "./parse-message-mentions.js";
+
+export const DEFAULT_AGENT_MENTION_ALIASES = ["agent", "think"] as const;
 
 export interface ThreadMentionTarget extends MentionTarget {
   id: string;
   avatarUrl?: string | null;
   role?: string | null;
+  isDefaultAgent?: boolean;
 }
 
 export interface ThreadMentionTargetsRepository {
-  loadThread(input: {
+  loadThread(input: { tenantId: string; threadId: string }): Promise<{
+    id: string;
     tenantId: string;
-    threadId: string;
-  }): Promise<{ id: string; tenantId: string; spaceId: string | null } | null>;
+    spaceId: string | null;
+    agentId: string | null;
+    computerId: string | null;
+  } | null>;
   loadTargets(input: {
     tenantId: string;
     threadId: string;
     spaceId?: string | null;
+    threadAgentId?: string | null;
+    computerId?: string | null;
   }): Promise<ThreadMentionTarget[]>;
 }
 
@@ -42,10 +47,14 @@ export async function loadThreadMentionTargets(
     tenantId: thread.tenantId,
     threadId: thread.id,
     spaceId: thread.spaceId,
+    threadAgentId: thread.agentId,
+    computerId: thread.computerId,
   });
 }
 
-class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepository {
+class DrizzleThreadMentionTargetsRepository
+  implements ThreadMentionTargetsRepository
+{
   private readonly db = getDb();
 
   async loadThread(input: { tenantId: string; threadId: string }) {
@@ -54,6 +63,8 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         id: threads.id,
         tenantId: threads.tenant_id,
         spaceId: threads.space_id,
+        agentId: threads.agent_id,
+        computerId: threads.computer_id,
       })
       .from(threads)
       .where(
@@ -69,6 +80,8 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
     tenantId: string;
     threadId: string;
     spaceId?: string | null;
+    threadAgentId?: string | null;
+    computerId?: string | null;
   }) {
     const byKey = new Map<string, ThreadMentionTarget>();
 
@@ -84,6 +97,9 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         agentName: agents.name,
         agentSlug: agents.slug,
         agentAvatarUrl: agents.avatar_url,
+        notificationPreference: threadParticipants.notification_preference,
+        participantCreatedAt: threadParticipants.created_at,
+        participantId: threadParticipants.id,
       })
       .from(threadParticipants)
       .leftJoin(users, eq(users.id, threadParticipants.user_id))
@@ -98,10 +114,25 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
     for (const row of participantRows) {
       addTarget(byKey, targetFromRow(row));
     }
+    const subscribedAgentParticipantId = [...participantRows]
+      .filter(
+        (row) =>
+          row.participantType === "agent" &&
+          row.agentId &&
+          row.notificationPreference === "subscribed",
+      )
+      .sort((a, b) => {
+        const created =
+          (a.participantCreatedAt?.getTime() ?? 0) -
+          (b.participantCreatedAt?.getTime() ?? 0);
+        if (created !== 0) return created;
+        return (a.participantId ?? "").localeCompare(b.participantId ?? "");
+      })[0]?.agentId;
 
     const spaceAccessMode = input.spaceId
       ? await this.loadSpaceAccessMode(input.tenantId, input.spaceId)
       : null;
+    let platformAgentId: string | null = null;
 
     if (input.spaceId) {
       const memberRows = await this.db
@@ -150,6 +181,7 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         )
         .limit(1);
       if (platformAgent) {
+        platformAgentId = platformAgent.agentId;
         addTarget(byKey, {
           id: `agent:${platformAgent.agentId}`,
           targetType: "agent",
@@ -212,19 +244,65 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
           ),
         );
       for (const row of tenantAgentRows) {
+        platformAgentId ??= row.agentId;
         addTarget(byKey, {
           id: `agent:${row.agentId}`,
           targetType: "agent",
           targetId: row.agentId,
           displayName: row.agentName,
-          aliases: [row.agentName].filter(isString),
+          aliases: [row.agentName, row.agentSlug].filter(isString),
           avatarUrl: row.agentAvatarUrl,
           role: row.role,
         });
       }
     }
 
+    const defaultAgentId = resolveDefaultAgentIdForMentionTargets({
+      threadAgentId: input.threadAgentId,
+      computerId: input.computerId,
+      platformAgentId,
+      subscribedAgentParticipantId,
+    });
+    if (defaultAgentId) {
+      await this.ensureDefaultAgentTarget(
+        byKey,
+        input.tenantId,
+        defaultAgentId,
+      );
+      markDefaultAgentTarget(byKey, defaultAgentId);
+    }
+
     return [...byKey.values()].filter((target) => target.targetId);
+  }
+
+  private async ensureDefaultAgentTarget(
+    byKey: Map<string, ThreadMentionTarget>,
+    tenantId: string,
+    agentId: string,
+  ) {
+    const key = `agent:${agentId}`;
+    if (byKey.has(key)) return;
+    const [agent] = await this.db
+      .select({
+        role: agents.role,
+        agentId: agents.id,
+        agentName: agents.name,
+        agentSlug: agents.slug,
+        agentAvatarUrl: agents.avatar_url,
+      })
+      .from(agents)
+      .where(and(eq(agents.tenant_id, tenantId), eq(agents.id, agentId)))
+      .limit(1);
+    if (!agent) return;
+    addTarget(byKey, {
+      id: `agent:${agent.agentId}`,
+      targetType: "agent",
+      targetId: agent.agentId,
+      displayName: agent.agentName,
+      aliases: [agent.agentName, agent.agentSlug].filter(isString),
+      avatarUrl: agent.agentAvatarUrl,
+      role: agent.role,
+    });
   }
 
   private async loadSpaceAccessMode(
@@ -250,6 +328,9 @@ function targetFromRow(row: {
   agentName: string | null;
   agentSlug: string | null;
   agentAvatarUrl: string | null;
+  notificationPreference?: string | null;
+  participantCreatedAt?: Date | null;
+  participantId?: string | null;
 }): ThreadMentionTarget | null {
   if (row.participantType === "agent" && row.agentId) {
     return {
@@ -257,7 +338,7 @@ function targetFromRow(row: {
       targetType: "agent",
       targetId: row.agentId,
       displayName: row.agentName ?? "Agent",
-      aliases: [row.agentName].filter(isString),
+      aliases: [row.agentName, row.agentSlug].filter(isString),
       avatarUrl: row.agentAvatarUrl,
       role: row.role,
     };
@@ -282,9 +363,72 @@ function addTarget(
 ) {
   if (!target?.targetId) return;
   const key = `${target.targetType}:${target.targetId}`;
-  if (!byKey.has(key)) byKey.set(key, target);
+  const existing = byKey.get(key);
+  if (!existing) {
+    byKey.set(key, {
+      ...target,
+      aliases: uniqueStrings(target.aliases ?? []),
+    });
+    return;
+  }
+  byKey.set(key, {
+    ...existing,
+    aliases: uniqueStrings([
+      ...(existing.aliases ?? []),
+      ...(target.aliases ?? []),
+    ]),
+    avatarUrl: existing.avatarUrl ?? target.avatarUrl,
+    role: existing.role ?? target.role,
+    isDefaultAgent: existing.isDefaultAgent || target.isDefaultAgent,
+  });
+}
+
+export function resolveDefaultAgentIdForMentionTargets(input: {
+  threadAgentId?: string | null;
+  computerId?: string | null;
+  platformAgentId?: string | null;
+  subscribedAgentParticipantId?: string | null;
+}) {
+  if (input.computerId) return null;
+  return (
+    input.threadAgentId ??
+    input.platformAgentId ??
+    input.subscribedAgentParticipantId ??
+    null
+  );
+}
+
+export function markDefaultAgentTarget(
+  byKey: Map<string, ThreadMentionTarget>,
+  agentId: string,
+) {
+  const key = `agent:${agentId}`;
+  const target = byKey.get(key);
+  if (!target) return;
+  byKey.set(key, {
+    ...target,
+    isDefaultAgent: true,
+    aliases: uniqueStrings([
+      ...DEFAULT_AGENT_MENTION_ALIASES,
+      ...(target.aliases ?? []),
+    ]),
+  });
 }
 
 function isString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function uniqueStrings(values: readonly string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
 }

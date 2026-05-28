@@ -15,14 +15,14 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U1 Backend send contract and dispatch gating
-- Active branch: `codex/follow-up-agent-toggle-u1`
+- Active unit: U2 Default agent alias normalization
+- Active branch: `codex/follow-up-agent-toggle-u2`
 - Active worktree:
-  `.Codex/worktrees/follow-up-agent-toggle-u1`
+  `.Codex/worktrees/follow-up-agent-toggle-u2`
 - Started: 2026-05-28
-- Latest merged PR: none
-- Active PR: [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789)
-- CI: pending
+- Latest merged PR: [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789)
+- Active PR: [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790)
+- CI: U1 passed required checks and merged; U2 pending PR CI
 
 ### Active Unit Notes
 
@@ -51,15 +51,37 @@ Target branch: `main`
 - First full API suite run caught one source-string test that still expected
   the old inline onboarding/default-dispatch guard; updated it to assert the
   new helper wiring and reran the full API suite successfully.
+- PR [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789) initially
+  passed CI but needed a rebase because `main` advanced. Rebased cleanly,
+  reran CI successfully, squash-merged into `main`, deleted the remote branch,
+  and removed the local U1 worktree/branch.
+- Started U2 from updated `origin/main`.
+- Implemented the first U2 pass: `ThreadMentionTarget` now exposes `aliases`
+  and `isDefaultAgent`, default-agent mention targets receive reserved
+  `agent`/`think` aliases using the same priority as default dispatch, and
+  text parsing gives reserved default-agent aliases precedence over ordinary
+  user/agent display-name matches.
+- U2 focused verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/mentions/parse-message-mentions.test.ts src/lib/mentions/thread-mention-targets.test.ts src/graphql/resolvers/threads/threadMentionTargets.query.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts src/__tests__/graphql-contract.test.ts`,
+  `pnpm --filter @thinkwork/spaces test -- src/lib/graphql-queries.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and
+  `pnpm --filter @thinkwork/spaces typecheck`.
+- U2 broader verification passed: `pnpm schema:build`,
+  `pnpm --filter @thinkwork/admin codegen`,
+  `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm --filter thinkwork-cli codegen`, `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/spaces test`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `git diff --check`, and touched-file
+  `pnpm dlx prettier@3.6.2 --check`.
 
 ### Progress Log
 
-| Date       | Unit | Branch                            | PR                                                           | Status     | Verification | Notes                                              |
-| ---------- | ---- | --------------------------------- | ------------------------------------------------------------ | ---------- | ------------ | -------------------------------------------------- |
-| 2026-05-28 | U1   | `codex/follow-up-agent-toggle-u1` | [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789) | CI pending | Local passed | Backend send contract and dispatch gating.         |
-| 2026-05-28 | U2   | pending                           | pending                                                      | Pending    | pending      | Default agent alias normalization.                 |
-| 2026-05-28 | U3   | pending                           | pending                                                      | Pending    | pending      | Follow-up composer toggle and special picker item. |
-| 2026-05-28 | U4   | pending                           | pending                                                      | Pending    | pending      | Route wiring and query-contract cleanup.           |
+| Date       | Unit | Branch                            | PR                                                           | Status     | Verification        | Notes                                              |
+| ---------- | ---- | --------------------------------- | ------------------------------------------------------------ | ---------- | ------------------- | -------------------------------------------------- |
+| 2026-05-28 | U1   | `codex/follow-up-agent-toggle-u1` | [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789) | Merged     | Local and CI passed | Backend send contract and dispatch gating.         |
+| 2026-05-28 | U2   | `codex/follow-up-agent-toggle-u2` | [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790) | CI pending | Local passed        | Default agent alias normalization.                 |
+| 2026-05-28 | U3   | pending                           | pending                                                      | Pending    | pending             | Follow-up composer toggle and special picker item. |
+| 2026-05-28 | U4   | pending                           | pending                                                      | Pending    | pending             | Route wiring and query-contract cleanup.           |
 
 ### CI Failures
 

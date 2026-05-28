@@ -18,6 +18,8 @@ export const threadMentionTargets = async (
     targetType: target.targetType.toUpperCase(),
     targetId: target.targetId,
     displayName: target.displayName,
+    aliases: target.aliases ?? [],
+    isDefaultAgent: target.isDefaultAgent ?? false,
     avatarUrl: target.avatarUrl,
     role: target.role,
   }));

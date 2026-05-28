@@ -606,6 +606,8 @@ export const ThreadMentionTargetsQuery = gql`
       targetType
       targetId
       displayName
+      aliases
+      isDefaultAgent
       avatarUrl
       role
     }

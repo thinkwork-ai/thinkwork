@@ -515,6 +515,8 @@ describe("GraphQL Schema Contract", () => {
         "targetType",
         "targetId",
         "displayName",
+        "aliases",
+        "isDefaultAgent",
         "avatarUrl",
         "role",
       ]);

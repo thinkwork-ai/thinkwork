@@ -159,6 +159,8 @@ describe("computer GraphQL queries", () => {
     expect(mentionTargets).toContain("targetType");
     expect(mentionTargets).toContain("targetId");
     expect(mentionTargets).toContain("displayName");
+    expect(mentionTargets).toContain("aliases");
+    expect(mentionTargets).toContain("isDefaultAgent");
     expect(mentionTargets).toContain("avatarUrl");
     expect(mentionTargets).toContain("role");
   });
