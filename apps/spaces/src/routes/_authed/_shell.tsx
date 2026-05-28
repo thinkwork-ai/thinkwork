@@ -127,7 +127,7 @@ function SidebarResizeHandle({
       aria-label="Resize sidebar"
       aria-orientation="vertical"
       tabIndex={0}
-      className="absolute inset-y-0 z-[60] w-2 -translate-x-1 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-sidebar-border/70 hover:after:bg-sidebar-foreground/35 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+      className="absolute inset-y-0 z-40 w-2 -translate-x-1 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-sidebar-border/70 hover:after:bg-sidebar-foreground/35 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
       style={{ left: `${width}px` }}
       onPointerDown={handlePointerDown}
       onKeyDown={(event) => {
