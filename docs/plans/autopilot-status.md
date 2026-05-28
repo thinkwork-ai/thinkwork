@@ -22,8 +22,8 @@ Target branch: `main`
   `.Codex/worktrees/local-pi-u5-sidecar-turns`
 - Started: 2026-05-28
 - Latest merged PR: [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797)
-- Active PR: none
-- CI: not started
+- Active PR: [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798)
+- CI: in progress
 
 ### Active Unit Notes
 
@@ -165,6 +165,7 @@ Target branch: `main`
   inspected the packaged `app.asar` and confirmed `/out/main/pi-sidecar.js`,
   `/out/main/index.js`, sidecar chunks, and
   `/node_modules/@earendil-works/pi-coding-agent` are present.
+- Opened PR [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798).
 
 ### Progress Log
 
@@ -174,7 +175,7 @@ Target branch: `main`
 | 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session`     | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | Merged      | CI passed    | Desktop runtime session preparation API.       |
 | 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged      | CI passed    | Desktop-local sendMessage dispatch ownership.  |
 | 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged      | CI passed    | Electron sidecar supervision and typed IPC.    |
-| 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | pending                                                      | In progress | Local passed | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | In progress | Local passed | Execute local desktop turns in sidecar.        |
 | 2026-05-28 | U6   | pending                                 | pending                                                      | Pending     | pending      | Managed delegation from local Pi to AgentCore. |
 | 2026-05-28 | U7   | pending                                 | pending                                                      | Pending     | pending      | Local runtime and delegation state in Spaces.  |
 | 2026-05-28 | U8   | pending                                 | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
