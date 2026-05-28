@@ -35,6 +35,9 @@ export interface ThreadMentionTargetsRepository {
     threadAgentId?: string | null;
     computerId?: string | null;
   }): Promise<ThreadMentionTarget[]>;
+  loadTenantTargets(input: {
+    tenantId: string;
+  }): Promise<ThreadMentionTarget[]>;
 }
 
 export async function loadThreadMentionTargets(
@@ -50,6 +53,20 @@ export async function loadThreadMentionTargets(
     threadAgentId: thread.agentId,
     computerId: thread.computerId,
   });
+}
+
+/**
+ * Thread-independent mention targets for the new-thread composer, where no
+ * thread (and thus no participants/space) exists yet. Mirrors the no-space
+ * branch of {@link loadTargets}: every active tenant member plus the
+ * platform-default agent, with the platform agent marked as the default
+ * mention so `@agent`/`@think` aliases resolve before the thread is created.
+ */
+export async function loadTenantMentionTargets(
+  input: { tenantId: string },
+  repository: ThreadMentionTargetsRepository = new DrizzleThreadMentionTargetsRepository(),
+) {
+  return repository.loadTenantTargets(input);
 }
 
 class DrizzleThreadMentionTargetsRepository
@@ -270,6 +287,74 @@ class DrizzleThreadMentionTargetsRepository
         defaultAgentId,
       );
       markDefaultAgentTarget(byKey, defaultAgentId);
+    }
+
+    return [...byKey.values()].filter((target) => target.targetId);
+  }
+
+  async loadTenantTargets(input: { tenantId: string }) {
+    const byKey = new Map<string, ThreadMentionTarget>();
+    let platformAgentId: string | null = null;
+
+    const tenantMemberRows = await this.db
+      .select({
+        role: tenantMembers.role,
+        userId: users.id,
+        userName: users.name,
+        userEmail: users.email,
+        userImage: users.image,
+      })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.principal_id))
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, input.tenantId),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
+    for (const row of tenantMemberRows) {
+      addTarget(byKey, {
+        id: `user:${row.userId}`,
+        targetType: "user",
+        targetId: row.userId,
+        displayName: row.userName ?? row.userEmail ?? "User",
+        aliases: [row.userName, row.userEmail].filter(isString),
+        avatarUrl: row.userImage,
+        role: row.role,
+      });
+    }
+
+    const tenantAgentRows = await this.db
+      .select({
+        role: agents.role,
+        agentId: agents.id,
+        agentName: agents.name,
+        agentSlug: agents.slug,
+        agentAvatarUrl: agents.avatar_url,
+      })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.tenant_id, input.tenantId),
+          eq(agents.is_platform_default, true),
+        ),
+      );
+    for (const row of tenantAgentRows) {
+      platformAgentId ??= row.agentId;
+      addTarget(byKey, {
+        id: `agent:${row.agentId}`,
+        targetType: "agent",
+        targetId: row.agentId,
+        displayName: row.agentName,
+        aliases: [row.agentName, row.agentSlug].filter(isString),
+        avatarUrl: row.agentAvatarUrl,
+        role: row.role,
+      });
+    }
+
+    if (platformAgentId) {
+      markDefaultAgentTarget(byKey, platformAgentId);
     }
 
     return [...byKey.values()].filter((target) => target.targetId);

@@ -6,6 +6,7 @@ import { threadProgress } from "./threadProgress.query.js";
 import { threadLabels_query } from "./threadLabels.query.js";
 import { unreadThreadCount } from "./unreadThreadCount.query.js";
 import { threadMentionTargets } from "./threadMentionTargets.query.js";
+import { tenantMentionTargets } from "./tenantMentionTargets.query.js";
 import { pinnedThreads } from "./pinnedThreads.query.js";
 
 import { createThread } from "./createThread.mutation.js";
@@ -34,6 +35,7 @@ export const threadQueries = {
   threadProgress,
   threadLabels: threadLabels_query,
   threadMentionTargets,
+  tenantMentionTargets,
   unreadThreadCount,
   pinnedThreads,
 };

@@ -151,29 +151,15 @@ export const SpacesQuery = gql`
 
 export const NewThreadMentionTargetsQuery = gql`
   query NewThreadMentionTargets($tenantId: ID!) {
-    tenantMembers(tenantId: $tenantId) {
+    tenantMentionTargets(tenantId: $tenantId) {
       id
-      principalType
-      principalId
-      role
-      status
-      user {
-        id
-        name
-        email
-        image
-      }
-    }
-    allTenantAgents(
-      tenantId: $tenantId
-      includeSystem: true
-      includeSubAgents: true
-    ) {
-      id
-      name
+      targetType
+      targetId
+      displayName
+      aliases
+      isDefaultAgent
       avatarUrl
       role
-      status
     }
   }
 `;
