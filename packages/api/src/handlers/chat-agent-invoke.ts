@@ -113,6 +113,12 @@ interface InvokeEvent {
   messageId?: string;
   computerId?: string;
   computerTaskId?: string;
+  desktopDelegation?: {
+    parentThreadTurnId: string;
+    requestedVisibility: "hidden" | "visible";
+    effectiveVisibility: "hidden" | "visible";
+    reason?: string;
+  };
   /**
    * U3 of the finance pilot — the dispatch caller (thread-cutover.ts)
    * resolves `messages.metadata.attachments` against `thread_attachments`
@@ -408,6 +414,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
 
   let turnId: string | undefined;
   try {
+    const desktopDelegation = event.desktopDelegation;
     // 1. Resolve per-invoker identity. This is the PER-TURN piece that the
     //    shared `resolveAgentRuntimeConfig` helper does NOT own — it's specific
     //    to the triggering chat event. Human/user messages and user-created
@@ -513,7 +520,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             tenant_id: tenantId,
             agent_id: agentId,
             thread_id: threadId,
-            invocation_source: "chat_message",
+            invocation_source: desktopDelegation
+              ? "desktop_managed_delegation"
+              : "chat_message",
+            trigger_detail: desktopDelegation?.reason,
+            origin_turn_id: desktopDelegation?.parentThreadTurnId,
             runtime_type: runtimeType,
             status: "running",
             started_at: new Date(),
@@ -524,7 +535,17 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               model: agentModel,
               agent_slug: agentSlug || undefined,
               space_id: spaceId || undefined,
-              dispatcher: "chat-agent-invoke",
+              dispatcher: desktopDelegation
+                ? "desktop-managed-delegation"
+                : "chat-agent-invoke",
+              desktop_managed_delegation: desktopDelegation
+                ? {
+                    parent_thread_turn_id: desktopDelegation.parentThreadTurnId,
+                    requested_visibility: desktopDelegation.requestedVisibility,
+                    visibility: desktopDelegation.effectiveVisibility,
+                    reason: desktopDelegation.reason,
+                  }
+                : undefined,
             },
           })
           .returning({ id: threadTurns.id });
@@ -901,7 +922,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       console.log(
         `[chat-agent-invoke] AgentCore Event-mode dispatch accepted in ${Date.now() - invokeStart}ms`,
       );
-      return;
+      return { ok: true, threadTurnId: turnId };
     } catch (dispatchErr) {
       const errMsgText = `AgentCore dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { capturedSystemPromptFromFinalizePayload } from "./process-finalize";
+import {
+  capturedSystemPromptFromFinalizePayload,
+  isHiddenDesktopDelegation,
+} from "./process-finalize";
 
 describe("capturedSystemPromptFromFinalizePayload", () => {
   it("uses the top-level composed prompt from runtime finalize payloads", () => {
@@ -28,5 +31,24 @@ describe("capturedSystemPromptFromFinalizePayload", () => {
         response: { composed_system_prompt: "" },
       }),
     ).toBeNull();
+  });
+});
+
+describe("isHiddenDesktopDelegation", () => {
+  it("detects hidden managed delegation turn contexts", () => {
+    expect(
+      isHiddenDesktopDelegation({
+        desktop_managed_delegation: {
+          visibility: "hidden",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isHiddenDesktopDelegation({
+        desktop_managed_delegation: {
+          visibility: "visible",
+        },
+      }),
+    ).toBe(false);
   });
 });

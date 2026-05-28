@@ -16,14 +16,14 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U5 Execute local desktop turns in the sidecar
-- Active branch: `codex/local-pi-u5-sidecar-turns`
+- Active unit: U6 Managed delegation from local Pi to AgentCore
+- Active branch: `codex/local-pi-u6-managed-delegation`
 - Active worktree:
-  `.Codex/worktrees/local-pi-u5-sidecar-turns`
+  `.Codex/worktrees/local-pi-u6-managed-delegation`
 - Started: 2026-05-28
-- Latest merged PR: [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797)
-- Active PR: [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798)
-- CI: in progress
+- Latest merged PR: [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798)
+- Active PR: none
+- CI: not started; local verification passed
 
 ### Active Unit Notes
 
@@ -166,6 +166,47 @@ Target branch: `main`
   `/out/main/index.js`, sidecar chunks, and
   `/node_modules/@earendil-works/pi-coding-agent` are present.
 - Opened PR [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798).
+- PR [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; squash-merged into
+  `main`, and deleted the remote/local U5 branch.
+- Started U6 from updated `origin/main`.
+- U6 implementation in progress: adding the per-turn sidecar-authenticated
+  managed delegation endpoint, Pi SDK custom delegation tool, hidden delegation
+  message suppression, and parent/child turn provenance.
+- U6 local implementation complete: added a sidecar-authenticated
+  `POST /api/desktop/managed-delegation` Lambda endpoint, dispatches managed
+  worker turns through `chat-agent-invoke` with parent/child provenance, exposes
+  a Pi SDK `delegate_to_managed_agent` custom tool inside the desktop sidecar,
+  suppresses assistant-message clutter for hidden child delegations while
+  preserving turn results for polling, and routes consequential hidden requests
+  to visible delegation.
+- U6 focused verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/desktop-runtime/managed-delegation.test.ts src/handlers/managed-delegation.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/lib/chat-finalize/process-finalize.test.ts`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/managed-delegation-client.test.ts test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`,
+  `bash scripts/build-lambdas.sh managed-delegation`,
+  `bash scripts/verify-supply-chain.sh`,
+  `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`, and
+  `bash -n scripts/build-lambdas.sh`.
+- U6 broader verification passed: `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/desktop run build`,
+  `pnpm --filter @thinkwork/api test`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`,
+  `pnpm -r --workspace-concurrency=1 --if-present test`, touched-file Prettier
+  check, and `git diff --check`.
+- U6 local-only note: one concurrent `pnpm --filter @thinkwork/desktop test`
+  run hit an Electron package symlink race while the desktop build was running;
+  reran the full desktop test after the build completed and it passed.
+- U6 review hardening added runtime validation for delegation visibility and
+  caps hidden-delegation polling below the Lambda timeout budget. Post-change
+  verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/desktop-runtime/managed-delegation.test.ts src/handlers/managed-delegation.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, `pnpm --filter @thinkwork/api test`,
+  `pnpm -r --if-present typecheck`, `bash scripts/build-lambdas.sh managed-delegation`,
+  touched-file Prettier check, and `git diff --check`.
 
 ### Progress Log
 
@@ -175,8 +216,8 @@ Target branch: `main`
 | 2026-05-28 | U2   | `codex/local-pi-u2-runtime-session`     | [#1794](https://github.com/thinkwork-ai/thinkwork/pull/1794) | Merged      | CI passed    | Desktop runtime session preparation API.       |
 | 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged      | CI passed    | Desktop-local sendMessage dispatch ownership.  |
 | 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged      | CI passed    | Electron sidecar supervision and typed IPC.    |
-| 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | In progress | Local passed | Execute local desktop turns in sidecar.        |
-| 2026-05-28 | U6   | pending                                 | pending                                                      | Pending     | pending      | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | Merged      | CI passed    | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | pending                                                      | In progress | Local passed | Managed delegation from local Pi to AgentCore. |
 | 2026-05-28 | U7   | pending                                 | pending                                                      | Pending     | pending      | Local runtime and delegation state in Spaces.  |
 | 2026-05-28 | U8   | pending                                 | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
 
