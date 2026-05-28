@@ -260,6 +260,10 @@ Target branch: `main`
   `main`, deleted the remote/local U8 branch, and removed the U8 worktree.
 - Desktop Local Pi Sidecar run complete: U1 through U8 are implemented, locally
   verified, CI-verified, merged to `main`, and cleaned up.
+- Post-run live desktop verification found a dev-only sidecar entry resolver
+  issue when `pi-sidecar-session` was emitted from an Electron Vite code-split
+  chunk. PR [#1803](https://github.com/thinkwork-ai/thinkwork/pull/1803) adds
+  the resolver hardening and relaunch verification.
 
 ### Progress Log
 

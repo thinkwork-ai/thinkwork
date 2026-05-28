@@ -6,7 +6,10 @@ import {
   redactPiDiagnosticLine,
   type UtilityProcessLike,
 } from "../../src/main/pi-sidecar-controller";
-import { isPiSidecarParentMessage } from "../../src/main/pi-sidecar-session";
+import {
+  isPiSidecarParentMessage,
+  resolvePiSidecarEntryPath,
+} from "../../src/main/pi-sidecar-session";
 
 class FakeUtilityProcess extends EventEmitter {
   pid?: number = 4321;
@@ -201,6 +204,12 @@ describe("PiSidecarController", () => {
       ),
     ).toBe(
       'authorization=[redacted] secretAccessKey=[redacted] [redacted-aws-key] {"message":"[redacted-message]"} https://s3.test/key?X-Amz-Signature=[redacted]',
+    );
+  });
+
+  it("resolves the sidecar entry when imported from a code-split chunk", () => {
+    expect(resolvePiSidecarEntryPath("/app/out/main/chunks")).toBe(
+      "/app/out/main/pi-sidecar.js",
     );
   });
 
