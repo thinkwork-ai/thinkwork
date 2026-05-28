@@ -112,17 +112,17 @@ describe("_authed/_shell layout", () => {
     render(<ShellLayout />);
     expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
     expect(screen.getByTestId("app-top-bar")).toBeTruthy();
-    expect(
-      screen.getByRole("separator", { name: /resize sidebar/i }),
-    ).toBeTruthy();
+    const resizeHandle = screen.getByRole("separator", {
+      name: /resize sidebar/i,
+    });
+    expect(resizeHandle).toBeTruthy();
+    expect(resizeHandle.className).toContain("z-40");
     expect(
       screen
         .getByTestId("sidebar-provider")
         .style.getPropertyValue("--sidebar-width"),
     ).toBe("300px");
-    expect(
-      screen.getByRole("separator", { name: /resize sidebar/i }).style.left,
-    ).toBe("300px");
+    expect(resizeHandle.style.left).toBe("300px");
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 
