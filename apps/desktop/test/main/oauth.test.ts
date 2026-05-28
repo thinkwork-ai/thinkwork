@@ -12,6 +12,9 @@ import type { ICognitoStorage } from "../../src/main/cognito-storage";
 const env = {
   nodeEnv: "test",
   stage: "dev",
+  desktopChannel: "dev",
+  desktopProductName: "ThinkWork Spaces",
+  desktopAppId: "ai.thinkwork.spaces.desktop.dev",
   desktopLocalPiEnabled: true,
   deepLinkScheme: null,
   rendererUrl: null,
