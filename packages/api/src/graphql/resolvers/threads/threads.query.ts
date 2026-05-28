@@ -5,6 +5,7 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "./access.js";
+import { threadSearchPredicate } from "./search.js";
 
 export const threads_query = async (
   _parent: any,
@@ -64,10 +65,9 @@ export const threads_query = async (
     }
     conditions.push(eq(threads.assignee_id, effectiveAssigneeId));
   }
-  if (args.search) {
-    conditions.push(
-      sql`search_vector @@ plainto_tsquery('english', ${args.search})`,
-    );
+  const search = typeof args.search === "string" ? args.search.trim() : "";
+  if (search) {
+    conditions.push(threadSearchPredicate(search));
   }
   const limit = Math.min(args.limit || 200, 500);
   const rows = await db

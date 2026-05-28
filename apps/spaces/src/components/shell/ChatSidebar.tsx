@@ -44,19 +44,23 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-  Input,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -419,6 +423,27 @@ export function ChatSidebar({
     [pendingThreadDeletes, searchData?.threadsPaged?.items],
   );
 
+  const openSearchThread = useCallback(
+    (thread: ChatThreadSummary) => {
+      activateThread(thread.id);
+      setSearchOpen(false);
+
+      if (thread.spaceId && !defaultSpaceIds.has(thread.spaceId)) {
+        void navigate({
+          to: "/spaces/$spaceId/threads/$threadId",
+          params: { spaceId: thread.spaceId, threadId: thread.id },
+        });
+        return;
+      }
+
+      void navigate({
+        to: "/threads/$id",
+        params: { id: thread.id },
+      });
+    },
+    [activateThread, defaultSpaceIds, navigate],
+  );
+
   const pinThread = useCallback((threadId: string) => {
     setPinnedThreadIds((current) =>
       current.includes(threadId) ? current : [...current, threadId],
@@ -449,8 +474,10 @@ export function ChatSidebar({
           search={search}
           onSearchChange={setSearch}
           threads={searchThreads}
+          pinnedThreadIds={pinnedThreadIdSet}
+          defaultSpaceIds={defaultSpaceIds}
           locallyReadThreadIds={locallyReadThreadIds}
-          onActivate={activateThread}
+          onSelectThread={openSearchThread}
           isLoading={searchFetching && !searchData}
           error={searchError?.message ?? null}
         />
@@ -584,8 +611,10 @@ export function ChatSidebar({
         search={search}
         onSearchChange={setSearch}
         threads={searchThreads}
+        pinnedThreadIds={pinnedThreadIdSet}
+        defaultSpaceIds={defaultSpaceIds}
         locallyReadThreadIds={locallyReadThreadIds}
-        onActivate={activateThread}
+        onSelectThread={openSearchThread}
         isLoading={searchFetching && !searchData}
         error={searchError?.message ?? null}
       />
@@ -599,8 +628,10 @@ function ThreadSearchDialog({
   search,
   onSearchChange,
   threads,
+  pinnedThreadIds,
+  defaultSpaceIds,
   locallyReadThreadIds,
-  onActivate,
+  onSelectThread,
   isLoading,
   error,
 }: {
@@ -609,72 +640,127 @@ function ThreadSearchDialog({
   search: string;
   onSearchChange: (value: string) => void;
   threads: ChatThreadSummary[];
+  pinnedThreadIds: ReadonlySet<string>;
+  defaultSpaceIds: ReadonlySet<string>;
   locallyReadThreadIds: ReadonlySet<string>;
-  onActivate: (threadId: string) => void;
+  onSelectThread: (thread: ChatThreadSummary) => void;
   isLoading: boolean;
   error: string | null;
 }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl">
-        <DialogTitle className="sr-only">Search threads</DialogTitle>
-        <div className="border-b p-3">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              autoFocus
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              className="h-10 border-0 bg-transparent pl-9 text-base shadow-none focus-visible:ring-0"
-              placeholder="Search threads"
-              aria-label="Search threads"
-            />
-          </label>
-        </div>
-        <div className="scrollbar-auto-hide max-h-[420px] overflow-y-auto p-2">
-          {error ? (
-            <p className="px-2 py-3 text-sm text-destructive">{error}</p>
-          ) : isLoading ? (
-            <p className="px-2 py-3 text-sm text-muted-foreground">
-              Searching...
-            </p>
-          ) : threads.length === 0 ? (
-            <p className="px-2 py-3 text-sm text-muted-foreground">
-              No threads found
-            </p>
-          ) : (
-            <div className="space-y-0.5">
-              {threads.map((thread) => (
-                <Link
-                  key={thread.id}
-                  to="/threads/$id"
-                  params={{ id: thread.id }}
-                  className="flex h-9 items-center gap-2 rounded-md px-2 text-sm outline-none hover:bg-accent focus-visible:bg-accent"
-                  onClick={() => {
-                    onActivate(thread.id);
-                    onOpenChange(false);
-                  }}
-                >
-                  <span
-                    className={cn(
-                      "size-1.5 shrink-0 rounded-full",
-                      isThreadUnread(thread) &&
-                        !locallyReadThreadIds.has(thread.id)
-                        ? "bg-blue-500"
-                        : "bg-transparent",
-                    )}
-                  />
-                  <span className="min-w-0 flex-1 truncate">
-                    {threadTitle(thread)}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+  const groups = useMemo(
+    () => groupSearchThreads(threads, pinnedThreadIds, defaultSpaceIds),
+    [defaultSpaceIds, pinnedThreadIds, threads],
   );
+
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Search threads"
+      description="Search across threads and Spaces"
+      className="sm:max-w-2xl"
+      showCloseButton
+    >
+      <Command shouldFilter={false}>
+        <CommandInput
+          autoFocus
+          value={search}
+          onValueChange={onSearchChange}
+          placeholder="Search threads"
+          aria-label="Search threads"
+        />
+        <CommandList className="scrollbar-auto-hide max-h-[420px]">
+          {error ? (
+            <CommandEmpty className="text-destructive">{error}</CommandEmpty>
+          ) : isLoading ? (
+            <CommandEmpty>Searching...</CommandEmpty>
+          ) : (
+            <CommandEmpty>No threads found</CommandEmpty>
+          )}
+          {!error && !isLoading
+            ? groups.map((group) => (
+                <CommandGroup key={group.key} heading={group.label}>
+                  {group.threads.map((thread) => {
+                    const relativeDate = formatTinyRelativeDate(
+                      threadActivityAt(thread),
+                    );
+
+                    return (
+                      <CommandItem
+                        key={thread.id}
+                        value={[
+                          group.label,
+                          threadTitle(thread),
+                          thread.identifier,
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        className="h-10"
+                        onSelect={() => onSelectThread(thread)}
+                      >
+                        <span
+                          className={cn(
+                            "size-1.5 shrink-0 rounded-full",
+                            isThreadUnread(thread) &&
+                              !locallyReadThreadIds.has(thread.id)
+                              ? "bg-blue-500"
+                              : "bg-transparent",
+                          )}
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {threadTitle(thread)}
+                        </span>
+                        {relativeDate ? (
+                          <CommandShortcut className="tracking-normal">
+                            {relativeDate}
+                          </CommandShortcut>
+                        ) : null}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ))
+            : null}
+        </CommandList>
+      </Command>
+    </CommandDialog>
+  );
+}
+
+function groupSearchThreads(
+  threads: ChatThreadSummary[],
+  pinnedThreadIds: ReadonlySet<string>,
+  defaultSpaceIds: ReadonlySet<string>,
+) {
+  const groups = new Map<
+    string,
+    { key: string; label: string; threads: ChatThreadSummary[] }
+  >();
+
+  for (const thread of threads) {
+    const group =
+      pinnedThreadIds.has(thread.id)
+        ? { key: "pinned", label: "Pinned" }
+        : thread.spaceId && !defaultSpaceIds.has(thread.spaceId)
+          ? {
+              key: `space:${thread.spaceId}`,
+              label:
+                thread.space?.name ??
+                thread.space?.slug ??
+                thread.spaceId ??
+                "Space",
+            }
+          : { key: "chats", label: "Chats" };
+
+    const existing = groups.get(group.key);
+    if (existing) {
+      existing.threads.push(thread);
+    } else {
+      groups.set(group.key, { ...group, threads: [thread] });
+    }
+  }
+
+  return Array.from(groups.values());
 }
 
 function ThreadListSection({

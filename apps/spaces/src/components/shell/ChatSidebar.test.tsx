@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -256,7 +257,68 @@ vi.mock("@thinkwork/ui", () => ({
       {children}
     </button>
   ),
-  Input: (props: React.ComponentProps<"input">) => <input {...props} />,
+  CommandDialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode;
+    open?: boolean;
+  }) => (open ? <div role="dialog">{children}</div> : null),
+  Command: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CommandInput: ({
+    value,
+    onValueChange,
+    placeholder,
+    ...props
+  }: {
+    value?: string;
+    onValueChange?: (value: string) => void;
+    placeholder?: string;
+  }) => (
+    <input
+      {...props}
+      aria-label={placeholder}
+      placeholder={placeholder}
+      value={value ?? ""}
+      onChange={(event) => onValueChange?.(event.target.value)}
+    />
+  ),
+  CommandList: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CommandEmpty: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CommandGroup: ({
+    children,
+    heading,
+  }: {
+    children: React.ReactNode;
+    heading?: React.ReactNode;
+  }) => (
+    <section>
+      <h3>{heading}</h3>
+      {children}
+    </section>
+  ),
+  CommandItem: ({
+    children,
+    onSelect,
+    value,
+  }: {
+    children: React.ReactNode;
+    onSelect?: (value: string) => void;
+    value?: string;
+  }) => (
+    <button type="button" onClick={() => onSelect?.(value ?? "")}>
+      {children}
+    </button>
+  ),
+  CommandShortcut: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
   Collapsible: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -291,6 +353,18 @@ vi.mock("@thinkwork/ui", () => ({
 import { selectNextThreadBelowDeleted } from "./chat-sidebar-types";
 import { ChatSidebar } from "./ChatSidebar";
 
+const ORIGINAL_LOCAL_STORAGE = Object.getOwnPropertyDescriptor(
+  window,
+  "localStorage",
+);
+
+beforeEach(() => {
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: createMemoryStorage(),
+  });
+});
+
 afterEach(() => {
   cleanup();
   tenantMock.mockReset();
@@ -301,7 +375,29 @@ afterEach(() => {
   recentReexecuteMock.mockReset();
   searchReexecuteMock.mockReset();
   recentThreadItemsMock.length = 0;
+  window.localStorage.clear();
+  if (ORIGINAL_LOCAL_STORAGE) {
+    Object.defineProperty(window, "localStorage", ORIGINAL_LOCAL_STORAGE);
+  }
 });
+
+function createMemoryStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(key) ?? null,
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+  };
+}
 
 describe("ChatSidebar", () => {
   beforeEach(() => {
@@ -444,6 +540,65 @@ describe("ChatSidebar", () => {
         .getByRole("link", { name: /recent space thread/i })
         .getAttribute("href"),
     ).toBe("/spaces/space-1/threads/thread-recent");
+  });
+
+  it("groups command search results by pinned, chats, and Spaces", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "pinned-thread",
+        title: "Bill's Oil pinned",
+        lastActivityAt: "2026-05-19T19:30:00Z",
+        lastReadAt: new Date().toISOString(),
+      },
+      {
+        id: "chat-thread",
+        title: "Bill's Oil chat",
+        lastActivityAt: "2026-05-19T19:15:00Z",
+        lastReadAt: new Date().toISOString(),
+      },
+      {
+        id: "space-thread",
+        title: "Bill's Oil onboarding",
+        spaceId: "space-1",
+        space: { id: "space-1", name: "Customer Onboarding" },
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: new Date().toISOString(),
+      },
+    );
+    localStorage.setItem(
+      "thinkwork:spaces:pinned-threads:tenant-1:user-1",
+      JSON.stringify(["pinned-thread"]),
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+    fireEvent.click(screen.getByRole("button", { name: /^search/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeTruthy();
+    expect(
+      within(dialog).getAllByRole("heading", { name: "Pinned" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(dialog).getAllByRole("heading", { name: "Chats" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(dialog).getAllByRole("heading", { name: "Customer Onboarding" })
+        .length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /bill's oil onboarding/i }),
+    );
+
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/spaces/$spaceId/threads/$threadId",
+        params: { spaceId: "space-1", threadId: "space-thread" },
+      }),
+    );
   });
 
   it("limits chat sections to five rows until Show more is clicked", () => {
