@@ -7,6 +7,8 @@ export interface MentionTarget {
   targetType: "USER" | "AGENT";
   targetId: string;
   displayName: string;
+  aliases?: string[];
+  isDefaultAgent?: boolean;
   avatarUrl?: string | null;
   role?: string | null;
 }
@@ -15,28 +17,80 @@ interface MentionMenuProps {
   targets: MentionTarget[];
   query: string;
   activeIndex?: number;
+  includeDefaultAgentShortcut?: boolean;
   onSelect: (target: MentionTarget) => void;
 }
 
-export function filterMentionTargets(targets: MentionTarget[], query: string) {
+const DEFAULT_AGENT_SHORTCUT_ALIASES = ["agent", "think"] as const;
+
+export function filterMentionTargets(
+  targets: MentionTarget[],
+  query: string,
+  options: { includeDefaultAgentShortcut?: boolean } = {},
+) {
   const normalized = query.trim().toLowerCase();
-  return targets
+  const shortcut = options.includeDefaultAgentShortcut
+    ? defaultAgentShortcutTarget(targets, normalized)
+    : null;
+  const filtered = targets
+    .filter(
+      (target) =>
+        !shortcut ||
+        target.targetType !== shortcut.targetType ||
+        target.targetId !== shortcut.targetId,
+    )
     .filter((target) =>
       normalized
         ? target.displayName.toLowerCase().includes(normalized) ||
-          target.role?.toLowerCase().includes(normalized)
+          target.role?.toLowerCase().includes(normalized) ||
+          target.aliases?.some((alias) =>
+            alias.toLowerCase().includes(normalized),
+          )
         : true,
     )
     .slice(0, 8);
+  return shortcut ? [shortcut, ...filtered].slice(0, 8) : filtered;
+}
+
+function defaultAgentShortcutTarget(
+  targets: MentionTarget[],
+  normalizedQuery: string,
+): MentionTarget | null {
+  if (
+    normalizedQuery &&
+    !DEFAULT_AGENT_SHORTCUT_ALIASES.some((alias) =>
+      alias.startsWith(normalizedQuery),
+    )
+  ) {
+    return null;
+  }
+  const target = targets.find(
+    (candidate) =>
+      candidate.targetType === "AGENT" && candidate.isDefaultAgent === true,
+  );
+  if (!target) return null;
+  return {
+    ...target,
+    id: `${target.id}:shortcut:agent`,
+    displayName: "agent",
+    role: "Default Thread agent",
+    aliases: Array.from(
+      new Set([...DEFAULT_AGENT_SHORTCUT_ALIASES, ...(target.aliases ?? [])]),
+    ),
+    isDefaultAgent: true,
+  };
 }
 
 export function MentionMenu({
   targets,
   query,
   activeIndex = 0,
+  includeDefaultAgentShortcut = false,
   onSelect,
 }: MentionMenuProps) {
-  const filtered = filterMentionTargets(targets, query);
+  const filtered = filterMentionTargets(targets, query, {
+    includeDefaultAgentShortcut,
+  });
 
   if (filtered.length === 0) return null;
 

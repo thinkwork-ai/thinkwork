@@ -1040,7 +1040,12 @@ export function SpacesThreadDetailRoute({
       }}
       artifactPanelState={artifactPanelState}
       infoPanelState={threadInfoPanelState}
-      onSendFollowUp={async (content, files, mentions = []) => {
+      onSendFollowUp={async (
+        content,
+        files,
+        mentions = [],
+        agentRequested = true,
+      ) => {
         setOptimisticMessage(content);
         resetStreamingChunks();
 
@@ -1093,6 +1098,7 @@ export function SpacesThreadDetailRoute({
             displayName: string;
             rawText: string;
           }>;
+          agentRequested?: boolean;
         } = {
           threadId,
           role: "USER",
@@ -1103,6 +1109,9 @@ export function SpacesThreadDetailRoute({
         }
         if (mentions.length > 0) {
           sendInput.mentions = mentions.map(toSendMention);
+        }
+        if (agentRequested === false) {
+          sendInput.agentRequested = false;
         }
         const result = await sendMessage({ input: sendInput });
         if (result.error) {
@@ -1725,9 +1734,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

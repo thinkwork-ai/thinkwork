@@ -177,6 +177,7 @@ interface TaskThreadViewProps {
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
+    agentRequested?: boolean,
   ) => Promise<void> | void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
@@ -361,9 +362,9 @@ export function TaskThreadView({
     isAwaitingAssistantResponse(thread, visibleMessages);
   const showTaskQueueProcessingShimmer = Boolean(
     promptTaskQueue &&
-    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-    !showStreamingBuffer &&
-    !showProcessingShimmer,
+      isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+      !showStreamingBuffer &&
+      !showProcessingShimmer,
   );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
@@ -2054,11 +2055,13 @@ function FollowUpComposer({
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
+    agentRequested?: boolean,
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
+  const [agentEnabled, setAgentEnabled] = useState(true);
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
@@ -2069,14 +2072,35 @@ function FollowUpComposer({
     () =>
       mentionQuery === null
         ? []
-        : filterMentionTargets(mentionTargets, mentionQuery),
+        : filterMentionTargets(mentionTargets, mentionQuery, {
+            includeDefaultAgentShortcut: true,
+          }),
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const defaultAgentTarget = useMemo(
+    () =>
+      mentionTargets.find(
+        (target) =>
+          target.targetType === "AGENT" && target.isDefaultAgent === true,
+      ) ?? null,
+    [mentionTargets],
+  );
+  const agentForcedOn = useMemo(
+    () =>
+      hasDefaultAgentMentionAlias(composer.text) ||
+      hasStructuredDefaultAgentMention(mentions, defaultAgentTarget),
+    [composer.text, defaultAgentTarget, mentions],
+  );
+  const effectiveAgentEnabled = agentForcedOn || agentEnabled;
   const canSubmit =
     (composer.text.trim().length > 0 || composer.files.length > 0) &&
     !disabled &&
     !isSending;
+
+  useEffect(() => {
+    if (agentForcedOn) setAgentEnabled(true);
+  }, [agentForcedOn]);
 
   useEffect(() => {
     setActiveMentionIndex(0);
@@ -2137,9 +2161,10 @@ function FollowUpComposer({
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
-      await onSubmit(content, files, submittedMentions);
+      await onSubmit(content, files, submittedMentions, effectiveAgentEnabled);
       composer.clear();
       setMentions([]);
+      setAgentEnabled(true);
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
     } finally {
@@ -2148,6 +2173,11 @@ function FollowUpComposer({
   }
 
   const hasTaskQueue = Boolean(taskQueue);
+  const agentToggleTitle = agentForcedOn
+    ? "Agent handling is required by @agent or @think"
+    : effectiveAgentEnabled
+      ? "Agent will respond"
+      : "Send without waking the agent";
 
   function selectMention(target: MentionTarget) {
     const replacement = `@${target.displayName} `;
@@ -2172,6 +2202,9 @@ function FollowUpComposer({
         rawText: replacement.trim(),
       },
     ]);
+    if (target.targetType === "AGENT" && target.isDefaultAgent) {
+      setAgentEnabled(true);
+    }
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -2216,6 +2249,7 @@ function FollowUpComposer({
             targets={mentionTargets}
             query={mentionQuery}
             activeIndex={activeMentionIndex}
+            includeDefaultAgentShortcut
             onSelect={selectMention}
           />
         ) : null}
@@ -2253,6 +2287,25 @@ function FollowUpComposer({
               <PromptInputButton
                 type="button"
                 variant="ghost"
+                onClick={() => {
+                  if (!agentForcedOn) setAgentEnabled((value) => !value);
+                }}
+                aria-label="Send to agent"
+                aria-pressed={effectiveAgentEnabled}
+                title={agentToggleTitle}
+                disabled={disabled || isSending || agentForcedOn}
+                className={cn(
+                  "text-white hover:bg-white/10 disabled:opacity-80",
+                  effectiveAgentEnabled
+                    ? "bg-white/15 text-white"
+                    : "text-white/60",
+                )}
+              >
+                <Bot className="h-4 w-4" />
+              </PromptInputButton>
+              <PromptInputButton
+                type="button"
+                variant="ghost"
                 onClick={() => composer.setText(`${composer.text}@`)}
                 aria-label="Mention"
                 title="Mention"
@@ -2281,6 +2334,22 @@ function FollowUpComposer({
 function currentMentionQuery(content: string): string | null {
   const match = content.match(/(?:^|\s)@([\w.'-]*)$/u);
   return match ? match[1] : null;
+}
+
+function hasStructuredDefaultAgentMention(
+  mentions: ComposerMention[],
+  defaultAgentTarget: MentionTarget | null,
+) {
+  if (!defaultAgentTarget) return false;
+  return mentions.some(
+    (mention) =>
+      mention.targetType === "AGENT" &&
+      mention.targetId === defaultAgentTarget.targetId,
+  );
+}
+
+function hasDefaultAgentMentionAlias(content: string) {
+  return /(^|[\s([{"'])@(agent|think)(?=$|[^\p{L}\p{N}_-])/iu.test(content);
 }
 
 function PromptTaskQueue({ queue }: { queue: TaskQueueData }) {
