@@ -472,7 +472,12 @@ describe("TaskThreadView", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() =>
-      expect(onSendFollowUp).toHaveBeenCalledWith("Please continue", [], []),
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "Please continue",
+        [],
+        [],
+        true,
+      ),
     );
   });
 
@@ -798,9 +803,13 @@ describe("TaskThreadView", () => {
     fireEvent.click(
       within(panel).getByRole("button", { name: "Request Goal changes" }),
     );
-    expect(screen.getByRole("dialog", { name: "Request changes" })).toBeTruthy();
     expect(
-      screen.getByText("Describe what needs to change before this Goal can be closed."),
+      screen.getByRole("dialog", { name: "Request changes" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Describe what needs to change before this Goal can be closed.",
+      ),
     ).toBeTruthy();
     const changeRequest = screen.getByLabelText(
       "Change request",
@@ -2728,7 +2737,81 @@ describe("TaskThreadView", () => {
       // (empty when no attachments) alongside the text. The route
       // uploads files before sendMessage and embeds attachmentId refs
       // in metadata.attachments.
-      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", [], []);
+      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", [], [], true);
+    });
+  });
+
+  it("sends one follow-up without agent handling and resets the toggle after success", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Human-only thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const agentToggle = screen.getByRole("button", { name: "Send to agent" });
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(agentToggle);
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "For humans only" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "For humans only",
+        [],
+        [],
+        false,
+      );
+    });
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("preserves a disabled agent toggle after send failure for retry", async () => {
+    const onSendFollowUp = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Message failed"))
+      .mockResolvedValueOnce(undefined);
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Retry thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const agentToggle = screen.getByRole("button", { name: "Send to agent" });
+    fireEvent.click(agentToggle);
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "Try once" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(await screen.findByText("Message failed")).toBeTruthy();
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenLastCalledWith(
+        "Try once",
+        [],
+        [],
+        false,
+      );
     });
   });
 
@@ -2791,8 +2874,93 @@ describe("TaskThreadView", () => {
             rawText: "@Scott Odom",
           },
         ],
+        true,
       );
     });
+  });
+
+  it("selects the pinned agent mention and forces agent handling back on", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Agent shortcut thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        mentionTargets={[
+          {
+            id: "agent:a1",
+            targetType: "AGENT",
+            targetId: "a1",
+            displayName: "Coordinator",
+            aliases: ["agent", "think"],
+            isDefaultAgent: true,
+            role: "agent",
+          },
+        ]}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const agentToggle = screen.getByRole("button", { name: "Send to agent" });
+    fireEvent.click(agentToggle);
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
+
+    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "@" } });
+    const options = screen.getAllByRole("option");
+    expect(options[0]?.textContent).toContain("agent");
+    fireEvent.click(options[0]!);
+
+    expect(input.value).toBe("@agent ");
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "@agent",
+        [],
+        [
+          {
+            targetType: "AGENT",
+            targetId: "a1",
+            displayName: "agent",
+            rawText: "@agent",
+          },
+        ],
+        true,
+      );
+    });
+  });
+
+  it("forces the agent toggle on while @think or @agent aliases are typed", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Alias thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    const agentToggle = screen.getByRole("button", { name: "Send to agent" });
+    fireEvent.click(agentToggle);
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
+
+    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "@think please" } });
+
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(agentToggle).toHaveProperty("disabled", true);
+
+    fireEvent.change(input, { target: { value: "please" } });
+    expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(agentToggle).toHaveProperty("disabled", false);
   });
 
   it("supports keyboard selection in the mention picker", () => {

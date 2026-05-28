@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MentionMenu, type MentionTarget } from "./MentionMenu";
+import {
+  filterMentionTargets,
+  MentionMenu,
+  type MentionTarget,
+} from "./MentionMenu";
 
 afterEach(cleanup);
 
@@ -10,6 +14,8 @@ const targets: MentionTarget[] = [
     targetType: "AGENT",
     targetId: "a1",
     displayName: "Coordinator",
+    aliases: ["agent", "think"],
+    isDefaultAgent: true,
     role: "coordinator",
   },
   {
@@ -48,5 +54,62 @@ describe("MentionMenu", () => {
     expect(options[1].getAttribute("aria-selected")).toBe("true");
     expect(options[1].className).toContain("px-2.5");
     expect(screen.getByRole("listbox").className).toContain("p-2");
+  });
+
+  it("pins the default agent shortcut first only when explicitly enabled", () => {
+    expect(filterMentionTargets(targets, "")[0]?.displayName).toBe(
+      "Coordinator",
+    );
+
+    const filtered = filterMentionTargets(targets, "", {
+      includeDefaultAgentShortcut: true,
+    });
+
+    expect(filtered[0]).toMatchObject({
+      targetType: "AGENT",
+      targetId: "a1",
+      displayName: "agent",
+      isDefaultAgent: true,
+    });
+    expect(filtered[1]?.displayName).toBe("Alex Finance");
+  });
+
+  it("shows the default agent shortcut for alias prefixes and hides it for unrelated queries", () => {
+    expect(
+      filterMentionTargets(targets, "th", {
+        includeDefaultAgentShortcut: true,
+      })[0]?.displayName,
+    ).toBe("agent");
+
+    expect(
+      filterMentionTargets(targets, "finance", {
+        includeDefaultAgentShortcut: true,
+      }).some((target) => target.displayName === "agent"),
+    ).toBe(false);
+  });
+
+  it("selects the synthetic default agent shortcut", () => {
+    const onSelect = vi.fn();
+    render(
+      <MentionMenu
+        targets={targets}
+        query="ag"
+        includeDefaultAgentShortcut
+        onSelect={onSelect}
+      />,
+    );
+
+    const options = screen.getAllByRole("option");
+    expect(options[0]?.textContent).toContain("agent");
+
+    fireEvent.click(options[0]!);
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetType: "AGENT",
+        targetId: "a1",
+        displayName: "agent",
+        isDefaultAgent: true,
+      }),
+    );
   });
 });

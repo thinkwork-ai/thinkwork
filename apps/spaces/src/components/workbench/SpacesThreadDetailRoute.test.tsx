@@ -788,7 +788,9 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.queryByText("DECISIONS.md")).toBe(null);
     expect(screen.queryByText("HANDOFFS.md")).toBe(null);
 
-    fireEvent.click(screen.getByRole("button", { name: "Request Goal changes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Request Goal changes" }),
+    );
     fireEvent.change(screen.getByLabelText("Change request"), {
       target: { value: "Need AP email before closure." },
     });
@@ -821,6 +823,27 @@ describe("SpacesThreadDetailRoute", () => {
     });
     expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
       requestPolicy: "network-only",
+    });
+  });
+
+  it("passes follow-up agent opt-out through SendMessageInput", async () => {
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "For the human collaborators only" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "For the human collaborators only",
+          agentRequested: false,
+        },
+      });
     });
   });
 });

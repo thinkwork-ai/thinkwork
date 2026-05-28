@@ -77,14 +77,15 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U2 Default agent alias normalization
-- Active branch: `codex/follow-up-agent-toggle-u2`
+- Active unit: Grouped U3/U4 follow-up composer toggle and route wiring
+- Active branch: `codex/follow-up-agent-toggle-u3`
 - Active worktree:
-  `.Codex/worktrees/follow-up-agent-toggle-u2`
+  `.Codex/worktrees/follow-up-agent-toggle-u3`
 - Started: 2026-05-28
-- Latest merged PR: [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789)
-- Active PR: [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790)
-- CI: U1 passed required checks and merged; U2 pending PR CI
+- Latest merged PR: [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790)
+- Active PR: [#1792](https://github.com/thinkwork-ai/thinkwork/pull/1792)
+- CI: U1 and U2 passed required checks and merged; grouped U3/U4 local
+  verification in progress
 
 ### Active Unit Notes
 
@@ -135,15 +136,37 @@ Target branch: `main`
   `pnpm --filter @thinkwork/spaces test`, `pnpm -r --if-present typecheck`,
   `pnpm -r --if-present lint`, `git diff --check`, and touched-file
   `pnpm dlx prettier@3.6.2 --check`.
+- PR [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790) passed CI,
+  squash-merged into `main`, deleted the remote branch, and removed the local
+  U2 worktree/branch.
+- Started grouped U3/U4 from updated `origin/main`; grouping these units avoids
+  shipping a visible human-only toggle before the route forwards
+  `agentRequested: false` to `sendMessage`.
+- Implemented the first grouped U3/U4 pass: default-on follow-up robot toggle,
+  one-successful-send reset, failure-preserving retry state, forced-on
+  `@agent` / `@think` behavior, pinned `agent` mention menu shortcut backed by
+  the default agent target, and route wiring for `SendMessageInput.agentRequested`.
+- Grouped U3/U4 focused verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/spaces/MentionMenu.test.tsx`,
+  `pnpm --filter @thinkwork/spaces test -- src/components/workbench/TaskThreadView.test.tsx`,
+  `pnpm --filter @thinkwork/spaces test -- src/components/workbench/SpacesThreadDetailRoute.test.tsx`,
+  and `pnpm --filter @thinkwork/spaces typecheck`.
+- Grouped U3/U4 broader local verification passed:
+  `pnpm --filter @thinkwork/spaces test`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `pnpm --filter @thinkwork/spaces build`,
+  `git diff --check`, and touched-file
+  `pnpm dlx prettier@3.6.2 --check`. Local browser smoke on
+  `http://localhost:5177/new` rendered the Spaces shell; the available local
+  account had no assigned workspace, so in-thread footer visuals remain covered
+  by component tests rather than a live tenant-backed route.
 
 ### Progress Log
 
-| Date       | Unit | Branch                            | PR                                                           | Status     | Verification        | Notes                                              |
-| ---------- | ---- | --------------------------------- | ------------------------------------------------------------ | ---------- | ------------------- | -------------------------------------------------- |
-| 2026-05-28 | U1   | `codex/follow-up-agent-toggle-u1` | [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789) | Merged     | Local and CI passed | Backend send contract and dispatch gating.         |
-| 2026-05-28 | U2   | `codex/follow-up-agent-toggle-u2` | [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790) | CI pending | Local passed        | Default agent alias normalization.                 |
-| 2026-05-28 | U3   | pending                           | pending                                                      | Pending    | pending             | Follow-up composer toggle and special picker item. |
-| 2026-05-28 | U4   | pending                           | pending                                                      | Pending    | pending             | Route wiring and query-contract cleanup.           |
+| Date       | Unit  | Branch                            | PR                                                           | Status | Verification        | Notes                                                                                    |
+| ---------- | ----- | --------------------------------- | ------------------------------------------------------------ | ------ | ------------------- | ---------------------------------------------------------------------------------------- |
+| 2026-05-28 | U1    | `codex/follow-up-agent-toggle-u1` | [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789) | Merged | Local and CI passed | Backend send contract and dispatch gating.                                               |
+| 2026-05-28 | U2    | `codex/follow-up-agent-toggle-u2` | [#1790](https://github.com/thinkwork-ai/thinkwork/pull/1790) | Merged | Local and CI passed | Default agent alias normalization.                                                       |
+| 2026-05-28 | U3/U4 | `codex/follow-up-agent-toggle-u3` | [#1792](https://github.com/thinkwork-ai/thinkwork/pull/1792) | Active | Local passed        | Composer toggle, special picker item, and route wiring grouped to avoid a half-wired UI. |
 
 ### CI Failures
 
