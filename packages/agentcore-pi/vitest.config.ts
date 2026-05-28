@@ -20,6 +20,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@thinkwork/pi-aws": path.resolve(__dirname, "../pi-aws/src/index.ts"),
+      "@thinkwork/pi-runtime-core": path.resolve(
+        __dirname,
+        "../pi-runtime-core/src/index.ts",
+      ),
     },
   },
 });

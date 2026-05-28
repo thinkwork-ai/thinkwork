@@ -6,6 +6,67 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Desktop Local Pi Sidecar
+
+Plan:
+`docs/plans/2026-05-28-003-feat-desktop-local-pi-sidecar-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: U1 Extract a host-agnostic Pi runtime core
+- Active branch: `codex/local-pi-u1-runtime-core`
+- Active worktree:
+  `.Codex/worktrees/local-pi-u1-runtime-core`
+- Started: 2026-05-28
+- Latest merged PR: none
+- Active PR: none
+- CI: not started
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the Desktop Local Pi sidecar plan and source requirements.
+- Created isolated U1 worktree from `origin/main`.
+- `origin/main` did not yet include the plan/requirements docs from the
+  planning session; copied them into this U1 branch so the PR carries its
+  source-of-truth documents forward.
+- Implemented U1 first pass: added `@thinkwork/pi-runtime-core`, moved
+  host-agnostic history normalization, Pi agent loop, finalizer client,
+  response/evidence types, and tool-cost collection into the shared package,
+  and kept compatibility re-exports from the AgentCore Pi `server.ts`.
+- Updated `@thinkwork/agentcore-pi` to consume the shared package while keeping
+  AgentCore HTTP/Lambda host code in the existing container.
+- Focused verification passed: `pnpm --filter @thinkwork/pi-runtime-core test`,
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/normalize-history.test.ts agent-container/tests/server.test.ts agent-container/tests/browser-automation.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`, and
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- Broader Pi verification passed: `pnpm --filter @thinkwork/agentcore-pi test`
+  and `pnpm --filter @thinkwork/pi-runtime-core build && pnpm --filter @thinkwork/agentcore-pi build`.
+
+### Progress Log
+
+| Date       | Unit | Branch                           | PR      | Status      | Verification | Notes                                          |
+| ---------- | ---- | -------------------------------- | ------- | ----------- | ------------ | ---------------------------------------------- |
+| 2026-05-28 | U1   | `codex/local-pi-u1-runtime-core` | pending | In progress | Local passed | Extract shared Pi runtime core.                |
+| 2026-05-28 | U2   | pending                          | pending | Pending     | pending      | Desktop runtime session preparation API.       |
+| 2026-05-28 | U3   | pending                          | pending | Pending     | pending      | Desktop-local sendMessage dispatch ownership.  |
+| 2026-05-28 | U4   | pending                          | pending | Pending     | pending      | Electron sidecar supervision and typed IPC.    |
+| 2026-05-28 | U5   | pending                          | pending | Pending     | pending      | Execute local desktop turns in sidecar.        |
+| 2026-05-28 | U6   | pending                          | pending | Pending     | pending      | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U7   | pending                          | pending | Pending     | pending      | Local runtime and delegation state in Spaces.  |
+| 2026-05-28 | U8   | pending                          | pending | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
+
+### CI Failures
+
+- None yet.
+
+### Blockers
+
+- None.
+
 ## Current Run: Follow-Up Agent Toggle
 
 Plan: `docs/plans/2026-05-28-002-feat-follow-up-agent-toggle-plan.md`
