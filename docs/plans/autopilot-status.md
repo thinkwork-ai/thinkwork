@@ -6,6 +6,69 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Follow-Up Agent Toggle
+
+Plan: `docs/plans/2026-05-28-002-feat-follow-up-agent-toggle-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: U1 Backend send contract and dispatch gating
+- Active branch: `codex/follow-up-agent-toggle-u1`
+- Active worktree:
+  `.Codex/worktrees/follow-up-agent-toggle-u1`
+- Started: 2026-05-28
+- Latest merged PR: none
+- Active PR: [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789)
+- CI: pending
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the follow-up agent toggle plan and requirements brainstorm.
+- Created isolated U1 worktree from `origin/main`.
+- Implemented the first U1 pass: optional `SendMessageInput.agentRequested`,
+  typed client regeneration, and backend dispatch gating so explicit
+  `false` suppresses default-agent and onboarding automation while explicit
+  agent mentions still dispatch.
+- Fresh worktree initially had no `node_modules`; ran `pnpm install`, then
+  reran codegen.
+- U1 focused verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/messages/sendMessage.mentions.test.ts`,
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/spaces/customer-onboarding-chat-updates.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/database-pg typecheck`, and
+  `pnpm --filter thinkwork-cli typecheck`. Admin has no typecheck script.
+- U1 broader verification passed: `pnpm schema:build`,
+  `pnpm --filter @thinkwork/admin codegen`,
+  `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm --filter thinkwork-cli codegen`, `pnpm --filter @thinkwork/api test`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`,
+  `git diff --check`, and touched-file
+  `pnpm dlx prettier@3.6.2 --check`.
+- First full API suite run caught one source-string test that still expected
+  the old inline onboarding/default-dispatch guard; updated it to assert the
+  new helper wiring and reran the full API suite successfully.
+
+### Progress Log
+
+| Date       | Unit | Branch                            | PR                                                           | Status     | Verification | Notes                                              |
+| ---------- | ---- | --------------------------------- | ------------------------------------------------------------ | ---------- | ------------ | -------------------------------------------------- |
+| 2026-05-28 | U1   | `codex/follow-up-agent-toggle-u1` | [#1789](https://github.com/thinkwork-ai/thinkwork/pull/1789) | CI pending | Local passed | Backend send contract and dispatch gating.         |
+| 2026-05-28 | U2   | pending                           | pending                                                      | Pending    | pending      | Default agent alias normalization.                 |
+| 2026-05-28 | U3   | pending                           | pending                                                      | Pending    | pending      | Follow-up composer toggle and special picker item. |
+| 2026-05-28 | U4   | pending                           | pending                                                      | Pending    | pending      | Route wiring and query-contract cleanup.           |
+
+### CI Failures
+
+- None yet.
+
+### Blockers
+
+- None.
+
 ## Current Run: Folder-Native Goals
 
 Plan: `docs/plans/2026-05-27-003-feat-folder-native-goals-plan.md`

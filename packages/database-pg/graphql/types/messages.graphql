@@ -100,6 +100,7 @@ input SendMessageInput {
   threadId: ID!
   role: MessageRole!
   content: String
+  agentRequested: Boolean
   senderType: String
   senderId: ID
   toolCalls: AWSJSON
