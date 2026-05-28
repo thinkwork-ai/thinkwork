@@ -465,6 +465,7 @@ export const ComputerThreadQuery = gql`
   query ComputerThread($id: ID!, $messageLimit: Int) {
     thread(id: $id) {
       id
+      agentId
       userId
       number
       identifier

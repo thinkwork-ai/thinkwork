@@ -791,6 +791,8 @@ async function listRuns(
     conditions.push(eq(threadTurns.routine_id, params.routine_id));
   if (params.trigger_id)
     conditions.push(eq(threadTurns.trigger_id, params.trigger_id));
+  if (params.thread_id)
+    conditions.push(eq(threadTurns.thread_id, params.thread_id));
   if (params.status) conditions.push(eq(threadTurns.status, params.status));
 
   const limit = Math.min(Number(params.limit) || 50, 200);

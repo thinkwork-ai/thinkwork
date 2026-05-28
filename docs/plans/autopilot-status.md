@@ -16,14 +16,14 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U6 Managed delegation from local Pi to AgentCore
-- Active branch: `codex/local-pi-u6-managed-delegation`
+- Active unit: U7 Surface local runtime and visible delegation state in `apps/spaces`
+- Active branch: `codex/local-pi-u7-state`
 - Active worktree:
-  `.Codex/worktrees/local-pi-u6-managed-delegation`
+  `.Codex/worktrees/local-pi-u7-state`
 - Started: 2026-05-28
-- Latest merged PR: [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798)
-- Active PR: [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800)
-- CI: pending; local verification passed
+- Latest merged PR: [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800)
+- Active PR: none
+- CI: not started for U7; local verification passed
 
 ### Active Unit Notes
 
@@ -208,6 +208,23 @@ Target branch: `main`
   `pnpm -r --if-present typecheck`, `bash scripts/build-lambdas.sh managed-delegation`,
   touched-file Prettier check, and `git diff --check`.
 - Opened PR [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800).
+- PR [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify` after rebasing onto current
+  `main`; squash-merged into `main`, deleted the remote/local U6 branch, and
+  removed the U6 worktree.
+- Started U7 from updated `origin/main`.
+- U7 implementation in progress: adding compact desktop-local Pi status to the
+  Spaces desktop header, routing desktop-local sends through the Electron Pi
+  IPC only when an agent-backed local sidecar is ready, and rendering visible
+  managed-delegation turn rows in the existing thread activity surface while
+  keeping hidden delegation out of extra UI chrome.
+- U7 local verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/lib/desktop-runtime.test.ts src/components/DesktopApplicationHeader.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm --filter @thinkwork/api typecheck`, touched-file Prettier check,
+  `git diff --check`, `pnpm --filter @thinkwork/spaces test`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, and
+  `pnpm --filter @thinkwork/api test`.
 
 ### Progress Log
 
@@ -218,8 +235,8 @@ Target branch: `main`
 | 2026-05-28 | U3   | `codex/local-pi-u3-dispatch-ownership`  | [#1796](https://github.com/thinkwork-ai/thinkwork/pull/1796) | Merged      | CI passed    | Desktop-local sendMessage dispatch ownership.  |
 | 2026-05-28 | U4   | `codex/local-pi-u4-sidecar-supervision` | [#1797](https://github.com/thinkwork-ai/thinkwork/pull/1797) | Merged      | CI passed    | Electron sidecar supervision and typed IPC.    |
 | 2026-05-28 | U5   | `codex/local-pi-u5-sidecar-turns`       | [#1798](https://github.com/thinkwork-ai/thinkwork/pull/1798) | Merged      | CI passed    | Execute local desktop turns in sidecar.        |
-| 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) | In progress | Local passed | Managed delegation from local Pi to AgentCore. |
-| 2026-05-28 | U7   | pending                                 | pending                                                      | Pending     | pending      | Local runtime and delegation state in Spaces.  |
+| 2026-05-28 | U6   | `codex/local-pi-u6-managed-delegation`  | [#1800](https://github.com/thinkwork-ai/thinkwork/pull/1800) | Merged      | CI passed    | Managed delegation from local Pi to AgentCore. |
+| 2026-05-28 | U7   | `codex/local-pi-u7-state`               | pending                                                      | In progress | Local passed | Local runtime and delegation state in Spaces.  |
 | 2026-05-28 | U8   | pending                                 | pending                                                      | Pending     | pending      | Diagnostics, redaction, packaging, rollout.    |
 
 ### CI Failures
