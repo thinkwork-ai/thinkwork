@@ -5,6 +5,7 @@ export interface MentionTarget {
   targetId: string;
   displayName: string;
   aliases?: string[];
+  isDefaultAgent?: boolean;
 }
 
 export interface ExplicitMentionInput {
@@ -74,8 +75,15 @@ function findTextMentions(
       })),
     )
     .filter((item) => item.alias.length > 0)
-    .sort((a, b) => b.alias.length - a.alias.length);
+    .sort((a, b) => {
+      const reservedPriority =
+        Number(isDefaultAgentReservedAlias(b.target, b.alias)) -
+        Number(isDefaultAgentReservedAlias(a.target, a.alias));
+      if (reservedPriority !== 0) return reservedPriority;
+      return b.alias.length - a.alias.length;
+    });
   const result: ParsedMention[] = [];
+  const claimedStartOffsets = new Set<number>();
 
   for (const { alias, target } of aliases) {
     const pattern = new RegExp(
@@ -85,10 +93,14 @@ function findTextMentions(
     const match = pattern.exec(content);
     if (!match) continue;
     const startOffset = match.index + match[1].length;
+    if (claimedStartOffsets.has(startOffset)) continue;
+    claimedStartOffsets.add(startOffset);
     result.push({
       targetType: target.targetType,
       targetId: target.targetId,
-      displayName: target.displayName,
+      displayName: isDefaultAgentReservedAlias(target, alias)
+        ? "agent"
+        : target.displayName,
       rawText: content.slice(startOffset, startOffset + alias.length + 1),
       startOffset,
       endOffset: startOffset + alias.length + 1,
@@ -113,4 +125,13 @@ function integerOrNull(value: number | null | undefined) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isDefaultAgentReservedAlias(target: MentionTarget, alias: string) {
+  const normalized = alias.trim().toLowerCase();
+  return (
+    target.targetType === "agent" &&
+    target.isDefaultAgent === true &&
+    (normalized === "agent" || normalized === "think")
+  );
 }

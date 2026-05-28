@@ -5306,9 +5306,11 @@ export enum ThreadLifecycleStatus {
 
 export type ThreadMentionTarget = {
   __typename?: 'ThreadMentionTarget';
+  aliases: Array<Scalars['String']['output']>;
   avatarUrl?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
   id: Scalars['ID']['output'];
+  isDefaultAgent: Scalars['Boolean']['output'];
   role?: Maybe<Scalars['String']['output']>;
   targetId: Scalars['ID']['output'];
   targetType: MessageMentionTargetType;

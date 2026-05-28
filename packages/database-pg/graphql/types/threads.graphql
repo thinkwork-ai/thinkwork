@@ -256,6 +256,8 @@ type ThreadMentionTarget {
   targetType: MessageMentionTargetType!
   targetId: ID!
   displayName: String!
+  aliases: [String!]!
+  isDefaultAgent: Boolean!
   avatarUrl: String
   role: String
 }
