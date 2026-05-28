@@ -1754,6 +1754,7 @@ export type Mutation = {
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
+  pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
   publishRoutineVersion: RoutineAslVersion;
@@ -1773,6 +1774,7 @@ export type Mutation = {
   removeThreadDependency: Scalars['Boolean']['output'];
   removeThreadLabel: Scalars['Boolean']['output'];
   renameTenantSlug: Tenant;
+  reorderPinnedThreads: Array<PinnedThread>;
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   /**
@@ -1819,6 +1821,7 @@ export type Mutation = {
   uninstallSlackWorkspace: SlackWorkspace;
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
+  unpinThread: Scalars['Boolean']['output'];
   unregisterPushToken: Scalars['Boolean']['output'];
   updateArtifact: Artifact;
   updateEvalTestCase: EvalTestCase;
@@ -2290,6 +2293,12 @@ export type MutationNotifyThreadUpdateArgs = {
 };
 
 
+export type MutationPinThreadArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+};
+
+
 export type MutationPlanRoutineDraftArgs = {
   input: PlanRoutineDraftInput;
 };
@@ -2386,6 +2395,12 @@ export type MutationRemoveThreadLabelArgs = {
 export type MutationRenameTenantSlugArgs = {
   newSlug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationReorderPinnedThreadsArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadIds: Array<Scalars['ID']['input']>;
 };
 
 
@@ -2563,6 +2578,12 @@ export type MutationUnlinkSlackIdentityArgs = {
 
 export type MutationUnpauseAgentArgs = {
   agentId: Scalars['ID']['input'];
+};
+
+
+export type MutationUnpinThreadArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 
@@ -3005,6 +3026,13 @@ export type PerformanceTimeSeries = {
   totalCostUsd: Scalars['Float']['output'];
 };
 
+export type PinnedThread = {
+  __typename?: 'PinnedThread';
+  pinOrder: Scalars['Int']['output'];
+  pinnedAt: Scalars['AWSDateTime']['output'];
+  thread: Thread;
+};
+
 export type PlanRoutineDraftInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
@@ -3166,6 +3194,7 @@ export type Query = {
   ontologySuggestionScanJob?: Maybe<OntologySuggestionScanJob>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
+  pinnedThreads: Array<PinnedThread>;
   queuedWakeups: Array<AgentWakeupRequest>;
   /**
    * Newest compiled wiki pages for the given user, ordered by
@@ -3624,6 +3653,12 @@ export type QueryPendingSystemReviewsCountArgs = {
 export type QueryPerformanceTimeSeriesArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   days?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryPinnedThreadsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
 };
 

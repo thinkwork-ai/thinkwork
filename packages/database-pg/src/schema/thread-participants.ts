@@ -10,6 +10,7 @@ import {
   pgTable,
   uuid,
   text,
+  integer,
   timestamp,
   uniqueIndex,
   index,
@@ -49,6 +50,8 @@ export const threadParticipants = pgTable(
       .notNull()
       .default("subscribed"),
     last_read_at: timestamp("last_read_at", { withTimezone: true }),
+    pinned_at: timestamp("pinned_at", { withTimezone: true }),
+    pin_order: integer("pin_order"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -70,6 +73,15 @@ export const threadParticipants = pgTable(
       table.user_id,
       table.last_read_at,
     ),
+    index("idx_thread_participants_user_pins")
+      .on(table.tenant_id, table.user_id, table.pin_order)
+      .where(
+        sql`
+          ${table.participant_type} = 'user'
+          AND ${table.user_id} IS NOT NULL
+          AND ${table.pinned_at} IS NOT NULL
+        `,
+      ),
     check(
       "thread_participants_type_allowed",
       sql`${table.participant_type} IN ('user','agent')`,

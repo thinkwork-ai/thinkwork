@@ -16,16 +16,41 @@ const {
   navigateMock,
   deleteThreadMock,
   updateThreadMock,
+  pinThreadMock,
+  unpinThreadMock,
+  reorderPinnedThreadsMock,
   recentThreadItemsMock,
+  searchThreadItemsMock,
+  pinnedThreadItemsMock,
   recentReexecuteMock,
   searchReexecuteMock,
+  pinnedReexecuteMock,
 } = vi.hoisted(() => ({
   tenantMock: vi.fn(),
   locationMock: vi.fn(),
   navigateMock: vi.fn(),
   deleteThreadMock: vi.fn(),
   updateThreadMock: vi.fn(),
+  pinThreadMock: vi.fn(),
+  unpinThreadMock: vi.fn(),
+  reorderPinnedThreadsMock: vi.fn(),
   recentThreadItemsMock: [] as Array<{
+    id: string;
+    title: string;
+    spaceId?: string;
+    space?: { id: string; name: string };
+    lastActivityAt?: string;
+    lastReadAt?: string | null;
+  }>,
+  searchThreadItemsMock: [] as Array<{
+    id: string;
+    title: string;
+    spaceId?: string;
+    space?: { id: string; name: string };
+    lastActivityAt?: string;
+    lastReadAt?: string | null;
+  }>,
+  pinnedThreadItemsMock: [] as Array<{
     id: string;
     title: string;
     spaceId?: string;
@@ -35,11 +60,16 @@ const {
   }>,
   recentReexecuteMock: vi.fn(),
   searchReexecuteMock: vi.fn(),
+  pinnedReexecuteMock: vi.fn(),
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
+    PinThreadMutation: Symbol("PinThreadMutation"),
+    PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
+    ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
     SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
+    UnpinThreadMutation: Symbol("UnpinThreadMutation"),
     UpdateThreadMutation: Symbol("UpdateThreadMutation"),
   },
 }));
@@ -102,9 +132,24 @@ vi.mock("urql", () => ({
     if (mutation === queryDocs.UpdateThreadMutation) {
       return [{ fetching: false }, updateThreadMock];
     }
+    if (mutation === queryDocs.PinThreadMutation) {
+      return [{ fetching: false }, pinThreadMock];
+    }
+    if (mutation === queryDocs.UnpinThreadMutation) {
+      return [{ fetching: false }, unpinThreadMock];
+    }
+    if (mutation === queryDocs.ReorderPinnedThreadsMutation) {
+      return [{ fetching: false }, reorderPinnedThreadsMock];
+    }
     return [{ fetching: false }, vi.fn()];
   },
-  useQuery: ({ query }: { query: unknown }) => {
+  useQuery: ({
+    query,
+    variables,
+  }: {
+    query: unknown;
+    variables?: Record<string, unknown>;
+  }) => {
     if (query === queryDocs.SpacesQuery) {
       return [
         {
@@ -162,19 +207,39 @@ vi.mock("urql", () => ({
       ];
     }
     if (query === queryDocs.ThreadsPagedQuery) {
+      const isSearchQuery =
+        variables?.limit === 30 || Object.hasOwn(variables ?? {}, "search");
+      const items = isSearchQuery
+        ? searchThreadItemsMock.length > 0
+          ? searchThreadItemsMock
+          : recentThreadItemsMock
+        : recentThreadItemsMock;
       return [
         {
           fetching: false,
           data: {
             threadsPaged: {
-              totalCount: recentThreadItemsMock.length,
-              items: recentThreadItemsMock,
+              totalCount: items.length,
+              items,
             },
           },
         },
-        recentThreadItemsMock.length > 1
-          ? recentReexecuteMock
-          : searchReexecuteMock,
+        isSearchQuery ? searchReexecuteMock : recentReexecuteMock,
+      ];
+    }
+    if (query === queryDocs.PinnedThreadsQuery) {
+      return [
+        {
+          fetching: false,
+          data: {
+            pinnedThreads: pinnedThreadItemsMock.map((thread, index) => ({
+              pinnedAt: "2026-05-19T20:00:00Z",
+              pinOrder: index + 1,
+              thread,
+            })),
+          },
+        },
+        pinnedReexecuteMock,
       ];
     }
     return [{ fetching: false, data: null }, vi.fn()];
@@ -372,9 +437,15 @@ afterEach(() => {
   navigateMock.mockReset();
   deleteThreadMock.mockReset();
   updateThreadMock.mockReset();
+  pinThreadMock.mockReset();
+  unpinThreadMock.mockReset();
+  reorderPinnedThreadsMock.mockReset();
   recentReexecuteMock.mockReset();
   searchReexecuteMock.mockReset();
+  pinnedReexecuteMock.mockReset();
   recentThreadItemsMock.length = 0;
+  searchThreadItemsMock.length = 0;
+  pinnedThreadItemsMock.length = 0;
   window.localStorage.clear();
   if (ORIGINAL_LOCAL_STORAGE) {
     Object.defineProperty(window, "localStorage", ORIGINAL_LOCAL_STORAGE);
@@ -403,6 +474,13 @@ describe("ChatSidebar", () => {
   beforeEach(() => {
     deleteThreadMock.mockResolvedValue({ data: { deleteThread: true } });
     updateThreadMock.mockResolvedValue({ data: { updateThread: { id: "t" } } });
+    pinThreadMock.mockResolvedValue({
+      data: { pinThread: { thread: { id: "t" } } },
+    });
+    unpinThreadMock.mockResolvedValue({ data: { unpinThread: true } });
+    reorderPinnedThreadsMock.mockResolvedValue({
+      data: { reorderPinnedThreads: [] },
+    });
     recentThreadItemsMock.push({
       id: "thread-recent",
       title: "Recent Space thread",
@@ -542,9 +620,91 @@ describe("ChatSidebar", () => {
     ).toBe("/spaces/space-1/threads/thread-recent");
   });
 
+  it("renders pinned threads even when they are absent from recent threads", () => {
+    pinnedThreadItemsMock.push({
+      id: "thread-pinned-old",
+      title: "Older pinned opportunity",
+      lastActivityAt: "2026-05-10T12:00:00Z",
+      lastReadAt: "2026-05-10T12:30:00Z",
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    expect(
+      screen
+        .getByRole("link", { name: /older pinned opportunity/i })
+        .getAttribute("href"),
+    ).toBe("/threads/thread-pinned-old");
+  });
+
+  it("pins a thread through the server and refreshes thread lists", async () => {
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /pin recent space thread/i }),
+    );
+
+    await waitFor(() =>
+      expect(pinThreadMock).toHaveBeenCalledWith({
+        tenantId: "tenant-1",
+        threadId: "thread-recent",
+      }),
+    );
+    await waitFor(() =>
+      expect(pinnedReexecuteMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
+    );
+    expect(recentReexecuteMock).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  it("imports missing localStorage pins once without making localStorage authoritative", async () => {
+    pinnedThreadItemsMock.push({
+      id: "server-thread",
+      title: "Already server pinned",
+      lastActivityAt: "2026-05-19T20:00:00Z",
+      lastReadAt: "2026-05-19T20:30:00Z",
+    });
+    localStorage.setItem(
+      "thinkwork:spaces:pinned-threads:tenant-1:user-1",
+      JSON.stringify(["server-thread", "local-thread", "local-thread", 42]),
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    await waitFor(() =>
+      expect(pinThreadMock).toHaveBeenCalledWith({
+        tenantId: "tenant-1",
+        threadId: "local-thread",
+      }),
+    );
+    expect(pinThreadMock).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        localStorage.getItem(
+          "thinkwork:spaces:pinned-threads:tenant-1:user-1:server-migrated:v1",
+        ),
+      ).toBe("true"),
+    );
+  });
+
   it("groups command search results by pinned, chats, and Spaces", async () => {
     recentThreadItemsMock.length = 0;
-    recentThreadItemsMock.push(
+    pinnedThreadItemsMock.push({
+      id: "pinned-thread",
+      title: "Bill's Oil pinned",
+      lastActivityAt: "2026-05-19T19:30:00Z",
+      lastReadAt: new Date().toISOString(),
+    });
+    searchThreadItemsMock.push(
       {
         id: "pinned-thread",
         title: "Bill's Oil pinned",
@@ -565,10 +725,6 @@ describe("ChatSidebar", () => {
         lastActivityAt: "2026-05-19T19:00:00Z",
         lastReadAt: new Date().toISOString(),
       },
-    );
-    localStorage.setItem(
-      "thinkwork:spaces:pinned-threads:tenant-1:user-1",
-      JSON.stringify(["pinned-thread"]),
     );
     tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
     locationMock.mockReturnValue({ pathname: "/threads", search: {} });

@@ -13,6 +13,14 @@ const migration0106 = readFileSync(
   join(HERE, "..", "drizzle", "0106_space_threads_participants.sql"),
   "utf-8",
 );
+const migration0137 = readFileSync(
+  join(HERE, "..", "drizzle", "0137_thread_participant_pins.sql"),
+  "utf-8",
+);
+const rollback0137 = readFileSync(
+  join(HERE, "..", "drizzle", "0137_thread_participant_pins_rollback.sql"),
+  "utf-8",
+);
 
 describe("Space thread participants schema", () => {
   it("requires every Thread to belong to a Space", () => {
@@ -37,6 +45,13 @@ describe("Space thread participants schema", () => {
     expect(columns.last_read_at.notNull).toBe(false);
   });
 
+  it("models per-user thread pin state", () => {
+    const columns = getTableColumns(threadParticipants);
+
+    expect(columns.pinned_at.notNull).toBe(false);
+    expect(columns.pin_order.notNull).toBe(false);
+  });
+
   it("declares participant-scoped read-state migration markers", () => {
     const migration0110 = readFileSync(
       join(HERE, "..", "drizzle", "0110_thread_participant_read_state.sql"),
@@ -53,6 +68,32 @@ describe("Space thread participants schema", () => {
     expect(migration0110).toContain(
       "WHERE participant_type = 'user' AND user_id IS NOT NULL",
     );
+  });
+
+  it("declares manual migration drift markers for thread pin state", () => {
+    expect(migration0137).toMatch(
+      /--\s*creates-column:\s*public\.thread_participants\.pinned_at\b/,
+    );
+    expect(migration0137).toMatch(
+      /--\s*creates-column:\s*public\.thread_participants\.pin_order\b/,
+    );
+    expect(migration0137).toMatch(
+      /--\s*creates:\s*public\.idx_thread_participants_user_pins\b/,
+    );
+    expect(migration0137).toMatch(/ADD COLUMN IF NOT EXISTS pinned_at\b/);
+    expect(migration0137).toMatch(/ADD COLUMN IF NOT EXISTS pin_order\b/);
+    expect(migration0137).toContain(
+      "CREATE INDEX IF NOT EXISTS idx_thread_participants_user_pins",
+    );
+  });
+
+  it("rolls back pin state without touching participant read state", () => {
+    expect(rollback0137).toContain(
+      "DROP INDEX IF EXISTS public.idx_thread_participants_user_pins",
+    );
+    expect(rollback0137).toMatch(/DROP COLUMN IF EXISTS pin_order\b/);
+    expect(rollback0137).toMatch(/DROP COLUMN IF EXISTS pinned_at\b/);
+    expect(rollback0137).not.toContain("last_read_at");
   });
 
   it("declares the access backfill migration for owners and mentioned users", () => {
