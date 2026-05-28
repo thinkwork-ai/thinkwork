@@ -56,6 +56,43 @@ function createController(processes: FakeUtilityProcess[] = []) {
       return 1;
     },
     clearTimeout: vi.fn(),
+    workspaceCacheRoot: "/user-data/pi-workspaces",
+    prepareTurn: async (request) => ({
+      threadTurnId: "turn-1",
+      expiresAt: "2026-05-28T13:00:00.000Z",
+      finalizeCallbackUrl: "https://api.test/api/threads/thread-1/finalize",
+      finalizeCallbackSecret: "dps_secret",
+      sidecarCredentials: {},
+      invocation: {
+        pi_sdk: {
+          packageName: "@earendil-works/pi-coding-agent",
+          minimumVersion: "0.76.0",
+          docsUrl: "https://pi.dev/docs/latest/sdk",
+          sessionFactory: "createAgentSession",
+          runtimeFactory: "createAgentSessionRuntime",
+          sessionManager: "in-memory",
+          authStorage: "runtime-overrides",
+          resourceLoader: "thinkwork-rendered-workspace",
+          modelSource: "prepared-invocation",
+          toolSource: "thinkwork-prepared-policy",
+        },
+        tenant_id: "tenant-1",
+        workspace_tenant_id: "tenant-1",
+        assistant_id: request.agentId,
+        thread_id: request.threadId,
+        user_id: "user-1",
+        current_user_email: "eric@example.com",
+        trace_id: "trace-1",
+        message: request.userMessage,
+        messages_history: [],
+        runtime_type: "pi",
+        runtime_host: "desktop-local",
+        model: null,
+        trigger_channel: "desktop",
+        finalize_callback_secret: "dps_secret",
+        thread_turn_id: "turn-1",
+      },
+    }),
     logger,
   });
   return { controller, processes, sentStates, logger };
@@ -81,23 +118,23 @@ describe("PiSidecarController", () => {
     );
   });
 
-  it("posts turn commands only when the sidecar is healthy", () => {
+  it("posts turn commands only when the sidecar is healthy", async () => {
     const { controller, processes } = createController();
 
-    expect(() =>
+    await expect(
       controller.startTurn({
         agentId: "agent-1",
         threadId: "thread-1",
         userMessage: "hello",
       }),
-    ).toThrow(/not healthy/);
+    ).rejects.toThrow(/not healthy/);
 
     controller.start();
     const child = processes[0];
     child.emit("spawn");
     child.emit("message", { type: "ready", version: "0.1.0" });
 
-    const response = controller.startTurn({
+    const response = await controller.startTurn({
       agentId: "agent-1",
       threadId: "thread-1",
       messageId: "message-1",
@@ -109,9 +146,15 @@ describe("PiSidecarController", () => {
       type: "start-turn",
       requestId: response.requestId,
       payload: {
-        agentId: "agent-1",
-        threadId: "thread-1",
-        userMessage: "Run locally",
+        workspaceCacheRoot: "/user-data/pi-workspaces",
+        session: {
+          invocation: {
+            assistant_id: "agent-1",
+            thread_id: "thread-1",
+            message: "Run locally",
+            runtime_host: "desktop-local",
+          },
+        },
       },
     });
   });
@@ -166,6 +209,16 @@ describe("PiSidecarController", () => {
     expect(isPiSidecarParentMessage({ type: "start-turn" })).toBe(false);
     expect(
       isPiSidecarParentMessage({ type: "start-turn", requestId: "request-1" }),
+    ).toBe(false);
+    expect(
+      isPiSidecarParentMessage({
+        type: "start-turn",
+        requestId: "request-1",
+        payload: {
+          workspaceCacheRoot: "/tmp/pi",
+          session: { invocation: { runtime_host: "desktop-local" } },
+        },
+      }),
     ).toBe(true);
   });
 });

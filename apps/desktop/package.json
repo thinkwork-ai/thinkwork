@@ -15,7 +15,10 @@
     "lint": "echo 'lint: skipped (eslint not configured)'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1028.0",
+    "@earendil-works/pi-coding-agent": "0.76.0",
     "@thinkwork/desktop-ipc": "workspace:*",
+    "@thinkwork/pi-runtime-core": "workspace:^",
     "electron-updater": "6.8.3"
   },
   "devDependencies": {

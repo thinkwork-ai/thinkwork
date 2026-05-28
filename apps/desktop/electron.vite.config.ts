@@ -48,6 +48,14 @@ export default defineConfig(async (env) => {
 
   return {
     main: {
+      resolve: {
+        alias: {
+          "@thinkwork/pi-runtime-core": resolve(
+            rootDir,
+            "../../packages/pi-runtime-core/src/index.ts",
+          ),
+        },
+      },
       define: {
         __THINKWORK_APPLE_TEAM_ID__: JSON.stringify(
           process.env.APPLE_TEAM_ID ??
@@ -58,7 +66,7 @@ export default defineConfig(async (env) => {
       },
       build: {
         externalizeDeps: {
-          exclude: ["@thinkwork/desktop-ipc"],
+          exclude: ["@thinkwork/desktop-ipc", "@thinkwork/pi-runtime-core"],
         },
         outDir: "out/main",
         rollupOptions: {
