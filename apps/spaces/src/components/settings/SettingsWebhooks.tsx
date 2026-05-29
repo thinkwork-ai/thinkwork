@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
-import { Badge, DataTable, Input, Skeleton } from "@thinkwork/ui";
+import { Badge, DataTable, Input } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsWebhooksQuery } from "@/lib/settings-queries";
-import {
-  SettingsHeader,
-  SettingsPane,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 type WebhookRow = {
   id: string;
@@ -84,41 +81,34 @@ export function SettingsWebhooks() {
     [],
   );
 
-  if (result.fetching && !result.data) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Webhooks" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Webhooks"
-        description="Inbound endpoints that trigger agents or routines."
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Webhooks"
+      loading={result.fetching && !result.data}
+      toolbar={
         <Input
           placeholder="Search webhooks…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={20}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No webhooks configured.
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
-import { Badge, DataTable, Input, Skeleton } from "@thinkwork/ui";
+import { Badge, DataTable, Input } from "@thinkwork/ui";
 import { ComputerKnowledgeBasesQuery } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
-import {
-  SettingsHeader,
-  SettingsPane,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 type KbRow = {
   id: string;
@@ -82,41 +79,34 @@ export function SettingsKnowledgeBases() {
     [],
   );
 
-  if (result.fetching && !result.data) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Knowledge Bases" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Knowledge Bases"
-        description="Document collections the agent can search."
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Knowledge Bases"
+      loading={result.fetching && !result.data}
+      toolbar={
         <Input
           placeholder="Search knowledge bases…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={20}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No knowledge bases yet.
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

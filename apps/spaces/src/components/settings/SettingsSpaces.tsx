@@ -17,7 +17,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
   Textarea,
 } from "@thinkwork/ui";
 import { SpaceAccessMode } from "@/gql/graphql";
@@ -29,6 +28,8 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
+  settingsLinkActionClassName,
 } from "@/components/settings/SettingsContent";
 
 type SpaceRow = {
@@ -115,15 +116,6 @@ export function SettingsSpaces() {
     [],
   );
 
-  if (result.fetching && !result.data) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Spaces" />
-        <Skeleton className="h-72 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   if (result.error) {
     return (
       <SettingsPane className="max-w-5xl">
@@ -145,29 +137,41 @@ export function SettingsSpaces() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Spaces"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>+ New Space</Button>
-        }
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Spaces"
+      loading={result.fetching && !result.data}
+      actions={
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className={settingsLinkActionClassName}
+        >
+          + New Space
+        </button>
+      }
+      toolbar={
         <Input
           placeholder="Search spaces…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={20}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         onRowClick={(row) =>
-          navigate({ to: "/spaces/$spaceId", params: { spaceId: row.id } })
+          navigate({
+            to: "/settings/spaces/$spaceId",
+            params: { spaceId: row.id },
+          })
         }
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
@@ -184,7 +188,7 @@ export function SettingsSpaces() {
           setCreateOpen(false);
         }}
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }
 

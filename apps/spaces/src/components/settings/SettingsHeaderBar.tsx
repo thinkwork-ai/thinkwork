@@ -1,0 +1,85 @@
+import { ChevronRight } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { cn } from "@thinkwork/ui";
+import { usePageHeader } from "@/context/PageHeaderContext";
+import { isDesktopBuild } from "@/lib/desktop-runtime";
+import {
+  settingsCrumbForPath,
+  type SettingsCrumb,
+} from "@/components/settings/settings-nav";
+
+/**
+ * Header bar for the settings takeover. Mirrors the main shell's content
+ * header: the page title relocates here as a breadcrumb trail (same font as
+ * the thread detail header), with the active section's action slot on the
+ * right. Back/forward navigation lives in the SettingsSidebar's top strip
+ * (next to the traffic lights), mirroring the main nav. On desktop this is the
+ * draggable `desktop-app-header` strip; on web it's a plain bordered bar.
+ */
+export function SettingsHeaderBar() {
+  const isDesktop = isDesktopBuild();
+  const { actions } = usePageHeader();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const crumbs: SettingsCrumb[] =
+    actions?.breadcrumbs && actions.breadcrumbs.length > 0
+      ? actions.breadcrumbs
+      : settingsCrumbForPath(pathname);
+
+  return (
+    <header
+      className={cn(
+        "flex shrink-0 items-center gap-2 border-b border-border text-foreground",
+        isDesktop
+          ? "desktop-app-header h-[var(--desktop-app-header-height)] bg-background pl-4 pr-3"
+          : "h-12 bg-background pl-4 pr-4",
+      )}
+    >
+      <nav
+        aria-label="Breadcrumb"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm font-medium"
+      >
+        {crumbs.map((crumb, index) => {
+          const isLast = index === crumbs.length - 1;
+          return (
+            <span
+              key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
+              className="flex min-w-0 items-center gap-1"
+            >
+              {index > 0 ? (
+                <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
+              ) : null}
+              {isLast || !crumb.href ? (
+                <span
+                  className={
+                    isLast
+                      ? "truncate text-foreground"
+                      : "shrink-0 truncate text-muted-foreground"
+                  }
+                >
+                  {crumb.label}
+                </span>
+              ) : (
+                <Link
+                  to={crumb.href}
+                  className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {crumb.label}
+                </Link>
+              )}
+            </span>
+          );
+        })}
+        {actions?.subtitle ? (
+          <span className="ml-1 shrink-0 truncate text-xs font-normal text-muted-foreground">
+            {actions.subtitle}
+          </span>
+        ) : null}
+      </nav>
+      {actions?.action ? (
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {actions.action}
+        </div>
+      ) : null}
+    </header>
+  );
+}
