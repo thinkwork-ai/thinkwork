@@ -2,11 +2,16 @@ import type { ComponentType } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  BookOpen,
   Bot,
+  Brain,
+  NotebookText,
   Plug,
+  Repeat,
   Settings as SettingsIcon,
   Sparkles,
   Users,
+  Webhook,
   Wrench,
 } from "lucide-react";
 import { IconChartBar, IconPlanet } from "@tabler/icons-react";
@@ -48,12 +53,37 @@ const NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
+    label: "Knowledge Bases",
+    to: "/settings/knowledge-bases",
+    icon: BookOpen,
+    operatorOnly: true,
+  },
+  { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
+  {
+    label: "Wiki",
+    to: "/settings/wiki",
+    icon: NotebookText,
+    operatorOnly: true,
+  },
+  {
     label: "Spaces",
     to: "/settings/spaces",
     icon: IconPlanet,
     operatorOnly: true,
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
+  {
+    label: "Routines",
+    to: "/settings/routines",
+    icon: Repeat,
+    operatorOnly: true,
+  },
+  {
+    label: "Webhooks",
+    to: "/settings/webhooks",
+    icon: Webhook,
+    operatorOnly: true,
+  },
   {
     label: "Analytics",
     to: "/settings/analytics",
