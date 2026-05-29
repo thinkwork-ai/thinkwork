@@ -82,6 +82,81 @@ export const spacesWorkspaceFilesClient: WorkspaceFilesClient<WorkspaceFilesTarg
     },
   };
 
+// ─── Skill catalog ───────────────────────────────────────────────────────
+
+/**
+ * Lists the skill slugs in the tenant catalog — the top-level folders under
+ * the catalog root (e.g. `web-research/SKILL.md` → skill "web-research").
+ */
+export async function listSkillSlugs(): Promise<string[]> {
+  const { files } = await spacesWorkspaceFilesClient.listFiles({
+    catalog: true,
+  });
+  const slugs = new Set<string>();
+  for (const f of files) {
+    const top = f.path.split("/")[0];
+    if (top && f.path.includes("/")) slugs.add(top);
+  }
+  return [...slugs].sort();
+}
+
+/**
+ * A workspace client scoped to a single skill folder in the catalog: paths are
+ * presented relative to the skill root (prefix stripped) and re-prefixed before
+ * hitting the catalog backend. Lets WorkspaceFileEditor show one skill's files
+ * instead of the whole catalog.
+ */
+export const skillCatalogClient: WorkspaceFilesClient<{ skill: string }> = {
+  async listFiles(target) {
+    const prefix = `${target.skill}/`;
+    const { files } = await spacesWorkspaceFilesClient.listFiles({
+      catalog: true,
+    });
+    return {
+      files: files
+        .filter((f) => f.path.startsWith(prefix))
+        .map((f) => ({ ...f, path: f.path.slice(prefix.length) })),
+    };
+  },
+  getFile(target, path) {
+    return spacesWorkspaceFilesClient.getFile(
+      { catalog: true },
+      `${target.skill}/${path}`,
+    );
+  },
+  putFile(target, path, content) {
+    return spacesWorkspaceFilesClient.putFile(
+      { catalog: true },
+      `${target.skill}/${path}`,
+      content,
+    );
+  },
+  deleteFile(target, path) {
+    return spacesWorkspaceFilesClient.deleteFile(
+      { catalog: true },
+      `${target.skill}/${path}`,
+    );
+  },
+  async movePath(target, fromPath, toFolder) {
+    const r = await spacesWorkspaceFilesClient.movePath?.(
+      { catalog: true },
+      `${target.skill}/${fromPath}`,
+      `${target.skill}/${toFolder}`,
+    );
+    const dest = r?.destPath ?? `${target.skill}/${fromPath}`;
+    return { destPath: dest.replace(`${target.skill}/`, "") };
+  },
+  async renamePath(target, fromPath, toPath) {
+    const r = await spacesWorkspaceFilesClient.renamePath?.(
+      { catalog: true },
+      `${target.skill}/${fromPath}`,
+      `${target.skill}/${toPath}`,
+    );
+    const dest = r?.destPath ?? `${target.skill}/${toPath}`;
+    return { destPath: dest.replace(`${target.skill}/`, "") };
+  },
+};
+
 export function createThreadGoalFilesClient(
   fallbackFiles: ThreadGoalFileFallback[] = [],
 ): WorkspaceFilesClient<{ threadId: string }> {

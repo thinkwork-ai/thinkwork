@@ -35,6 +35,13 @@ const NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
   { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
   {
+    label: "Spaces",
+    to: "/settings/spaces",
+    icon: IconPlanet,
+    operatorOnly: true,
+  },
+  { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
+  {
     label: "Skills",
     to: "/settings/skills",
     icon: Sparkles,
@@ -65,13 +72,6 @@ const NAV_ITEMS: SettingsNavItem[] = [
     icon: NotebookText,
     operatorOnly: true,
   },
-  {
-    label: "Spaces",
-    to: "/settings/spaces",
-    icon: IconPlanet,
-    operatorOnly: true,
-  },
-  { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
   {
     label: "Routines",
     to: "/settings/routines",
