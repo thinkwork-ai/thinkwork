@@ -110,7 +110,7 @@ export function SettingsKnowledgeBases() {
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={20}
+        pageSize={10}
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No knowledge bases yet.

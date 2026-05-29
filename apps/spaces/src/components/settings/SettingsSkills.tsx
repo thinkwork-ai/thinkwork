@@ -88,7 +88,7 @@ export function SettingsSkills() {
         data={rows}
         filterValue={search}
         filterColumn="slug"
-        pageSize={20}
+        pageSize={10}
         onRowClick={(row) =>
           navigate({
             to: "/settings/skills/$skillSlug",

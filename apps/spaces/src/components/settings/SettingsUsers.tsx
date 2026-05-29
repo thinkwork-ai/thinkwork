@@ -194,7 +194,7 @@ export function SettingsUsers() {
         columns={columns}
         data={rows}
         filterValue={search}
-        pageSize={20}
+        pageSize={10}
         onRowClick={(row) =>
           navigate({
             to: "/settings/users/$userId",

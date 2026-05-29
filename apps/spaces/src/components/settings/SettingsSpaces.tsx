@@ -165,7 +165,7 @@ export function SettingsSpaces() {
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={20}
+        pageSize={10}
         onRowClick={(row) =>
           navigate({ to: "/spaces/$spaceId", params: { spaceId: row.id } })
         }
