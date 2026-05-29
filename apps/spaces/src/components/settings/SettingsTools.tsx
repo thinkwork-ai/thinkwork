@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { DataTable, Input, Skeleton, Switch } from "@thinkwork/ui";
+import { DataTable, Input, Switch } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
   listBuiltinTools,
   setBuiltinToolEnabled,
   type BuiltinTool,
 } from "@/lib/builtin-tools-api";
-import {
-  SettingsHeader,
-  SettingsPane,
-  SettingsTablePane,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 export function SettingsTools() {
   const { tenant } = useTenant();
@@ -91,19 +87,10 @@ export function SettingsTools() {
     [pending, toggle],
   );
 
-  if (!tools && !error) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Built-in Tools" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   return (
     <SettingsTablePane
       title="Built-in Tools"
-      description="Enable or disable the agent’s built-in tools."
+      loading={!tools && !error}
       toolbar={
         error ? (
           <p className="text-sm text-destructive">{error}</p>

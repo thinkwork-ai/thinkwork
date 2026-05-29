@@ -2,14 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Sparkles } from "lucide-react";
-import { DataTable, Input, Skeleton } from "@thinkwork/ui";
+import { DataTable, Input } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { listSkillSlugs } from "@/lib/workspace-files-api";
-import {
-  SettingsHeader,
-  SettingsPane,
-  SettingsTablePane,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 type SkillRow = { slug: string };
 
@@ -57,19 +53,10 @@ export function SettingsSkills() {
     [],
   );
 
-  if (!slugs && !error) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Skills" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   return (
     <SettingsTablePane
       title="Skills"
-      description="The tenant skill catalog. Open a skill to edit its files."
+      loading={!slugs && !error}
       toolbar={
         error ? (
           <p className="text-sm text-destructive">{error}</p>

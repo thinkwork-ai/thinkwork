@@ -1,27 +1,30 @@
 import type { ReactNode } from "react";
 import { cn } from "@thinkwork/ui";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 
-/** Page title at the top of a settings section's content pane. */
+/**
+ * Publishes a settings section's title (and optional action) to the settings
+ * header bar as a single breadcrumb. Renders nothing in the content body — the
+ * title lives in the header now. `description` is accepted for call-site
+ * compatibility but no longer rendered. Detail pages that need nested
+ * breadcrumbs call `usePageHeaderActions` directly instead of using this.
+ */
 export function SettingsHeader({
   title,
-  description,
   actions,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
 }) {
-  return (
-    <div className="mb-8 flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {description ? (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        ) : null}
-      </div>
-      {actions ? <div className="shrink-0">{actions}</div> : null}
-    </div>
-  );
+  usePageHeaderActions({
+    title,
+    breadcrumbs: [{ label: title }],
+    action: actions ?? undefined,
+    actionKey: actions ? `settings-header:${title}` : undefined,
+  });
+  return null;
 }
 
 /** Outer padding wrapper for a settings content pane. */
@@ -33,7 +36,7 @@ export function SettingsPane({
   className?: string;
 }) {
   return (
-    <div className={cn("mx-auto w-full max-w-3xl px-8 py-10", className)}>
+    <div className={cn("mx-auto w-full max-w-3xl px-6 pb-10 pt-6", className)}>
       {children}
     </div>
   );
@@ -44,32 +47,50 @@ export function SettingsPane({
  * top, the table area filling the rest (so a `scrollable` DataTable scrolls its
  * body and pins pagination to the bottom — matching the Memory section).
  */
+/**
+ * Shared style for a muted link-style action (e.g. "+ New Space", "+ Invite
+ * member", "Workspace", "Rename") — low-emphasis text that brightens on hover.
+ */
+export const settingsLinkActionClassName =
+  "text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:underline";
+
 export function SettingsTablePane({
   title,
-  description,
   actions,
   toolbar,
+  loading,
   children,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
   toolbar?: ReactNode;
+  /** When true, render a centered loading shimmer in the table area (the
+   *  toolbar stays visible) — mirroring the Memory page's load behavior. */
+  loading?: boolean;
   children: ReactNode;
 }) {
+  // Title relocates to the settings header bar as a breadcrumb. The search
+  // toolbar (left) and primary action (right, a muted link) share a row above
+  // the table in the content body.
+  usePageHeaderActions({ title, breadcrumbs: [{ label: title }] });
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          {description ? (
-            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-          ) : null}
+      {toolbar || actions ? (
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+          <div className="min-w-0">{toolbar}</div>
+          {actions ? <div className="shrink-0">{actions}</div> : null}
         </div>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
+      ) : null}
+      <div className="min-h-0 flex-1">
+        {loading ? (
+          <div className="flex h-full items-center justify-center">
+            <LoadingShimmer />
+          </div>
+        ) : (
+          children
+        )}
       </div>
-      {toolbar ? <div className="mb-3 shrink-0">{toolbar}</div> : null}
-      <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
 }

@@ -87,6 +87,31 @@ export const SettingsCreateSpaceMutation = graphql(`
   }
 `);
 
+export const SettingsSpaceQuery = graphql(`
+  query SettingsSpace($id: ID!) {
+    space(id: $id) {
+      id
+      tenantId
+      name
+      description
+      status
+      accessMode
+      slug
+    }
+  }
+`);
+
+export const SettingsUpdateSpaceMutation = graphql(`
+  mutation SettingsUpdateSpace($input: UpdateSpaceInput!) {
+    updateSpace(input: $input) {
+      id
+      name
+      description
+      accessMode
+    }
+  }
+`);
+
 // ─── Agent config (operator-only section) ────────────────────────────────
 
 export const SettingsTenantAgentQuery = graphql(`

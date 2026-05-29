@@ -1,14 +1,10 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
-import { Badge, DataTable, Input, Skeleton } from "@thinkwork/ui";
+import { Badge, DataTable, Input } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsWebhooksQuery } from "@/lib/settings-queries";
-import {
-  SettingsHeader,
-  SettingsPane,
-  SettingsTablePane,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 type WebhookRow = {
   id: string;
@@ -85,19 +81,10 @@ export function SettingsWebhooks() {
     [],
   );
 
-  if (result.fetching && !result.data) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Webhooks" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   return (
     <SettingsTablePane
       title="Webhooks"
-      description="Inbound endpoints that trigger agents or routines."
+      loading={result.fetching && !result.data}
       toolbar={
         <Input
           placeholder="Search webhooks…"

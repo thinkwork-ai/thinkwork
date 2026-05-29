@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  Badge,
-  Button,
-  DataTable,
-  Input,
-  Skeleton,
-  Switch,
-} from "@thinkwork/ui";
+import { Badge, Button, DataTable, Input, Switch } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
   deleteMcpServer,
@@ -15,11 +8,7 @@ import {
   setMcpServerEnabled,
   type McpServer,
 } from "@/lib/mcp-api";
-import {
-  SettingsHeader,
-  SettingsPane,
-  SettingsTablePane,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 export function SettingsMcpServers() {
   const { tenant } = useTenant();
@@ -140,19 +129,10 @@ export function SettingsMcpServers() {
     [pending, toggle, remove],
   );
 
-  if (!servers && !error) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="MCP Servers" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   return (
     <SettingsTablePane
       title="MCP Servers"
-      description="Model Context Protocol servers available to the agent."
+      loading={!servers && !error}
       toolbar={
         error ? (
           <p className="text-sm text-destructive">{error}</p>

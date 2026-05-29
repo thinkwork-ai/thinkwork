@@ -19,7 +19,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -30,6 +29,7 @@ import {
   SettingsHeader,
   SettingsPane,
   SettingsTablePane,
+  settingsLinkActionClassName,
 } from "@/components/settings/SettingsContent";
 
 type UserRow = {
@@ -146,15 +146,6 @@ export function SettingsUsers() {
     [],
   );
 
-  if (result.fetching && !result.data) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Users" />
-        <Skeleton className="h-72 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   if (result.error) {
     return (
       <SettingsPane className="max-w-5xl">
@@ -178,8 +169,15 @@ export function SettingsUsers() {
   return (
     <SettingsTablePane
       title="Users"
+      loading={result.fetching && !result.data}
       actions={
-        <Button onClick={() => setInviteOpen(true)}>+ Invite member</Button>
+        <button
+          type="button"
+          onClick={() => setInviteOpen(true)}
+          className={settingsLinkActionClassName}
+        >
+          + Invite member
+        </button>
       }
       toolbar={
         <Input

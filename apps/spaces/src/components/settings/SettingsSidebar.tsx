@@ -1,96 +1,14 @@
-import type { ComponentType } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  BookOpen,
-  Bot,
-  Brain,
-  NotebookText,
-  Plug,
-  Repeat,
-  Settings as SettingsIcon,
-  Sparkles,
-  Users,
-  Webhook,
-  Wrench,
-} from "lucide-react";
-import { IconChartBar, IconPlanet } from "@tabler/icons-react";
-import { cn } from "@thinkwork/ui";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Button, cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
+import {
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
 import { getSettingsReturnTo } from "@/lib/settings-return";
-
-interface SettingsNavItem {
-  label: string;
-  to: string;
-  // Accepts both lucide-react and @tabler/icons-react components.
-  icon: ComponentType<{ className?: string }>;
-  /** When true, only render for operators (owner/admin). */
-  operatorOnly?: boolean;
-}
-
-// General first (visible to all), then operator-only sections. Appearance is
-// folded into General as a "Color mode" control rather than a nav item.
-const NAV_ITEMS: SettingsNavItem[] = [
-  { label: "General", to: "/settings/general", icon: SettingsIcon },
-  { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
-  {
-    label: "Spaces",
-    to: "/settings/spaces",
-    icon: IconPlanet,
-    operatorOnly: true,
-  },
-  { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
-  {
-    label: "Skills",
-    to: "/settings/skills",
-    icon: Sparkles,
-    operatorOnly: true,
-  },
-  {
-    label: "Built-in Tools",
-    to: "/settings/tools",
-    icon: Wrench,
-    operatorOnly: true,
-  },
-  {
-    label: "MCP Servers",
-    to: "/settings/mcp-servers",
-    icon: Plug,
-    operatorOnly: true,
-  },
-  {
-    label: "Knowledge Bases",
-    to: "/settings/knowledge-bases",
-    icon: BookOpen,
-    operatorOnly: true,
-  },
-  { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
-  {
-    label: "Wiki",
-    to: "/settings/wiki",
-    icon: NotebookText,
-    operatorOnly: true,
-  },
-  {
-    label: "Routines",
-    to: "/settings/routines",
-    icon: Repeat,
-    operatorOnly: true,
-  },
-  {
-    label: "Webhooks",
-    to: "/settings/webhooks",
-    icon: Webhook,
-    operatorOnly: true,
-  },
-  {
-    label: "Analytics",
-    to: "/settings/analytics",
-    icon: IconChartBar,
-    operatorOnly: true,
-  },
-];
+import { SETTINGS_NAV_ITEMS } from "@/components/settings/settings-nav";
 
 // Matches the main chat-sidebar nav item style (SidebarMenuButton): h-8, p-2,
 // gap-2, text-sm, size-4 icons.
@@ -105,7 +23,7 @@ export function SettingsSidebar() {
 
   // Hide operator items until the role is known, to avoid a flash of operator
   // content for members.
-  const items = NAV_ITEMS.filter(
+  const items = SETTINGS_NAV_ITEMS.filter(
     (item) => !item.operatorOnly || (roleResolved && isOperator),
   );
 
@@ -114,7 +32,21 @@ export function SettingsSidebar() {
       {/* Web carries the brand header from the chat shell; desktop relies on
           its own window chrome. Padding mirrors the shell SidebarHeader
           (p-2 + pb-3, inner brand px-1) so the logo aligns across surfaces. */}
-      {isDesktop ? null : (
+      {isDesktop ? (
+        // Reserve the macOS traffic-light band (mirrors SpacesSidebar's top
+        // strip: same height, pl-20, draggable) and carry the back/forward
+        // history controls here, next to the lights — mirroring the main nav.
+        <div
+          className={cn(
+            "desktop-app-header flex h-[var(--desktop-app-header-height)] shrink-0 items-center pl-20 pr-3 text-sidebar-foreground/70",
+            desktopToolbarGapClassName,
+          )}
+        >
+          <SettingsNavControls
+            onBackFallback={() => navigate({ to: getSettingsReturnTo() })}
+          />
+        </div>
+      ) : (
         <div className="flex items-center gap-2 px-3 pt-2 pb-3">
           <Link
             to="/"
@@ -136,12 +68,7 @@ export function SettingsSidebar() {
           </Link>
         </div>
       )}
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col px-3 pb-2",
-          isDesktop && "pt-2",
-        )}
-      >
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-0">
         <button
           type="button"
           className={cn(itemClassName, "mb-2 text-sidebar-foreground/65")}
@@ -171,5 +98,46 @@ export function SettingsSidebar() {
         </nav>
       </div>
     </aside>
+  );
+}
+
+/** Back / forward history controls for the desktop sidebar strip. */
+function SettingsNavControls({
+  onBackFallback,
+}: {
+  onBackFallback: () => void;
+}) {
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    onBackFallback();
+  };
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className={cn("size-8", desktopToolbarButtonClassName)}
+        aria-label="Back"
+        title="Back"
+        onClick={handleBack}
+      >
+        <ArrowLeft className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className={cn("size-8", desktopToolbarButtonClassName)}
+        aria-label="Forward"
+        title="Forward"
+        onClick={() => window.history.forward()}
+      >
+        <ArrowRight className="size-4" />
+      </Button>
+    </>
   );
 }

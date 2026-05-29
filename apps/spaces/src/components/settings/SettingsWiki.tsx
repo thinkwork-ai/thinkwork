@@ -22,6 +22,7 @@ import {
   ComputerRecentWikiPagesQuery,
   ComputerWikiSearchQuery,
 } from "@/lib/graphql-queries";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   WikiPageDetailSheet,
@@ -55,6 +56,7 @@ export function SettingsWiki() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<WikiGraphHandle>(null);
+  usePageHeaderActions({ title: "Wiki", breadcrumbs: [{ label: "Wiki" }] });
 
   const requesterUserId = null;
   const effectiveTenantId = tenantId ?? null;
@@ -151,13 +153,6 @@ export function SettingsWiki() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Wiki</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Compiled knowledge pages distilled from memory.
-        </p>
-      </div>
-
       <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="relative w-fit min-w-56 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

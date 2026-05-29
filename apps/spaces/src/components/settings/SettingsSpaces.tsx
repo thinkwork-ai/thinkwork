@@ -17,7 +17,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
   Textarea,
 } from "@thinkwork/ui";
 import { SpaceAccessMode } from "@/gql/graphql";
@@ -30,6 +29,7 @@ import {
   SettingsHeader,
   SettingsPane,
   SettingsTablePane,
+  settingsLinkActionClassName,
 } from "@/components/settings/SettingsContent";
 
 type SpaceRow = {
@@ -116,15 +116,6 @@ export function SettingsSpaces() {
     [],
   );
 
-  if (result.fetching && !result.data) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Spaces" />
-        <Skeleton className="h-72 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   if (result.error) {
     return (
       <SettingsPane className="max-w-5xl">
@@ -148,7 +139,16 @@ export function SettingsSpaces() {
   return (
     <SettingsTablePane
       title="Spaces"
-      actions={<Button onClick={() => setCreateOpen(true)}>+ New Space</Button>}
+      loading={result.fetching && !result.data}
+      actions={
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className={settingsLinkActionClassName}
+        >
+          + New Space
+        </button>
+      }
       toolbar={
         <Input
           placeholder="Search spaces…"
@@ -168,7 +168,10 @@ export function SettingsSpaces() {
         pageSize={25}
         tableClassName="table-fixed"
         onRowClick={(row) =>
-          navigate({ to: "/spaces/$spaceId", params: { spaceId: row.id } })
+          navigate({
+            to: "/settings/spaces/$spaceId",
+            params: { spaceId: row.id },
+          })
         }
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">

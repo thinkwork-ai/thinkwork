@@ -6,7 +6,6 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +15,7 @@ import {
   TableRow,
   type ChartConfig,
 } from "@thinkwork/ui";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsCostByAgentQuery,
@@ -88,8 +88,9 @@ export function SettingsAnalytics() {
     return (
       <SettingsPane className="max-w-5xl">
         <SettingsHeader title="Analytics" />
-        <Skeleton className="mb-6 h-24 w-full rounded-xl" />
-        <Skeleton className="h-64 w-full rounded-xl" />
+        <div className="flex items-center justify-center py-24">
+          <LoadingShimmer />
+        </div>
       </SettingsPane>
     );
   }

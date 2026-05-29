@@ -21,7 +21,6 @@ import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settin
 import { Route as AuthedSettingsWikiRouteImport } from "./routes/_authed/settings.wiki";
 import { Route as AuthedSettingsWebhooksRouteImport } from "./routes/_authed/settings.webhooks";
 import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settings.tools";
-import { Route as AuthedSettingsSpacesRouteImport } from "./routes/_authed/settings.spaces";
 import { Route as AuthedSettingsRoutinesRouteImport } from "./routes/_authed/settings.routines";
 import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/settings.memory";
 import { Route as AuthedSettingsMcpServersRouteImport } from "./routes/_authed/settings.mcp-servers";
@@ -34,6 +33,7 @@ import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/m
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
 import { Route as AuthedSettingsUsersIndexRouteImport } from "./routes/_authed/settings.users.index";
+import { Route as AuthedSettingsSpacesIndexRouteImport } from "./routes/_authed/settings.spaces.index";
 import { Route as AuthedSettingsSkillsIndexRouteImport } from "./routes/_authed/settings.skills.index";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
 import { Route as AuthedShellSpacesIndexRouteImport } from "./routes/_authed/_shell/spaces.index";
@@ -43,6 +43,7 @@ import { Route as AuthedShellAutomationsIndexRouteImport } from "./routes/_authe
 import { Route as AuthedShellArtifactsIndexRouteImport } from "./routes/_authed/_shell/artifacts.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
 import { Route as AuthedSettingsUsersUserIdRouteImport } from "./routes/_authed/settings.users.$userId";
+import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authed/settings.spaces.$spaceId";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellSpacesSpaceIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId";
@@ -115,11 +116,6 @@ const AuthedSettingsToolsRoute = AuthedSettingsToolsRouteImport.update({
   path: "/tools",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
-const AuthedSettingsSpacesRoute = AuthedSettingsSpacesRouteImport.update({
-  id: "/spaces",
-  path: "/spaces",
-  getParentRoute: () => AuthedSettingsRoute,
-} as any);
 const AuthedSettingsRoutinesRoute = AuthedSettingsRoutinesRouteImport.update({
   id: "/routines",
   path: "/routines",
@@ -183,6 +179,12 @@ const AuthedSettingsUsersIndexRoute =
     path: "/users/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsSpacesIndexRoute =
+  AuthedSettingsSpacesIndexRouteImport.update({
+    id: "/spaces/",
+    path: "/spaces/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsSkillsIndexRoute =
   AuthedSettingsSkillsIndexRouteImport.update({
     id: "/skills/",
@@ -232,6 +234,12 @@ const AuthedSettingsUsersUserIdRoute =
   AuthedSettingsUsersUserIdRouteImport.update({
     id: "/users/$userId",
     path: "/users/$userId",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
+const AuthedSettingsSpacesSpaceIdRoute =
+  AuthedSettingsSpacesSpaceIdRouteImport.update({
+    id: "/spaces/$spaceId",
+    path: "/spaces/$spaceId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsSkillsSkillSlugRoute =
@@ -326,7 +334,6 @@ export interface FileRoutesByFullPath {
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/settings/routines": typeof AuthedSettingsRoutinesRoute;
-  "/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
@@ -342,6 +349,7 @@ export interface FileRoutesByFullPath {
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
+  "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/artifacts/": typeof AuthedShellArtifactsIndexRoute;
@@ -351,6 +359,7 @@ export interface FileRoutesByFullPath {
   "/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
   "/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
+  "/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
   "/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
@@ -369,7 +378,6 @@ export interface FileRoutesByTo {
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/settings/routines": typeof AuthedSettingsRoutinesRoute;
-  "/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
@@ -385,6 +393,7 @@ export interface FileRoutesByTo {
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
+  "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
   "/artifacts": typeof AuthedShellArtifactsIndexRoute;
@@ -394,6 +403,7 @@ export interface FileRoutesByTo {
   "/spaces": typeof AuthedShellSpacesIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
   "/settings/skills": typeof AuthedSettingsSkillsIndexRoute;
+  "/settings/spaces": typeof AuthedSettingsSpacesIndexRoute;
   "/settings/users": typeof AuthedSettingsUsersIndexRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
@@ -419,7 +429,6 @@ export interface FileRoutesById {
   "/_authed/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
   "/_authed/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/_authed/settings/routines": typeof AuthedSettingsRoutinesRoute;
-  "/_authed/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
   "/_authed/settings/webhooks": typeof AuthedSettingsWebhooksRoute;
   "/_authed/settings/wiki": typeof AuthedSettingsWikiRoute;
@@ -435,6 +444,7 @@ export interface FileRoutesById {
   "/_authed/_shell/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
+  "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/_authed/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/_authed/_shell/artifacts/": typeof AuthedShellArtifactsIndexRoute;
@@ -444,6 +454,7 @@ export interface FileRoutesById {
   "/_authed/_shell/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
   "/_authed/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
+  "/_authed/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
   "/_authed/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/_authed/_shell/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/_authed/_shell/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
@@ -468,7 +479,6 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers"
     | "/settings/memory"
     | "/settings/routines"
-    | "/settings/spaces"
     | "/settings/tools"
     | "/settings/webhooks"
     | "/settings/wiki"
@@ -484,6 +494,7 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId"
     | "/threads/$id"
     | "/settings/skills/$skillSlug"
+    | "/settings/spaces/$spaceId"
     | "/settings/users/$userId"
     | "/approvals/"
     | "/artifacts/"
@@ -493,6 +504,7 @@ export interface FileRouteTypes {
     | "/spaces/"
     | "/threads/"
     | "/settings/skills/"
+    | "/settings/spaces/"
     | "/settings/users/"
     | "/memory/kbs/$kbId"
     | "/spaces/$spaceId/threads/$threadId";
@@ -511,7 +523,6 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers"
     | "/settings/memory"
     | "/settings/routines"
-    | "/settings/spaces"
     | "/settings/tools"
     | "/settings/webhooks"
     | "/settings/wiki"
@@ -527,6 +538,7 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId"
     | "/threads/$id"
     | "/settings/skills/$skillSlug"
+    | "/settings/spaces/$spaceId"
     | "/settings/users/$userId"
     | "/approvals"
     | "/artifacts"
@@ -536,6 +548,7 @@ export interface FileRouteTypes {
     | "/spaces"
     | "/threads"
     | "/settings/skills"
+    | "/settings/spaces"
     | "/settings/users"
     | "/memory/kbs/$kbId"
     | "/spaces/$spaceId/threads/$threadId";
@@ -560,7 +573,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/mcp-servers"
     | "/_authed/settings/memory"
     | "/_authed/settings/routines"
-    | "/_authed/settings/spaces"
     | "/_authed/settings/tools"
     | "/_authed/settings/webhooks"
     | "/_authed/settings/wiki"
@@ -576,6 +588,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/spaces/$spaceId"
     | "/_authed/_shell/threads/$id"
     | "/_authed/settings/skills/$skillSlug"
+    | "/_authed/settings/spaces/$spaceId"
     | "/_authed/settings/users/$userId"
     | "/_authed/_shell/approvals/"
     | "/_authed/_shell/artifacts/"
@@ -585,6 +598,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/spaces/"
     | "/_authed/_shell/threads/"
     | "/_authed/settings/skills/"
+    | "/_authed/settings/spaces/"
     | "/_authed/settings/users/"
     | "/_authed/_shell/memory/kbs/$kbId"
     | "/_authed/_shell/spaces/$spaceId/threads/$threadId";
@@ -685,13 +699,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsToolsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/spaces": {
-      id: "/_authed/settings/spaces";
-      path: "/spaces";
-      fullPath: "/settings/spaces";
-      preLoaderRoute: typeof AuthedSettingsSpacesRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/routines": {
       id: "/_authed/settings/routines";
       path: "/routines";
@@ -776,6 +783,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsUsersIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/spaces/": {
+      id: "/_authed/settings/spaces/";
+      path: "/spaces";
+      fullPath: "/settings/spaces/";
+      preLoaderRoute: typeof AuthedSettingsSpacesIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/skills/": {
       id: "/_authed/settings/skills/";
       path: "/skills";
@@ -837,6 +851,13 @@ declare module "@tanstack/react-router" {
       path: "/users/$userId";
       fullPath: "/settings/users/$userId";
       preLoaderRoute: typeof AuthedSettingsUsersUserIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/spaces/$spaceId": {
+      id: "/_authed/settings/spaces/$spaceId";
+      path: "/spaces/$spaceId";
+      fullPath: "/settings/spaces/$spaceId";
+      preLoaderRoute: typeof AuthedSettingsSpacesSpaceIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/skills/$skillSlug": {
@@ -1050,14 +1071,15 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsMcpServersRoute: typeof AuthedSettingsMcpServersRoute;
   AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRoute;
   AuthedSettingsRoutinesRoute: typeof AuthedSettingsRoutinesRoute;
-  AuthedSettingsSpacesRoute: typeof AuthedSettingsSpacesRoute;
   AuthedSettingsToolsRoute: typeof AuthedSettingsToolsRoute;
   AuthedSettingsWebhooksRoute: typeof AuthedSettingsWebhooksRoute;
   AuthedSettingsWikiRoute: typeof AuthedSettingsWikiRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
+  AuthedSettingsSpacesSpaceIdRoute: typeof AuthedSettingsSpacesSpaceIdRoute;
   AuthedSettingsUsersUserIdRoute: typeof AuthedSettingsUsersUserIdRoute;
   AuthedSettingsSkillsIndexRoute: typeof AuthedSettingsSkillsIndexRoute;
+  AuthedSettingsSpacesIndexRoute: typeof AuthedSettingsSpacesIndexRoute;
   AuthedSettingsUsersIndexRoute: typeof AuthedSettingsUsersIndexRoute;
 }
 
@@ -1069,14 +1091,15 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsMcpServersRoute: AuthedSettingsMcpServersRoute,
   AuthedSettingsMemoryRoute: AuthedSettingsMemoryRoute,
   AuthedSettingsRoutinesRoute: AuthedSettingsRoutinesRoute,
-  AuthedSettingsSpacesRoute: AuthedSettingsSpacesRoute,
   AuthedSettingsToolsRoute: AuthedSettingsToolsRoute,
   AuthedSettingsWebhooksRoute: AuthedSettingsWebhooksRoute,
   AuthedSettingsWikiRoute: AuthedSettingsWikiRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,
+  AuthedSettingsSpacesSpaceIdRoute: AuthedSettingsSpacesSpaceIdRoute,
   AuthedSettingsUsersUserIdRoute: AuthedSettingsUsersUserIdRoute,
   AuthedSettingsSkillsIndexRoute: AuthedSettingsSkillsIndexRoute,
+  AuthedSettingsSpacesIndexRoute: AuthedSettingsSpacesIndexRoute,
   AuthedSettingsUsersIndexRoute: AuthedSettingsUsersIndexRoute,
 };
 

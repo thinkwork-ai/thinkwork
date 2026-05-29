@@ -1,6 +1,6 @@
-import { Link, useParams } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { useParams } from "@tanstack/react-router";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { skillCatalogClient } from "@/lib/workspace-files-api";
 
 export function SettingsSkillDetail() {
@@ -8,18 +8,18 @@ export function SettingsSkillDetail() {
     from: "/_authed/settings/skills/$skillSlug",
   });
 
+  // Title + back navigation relocate to the settings header bar: the "Skills"
+  // crumb links back to the list, and the sidebar's back button also works.
+  usePageHeaderActions({
+    title: skillSlug,
+    breadcrumbs: [
+      { label: "Skills", href: "/settings/skills" },
+      { label: skillSlug },
+    ],
+  });
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <Link
-        to="/settings/skills"
-        className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
-      >
-        <ArrowLeft className="size-4" />
-        Skills
-      </Link>
-      <h1 className="mb-4 text-2xl font-semibold tracking-tight">
-        {skillSlug}
-      </h1>
       <WorkspaceFileEditor
         target={{ skill: skillSlug }}
         targetKey={`skill:${skillSlug}`}
