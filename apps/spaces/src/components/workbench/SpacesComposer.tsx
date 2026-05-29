@@ -41,6 +41,7 @@ import {
 } from "@/components/workbench/AgentRuntimeIndicator";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
+import { deriveAgentDefault } from "@/lib/agent-mode";
 
 export interface SpacesComposerMention {
   targetType: "USER" | "AGENT";
@@ -122,7 +123,28 @@ export function SpacesComposer({
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
-  const [agentEnabled, setAgentEnabled] = useState(true);
+  // Escape dismisses the mention menu without committing. mentionQuery is
+  // derived from the text, so we suppress the menu with a flag that resets
+  // whenever the query changes.
+  const [mentionMenuDismissed, setMentionMenuDismissed] = useState(false);
+  const mentionMenuOpen =
+    mentionQuery !== null && mentionOptions.length > 0 && !mentionMenuDismissed;
+  // New threads have no history, so mode derives from the draft mentions only:
+  // mentioning another user makes it multi-player (agent defaults OFF).
+  const agentDefaultOn = useMemo(
+    () =>
+      deriveAgentDefault({
+        draftMentions: mentions.map((mention) => ({
+          targetType: mention.targetType,
+          targetId: mention.targetId,
+        })),
+      }).agentDefaultOn,
+    [mentions],
+  );
+  const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
+  // Once the user manually toggles, their choice persists until the draft is
+  // cleared; until then the toggle tracks the derived default.
+  const agentOverriddenRef = useRef(false);
   const [runtimePreference, setRuntimePreference] =
     useState<AgentRuntimePreference>("local");
   const agentForcedOn = hasDefaultAgentMentionAlias(value);
@@ -130,11 +152,17 @@ export function SpacesComposer({
 
   useEffect(() => {
     setActiveMentionIndex(0);
+    setMentionMenuDismissed(false);
   }, [mentionQuery, mentionOptions.length]);
 
   useEffect(() => {
     if (agentForcedOn) setAgentEnabled(true);
   }, [agentForcedOn]);
+
+  // Track the derived default as draft mentions change, until manually overridden.
+  useEffect(() => {
+    if (!agentOverriddenRef.current) setAgentEnabled(agentDefaultOn);
+  }, [agentDefaultOn]);
 
   // Re-runs when the textarea's disabled flag flips. Mount-time focus
   // (autoFocus + the rAF/setTimeout pair) silently no-ops while the
@@ -186,6 +214,9 @@ export function SpacesComposer({
       runtimePreference,
     );
     setMentions([]);
+    // Fresh draft after send: drop the manual override so the next new thread
+    // starts from the derived default again.
+    agentOverriddenRef.current = false;
   }
 
   function selectMention(target: MentionTarget) {
@@ -211,7 +242,7 @@ export function SpacesComposer({
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (mentionQuery === null || mentionOptions.length === 0) return;
+    if (!mentionMenuOpen) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -225,13 +256,19 @@ export function SpacesComposer({
       );
       return;
     }
-    if (event.key === "Enter") {
+    // Tab and Enter both commit the highlighted mention.
+    if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       const target =
         mentionOptions[
           Math.min(activeMentionIndex, Math.max(mentionOptions.length - 1, 0))
         ];
       if (target) selectMention(target);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMentionMenuDismissed(true);
     }
   }
 
@@ -244,10 +281,10 @@ export function SpacesComposer({
   return (
     <div className="grid gap-2">
       <div className="relative">
-        {mentionQuery !== null ? (
+        {mentionMenuOpen ? (
           <MentionMenu
             targets={mentionTargets}
-            query={mentionQuery}
+            query={mentionQuery ?? ""}
             activeIndex={activeMentionIndex}
             placement="bottom"
             onSelect={selectMention}
@@ -285,7 +322,10 @@ export function SpacesComposer({
               <button
                 type="button"
                 onClick={() => {
-                  if (!agentForcedOn) setAgentEnabled((value) => !value);
+                  if (!agentForcedOn) {
+                    agentOverriddenRef.current = true;
+                    setAgentEnabled((value) => !value);
+                  }
                 }}
                 aria-label="Send to agent"
                 aria-pressed={effectiveAgentEnabled}

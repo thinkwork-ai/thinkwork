@@ -41,6 +41,18 @@ export function callerVisibleThreadPredicate(
              )
            )
       )
+      -- A mention into a thread is a thread-level invite: an explicit
+      -- participant sees THAT thread even inside a private Space they don't
+      -- belong to. They still don't gain access to the rest of the Space —
+      -- the participant clause above gates them to this thread only.
+      OR EXISTS (
+        SELECT 1
+          FROM thread_participants caller_tp_space
+         WHERE caller_tp_space.tenant_id = ${tenantId}
+           AND caller_tp_space.thread_id = ${threads.id}
+           AND caller_tp_space.participant_type = 'user'
+           AND caller_tp_space.user_id = ${callerUserId}
+      )
     )
   )`;
 }

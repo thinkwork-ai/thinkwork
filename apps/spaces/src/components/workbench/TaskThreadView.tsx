@@ -95,6 +95,7 @@ import type {
 } from "@/lib/ui-message-types";
 import { useComposerState } from "@/lib/use-composer-state";
 import { cn } from "@/lib/utils";
+import { deriveAgentDefault } from "@/lib/agent-mode";
 import {
   GeneratedArtifactCard,
   GeneratedArtifactPreview,
@@ -499,6 +500,8 @@ export function TaskThreadView({
               disabled={!onSendFollowUp || isSending}
               isSending={isSending}
               mentionTargets={mentionTargets}
+              threadMessages={thread.messages}
+              currentUserId={currentUser?.id ?? null}
               prefill={composerPrefill}
               onSubmit={onSendFollowUp}
             />
@@ -1487,7 +1490,10 @@ function ThreadTurnActivity({
 
   const usage = parseRecord(turn.usageJson);
   const cloudRows = actionRowsForTurn(turn, usage);
-  const rows = mergeActionRows(cloudRows, consoleRowsFromEntries(consoleEntries));
+  const rows = mergeActionRows(
+    cloudRows,
+    consoleRowsFromEntries(consoleEntries),
+  );
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.
@@ -1545,16 +1551,37 @@ function turnDurationMs(turn: TaskThreadTurn): number | null {
 
 // Match each USER message to its corresponding turn so multi-turn threads
 // render one Thinking row per turn (parity with the admin thread view).
-// Sort turns ASC by startedAt (the GraphQL resolver emits DESC), then assign
-// turns to user messages in document order. Extra turns (e.g. scheduled-job
-// triggers with no preceding user message) attach to the latest user message
-// so the activity remains discoverable.
+// Attach each turn to the user message that actually triggered it, by
+// timestamp causality rather than document-order position. Positional pairing
+// (the i-th user message -> the i-th turn) misaligns in multi-player threads:
+// other humans' messages are USER messages that trigger no turn, so a later
+// turn's "Working…" row gets pinned to an earlier message. Causal pairing maps
+// each turn (sorted ASC by startedAt) to the nearest-preceding user message
+// (the last one created at or before the turn started).
+//
+// Notes:
+//  - A turn that precedes every user message (e.g. a scheduled-job trigger)
+//    anchors to the earliest user message so it stays discoverable.
+//  - When several turns map to the same user message, the latest turn wins —
+//    the transcript renders one activity disclosure per user message.
+//  - Limitation: turn.startedAt derives from the task's claim time, which can
+//    lag the trigger; two user messages sent before the first turn is claimed
+//    can mis-attribute. A turn->message id link would remove this; see plan U3.
 function mapTurnsToUserMessages(
   messages: TaskThreadMessage[],
   turns: TaskThreadTurn[],
 ): Map<string, TaskThreadTurn> {
   const map = new Map<string, TaskThreadTurn>();
   if (turns.length === 0) return map;
+
+  const userMessages = messages.filter(
+    (message) => message.role.toUpperCase() === "USER",
+  );
+  if (userMessages.length === 0) return map;
+
+  const userTimes = userMessages.map((message) =>
+    parseEventTimestamp(message.createdAt ?? null),
+  );
 
   const sortedTurns = [...turns].sort((a, b) => {
     const ta = parseEventTimestamp(a.startedAt ?? null);
@@ -1563,23 +1590,36 @@ function mapTurnsToUserMessages(
     return (a.id ?? "").localeCompare(b.id ?? "");
   });
 
-  const userMessages = messages.filter(
-    (message) => message.role.toUpperCase() === "USER",
-  );
-  if (userMessages.length === 0) return map;
-
-  const pairCount = Math.min(userMessages.length, sortedTurns.length);
-  for (let i = 0; i < pairCount; i += 1) {
-    map.set(userMessages[i].id, sortedTurns[i]);
+  // Causal pairing needs user-message timestamps. Older/synthetic threads omit
+  // createdAt; fall back to positional pairing (i-th turn -> i-th user message)
+  // so they still render one disclosure per turn.
+  const userTimesUsable = userTimes.some((time) => time > 0);
+  if (!userTimesUsable) {
+    const pairCount = Math.min(userMessages.length, sortedTurns.length);
+    for (let i = 0; i < pairCount; i += 1) {
+      map.set(userMessages[i].id, sortedTurns[i]);
+    }
+    if (sortedTurns.length > userMessages.length) {
+      map.set(
+        userMessages[userMessages.length - 1].id,
+        sortedTurns[sortedTurns.length - 1],
+      );
+    }
+    return map;
   }
 
-  // If there are more turns than user messages, anchor the trailing turns to
-  // the latest user message so they remain visible.
-  if (sortedTurns.length > userMessages.length) {
-    map.set(
-      userMessages[userMessages.length - 1].id,
-      sortedTurns[sortedTurns.length - 1],
-    );
+  for (const turn of sortedTurns) {
+    const turnTime = parseEventTimestamp(turn.startedAt ?? null);
+    // Nearest-preceding user message: the last one (in chronological/document
+    // order) created at or before this turn started.
+    let targetIndex = -1;
+    for (let i = 0; i < userMessages.length; i += 1) {
+      if (userTimes[i] <= turnTime) targetIndex = i;
+    }
+    // A turn before every user message anchors to the earliest one.
+    if (targetIndex < 0) targetIndex = 0;
+    // Latest turn wins when several map to the same message.
+    map.set(userMessages[targetIndex].id, turn);
   }
 
   return map;
@@ -2062,6 +2102,8 @@ function FollowUpComposer({
   disabled,
   isSending,
   mentionTargets,
+  threadMessages,
+  currentUserId,
   prefill,
   onSubmit,
 }: {
@@ -2070,6 +2112,8 @@ function FollowUpComposer({
   disabled?: boolean;
   isSending?: boolean;
   mentionTargets: MentionTarget[];
+  threadMessages?: TaskThreadMessage[];
+  currentUserId?: string | null;
   prefill?: { text: string; token: number } | null;
   onSubmit?: (
     content: string,
@@ -2082,7 +2126,27 @@ function FollowUpComposer({
   const composer = useComposerState(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
-  const [agentEnabled, setAgentEnabled] = useState(true);
+  const agentDefaultOn = useMemo(
+    () =>
+      deriveAgentDefault({
+        currentUserId,
+        threadMessages: (threadMessages ?? []).map((message) => ({
+          role: message.role,
+          senderType: message.sender?.type ?? null,
+          senderId: message.sender?.id ?? null,
+        })),
+        draftMentions: mentions.map((mention) => ({
+          targetType: mention.targetType,
+          targetId: mention.targetId,
+        })),
+      }).agentDefaultOn,
+    [currentUserId, threadMessages, mentions],
+  );
+  const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
+  // Whether the user has manually toggled the agent in this thread. While
+  // false, the toggle tracks the derived default; once true, the manual choice
+  // persists until the thread changes (which clears it).
+  const agentOverriddenRef = useRef(false);
   const [runtimePreference, setRuntimePreference] =
     useState<AgentRuntimePreference>("local");
   const prefillText = prefill?.text;
@@ -2101,6 +2165,12 @@ function FollowUpComposer({
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  // Escape dismisses the mention menu without committing. Because mentionQuery
+  // is derived from the composer text (not state we can clear), we suppress the
+  // menu with a flag that resets whenever the query changes.
+  const [mentionMenuDismissed, setMentionMenuDismissed] = useState(false);
+  const mentionMenuOpen =
+    mentionQuery !== null && mentionOptions.length > 0 && !mentionMenuDismissed;
   const defaultAgentTarget = useMemo(
     () =>
       mentionTargets.find(
@@ -2125,12 +2195,23 @@ function FollowUpComposer({
     if (agentForcedOn) setAgentEnabled(true);
   }, [agentForcedOn]);
 
+  // Switching threads clears any manual override and re-derives the default.
   useEffect(() => {
-    setAgentEnabled(true);
+    agentOverriddenRef.current = false;
+    setAgentEnabled(agentDefaultOn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
+
+  // Track the derived default (single -> on, multiplayer -> off) as the draft
+  // mentions or thread history change, until the user manually overrides; the
+  // manual choice then persists within the thread.
+  useEffect(() => {
+    if (!agentOverriddenRef.current) setAgentEnabled(agentDefaultOn);
+  }, [agentDefaultOn]);
 
   useEffect(() => {
     setActiveMentionIndex(0);
+    setMentionMenuDismissed(false);
   }, [mentionQuery, mentionOptions.length]);
 
   useEffect(() => {
@@ -2240,7 +2321,7 @@ function FollowUpComposer({
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (mentionQuery === null || mentionOptions.length === 0) return;
+    if (!mentionMenuOpen) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -2254,13 +2335,19 @@ function FollowUpComposer({
       );
       return;
     }
-    if (event.key === "Enter") {
+    // Tab and Enter both commit the highlighted mention.
+    if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       const target =
         mentionOptions[
           Math.min(activeMentionIndex, Math.max(mentionOptions.length - 1, 0))
         ];
       if (target) selectMention(target);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMentionMenuDismissed(true);
     }
   }
 
@@ -2276,10 +2363,10 @@ function FollowUpComposer({
         <PromptTaskQueue key={taskQueue.id} queue={taskQueue.data} />
       ) : null}
       <div className="relative">
-        {mentionQuery !== null ? (
+        {mentionMenuOpen ? (
           <MentionMenu
             targets={mentionTargets}
-            query={mentionQuery}
+            query={mentionQuery ?? ""}
             activeIndex={activeMentionIndex}
             includeDefaultAgentShortcut
             onSelect={selectMention}
@@ -2319,7 +2406,10 @@ function FollowUpComposer({
               <button
                 type="button"
                 onClick={() => {
-                  if (!agentForcedOn) setAgentEnabled((value) => !value);
+                  if (!agentForcedOn) {
+                    agentOverriddenRef.current = true;
+                    setAgentEnabled((value) => !value);
+                  }
                 }}
                 aria-label="Send to agent"
                 aria-pressed={effectiveAgentEnabled}
@@ -2737,10 +2827,7 @@ function ConsoleLogToggle({
         <SquareTerminal className="size-3.5 shrink-0" />
         view console log
         <ChevronRight
-          className={cn(
-            "size-3.5 transition-transform",
-            open && "rotate-90",
-          )}
+          className={cn("size-3.5 transition-transform", open && "rotate-90")}
         />
       </button>
       {open ? (
@@ -2764,7 +2851,8 @@ function consoleRowsFromEntries(
 ): ActionRowData[] {
   return [...entries]
     .sort(
-      (a, b) => parseEventTimestamp(a.emittedAt) - parseEventTimestamp(b.emittedAt),
+      (a, b) =>
+        parseEventTimestamp(a.emittedAt) - parseEventTimestamp(b.emittedAt),
     )
     .map((entry) => ({
       title: truncateRowTitle(entry.message),

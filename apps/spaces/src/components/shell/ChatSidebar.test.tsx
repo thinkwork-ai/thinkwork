@@ -25,6 +25,7 @@ const {
   recentReexecuteMock,
   searchReexecuteMock,
   pinnedReexecuteMock,
+  subscriptionResultMock,
 } = vi.hoisted(() => ({
   tenantMock: vi.fn(),
   locationMock: vi.fn(),
@@ -61,6 +62,7 @@ const {
   recentReexecuteMock: vi.fn(),
   searchReexecuteMock: vi.fn(),
   pinnedReexecuteMock: vi.fn(),
+  subscriptionResultMock: { data: undefined as unknown },
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
@@ -69,6 +71,7 @@ const {
     ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
     SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
+    ThreadUpdatedSubscription: Symbol("ThreadUpdatedSubscription"),
     UnpinThreadMutation: Symbol("UnpinThreadMutation"),
     UpdateThreadMutation: Symbol("UpdateThreadMutation"),
   },
@@ -125,6 +128,7 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("urql", () => ({
+  useSubscription: () => [subscriptionResultMock],
   useMutation: (mutation: unknown) => {
     if (mutation === queryDocs.DeleteThreadMutation) {
       return [{ fetching: false }, deleteThreadMock];
@@ -297,9 +301,7 @@ vi.mock("@thinkwork/ui", () => ({
     children: React.ReactNode;
     asChild?: boolean;
   }) => (asChild ? children : <button>{children}</button>),
-  ContextMenu: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  ContextMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   ContextMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
@@ -443,6 +445,7 @@ afterEach(() => {
   recentReexecuteMock.mockReset();
   searchReexecuteMock.mockReset();
   pinnedReexecuteMock.mockReset();
+  subscriptionResultMock.data = undefined;
   recentThreadItemsMock.length = 0;
   searchThreadItemsMock.length = 0;
   pinnedThreadItemsMock.length = 0;
@@ -662,6 +665,41 @@ describe("ChatSidebar", () => {
     expect(recentReexecuteMock).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
+  });
+
+  it("refetches the thread lists when the window regains focus", async () => {
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+    recentReexecuteMock.mockClear();
+
+    window.dispatchEvent(new Event("focus"));
+
+    await waitFor(() =>
+      expect(recentReexecuteMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
+    );
+  });
+
+  it("refetches the thread lists when an onThreadUpdated event arrives", async () => {
+    // A thread the caller was just tagged into pushes a tenant-scoped
+    // onThreadUpdated event; the sidebar refetches so it appears without a
+    // manual refresh.
+    subscriptionResultMock.data = {
+      onThreadUpdated: { threadId: "thread-new" },
+    };
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    await waitFor(() =>
+      expect(recentReexecuteMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
+    );
   });
 
   it("imports missing localStorage pins once without making localStorage authoritative", async () => {

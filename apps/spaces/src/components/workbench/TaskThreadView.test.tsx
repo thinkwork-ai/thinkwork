@@ -2744,6 +2744,138 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
+  it("anchors a turn to its triggering message, not an intervening human's message", () => {
+    // U3: in a multi-player thread another human's message is a USER message
+    // that triggers no turn. Positional pairing pinned the agent's turn to that
+    // intervening message; causal pairing (by startedAt vs createdAt) keeps it
+    // on the message that actually triggered it.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-mp",
+          title: "Group thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "u-me-1",
+              role: "USER",
+              content: "Agent, summarize this",
+              createdAt: "2026-05-29T10:00:00Z",
+              sender: { type: "user", id: "user-me" },
+            },
+            {
+              id: "a-1",
+              role: "ASSISTANT",
+              content: "Summary…",
+              createdAt: "2026-05-29T10:00:20Z",
+            },
+            {
+              id: "u-scott",
+              role: "USER",
+              content: "thanks!",
+              createdAt: "2026-05-29T10:01:00Z",
+              sender: { type: "user", id: "user-scott" },
+            },
+          ],
+          // One turn, triggered by the first message (started before Scott's
+          // reply). The resolver emits DESC; component sorts ASC.
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-29T10:00:05Z",
+              finishedAt: "2026-05-29T10:00:20Z",
+            },
+          ],
+        }}
+        currentUser={{ id: "user-me", name: "Me" }}
+      />,
+    );
+
+    // Exactly one turn disclosure, and it renders before Scott's "thanks!"
+    // message — not pinned beneath it.
+    const disclosures = screen.getAllByLabelText("Turn activity");
+    expect(disclosures).toHaveLength(1);
+    const scottMessage = screen.getByText("thanks!");
+    expect(
+      disclosures[0].compareDocumentPosition(scottMessage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("collapses multiple turns for one user message to a single disclosure", () => {
+    // U3 edge: a tool-loop can emit several turns for one user prompt. Causal
+    // pairing maps them all to that message; the transcript renders one
+    // disclosure (latest turn wins) rather than crashing or stacking.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-loop",
+          title: "Tool loop",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Do the thing",
+              createdAt: "2026-05-29T10:00:00Z",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-a",
+              status: "succeeded",
+              startedAt: "2026-05-29T10:00:05Z",
+              finishedAt: "2026-05-29T10:00:10Z",
+            },
+            {
+              id: "turn-b",
+              status: "succeeded",
+              startedAt: "2026-05-29T10:00:11Z",
+              finishedAt: "2026-05-29T10:00:20Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByLabelText("Turn activity")).toHaveLength(1);
+  });
+
+  it("anchors a turn with no preceding user message without crashing", () => {
+    // U3 edge: a turn whose startedAt precedes every user message (e.g. a
+    // scheduled-job trigger) anchors to the earliest message rather than
+    // dropping or throwing. A dedicated unattributed surface is deferred.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-sched",
+          title: "Scheduled",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Later message",
+              createdAt: "2026-05-29T10:00:00Z",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-early",
+              status: "succeeded",
+              startedAt: "2026-05-29T09:59:00Z",
+              finishedAt: "2026-05-29T09:59:30Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByLabelText("Turn activity")).toHaveLength(1);
+  });
+
   it("keeps the turn-activity aria-label intact on the Reasoning disclosure", () => {
     // The labelled region affordance survives the header relabel — screen
     // readers find the surface by name even though the visible header is now
@@ -2916,7 +3048,9 @@ describe("TaskThreadView", () => {
     const agentToggle = screen.getByRole("button", { name: "Send to agent" });
     const agentIcon = agentToggle.querySelector("svg");
     expect(
-      screen.getByLabelText("Run this turn on local Pi (click for managed cloud)"),
+      screen.getByLabelText(
+        "Run this turn on local Pi (click for managed cloud)",
+      ),
     ).toBeTruthy();
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-[#54a9ff]");
@@ -3199,6 +3333,14 @@ describe("TaskThreadView", () => {
     fireEvent.click(screen.getByRole("option", { name: /Scott Odom/ }));
     expect(input.value).toBe("@Scott Odom ");
 
+    // Mentioning another user makes the thread multi-player, so the agent
+    // toggle auto-derives OFF (single -> on, multi -> off).
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -3213,10 +3355,89 @@ describe("TaskThreadView", () => {
             rawText: "@Scott Odom",
           },
         ],
-        true,
+        false,
         "local",
       );
     });
+  });
+
+  it("defaults the agent toggle OFF when another human has already posted", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-mp",
+          title: "Group thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "m1",
+              role: "USER",
+              content: "Hi",
+              sender: { type: "user", id: "user-current" },
+            },
+            {
+              id: "m2",
+              role: "USER",
+              content: "Hey back",
+              sender: { type: "user", id: "user-scott" },
+            },
+          ],
+        }}
+        currentUser={{ id: "user-current", name: "Eric Odom" }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("commits the highlighted mention on Tab and closes the menu on Escape", () => {
+    const renderMentionComposer = () =>
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Mention thread",
+            lifecycleStatus: "IDLE",
+            messages: [{ id: "message-1", role: "USER", content: "Start" }],
+          }}
+          mentionTargets={[
+            {
+              id: "user:u1",
+              targetType: "USER",
+              targetId: "u1",
+              displayName: "Scott Odom",
+              role: "eric@thinkwork.ai",
+            },
+          ]}
+          onSendFollowUp={vi.fn()}
+        />,
+      );
+
+    const { unmount } = renderMentionComposer();
+    let input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+
+    // Tab commits the highlighted mention (same as Enter).
+    fireEvent.change(input, { target: { value: "@cot" } });
+    expect(screen.getByRole("option", { name: /Scott Odom/ })).toBeTruthy();
+    const tabEvent = fireEvent.keyDown(input, { key: "Tab" });
+    expect(tabEvent).toBe(false); // preventDefault was called
+    expect(input.value).toBe("@Scott Odom ");
+
+    unmount();
+
+    // Escape closes the menu without committing.
+    renderMentionComposer();
+    input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "@cot" } });
+    expect(screen.getByRole("option", { name: /Scott Odom/ })).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("option", { name: /Scott Odom/ })).toBeNull();
+    expect(input.value).toBe("@cot");
   });
 
   it("selects the pinned agent mention and forces agent handling back on", async () => {
