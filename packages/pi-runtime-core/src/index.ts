@@ -3,5 +3,8 @@ export * from "./delegation.js";
 export * from "./desktop-session.js";
 export * from "./finalize-client.js";
 export * from "./history.js";
+export * from "./memory-provider.js";
+export * from "./model-provider.js";
 export * from "./tool-costs.js";
 export * from "./types.js";
+export * from "./workspace-provider.js";
