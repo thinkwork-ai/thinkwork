@@ -6,6 +6,17 @@ import { textFromAssistant } from "./history.js";
 import { collectToolCosts } from "./tool-costs.js";
 import type { RunAgentLoopArgs, RunAgentLoopResult } from "./types.js";
 
+/** Short, render-safe preview of a tool arg/result for the thread activity UI. */
+function toolPreview(value: unknown, max = 600): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.slice(0, max);
+  try {
+    return JSON.stringify(value).slice(0, max);
+  } catch {
+    return String(value).slice(0, max);
+  }
+}
+
 function resolveModel(modelId: unknown) {
   const id =
     typeof modelId === "string" && modelId.trim()
@@ -48,6 +59,8 @@ export async function runAgentLoop(
         name: event.toolName,
         tool_name: event.toolName,
         args: event.args,
+        input_preview: toolPreview(event.args),
+        status: "running",
         started_at: new Date().toISOString(),
         runtime: "pi",
       });
@@ -60,6 +73,8 @@ export async function runAgentLoop(
       if (existing) {
         existing.result = event.result;
         existing.is_error = event.isError;
+        existing.output_preview = toolPreview(event.result);
+        existing.status = event.isError ? "error" : "ok";
         existing.finished_at = finished;
       } else {
         toolInvocations.push({
@@ -68,6 +83,8 @@ export async function runAgentLoop(
           tool_name: event.toolName,
           result: event.result,
           is_error: event.isError,
+          output_preview: toolPreview(event.result),
+          status: event.isError ? "error" : "ok",
           finished_at: finished,
           runtime: "pi",
         });

@@ -16,6 +16,10 @@ export interface ToolInvocationRecord {
   args?: unknown;
   result?: unknown;
   is_error?: boolean;
+  /** Short string previews the thread UI renders as Input/Output/Status. */
+  input_preview?: string;
+  output_preview?: string;
+  status?: string;
   started_at?: string;
   finished_at?: string;
   runtime: "pi";
