@@ -149,6 +149,11 @@ build_handler "managed-delegation" \
 build_handler "model-converse" \
   "$REPO_ROOT/packages/api/src/handlers/model-converse.ts"
 
+# Mobile harness turn persistence: append a completed (client-produced) user+assistant
+# turn to an existing thread. Append-only; OPTIONS handled before auth.
+build_handler "record-turn" \
+  "$REPO_ROOT/packages/api/src/handlers/record-turn.ts"
+
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
 

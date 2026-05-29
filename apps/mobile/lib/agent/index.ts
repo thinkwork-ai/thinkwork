@@ -37,3 +37,9 @@ export { buildTurnContext } from "./turn-context";
 export type { TurnContext, TurnContextInput } from "./turn-context";
 export { InMemorySessionStore } from "./session-store";
 export type { SessionStore, SessionRecord } from "./session-store";
+export { recordTurn } from "./persist-turn";
+export type {
+  RecordTurnInput,
+  RecordTurnResult,
+  RecordTurnDeps,
+} from "./persist-turn";

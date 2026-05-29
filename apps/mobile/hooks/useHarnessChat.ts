@@ -11,6 +11,7 @@ import { useCallback, useRef, useState } from "react";
 import { getIdToken } from "../lib/auth";
 import { BedrockModelProvider } from "../lib/agent/providers/bedrock";
 import { runHarnessChatTurn } from "../lib/agent/harness-chat-core";
+import { recordTurn } from "../lib/agent/persist-turn";
 import type { Tool } from "../lib/agent/types";
 import type { ChatMessage, ConnectionStatus } from "./useGatewayChat";
 
@@ -20,6 +21,12 @@ export interface UseHarnessChatOptions {
   model?: string;
   /** Tools available this turn (network/MCP + capability tools). */
   tools?: Tool[];
+  /**
+   * Existing thread to persist turns into (via /api/threads/record-turn). When omitted,
+   * the session stays in-memory only. Thread creation lives in the existing CreateThread
+   * path (it owns space_id + the per-tenant number sequence).
+   */
+  threadId?: string;
 }
 
 export interface UseHarnessChatResult {
@@ -50,7 +57,7 @@ export function useHarnessChat(
     (text: string) => {
       if (!text.trim() || streamingRef.current) return;
       setIsStreaming(true);
-      void runHarnessChatTurn({
+      runHarnessChatTurn({
         userText: text,
         prior: messagesRef.current,
         provider: providerRef.current,
@@ -59,9 +66,22 @@ export function useHarnessChat(
         model: opts.model,
         now: () => Date.now(),
         onUpdate: setMessages,
-      }).finally(() => setIsStreaming(false));
+      })
+        .then((final) => {
+          if (!opts.threadId) return;
+          const assistant = [...final]
+            .reverse()
+            .find((m) => m.role === "assistant");
+          // Best-effort: a persistence failure must not break the live chat.
+          void recordTurn({
+            threadId: opts.threadId,
+            userText: text,
+            assistantText: assistant?.content ?? "",
+          }).catch(() => {});
+        })
+        .finally(() => setIsStreaming(false));
     },
-    [opts.tools, opts.agentName, opts.model],
+    [opts.tools, opts.agentName, opts.model, opts.threadId],
   );
 
   return {
