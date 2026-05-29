@@ -58,12 +58,16 @@ function lifecycleColor(
 }
 
 export default function ChatRoute() {
-  const { threadId: paramThreadId, identifier: paramIdentifier } =
-    useLocalSearchParams<{
-      agentId?: string;
-      threadId?: string;
-      identifier?: string;
-    }>();
+  const {
+    threadId: paramThreadId,
+    identifier: paramIdentifier,
+    mode: paramMode,
+  } = useLocalSearchParams<{
+    agentId?: string;
+    threadId?: string;
+    identifier?: string;
+    mode?: string;
+  }>();
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const authTenantId = user?.tenantId ?? null;
@@ -71,6 +75,12 @@ export default function ChatRoute() {
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
   const insets = useSafeAreaInsets();
+
+  // Dev-only: route the chat through the on-device harness (agentType "on-device")
+  // instead of the cloud computer agent. Reachable via the header toggle (__DEV__)
+  // or `/chat?mode=on-device`. Lets us validate the RN-Pi harness against the
+  // deployed Bedrock proxy before there's a production entry point for it.
+  const [onDeviceMode, setOnDeviceMode] = useState(paramMode === "on-device");
 
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
@@ -210,37 +220,66 @@ export default function ChatRoute() {
             </Text>
           </Pressable>
 
-          {/* Right: read-only lifecycle badge (U9 — status picker retired) */}
-          {activeThread?.id && lifecycleLabel ? (
-            <View
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: lifecycleDotColor,
-              }}
-            >
-              <Text
-                className="text-xs font-medium"
-                style={{ color: lifecycleDotColor }}
+          {/* Right: read-only lifecycle badge (U9) + dev on-device toggle */}
+          <View
+            className="flex-row items-center gap-2"
+            style={{ minWidth: 80, justifyContent: "flex-end" }}
+          >
+            {activeThread?.id && lifecycleLabel ? (
+              <View
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: lifecycleDotColor,
+                }}
               >
-                {lifecycleLabel}
-              </Text>
-            </View>
-          ) : (
-            <View style={{ width: 80 }} />
-          )}
+                <Text
+                  className="text-xs font-medium"
+                  style={{ color: lifecycleDotColor }}
+                >
+                  {lifecycleLabel}
+                </Text>
+              </View>
+            ) : null}
+            {__DEV__ ? (
+              <Pressable
+                onPress={() => setOnDeviceMode((v) => !v)}
+                className="active:opacity-70"
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: onDeviceMode ? "#38bdf8" : colors.foreground,
+                }}
+              >
+                <Text
+                  className="text-xs font-medium"
+                  style={{
+                    color: onDeviceMode ? "#38bdf8" : colors.foreground,
+                  }}
+                >
+                  {onDeviceMode ? "On-device" : "Cloud"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </View>
 
       {/* Chat */}
       <ChatScreen
-        key={`chat-${chatKey}-${selectedComputer.id}`}
+        key={`chat-${chatKey}-${selectedComputer.id}-${onDeviceMode ? "od" : "cloud"}`}
         baseUrl=""
         token="graphql"
-        agentType="computer"
-        agentName={selectedComputer.name || "Computer"}
+        agentType={onDeviceMode ? "on-device" : "computer"}
+        agentName={
+          onDeviceMode
+            ? `${selectedComputer.name || "Agent"} (on-device)`
+            : selectedComputer.name || "Computer"
+        }
         agents={[]}
         selectedAgentId=""
         threadId={activeThread?.id}
