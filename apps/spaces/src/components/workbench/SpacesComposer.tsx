@@ -128,9 +128,7 @@ export function SpacesComposer({
   // whenever the query changes.
   const [mentionMenuDismissed, setMentionMenuDismissed] = useState(false);
   const mentionMenuOpen =
-    mentionQuery !== null &&
-    mentionOptions.length > 0 &&
-    !mentionMenuDismissed;
+    mentionQuery !== null && mentionOptions.length > 0 && !mentionMenuDismissed;
   // New threads have no history, so mode derives from the draft mentions only:
   // mentioning another user makes it multi-player (agent defaults OFF).
   const agentDefaultOn = useMemo(

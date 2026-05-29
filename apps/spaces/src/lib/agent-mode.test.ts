@@ -76,7 +76,9 @@ describe("deriveAgentMode", () => {
     expect(
       deriveAgentMode({
         currentUserId: null,
-        threadMessages: [{ role: "USER", senderId: "someone", senderType: "user" }],
+        threadMessages: [
+          { role: "USER", senderId: "someone", senderType: "user" },
+        ],
         draftMentions: [],
       }),
     ).toBe("single");

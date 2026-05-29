@@ -197,7 +197,9 @@ describe("SpacesComposer", () => {
     render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
 
     expect(
-      screen.getByLabelText("Run this turn on local Pi (click for managed cloud)"),
+      screen.getByLabelText(
+        "Run this turn on local Pi (click for managed cloud)",
+      ),
     ).toBeTruthy();
   });
 
