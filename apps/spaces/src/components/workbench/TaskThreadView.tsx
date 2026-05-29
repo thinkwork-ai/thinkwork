@@ -2101,6 +2101,14 @@ function FollowUpComposer({
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  // Escape dismisses the mention menu without committing. Because mentionQuery
+  // is derived from the composer text (not state we can clear), we suppress the
+  // menu with a flag that resets whenever the query changes.
+  const [mentionMenuDismissed, setMentionMenuDismissed] = useState(false);
+  const mentionMenuOpen =
+    mentionQuery !== null &&
+    mentionOptions.length > 0 &&
+    !mentionMenuDismissed;
   const defaultAgentTarget = useMemo(
     () =>
       mentionTargets.find(
@@ -2131,6 +2139,7 @@ function FollowUpComposer({
 
   useEffect(() => {
     setActiveMentionIndex(0);
+    setMentionMenuDismissed(false);
   }, [mentionQuery, mentionOptions.length]);
 
   useEffect(() => {
@@ -2240,7 +2249,7 @@ function FollowUpComposer({
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (mentionQuery === null || mentionOptions.length === 0) return;
+    if (!mentionMenuOpen) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -2254,13 +2263,19 @@ function FollowUpComposer({
       );
       return;
     }
-    if (event.key === "Enter") {
+    // Tab and Enter both commit the highlighted mention.
+    if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       const target =
         mentionOptions[
           Math.min(activeMentionIndex, Math.max(mentionOptions.length - 1, 0))
         ];
       if (target) selectMention(target);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMentionMenuDismissed(true);
     }
   }
 
@@ -2276,10 +2291,10 @@ function FollowUpComposer({
         <PromptTaskQueue key={taskQueue.id} queue={taskQueue.data} />
       ) : null}
       <div className="relative">
-        {mentionQuery !== null ? (
+        {mentionMenuOpen ? (
           <MentionMenu
             targets={mentionTargets}
-            query={mentionQuery}
+            query={mentionQuery ?? ""}
             activeIndex={activeMentionIndex}
             includeDefaultAgentShortcut
             onSelect={selectMention}

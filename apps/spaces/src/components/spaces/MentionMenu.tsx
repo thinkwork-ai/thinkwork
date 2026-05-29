@@ -103,6 +103,9 @@ export function MentionMenu({
 
   if (filtered.length === 0) return null;
 
+  const optionId = (target: MentionTarget) => `mention-option-${target.id}`;
+  const activeOption = filtered[Math.min(activeIndex, filtered.length - 1)];
+
   return (
     <div
       className={cn(
@@ -111,6 +114,7 @@ export function MentionMenu({
       )}
       role="listbox"
       aria-label="Mention suggestions"
+      aria-activedescendant={activeOption ? optionId(activeOption) : undefined}
     >
       {filtered.map((target, index) => {
         const Icon = target.targetType === "AGENT" ? Bot : UserRound;
@@ -118,6 +122,7 @@ export function MentionMenu({
         return (
           <Button
             key={target.id}
+            id={optionId(target)}
             type="button"
             variant="ghost"
             role="option"

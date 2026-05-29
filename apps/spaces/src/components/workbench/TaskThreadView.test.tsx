@@ -3219,6 +3219,51 @@ describe("TaskThreadView", () => {
     });
   });
 
+  it("commits the highlighted mention on Tab and closes the menu on Escape", () => {
+    const renderMentionComposer = () =>
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Mention thread",
+            lifecycleStatus: "IDLE",
+            messages: [{ id: "message-1", role: "USER", content: "Start" }],
+          }}
+          mentionTargets={[
+            {
+              id: "user:u1",
+              targetType: "USER",
+              targetId: "u1",
+              displayName: "Scott Odom",
+              role: "eric@thinkwork.ai",
+            },
+          ]}
+          onSendFollowUp={vi.fn()}
+        />,
+      );
+
+    const { unmount } = renderMentionComposer();
+    let input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+
+    // Tab commits the highlighted mention (same as Enter).
+    fireEvent.change(input, { target: { value: "@cot" } });
+    expect(screen.getByRole("option", { name: /Scott Odom/ })).toBeTruthy();
+    const tabEvent = fireEvent.keyDown(input, { key: "Tab" });
+    expect(tabEvent).toBe(false); // preventDefault was called
+    expect(input.value).toBe("@Scott Odom ");
+
+    unmount();
+
+    // Escape closes the menu without committing.
+    renderMentionComposer();
+    input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "@cot" } });
+    expect(screen.getByRole("option", { name: /Scott Odom/ })).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("option", { name: /Scott Odom/ })).toBeNull();
+    expect(input.value).toBe("@cot");
+  });
+
   it("selects the pinned agent mention and forces agent handling back on", async () => {
     const onSendFollowUp = vi.fn();
     render(
