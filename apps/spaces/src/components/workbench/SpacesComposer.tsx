@@ -303,6 +303,17 @@ export function SpacesComposer({
                 preference={runtimePreference}
                 onPreferenceChange={setRuntimePreference}
               />
+              <PromptInputButton
+                type="button"
+                variant="ghost"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => onChange(`${value}@`)}
+                aria-label="Mention"
+                title="Mention"
+              >
+                <AtSign className="h-4 w-4" />
+              </PromptInputButton>
+              <PromptInputAttachButton />
               {spaces.length > 0 && selectedSpaceId && onSelectedSpaceChange ? (
                 <Select
                   value={selectedSpaceId}
@@ -332,17 +343,6 @@ export function SpacesComposer({
                   </SelectContent>
                 </Select>
               ) : null}
-              <PromptInputButton
-                type="button"
-                variant="ghost"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => onChange(`${value}@`)}
-                aria-label="Mention"
-                title="Mention"
-              >
-                <AtSign className="h-4 w-4" />
-              </PromptInputButton>
-              <PromptInputAttachButton />
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSpeechButton
