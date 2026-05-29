@@ -161,6 +161,50 @@ describe("resolveCallerFromAuth", () => {
     expect(errSpy.mock.calls[0]?.[0]).toContain("23505");
   });
 
+  it("does not backfill when an email-matched row already has a cognito_sub (verified email)", async () => {
+    // Already-linked row: step 1 misses for THIS sub, step 2 misses, email
+    // matches a row that another sub already owns. We must not overwrite it,
+    // and (per KTD-5/A2) the IS NULL guard would no-op anyway.
+    selectQueue.push([]); // by sub miss
+    selectQueue.push([]); // by id miss
+    selectQueue.push([
+      { id: "user-2", tenant_id: "tenant-2", cognito_sub: "sub-original" },
+    ]); // by email hit, already linked
+
+    const result = await resolveCallerFromAuth(
+      cognitoAuth({
+        principalId: "sub-other",
+        email: "eric@example.com",
+        emailVerified: true,
+      }),
+    );
+
+    expect(result).toEqual({ userId: "user-2", tenantId: "tenant-2" });
+    expect(updateCalls).toHaveLength(0); // row already linked — no rebind
+  });
+
+  it("does not change identity when the email-path backfill conflicts (23505)", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    updateBehavior.mode = "conflict";
+    selectQueue.push([]); // by sub miss
+    selectQueue.push([]); // by id miss
+    selectQueue.push([
+      { id: "user-2", tenant_id: "tenant-2", cognito_sub: null },
+    ]); // by verified email → backfill attempted → conflicts
+
+    const result = await resolveCallerFromAuth(
+      cognitoAuth({
+        principalId: "sub-G2",
+        email: "eric@example.com",
+        emailVerified: true,
+      }),
+    );
+
+    expect(result).toEqual({ userId: "user-2", tenantId: "tenant-2" });
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(errSpy.mock.calls[0]?.[0]).toContain("23505");
+  });
+
   it("does not change identity when backfill is a concurrent no-op (0 rows)", async () => {
     // updateBehavior stays "ok" — resolves empty, mirroring the loser of a
     // same-user race whose `cognito_sub IS NULL` guard matched 0 rows.
