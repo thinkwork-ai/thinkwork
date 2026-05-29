@@ -54,6 +54,7 @@ import {
   type WebViewSheetRef,
 } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
+import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
 import {
   useNewMessageSubscription,
   useThreadUpdatedSubscription,
@@ -1110,25 +1111,32 @@ export default function ThreadDetailRoute() {
     if (!text || !threadId) return;
     setMessageText("");
     Keyboard.dismiss();
-    await executeSendMessage({
-      input: {
-        threadId: threadId,
-        role: "USER" as any,
-        content: text,
-        senderType: "human",
-        senderId: currentUser?.id,
-      },
-    });
+    // Real messages run through the on-device Pi-inspired harness (the agent loop runs in
+    // Hermes → Bedrock via /api/model/converse), and the completed turn is persisted into
+    // the thread via record-turn so it renders through the normal message query +
+    // subscription. (No production users yet — this is the on-device agent handling live
+    // mobile messages.)
+    try {
+      await runThreadHarnessTurn({
+        threadId,
+        userText: text,
+        priorMessages: messages.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      });
+    } catch (e) {
+      console.error("[harness] thread turn failed:", e);
+    }
     markThreadActive(threadId);
-    // Re-fetch immediately so the new message appears and auto-scroll kicks in
+    // Re-fetch so the persisted user + assistant messages appear and auto-scroll kicks in
     reexecuteThread({ requestPolicy: "network-only" });
     reexecuteMessages({ requestPolicy: "network-only" });
     reexecuteTurns({ requestPolicy: "network-only" });
   }, [
     messageText,
     threadId,
-    currentUser?.id,
-    executeSendMessage,
+    messages,
     reexecuteThread,
     reexecuteMessages,
     reexecuteTurns,
