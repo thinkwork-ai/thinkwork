@@ -55,7 +55,7 @@ export function SettingsSidebar() {
           its own window chrome. Padding mirrors the shell SidebarHeader
           (p-2 + pb-3, inner brand px-1) so the logo aligns across surfaces. */}
       {isDesktop ? null : (
-        <div className="flex items-center gap-2 px-2 pt-2 pb-3">
+        <div className="flex items-center gap-2 px-3 pt-2 pb-3">
           <Link
             to="/"
             className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -78,7 +78,7 @@ export function SettingsSidebar() {
       )}
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col px-2 pb-2",
+          "flex min-h-0 flex-1 flex-col px-3 pb-2",
           isDesktop && "pt-2",
         )}
       >
