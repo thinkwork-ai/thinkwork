@@ -244,7 +244,14 @@ publish:
     owner: thinkwork-ai
     repo: thinkwork
     vPrefixedTagName: true
-    releaseType: release
+    # Publish to a DRAFT release so the auto-updater can't see it until every
+    # asset (the ~140 MB zip/dmg + *-mac.yml manifests) has finished uploading.
+    # release-desktop.yml flips the draft to published once uploads complete.
+    # Without this, electron-builder marks the release the moment it is created
+    # — minutes before the zip lands — so any open app polling in that window
+    # downloads a not-yet-present artifact and drops into the updater error
+    # ("Retry"/"spins then stops") state.
+    releaseType: draft
     publishAutoUpdate: true
 
 generateUpdatesFilesForAllChannels: true
