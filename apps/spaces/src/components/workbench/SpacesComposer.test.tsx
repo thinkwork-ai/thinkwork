@@ -197,7 +197,9 @@ describe("SpacesComposer", () => {
     render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
 
     expect(
-      screen.getByLabelText("Run this turn on local Pi (click for managed cloud)"),
+      screen.getByLabelText(
+        "Run this turn on local Pi (click for managed cloud)",
+      ),
     ).toBeTruthy();
   });
 
@@ -345,6 +347,87 @@ describe("SpacesComposer", () => {
     expect(
       (screen.getByLabelText("Send message") as HTMLTextAreaElement).value,
     ).toBe("@Marco ");
+  });
+
+  it("commits the highlighted mention on Tab", () => {
+    render(<ControlledComposer />);
+
+    fireEvent.change(screen.getByLabelText("Send message"), {
+      target: { value: "@mar" },
+    });
+    expect(screen.getByRole("option", { name: /Marco/ })).toBeTruthy();
+
+    const event = fireEvent.keyDown(screen.getByLabelText("Send message"), {
+      key: "Tab",
+    });
+
+    // Tab is intercepted (returns false = preventDefault was called) and
+    // commits the mention rather than moving focus.
+    expect(event).toBe(false);
+    expect(
+      (screen.getByLabelText("Send message") as HTMLTextAreaElement).value,
+    ).toBe("@Marco ");
+  });
+
+  it("closes the mention menu on Escape without committing", () => {
+    render(<ControlledComposer />);
+
+    fireEvent.change(screen.getByLabelText("Send message"), {
+      target: { value: "@mar" },
+    });
+    expect(screen.getByRole("option", { name: /Marco/ })).toBeTruthy();
+
+    fireEvent.keyDown(screen.getByLabelText("Send message"), {
+      key: "Escape",
+    });
+
+    expect(screen.queryByRole("option", { name: /Marco/ })).toBeNull();
+    // Text is unchanged — nothing was committed.
+    expect(
+      (screen.getByLabelText("Send message") as HTMLTextAreaElement).value,
+    ).toBe("@mar");
+  });
+
+  it("does not intercept Tab when the mention menu is closed", () => {
+    render(<ControlledComposer />);
+
+    const event = fireEvent.keyDown(screen.getByLabelText("Send message"), {
+      key: "Tab",
+    });
+
+    // No open menu -> Tab is not intercepted (default focus traversal allowed).
+    expect(event).toBe(true);
+  });
+
+  it("defaults the agent toggle OFF once a user is mentioned", () => {
+    render(<ControlledComposer />);
+
+    const toggle = screen.getByRole("button", { name: "Send to agent" });
+    // Single-player (no mentions) -> ON.
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+    // Mention a user -> multi-player -> auto-derives OFF.
+    fireEvent.change(screen.getByLabelText("Send message"), {
+      target: { value: "@eri" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Eric Odom/ }));
+
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("keeps the agent toggle ON when only an agent is mentioned", () => {
+    render(<ControlledComposer />);
+
+    fireEvent.change(screen.getByLabelText("Send message"), {
+      target: { value: "@mar" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Marco/ }));
+
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 });
 

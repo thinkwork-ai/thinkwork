@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMutation, useQuery } from "urql";
+import { useMutation, useQuery, useSubscription } from "urql";
 import { toast } from "sonner";
 import {
   Anchor,
@@ -76,6 +76,7 @@ import {
   ReorderPinnedThreadsMutation,
   SpacesQuery,
   ThreadsPagedQuery,
+  ThreadUpdatedSubscription,
   UnpinThreadMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
@@ -380,6 +381,69 @@ export function ChatSidebar() {
     reexecuteRecentThreadsQuery,
     reexecuteSearchThreadsQuery,
   ]);
+
+  // U1/U2: a thread the caller was @mentioned into won't appear in the list
+  // until the list query re-executes — the urql document cache doesn't
+  // auto-invalidate on a live event. Both a window-focus return and an
+  // onThreadUpdated event trigger a coalesced network-only refetch.
+  const refreshThreadLists = useCallback(() => {
+    reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+    reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
+    reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+  }, [
+    reexecutePinnedThreadsQuery,
+    reexecuteRecentThreadsQuery,
+    reexecuteSearchThreadsQuery,
+  ]);
+
+  const threadListRefreshTimerRef = useRef<number | null>(null);
+  const scheduleThreadListRefresh = useCallback(() => {
+    // Coalesce bursts of events into a single trailing refetch.
+    if (threadListRefreshTimerRef.current != null) return;
+    threadListRefreshTimerRef.current = window.setTimeout(() => {
+      threadListRefreshTimerRef.current = null;
+      refreshThreadLists();
+    }, 400);
+  }, [refreshThreadLists]);
+
+  useEffect(
+    () => () => {
+      if (threadListRefreshTimerRef.current != null) {
+        window.clearTimeout(threadListRefreshTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  // U1: returning to the window (focus / tab visible) re-runs the list query so
+  // threads created/tagged while the desktop app was backgrounded show up.
+  useEffect(() => {
+    function handleWindowActive() {
+      if (document.visibilityState === "visible") scheduleThreadListRefresh();
+    }
+    window.addEventListener("focus", handleWindowActive);
+    document.addEventListener("visibilitychange", handleWindowActive);
+    return () => {
+      window.removeEventListener("focus", handleWindowActive);
+      document.removeEventListener("visibilitychange", handleWindowActive);
+    };
+  }, [scheduleThreadListRefresh]);
+
+  // U2: onThreadUpdated is tenant-scoped and fires for the caller on both
+  // createThread and sendMessage, so a thread the caller was just added to
+  // pushes an event even though they don't yet know its id. Refetch the list
+  // when one arrives so tagged threads appear without a manual refresh.
+  const [{ data: threadUpdatedEvent }] = useSubscription<{
+    onThreadUpdated?: { threadId?: string | null } | null;
+  }>({
+    query: ThreadUpdatedSubscription,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  useEffect(() => {
+    if (!threadUpdatedEvent?.onThreadUpdated) return;
+    scheduleThreadListRefresh();
+  }, [threadUpdatedEvent, scheduleThreadListRefresh]);
 
   const recentThreads = useMemo(
     () =>
@@ -837,19 +901,18 @@ function groupSearchThreads(
   >();
 
   for (const thread of threads) {
-    const group =
-      pinnedThreadIds.has(thread.id)
-        ? { key: "pinned", label: "Pinned" }
-        : thread.spaceId && !defaultSpaceIds.has(thread.spaceId)
-          ? {
-              key: `space:${thread.spaceId}`,
-              label:
-                thread.space?.name ??
-                thread.space?.slug ??
-                thread.spaceId ??
-                "Space",
-            }
-          : { key: "chats", label: "Chats" };
+    const group = pinnedThreadIds.has(thread.id)
+      ? { key: "pinned", label: "Pinned" }
+      : thread.spaceId && !defaultSpaceIds.has(thread.spaceId)
+        ? {
+            key: `space:${thread.spaceId}`,
+            label:
+              thread.space?.name ??
+              thread.space?.slug ??
+              thread.spaceId ??
+              "Space",
+          }
+        : { key: "chats", label: "Chats" };
 
     const existing = groups.get(group.key);
     if (existing) {
