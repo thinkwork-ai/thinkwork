@@ -7,10 +7,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
 } from "@thinkwork/ui";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { AgentRuntime } from "@/gql/graphql";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
@@ -19,7 +20,6 @@ import {
   SettingsUpdateTenantAgentMutation,
 } from "@/lib/settings-queries";
 import {
-  SettingsHeader,
   SettingsPane,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
@@ -55,11 +55,30 @@ export function SettingsAgentConfig() {
     }
   }, [agent]);
 
+  // Title relocates to the settings header bar; the files sub-view adds a
+  // "Workspace" crumb and a Done action. Called unconditionally before any
+  // early return.
+  usePageHeaderActions({
+    title: "Agent",
+    breadcrumbs:
+      filesOpen && agent
+        ? [{ label: "Agent", href: "/settings/agent" }, { label: "Workspace" }]
+        : [{ label: "Agent" }],
+    action:
+      filesOpen && agent ? (
+        <Button variant="ghost" size="sm" onClick={() => setFilesOpen(false)}>
+          Done
+        </Button>
+      ) : undefined,
+    actionKey: filesOpen && agent ? "agent-files" : undefined,
+  });
+
   if (agentResult.fetching && !agent) {
     return (
       <SettingsPane>
-        <SettingsHeader title="Agent" />
-        <Skeleton className="h-40 w-full rounded-xl" />
+        <div className="flex items-center justify-center py-24">
+          <LoadingShimmer />
+        </div>
       </SettingsPane>
     );
   }
@@ -67,7 +86,6 @@ export function SettingsAgentConfig() {
   if (agentResult.error) {
     return (
       <SettingsPane>
-        <SettingsHeader title="Agent" />
         <SettingsSection>
           <div className="p-6 text-sm text-muted-foreground">
             Couldn’t load agent configuration. {agentResult.error.message}
@@ -94,14 +112,6 @@ export function SettingsAgentConfig() {
   if (filesOpen && agent) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Agent workspace
-          </h1>
-          <Button variant="ghost" size="sm" onClick={() => setFilesOpen(false)}>
-            Done
-          </Button>
-        </div>
         <WorkspaceFileEditor
           target={{ agentId: agent.id }}
           targetKey={`agent:${agent.id}`}
@@ -115,10 +125,6 @@ export function SettingsAgentConfig() {
 
   return (
     <SettingsPane>
-      <SettingsHeader
-        title="Agent"
-        description="Runtime and default model for this tenant’s agent."
-      />
       <SettingsSection
         label="Configuration"
         action={

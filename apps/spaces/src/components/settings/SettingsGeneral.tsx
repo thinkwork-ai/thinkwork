@@ -8,9 +8,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
   useTheme,
 } from "@thinkwork/ui";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsDeploymentStatusQuery,
@@ -45,8 +45,9 @@ export function SettingsGeneral() {
     return (
       <SettingsPane>
         <SettingsHeader title="General" />
-        <Skeleton className="mb-4 h-44 w-full rounded-xl" />
-        <Skeleton className="h-32 w-full rounded-xl" />
+        <div className="flex items-center justify-center py-24">
+          <LoadingShimmer />
+        </div>
       </SettingsPane>
     );
   }
