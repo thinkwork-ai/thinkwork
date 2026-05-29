@@ -1,5 +1,5 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
-import type { Message, Usage } from "@mariozechner/pi-ai";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { Message, Usage } from "@earendil-works/pi-ai";
 
 export interface ToolCostRecord {
   provider: string;

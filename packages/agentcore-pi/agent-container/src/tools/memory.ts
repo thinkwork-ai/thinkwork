@@ -6,7 +6,7 @@ import {
   ListMemoryRecordsCommand,
   RetrieveMemoryRecordsCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 
 /**

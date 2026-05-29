@@ -3,7 +3,7 @@ import type {
   Message,
   TextContent,
   Usage,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 
 interface HistoryMessage {
   role?: unknown;

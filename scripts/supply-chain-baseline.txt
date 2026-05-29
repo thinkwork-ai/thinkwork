@@ -16,17 +16,17 @@
 # documents the upgrade-review gate.
 #
 # Trust tiers (see SLA doc):
-#   - @mariozechner/pi-agent-core, @mariozechner/pi-ai
-#       Manual upgrade-review gate. Every version bump requires changelog +
-#       diff review by a named reviewer before merge.
 #   - @modelcontextprotocol/sdk
 #       Lockfile integrity is the primary control; standard CVE response.
-#   - @earendil-works/pi-coding-agent and bundled Pi SDK runtime packages
-#       Desktop-local Pi embeds this SDK directly. Treat bumps like runtime
-#       substrate upgrades and review the SDK docs/changelog before merge.
+#   - @earendil-works/pi-agent-core, @earendil-works/pi-ai,
+#     @earendil-works/pi-coding-agent and bundled Pi SDK runtime packages
+#       The single agent-runtime substrate for BOTH the cloud runtime
+#       (agentcore-pi / pi-runtime-core) and desktop-local Pi, after the
+#       @mariozechner/* → @earendil-works/* migration (plan §005 U4 part 1).
+#       Treat bumps like runtime substrate upgrades and review the SDK
+#       docs/changelog before merge. Manual upgrade-review gate: every
+#       version bump requires changelog + diff review by a named reviewer.
 
-@mariozechner/pi-agent-core@0.70.2 sha512-g1hIdKyDwmQOoBGO0R4OhpemKeMENeK0vE5FJtuQKqEcsdCAkVBgZAK6aZUARYZVxMA718JS6WPLFWoddzjD7g==
-@mariozechner/pi-ai@0.70.2 sha512-+30LRPjXsXF+oI96DvGWMbdPGeqoLJvadh6UPev7wx2DzhC9FEqXkQcoMZ0usbCm7E9pl8ua8a9s/pQ5ikaUbg==
 @modelcontextprotocol/sdk@1.29.0 sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==
 @earendil-works/pi-agent-core@0.76.0 sha512-gNfR+ScnyAKr/13K8129svRBwO48jIK4jBHZRLaj3l4inKRkCRyCGs6hZnyQCYeiVNbBt1Jcjvb7osss44Q9xw==
 @earendil-works/pi-ai@0.76.0 sha512-RO/L80iTxkK/nM2s5IVuirjH04UBsVzFfAT0qVcP/VwtDe9pjpqL+BVqb3XTyfitTD9tBo/hQuKmagN8Ep5qZA==

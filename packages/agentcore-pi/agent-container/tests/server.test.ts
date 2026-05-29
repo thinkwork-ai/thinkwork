@@ -14,7 +14,7 @@ import {
 } from "../src/server.js";
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 // ---------------------------------------------------------------------------
 // Test fixtures.

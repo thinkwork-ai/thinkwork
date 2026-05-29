@@ -7,7 +7,7 @@ problem_type: integration_issue
 component: supply_chain
 severity: medium
 applies_when:
-  - Bumping a version on @mariozechner/pi-agent-core, @mariozechner/pi-ai, or @modelcontextprotocol/sdk
+  - Bumping a version on @earendil-works/pi-agent-core, @earendil-works/pi-ai, @earendil-works/pi-coding-agent, or @modelcontextprotocol/sdk
   - A CI run reports `integrity mismatch` from scripts/verify-supply-chain.sh
   - A CVE is filed against any of the trusted-handler critical-path packages
   - A transitive dependency loses provenance (maintainer change, signing rotation, npm registry takedown)
@@ -36,16 +36,16 @@ The supply-chain baseline (`scripts/supply-chain-baseline.txt`) covers the three
 
 ### Tier 1 — Manual upgrade-review gate
 
-**Packages:** `@mariozechner/pi-agent-core`, `@mariozechner/pi-ai`
+**Packages:** `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`
 
-These are the agent-loop substrate (Mario Zechner's Pi runtime). Every version bump must:
+These are the agent-loop substrate (the Earendil Pi runtime, formerly published under the now-deprecated `@mariozechner/*` scope; migrated in plan §005 U4). Every version bump must:
 
 1. Open a PR that updates `package.json` AND `scripts/supply-chain-baseline.txt` in the same diff.
 2. Link to the upstream changelog or commit list for the version range being applied.
 3. Get a named-reviewer approval from a platform engineer who confirmed the diff against the upstream commits.
 4. Run the full CI matrix (lint, typecheck, test, supply-chain, deploy preview) before merge.
 
-Lockfile integrity is the wire-level gate, but the upgrade-review gate is what stops a "Mario rotated his signing key" or "Mario's npm token was leaked" attack from sailing through on autopilot.
+Lockfile integrity is the wire-level gate, but the upgrade-review gate is what stops a "the maintainer rotated their signing key" or "the maintainer's npm token was leaked" attack from sailing through on autopilot — especially important since this is a single-author 0.x SDK.
 
 ### Tier 2 — Lockfile integrity primary
 

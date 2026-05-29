@@ -27,7 +27,7 @@
  * factory cross no security boundary.
  */
 
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "typebox";
 import type { ConnectMcpServerFn } from "./mcp.js";
 import type { McpToolRegistry } from "./mcp-registry.js";

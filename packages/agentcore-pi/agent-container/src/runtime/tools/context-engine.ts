@@ -1,4 +1,4 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 
 /**
@@ -52,9 +52,7 @@ function normalizeMode(value: unknown): "results" | "answer" {
 }
 
 function normalizeScope(value: unknown): "personal" | "team" | "auto" {
-  return value === "personal" || value === "team"
-    ? value
-    : "auto";
+  return value === "personal" || value === "team" ? value : "auto";
 }
 
 function normalizeDepth(value: unknown): "quick" | "deep" {
@@ -73,8 +71,12 @@ function renderResult(result: Record<string, unknown> | string): string {
   if (typeof result === "string") return result;
   const content = Array.isArray(result.content) ? result.content : [];
   const text = content
-    .map((item) => (typeof item === "object" && item ? recordOf(item).text : ""))
-    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .map((item) =>
+      typeof item === "object" && item ? recordOf(item).text : "",
+    )
+    .filter(
+      (value): value is string => typeof value === "string" && value.length > 0,
+    )
     .join("\n")
     .trim();
   if (text) return text;
@@ -120,8 +122,7 @@ export function buildContextEngineTools(
       });
       const payload = recordOf(await response.json().catch(() => ({})));
       if (payload.error) {
-        const message =
-          recordOf(payload.error).message ?? "unknown error";
+        const message = recordOf(payload.error).message ?? "unknown error";
         return `Context Engine failed: ${String(message)}`;
       }
       const result = payload.result;
@@ -178,7 +179,9 @@ export function buildContextEngineTools(
       const typed = recordOf(params);
       const query = String(typed.query ?? "").trim();
       if (!query) {
-        return textResult("query_context requires a non-empty query.", { ok: false });
+        return textResult("query_context requires a non-empty query.", {
+          ok: false,
+        });
       }
       const providers: Record<string, unknown> = {};
       if (Array.isArray(typed.provider_ids) && typed.provider_ids.length > 0) {
@@ -219,7 +222,9 @@ export function buildContextEngineTools(
       const typed = recordOf(params);
       const query = String(typed.query ?? "").trim();
       if (!query) {
-        return textResult("query_memory_context requires a non-empty query.", { ok: false });
+        return textResult("query_memory_context requires a non-empty query.", {
+          ok: false,
+        });
       }
       const result = await jsonRpc("query_memory_context", {
         query,
@@ -245,7 +250,9 @@ export function buildContextEngineTools(
       const typed = recordOf(params);
       const query = String(typed.query ?? "").trim();
       if (!query) {
-        return textResult("query_wiki_context requires a non-empty query.", { ok: false });
+        return textResult("query_wiki_context requires a non-empty query.", {
+          ok: false,
+        });
       }
       const result = await jsonRpc("query_wiki_context", {
         query,

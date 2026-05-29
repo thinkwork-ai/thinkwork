@@ -1,4 +1,4 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 
 /**
@@ -46,7 +46,10 @@ async function fetchJson(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(url, { ...init, signal: controller.signal });
+    const response = await fetchImpl(url, {
+      ...init,
+      signal: controller.signal,
+    });
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       throw new Error(

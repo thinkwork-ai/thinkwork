@@ -151,7 +151,7 @@ describe("verify-supply-chain.sh", () => {
     const tmpBaseline = path.join(tmpDir, "baseline.txt");
     writeFileSync(
       tmpBaseline,
-      "@mariozechner/pi-agent-core@0.70.2 sha256-shorterhashthatshouldbedisallowed\n",
+      "@earendil-works/pi-agent-core@0.70.2 sha256-shorterhashthatshouldbedisallowed\n",
     );
     const result = runScript([tmpBaseline]);
     expect(result.exitCode).not.toBe(0);

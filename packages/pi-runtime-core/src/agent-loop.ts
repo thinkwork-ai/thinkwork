@@ -1,6 +1,6 @@
-import { Agent, type AgentEvent } from "@mariozechner/pi-agent-core";
-import type { AssistantMessage } from "@mariozechner/pi-ai";
-import { getModel, streamSimple } from "@mariozechner/pi-ai";
+import { Agent, type AgentEvent } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getModel, streamSimple } from "@earendil-works/pi-ai";
 
 import { textFromAssistant } from "./history.js";
 import { collectToolCosts } from "./tool-costs.js";
