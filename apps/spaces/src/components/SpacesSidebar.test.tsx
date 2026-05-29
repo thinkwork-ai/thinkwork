@@ -34,6 +34,11 @@ vi.mock("@tanstack/react-router", () => ({
       {children}
     </a>
   ),
+  useNavigate: () => vi.fn(),
+  useRouterState: (opts?: { select?: (s: unknown) => unknown }) => {
+    const state = { location: { pathname: "/" } };
+    return opts?.select ? opts.select(state) : state;
+  },
 }));
 vi.mock("@thinkwork/ui", () => ({
   Avatar: ({ children }: { children: React.ReactNode }) => (
@@ -126,7 +131,9 @@ describe("SpacesSidebar", () => {
     expect(screen.getByTestId("spaces-sidebar").dataset.collapsible).toBe(
       "offcanvas",
     );
-    expect(screen.getByTestId("sidebar-content").className).not.toContain("pt-");
+    expect(screen.getByTestId("sidebar-content").className).not.toContain(
+      "pt-",
+    );
     expect(screen.getByTestId("chat-sidebar")).toBeTruthy();
   });
 });
