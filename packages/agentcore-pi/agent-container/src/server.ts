@@ -43,6 +43,11 @@
 
 import http from "node:http";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import {
+  createMemoryExtension,
+  toExtensionFactory,
+  type ExtensionFactory,
+} from "@thinkwork/pi-extensions";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
@@ -89,8 +94,8 @@ import {
   type McpJsonConfig,
 } from "./runtime/mcp-json.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
-import { buildHindsightTools } from "./tools/hindsight.js";
 import { buildMemoryTools } from "./tools/memory.js";
+import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import {
   AuroraSessionStore,
   type AuroraSessionStoreOptions,
@@ -231,6 +236,14 @@ const defaultDependencies: HandlerDependencies = {
 
 export interface AssembledToolBundle {
   tools: AgentTool<any>[];
+  /**
+   * Plan §004 U5 — Pi extension factories loaded into the session's resource
+   * loader alongside `tools`. Each is a capability from
+   * `@thinkwork/pi-extensions` bound to its U3 provider bundle. Memory is the
+   * first (the tracer bullet); U7 ports the rest. The agent loop forwards these
+   * to `DefaultResourceLoader.extensionFactories`.
+   */
+  extensionFactories: ExtensionFactory[];
   cleanup: Array<() => Promise<void>>;
   workspaceSkills: WorkspaceSkill[];
   handleStore: HandleStore;
@@ -414,10 +427,16 @@ export async function assembleTools(
     );
   }
 
-  // Memory (U6) — engine selector lives in env. Eval-mode invocations are
-  // user-less by construction, so user-scoped memory + hindsight tools are
-  // skipped entirely (matching `eval_tools_enabled: false` semantics in the
-  // direct AgentCore eval payload).
+  // Memory — engine selector lives in env. Eval-mode invocations are user-less
+  // by construction, so user-scoped memory is skipped entirely (matching
+  // `eval_tools_enabled: false` semantics in the direct AgentCore eval payload).
+  //
+  // Plan §004 U5 — the Hindsight path is now a Pi EXTENSION (the tracer bullet):
+  // a Hindsight-backed MemoryProvider wrapped by `createMemoryExtension`, loaded
+  // via the resource loader's `extensionFactories` instead of hand-assembled
+  // recall/reflect AgentTools. The managed AgentCore-Memory path stays as custom
+  // tools until the firming plan's single-engine cutover retires it.
+  const extensionFactories: ExtensionFactory[] = [];
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -445,23 +464,32 @@ export async function assembleTools(
         threadId: args.identity.threadId,
       });
     }
+  } else if (args.env.hindsightEndpoint) {
+    const memoryProvider = createHindsightMemoryProvider({
+      endpoint: args.env.hindsightEndpoint,
+      tenantId: args.identity.tenantId,
+      userId: args.identity.userId,
+    });
+    // The turn's user message grounds the proactive session_start recall.
+    const memoryExtension = createMemoryExtension({
+      groundingQuery: asString(args.payload.message),
+    });
+    extensionFactories.push(
+      toExtensionFactory(memoryExtension, { memory: memoryProvider }),
+    );
+    logStructured({
+      level: "info",
+      event: "memory_extension_loaded",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
   } else {
-    if (args.env.hindsightEndpoint) {
-      tools.push(
-        ...buildHindsightTools({
-          endpoint: args.env.hindsightEndpoint,
-          tenantId: args.identity.tenantId,
-          userId: args.identity.userId,
-        }),
-      );
-    } else {
-      logStructured({
-        level: "warn",
-        event: "hindsight_skipped_no_endpoint",
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-      });
-    }
+    logStructured({
+      level: "warn",
+      event: "hindsight_skipped_no_endpoint",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
   }
 
   // MCP (U7) — validate, mint, build.
@@ -552,6 +580,7 @@ export async function assembleTools(
 
   return {
     tools,
+    extensionFactories,
     cleanup,
     workspaceSkills: args.workspaceSkills,
     handleStore,
@@ -1137,6 +1166,10 @@ export async function handleInvocation(
         ),
         systemPrompt,
         tools: bundle.tools,
+        // Plan §004 U5 — load thinkwork capabilities (memory first) as Pi
+        // extensions over the resource loader, additive to the built-ins +
+        // custom tools.
+        extensionFactories: bundle.extensionFactories,
         modelId: args.payload.model,
         threadId: identity.threadId,
         gitSha: env.gitSha,

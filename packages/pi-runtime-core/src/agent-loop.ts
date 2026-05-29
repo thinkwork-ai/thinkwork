@@ -10,6 +10,7 @@ import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type {
   AgentSession,
   AgentSessionEvent,
+  ExtensionFactory,
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 
@@ -96,6 +97,12 @@ export interface OpenSessionInputs {
   seedHistory?: Message[];
   /** Structured logger forwarded to the durable session path. */
   log?: SessionLog;
+  /**
+   * Pi extension factories the host bound to its provider bundle. Loaded into
+   * the resource loader's `extensionFactories` (U1 mechanism) so the extensions'
+   * tools/hooks reach the session additively over the built-ins + custom tools.
+   */
+  extensionFactories?: ExtensionFactory[];
 }
 
 function resolveModelIdString(modelId: unknown): string {
@@ -250,6 +257,12 @@ async function defaultOpenSession(
     cwd: inputs.cwd,
     agentDir,
     systemPromptOverride: () => inputs.systemPrompt,
+    // U5 — load thinkwork capabilities as Pi extensions via factory injection
+    // (no filesystem discovery; the U1-resolved serverless mechanism). The host
+    // built these closed over its provider bundle. Omitted/empty → no-op.
+    ...(inputs.extensionFactories && inputs.extensionFactories.length > 0
+      ? { extensionFactories: inputs.extensionFactories }
+      : {}),
   });
   await resourceLoader.reload();
 
@@ -321,6 +334,7 @@ export async function runAgentLoop(
     sessionDir: args.sessionDir,
     seedHistory: args.history,
     log: deps.log,
+    extensionFactories: args.extensionFactories,
   });
 
   try {
