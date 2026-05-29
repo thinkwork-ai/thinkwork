@@ -396,6 +396,37 @@ describe("SpacesComposer", () => {
     // No open menu -> Tab is not intercepted (default focus traversal allowed).
     expect(event).toBe(true);
   });
+
+  it("defaults the agent toggle OFF once a user is mentioned", () => {
+    render(<ControlledComposer />);
+
+    const toggle = screen.getByRole("button", { name: "Send to agent" });
+    // Single-player (no mentions) -> ON.
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+    // Mention a user -> multi-player -> auto-derives OFF.
+    fireEvent.change(screen.getByLabelText("Send message"), {
+      target: { value: "@eri" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Eric Odom/ }));
+
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("keeps the agent toggle ON when only an agent is mentioned", () => {
+    render(<ControlledComposer />);
+
+    fireEvent.change(screen.getByLabelText("Send message"), {
+      target: { value: "@mar" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Marco/ }));
+
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
 });
 
 function ControlledComposer() {
