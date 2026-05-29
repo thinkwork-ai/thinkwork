@@ -122,11 +122,20 @@ export function SettingsAgentConfig() {
       <SettingsSection
         label="Configuration"
         action={
-          saveState.fetching ? (
-            <span className="text-sm text-muted-foreground">Saving…</span>
-          ) : errorMsg ? (
-            <span className="text-sm text-destructive">{errorMsg}</span>
-          ) : undefined
+          <div className="flex items-center gap-3">
+            {saveState.fetching ? (
+              <span className="text-sm text-muted-foreground">Saving…</span>
+            ) : errorMsg ? (
+              <span className="text-sm text-destructive">{errorMsg}</span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setFilesOpen(true)}
+              className="text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+            >
+              Workspace
+            </button>
+          </div>
         }
       >
         <div className="space-y-5 p-5">
@@ -182,23 +191,6 @@ export function SettingsAgentConfig() {
               </Select>
             )}
           </Field>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection label="Workspace">
-        <div className="flex items-center justify-between gap-4 p-4">
-          <p className="text-sm text-muted-foreground">
-            Edit the agent’s workspace files — AGENTS.md, CONTEXT.md,
-            GUARDRAILS.md, skills, and more.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => setFilesOpen(true)}
-          >
-            Open workspace editor
-          </Button>
         </div>
       </SettingsSection>
     </SettingsPane>

@@ -1,11 +1,7 @@
+import type { ComponentType } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Bot,
-  LayoutGrid,
-  Settings as SettingsIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowLeft, Bot, Settings as SettingsIcon, Users } from "lucide-react";
+import { IconChartBar, IconPlanet } from "@tabler/icons-react";
 import { cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
@@ -14,7 +10,8 @@ import { getSettingsReturnTo } from "@/lib/settings-return";
 interface SettingsNavItem {
   label: string;
   to: string;
-  icon: LucideIcon;
+  // Accepts both lucide-react and @tabler/icons-react components.
+  icon: ComponentType<{ className?: string }>;
   /** When true, only render for operators (owner/admin). */
   operatorOnly?: boolean;
 }
@@ -23,13 +20,20 @@ interface SettingsNavItem {
 // folded into General as a "Color mode" control rather than a nav item.
 const NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
+  { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
   {
     label: "Spaces",
     to: "/settings/spaces",
-    icon: LayoutGrid,
+    icon: IconPlanet,
     operatorOnly: true,
   },
-  { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
+  { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
+  {
+    label: "Analytics",
+    to: "/settings/analytics",
+    icon: IconChartBar,
+    operatorOnly: true,
+  },
 ];
 
 // Matches the main chat-sidebar nav item style (SidebarMenuButton): h-8, p-2,

@@ -124,3 +124,141 @@ export const SettingsUpdateTenantAgentMutation = graphql(`
     }
   }
 `);
+
+// ─── Users (operator-only section) ───────────────────────────────────────
+
+export const SettingsTenantMembersQuery = graphql(`
+  query SettingsTenantMembers($tenantId: ID!) {
+    tenantMembers(tenantId: $tenantId) {
+      id
+      principalType
+      principalId
+      role
+      status
+      createdAt
+      user {
+        id
+        name
+        email
+        profile {
+          id
+          title
+          timezone
+          pronouns
+          callBy
+          notes
+        }
+      }
+    }
+  }
+`);
+
+export const SettingsUpdateUserMutation = graphql(`
+  mutation SettingsUpdateUser($id: ID!, $input: UpdateUserInput!) {
+    updateUser(id: $id, input: $input) {
+      id
+      name
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsUpdateUserProfileMutation = graphql(`
+  mutation SettingsUpdateUserProfile(
+    $userId: ID!
+    $input: UpdateUserProfileInput!
+  ) {
+    updateUserProfile(userId: $userId, input: $input) {
+      id
+      title
+      timezone
+      pronouns
+      callBy
+      notes
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsUpdateTenantMemberMutation = graphql(`
+  mutation SettingsUpdateTenantMember(
+    $id: ID!
+    $input: UpdateTenantMemberInput!
+  ) {
+    updateTenantMember(id: $id, input: $input) {
+      id
+      role
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsInviteMemberMutation = graphql(`
+  mutation SettingsInviteMember($tenantId: ID!, $input: InviteMemberInput!) {
+    inviteMember(tenantId: $tenantId, input: $input) {
+      id
+      principalType
+      principalId
+      role
+      status
+      createdAt
+      user {
+        id
+        name
+        email
+      }
+    }
+  }
+`);
+
+// ─── Analytics (usage cost, operator-only) ───────────────────────────────
+
+export const SettingsCostSummaryQuery = graphql(`
+  query SettingsCostSummary($tenantId: ID!) {
+    costSummary(tenantId: $tenantId) {
+      totalUsd
+      llmUsd
+      computeUsd
+      toolsUsd
+      totalInputTokens
+      totalOutputTokens
+      eventCount
+    }
+  }
+`);
+
+export const SettingsCostByAgentQuery = graphql(`
+  query SettingsCostByAgent($tenantId: ID!) {
+    costByAgent(tenantId: $tenantId) {
+      agentId
+      agentName
+      totalUsd
+      eventCount
+    }
+  }
+`);
+
+export const SettingsCostByModelQuery = graphql(`
+  query SettingsCostByModel($tenantId: ID!) {
+    costByModel(tenantId: $tenantId) {
+      model
+      totalUsd
+      inputTokens
+      outputTokens
+    }
+  }
+`);
+
+export const SettingsCostTimeSeriesQuery = graphql(`
+  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {
+    costTimeSeries(tenantId: $tenantId, days: $days) {
+      day
+      totalUsd
+      llmUsd
+      computeUsd
+      toolsUsd
+      eventCount
+    }
+  }
+`);

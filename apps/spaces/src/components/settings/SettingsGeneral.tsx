@@ -100,23 +100,16 @@ export function SettingsGeneral() {
             {new Date(tenant.createdAt).toLocaleDateString()}
           </SettingsRow>
         ) : null}
-      </SettingsSection>
-
-      <TenantIdentifierSection
-        slug={tenant.slug}
-        tenantId={tenant.id}
-        canRename={showOperator}
-        onRenamed={() => refetchTenant({ requestPolicy: "network-only" })}
-      />
-
-      <SettingsSection label="Configuration">
-        <SettingsRow label="Default model">
-          {tenant.settings?.defaultModel ?? "—"}
-        </SettingsRow>
+        <SubdomainRow
+          slug={tenant.slug}
+          tenantId={tenant.id}
+          canRename={showOperator}
+          onRenamed={() => refetchTenant({ requestPolicy: "network-only" })}
+        />
       </SettingsSection>
 
       <SettingsSection label="Appearance">
-        <ColorModeRow />
+        <ThemeRow />
       </SettingsSection>
 
       {showOperator ? (
@@ -178,13 +171,10 @@ function ResourceRow({
   );
 }
 
-function ColorModeRow() {
+function ThemeRow() {
   const { theme, setTheme } = useTheme();
   return (
-    <SettingsRow
-      label="Color mode"
-      description="Light or dark theme on this device."
-    >
+    <SettingsRow label="Theme">
       <Select
         value={theme}
         onValueChange={(v) => setTheme(v as "light" | "dark")}
@@ -201,7 +191,7 @@ function ColorModeRow() {
   );
 }
 
-function TenantIdentifierSection({
+function SubdomainRow({
   slug,
   tenantId,
   canRename,
@@ -228,57 +218,53 @@ function TenantIdentifierSection({
     onRenamed();
   }
 
+  if (editing) {
+    return (
+      <SettingsRow label="Subdomain">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="h-8 w-48"
+          aria-label="New subdomain"
+        />
+        <span className="text-muted-foreground">.thinkwork.ai</span>
+        <Button
+          size="sm"
+          onClick={onSubmit}
+          disabled={renameState.fetching || !draft.trim()}
+        >
+          {renameState.fetching ? "Saving…" : "Save"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setEditing(false);
+            setDraft(slug);
+            setErrorMsg(null);
+          }}
+        >
+          Cancel
+        </Button>
+        {errorMsg ? <span className="text-destructive">{errorMsg}</span> : null}
+      </SettingsRow>
+    );
+  }
+
   return (
-    <SettingsSection
-      label="Tenant identifier"
-      action={
-        canRename && !editing ? (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
-          >
-            Rename
-          </button>
-        ) : undefined
-      }
-    >
-      {editing ? (
-        <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className="h-8 w-56"
-            aria-label="New subdomain"
-          />
-          <span className="text-sm text-muted-foreground">.thinkwork.ai</span>
-          <Button
-            size="sm"
-            onClick={onSubmit}
-            disabled={renameState.fetching || !draft.trim()}
-          >
-            {renameState.fetching ? "Saving…" : "Save"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setEditing(false);
-              setDraft(slug);
-              setErrorMsg(null);
-            }}
-          >
-            Cancel
-          </Button>
-          {errorMsg ? (
-            <span className="text-sm text-destructive">{errorMsg}</span>
-          ) : null}
-        </div>
+    <SettingsRow label="Subdomain">
+      {canRename ? (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Rename subdomain"
+          className="font-mono text-xs outline-none hover:text-foreground focus-visible:underline"
+        >
+          {slug}.thinkwork.ai
+        </button>
       ) : (
-        <SettingsRow label="Subdomain">
-          <span className="font-mono text-xs">{slug}.thinkwork.ai</span>
-        </SettingsRow>
+        <span className="font-mono text-xs">{slug}.thinkwork.ai</span>
       )}
-    </SettingsSection>
+    </SettingsRow>
   );
 }
