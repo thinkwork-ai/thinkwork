@@ -21,10 +21,31 @@ export interface Tenant {
   logoUrl?: string;
 }
 
+/** Caller's role in the current tenant, from `tenant_members.role`. */
+export type TenantRole = "owner" | "admin" | "member" | string;
+
 interface TenantContextValue {
   tenant: Tenant | null;
   tenantId: string | null;
   userId: string | null;
+  /**
+   * The caller's role in this tenant (`tenant_members.role`), or null when
+   * unresolved / no membership. Sourced from `/api/auth/me` — NOT from JWT
+   * claims, which are unreliable for Google-federated users.
+   */
+  role: TenantRole | null;
+  /**
+   * True when the caller is an owner or admin. Gate operator-only settings
+   * surfaces and controls on this. Mirrors admin's `isOwner` gate but widened
+   * to include `admin`.
+   */
+  isOperator: boolean;
+  /**
+   * False until `/api/auth/me` has resolved the role. Consumers that gate UI
+   * on `isOperator` should wait for `roleResolved` before rendering operator
+   * affordances, to avoid a flash of operator content for members.
+   */
+  roleResolved: boolean;
   isLoading: boolean;
   error: string | null;
   /**
@@ -66,17 +87,20 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 async function discoverCallerViaAuthMe(): Promise<{
   tenantId: string | null;
   userId: string | null;
+  role: TenantRole | null;
 }> {
-  const empty = { tenantId: null, userId: null };
+  const empty = { tenantId: null, userId: null, role: null };
   if (!API_URL) return empty;
   try {
     const data = await apiFetch<{
       tenantId?: string | null;
       userId?: string | null;
+      role?: string | null;
     }>("/api/auth/me");
     return {
       tenantId: data.tenantId ?? null,
       userId: data.userId ?? null,
+      role: data.role ?? null,
     };
   } catch (err) {
     if (err instanceof NotReadyError) throw err;
@@ -94,6 +118,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [discoveredUserId, setDiscoveredUserId] = useState<string | null>(null);
+  const [role, setRole] = useState<TenantRole | null>(null);
+  const [roleResolved, setRoleResolved] = useState(false);
   // Bumps to retry when apiFetch throws NotReadyError — the Cognito session
   // may be hydrated into AuthContext before the token cache is populated, and
   // AuthProvider wraps us so tenantId arrives before getIdToken() returns a
@@ -160,6 +186,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     }
     const found = await discoverCallerViaAuthMe();
     setDiscoveredUserId(found.userId);
+    setRole(found.role);
+    setRoleResolved(true);
     if (found.tenantId) {
       setDiscoveredTenantId(found.tenantId);
       setNoTenantAssigned(false);
@@ -185,6 +213,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     }
     const found = await discoverCallerViaAuthMe();
     setDiscoveredUserId(found.userId);
+    setRole(found.role);
+    setRoleResolved(true);
     await fetchTenant(targetTenantId);
   }
 
@@ -199,6 +229,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     } else {
       setTenant(null);
       setDiscoveredUserId(null);
+      setRole(null);
+      setRoleResolved(true);
       setNoTenantAssigned(false);
       setIsLoading(false);
     }
@@ -211,6 +243,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         tenant,
         tenantId: effectiveTenantId || tenant?.id || null,
         userId: discoveredUserId ?? user?.sub ?? null,
+        role,
+        isOperator: role === "owner" || role === "admin",
+        roleResolved,
         isLoading,
         error,
         noTenantAssigned,
