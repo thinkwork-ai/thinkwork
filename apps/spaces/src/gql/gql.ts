@@ -33,6 +33,8 @@ type Documents = {
     "\n  query SettingsCostByAgent($tenantId: ID!) {\n    costByAgent(tenantId: $tenantId) {\n      agentId\n      agentName\n      totalUsd\n      eventCount\n    }\n  }\n": typeof types.SettingsCostByAgentDocument,
     "\n  query SettingsCostByModel($tenantId: ID!) {\n    costByModel(tenantId: $tenantId) {\n      model\n      totalUsd\n      inputTokens\n      outputTokens\n    }\n  }\n": typeof types.SettingsCostByModelDocument,
     "\n  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {\n    costTimeSeries(tenantId: $tenantId, days: $days) {\n      day\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      eventCount\n    }\n  }\n": typeof types.SettingsCostTimeSeriesDocument,
+    "\n  query SettingsRoutines($tenantId: ID!) {\n    routines(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      lastRunAt\n      engine\n      createdAt\n    }\n  }\n": typeof types.SettingsRoutinesDocument,
+    "\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": typeof types.SettingsWebhooksDocument,
 };
 const documents: Documents = {
     "\n  query AppletState($appId: ID!, $instanceId: ID!, $key: String!) {\n    appletState(appId: $appId, instanceId: $instanceId, key: $key) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n": types.AppletStateDocument,
@@ -54,6 +56,8 @@ const documents: Documents = {
     "\n  query SettingsCostByAgent($tenantId: ID!) {\n    costByAgent(tenantId: $tenantId) {\n      agentId\n      agentName\n      totalUsd\n      eventCount\n    }\n  }\n": types.SettingsCostByAgentDocument,
     "\n  query SettingsCostByModel($tenantId: ID!) {\n    costByModel(tenantId: $tenantId) {\n      model\n      totalUsd\n      inputTokens\n      outputTokens\n    }\n  }\n": types.SettingsCostByModelDocument,
     "\n  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {\n    costTimeSeries(tenantId: $tenantId, days: $days) {\n      day\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      eventCount\n    }\n  }\n": types.SettingsCostTimeSeriesDocument,
+    "\n  query SettingsRoutines($tenantId: ID!) {\n    routines(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      lastRunAt\n      engine\n      createdAt\n    }\n  }\n": types.SettingsRoutinesDocument,
+    "\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": types.SettingsWebhooksDocument,
 };
 
 /**
@@ -146,6 +150,14 @@ export function graphql(source: "\n  query SettingsCostByModel($tenantId: ID!) {
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {\n    costTimeSeries(tenantId: $tenantId, days: $days) {\n      day\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      eventCount\n    }\n  }\n"): (typeof documents)["\n  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {\n    costTimeSeries(tenantId: $tenantId, days: $days) {\n      day\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      eventCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SettingsRoutines($tenantId: ID!) {\n    routines(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      lastRunAt\n      engine\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query SettingsRoutines($tenantId: ID!) {\n    routines(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      lastRunAt\n      engine\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

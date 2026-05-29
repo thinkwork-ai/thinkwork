@@ -1,6 +1,19 @@
 import type { ComponentType } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, Bot, Settings as SettingsIcon, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Bot,
+  Brain,
+  NotebookText,
+  Plug,
+  Repeat,
+  Settings as SettingsIcon,
+  Sparkles,
+  Users,
+  Webhook,
+  Wrench,
+} from "lucide-react";
 import { IconChartBar, IconPlanet } from "@tabler/icons-react";
 import { cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
@@ -22,12 +35,55 @@ const NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
   { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
   {
+    label: "Skills",
+    to: "/settings/skills",
+    icon: Sparkles,
+    operatorOnly: true,
+  },
+  {
+    label: "Built-in Tools",
+    to: "/settings/tools",
+    icon: Wrench,
+    operatorOnly: true,
+  },
+  {
+    label: "MCP Servers",
+    to: "/settings/mcp-servers",
+    icon: Plug,
+    operatorOnly: true,
+  },
+  {
+    label: "Knowledge Bases",
+    to: "/settings/knowledge-bases",
+    icon: BookOpen,
+    operatorOnly: true,
+  },
+  { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
+  {
+    label: "Wiki",
+    to: "/settings/wiki",
+    icon: NotebookText,
+    operatorOnly: true,
+  },
+  {
     label: "Spaces",
     to: "/settings/spaces",
     icon: IconPlanet,
     operatorOnly: true,
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
+  {
+    label: "Routines",
+    to: "/settings/routines",
+    icon: Repeat,
+    operatorOnly: true,
+  },
+  {
+    label: "Webhooks",
+    to: "/settings/webhooks",
+    icon: Webhook,
+    operatorOnly: true,
+  },
   {
     label: "Analytics",
     to: "/settings/analytics",
