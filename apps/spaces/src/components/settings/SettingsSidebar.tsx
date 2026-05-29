@@ -1,6 +1,14 @@
 import type { ComponentType } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, Bot, Settings as SettingsIcon, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  Plug,
+  Settings as SettingsIcon,
+  Sparkles,
+  Users,
+  Wrench,
+} from "lucide-react";
 import { IconChartBar, IconPlanet } from "@tabler/icons-react";
 import { cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
@@ -21,6 +29,24 @@ interface SettingsNavItem {
 const NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
   { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
+  {
+    label: "Skills",
+    to: "/settings/skills",
+    icon: Sparkles,
+    operatorOnly: true,
+  },
+  {
+    label: "Built-in Tools",
+    to: "/settings/tools",
+    icon: Wrench,
+    operatorOnly: true,
+  },
+  {
+    label: "MCP Servers",
+    to: "/settings/mcp-servers",
+    icon: Plug,
+    operatorOnly: true,
+  },
   {
     label: "Spaces",
     to: "/settings/spaces",

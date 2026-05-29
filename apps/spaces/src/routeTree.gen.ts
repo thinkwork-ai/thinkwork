@@ -18,7 +18,10 @@ import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
 import { Route as AuthedSettingsRouteImport } from "./routes/_authed/settings";
 import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settings.index";
+import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settings.tools";
 import { Route as AuthedSettingsSpacesRouteImport } from "./routes/_authed/settings.spaces";
+import { Route as AuthedSettingsSkillsRouteImport } from "./routes/_authed/settings.skills";
+import { Route as AuthedSettingsMcpServersRouteImport } from "./routes/_authed/settings.mcp-servers";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
 import { Route as AuthedSettingsAgentRouteImport } from "./routes/_authed/settings.agent";
@@ -91,11 +94,27 @@ const AuthedSettingsIndexRoute = AuthedSettingsIndexRouteImport.update({
   path: "/",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedSettingsToolsRoute = AuthedSettingsToolsRouteImport.update({
+  id: "/tools",
+  path: "/tools",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
 const AuthedSettingsSpacesRoute = AuthedSettingsSpacesRouteImport.update({
   id: "/spaces",
   path: "/spaces",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedSettingsSkillsRoute = AuthedSettingsSkillsRouteImport.update({
+  id: "/skills",
+  path: "/skills",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedSettingsMcpServersRoute =
+  AuthedSettingsMcpServersRouteImport.update({
+    id: "/mcp-servers",
+    path: "/mcp-servers",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsGeneralRoute = AuthedSettingsGeneralRouteImport.update({
   id: "/general",
   path: "/general",
@@ -264,7 +283,10 @@ export interface FileRoutesByFullPath {
   "/settings/agent": typeof AuthedSettingsAgentRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
+  "/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
+  "/settings/skills": typeof AuthedSettingsSkillsRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesRoute;
+  "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
@@ -298,7 +320,10 @@ export interface FileRoutesByTo {
   "/settings/agent": typeof AuthedSettingsAgentRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
+  "/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
+  "/settings/skills": typeof AuthedSettingsSkillsRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesRoute;
+  "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
@@ -339,7 +364,10 @@ export interface FileRoutesById {
   "/_authed/settings/agent": typeof AuthedSettingsAgentRoute;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
+  "/_authed/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
+  "/_authed/settings/skills": typeof AuthedSettingsSkillsRoute;
   "/_authed/settings/spaces": typeof AuthedSettingsSpacesRoute;
+  "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
@@ -379,7 +407,10 @@ export interface FileRouteTypes {
     | "/settings/agent"
     | "/settings/analytics"
     | "/settings/general"
+    | "/settings/mcp-servers"
+    | "/settings/skills"
     | "/settings/spaces"
+    | "/settings/tools"
     | "/settings/"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
@@ -413,7 +444,10 @@ export interface FileRouteTypes {
     | "/settings/agent"
     | "/settings/analytics"
     | "/settings/general"
+    | "/settings/mcp-servers"
+    | "/settings/skills"
     | "/settings/spaces"
+    | "/settings/tools"
     | "/settings"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
@@ -453,7 +487,10 @@ export interface FileRouteTypes {
     | "/_authed/settings/agent"
     | "/_authed/settings/analytics"
     | "/_authed/settings/general"
+    | "/_authed/settings/mcp-servers"
+    | "/_authed/settings/skills"
     | "/_authed/settings/spaces"
+    | "/_authed/settings/tools"
     | "/_authed/settings/"
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/artifacts/$id"
@@ -552,11 +589,32 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/tools": {
+      id: "/_authed/settings/tools";
+      path: "/tools";
+      fullPath: "/settings/tools";
+      preLoaderRoute: typeof AuthedSettingsToolsRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/spaces": {
       id: "/_authed/settings/spaces";
       path: "/spaces";
       fullPath: "/settings/spaces";
       preLoaderRoute: typeof AuthedSettingsSpacesRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/skills": {
+      id: "/_authed/settings/skills";
+      path: "/skills";
+      fullPath: "/settings/skills";
+      preLoaderRoute: typeof AuthedSettingsSkillsRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/mcp-servers": {
+      id: "/_authed/settings/mcp-servers";
+      path: "/mcp-servers";
+      fullPath: "/settings/mcp-servers";
+      preLoaderRoute: typeof AuthedSettingsMcpServersRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/general": {
@@ -871,7 +929,10 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsAgentRoute: typeof AuthedSettingsAgentRoute;
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
+  AuthedSettingsMcpServersRoute: typeof AuthedSettingsMcpServersRoute;
+  AuthedSettingsSkillsRoute: typeof AuthedSettingsSkillsRoute;
   AuthedSettingsSpacesRoute: typeof AuthedSettingsSpacesRoute;
+  AuthedSettingsToolsRoute: typeof AuthedSettingsToolsRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
   AuthedSettingsUsersUserIdRoute: typeof AuthedSettingsUsersUserIdRoute;
   AuthedSettingsUsersIndexRoute: typeof AuthedSettingsUsersIndexRoute;
@@ -881,7 +942,10 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAgentRoute: AuthedSettingsAgentRoute,
   AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
+  AuthedSettingsMcpServersRoute: AuthedSettingsMcpServersRoute,
+  AuthedSettingsSkillsRoute: AuthedSettingsSkillsRoute,
   AuthedSettingsSpacesRoute: AuthedSettingsSpacesRoute,
+  AuthedSettingsToolsRoute: AuthedSettingsToolsRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
   AuthedSettingsUsersUserIdRoute: AuthedSettingsUsersUserIdRoute,
   AuthedSettingsUsersIndexRoute: AuthedSettingsUsersIndexRoute,
