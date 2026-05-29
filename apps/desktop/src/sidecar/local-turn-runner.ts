@@ -103,6 +103,10 @@ export async function runLocalDesktopTurn(
     | { session: PiSdkSessionLike; modelFallbackMessage?: string }
     | undefined;
   let unbindAbort: (() => void) | undefined;
+  // Snapshot the composed prompt at turn entry so the finalize callback
+  // (incl. the catch path) persists exactly what the SDK received, not the
+  // raw invocation base. See feedback_completion_callback_snapshot_pattern.
+  let composedSystemPrompt: string | undefined;
 
   try {
     throwIfAborted(deps.signal);
@@ -123,6 +127,7 @@ export async function runLocalDesktopTurn(
       cacheHit: workspace.cacheHit === true,
     });
     const systemPrompt = buildSystemPrompt(payload.session.invocation);
+    composedSystemPrompt = systemPrompt;
     await maybeWriteDebugBundle({
       payload,
       workspaceDir: workspace.localDir,
@@ -173,6 +178,7 @@ export async function runLocalDesktopTurn(
       prepared: payload.session,
       runResult,
       status: "ok",
+      systemPrompt: composedSystemPrompt,
       startedAt,
       deps,
       logger,
@@ -198,6 +204,7 @@ export async function runLocalDesktopTurn(
       prepared: payload.session,
       error,
       status: "error",
+      systemPrompt: composedSystemPrompt,
       startedAt,
       deps,
       logger,
@@ -1212,6 +1219,7 @@ async function finalizeTurn(args: {
   status: "ok" | "error";
   runResult?: RunAgentLoopResult;
   error?: unknown;
+  systemPrompt?: string;
   startedAt: Date;
   deps: LocalTurnRunnerDeps;
   logger: RedactedLogger;
@@ -1234,7 +1242,8 @@ async function finalizeTurn(args: {
       agentSlug: args.prepared.invocation.instance_id,
       traceId: args.prepared.invocation.trace_id,
     },
-    systemPrompt: args.prepared.invocation.system_prompt,
+    systemPrompt:
+      args.systemPrompt ?? args.prepared.invocation.system_prompt,
     result:
       args.status === "ok" && args.runResult
         ? { status: "ok", runResult: args.runResult, latencyMs }
