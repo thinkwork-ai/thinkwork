@@ -1,0 +1,132 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const {
+  mockRequireAdminOrServiceCaller,
+  mockRequireTenantMember,
+  mockResolveCallerTenantId,
+  mockSelect,
+} = vi.hoisted(() => ({
+  mockRequireAdminOrServiceCaller: vi.fn(),
+  mockRequireTenantMember: vi.fn(),
+  mockResolveCallerTenantId: vi.fn(),
+  mockSelect: vi.fn(),
+}));
+
+vi.mock("./authz.js", () => ({
+  requireAdminOrServiceCaller: mockRequireAdminOrServiceCaller,
+  requireTenantMember: mockRequireTenantMember,
+}));
+
+vi.mock("./resolve-auth-user.js", () => ({
+  resolveCallerTenantId: mockResolveCallerTenantId,
+}));
+
+vi.mock("../../utils.js", () => ({
+  db: { select: mockSelect },
+  eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
+  tenants: { id: "tenants.id" },
+  tenantMembers: { tenant_id: "tenant_members.tenant_id" },
+  snakeToCamel: (row: Record<string, unknown>) => row,
+}));
+
+function queryRows(rows: unknown[]) {
+  const chain = {
+    from: () => chain,
+    where: () => Promise.resolve(rows),
+  };
+  return chain;
+}
+
+let deploymentStatusMod: typeof import("./deploymentStatus.query.js");
+let tenantMod: typeof import("./tenant.query.js");
+let tenantMembersMod: typeof import("./tenantMembers.query.js");
+
+beforeEach(async () => {
+  vi.resetModules();
+  mockRequireAdminOrServiceCaller.mockReset();
+  mockRequireTenantMember.mockReset();
+  mockResolveCallerTenantId.mockReset();
+  mockResolveCallerTenantId.mockResolvedValue("tenant-1");
+  mockSelect.mockReset();
+  deploymentStatusMod = await import("./deploymentStatus.query.js");
+  tenantMod = await import("./tenant.query.js");
+  tenantMembersMod = await import("./tenantMembers.query.js");
+});
+
+const cognito = { auth: { authType: "cognito" } } as any;
+const service = { auth: { authType: "service" } } as any;
+
+describe("deploymentStatus authz", () => {
+  it("refuses a member (non-operator) before returning infra fields", async () => {
+    mockRequireAdminOrServiceCaller.mockRejectedValueOnce(
+      new Error("Tenant admin role required"),
+    );
+    await expect(
+      deploymentStatusMod.deploymentStatus(null, {}, cognito),
+    ).rejects.toThrow(/admin/i);
+    expect(mockRequireAdminOrServiceCaller).toHaveBeenCalledWith(
+      cognito,
+      "tenant-1",
+      "deployment_status:read",
+    );
+  });
+
+  it("returns the payload for an operator/service caller", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValueOnce(undefined);
+    const result = await deploymentStatusMod.deploymentStatus(null, {}, service);
+    expect(result).toMatchObject({ source: "AWS" });
+    expect(result).toHaveProperty("accountId");
+  });
+});
+
+describe("tenant query authz", () => {
+  it("refuses a cognito non-member before reading the row", async () => {
+    mockRequireTenantMember.mockRejectedValueOnce(
+      new Error("Tenant membership required"),
+    );
+    await expect(
+      tenantMod.tenant(null, { id: "tenant-2" }, cognito),
+    ).rejects.toThrow(/membership/i);
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it("returns the tenant for a cognito member", async () => {
+    mockRequireTenantMember.mockResolvedValueOnce("owner");
+    mockSelect.mockReturnValueOnce(
+      queryRows([{ id: "tenant-1", name: "Tenant One" }]),
+    );
+    const result = await tenantMod.tenant(null, { id: "tenant-1" }, cognito);
+    expect(result).toMatchObject({ id: "tenant-1", name: "Tenant One" });
+    expect(mockRequireTenantMember).toHaveBeenCalledWith(cognito, "tenant-1");
+  });
+
+  it("does not gate service callers", async () => {
+    mockSelect.mockReturnValueOnce(queryRows([{ id: "tenant-1" }]));
+    await tenantMod.tenant(null, { id: "tenant-1" }, service);
+    expect(mockRequireTenantMember).not.toHaveBeenCalled();
+  });
+});
+
+describe("tenantMembers query authz", () => {
+  it("refuses a cognito non-member before enumerating members", async () => {
+    mockRequireTenantMember.mockRejectedValueOnce(
+      new Error("Tenant membership required"),
+    );
+    await expect(
+      tenantMembersMod.tenantMembers_(null, { tenantId: "tenant-2" }, cognito),
+    ).rejects.toThrow(/membership/i);
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it("enumerates members for a cognito member", async () => {
+    mockRequireTenantMember.mockResolvedValueOnce("member");
+    mockSelect.mockReturnValueOnce(queryRows([]));
+    const result = await tenantMembersMod.tenantMembers_(
+      null,
+      { tenantId: "tenant-1" },
+      cognito,
+    );
+    expect(result).toEqual([]);
+    expect(mockRequireTenantMember).toHaveBeenCalledWith(cognito, "tenant-1");
+  });
+});

@@ -1,6 +1,5 @@
-import { useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { LogOut, Moon, Settings, Sun } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { LogOut, Settings } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -16,22 +15,21 @@ import {
   SidebarHeader,
   SidebarTrigger,
   useSidebar,
-  useTheme,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
 import { DesktopNavigationControls } from "@/components/DesktopApplicationHeader";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
+import { rememberSettingsReturnTo } from "@/lib/settings-return";
 
 export function SpacesSidebar() {
   const { state, setOpen } = useSidebar();
-  const { theme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const navigate = useNavigate();
+  const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const isCollapsed = state === "collapsed";
   const isDesktop = isDesktopBuild();
-  const nextTheme = theme === "dark" ? "light" : "dark";
 
   return (
     <Sidebar collapsible={isDesktop ? "offcanvas" : "icon"}>
@@ -75,28 +73,20 @@ export function SpacesSidebar() {
       )}
 
       <SidebarContent className="min-h-0">
-        <ChatSidebar
-          settingsOpen={settingsOpen}
-          onSettingsOpenChange={setSettingsOpen}
-        />
+        <ChatSidebar />
       </SidebarContent>
 
-      {settingsOpen ? null : (
-        <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1">
-          <AccountMenu
-            name={user?.name}
-            email={user?.email}
-            theme={theme}
-            nextTheme={nextTheme}
-            onOpenSettings={() => {
-              setSettingsOpen(true);
-              if (isCollapsed) setOpen(true);
-            }}
-            onToggleTheme={toggleTheme}
-            onSignOut={signOut}
-          />
-        </SidebarFooter>
-      )}
+      <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1">
+        <AccountMenu
+          name={user?.name}
+          email={user?.email}
+          onOpenSettings={() => {
+            rememberSettingsReturnTo(currentPath);
+            navigate({ to: "/settings" });
+          }}
+          onSignOut={signOut}
+        />
+      </SidebarFooter>
     </Sidebar>
   );
 }
@@ -104,18 +94,12 @@ export function SpacesSidebar() {
 function AccountMenu({
   name,
   email,
-  theme,
-  nextTheme,
   onOpenSettings,
-  onToggleTheme,
   onSignOut,
 }: {
   name?: string | null;
   email?: string | null;
-  theme: string;
-  nextTheme: string;
   onOpenSettings: () => void;
-  onToggleTheme: () => void;
   onSignOut: () => void;
 }) {
   const displayName = name ?? email ?? "Account";
@@ -163,15 +147,6 @@ function AccountMenu({
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onToggleTheme}>
-          {theme === "dark" ? (
-            <Sun className="mr-2 h-4 w-4" />
-          ) : (
-            <Moon className="mr-2 h-4 w-4" />
-          )}
-          Switch to {nextTheme} mode
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onSignOut}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out

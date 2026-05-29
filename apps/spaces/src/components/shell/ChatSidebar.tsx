@@ -127,15 +127,7 @@ const SEARCH_LIMIT = 30;
 const PINNED_LIMIT = 100;
 const SECTION_THREAD_LIMIT = 5;
 
-interface ChatSidebarProps {
-  settingsOpen?: boolean;
-  onSettingsOpenChange?: (open: boolean) => void;
-}
-
-export function ChatSidebar({
-  settingsOpen: controlledSettingsOpen,
-  onSettingsOpenChange,
-}: ChatSidebarProps = {}) {
+export function ChatSidebar() {
   const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
@@ -144,7 +136,6 @@ export function ChatSidebar({
   const isNewThreadRoute = location.pathname === "/new";
   const isAutomationsRoute = location.pathname === "/automations";
   const [searchOpen, setSearchOpen] = useState(false);
-  const [localSettingsOpen, setLocalSettingsOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
   );
@@ -586,30 +577,6 @@ export function ChatSidebar({
     serverPinnedThreads,
     tenantId,
   ]);
-
-  const settingsOpen = controlledSettingsOpen ?? localSettingsOpen;
-  const setSettingsOpen = onSettingsOpenChange ?? setLocalSettingsOpen;
-
-  if (settingsOpen) {
-    return (
-      <>
-        <SettingsNav onBack={() => setSettingsOpen(false)} />
-        <ThreadSearchDialog
-          open={searchOpen}
-          onOpenChange={setSearchOpen}
-          search={search}
-          onSearchChange={setSearch}
-          threads={searchThreads}
-          pinnedThreadIds={pinnedThreadIdSet}
-          defaultSpaceIds={defaultSpaceIds}
-          locallyReadThreadIds={locallyReadThreadIds}
-          onSelectThread={openSearchThread}
-          isLoading={searchFetching && !searchData}
-          error={searchError?.message ?? null}
-        />
-      </>
-    );
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1269,53 +1236,6 @@ function SpaceThreadSection({
   );
 }
 
-function SettingsNav({ onBack }: { onBack: () => void }) {
-  const items = [
-    { label: "General", icon: Settings, active: true },
-    { label: "Appearance", icon: Sun },
-    { label: "Configuration", icon: Shield },
-    { label: "Personalization", icon: User },
-    { label: "Keyboard shortcuts", icon: Keyboard },
-    { label: "MCP servers", icon: Paperclip },
-    { label: "Hooks", icon: Anchor },
-    { label: "Connections", icon: Globe },
-    { label: "Git", icon: GitBranch },
-    { label: "Environments", icon: Monitor },
-    { label: "Worktrees", icon: SlidersHorizontal },
-    { label: "Browser", icon: Monitor },
-    { label: "Computer use", icon: SlidersHorizontal },
-    { label: "Archived chats", icon: Archive },
-  ];
-
-  return (
-    <div className="scrollbar-auto-hide min-h-0 flex-1 overflow-y-auto px-3 pb-3 group-data-[collapsible=icon]:hidden">
-      <button
-        type="button"
-        className="mb-3 flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground/65 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-        onClick={onBack}
-      >
-        <ArrowLeft className="size-4" />
-        <span>Back to app</span>
-      </button>
-      <nav className="space-y-1" aria-label="Settings">
-        {items.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className={cn(
-              navItemClassName,
-              item.active && "bg-sidebar-accent text-sidebar-accent-foreground",
-            )}
-          >
-            <item.icon className="size-4 shrink-0" />
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
-    </div>
-  );
-}
-
 function ChatThreadRow({
   thread,
   active,
@@ -1595,9 +1515,6 @@ function ChatThreadRow({
     </div>
   );
 }
-
-const navItemClassName =
-  "flex h-8 w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 text-sm font-normal text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
 
 function threadIdFromThreadPath(pathname: string) {
   const canonicalMatch = /^\/threads\/([^/]+)$/.exec(pathname);

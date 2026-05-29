@@ -15,7 +15,12 @@ import { Route as SplatRouteImport } from "./routes/$";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as AuthDesktopCallbackRouteImport } from "./routes/auth/desktop-callback";
 import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
+import { Route as AuthedSettingsRouteImport } from "./routes/_authed/settings";
 import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
+import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settings.index";
+import { Route as AuthedSettingsSpacesRouteImport } from "./routes/_authed/settings.spaces";
+import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
+import { Route as AuthedSettingsAgentRouteImport } from "./routes/_authed/settings.agent";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
 import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/memory";
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
@@ -69,9 +74,34 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: "/auth/callback",
   getParentRoute: () => rootRouteImport,
 } as any);
+const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
+  getParentRoute: () => AuthedRoute,
+} as any);
 const AuthedShellRoute = AuthedShellRouteImport.update({
   id: "/_shell",
   getParentRoute: () => AuthedRoute,
+} as any);
+const AuthedSettingsIndexRoute = AuthedSettingsIndexRouteImport.update({
+  id: "/",
+  path: "/",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedSettingsSpacesRoute = AuthedSettingsSpacesRouteImport.update({
+  id: "/spaces",
+  path: "/spaces",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedSettingsGeneralRoute = AuthedSettingsGeneralRouteImport.update({
+  id: "/general",
+  path: "/general",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedSettingsAgentRoute = AuthedSettingsAgentRouteImport.update({
+  id: "/agent",
+  path: "/agent",
+  getParentRoute: () => AuthedSettingsRoute,
 } as any);
 const AuthedShellNewRoute = AuthedShellNewRouteImport.update({
   id: "/new",
@@ -204,12 +234,17 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/$": typeof SplatRoute;
   "/sign-in": typeof SignInRoute;
+  "/settings": typeof AuthedSettingsRouteWithChildren;
   "/auth/callback": typeof AuthCallbackRoute;
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
+  "/settings/agent": typeof AuthedSettingsAgentRoute;
+  "/settings/general": typeof AuthedSettingsGeneralRoute;
+  "/settings/spaces": typeof AuthedSettingsSpacesRoute;
+  "/settings/": typeof AuthedSettingsIndexRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
@@ -237,6 +272,10 @@ export interface FileRoutesByTo {
   "/auth/callback": typeof AuthCallbackRoute;
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/new": typeof AuthedShellNewRoute;
+  "/settings/agent": typeof AuthedSettingsAgentRoute;
+  "/settings/general": typeof AuthedSettingsGeneralRoute;
+  "/settings/spaces": typeof AuthedSettingsSpacesRoute;
+  "/settings": typeof AuthedSettingsIndexRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
@@ -264,12 +303,17 @@ export interface FileRoutesById {
   "/_authed": typeof AuthedRouteWithChildren;
   "/sign-in": typeof SignInRoute;
   "/_authed/_shell": typeof AuthedShellRouteWithChildren;
+  "/_authed/settings": typeof AuthedSettingsRouteWithChildren;
   "/auth/callback": typeof AuthCallbackRoute;
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/_authed/_shell/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
+  "/_authed/settings/agent": typeof AuthedSettingsAgentRoute;
+  "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
+  "/_authed/settings/spaces": typeof AuthedSettingsSpacesRoute;
+  "/_authed/settings/": typeof AuthedSettingsIndexRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/_authed/_shell/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
@@ -296,12 +340,17 @@ export interface FileRouteTypes {
     | "/"
     | "/$"
     | "/sign-in"
+    | "/settings"
     | "/auth/callback"
     | "/auth/desktop-callback"
     | "/automations"
     | "/customize"
     | "/memory"
     | "/new"
+    | "/settings/agent"
+    | "/settings/general"
+    | "/settings/spaces"
+    | "/settings/"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
@@ -329,6 +378,10 @@ export interface FileRouteTypes {
     | "/auth/callback"
     | "/auth/desktop-callback"
     | "/new"
+    | "/settings/agent"
+    | "/settings/general"
+    | "/settings/spaces"
+    | "/settings"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
@@ -355,12 +408,17 @@ export interface FileRouteTypes {
     | "/_authed"
     | "/sign-in"
     | "/_authed/_shell"
+    | "/_authed/settings"
     | "/auth/callback"
     | "/auth/desktop-callback"
     | "/_authed/_shell/automations"
     | "/_authed/_shell/customize"
     | "/_authed/_shell/memory"
     | "/_authed/_shell/new"
+    | "/_authed/settings/agent"
+    | "/_authed/settings/general"
+    | "/_authed/settings/spaces"
+    | "/_authed/settings/"
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/artifacts/$id"
     | "/_authed/_shell/automations/$scheduledJobId"
@@ -435,12 +493,47 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthCallbackRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/_authed/settings": {
+      id: "/_authed/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof AuthedSettingsRouteImport;
+      parentRoute: typeof AuthedRoute;
+    };
     "/_authed/_shell": {
       id: "/_authed/_shell";
       path: "";
       fullPath: "/";
       preLoaderRoute: typeof AuthedShellRouteImport;
       parentRoute: typeof AuthedRoute;
+    };
+    "/_authed/settings/": {
+      id: "/_authed/settings/";
+      path: "/";
+      fullPath: "/settings/";
+      preLoaderRoute: typeof AuthedSettingsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/spaces": {
+      id: "/_authed/settings/spaces";
+      path: "/spaces";
+      fullPath: "/settings/spaces";
+      preLoaderRoute: typeof AuthedSettingsSpacesRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/general": {
+      id: "/_authed/settings/general";
+      path: "/general";
+      fullPath: "/settings/general";
+      preLoaderRoute: typeof AuthedSettingsGeneralRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/agent": {
+      id: "/_authed/settings/agent";
+      path: "/agent";
+      fullPath: "/settings/agent";
+      preLoaderRoute: typeof AuthedSettingsAgentRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/_shell/new": {
       id: "/_authed/_shell/new";
@@ -715,12 +808,32 @@ const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
   AuthedShellRouteChildren,
 );
 
+interface AuthedSettingsRouteChildren {
+  AuthedSettingsAgentRoute: typeof AuthedSettingsAgentRoute;
+  AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
+  AuthedSettingsSpacesRoute: typeof AuthedSettingsSpacesRoute;
+  AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
+}
+
+const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
+  AuthedSettingsAgentRoute: AuthedSettingsAgentRoute,
+  AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
+  AuthedSettingsSpacesRoute: AuthedSettingsSpacesRoute,
+  AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
+};
+
+const AuthedSettingsRouteWithChildren = AuthedSettingsRoute._addFileChildren(
+  AuthedSettingsRouteChildren,
+);
+
 interface AuthedRouteChildren {
   AuthedShellRoute: typeof AuthedShellRouteWithChildren;
+  AuthedSettingsRoute: typeof AuthedSettingsRouteWithChildren;
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedShellRoute: AuthedShellRouteWithChildren,
+  AuthedSettingsRoute: AuthedSettingsRouteWithChildren,
 };
 
 const AuthedRouteWithChildren =
