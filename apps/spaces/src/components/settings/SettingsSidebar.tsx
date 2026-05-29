@@ -4,6 +4,7 @@ import {
   Bot,
   LayoutGrid,
   Settings as SettingsIcon,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@thinkwork/ui";
@@ -29,6 +30,7 @@ const NAV_ITEMS: SettingsNavItem[] = [
     icon: LayoutGrid,
     operatorOnly: true,
   },
+  { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
   { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
 ];
 

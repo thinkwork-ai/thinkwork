@@ -124,3 +124,41 @@ export const SettingsUpdateTenantAgentMutation = graphql(`
     }
   }
 `);
+
+// ─── Users (operator-only section) ───────────────────────────────────────
+
+export const SettingsTenantMembersQuery = graphql(`
+  query SettingsTenantMembers($tenantId: ID!) {
+    tenantMembers(tenantId: $tenantId) {
+      id
+      principalType
+      principalId
+      role
+      status
+      createdAt
+      user {
+        id
+        name
+        email
+      }
+    }
+  }
+`);
+
+export const SettingsInviteMemberMutation = graphql(`
+  mutation SettingsInviteMember($tenantId: ID!, $input: InviteMemberInput!) {
+    inviteMember(tenantId: $tenantId, input: $input) {
+      id
+      principalType
+      principalId
+      role
+      status
+      createdAt
+      user {
+        id
+        name
+        email
+      }
+    }
+  }
+`);
