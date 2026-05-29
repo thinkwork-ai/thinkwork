@@ -92,6 +92,22 @@ Channel support has three seams: a new channel value in the thread model, an inb
 
 Integration-origin threads also carry provider metadata, such as Linear issue id, integration execution id, Space id, and provider writeback state. The channel tells operators what kind of source created the thread; the Space and metadata tie the visible thread back to the durable integration lifecycle.
 
+## Single-player vs. multiplayer threads
+
+A `CHAT` thread isn't only you and the agent. You can bring other people into a thread by `@`-mentioning them, which turns a private exchange into a shared workroom. That changes one thing: **whether the agent replies by default.**
+
+- **Single-player** — no other person is in the thread. The agent is the conversation partner, so it responds to every message. In the composer the agent toggle (the robot) is **on** by default.
+- **Multiplayer** — another person has been `@`-mentioned or has posted. The thread is now a human-to-human space the agent shouldn't talk over, so the agent toggle defaults to **off**: your messages go to the other people without waking the agent.
+
+The default is derived from the thread, not a global setting. It re-evaluates as you type — `@`-mentioning a teammate flips a single-player thread to multiplayer (toggle off) before you send. A manual choice **persists for that thread**: once you turn the agent on (or off) yourself, it stays where you put it until you change it again.
+
+Two ways to bring the agent into a multiplayer thread:
+
+1. **Toggle it on** for a message — click the robot so it lights up, then send.
+2. **`@`-mention the agent** (e.g. `@agent`) — an explicit agent mention always dispatches a turn, regardless of the toggle.
+
+**Mention picker.** Type `@` to open the people/agent picker. Arrow keys move the highlight; **Tab or Enter** commits the highlighted name; **Escape** closes the picker without selecting.
+
 ## Reopen, don't recreate
 
 This is the single most important invariant in the thread model.
