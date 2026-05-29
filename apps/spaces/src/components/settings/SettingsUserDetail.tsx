@@ -106,14 +106,6 @@ export function SettingsUserDetail() {
         description={user.email}
       />
 
-      <RoleSection
-        memberId={member.id}
-        currentRole={member.role}
-        status={member.status}
-        isSelf={isSelf}
-        callerIsOwner={callerIsOwner}
-      />
-
       <ProfileSection
         userId={user.id}
         name={user.name ?? ""}
@@ -136,6 +128,14 @@ export function SettingsUserDetail() {
           </Button>
         </div>
       </SettingsSection>
+
+      <RoleSection
+        memberId={member.id}
+        currentRole={member.role}
+        status={member.status}
+        isSelf={isSelf}
+        callerIsOwner={callerIsOwner}
+      />
     </SettingsPane>
   );
 }
@@ -224,8 +224,6 @@ function RoleSection({
 type Profile = {
   title?: string | null;
   timezone?: string | null;
-  pronouns?: string | null;
-  callBy?: string | null;
   notes?: string | null;
 } | null;
 
@@ -244,8 +242,6 @@ function ProfileSection({
     name,
     title: profile?.title ?? "",
     timezone: profile?.timezone ?? "",
-    pronouns: profile?.pronouns ?? "",
-    callBy: profile?.callBy ?? "",
     notes: profile?.notes ?? "",
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -263,8 +259,6 @@ function ProfileSection({
       name,
       title: profile?.title ?? "",
       timezone: profile?.timezone ?? "",
-      pronouns: profile?.pronouns ?? "",
-      callBy: profile?.callBy ?? "",
       notes: profile?.notes ?? "",
     });
   }, [name, profile]);
@@ -283,8 +277,6 @@ function ProfileSection({
         input: {
           title: form.title,
           timezone: form.timezone,
-          pronouns: form.pronouns,
-          callBy: form.callBy,
           notes: form.notes,
         },
       }),
@@ -298,62 +290,48 @@ function ProfileSection({
   }
 
   return (
-    <>
-      <SettingsSection label="Profile">
-        <div className="space-y-4 p-4">
-          <Labeled label="Name">
+    <SettingsSection label="Profile">
+      <div className="space-y-4 p-4">
+        <Labeled label="Name">
+          <Input
+            value={form.name}
+            onChange={(e) => set("name")(e.target.value)}
+          />
+        </Labeled>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Labeled label="Title">
             <Input
-              value={form.name}
-              onChange={(e) => set("name")(e.target.value)}
+              value={form.title}
+              onChange={(e) => set("title")(e.target.value)}
             />
           </Labeled>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Labeled label="Title">
-              <Input
-                value={form.title}
-                onChange={(e) => set("title")(e.target.value)}
-              />
-            </Labeled>
-            <Labeled label="Timezone">
-              <Input
-                value={form.timezone}
-                onChange={(e) => set("timezone")(e.target.value)}
-              />
-            </Labeled>
-            <Labeled label="Pronouns">
-              <Input
-                value={form.pronouns}
-                onChange={(e) => set("pronouns")(e.target.value)}
-              />
-            </Labeled>
-            <Labeled label="Call by">
-              <Input
-                value={form.callBy}
-                onChange={(e) => set("callBy")(e.target.value)}
-              />
-            </Labeled>
-          </div>
-          <Labeled label="Notes">
-            <Textarea
-              rows={3}
-              value={form.notes}
-              onChange={(e) => set("notes")(e.target.value)}
+          <Labeled label="Timezone">
+            <Input
+              value={form.timezone}
+              onChange={(e) => set("timezone")(e.target.value)}
             />
           </Labeled>
         </div>
-      </SettingsSection>
-      <div className="flex items-center gap-3">
-        <Button onClick={onSave} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-        {saved ? (
-          <span className="text-sm text-muted-foreground">Saved</span>
-        ) : null}
-        {errorMsg ? (
-          <span className="text-sm text-destructive">{errorMsg}</span>
-        ) : null}
+        <Labeled label="Notes">
+          <Textarea
+            rows={3}
+            value={form.notes}
+            onChange={(e) => set("notes")(e.target.value)}
+          />
+        </Labeled>
+        <div className="flex items-center justify-end gap-3 pt-1">
+          {saved ? (
+            <span className="text-sm text-muted-foreground">Saved</span>
+          ) : null}
+          {errorMsg ? (
+            <span className="text-sm text-destructive">{errorMsg}</span>
+          ) : null}
+          <Button onClick={onSave} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
