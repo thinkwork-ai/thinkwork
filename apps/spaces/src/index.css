@@ -27,22 +27,16 @@
   color-scheme: dark;
 }
 
-.dark *::-webkit-scrollbar {
+/*
+ * No global `*::-webkit-scrollbar` styling — defining it opts every scroll
+ * container out of the macOS native overlay scrollbar (which auto-hides) and
+ * forces an always-visible classic bar. `color-scheme: dark` above already
+ * gives the native scrollbars a dark appearance. Surfaces that specifically
+ * want a styled, on-hover bar can opt in via `.scrollbar-auto-hide`.
+ */
+.scrollbar-auto-hide::-webkit-scrollbar {
   width: 8px;
   height: 8px;
-}
-
-.dark *::-webkit-scrollbar-track {
-  background: oklch(0.205 0 0);
-}
-
-.dark *::-webkit-scrollbar-thumb {
-  background: oklch(0.4 0 0);
-  border-radius: 4px;
-}
-
-.dark *::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.5 0 0);
 }
 
 .scrollbar-auto-hide::-webkit-scrollbar-track {
