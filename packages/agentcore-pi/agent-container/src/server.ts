@@ -97,6 +97,7 @@ import {
 } from "./sessionstore-aurora.js";
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
+import { createS3SessionStore } from "./runtime/session-store.js";
 import { composeSystemPrompt } from "./runtime/system-prompt.js";
 import {
   buildFileReadTool,
@@ -1115,6 +1116,18 @@ export async function handleInvocation(
       typeof args.payload.model === "string" && args.payload.model.trim()
         ? args.payload.model.trim()
         : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+    // Durable per-thread session (U4): resume the thread's persisted Pi session
+    // from S3 instead of replaying full history as prompt text. Requires the
+    // workspace bucket + a tenant slug for isolation; otherwise the loop falls
+    // back to the transitional history-prepend path.
+    const sessionStore =
+      env.workspaceBucket && identity.tenantSlug
+        ? createS3SessionStore({
+            s3: deps.s3ClientFactory(env.awsRegion),
+            bucket: env.workspaceBucket,
+            keyPrefix: `pi-sessions/${identity.tenantSlug}/`,
+          })
+        : undefined;
     runResult = await runLoop({
       message: userMessage,
       history: normalizeHistory(args.payload.messages_history, currentModelId),
@@ -1125,6 +1138,7 @@ export async function handleInvocation(
       gitSha: env.gitSha,
       identity,
       cwd: env.workspaceDir,
+      sessionStore,
     });
   } catch (err) {
     runError = err;
