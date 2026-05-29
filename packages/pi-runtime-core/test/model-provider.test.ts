@@ -72,4 +72,12 @@ describe("UnsupportedModelError", () => {
     expect(err.message).toContain("kimi-k2");
     expect(err.supportedModelIds).toBeUndefined();
   });
+
+  it("keeps an empty supportedModelIds array but omits the clause", () => {
+    // The length>0 guard distinguishes [] from undefined: the field is still
+    // an array, but the message carries no "Supported models:" clause.
+    const err = new UnsupportedModelError("kimi-k2", []);
+    expect(err.supportedModelIds).toEqual([]);
+    expect(err.message).not.toContain("Supported models");
+  });
 });

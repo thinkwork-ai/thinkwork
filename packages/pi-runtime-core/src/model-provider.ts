@@ -23,14 +23,6 @@
  */
 
 /**
- * The result of resolving a model ID. The concrete shape is host-defined — a
- * Bedrock model descriptor, a pi-ai model object, etc. — so the core depends on
- * the resolution contract, not the resolved value's internals. Hosts may
- * specialize `TResolved` to their framework's model type.
- */
-export type ResolvedModel = unknown;
-
-/**
  * Thrown when a model ID is not in the host's supported set. Typed so callers can
  * branch on it (e.g. finalize a turn `status: failed` with a surfaced error)
  * rather than pattern-matching on a message string. This is the uniform failure
@@ -54,7 +46,14 @@ export class UnsupportedModelError extends Error {
   }
 }
 
-export interface ModelProvider<TResolved = ResolvedModel> {
+/**
+ * @typeParam TResolved - the host's model representation returned by `resolve()`.
+ * Host-defined and opaque to the core (a Bedrock model descriptor, a pi-ai model
+ * object, etc.); defaults to `unknown` so the core depends on the resolution
+ * contract, not the resolved value's internals. Hosts specialize it, e.g.
+ * `ModelProvider<BedrockModelDescriptor>`.
+ */
+export interface ModelProvider<TResolved = unknown> {
   /**
    * Whether the given model ID is in this host's supported set. Pure and
    * side-effect free — callers use it to gate before `resolve()`.
