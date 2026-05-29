@@ -613,7 +613,7 @@ export function ChatSidebar({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <SidebarGroup className="shrink-0 pb-2 group-data-[collapsible=icon]:hidden">
+      <SidebarGroup className="shrink-0 pt-0 pb-2 group-data-[collapsible=icon]:hidden">
         <SidebarGroupContent>
           <SidebarMenu className="gap-0.5" aria-label="Chat actions">
             <SidebarMenuItem>
