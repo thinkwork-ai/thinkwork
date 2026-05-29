@@ -18,3 +18,9 @@ export {
   toolResponse,
 } from "./providers/mock";
 export type { MockScript } from "./providers/mock";
+export { BedrockModelProvider } from "./providers/bedrock";
+export type { BedrockModelProviderOptions } from "./providers/bedrock";
+export { createMcpTool } from "./tools/mcp-tool";
+export type { McpToolDef, McpCall } from "./tools/mcp-tool";
+export { buildTurnContext } from "./turn-context";
+export type { TurnContext, TurnContextInput } from "./turn-context";
