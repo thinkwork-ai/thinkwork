@@ -1,11 +1,18 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, tenantMembers, snakeToCamel } from "../../utils.js";
+import { requireTenantMember } from "./authz.js";
 
 export const tenantMembers_ = async (
   _parent: any,
   args: any,
   ctx: GraphQLContext,
 ) => {
+  // Require a cognito caller to be a member of the requested tenant. Previously
+  // any authenticated caller could enumerate any tenant's members and roles
+  // (cross-tenant role enumeration). Service/apikey callers pass through.
+  if (ctx.auth.authType === "cognito") {
+    await requireTenantMember(ctx, args.tenantId);
+  }
   const rows = await db
     .select()
     .from(tenantMembers)

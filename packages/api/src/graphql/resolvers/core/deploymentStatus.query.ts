@@ -1,9 +1,28 @@
+import type { GraphQLContext } from "../../context.js";
+import { requireAdminOrServiceCaller } from "./authz.js";
+import { resolveCallerTenantId } from "./resolve-auth-user.js";
+
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda
  * environment variables. No DB access, no live AWS API calls.
+ *
+ * Operator-only: the payload includes account ID, DB endpoint, ECR URL, and
+ * AppSync/Hindsight endpoints. Frontend hiding is not a security boundary, so
+ * the gate lives here — a member who hand-issues this query must be refused.
+ * Service callers (trusted backends) pass through.
  */
 
-export const deploymentStatus = async () => {
+export const deploymentStatus = async (
+  _parent: any,
+  _args: any,
+  ctx: GraphQLContext,
+) => {
+  const tenantId = await resolveCallerTenantId(ctx);
+  await requireAdminOrServiceCaller(
+    ctx,
+    tenantId ?? "",
+    "deployment_status:read",
+  );
   return {
     stage: process.env.STAGE || "unknown",
     source: "AWS",
