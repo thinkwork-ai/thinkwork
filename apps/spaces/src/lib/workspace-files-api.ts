@@ -10,7 +10,8 @@ export type WorkspaceFilesTarget =
   | { threadId: string }
   | { spaceId: string }
   | { agentId: string }
-  | { userId: string };
+  | { userId: string }
+  | { catalog: true };
 
 export interface ThreadGoalFileFallback {
   file: string;
