@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { Skeleton, Switch } from "@thinkwork/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { DataTable, Input, Skeleton, Switch } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
   listBuiltinTools,
@@ -9,8 +10,6 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
-  SettingsRow,
-  SettingsSection,
 } from "@/components/settings/SettingsContent";
 
 export function SettingsTools() {
@@ -19,6 +18,7 @@ export function SettingsTools() {
   const [tools, setTools] = useState<BuiltinTool[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
 
   const load = useCallback(() => {
     if (!tenantSlug) return;
@@ -34,27 +34,65 @@ export function SettingsTools() {
     load();
   }, [load]);
 
-  async function toggle(slug: string, enabled: boolean) {
-    if (!tenantSlug) return;
-    setPending((p) => ({ ...p, [slug]: true }));
-    // Optimistic update.
-    setTools(
-      (prev) =>
-        prev?.map((t) => (t.toolSlug === slug ? { ...t, enabled } : t)) ?? prev,
-    );
-    try {
-      await setBuiltinToolEnabled(tenantSlug, slug, enabled);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update");
-      load(); // revert to server truth
-    } finally {
-      setPending((p) => ({ ...p, [slug]: false }));
-    }
-  }
+  const toggle = useCallback(
+    async (slug: string, enabled: boolean) => {
+      if (!tenantSlug) return;
+      setPending((p) => ({ ...p, [slug]: true }));
+      setTools(
+        (prev) =>
+          prev?.map((t) => (t.toolSlug === slug ? { ...t, enabled } : t)) ??
+          prev,
+      );
+      try {
+        await setBuiltinToolEnabled(tenantSlug, slug, enabled);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to update");
+        load();
+      } finally {
+        setPending((p) => ({ ...p, [slug]: false }));
+      }
+    },
+    [tenantSlug, load],
+  );
+
+  const columns = useMemo<ColumnDef<BuiltinTool>[]>(
+    () => [
+      {
+        accessorKey: "toolSlug",
+        header: "Tool",
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.toolSlug}</span>
+        ),
+      },
+      {
+        accessorKey: "provider",
+        header: "Provider",
+        size: 180,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {row.original.provider ?? "—"}
+          </span>
+        ),
+      },
+      {
+        id: "enabled",
+        header: "Enabled",
+        size: 90,
+        cell: ({ row }) => (
+          <Switch
+            checked={row.original.enabled}
+            disabled={pending[row.original.toolSlug]}
+            onCheckedChange={(v) => toggle(row.original.toolSlug, v)}
+          />
+        ),
+      },
+    ],
+    [pending, toggle],
+  );
 
   if (!tools && !error) {
     return (
-      <SettingsPane>
+      <SettingsPane className="max-w-5xl">
         <SettingsHeader title="Built-in Tools" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </SettingsPane>
@@ -62,38 +100,37 @@ export function SettingsTools() {
   }
 
   return (
-    <SettingsPane>
+    <SettingsPane className="max-w-5xl">
       <SettingsHeader
         title="Built-in Tools"
         description="Enable or disable the agent’s built-in tools."
       />
-      <SettingsSection
-        action={
-          error ? (
-            <span className="text-sm text-destructive">{error}</span>
-          ) : undefined
-        }
-      >
-        {(tools ?? []).length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground">
+      {error ? (
+        <p className="mb-4 text-sm text-destructive">{error}</p>
+      ) : (
+        <div className="mb-4">
+          <Input
+            placeholder="Search tools…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+        </div>
+      )}
+      <DataTable
+        columns={columns}
+        data={tools ?? []}
+        filterValue={search}
+        filterColumn="toolSlug"
+        pageSize={10}
+        allowHorizontalScroll={false}
+        tableClassName="table-fixed"
+        emptyState={
+          <div className="py-10 text-center text-sm text-muted-foreground">
             No built-in tools available.
           </div>
-        ) : (
-          (tools ?? []).map((tool) => (
-            <SettingsRow
-              key={tool.id}
-              label={tool.toolSlug}
-              description={tool.provider ?? undefined}
-            >
-              <Switch
-                checked={tool.enabled}
-                disabled={pending[tool.toolSlug]}
-                onCheckedChange={(v) => toggle(tool.toolSlug, v)}
-              />
-            </SettingsRow>
-          ))
-        )}
-      </SettingsSection>
+        }
+      />
     </SettingsPane>
   );
 }

@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Skeleton, Switch } from "@thinkwork/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import {
+  Badge,
+  Button,
+  DataTable,
+  Input,
+  Skeleton,
+  Switch,
+} from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
   deleteMcpServer,
@@ -10,8 +18,6 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
-  SettingsRow,
-  SettingsSection,
 } from "@/components/settings/SettingsContent";
 
 export function SettingsMcpServers() {
@@ -20,6 +26,7 @@ export function SettingsMcpServers() {
   const [servers, setServers] = useState<McpServer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
 
   const load = useCallback(() => {
     if (!tenantSlug) return;
@@ -35,38 +42,106 @@ export function SettingsMcpServers() {
     load();
   }, [load]);
 
-  async function toggle(id: string, enabled: boolean) {
-    if (!tenantSlug) return;
-    setPending((p) => ({ ...p, [id]: true }));
-    setServers(
-      (prev) => prev?.map((s) => (s.id === id ? { ...s, enabled } : s)) ?? prev,
-    );
-    try {
-      await setMcpServerEnabled(tenantSlug, id, enabled);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update");
-      load();
-    } finally {
-      setPending((p) => ({ ...p, [id]: false }));
-    }
-  }
+  const toggle = useCallback(
+    async (id: string, enabled: boolean) => {
+      if (!tenantSlug) return;
+      setPending((p) => ({ ...p, [id]: true }));
+      setServers(
+        (prev) =>
+          prev?.map((s) => (s.id === id ? { ...s, enabled } : s)) ?? prev,
+      );
+      try {
+        await setMcpServerEnabled(tenantSlug, id, enabled);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to update");
+        load();
+      } finally {
+        setPending((p) => ({ ...p, [id]: false }));
+      }
+    },
+    [tenantSlug, load],
+  );
 
-  async function remove(id: string) {
-    if (!tenantSlug) return;
-    setPending((p) => ({ ...p, [id]: true }));
-    try {
-      await deleteMcpServer(tenantSlug, id);
-      setServers((prev) => prev?.filter((s) => s.id !== id) ?? prev);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to remove");
-    } finally {
-      setPending((p) => ({ ...p, [id]: false }));
-    }
-  }
+  const remove = useCallback(
+    async (id: string) => {
+      if (!tenantSlug) return;
+      setPending((p) => ({ ...p, [id]: true }));
+      try {
+        await deleteMcpServer(tenantSlug, id);
+        setServers((prev) => prev?.filter((s) => s.id !== id) ?? prev);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to remove");
+      } finally {
+        setPending((p) => ({ ...p, [id]: false }));
+      }
+    },
+    [tenantSlug],
+  );
+
+  const columns = useMemo<ColumnDef<McpServer>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        size: 200,
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.name}</span>
+        ),
+      },
+      {
+        accessorKey: "url",
+        header: "URL",
+        cell: ({ row }) => (
+          <span className="block max-w-md truncate font-mono text-xs text-muted-foreground">
+            {row.original.url}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        size: 110,
+        cell: ({ row }) =>
+          row.original.status && row.original.status !== "approved" ? (
+            <Badge variant="outline">{row.original.status}</Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "enabled",
+        header: "Enabled",
+        size: 90,
+        cell: ({ row }) => (
+          <Switch
+            checked={row.original.enabled}
+            disabled={pending[row.original.id]}
+            onCheckedChange={(v) => toggle(row.original.id, v)}
+          />
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        size: 90,
+        cell: ({ row }) => (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={pending[row.original.id]}
+            onClick={() => remove(row.original.id)}
+          >
+            Remove
+          </Button>
+        ),
+      },
+    ],
+    [pending, toggle, remove],
+  );
 
   if (!servers && !error) {
     return (
-      <SettingsPane>
+      <SettingsPane className="max-w-5xl">
         <SettingsHeader title="MCP Servers" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </SettingsPane>
@@ -74,49 +149,37 @@ export function SettingsMcpServers() {
   }
 
   return (
-    <SettingsPane>
+    <SettingsPane className="max-w-5xl">
       <SettingsHeader
         title="MCP Servers"
         description="Model Context Protocol servers available to the agent."
       />
-      <SettingsSection
-        action={
-          error ? (
-            <span className="text-sm text-destructive">{error}</span>
-          ) : undefined
-        }
-      >
-        {(servers ?? []).length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground">
+      {error ? (
+        <p className="mb-4 text-sm text-destructive">{error}</p>
+      ) : (
+        <div className="mb-4">
+          <Input
+            placeholder="Search servers…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+        </div>
+      )}
+      <DataTable
+        columns={columns}
+        data={servers ?? []}
+        filterValue={search}
+        filterColumn="name"
+        pageSize={10}
+        allowHorizontalScroll={false}
+        tableClassName="table-fixed"
+        emptyState={
+          <div className="py-10 text-center text-sm text-muted-foreground">
             No MCP servers configured.
           </div>
-        ) : (
-          (servers ?? []).map((server) => (
-            <SettingsRow
-              key={server.id}
-              label={server.name}
-              description={server.url}
-            >
-              {server.status && server.status !== "approved" ? (
-                <Badge variant="outline">{server.status}</Badge>
-              ) : null}
-              <Switch
-                checked={server.enabled}
-                disabled={pending[server.id]}
-                onCheckedChange={(v) => toggle(server.id, v)}
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={pending[server.id]}
-                onClick={() => remove(server.id)}
-              >
-                Remove
-              </Button>
-            </SettingsRow>
-          ))
-        )}
-      </SettingsSection>
+        }
+      />
     </SettingsPane>
   );
 }
