@@ -4,8 +4,23 @@ type: feat
 status: active
 date: 2026-05-28
 origin: docs/brainstorms/2026-05-28-desktop-turn-surface-and-composer-cleanup-requirements.md
-depends_on: docs/plans/2026-05-28-003-feat-desktop-local-pi-sidecar-plan.md
 ---
+
+<!--
+CORRECTION (2026-05-28, post-research): the original plan claimed a hard
+dependency on plan 003 (desktop-local-pi-sidecar). Plan 003 is ALREADY
+MERGED to main (PRs #1798–#1802; the sidecar, pi-sidecar-session.ts,
+LocalPiConsole in TaskThreadView.tsx, and apps/spaces/src/lib/use-desktop-local-pi-console.ts
+are all present). ALL units U1–U7 are unblocked. The earlier "blocked"
+framing was a research artifact — initial research ran against a stale
+detached checkout (63edf783) instead of real origin/main (a44823e3).
+
+STATUS: U1 (composer reorder) is DONE and merged (PR #1808 / commit 1c3e69c4).
+U2–U7 remain. Re-verify ALL file line numbers below against current
+origin/main before editing — they came from the stale checkout and are off
+(notably TaskThreadView.tsx and the thread route file).
+-->
+
 
 # feat: Desktop turn-surface consolidation, composer reorder, and system-prompt viewer
 
@@ -17,7 +32,7 @@ Three cleanups to the ThinkWork Spaces desktop UI (`apps/spaces`, React 19 + Vit
 2. **One turn surface** — relabel the existing activity collapsible (keep its tool rows) so it reads **"Working…"** in shimmer style while running and **"Worked for Xm Ys"** collapsed when done; remove the separate "Processing…" shimmer and the boxed Local Pi console; merge local-Pi events into the same row list; render the final assistant message as un-boxed prose.
 3. **System Prompt viewer** — add a "System Prompt" item to the thread "…" menu that opens a read-only, tree-less CodeMirror dialog showing the **exact** persisted system prompt the model received.
 
-**Sequencing:** This plan lands **after** `2026-05-28-003-feat-desktop-local-pi-sidecar` and consolidates what it built (deletes the boxed console, folds Pi events into the activity rows). See Risks & Dependencies.
+**Sequencing:** Plan `2026-05-28-003-feat-desktop-local-pi-sidecar` is **already merged to main**, so the surface this plan consolidates (boxed Local Pi console, sidecar session path) already exists. **All units U1–U7 are unblocked.** U1 is done (PR #1808). U5/U7 consolidate the merged local-Pi code — verify against current main before editing. See Risks & Dependencies.
 
 ---
 
@@ -221,7 +236,7 @@ flowchart LR
 
 **Goal:** Local-Pi output appears as step rows in the same activity list; the boxed Local Pi console is gone; raw logs live behind a quiet, conditionally-shown toggle.
 **Requirements:** R5, R7.
-**Dependencies:** U4; **plan 003 merged** (the `LocalPiConsole` and local-Pi event/console data it introduces).
+**Dependencies:** U4. (Plan 003's `LocalPiConsole` and local-Pi event/console data are **already on main** — no cross-plan wait.)
 **Files:**
 - `apps/spaces/src/components/workbench/TaskThreadView.tsx` (`actionRowsForTurn` `:2385`; remove `LocalPiConsole` + its render site introduced by plan 003)
 - `apps/spaces/src/components/workbench/TaskThreadView.test.tsx`
@@ -282,7 +297,7 @@ flowchart LR
 
 **Goal:** Local-Pi turns persist their composed prompt so the viewer (U6) works for local threads, not just cloud.
 **Requirements:** R8 (local-Pi parity).
-**Dependencies:** **plan 003** (the sidecar session-creation path); U6 consumes the result.
+**Dependencies:** U6 consumes the result. (The sidecar session-creation path from plan 003 is **already on main**.)
 **Files:**
 - the pi-sidecar session module introduced by plan 003 (the "local Pi SDK session creating" path)
 - the local-Pi turn finalize/persistence path that writes `thread_turns`
@@ -320,7 +335,7 @@ flowchart LR
 
 ## Risks & Dependencies
 
-- **Hard dependency on plan 003 (merge-collision).** The boxed `LocalPiConsole`, the local-Pi event/console data, and the sidecar session path all originate in `2026-05-28-003-feat-desktop-local-pi-sidecar`, which also edits `TaskThreadView.tsx` / `SpacesThreadDetailRoute.tsx`. **U5 and U7 must not start until plan 003 is merged to main.** U1–U4 and U6 do not depend on 003 and can proceed first. Before U5/U7, `git fetch` and diff the target files against merged main (`feedback_diff_against_origin_before_patching`).
+- **Plan 003 surface is already merged (no cross-plan wait).** The boxed `LocalPiConsole`, the local-Pi event/console data, and the sidecar session path originate in `2026-05-28-003-feat-desktop-local-pi-sidecar`, **which is merged to main** (PRs #1798–#1802; `apps/desktop/src/sidecar/`, `pi-sidecar-session.ts`, `LocalPiConsole` in `TaskThreadView.tsx`, `apps/spaces/src/lib/use-desktop-local-pi-console.ts`). **All units U1–U7 are unblocked.** Before U5/U7, `git fetch` and re-verify the `LocalPiConsole` symbol + local-Pi event shape against current main (`feedback_diff_against_origin_before_patching`) — and re-derive every line number in this plan, which came from a stale checkout.
 - **Codegen coupling.** The new turn-query fields are untyped/unqueryable until `pnpm --filter @thinkwork/spaces codegen` regenerates client documents; ship the query change + regenerated output together.
 - **GraphQL deploys via PR**, not `aws lambda update-function-code` — though this plan needs no resolver change, the query/codegen change still ships through a PR to `main`.
 - **Worktree isolation.** Do this work in `.claude/worktrees/<name>` off `origin/main`; the admin/spaces dev ports must be Cognito-registered if a dev server is needed for visual validation.
@@ -338,7 +353,7 @@ flowchart LR
 ## Sources & Research
 
 - Origin: `docs/brainstorms/2026-05-28-desktop-turn-surface-and-composer-cleanup-requirements.md`
-- In-flight dependency: `docs/plans/2026-05-28-003-feat-desktop-local-pi-sidecar-plan.md`
+- Predecessor (merged): `docs/plans/2026-05-28-003-feat-desktop-local-pi-sidecar-plan.md`
 - GraphQL turn type already exposing `systemPrompt`/`runtimeType`/`status`/`errorCode`: `packages/database-pg/graphql/types/heartbeats.graphql:53-81`; status vocabulary `packages/database-pg/src/schema/scheduled-jobs.ts:107`.
 - Pi SDK `session.agent.state.systemPrompt`: https://pi.dev/docs/latest/sdk
 - Learnings: AI Elements vendor-extend (`docs/solutions/design-patterns/ai-elements-vendor-extend-composability-gap-2026-05-13.md`); audit-before-parallel-build (`docs/solutions/design-patterns/audit-existing-ui-and-data-model-before-parallel-build-2026-04-28.md`); GraphQL codegen coupling (`docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`); shadcn/pnpm dep install (`docs/solutions/tooling-decisions/shadcn-add-cli-pnpm-workspace-vendor-pattern-2026-05-13.md`); Electron typed-IPC boundary (`docs/solutions/spikes/2026-05-21-electron-oauth-cold-start-validation.md`); field passthrough anti-pattern (`docs/solutions/patterns/apply-invocation-env-field-passthrough-2026-04-24.md`).
