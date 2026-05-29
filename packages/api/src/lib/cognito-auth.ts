@@ -41,6 +41,15 @@ export interface AuthResult {
   tenantId: string | null;
   email: string | null;
   /**
+   * Whether the Cognito-verified ID token asserts `email_verified: true`.
+   * Gates the *permanent* sub↔user backfill on the email-fallback resolution
+   * path (resolve-auth-user.ts): resolving via email may read an existing row,
+   * but binding a Cognito sub to that row only happens for a verified email,
+   * so a recycled/unverified email can't permanently capture another user's
+   * row (and tenant). Always false for apikey/service callers.
+   */
+  emailVerified: boolean;
+  /**
    * Three auth classes share the request pipeline:
    *  - `cognito` — Cognito JWT (admin SPA, mobile, `thinkwork login`).
    *  - `apikey`  — shared service secret + asserted caller identity. The
@@ -110,6 +119,9 @@ export async function authenticate(
         principalId: payload.sub,
         tenantId: (payload as any)["custom:tenant_id"] || null,
         email: (payload as any).email || null,
+        emailVerified:
+          (payload as any).email_verified === true ||
+          (payload as any).email_verified === "true",
         authType: "cognito",
         agentId: null,
       };
@@ -175,6 +187,7 @@ function apikeyAuthResult(
     principalId,
     tenantId: headers["x-tenant-id"] || null,
     email: headers["x-principal-email"] || null,
+    emailVerified: false,
     authType,
     agentId,
   };

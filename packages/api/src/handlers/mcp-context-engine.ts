@@ -745,6 +745,9 @@ async function resolveCaller(claims: Record<string, unknown>) {
     authType: "cognito",
     principalId: sub,
     email: stringClaim(claims.email) ?? null,
+    emailVerified:
+      claims.email_verified === true ||
+      stringClaim(claims.email_verified) === "true",
     tenantId: claimedTenantId ?? null,
     agentId: null,
   });
