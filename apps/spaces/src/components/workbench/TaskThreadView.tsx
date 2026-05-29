@@ -155,12 +155,15 @@ export interface TaskThreadTurn {
   id: string;
   status?: string | null;
   invocationSource?: string | null;
+  runtimeType?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   model?: string | null;
   usageJson?: unknown;
   resultJson?: unknown;
   error?: string | null;
+  errorCode?: string | null;
+  systemPrompt?: string | null;
   events?: TaskThreadEvent[];
 }
 
