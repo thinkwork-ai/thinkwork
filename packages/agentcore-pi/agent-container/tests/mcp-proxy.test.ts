@@ -7,7 +7,7 @@
  * accidentally re-disabling the proxy.
  */
 
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildMcpProxyTool,

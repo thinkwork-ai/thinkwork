@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 
 import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 
 export interface MessageAttachmentRef {

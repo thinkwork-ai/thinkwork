@@ -42,7 +42,7 @@
  */
 
 import http from "node:http";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
