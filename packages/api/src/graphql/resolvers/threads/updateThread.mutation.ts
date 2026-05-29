@@ -90,7 +90,7 @@ export const updateThread = async (
     if (readState.handledByParticipant) {
       callerParticipantLastReadAt = readState.lastReadAt;
       callerParticipantReadStateHandled = true;
-    } else {
+    } else if (!readState.skipped) {
       updates.last_read_at = readState.lastReadAt;
     }
   }
@@ -218,7 +218,11 @@ async function applyCallerReadState(
   threadId: string,
   rawLastReadAt: string | null,
   ctx: GraphQLContext,
-) {
+): Promise<{
+  handledByParticipant: boolean;
+  lastReadAt: Date | null;
+  skipped?: boolean;
+}> {
   const lastReadAt = rawLastReadAt ? new Date(rawLastReadAt) : null;
   if (ctx.auth?.authType !== "cognito") {
     return { handledByParticipant: false, lastReadAt };
@@ -227,9 +231,17 @@ async function applyCallerReadState(
   const callerTenantId = await resolveCallerTenantId(ctx);
   const callerUserId = await resolveCallerUserId(ctx);
   if (!callerTenantId || !callerUserId) {
-    throw new GraphQLError("Requester user identity required", {
-      extensions: { code: "UNAUTHENTICATED" },
-    });
+    // Marking a thread read is a best-effort side effect — the sidebar fires it
+    // automatically on thread open. A caller whose identity can't be resolved
+    // (e.g. a Google-federated session whose token lost its `email` claim after
+    // a refresh, so the email-fallback in resolveCallerFromAuth finds no user)
+    // must NOT get a blocking "Requester user identity required" error here.
+    // Skip the read-state write and continue. Identity-critical mutations
+    // (sendMessage, createThread) still require identity and fail loudly.
+    console.warn(
+      "[updateThread] caller identity unresolved — skipping read-state update",
+    );
+    return { handledByParticipant: false, lastReadAt, skipped: true };
   }
 
   const [threadRow] = await db

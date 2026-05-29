@@ -212,6 +212,26 @@ describe("updateThread participant-scoped read state", () => {
     expect(result).toMatchObject({ lastReadAt: "2026-05-19T12:00:00.000Z" });
   });
 
+  it("skips read-state (no throw, no write) when the caller identity is unresolved", async () => {
+    // A Google-federated session whose token lost its email claim resolves to a
+    // null user id. Mark-read is best-effort — it must NOT surface a blocking
+    // "Requester user identity required" error in the sidebar.
+    mockResolveCallerUserId.mockResolvedValue(null);
+
+    const result = await updateThread(
+      {},
+      {
+        id: "thread-1",
+        input: { lastReadAt: "2026-05-19T12:00:00.000Z" },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updatedParticipantValues).toHaveLength(0);
+    expect(updatedThreadValues).toHaveLength(0); // no legacy thread-level write either
+    expect(result).toBeTruthy(); // returns the thread, unchanged read state
+  });
+
   it("rejects read-state updates from non-participant Cognito callers", async () => {
     state.participantRows = [];
     state.userParticipantCount = 1;
