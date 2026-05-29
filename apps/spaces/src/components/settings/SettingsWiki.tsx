@@ -243,6 +243,7 @@ export function SettingsWiki() {
               setSheetOpen(true);
             }}
             scrollable
+            allowHorizontalScroll={false}
             pageSize={10}
             tableClassName="table-fixed"
           />

@@ -299,6 +299,7 @@ export function SettingsMemory() {
               setSheetOpen(true);
             }}
             scrollable
+            allowHorizontalScroll={false}
             pageSize={25}
             tableClassName="table-fixed"
           />
