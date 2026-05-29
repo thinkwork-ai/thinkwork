@@ -65,8 +65,6 @@ divergent, mis-shaped, partially-extracted foundation.
 
 Origin: `docs/brainstorms/2026-05-28-pi-runtime-firming-requirements.md`.
 
-- R1, R2, R4, R5 — Strands removal + runtime-selection surface removal + CI/script
-  cleanup + de-Strands-ification → U1, U2, U10, U11, U12, U13.
 Per-R-ID mapping, derived from each unit's own Requirements line (R-IDs and
 acceptance-example IDs referenced as `AE<N>` are defined in the origin brainstorm):
 
@@ -103,10 +101,12 @@ acceptance-example IDs referenced as `AE<N>` are defined in the origin brainstor
   (`docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`)
   and the migration-ordering rule (see origin; `feedback_migration_deploy_ordering`).
 
-- **Give Pi its own Dockerfile before deleting Strands sources.** The Pi image must
-  build from `packages/agentcore-pi/agent-container/` and the deploy pipeline must
-  be repointed and a Pi turn served from the new image, before
-  `packages/agentcore-strands/` is removed (audit finding S1).
+- **Re-home the sandbox base file before deleting Strands sources.** The cloud Pi
+  image already builds from `packages/agentcore-pi/agent-container/Dockerfile` and
+  the deploy pipeline already points at it — that work is done. The one remaining
+  build-time prerequisite is re-homing `sitecustomize.py` off the Strands package
+  (the sandbox-base image COPYs it) before `packages/agentcore-strands/` is removed
+  (audit finding S1, narrowed to the sandbox base after re-verifying against main).
 
 - **Re-home shared infra via Terraform `moved {}` blocks with a no-destroy plan
   gate.** The ECR repo, async DLQ, and their lifecycle/policy resources move from
@@ -250,12 +250,13 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
 - Test scenarios:
   - Covers R3. The sandbox base image builds with the re-homed `sitecustomize.py`
     and the `import sitecustomize` startup assertion passes.
-  - The Pi container image builds from the new Dockerfile and a Pi turn served from
-    it returns non-empty content (smoke).
+  - The existing Pi container image still serves a turn (non-empty content) after
+    the sandbox-base re-home — confirming the re-home didn't break the image.
   - A turn through the code-interpreter sandbox still has stdout/stderr redaction
     applied (proves the re-homed `sitecustomize.py` is active).
-- Verification: a deploy builds the Pi image from the Pi Dockerfile, the sandbox
-  base builds, and a Pi turn + a sandbox turn both succeed against the new images.
+- Verification: the sandbox base image builds with the re-homed `sitecustomize.py`,
+  and a Pi turn + a sandbox turn both still succeed (the existing Pi image is
+  confirmed, not rebuilt from a new Dockerfile).
 
 ### U3. Define the four provider interfaces (inert)
 
@@ -311,8 +312,11 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
     swap)
   - `packages/agentcore-pi/agent-container/src/server.ts` (consume the core loop via
     `createAgentSession()`; drop direct `pi-agent-core` `Agent` construction)
-  - `packages/agentcore-pi/agent-container/src/tools/memory.ts` (`AgentTool` import
-    swap)
+  - `packages/agentcore-pi/agent-container/src/tools/memory.ts`,
+    `runtime/tools/web-search.ts`, `runtime/tools/context-engine.ts`,
+    `runtime/tools/send-email.ts` (all construct `AgentTool` from `@mariozechner/*`
+    — all must swap. web-search + context-engine landed via #1813, send-email via
+    #1814, after the plan's original basis)
 - Approach: Swap the package and isolate the `Usage` shape behind an adapter so a
   shape difference between scopes doesn't cascade into every usage-reading site at
   once. Resolve whether `@earendil-works/pi-coding-agent` subsumes the `pi-ai`
@@ -325,7 +329,22 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
 - Blast radius: the swap must keep the whole workspace type graph green — the
   `agentcore-pi` container Dockerfile runs `tsc --build` over `pi-aws` then
   `agentcore-pi`, so a locally-typechecking swap can still break the container build
-  if the lockfile isn't refreshed (`pnpm --frozen-lockfile`).
+  if the lockfile isn't refreshed (`pnpm --frozen-lockfile`). #1811 also made the
+  Dockerfile COPY+build `@thinkwork/pi-runtime-core` into the image, so the
+  `@mariozechner`→`@earendil` swap must keep that in-image build green too.
+- Tool inventory drift (survey current main, not canary.55): since the plan was
+  written, `web_search` and Company Brain/`context-engine` tools were added to the
+  cloud runtime (#1813) and Company Brain + Send Email to the desktop sidecar
+  (#1814). The "platform tools injected" set is therefore larger than the plan's
+  basis — re-grep `packages/agentcore-pi/agent-container/src/runtime/tools/` for the
+  live set; all of it must route through `createAgentSession()` and be covered by
+  the framework swap and tool-cost/usage plumbing.
+- agent-loop.ts moved-target note: `agent-loop.ts` gained a `runWithRetry` wrapper
+  after canary.55 — the `createAgentSession()` rewrite must preserve/reconcile it,
+  not overwrite. Confirmed against current main: `resolveModel` still hardcodes the
+  `us.anthropic.claude-sonnet-4-5-…` fallback and the file is still on
+  `@mariozechner/*`, so U4 (swap), U7 (fail-loud resolution), and U9 (usage) all
+  remain genuinely required — not pre-done.
 - Patterns to follow: the desktop sidecar's existing `createAgentSession()` usage in
   `apps/desktop/src/sidecar/local-turn-runner.ts`.
 - Execution note: Add a build-time assertion that the expected
@@ -347,7 +366,9 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
     platform tools are present.
 - Verification: cloud Pi turn succeeds end-to-end on the new framework; a
   repo-wide grep for `@mariozechner/` returns zero matches (both `pi-agent-core`
-  and `pi-ai`, across all package.json files and imports).
+  and `pi-ai`, across all package.json files and imports) — this grep must now clear
+  the web-search / context-engine / send-email tool files added since the original
+  basis, not just `tools/memory.ts`.
 
 ### U5. Snapshot creds at loop entry; remove env re-reads
 
@@ -392,6 +413,9 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
     targets the same typed contract; preserve `runtimeHost` discriminator)
   - `packages/api/src/lib/chat-finalize/process-finalize.ts`,
     `chat-finalize/types.ts` (version-keyed dual-read; one canonical usage field)
+  - `packages/api/src/lib/desktop-runtime/finalize-auth.ts`,
+    `packages/api/src/lib/chat-finalize/claim-turn.ts` (already exist — verify the
+    dual-read legacy branch routes through both; do not rebuild)
   - `apps/desktop/src/sidecar/local-turn-runner.ts` (read renamed invocation
     fields)
   - `packages/agentcore-pi/agent-container/src/server.ts` (emit the unified shape)
@@ -415,11 +439,18 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   tenant-binding, and turn-binding checks as the versioned branch — otherwise an
   attacker with a finalize token can submit the legacy shape to take a weaker path
   (downgrade attack).
-- Approach (finalize token hardening): bind the presented finalize token to the
-  exact `thread_id` + `thread_turn_id` from the context snapshot (reject on
-  mismatch), treat finalize as single-use via CAS on turn status (reject a second
-  finalize), and give the finalize token its own TTL independent of (and not shorter
-  than start+max-turn, but decoupled from) the AWS session TTL.
+- Approach (finalize token hardening — MOSTLY ALREADY BUILT on main; verify, don't
+  rebuild): main now ships `packages/api/src/lib/desktop-runtime/finalize-auth.ts`
+  (`verifyDesktopFinalizeToken` — tenant + `thread_turn_id` binding, SHA-256
+  timing-safe verify, expiry) and `packages/api/src/lib/chat-finalize/claim-turn.ts`
+  (`claimThreadTurnForFinalize` — CAS `UPDATE … WHERE finalized_at IS NULL`, whose
+  docstring states a replayed token is rejected as already-finalized). So
+  binding + verify + expiry + single-use are done. The residual for U6 is narrow:
+  confirm the transitional dual-read's legacy branch routes desktop-token auth
+  through `verifyDesktopFinalizeToken` AND through `claimThreadTurnForFinalize` (no
+  bypass path), and give the finalize token its own TTL decoupled from the AWS
+  session TTL if it isn't already. Add `finalize-auth.ts` and `claim-turn.ts` to the
+  Files list and reference them rather than describing a fresh build.
 - Test scenarios:
   - Covers R13, R14. The same typed builder produces chat, eval, and desktop
     payloads; eval still skips memory + reads synchronous response, chat + desktop
@@ -457,6 +488,12 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   turn finalizes with `status: failed` + a surfaced error. Catch the
   resolve-then-ValidationException (missing `us.` prefix) case and surface it
   rather than recording zero tokens.
+- Tool-routing note (new surface since basis): the cloud `assembleTools` now also
+  registers `web_search`, Company Brain/`context_engine`, and `send_email` (added
+  #1813/#1814). These platform tools must keep registering and routing through the
+  `createAgentSession()` session after the U4 swap — re-grep
+  `packages/agentcore-pi/agent-container/src/runtime/tools/` for the live set; don't
+  enumerate from the plan's original (smaller) inventory.
 - Patterns to follow: `feedback_pi_ai_silent_validation_exception`; the
   smoke-detector matrix (non-empty content + non-zero tokens).
 - Test scenarios:
@@ -746,6 +783,36 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   + finalize token; the renderer holds none. The renderer↔main IPC surface is an
   explicit allowlist with no credential-returning handler; brokered creds reach the
   sidecar via a channel the renderer cannot observe.
+- Approach (two desktop credential surfaces — reconcile, don't duplicate): the
+  desktop now has TWO brokered-credential mechanisms, and U14 owns reconciling them.
+  (1) This unit's STS broker for Bedrock/S3 (model + workspace). (2) An ALREADY-
+  MERGED per-turn `dps_` token path (#1814, `finalize-auth.ts` +
+  `createContextEngineTools`/`createSendEmailTools` in `local-turn-runner.ts`) that
+  authorizes API-backed tools — finalize AND Send Email AND Company Brain recall.
+  Decide explicitly whether the STS broker supersedes the scoped-token path for
+  API tools or they coexist; if they coexist, classify the scoped-token path as
+  in-scope-retained (not superseded), and U15's broker-failure terminal-state
+  handling + the IPC-no-credential-material assertion apply to BOTH.
+- Approach (per-turn token is a MULTI-capability bearer — replay gap): the single-use
+  CAS already on main (`claim-turn.ts`, `UPDATE … WHERE finalized_at IS NULL`)
+  protects only the *finalize* call. The same `dps_` token also authorizes Send
+  Email and Company Brain reads via the capability endpoints, which have NO
+  consumption gate — a captured token can call them repeatedly for the token's TTL.
+  Enumerate every action the per-turn token authorizes and, for each, state the
+  server-side scope binding (tenant/user/turn) and abuse limit. Treat **Send Email
+  as highest-risk** (outbound impersonation / spam / phishing): sender identity and
+  recipient scope enforced server-side from the authenticated user (never trusted
+  from the sidecar), and rate-limited per turn. Either issue a separate narrowly-
+  scoped capability token distinct from the finalize token, or add per-call
+  replay/rate controls (bind each capability call to a live, non-finalized turn).
+  Add a standing rule: any NEW desktop tool requires explicit per-token scope
+  review — the boundary widens silently otherwise.
+- Approach (single shared auth function): main currently has TWO finalize-token auth
+  implementations — `finalize-auth.ts` (`authenticateDesktopFinalizeToken`, used by
+  the capability endpoints) and an inline `isAuthorizedFinalizeToken` in
+  `chat-agent-finalize.ts`. When U6's version-branching dual-read lands, route both
+  finalize branches AND the capability endpoints through ONE shared auth function so
+  the downgrade guard can't be defeated by drift between two implementations.
 - Patterns to follow:
   `docs/solutions/spikes/2026-05-21-electron-oauth-cold-start-validation.md`;
   `docs/solutions/runbooks/update-cognito-callback-urls-2026-05-22.md`. The STS
@@ -775,7 +842,9 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
 - Dependencies: U14.
 - Files:
   - `apps/desktop/src/sidecar/local-turn-runner.ts` (remove the
-    `aws-sdk-default-credential-chain` and `AWS_BEARER_TOKEN_BEDROCK` fallbacks)
+    `aws-sdk-default-credential-chain` and `AWS_BEARER_TOKEN_BEDROCK` fallbacks —
+    re-locate these on current main; the file grew ~269 lines since canary.55 so any
+    prior line-number references are stale)
   - `apps/desktop/src/sidecar/runtime-adapters/bedrock.ts`
 - Approach: Each broker failure (keychain locked, entry missing, refresh 401,
   expiry mid-turn) maps to an explicit user-facing terminal state, not a silent
@@ -879,13 +948,22 @@ portability proof.
   plan leans on to catch an unapplied hand-rolled `DROP COLUMN` (U2) is `if: false`
   in `deploy.yml` at canary.55 — re-enable it or hand-verify the U2 migration
   applied to dev before merge; the gate is not currently a backstop.
-- **Concurrent plan collision.** Plan `2026-05-28-003` (desktop local Pi sidecar,
-  status active) also edits `packages/agentcore-pi`, `packages/pi-runtime-core`, and
-  `apps/desktop/src/sidecar/local-turn-runner.ts`. The deploy-gated phasing here
-  assumes a single sequential operator — concurrent merges from another
-  worktree/session could re-add an ambient-cred path U15 removed, or land a sidecar
-  change against the pre-swap core. This plan owns those shared files for its
-  duration; freeze or rebase 003's overlapping units onto these phases.
+- **005 owns the shared Pi/runtime files; the desktop-sidecar workstream is now
+  baseline, not a concurrent race.** Plan `2026-05-28-003` (desktop local Pi
+  sidecar) is **already merged** to main (PRs #1798–#1802), and follow-on desktop
+  work continues to land (#1810 turn-model/prompt-capture, #1813 web_search +
+  Company Brain cloud tools, #1814 Company Brain + Send Email on desktop +
+  `finalize-auth.ts`, #1815/#1816 turn-surface + tool-args rendering). So this is
+  not a freeze-the-other-plan situation — that code is the substrate U4/U6/U14/U15
+  build on. The decision: **005 is the architectural firming and owns the shared
+  core/runtime/sidecar files** (`agent-loop.ts`, `server.ts`, `local-turn-runner.ts`,
+  `finalize-auth.ts`, the contract types); other desktop plans finish only their
+  non-overlapping UX work and rebase onto 005's phases for anything touching those
+  files. Two operational consequences: (a) the plan's basis is current `origin/main`,
+  not `canary.55` — re-survey every unit against main before it starts (the U11
+  fresh-survey rule applied plan-wide); (b) U-IDs are plan-LOCAL — plans 003/004/005
+  all number units U2/U3/U5/U7 with different meanings, so a commit tagged "U7" in
+  git history may belong to another plan. Qualify cross-plan references (`005-U7`).
 - **CI lacks `uv`.** Don't spawn `uv run` from TS tests (`feedback_ci_lacks_uv`).
 - **Worktree bootstrap.** After `pnpm install` in `pi-agent`, clear `tsbuildinfo`
   and rebuild `@thinkwork/database-pg` before typecheck
@@ -935,6 +1013,16 @@ Before each destructive unit lands, confirm its specific gate:
 
 ## Sources & Research
 
+- **Basis: current `origin/main`, not `canary.55`.** This plan was first written
+  against `canary.55` (`379d1519`); a re-review against `origin/main` (12 commits
+  ahead) found drift — see the per-unit notes and the active-collision update in
+  Risks. Re-survey each unit's target files against current `main` before starting.
+- Already-on-main since the plan was written (verify, don't rebuild): finalize-token
+  binding/verify/expiry (`packages/api/src/lib/desktop-runtime/finalize-auth.ts`),
+  single-use/replay CAS (`packages/api/src/lib/chat-finalize/claim-turn.ts`,
+  `UPDATE … WHERE finalized_at IS NULL`), and new tools — `web_search` +
+  Company Brain/`context-engine` (cloud, #1813), Company Brain + Send Email
+  (desktop, #1814).
 - Origin: `docs/brainstorms/2026-05-28-pi-runtime-firming-requirements.md`
 - Build-time coupling: `terraform/modules/app/agentcore-code-interpreter/Dockerfile.sandbox-base:50`
   (sandbox base COPYs `sitecustomize.py` from the Strands package; the cloud Pi
@@ -950,8 +1038,9 @@ Before each destructive unit lands, confirm its specific gate:
   `desktop-session.ts`, `delegation.ts` — but `DelegationProvider` is the only
   provider interface; the loop hardcodes Bedrock. Cloud loop
   `packages/agentcore-pi/agent-container/src/server.ts`; desktop loop
-  `apps/desktop/src/sidecar/local-turn-runner.ts` (model fallback ~line 422, ambient
-  cred fallback ~line 439)
+  `apps/desktop/src/sidecar/local-turn-runner.ts` (model fallback + ambient-cred
+  fallback — re-locate on current main; the file grew ~269 lines since canary.55 so
+  prior line numbers are stale)
 - Desktop session/auth: `packages/api/src/lib/desktop-runtime/prepare-local-turn.ts`,
   `sidecar-credentials.ts`
 - Learnings: `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`,
