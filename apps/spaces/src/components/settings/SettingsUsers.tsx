@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery } from "urql";
 import {
@@ -60,6 +61,7 @@ function relativeTime(value: unknown): string {
 
 export function SettingsUsers() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
 
@@ -193,6 +195,12 @@ export function SettingsUsers() {
         data={rows}
         filterValue={search}
         pageSize={20}
+        onRowClick={(row) =>
+          navigate({
+            to: "/settings/users/$userId",
+            params: { userId: row.id },
+          })
+        }
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No team members yet. Invite someone to collaborate.

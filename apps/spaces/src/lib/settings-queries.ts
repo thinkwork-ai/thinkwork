@@ -140,7 +140,56 @@ export const SettingsTenantMembersQuery = graphql(`
         id
         name
         email
+        profile {
+          id
+          title
+          timezone
+          pronouns
+          callBy
+          notes
+        }
       }
+    }
+  }
+`);
+
+export const SettingsUpdateUserMutation = graphql(`
+  mutation SettingsUpdateUser($id: ID!, $input: UpdateUserInput!) {
+    updateUser(id: $id, input: $input) {
+      id
+      name
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsUpdateUserProfileMutation = graphql(`
+  mutation SettingsUpdateUserProfile(
+    $userId: ID!
+    $input: UpdateUserProfileInput!
+  ) {
+    updateUserProfile(userId: $userId, input: $input) {
+      id
+      title
+      timezone
+      pronouns
+      callBy
+      notes
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsUpdateTenantMemberMutation = graphql(`
+  mutation SettingsUpdateTenantMember(
+    $id: ID!
+    $input: UpdateTenantMemberInput!
+  ) {
+    updateTenantMember(id: $id, input: $input) {
+      id
+      role
+      status
+      updatedAt
     }
   }
 `);

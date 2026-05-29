@@ -9,7 +9,8 @@ import { apiFetch } from "@/lib/api-fetch";
 export type WorkspaceFilesTarget =
   | { threadId: string }
   | { spaceId: string }
-  | { agentId: string };
+  | { agentId: string }
+  | { userId: string };
 
 export interface ThreadGoalFileFallback {
   file: string;
