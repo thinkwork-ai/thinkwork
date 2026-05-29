@@ -10,6 +10,7 @@ import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type {
   AgentSession,
   AgentSessionEvent,
+  ExtensionFactory,
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 
@@ -96,6 +97,12 @@ export interface OpenSessionInputs {
   seedHistory?: Message[];
   /** Structured logger forwarded to the durable session path. */
   log?: SessionLog;
+  /**
+   * Pi extension factories the host bound to its provider bundle. Loaded into
+   * the resource loader's `extensionFactories` (U1 mechanism) so the extensions'
+   * tools/hooks reach the session additively over the built-ins + custom tools.
+   */
+  extensionFactories?: ExtensionFactory[];
 }
 
 function resolveModelIdString(modelId: unknown): string {
@@ -250,6 +257,12 @@ async function defaultOpenSession(
     cwd: inputs.cwd,
     agentDir,
     systemPromptOverride: () => inputs.systemPrompt,
+    // U5 — load thinkwork capabilities as Pi extensions via factory injection
+    // (no filesystem discovery; the U1-resolved serverless mechanism). The host
+    // built these closed over its provider bundle. Omitted/empty → no-op.
+    ...(inputs.extensionFactories && inputs.extensionFactories.length > 0
+      ? { extensionFactories: inputs.extensionFactories }
+      : {}),
   });
   await resourceLoader.reload();
 
@@ -278,7 +291,7 @@ async function defaultOpenSession(
   const sessionManager =
     durable?.sessionManager ?? SessionManager.inMemory(inputs.cwd);
 
-  const { session } = await createAgentSession({
+  const { session, extensionsResult } = await createAgentSession({
     cwd: inputs.cwd,
     tools: inputs.toolAllowlist,
     customTools: inputs.customTools,
@@ -288,6 +301,19 @@ async function defaultOpenSession(
     modelRegistry,
     ...(model ? { model } : {}),
   });
+
+  // Surface extension load failures loudly. The SDK collects factory/register
+  // errors into `extensionsResult.errors` and does NOT throw — without this an
+  // extension that fails to register (e.g. a missing provider) would silently
+  // drop its tools/hooks while the host's pre-load log still reads "loaded". U5.
+  for (const failure of extensionsResult?.errors ?? []) {
+    inputs.log?.({
+      level: "error",
+      event: "extension_load_failed",
+      extensionPath: failure.path,
+      error: failure.error,
+    });
+  }
 
   return {
     session,
@@ -321,6 +347,7 @@ export async function runAgentLoop(
     sessionDir: args.sessionDir,
     seedHistory: args.history,
     log: deps.log,
+    extensionFactories: args.extensionFactories,
   });
 
   try {

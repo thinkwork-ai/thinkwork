@@ -15,6 +15,11 @@ import { defineConfig } from "vitest/config";
  * `../src/pi-types.js` directly (no path-remap), so the chain
  * type-checks and runs cleanly under vitest without pi-aws being
  * built.
+ *
+ * `@thinkwork/pi-extensions` (plan §004 U5) gets the same treatment: server.ts
+ * imports the memory extension from it, and its package.json `import` condition
+ * points at `dist/`, so without this alias vitest fails to load every suite that
+ * touches server.ts in CI (where `pnpm test` runs with no prior build step).
  */
 export default defineConfig({
   resolve: {
@@ -23,6 +28,10 @@ export default defineConfig({
       "@thinkwork/pi-runtime-core": path.resolve(
         __dirname,
         "../pi-runtime-core/src/index.ts",
+      ),
+      "@thinkwork/pi-extensions": path.resolve(
+        __dirname,
+        "../pi-extensions/src/index.ts",
       ),
     },
   },

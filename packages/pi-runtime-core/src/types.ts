@@ -1,5 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Message, Usage } from "@earendil-works/pi-ai";
+import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 
 import type { SessionStore } from "./durable-session-manager.js";
 
@@ -89,6 +90,13 @@ export interface RunAgentLoopArgs {
   sessionStore?: SessionStore;
   /** Local scratch directory for the SDK session file (defaults under `cwd`). */
   sessionDir?: string;
+  /**
+   * Pi extension factories loaded into the session's resource loader (the U1
+   * serverless mechanism — `DefaultResourceLoader.extensionFactories`). The host
+   * builds these from `@thinkwork/pi-extensions` closed over its U3 provider
+   * bundle; the loop stays host-agnostic and only forwards them. U5.
+   */
+  extensionFactories?: ExtensionFactory[];
 }
 
 export interface RunAgentLoopResult {

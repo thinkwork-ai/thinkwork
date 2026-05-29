@@ -17,6 +17,7 @@
     "@earendil-works/pi-ai": "0.76.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@thinkwork/pi-runtime-core": "workspace:*",
+    "@thinkwork/pi-extensions": "workspace:*",
     "@thinkwork/pi-aws": "workspace:*",
     "typebox": "^1.1.33"
   },
