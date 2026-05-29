@@ -2,7 +2,11 @@
 # Build from monorepo root:
 #   docker build -f packages/agentcore-pi/agent-container/Dockerfile .
 
-FROM node:20-bookworm-slim
+# Node 22: the @earendil-works/pi-* SDK requires node >=22.19 (pi-coding-agent
+# engines), and the monorepo floor is Node 22. On Node 20 the runtime cold-starts
+# fine but the first turn's createAgentSession import hits a Node 22+ API and the
+# process exits 1 ("Runtime exited with error: exit status 1").
+FROM node:22-bookworm-slim
 
 # Python 3.11 + pip for the skill-bridge subprocess (plan §005 U5).
 # Bookworm ships python 3.11 as `python3`; no separate version pin needed.
