@@ -1,0 +1,30 @@
+{
+  "name": "@thinkwork/pi-extensions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared thinkwork platform capabilities as Pi extensions, loaded by both the cloud and desktop hosts.",
+  "main": "./dist/src/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.76.0",
+    "@thinkwork/pi-runtime-core": "workspace:*",
+    "typebox": "^1.1.38"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.1"
+  }
+}
