@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   defineExtension,
+  emptyToolParameters,
+  requireProvider,
   toExtensionFactories,
   toExtensionFactory,
   type ProviderBundle,
@@ -49,10 +51,37 @@ describe("defineExtension", () => {
     ).toThrow(/missing a `register` function/);
   });
 
-  it("rejects a non-object", () => {
+  it("rejects a non-object (null and primitives)", () => {
     expect(() =>
       defineExtension(undefined as unknown as ThinkworkExtension),
     ).toThrow(/requires an extension object/);
+    expect(() =>
+      defineExtension(null as unknown as ThinkworkExtension),
+    ).toThrow(/requires an extension object/);
+    expect(() =>
+      defineExtension("nope" as unknown as ThinkworkExtension),
+    ).toThrow(/requires an extension object/);
+  });
+});
+
+describe("requireProvider", () => {
+  it("returns the provider when present", () => {
+    const memory = { recall: () => {}, reflect: () => {} };
+    const providers = { memory } as unknown as ProviderBundle;
+    expect(requireProvider(providers, "memory", "ext")).toBe(memory);
+  });
+
+  it("throws a descriptive, extension-named error when absent", () => {
+    expect(() => requireProvider({}, "memory", "my-ext")).toThrow(
+      /Extension "my-ext" requires a "memory" provider/,
+    );
+  });
+});
+
+describe("emptyToolParameters", () => {
+  it("is a valid empty TypeBox object schema", () => {
+    expect(emptyToolParameters.type).toBe("object");
+    expect(emptyToolParameters.properties).toEqual({});
   });
 });
 
@@ -104,5 +133,49 @@ describe("toExtensionFactory", () => {
     factories.forEach((f) => void f(api));
     expect(order).toEqual(["a", "b"]);
     expect(factories).toHaveLength(2);
+  });
+
+  it("returns an empty array for no extensions", () => {
+    expect(toExtensionFactories([], {})).toEqual([]);
+  });
+
+  it("propagates a synchronous register throw to the host", () => {
+    const ext = defineExtension({
+      name: "boom",
+      register: () => {
+        throw new Error("register failed");
+      },
+    });
+    const { api } = makeFakeApi();
+    expect(() => toExtensionFactory(ext, {})(api)).toThrow("register failed");
+  });
+
+  it("returns (does not drop) an async register's promise so the host can await it", async () => {
+    let resolved = false;
+    const ext = defineExtension({
+      name: "async",
+      async register() {
+        await Promise.resolve();
+        resolved = true;
+      },
+    });
+    const { api } = makeFakeApi();
+    const pending = toExtensionFactory(ext, {})(api);
+    expect(resolved).toBe(false); // not yet — proves the work is async
+    await pending;
+    expect(resolved).toBe(true); // and the factory returned the promise
+  });
+
+  it("propagates a rejected async register", async () => {
+    const ext = defineExtension({
+      name: "reject",
+      register: async () => {
+        throw new Error("async register failed");
+      },
+    });
+    const { api } = makeFakeApi();
+    await expect(toExtensionFactory(ext, {})(api)).rejects.toThrow(
+      "async register failed",
+    );
   });
 });

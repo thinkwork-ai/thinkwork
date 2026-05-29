@@ -2,6 +2,7 @@ import type {
   ExtensionAPI,
   ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import type {
   DelegationProvider,
   MemoryProvider,
@@ -28,6 +29,14 @@ export interface ProviderBundle {
 }
 
 /**
+ * A typed empty TypeBox parameter schema for tools that take no arguments.
+ * Use this (or a real `Type.Object({...})`) for `ToolDefinition.parameters`
+ * rather than casting — the schema is the most error-prone field, so authors
+ * should get type-checking, not a hole.
+ */
+export const emptyToolParameters = Type.Object({});
+
+/**
  * A thinkwork platform capability authored as a Pi extension. `register`
  * receives the live Pi {@link ExtensionAPI} (to `registerTool` / `on(event)` /
  * edit the system prompt) plus the {@link ProviderBundle} host seam. The
@@ -35,9 +44,33 @@ export interface ProviderBundle {
  * only through `providers`.
  */
 export interface ThinkworkExtension {
-  /** Stable identifier (kebab-case), used in logs and load ordering. */
+  /** Authoring-time identifier (kebab-case). Surfaced in `defineExtension`
+   *  validation errors; not yet plumbed into the Pi runtime (Pi keys
+   *  extensions by load path). */
   name: string;
   register(pi: ExtensionAPI, providers: ProviderBundle): void | Promise<void>;
+}
+
+/**
+ * Acquire a required provider up front, throwing a descriptive error naming the
+ * extension when the host did not supply it. The authoring convention for any
+ * extension that genuinely needs a capability: fail loud at load rather than
+ * silently no-op mid-turn (the all-optional {@link ProviderBundle} otherwise
+ * invites silent degradation). Provider-optional extensions read the bundle
+ * directly instead.
+ */
+export function requireProvider<K extends keyof ProviderBundle>(
+  providers: ProviderBundle,
+  key: K,
+  extensionName: string,
+): NonNullable<ProviderBundle[K]> {
+  const provider = providers[key];
+  if (provider == null) {
+    throw new Error(
+      `Extension "${extensionName}" requires a "${key}" provider, but the host supplied none.`,
+    );
+  }
+  return provider as NonNullable<ProviderBundle[K]>;
 }
 
 /**
