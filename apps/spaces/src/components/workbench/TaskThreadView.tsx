@@ -1490,7 +1490,10 @@ function ThreadTurnActivity({
 
   const usage = parseRecord(turn.usageJson);
   const cloudRows = actionRowsForTurn(turn, usage);
-  const rows = mergeActionRows(cloudRows, consoleRowsFromEntries(consoleEntries));
+  const rows = mergeActionRows(
+    cloudRows,
+    consoleRowsFromEntries(consoleEntries),
+  );
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.
@@ -1548,16 +1551,37 @@ function turnDurationMs(turn: TaskThreadTurn): number | null {
 
 // Match each USER message to its corresponding turn so multi-turn threads
 // render one Thinking row per turn (parity with the admin thread view).
-// Sort turns ASC by startedAt (the GraphQL resolver emits DESC), then assign
-// turns to user messages in document order. Extra turns (e.g. scheduled-job
-// triggers with no preceding user message) attach to the latest user message
-// so the activity remains discoverable.
+// Attach each turn to the user message that actually triggered it, by
+// timestamp causality rather than document-order position. Positional pairing
+// (the i-th user message -> the i-th turn) misaligns in multi-player threads:
+// other humans' messages are USER messages that trigger no turn, so a later
+// turn's "Working…" row gets pinned to an earlier message. Causal pairing maps
+// each turn (sorted ASC by startedAt) to the nearest-preceding user message
+// (the last one created at or before the turn started).
+//
+// Notes:
+//  - A turn that precedes every user message (e.g. a scheduled-job trigger)
+//    anchors to the earliest user message so it stays discoverable.
+//  - When several turns map to the same user message, the latest turn wins —
+//    the transcript renders one activity disclosure per user message.
+//  - Limitation: turn.startedAt derives from the task's claim time, which can
+//    lag the trigger; two user messages sent before the first turn is claimed
+//    can mis-attribute. A turn->message id link would remove this; see plan U3.
 function mapTurnsToUserMessages(
   messages: TaskThreadMessage[],
   turns: TaskThreadTurn[],
 ): Map<string, TaskThreadTurn> {
   const map = new Map<string, TaskThreadTurn>();
   if (turns.length === 0) return map;
+
+  const userMessages = messages.filter(
+    (message) => message.role.toUpperCase() === "USER",
+  );
+  if (userMessages.length === 0) return map;
+
+  const userTimes = userMessages.map((message) =>
+    parseEventTimestamp(message.createdAt ?? null),
+  );
 
   const sortedTurns = [...turns].sort((a, b) => {
     const ta = parseEventTimestamp(a.startedAt ?? null);
@@ -1566,23 +1590,36 @@ function mapTurnsToUserMessages(
     return (a.id ?? "").localeCompare(b.id ?? "");
   });
 
-  const userMessages = messages.filter(
-    (message) => message.role.toUpperCase() === "USER",
-  );
-  if (userMessages.length === 0) return map;
-
-  const pairCount = Math.min(userMessages.length, sortedTurns.length);
-  for (let i = 0; i < pairCount; i += 1) {
-    map.set(userMessages[i].id, sortedTurns[i]);
+  // Causal pairing needs user-message timestamps. Older/synthetic threads omit
+  // createdAt; fall back to positional pairing (i-th turn -> i-th user message)
+  // so they still render one disclosure per turn.
+  const userTimesUsable = userTimes.some((time) => time > 0);
+  if (!userTimesUsable) {
+    const pairCount = Math.min(userMessages.length, sortedTurns.length);
+    for (let i = 0; i < pairCount; i += 1) {
+      map.set(userMessages[i].id, sortedTurns[i]);
+    }
+    if (sortedTurns.length > userMessages.length) {
+      map.set(
+        userMessages[userMessages.length - 1].id,
+        sortedTurns[sortedTurns.length - 1],
+      );
+    }
+    return map;
   }
 
-  // If there are more turns than user messages, anchor the trailing turns to
-  // the latest user message so they remain visible.
-  if (sortedTurns.length > userMessages.length) {
-    map.set(
-      userMessages[userMessages.length - 1].id,
-      sortedTurns[sortedTurns.length - 1],
-    );
+  for (const turn of sortedTurns) {
+    const turnTime = parseEventTimestamp(turn.startedAt ?? null);
+    // Nearest-preceding user message: the last one (in chronological/document
+    // order) created at or before this turn started.
+    let targetIndex = -1;
+    for (let i = 0; i < userMessages.length; i += 1) {
+      if (userTimes[i] <= turnTime) targetIndex = i;
+    }
+    // A turn before every user message anchors to the earliest one.
+    if (targetIndex < 0) targetIndex = 0;
+    // Latest turn wins when several map to the same message.
+    map.set(userMessages[targetIndex].id, turn);
   }
 
   return map;
@@ -2133,9 +2170,7 @@ function FollowUpComposer({
   // menu with a flag that resets whenever the query changes.
   const [mentionMenuDismissed, setMentionMenuDismissed] = useState(false);
   const mentionMenuOpen =
-    mentionQuery !== null &&
-    mentionOptions.length > 0 &&
-    !mentionMenuDismissed;
+    mentionQuery !== null && mentionOptions.length > 0 && !mentionMenuDismissed;
   const defaultAgentTarget = useMemo(
     () =>
       mentionTargets.find(
@@ -2792,10 +2827,7 @@ function ConsoleLogToggle({
         <SquareTerminal className="size-3.5 shrink-0" />
         view console log
         <ChevronRight
-          className={cn(
-            "size-3.5 transition-transform",
-            open && "rotate-90",
-          )}
+          className={cn("size-3.5 transition-transform", open && "rotate-90")}
         />
       </button>
       {open ? (
@@ -2819,7 +2851,8 @@ function consoleRowsFromEntries(
 ): ActionRowData[] {
   return [...entries]
     .sort(
-      (a, b) => parseEventTimestamp(a.emittedAt) - parseEventTimestamp(b.emittedAt),
+      (a, b) =>
+        parseEventTimestamp(a.emittedAt) - parseEventTimestamp(b.emittedAt),
     )
     .map((entry) => ({
       title: truncateRowTitle(entry.message),

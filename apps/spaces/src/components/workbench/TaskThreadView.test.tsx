@@ -2744,6 +2744,66 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
+  it("anchors a turn to its triggering message, not an intervening human's message", () => {
+    // U3: in a multi-player thread another human's message is a USER message
+    // that triggers no turn. Positional pairing pinned the agent's turn to that
+    // intervening message; causal pairing (by startedAt vs createdAt) keeps it
+    // on the message that actually triggered it.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-mp",
+          title: "Group thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "u-me-1",
+              role: "USER",
+              content: "Agent, summarize this",
+              createdAt: "2026-05-29T10:00:00Z",
+              sender: { type: "user", id: "user-me" },
+            },
+            {
+              id: "a-1",
+              role: "ASSISTANT",
+              content: "Summary…",
+              createdAt: "2026-05-29T10:00:20Z",
+            },
+            {
+              id: "u-scott",
+              role: "USER",
+              content: "thanks!",
+              createdAt: "2026-05-29T10:01:00Z",
+              sender: { type: "user", id: "user-scott" },
+            },
+          ],
+          // One turn, triggered by the first message (started before Scott's
+          // reply). The resolver emits DESC; component sorts ASC.
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-29T10:00:05Z",
+              finishedAt: "2026-05-29T10:00:20Z",
+            },
+          ],
+        }}
+        currentUser={{ id: "user-me", name: "Me" }}
+      />,
+    );
+
+    // Exactly one turn disclosure, and it renders before Scott's "thanks!"
+    // message — not pinned beneath it.
+    const disclosures = screen.getAllByLabelText("Turn activity");
+    expect(disclosures).toHaveLength(1);
+    const scottMessage = screen.getByText("thanks!");
+    expect(
+      disclosures[0].compareDocumentPosition(scottMessage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("keeps the turn-activity aria-label intact on the Reasoning disclosure", () => {
     // The labelled region affordance survives the header relabel — screen
     // readers find the surface by name even though the visible header is now
@@ -2916,7 +2976,9 @@ describe("TaskThreadView", () => {
     const agentToggle = screen.getByRole("button", { name: "Send to agent" });
     const agentIcon = agentToggle.querySelector("svg");
     expect(
-      screen.getByLabelText("Run this turn on local Pi (click for managed cloud)"),
+      screen.getByLabelText(
+        "Run this turn on local Pi (click for managed cloud)",
+      ),
     ).toBeTruthy();
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-[#54a9ff]");
