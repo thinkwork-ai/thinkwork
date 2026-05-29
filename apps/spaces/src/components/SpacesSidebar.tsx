@@ -147,7 +147,6 @@ function AccountMenu({
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onSignOut}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out

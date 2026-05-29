@@ -4,7 +4,6 @@ import {
   Bot,
   LayoutGrid,
   Settings as SettingsIcon,
-  Sun,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@thinkwork/ui";
@@ -19,10 +18,9 @@ interface SettingsNavItem {
   operatorOnly?: boolean;
 }
 
-// Order follows the Codex reference: personal first (Appearance), then the
-// always-visible General, then operator-only sections.
+// General first (visible to all), then operator-only sections. Appearance is
+// folded into General as a "Color mode" control rather than a nav item.
 const NAV_ITEMS: SettingsNavItem[] = [
-  { label: "Appearance", to: "/settings/appearance", icon: Sun },
   { label: "General", to: "/settings/general", icon: SettingsIcon },
   {
     label: "Spaces",
@@ -33,8 +31,10 @@ const NAV_ITEMS: SettingsNavItem[] = [
   { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
 ];
 
+// Matches the main chat-sidebar nav item style (SidebarMenuButton): h-8, p-2,
+// gap-2, text-sm, size-4 icons.
 const itemClassName =
-  "flex h-9 w-full min-w-0 items-center gap-3 rounded-md px-3 text-sm text-sidebar-foreground/85 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+  "flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm text-sidebar-foreground/85 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring [&_svg]:size-4 [&_svg]:shrink-0";
 
 export function SettingsSidebar() {
   const navigate = useNavigate();
@@ -51,13 +51,13 @@ export function SettingsSidebar() {
     <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-4">
       <button
         type="button"
-        className="mb-4 flex h-9 w-full items-center gap-2 rounded-md px-3 text-sm text-sidebar-foreground/65 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        className={cn(itemClassName, "mb-3 text-sidebar-foreground/65")}
         onClick={() => navigate({ to: getSettingsReturnTo() })}
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft />
         <span>Back to app</span>
       </button>
-      <nav className="space-y-1" aria-label="Settings sections">
+      <nav className="flex flex-col gap-0.5" aria-label="Settings sections">
         {items.map((item) => {
           const active = pathname.startsWith(item.to);
           return (
@@ -66,10 +66,11 @@ export function SettingsSidebar() {
               to={item.to}
               className={cn(
                 itemClassName,
-                active && "bg-sidebar-accent text-sidebar-accent-foreground",
+                active &&
+                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
               )}
             >
-              <item.icon className="size-4 shrink-0" />
+              <item.icon />
               <span className="truncate">{item.label}</span>
             </Link>
           );

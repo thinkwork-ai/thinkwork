@@ -42,15 +42,21 @@ export function SettingsPane({
 /** A labeled group of settings (e.g. "Permissions", "Organization"). */
 export function SettingsSection({
   label,
+  action,
   children,
 }: {
   label?: string;
+  /** Optional right-justified header action (e.g. a muted "Rename" link). */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="mb-8">
-      {label ? (
-        <h2 className="mb-3 text-base font-medium text-foreground">{label}</h2>
+      {label || action ? (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-base font-medium text-foreground">{label}</h2>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
       ) : null}
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {children}

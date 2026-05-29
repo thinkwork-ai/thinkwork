@@ -9,8 +9,10 @@ import {
   SelectValue,
   Skeleton,
 } from "@thinkwork/ui";
+import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { AgentRuntime } from "@/gql/graphql";
 import { useTenant } from "@/context/TenantContext";
+import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
   SettingsModelCatalogQuery,
   SettingsTenantAgentQuery,
@@ -42,6 +44,7 @@ export function SettingsAgentConfig() {
   const [model, setModel] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
 
   const agent = agentResult.data?.agent;
 
@@ -93,6 +96,28 @@ export function SettingsAgentConfig() {
       return;
     }
     setSaved(true);
+  }
+
+  if (filesOpen && agent) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Agent workspace
+          </h1>
+          <Button variant="ghost" size="sm" onClick={() => setFilesOpen(false)}>
+            Done
+          </Button>
+        </div>
+        <WorkspaceFileEditor
+          target={{ agentId: agent.id }}
+          targetKey={`agent:${agent.id}`}
+          client={spacesWorkspaceFilesClient}
+          defaultOpenFile="AGENTS.md"
+          className="min-h-0 flex-1"
+        />
+      </div>
+    );
   }
 
   return (
@@ -151,7 +176,7 @@ export function SettingsAgentConfig() {
         </div>
       </SettingsSection>
 
-      <div className="flex items-center gap-3">
+      <div className="mb-8 flex items-center gap-3">
         <Button onClick={onSave} disabled={!dirty || saveState.fetching}>
           {saveState.fetching ? "Saving…" : "Save"}
         </Button>
@@ -162,6 +187,23 @@ export function SettingsAgentConfig() {
           <span className="text-sm text-destructive">{errorMsg}</span>
         ) : null}
       </div>
+
+      <SettingsSection label="Workspace">
+        <div className="flex items-center justify-between gap-4 p-4">
+          <p className="text-sm text-muted-foreground">
+            Edit the agent’s workspace files — AGENTS.md, CONTEXT.md,
+            GUARDRAILS.md, skills, and more.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setFilesOpen(true)}
+          >
+            Open workspace editor
+          </Button>
+        </div>
+      </SettingsSection>
     </SettingsPane>
   );
 }

@@ -8,7 +8,8 @@ import { apiFetch } from "@/lib/api-fetch";
 
 export type WorkspaceFilesTarget =
   | { threadId: string }
-  | { spaceId: string };
+  | { spaceId: string }
+  | { agentId: string };
 
 export interface ThreadGoalFileFallback {
   file: string;
@@ -152,7 +153,6 @@ function fallbackPathForGoalFile(file: ThreadGoalFileFallback) {
 function isThreadTargetUnsupportedError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return (
-    message.includes("Exactly one of agentId") &&
-    !message.includes("threadId")
+    message.includes("Exactly one of agentId") && !message.includes("threadId")
   );
 }

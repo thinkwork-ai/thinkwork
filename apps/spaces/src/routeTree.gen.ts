@@ -20,7 +20,6 @@ import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settings.index";
 import { Route as AuthedSettingsSpacesRouteImport } from "./routes/_authed/settings.spaces";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
-import { Route as AuthedSettingsAppearanceRouteImport } from "./routes/_authed/settings.appearance";
 import { Route as AuthedSettingsAgentRouteImport } from "./routes/_authed/settings.agent";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
 import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/memory";
@@ -99,12 +98,6 @@ const AuthedSettingsGeneralRoute = AuthedSettingsGeneralRouteImport.update({
   path: "/general",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
-const AuthedSettingsAppearanceRoute =
-  AuthedSettingsAppearanceRouteImport.update({
-    id: "/appearance",
-    path: "/appearance",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsAgentRoute = AuthedSettingsAgentRouteImport.update({
   id: "/agent",
   path: "/agent",
@@ -249,7 +242,6 @@ export interface FileRoutesByFullPath {
   "/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
   "/settings/agent": typeof AuthedSettingsAgentRoute;
-  "/settings/appearance": typeof AuthedSettingsAppearanceRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
@@ -281,7 +273,6 @@ export interface FileRoutesByTo {
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/new": typeof AuthedShellNewRoute;
   "/settings/agent": typeof AuthedSettingsAgentRoute;
-  "/settings/appearance": typeof AuthedSettingsAppearanceRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
@@ -320,7 +311,6 @@ export interface FileRoutesById {
   "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/settings/agent": typeof AuthedSettingsAgentRoute;
-  "/_authed/settings/appearance": typeof AuthedSettingsAppearanceRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
@@ -358,7 +348,6 @@ export interface FileRouteTypes {
     | "/memory"
     | "/new"
     | "/settings/agent"
-    | "/settings/appearance"
     | "/settings/general"
     | "/settings/spaces"
     | "/settings/"
@@ -390,7 +379,6 @@ export interface FileRouteTypes {
     | "/auth/desktop-callback"
     | "/new"
     | "/settings/agent"
-    | "/settings/appearance"
     | "/settings/general"
     | "/settings/spaces"
     | "/settings"
@@ -428,7 +416,6 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory"
     | "/_authed/_shell/new"
     | "/_authed/settings/agent"
-    | "/_authed/settings/appearance"
     | "/_authed/settings/general"
     | "/_authed/settings/spaces"
     | "/_authed/settings/"
@@ -539,13 +526,6 @@ declare module "@tanstack/react-router" {
       path: "/general";
       fullPath: "/settings/general";
       preLoaderRoute: typeof AuthedSettingsGeneralRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/appearance": {
-      id: "/_authed/settings/appearance";
-      path: "/appearance";
-      fullPath: "/settings/appearance";
-      preLoaderRoute: typeof AuthedSettingsAppearanceRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/agent": {
@@ -830,7 +810,6 @@ const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
 
 interface AuthedSettingsRouteChildren {
   AuthedSettingsAgentRoute: typeof AuthedSettingsAgentRoute;
-  AuthedSettingsAppearanceRoute: typeof AuthedSettingsAppearanceRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsSpacesRoute: typeof AuthedSettingsSpacesRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
@@ -838,7 +817,6 @@ interface AuthedSettingsRouteChildren {
 
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAgentRoute: AuthedSettingsAgentRoute,
-  AuthedSettingsAppearanceRoute: AuthedSettingsAppearanceRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsSpacesRoute: AuthedSettingsSpacesRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,

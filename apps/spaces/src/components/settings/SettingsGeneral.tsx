@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "urql";
-import { Button, Input, Skeleton } from "@thinkwork/ui";
+import {
+  Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Skeleton,
+  useTheme,
+} from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsDeploymentStatusQuery,
@@ -105,6 +115,10 @@ export function SettingsGeneral() {
         </SettingsRow>
       </SettingsSection>
 
+      <SettingsSection label="Appearance">
+        <ColorModeRow />
+      </SettingsSection>
+
       {showOperator ? (
         <>
           <SettingsSection label="Deployment">
@@ -164,6 +178,29 @@ function ResourceRow({
   );
 }
 
+function ColorModeRow() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <SettingsRow
+      label="Color mode"
+      description="Light or dark theme on this device."
+    >
+      <Select
+        value={theme}
+        onValueChange={(v) => setTheme(v as "light" | "dark")}
+      >
+        <SelectTrigger className="w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="light">Light</SelectItem>
+          <SelectItem value="dark">Dark</SelectItem>
+        </SelectContent>
+      </Select>
+    </SettingsRow>
+  );
+}
+
 function TenantIdentifierSection({
   slug,
   tenantId,
@@ -192,55 +229,56 @@ function TenantIdentifierSection({
   }
 
   return (
-    <SettingsSection label="Tenant identifier">
-      <SettingsRow label="Subdomain">
-        {editing ? null : (
-          <span className="font-mono text-xs">{slug}.thinkwork.ai</span>
-        )}
-      </SettingsRow>
-      {canRename ? (
-        <div className="flex items-center gap-2 px-4 py-3">
-          {editing ? (
-            <>
-              <Input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                className="h-8 w-48"
-                aria-label="New subdomain"
-              />
-              <Button
-                size="sm"
-                onClick={onSubmit}
-                disabled={renameState.fetching || !draft.trim()}
-              >
-                {renameState.fetching ? "Saving…" : "Save"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setEditing(false);
-                  setDraft(slug);
-                  setErrorMsg(null);
-                }}
-              >
-                Cancel
-              </Button>
-              {errorMsg ? (
-                <span className="text-sm text-destructive">{errorMsg}</span>
-              ) : null}
-            </>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEditing(true)}
-            >
-              Rename
-            </Button>
-          )}
+    <SettingsSection
+      label="Tenant identifier"
+      action={
+        canRename && !editing ? (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+          >
+            Rename
+          </button>
+        ) : undefined
+      }
+    >
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="h-8 w-56"
+            aria-label="New subdomain"
+          />
+          <span className="text-sm text-muted-foreground">.thinkwork.ai</span>
+          <Button
+            size="sm"
+            onClick={onSubmit}
+            disabled={renameState.fetching || !draft.trim()}
+          >
+            {renameState.fetching ? "Saving…" : "Save"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setEditing(false);
+              setDraft(slug);
+              setErrorMsg(null);
+            }}
+          >
+            Cancel
+          </Button>
+          {errorMsg ? (
+            <span className="text-sm text-destructive">{errorMsg}</span>
+          ) : null}
         </div>
-      ) : null}
+      ) : (
+        <SettingsRow label="Subdomain">
+          <span className="font-mono text-xs">{slug}.thinkwork.ai</span>
+        </SettingsRow>
+      )}
     </SettingsSection>
   );
 }
