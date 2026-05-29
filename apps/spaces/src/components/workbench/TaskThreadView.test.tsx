@@ -2804,6 +2804,78 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
+  it("collapses multiple turns for one user message to a single disclosure", () => {
+    // U3 edge: a tool-loop can emit several turns for one user prompt. Causal
+    // pairing maps them all to that message; the transcript renders one
+    // disclosure (latest turn wins) rather than crashing or stacking.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-loop",
+          title: "Tool loop",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Do the thing",
+              createdAt: "2026-05-29T10:00:00Z",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-a",
+              status: "succeeded",
+              startedAt: "2026-05-29T10:00:05Z",
+              finishedAt: "2026-05-29T10:00:10Z",
+            },
+            {
+              id: "turn-b",
+              status: "succeeded",
+              startedAt: "2026-05-29T10:00:11Z",
+              finishedAt: "2026-05-29T10:00:20Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByLabelText("Turn activity")).toHaveLength(1);
+  });
+
+  it("anchors a turn with no preceding user message without crashing", () => {
+    // U3 edge: a turn whose startedAt precedes every user message (e.g. a
+    // scheduled-job trigger) anchors to the earliest message rather than
+    // dropping or throwing. A dedicated unattributed surface is deferred.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-sched",
+          title: "Scheduled",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Later message",
+              createdAt: "2026-05-29T10:00:00Z",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-early",
+              status: "succeeded",
+              startedAt: "2026-05-29T09:59:00Z",
+              finishedAt: "2026-05-29T09:59:30Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByLabelText("Turn activity")).toHaveLength(1);
+  });
+
   it("keeps the turn-activity aria-label intact on the Reasoning disclosure", () => {
     // The labelled region affordance survives the header relabel — screen
     // readers find the surface by name even though the visible header is now
