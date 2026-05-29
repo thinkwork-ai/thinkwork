@@ -62,6 +62,31 @@ describe("createS3SessionStore", () => {
     expect(await store.read("t1.jsonl")).toBeNull();
   });
 
+  it("treats an existing-but-empty object as no session (returns null)", async () => {
+    const s3 = makeFakeS3();
+    s3.raw.set("pi-sessions/acme/t1.jsonl", { body: "  \n", etag: '"e"' });
+    const store = createS3SessionStore(opts(s3));
+    expect(await store.read("t1.jsonl")).toBeNull();
+  });
+
+  it("isolates sessions across tenant prefixes for the same logical key", async () => {
+    const s3 = makeFakeS3();
+    const acme = createS3SessionStore({
+      s3,
+      bucket: "wsbucket",
+      keyPrefix: "pi-sessions/acme/",
+    });
+    const globex = createS3SessionStore({
+      s3,
+      bucket: "wsbucket",
+      keyPrefix: "pi-sessions/globex/",
+    });
+    await acme.write("t1.jsonl", "acme-body\n", null);
+    await globex.write("t1.jsonl", "globex-body\n", null);
+    expect((await acme.read("t1.jsonl"))?.body).toBe("acme-body\n");
+    expect((await globex.read("t1.jsonl"))?.body).toBe("globex-body\n");
+  });
+
   it("creates a new session object under the tenant-isolated key", async () => {
     const s3 = makeFakeS3();
     const store = createS3SessionStore(opts(s3));

@@ -12,6 +12,7 @@ import {
   type AgentSessionLike,
   type OpenSessionInputs,
 } from "../src/agent-loop.js";
+import { SessionConflictError } from "../src/durable-session-manager.js";
 import type { RunAgentLoopArgs } from "../src/types.js";
 
 function userMessage(text: string): AgentMessage {
@@ -486,6 +487,30 @@ describe("runAgentLoop", () => {
     expect(session.promptText).toBe("current");
     expect(session.promptText).not.toContain("Prior conversation");
     expect(persisted).toBe(1);
+  });
+
+  it("returns the assistant reply even when persisting the durable session conflicts", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("the reply")],
+    });
+    const logged: { level: string; event: string }[] = [];
+    const result = await runAgentLoop(baseArgs(), {
+      log: (e) => logged.push({ level: e.level, event: e.event }),
+      openSession: async () => ({
+        session,
+        modelId: "m",
+        durable: true,
+        persistSession: async () => {
+          throw new SessionConflictError("raced");
+        },
+      }),
+    });
+    // The model output is valid; a lost persist race must not fail the turn.
+    expect(result.content).toBe("the reply");
+    expect(logged).toContainEqual({
+      level: "warn",
+      event: "durable_session_persist_conflict",
+    });
   });
 
   it("does not persist the durable session when the prompt throws", async () => {

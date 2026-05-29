@@ -1128,18 +1128,28 @@ export async function handleInvocation(
             keyPrefix: `pi-sessions/${identity.tenantSlug}/`,
           })
         : undefined;
-    runResult = await runLoop({
-      message: userMessage,
-      history: normalizeHistory(args.payload.messages_history, currentModelId),
-      systemPrompt,
-      tools: bundle.tools,
-      modelId: args.payload.model,
-      threadId: identity.threadId,
-      gitSha: env.gitSha,
-      identity,
-      cwd: env.workspaceDir,
-      sessionStore,
-    });
+    runResult = await runLoop(
+      {
+        message: userMessage,
+        history: normalizeHistory(
+          args.payload.messages_history,
+          currentModelId,
+        ),
+        systemPrompt,
+        tools: bundle.tools,
+        modelId: args.payload.model,
+        threadId: identity.threadId,
+        gitSha: env.gitSha,
+        identity,
+        cwd: env.workspaceDir,
+        sessionStore,
+        // Session scratch lives outside the workspace dir so the per-turn
+        // workspace S3 sync (delete-extraneous) cannot reap an in-flight
+        // session file.
+        sessionDir: "/tmp/pi-sessions",
+      },
+      { log: (entry) => logStructured(entry) },
+    );
   } catch (err) {
     runError = err;
   } finally {

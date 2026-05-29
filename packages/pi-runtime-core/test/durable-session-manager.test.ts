@@ -71,6 +71,18 @@ function makeFakeFactories(): SessionManagerFactories {
         );
         return `entry-${++counter}`;
       },
+      getEntries: () =>
+        readFileSync(file, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => {
+            try {
+              return JSON.parse(line) as unknown;
+            } catch {
+              return null;
+            }
+          })
+          .filter((entry) => entry !== null),
     };
   }
   return {
@@ -194,6 +206,71 @@ describe("openDurableSession", () => {
     await expect(durable.persist()).rejects.toBeInstanceOf(
       SessionConflictError,
     );
+  });
+
+  it("rebuilds from history when a stored session opens to zero entries (SDK silent-fresh)", async () => {
+    const logs: { level: string; event: string }[] = [];
+    // Non-empty body whose lines do not parse to entries → fake open yields 0
+    // entries (mirrors the real SDK skipping malformed lines and starting fresh).
+    const store = makeFakeStore({
+      [sessionKey("thread-1")]: "not-json-line\n",
+    });
+    const durable = await openDurableSession(
+      base(store, {
+        seedHistory: [msg("user", "recovered")],
+        log: (e) => logs.push({ level: e.level, event: e.event }),
+      }),
+    );
+    expect(durable.resumed).toBe(false);
+    expect(logs).toContainEqual({
+      level: "error",
+      event: "durable_session_empty_rebuilding",
+    });
+    expect(
+      readFileSync(durable.sessionManager.getSessionFile()!, "utf8"),
+    ).toContain("recovered");
+  });
+
+  it("round-trips two turns: turn 1 seeds+persists, turn 2 resumes with prior content (AE2)", async () => {
+    const store = makeFakeStore();
+    // Turn 1: brand-new thread, seeds from history, runs, persists.
+    const t1 = await openDurableSession(
+      base(store, { seedHistory: [msg("user", "first question")] }),
+    );
+    expect(t1.resumed).toBe(false);
+    t1.sessionManager.appendMessage(msg("assistant", "first answer"));
+    await t1.persist();
+
+    // Turn 2: same thread + store, resumes the persisted session.
+    const t2 = await openDurableSession(base(store));
+    expect(t2.resumed).toBe(true);
+    const body = readFileSync(t2.sessionManager.getSessionFile()!, "utf8");
+    expect(body).toContain("first question");
+    expect(body).toContain("first answer");
+    t2.sessionManager.appendMessage(msg("assistant", "second answer"));
+    await t2.persist();
+    expect(store.raw.get(sessionKey("thread-1"))?.version).toBe(2);
+  });
+
+  it("persist throws when the manager is not file-backed", async () => {
+    const store = makeFakeStore();
+    const durable = await openDurableSession(
+      base(store, {
+        factories: {
+          open: () => ({
+            getSessionFile: () => undefined,
+            appendMessage: () => "e",
+            getEntries: () => [],
+          }),
+          create: () => ({
+            getSessionFile: () => undefined,
+            appendMessage: () => "e",
+            getEntries: () => [],
+          }),
+        },
+      }),
+    );
+    await expect(durable.persist()).rejects.toThrow(/no session file/);
   });
 
   it("rebuilds from history on a corrupt stored session (never silent-empty)", async () => {

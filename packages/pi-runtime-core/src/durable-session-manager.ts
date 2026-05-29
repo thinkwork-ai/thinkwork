@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -35,6 +36,14 @@ export interface SessionStore {
   ): Promise<string>;
 }
 
+/** Structured logger used by the durable-session path and the loop's
+ *  persist-failure handling. No-op by default. */
+export type SessionLog = (entry: {
+  level: "info" | "warn" | "error";
+  event: string;
+  [key: string]: unknown;
+}) => void;
+
 /** Thrown by a {@link SessionStore} write when the optimistic-concurrency
  *  precondition fails (a concurrent turn wrote the same thread's session). */
 export class SessionConflictError extends Error {
@@ -50,6 +59,10 @@ export class SessionConflictError extends Error {
 export interface SessionManagerLike {
   getSessionFile(): string | undefined;
   appendMessage(message: Message): string;
+  /** Loaded session entries. Used to detect an opened-but-empty session (the
+   *  SDK silently starts fresh on a malformed/empty file rather than throwing),
+   *  which must rebuild from history instead of resuming an empty context. */
+  getEntries(): unknown[];
 }
 
 export interface SessionManagerFactories<
@@ -82,11 +95,7 @@ export interface OpenDurableSessionArgs<
    *  of a pre-durable thread). Ignored when a stored session is resumed. */
   seedHistory?: Message[];
   /** Optional structured logger; defaults to no-op. */
-  log?: (entry: {
-    level: "info" | "warn" | "error";
-    event: string;
-    [key: string]: unknown;
-  }) => void;
+  log?: SessionLog;
 }
 
 export interface DurableSession<
@@ -108,7 +117,10 @@ export function sessionKey(threadId: string): string {
 }
 
 function localSessionPath(sessionDir: string, threadId: string): string {
-  return path.join(sessionDir, sessionKey(threadId));
+  // Invocation-unique so two concurrent turns for the same thread on one warm
+  // container do not share (and clobber) the same local scratch file. The S3
+  // object key stays thread-stable; only this local copy needs to be unique.
+  return path.join(sessionDir, `${randomUUID()}-${sessionKey(threadId)}`);
 }
 
 /**
@@ -140,17 +152,28 @@ export async function openDurableSession<
     const localFile = localSessionPath(args.sessionDir, args.threadId);
     try {
       await writeFile(localFile, stored.body, "utf8");
-      sessionManager = args.factories.open(
-        localFile,
-        args.sessionDir,
-        args.cwd,
-      );
-      resumed = true;
-      log({
-        level: "info",
-        event: "durable_session_resumed",
-        threadId: args.threadId,
-      });
+      const opened = args.factories.open(localFile, args.sessionDir, args.cwd);
+      // The SDK does not throw on a malformed/empty session file — it skips
+      // unparseable lines and silently starts a fresh empty session. Detect
+      // that here so we rebuild from history rather than resuming empty (which
+      // would silently drop the whole transcript). An entry-bearing thread that
+      // parsed to zero entries is treated as corrupt.
+      if (opened.getEntries().length === 0) {
+        log({
+          level: "error",
+          event: "durable_session_empty_rebuilding",
+          threadId: args.threadId,
+        });
+        sessionManager = undefined;
+      } else {
+        sessionManager = opened;
+        resumed = true;
+        log({
+          level: "info",
+          event: "durable_session_resumed",
+          threadId: args.threadId,
+        });
+      }
     } catch (error) {
       // Corrupt/unreadable stored session: rebuild from history rather than
       // resuming an empty context, but keep `version` so the overwrite still

@@ -15,6 +15,8 @@ import type {
 
 import {
   openDurableSession,
+  SessionConflictError,
+  type SessionLog,
   type SessionStore,
 } from "./durable-session-manager.js";
 import { textFromAssistant } from "./history.js";
@@ -73,6 +75,9 @@ export interface RunAgentLoopDeps {
    * verified without a live model.
    */
   openSession?: (inputs: OpenSessionInputs) => Promise<OpenedSession>;
+  /** Optional structured logger for durable-session lifecycle + persist
+   *  failures. No-op by default. */
+  log?: SessionLog;
 }
 
 export interface OpenSessionInputs {
@@ -89,6 +94,8 @@ export interface OpenSessionInputs {
   sessionDir?: string;
   /** Prior conversation, used only to seed a brand-new durable session. */
   seedHistory?: Message[];
+  /** Structured logger forwarded to the durable session path. */
+  log?: SessionLog;
 }
 
 function resolveModelIdString(modelId: unknown): string {
@@ -265,6 +272,7 @@ async function defaultOpenSession(
               SessionManager.open(file, dir, cwdOverride),
             create: (cwd, dir) => SessionManager.create(cwd, dir),
           },
+          log: inputs.log,
         })
       : undefined;
   const sessionManager =
@@ -312,6 +320,7 @@ export async function runAgentLoop(
     threadId: args.threadId || undefined,
     sessionDir: args.sessionDir,
     seedHistory: args.history,
+    log: deps.log,
   });
 
   try {
@@ -364,7 +373,26 @@ export async function runAgentLoop(
 
     // Persist the durable session only after a successful turn — a failed turn
     // leaves the stored session at its prior good state for the retry to resume.
-    if (persistSession) await persistSession();
+    // Persistence is best-effort: the assistant reply is already valid, so a
+    // lost concurrency race (SessionConflictError) or a transient store error
+    // must NOT fail the turn and discard the reply. The `If-Match` guard already
+    // prevented any clobber; we log loudly and return the content. The next turn
+    // resumes the winner's state.
+    if (persistSession) {
+      try {
+        await persistSession();
+      } catch (error) {
+        deps.log?.({
+          level: error instanceof SessionConflictError ? "warn" : "error",
+          event:
+            error instanceof SessionConflictError
+              ? "durable_session_persist_conflict"
+              : "durable_session_persist_failed",
+          threadId: args.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const assistant = [...session.messages]
       .reverse()

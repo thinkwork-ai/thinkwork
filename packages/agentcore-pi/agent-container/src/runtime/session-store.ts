@@ -49,6 +49,11 @@ export function createS3SessionStore(
           new GetObjectCommand({ Bucket: options.bucket, Key: fullKey(key) }),
         );
         const body = (await response.Body?.transformToString()) ?? "";
+        // An object that exists but is empty/whitespace is never a legitimate
+        // persisted session (a real one always has at least a header line).
+        // Treat it as missing so the caller seeds a fresh session instead of
+        // resuming an empty context.
+        if (body.trim() === "") return null;
         const version = response.ETag ?? "";
         return { body, version };
       } catch (error) {
