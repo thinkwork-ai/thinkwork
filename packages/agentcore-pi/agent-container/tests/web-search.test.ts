@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildWebSearchTool } from "../src/runtime/tools/web-search.js";
 
 function parse(result: any): any {
-  return JSON.parse(result.content[0].text);
+  return JSON.parse((result.content[0] as { text: string }).text);
 }
 
 describe("buildWebSearchTool", () => {
@@ -53,7 +53,7 @@ describe("buildWebSearchTool", () => {
 
   it("clamps num_results to 1..10 and forwards to the provider", async () => {
     const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ results: [] }), { status: 200 }),
+      async (_u: unknown, _i?: unknown) => new Response(JSON.stringify({ results: [] }), { status: 200 }),
     );
     const tool = buildWebSearchTool({
       webSearchConfig: { apiKey: "k" },
@@ -72,7 +72,7 @@ describe("buildWebSearchTool", () => {
   });
 
   it("surfaces provider failures without throwing", async () => {
-    const fetchMock = vi.fn(async () => new Response("boom", { status: 500 }));
+    const fetchMock = vi.fn(async (_u: unknown, _i?: unknown) => new Response("boom", { status: 500 }));
     const tool = buildWebSearchTool({
       webSearchConfig: { apiKey: "k" },
       fetchImpl: fetchMock as unknown as typeof fetch,
@@ -85,7 +85,7 @@ describe("buildWebSearchTool", () => {
 
   it("uses SerpApi GET when provider is serpapi", async () => {
     const fetchMock = vi.fn(
-      async () =>
+      async (_u: unknown, _i?: unknown) =>
         new Response(
           JSON.stringify({
             organic_results: [

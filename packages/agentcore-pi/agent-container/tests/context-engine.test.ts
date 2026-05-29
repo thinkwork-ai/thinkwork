@@ -50,12 +50,12 @@ describe("buildContextEngineTools", () => {
       method: "tools/call",
       params: { name: "query_context", arguments: { query: "who is acme" } },
     });
-    expect(result.content[0].text).toBe("Brain says hello");
+    expect((result.content[0] as { text: string }).text).toBe("Brain says hello");
   });
 
   it("applies config provider defaults when no provider args are given", async () => {
     const fetchMock = vi.fn(
-      async () =>
+      async (_u: unknown, _i?: unknown) =>
         new Response(JSON.stringify({ result: { content: [] } }), { status: 200 }),
     );
     const [queryContext] = buildContextEngineTools({
@@ -81,12 +81,12 @@ describe("buildContextEngineTools", () => {
     });
     const result = await queryContext.execute("c", { query: "x" });
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.content[0].text).toMatch(/not enabled/i);
+    expect((result.content[0] as { text: string }).text).toMatch(/not enabled/i);
   });
 
   it("surfaces JSON-RPC errors as text", async () => {
     const fetchMock = vi.fn(
-      async () =>
+      async (_u: unknown, _i?: unknown) =>
         new Response(
           JSON.stringify({ error: { message: "provider exploded" } }),
           { status: 200 },
@@ -97,7 +97,7 @@ describe("buildContextEngineTools", () => {
       fetchImpl: fetchMock as unknown as typeof fetch,
     });
     const result = await queryContext.execute("c", { query: "x" });
-    expect(result.content[0].text).toMatch(/provider exploded/);
+    expect((result.content[0] as { text: string }).text).toMatch(/provider exploded/);
   });
 
   it("rejects an empty query before any network call", async () => {
@@ -108,6 +108,6 @@ describe("buildContextEngineTools", () => {
     });
     const result = await queryMemory.execute("c", { query: "  " });
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.content[0].text).toMatch(/non-empty query/);
+    expect((result.content[0] as { text: string }).text).toMatch(/non-empty query/);
   });
 });
