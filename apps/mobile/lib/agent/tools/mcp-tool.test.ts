@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMcpTool } from "./mcp-tool";
 import { runAgentTurn } from "../loop";
-import { ToolRegistry } from "../tool-registry";
 import {
   MockModelProvider,
   textResponse,
@@ -18,9 +17,13 @@ const DEF = {
 };
 
 describe("createMcpTool", () => {
-  it("advertises the MCP tool's spec to the model", () => {
+  it("advertises the MCP tool's name/description/parameters to the model", () => {
     const tool = createMcpTool(DEF, async () => ({}));
-    expect(tool.spec).toEqual(DEF);
+    expect({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    }).toEqual(DEF);
   });
 
   it("stringifies an object result as tool content", async () => {
@@ -49,7 +52,6 @@ describe("createMcpTool", () => {
 
   it("executes inside a loop turn and feeds the result back to the model", async () => {
     const call = vi.fn().mockResolvedValue({ id: "opp_42" });
-    const registry = new ToolRegistry([createMcpTool(DEF, call)]);
     const provider = new MockModelProvider([
       toolResponse(
         "c1",
@@ -62,7 +64,7 @@ describe("createMcpTool", () => {
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [createMcpTool(DEF, call)],
       messages: [user("add Acme to CRM")],
     });
 

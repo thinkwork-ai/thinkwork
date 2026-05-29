@@ -1,12 +1,13 @@
-// Lightweight, Pi-inspired mobile agent harness — core types.
+// A React Native version of Pi — core types.
 //
-// This is NOT the Pi runtime (the @earendil-works framework requires Node >=22.19 and
-// ships native addons, neither of which runs on iOS — see
-// docs/solutions/spikes/2026-05-29-mobile-embedded-node-pi-spike.md). It is a small,
-// bespoke harness that borrows Pi's shape: a JSON tool-calling loop behind a swappable
-// ModelProvider seam. Today the provider calls a cloud model; when on-device LLMs become
-// agent-capable, a local provider (llama.rn / ExecuTorch / MLC / Apple Foundation Models)
-// drops in behind the same interface with no change to the loop or tools.
+// This deliberately mirrors Pi's shape (a stateful agent session with `messages`/`tools`,
+// `prompt()`, and `subscribe()`, plus flat `defineTool` tools) rather than inventing a new
+// harness — Pi's appeal is its simplicity, and we keep that. It is NOT the Pi runtime
+// itself: the @earendil-works framework needs Node >=22.19 + native addons that don't run
+// on iOS (docs/solutions/spikes/2026-05-29-mobile-embedded-node-pi-spike.md), so this is a
+// faithful Hermes-native re-implementation of the same small loop behind a swappable
+// ModelProvider seam. Cloud Bedrock today; a local provider (llama.rn / ExecuTorch / MLC /
+// Apple Foundation Models) drops in behind the same seam when phones can run agent models.
 
 export type Role = "user" | "assistant" | "tool";
 
@@ -115,10 +116,25 @@ export interface ToolContext {
   sessionId?: string;
 }
 
-/** A registered, executable tool. */
+/**
+ * An executable tool — flat, like Pi's `AgentTool`: the model-facing fields
+ * (name/description/parameters) sit directly on the tool alongside `execute`.
+ * Create with `defineTool`.
+ */
 export interface Tool {
-  spec: ToolSpec;
+  name: string;
+  description: string;
+  parameters: JsonSchema;
   execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
+}
+
+/** The model-facing projection of a tool (name/description/parameters, no executor). */
+export function toToolSpec(tool: Tool): ToolSpec {
+  return {
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+  };
 }
 
 /** Streaming/observability events emitted across a turn. */

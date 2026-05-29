@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { BedrockModelProvider } from "./bedrock";
 import { runAgentTurn } from "../loop";
-import { ToolRegistry } from "../tool-registry";
+import { defineTool } from "../session";
 import type { Message, Tool } from "../types";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -13,14 +13,12 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
 }
 
 function echoTool(): Tool {
-  return {
-    spec: {
-      name: "echo",
-      description: "echo",
-      parameters: { type: "object", properties: { v: { type: "string" } } },
-    },
+  return defineTool({
+    name: "echo",
+    description: "echo",
+    parameters: { type: "object", properties: { v: { type: "string" } } },
     execute: async (args) => ({ content: `echo:${String(args.v)}` }),
-  };
+  });
 }
 
 const user = (content: string): Message => ({ role: "user", content });
@@ -90,11 +88,10 @@ describe("BedrockModelProvider", () => {
         }),
       );
     const provider = makeProvider(fetchImpl as unknown as typeof fetch);
-    const registry = new ToolRegistry([echoTool()]);
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [echoTool()],
       messages: [user("echo ping")],
     });
 
@@ -102,7 +99,6 @@ describe("BedrockModelProvider", () => {
     expect(result.finalText).toBe("the echo said ping");
     expect(result.steps).toBe(2);
     expect(result.usage).toEqual({ inputTokens: 7, outputTokens: 3 });
-    // second call carried the tool result back to the proxy
     const secondBody = JSON.parse(
       (fetchImpl.mock.calls[1][1] as RequestInit).body as string,
     );
@@ -118,11 +114,10 @@ describe("BedrockModelProvider", () => {
         jsonResponse({ error: "model not allowlisted" }, false, 400),
       );
     const provider = makeProvider(fetchImpl as unknown as typeof fetch);
-    const registry = new ToolRegistry();
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [],
       messages: [user("hi")],
     });
     expect(result.stopReason).toBe("error");

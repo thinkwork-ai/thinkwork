@@ -1,22 +1,27 @@
-// The agent loop — the small core, Pi-inspired.
+// The agent loop — the small core, mirroring Pi.
 //
 // One turn = repeated (model -> tools -> model) steps until the model answers without
 // requesting tools, a step budget is hit, or the caller aborts. The loop depends only on
-// the ModelProvider interface and a ToolRegistry; it knows nothing about Bedrock, llama.rn,
-// or any concrete model/tool. That seam is the whole point: swap the provider, keep the loop.
+// the ModelProvider interface and a flat list of tools; it knows nothing about Bedrock,
+// llama.rn, or any concrete model/tool. `createAgentSession` (session.ts) wraps this engine
+// in Pi's stateful prompt/subscribe surface — this function is the stateless turn-runner.
 
-import { ToolRegistry } from "./tool-registry";
 import type {
   AgentEvent,
   AgentRunResult,
   Message,
   ModelProvider,
+  Tool,
+  ToolContext,
+  ToolResult,
   Usage,
 } from "./types";
+import { toToolSpec } from "./types";
 
 export interface RunAgentTurnOptions {
   provider: ModelProvider;
-  registry: ToolRegistry;
+  /** Tools advertised to the model and dispatched on tool calls. */
+  tools: Tool[];
   /** Seed transcript — typically prior thread messages plus the new user message. */
   messages: Message[];
   system?: string;
@@ -38,12 +43,32 @@ function addUsage(into: Usage, add?: Usage): void {
   into.outputTokens += add.outputTokens;
 }
 
+/** Dispatch a tool call by name; unknown tools and thrown handlers become error results. */
+async function executeTool(
+  tools: Tool[],
+  name: string,
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const tool = tools.find((t) => t.name === name);
+  if (!tool) return { content: `Unknown tool: ${name}`, isError: true };
+  if (ctx.signal?.aborted) {
+    return { content: `Aborted before tool "${name}" ran`, isError: true };
+  }
+  try {
+    return await tool.execute(args, ctx);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { content: `Tool "${name}" failed: ${message}`, isError: true };
+  }
+}
+
 export async function runAgentTurn(
   options: RunAgentTurnOptions,
 ): Promise<AgentRunResult> {
   const {
     provider,
-    registry,
+    tools,
     system,
     model,
     maxSteps = DEFAULT_MAX_STEPS,
@@ -62,9 +87,9 @@ export async function runAgentTurn(
     }
   };
 
-  // Work on a copy so the caller's array is never mutated.
   const messages: Message[] = [...options.messages];
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
+  const toolSpecs = tools.map(toToolSpec);
   let finalText = "";
   let steps = 0;
 
@@ -87,7 +112,7 @@ export async function runAgentTurn(
         {
           system,
           messages: [...messages],
-          tools: registry.specs(),
+          tools: toolSpecs,
           model,
           maxTokens,
           temperature,
@@ -118,23 +143,20 @@ export async function runAgentTurn(
       emit({ type: "assistant_text", text: response.text, step: steps });
     }
 
-    // Record the assistant turn (text and/or tool calls) in the transcript.
     messages.push({
       role: "assistant",
       content: response.text,
       toolCalls: response.toolCalls.length ? response.toolCalls : undefined,
     });
 
-    // No tool calls -> the model answered. Done.
     if (response.toolCalls.length === 0) {
       emit({ type: "done", stopReason: "completed", steps });
       return { messages, finalText, steps, stopReason: "completed", usage };
     }
 
-    // Execute every requested tool and append results before the next model call.
     for (const call of response.toolCalls) {
       emit({ type: "tool_call", call, step: steps });
-      const result = await registry.execute(call.name, call.arguments, {
+      const result = await executeTool(tools, call.name, call.arguments, {
         signal,
         sessionId: undefined,
       });

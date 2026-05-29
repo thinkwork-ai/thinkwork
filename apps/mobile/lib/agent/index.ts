@@ -1,17 +1,24 @@
-// Lightweight, Pi-inspired mobile agent harness.
+// A React Native version of Pi.
 //
-// A small JSON tool-calling loop behind a swappable ModelProvider seam. Runs in Hermes
-// (no Node runtime, no native addons), uses cloud inference today, and is the substrate a
-// local on-device model (llama.rn / ExecuTorch / MLC / Apple Foundation Models) drops into
+// The primary surface mirrors Pi: `createAgentSession({ model, systemPrompt, tools,
+// modelProvider })` → a stateful session with `messages`, `tools`, `prompt()`, and
+// `subscribe()`, plus flat `defineTool` tools. Runs in Hermes (no Node runtime, no native
+// addons); cloud Bedrock inference today via the ModelProvider seam, with a local on-device
+// model (llama.rn / ExecuTorch / MLC / Apple Foundation Models) dropping into the same seam
 // when phones can run agent-capable models. Tools are mobile-safe capabilities + network
 // actions, never shell/filesystem mutation.
 
 export * from "./types";
-export { ToolRegistry } from "./tool-registry";
+
+// Pi-shaped public surface.
+export { createAgentSession, defineTool } from "./session";
+export type { AgentSession, AgentSessionConfig } from "./session";
+
+// Lower-level engine (advanced use; createAgentSession wraps it).
 export { runAgentTurn } from "./loop";
 export type { RunAgentTurnOptions } from "./loop";
-export { InMemorySessionStore } from "./session-store";
-export type { SessionStore, SessionRecord } from "./session-store";
+
+// Model providers (the seam).
 export {
   MockModelProvider,
   textResponse,
@@ -20,7 +27,13 @@ export {
 export type { MockScript } from "./providers/mock";
 export { BedrockModelProvider } from "./providers/bedrock";
 export type { BedrockModelProviderOptions } from "./providers/bedrock";
+
+// Tools.
 export { createMcpTool } from "./tools/mcp-tool";
 export type { McpToolDef, McpCall } from "./tools/mcp-tool";
+
+// Turn assembly + session storage.
 export { buildTurnContext } from "./turn-context";
 export type { TurnContext, TurnContextInput } from "./turn-context";
+export { InMemorySessionStore } from "./session-store";
+export type { SessionStore, SessionRecord } from "./session-store";

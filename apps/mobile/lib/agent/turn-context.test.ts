@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { buildTurnContext } from "./turn-context";
+import { defineTool } from "./session";
 import type { Tool } from "./types";
 
 function tool(name: string): Tool {
-  return {
-    spec: { name, description: `${name} tool`, parameters: { type: "object" } },
+  return defineTool({
+    name,
+    description: `${name} tool`,
+    parameters: { type: "object" },
     execute: async () => ({ content: "" }),
-  };
+  });
 }
 
 describe("buildTurnContext", () => {
@@ -22,14 +25,14 @@ describe("buildTurnContext", () => {
     expect(ctx.system).toContain("your ThinkWork agent");
   });
 
-  it("registers exactly the tools provided", () => {
+  it("returns exactly the tools provided", () => {
     const ctx = buildTurnContext({ tools: [tool("a"), tool("b")] });
-    expect(ctx.registry.specs().map((s) => s.name)).toEqual(["a", "b"]);
+    expect(ctx.tools.map((t) => t.name)).toEqual(["a", "b"]);
   });
 
-  it("yields a tools-less registry when none are provided (model answers directly)", () => {
+  it("yields no tools when none are provided (model answers directly)", () => {
     const ctx = buildTurnContext({ agentName: "Scout" });
-    expect(ctx.registry.specs()).toEqual([]);
+    expect(ctx.tools).toEqual([]);
   });
 
   it("appends extra guidance after the base prompt", () => {

@@ -1,11 +1,11 @@
 // Assembles a harness turn's system prompt and tool set.
 //
 // v1 is deliberately lightweight: a base identity + mobile-safe-tools system prompt plus
-// whatever tools the caller registers for the turn. Full platform agent-config / tool-
-// policy parity (fetching the agent's configured tools, per-tenant policy narrowing) is
-// deferred — `platformConfig` is the seam a later unit fills from the platform.
+// whatever tools the caller provides. Full platform agent-config / tool-policy parity
+// (fetching the agent's configured tools, per-tenant policy narrowing) is deferred —
+// `platformConfig` is the seam a later unit fills from the platform. The result feeds
+// straight into `createAgentSession({ systemPrompt, tools })`.
 
-import { ToolRegistry } from "./tool-registry";
 import type { Tool } from "./types";
 
 export interface TurnContextInput {
@@ -24,7 +24,7 @@ export interface TurnContextInput {
 
 export interface TurnContext {
   system: string;
-  registry: ToolRegistry;
+  tools: Tool[];
 }
 
 const BASE_SYSTEM = [
@@ -45,5 +45,5 @@ export function buildTurnContext(input: TurnContextInput = {}): TurnContext {
   const system = input.extraGuidance?.trim()
     ? `${base}\n\n${input.extraGuidance.trim()}`
     : base;
-  return { system, registry: new ToolRegistry(input.tools ?? []) };
+  return { system, tools: input.tools ?? [] };
 }

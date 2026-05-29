@@ -5,7 +5,7 @@ import {
   textResponse,
   toolResponse,
 } from "./providers/mock";
-import { ToolRegistry } from "./tool-registry";
+import { defineTool } from "./session";
 import type { Tool } from "./types";
 import type { ChatMessage } from "../../hooks/useGatewayChat";
 
@@ -13,10 +13,12 @@ let t = 1000;
 const now = () => (t += 1);
 
 function echoTool(): Tool {
-  return {
-    spec: { name: "echo", description: "echo", parameters: { type: "object" } },
+  return defineTool({
+    name: "echo",
+    description: "echo",
+    parameters: { type: "object" },
     execute: async (a) => ({ content: `echo:${String(a.v)}` }),
-  };
+  });
 }
 
 describe("runHarnessChatTurn", () => {
@@ -69,8 +71,6 @@ describe("runHarnessChatTurn", () => {
       toolResponse("c1", "echo", { v: "x" }, "working on it"),
       textResponse("done"),
     ]);
-    const registry = new ToolRegistry([echoTool()]);
-    void registry;
     const contents: string[] = [];
 
     await runHarnessChatTurn({

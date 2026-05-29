@@ -5,22 +5,20 @@ import {
   textResponse,
   toolResponse,
 } from "./providers/mock";
-import { ToolRegistry } from "./tool-registry";
+import { defineTool } from "./session";
 import type { AgentEvent, Message, Tool } from "./types";
 
 function echoTool(): Tool {
-  return {
-    spec: {
-      name: "echo",
-      description: "Echo the input back",
-      parameters: {
-        type: "object",
-        properties: { value: { type: "string" } },
-        required: ["value"],
-      },
+  return defineTool({
+    name: "echo",
+    description: "Echo the input back",
+    parameters: {
+      type: "object",
+      properties: { value: { type: "string" } },
+      required: ["value"],
     },
     execute: async (args) => ({ content: `echo:${String(args.value)}` }),
-  };
+  });
 }
 
 function user(content: string): Message {
@@ -30,18 +28,16 @@ function user(content: string): Message {
 describe("runAgentTurn", () => {
   it("returns the model's direct answer when no tools are requested", async () => {
     const provider = new MockModelProvider([textResponse("Hello there")]);
-    const registry = new ToolRegistry();
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [],
       messages: [user("hi")],
     });
 
     expect(result.stopReason).toBe("completed");
     expect(result.finalText).toBe("Hello there");
     expect(result.steps).toBe(1);
-    // seed user + one assistant message
     expect(result.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
   });
 
@@ -50,18 +46,16 @@ describe("runAgentTurn", () => {
       toolResponse("call-1", "echo", { value: "ping" }, "let me check"),
       textResponse("the echo said ping"),
     ]);
-    const registry = new ToolRegistry([echoTool()]);
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [echoTool()],
       messages: [user("echo ping")],
     });
 
     expect(result.stopReason).toBe("completed");
     expect(result.finalText).toBe("the echo said ping");
     expect(result.steps).toBe(2);
-    // user, assistant(tool_use), tool, assistant(final)
     expect(result.messages.map((m) => m.role)).toEqual([
       "user",
       "assistant",
@@ -76,11 +70,10 @@ describe("runAgentTurn", () => {
 
   it("passes the advertised tool specs and prior messages to the provider", async () => {
     const provider = new MockModelProvider([textResponse("ok")]);
-    const registry = new ToolRegistry([echoTool()]);
 
     await runAgentTurn({
       provider,
-      registry,
+      tools: [echoTool()],
       messages: [user("hi")],
       system: "be brief",
     });
@@ -91,25 +84,22 @@ describe("runAgentTurn", () => {
   });
 
   it("surfaces a tool failure as an error result the model can recover from", async () => {
-    const failing: Tool = {
-      spec: {
-        name: "boom",
-        description: "always throws",
-        parameters: { type: "object" },
-      },
+    const failing: Tool = defineTool({
+      name: "boom",
+      description: "always throws",
+      parameters: { type: "object" },
       execute: async () => {
         throw new Error("kaboom");
       },
-    };
+    });
     const provider = new MockModelProvider([
       toolResponse("c1", "boom", {}),
       textResponse("recovered"),
     ]);
-    const registry = new ToolRegistry([failing]);
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [failing],
       messages: [user("go")],
     });
 
@@ -120,16 +110,29 @@ describe("runAgentTurn", () => {
     expect(result.finalText).toBe("recovered");
   });
 
+  it("returns an error result for an unknown tool", async () => {
+    const provider = new MockModelProvider([
+      toolResponse("c1", "missing", {}),
+      textResponse("ok"),
+    ]);
+    const result = await runAgentTurn({
+      provider,
+      tools: [],
+      messages: [user("go")],
+    });
+    const toolMsg = result.messages.find((m) => m.role === "tool");
+    expect(toolMsg?.isError).toBe(true);
+    expect(toolMsg?.content).toContain("Unknown tool: missing");
+  });
+
   it("stops with max_steps when the model keeps calling tools", async () => {
-    // Always asks for the tool again -> never terminates on its own.
     const provider = new MockModelProvider(() =>
       toolResponse("loop", "echo", { value: "x" }),
     );
-    const registry = new ToolRegistry([echoTool()]);
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [echoTool()],
       messages: [user("loop forever")],
       maxSteps: 3,
     });
@@ -140,11 +143,10 @@ describe("runAgentTurn", () => {
 
   it("stops with aborted when the signal is already aborted", async () => {
     const provider = new MockModelProvider([textResponse("should not run")]);
-    const registry = new ToolRegistry();
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [],
       messages: [user("hi")],
       signal: AbortSignal.abort(),
     });
@@ -158,12 +160,11 @@ describe("runAgentTurn", () => {
     const provider = new MockModelProvider(() => {
       throw new Error("network down");
     });
-    const registry = new ToolRegistry();
     const events: AgentEvent[] = [];
 
     const result = await runAgentTurn({
       provider,
-      registry,
+      tools: [],
       messages: [user("hi")],
       onEvent: (e) => events.push(e),
     });
@@ -192,12 +193,15 @@ describe("runAgentTurn", () => {
         usage: { inputTokens: 8, outputTokens: 3 },
       },
     ]);
-    const registry = new ToolRegistry([echoTool()]);
 
-    const result = await runAgentTurn({ provider, registry, messages: seed });
+    const result = await runAgentTurn({
+      provider,
+      tools: [echoTool()],
+      messages: seed,
+    });
 
     expect(result.usage).toEqual({ inputTokens: 18, outputTokens: 8 });
-    expect(seed).toEqual([user("hi")]); // caller array untouched
+    expect(seed).toEqual([user("hi")]);
   });
 
   it("emits assistant_text, tool_call, tool_result, and done events in order", async () => {
@@ -205,10 +209,14 @@ describe("runAgentTurn", () => {
       toolResponse("c1", "echo", { value: "z" }, "checking"),
       textResponse("all set"),
     ]);
-    const registry = new ToolRegistry([echoTool()]);
     const onEvent = vi.fn();
 
-    await runAgentTurn({ provider, registry, messages: [user("go")], onEvent });
+    await runAgentTurn({
+      provider,
+      tools: [echoTool()],
+      messages: [user("go")],
+      onEvent,
+    });
 
     const kinds = onEvent.mock.calls.map((c) => (c[0] as AgentEvent).type);
     expect(kinds).toEqual([

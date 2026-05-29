@@ -7,7 +7,7 @@
 // ChatView exactly like the GraphQL/Gateway modes.
 
 import type { ChatMessage } from "../../hooks/useGatewayChat";
-import { runAgentTurn } from "./loop";
+import { createAgentSession } from "./session";
 import { buildTurnContext } from "./turn-context";
 import type { ImagePart, Message, ModelProvider, Tool } from "./types";
 
@@ -37,7 +37,6 @@ export interface RunHarnessChatTurnInput {
   now: () => number;
   /** Called with the full updated message list as the turn progresses. */
   onUpdate: (messages: ChatMessage[]) => void;
-  signal?: AbortSignal;
 }
 
 const ERROR_TEXT = "Something went wrong handling that turn. Please try again.";
@@ -45,15 +44,7 @@ const ERROR_TEXT = "Something went wrong handling that turn. Please try again.";
 export async function runHarnessChatTurn(
   input: RunHarnessChatTurnInput,
 ): Promise<ChatMessage[]> {
-  const {
-    provider,
-    tools = [],
-    agentName,
-    model,
-    now,
-    onUpdate,
-    signal,
-  } = input;
+  const { provider, tools = [], agentName, model, now, onUpdate } = input;
   const ts = now();
 
   const userMsg: ChatMessage = {
@@ -73,26 +64,27 @@ export async function runHarnessChatTurn(
   const snapshot = (): ChatMessage[] => [...input.prior, userMsg, assistant];
   onUpdate(snapshot());
 
-  const { system, registry } = buildTurnContext({ agentName, tools });
-  const harnessMessages: Message[] = [
-    ...toHarnessMessages(input.prior),
-    { role: "user", content: input.userText, images: input.images },
-  ];
-
-  const result = await runAgentTurn({
-    provider,
-    registry,
-    system,
+  const { system, tools: turnTools } = buildTurnContext({ agentName, tools });
+  const session = createAgentSession({
+    modelProvider: provider,
     model,
-    messages: harnessMessages,
-    signal,
-    onEvent: (event) => {
-      if (event.type === "assistant_text") {
-        assistant = { ...assistant, content: event.text };
-        onUpdate(snapshot());
-      }
-    },
+    systemPrompt: system,
+    tools: turnTools,
+    messages: toHarnessMessages(input.prior),
   });
+  const unsubscribe = session.subscribe((event) => {
+    if (event.type === "assistant_text") {
+      assistant = { ...assistant, content: event.text };
+      onUpdate(snapshot());
+    }
+  });
+
+  let result;
+  try {
+    result = await session.prompt(input.userText, input.images);
+  } finally {
+    unsubscribe();
+  }
 
   const failed = result.stopReason === "error";
   assistant = {
