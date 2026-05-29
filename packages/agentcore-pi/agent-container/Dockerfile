@@ -32,28 +32,33 @@ COPY packages/agentcore-pi/agent-container/requirements.txt packages/agentcore-p
 RUN pip3 install --no-cache-dir --break-system-packages \
     -r packages/agentcore-pi/agent-container/requirements.txt
 
-# @thinkwork/pi-aws workspace dep (plan §005 U8 — sandbox factory).
+# @thinkwork/pi-aws + @thinkwork/pi-runtime-core workspace deps.
 # pnpm install --frozen-lockfile fails when a workspace dep's directory is
 # absent, and the build needs the source to compile against. Both the
-# package.json AND the source go in.
+# package.json AND the source go in for each.
 COPY packages/pi-aws/package.json packages/pi-aws/package.json
 COPY packages/pi-aws/tsconfig.json packages/pi-aws/tsconfig.json
 COPY packages/pi-aws/src/ packages/pi-aws/src/
 COPY packages/pi-aws/connectors/ packages/pi-aws/connectors/
+COPY packages/pi-runtime-core/package.json packages/pi-runtime-core/package.json
+COPY packages/pi-runtime-core/tsconfig.json packages/pi-runtime-core/tsconfig.json
+COPY packages/pi-runtime-core/src/ packages/pi-runtime-core/src/
 
-# Both packages must be in the install filter so their devDependencies
+# All three packages must be in the install filter so their devDependencies
 # (in particular, typescript / tsc) land in node_modules. Filtering on
-# `@thinkwork/agentcore-pi` alone pulls in `@thinkwork/pi-aws`'s
-# RUNTIME deps via the workspace edge but skips its devDeps — the next
+# `@thinkwork/agentcore-pi` alone pulls in its workspace deps'
+# RUNTIME deps via the workspace edge but skips their devDeps — the next
 # `tsc --build` step then fails with `sh: 1: tsc: not found`.
 RUN corepack enable && pnpm install \
     --filter @thinkwork/agentcore-pi \
     --filter @thinkwork/pi-aws \
+    --filter @thinkwork/pi-runtime-core \
     --prod=false --frozen-lockfile
-# Build pi-aws first so its dist/ exists for the runtime import path
-# (package.json's `import` condition points at dist/src/index.js — vitest
+# Build the workspace deps first so their dist/ exists for the runtime import
+# path (package.json's `import` condition points at dist/src/index.js — vitest
 # tolerates raw .ts via the `types` condition, but plain Node ESM does not).
 RUN pnpm --filter @thinkwork/pi-aws build
+RUN pnpm --filter @thinkwork/pi-runtime-core build
 RUN pnpm --filter @thinkwork/agentcore-pi build
 
 ENV PORT=8080
