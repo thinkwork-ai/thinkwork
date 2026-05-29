@@ -28,10 +28,19 @@ export interface WireToolCall {
   arguments: Record<string, unknown>;
 }
 
-/** Mirrors the harness `Message`. `content` is a string in v1; image parts arrive in U3. */
+export type WireImageFormat = "png" | "jpeg" | "gif" | "webp";
+
+/** An image on a user message; `data` is base64-encoded bytes. */
+export interface WireImagePart {
+  format: WireImageFormat;
+  data: string;
+}
+
+/** Mirrors the harness `Message`. Optional `images` carry multimodal user input. */
 export interface WireMessage {
   role: WireRole;
   content: string;
+  images?: WireImagePart[];
   toolCalls?: WireToolCall[];
   toolCallId?: string;
   name?: string;
@@ -165,6 +174,10 @@ export function toToolConfig(
  *   consecutive tool results to coalesce into a single user message, so runs of tool
  *   messages are merged.
  */
+function base64ToBytes(data: string): Uint8Array {
+  return Buffer.from(data, "base64");
+}
+
 export function toConverseMessages(messages: WireMessage[]): ConverseMessage[] {
   const out: ConverseMessage[] = [];
   let pendingToolResults: ContentBlock[] = [];
@@ -191,10 +204,21 @@ export function toConverseMessages(messages: WireMessage[]): ConverseMessage[] {
     flushToolResults();
 
     if (msg.role === "user") {
-      out.push({
-        role: "user",
-        content: [{ text: msg.content } as ContentBlock],
-      });
+      const userBlocks: ContentBlock[] = [];
+      if (msg.content) userBlocks.push({ text: msg.content } as ContentBlock);
+      for (const img of msg.images ?? []) {
+        userBlocks.push({
+          image: {
+            format: img.format,
+            source: { bytes: base64ToBytes(img.data) },
+          },
+        } as unknown as ContentBlock);
+      }
+      // Converse requires at least one content block.
+      if (userBlocks.length === 0) {
+        userBlocks.push({ text: msg.content } as ContentBlock);
+      }
+      out.push({ role: "user", content: userBlocks });
       continue;
     }
 

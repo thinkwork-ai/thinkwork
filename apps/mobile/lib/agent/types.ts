@@ -18,11 +18,22 @@ export interface ToolCall {
   arguments: Record<string, unknown>;
 }
 
+export type ImageFormat = "png" | "jpeg" | "gif" | "webp";
+
+/** An image on a user message — the substrate for capture tools (e.g. business cards). */
+export interface ImagePart {
+  format: ImageFormat;
+  /** Base64-encoded image bytes. */
+  data: string;
+}
+
 /** One message in the running transcript. */
 export interface Message {
   role: Role;
   /** Natural-language content. Empty string is valid (e.g. an assistant turn that is purely tool calls). */
   content: string;
+  /** Optional images on a user message. Additive — text-only messages omit it. */
+  images?: ImagePart[];
   /** Present on assistant messages that requested tools. */
   toolCalls?: ToolCall[];
   /** Present on tool messages: the id of the ToolCall this result answers. */

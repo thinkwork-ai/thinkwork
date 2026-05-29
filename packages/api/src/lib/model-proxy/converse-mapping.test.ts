@@ -167,6 +167,37 @@ describe("toConverseMessages", () => {
     expect(out[2].content?.[0]).toHaveProperty("toolResult");
     expect(out[3].content).toEqual([{ text: "and now this" }]);
   });
+
+  it("maps a user message image to a Converse image block with decoded bytes", () => {
+    const data = Buffer.from("hello-bytes").toString("base64");
+    const out = toConverseMessages([
+      {
+        role: "user",
+        content: "what's on this card?",
+        images: [{ format: "jpeg", data }],
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    const blocks = out[0].content ?? [];
+    expect(blocks[0]).toEqual({ text: "what's on this card?" });
+    const imageBlock = blocks[1] as {
+      image?: { format?: string; source?: { bytes?: Uint8Array } };
+    };
+    expect(imageBlock.image?.format).toBe("jpeg");
+    expect(
+      Buffer.from(imageBlock.image?.source?.bytes as Uint8Array).toString(),
+    ).toBe("hello-bytes");
+  });
+
+  it("emits image-only content when a user message has images but no text", () => {
+    const data = Buffer.from("x").toString("base64");
+    const out = toConverseMessages([
+      { role: "user", content: "", images: [{ format: "png", data }] },
+    ]);
+    const blocks = out[0].content ?? [];
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toHaveProperty("image");
+  });
 });
 
 describe("parseConverseOutput", () => {
