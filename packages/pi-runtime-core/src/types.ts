@@ -74,6 +74,11 @@ export interface RunAgentLoopArgs {
   threadId: string;
   gitSha: string;
   identity?: unknown;
+  /**
+   * Workspace directory the agent session runs against (built-in file tools,
+   * project context discovery). Defaults to `process.cwd()` when omitted.
+   */
+  cwd?: string;
 }
 
 export interface RunAgentLoopResult {

@@ -23,7 +23,8 @@
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.76.0",
-    "@earendil-works/pi-ai": "0.76.0"
+    "@earendil-works/pi-ai": "0.76.0",
+    "@earendil-works/pi-coding-agent": "0.76.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

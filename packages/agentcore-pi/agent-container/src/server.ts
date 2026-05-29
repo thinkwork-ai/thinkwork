@@ -1124,6 +1124,7 @@ export async function handleInvocation(
       threadId: identity.threadId,
       gitSha: env.gitSha,
       identity,
+      cwd: env.workspaceDir,
     });
   } catch (err) {
     runError = err;
