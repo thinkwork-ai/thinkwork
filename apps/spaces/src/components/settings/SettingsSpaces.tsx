@@ -29,6 +29,7 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 type SpaceRow = {
@@ -145,27 +146,27 @@ export function SettingsSpaces() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Spaces"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>+ New Space</Button>
-        }
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Spaces"
+      actions={<Button onClick={() => setCreateOpen(true)}>+ New Space</Button>}
+      toolbar={
         <Input
           placeholder="Search spaces…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={10}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         onRowClick={(row) =>
           navigate({ to: "/spaces/$spaceId", params: { spaceId: row.id } })
         }
@@ -184,7 +185,7 @@ export function SettingsSpaces() {
           setCreateOpen(false);
         }}
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }
 

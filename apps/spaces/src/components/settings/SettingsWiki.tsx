@@ -244,7 +244,7 @@ export function SettingsWiki() {
             }}
             scrollable
             allowHorizontalScroll={false}
-            pageSize={10}
+            pageSize={25}
             tableClassName="table-fixed"
           />
         )}

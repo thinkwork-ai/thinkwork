@@ -10,6 +10,7 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 export function SettingsTools() {
@@ -100,30 +101,30 @@ export function SettingsTools() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Built-in Tools"
-        description="Enable or disable the agent’s built-in tools."
-      />
-      {error ? (
-        <p className="mb-4 text-sm text-destructive">{error}</p>
-      ) : (
-        <div className="mb-4">
+    <SettingsTablePane
+      title="Built-in Tools"
+      description="Enable or disable the agent’s built-in tools."
+      toolbar={
+        error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : (
           <Input
             placeholder="Search tools…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
           />
-        </div>
-      )}
+        )
+      }
+    >
       <DataTable
         columns={columns}
         data={tools ?? []}
         filterValue={search}
         filterColumn="toolSlug"
-        pageSize={10}
+        scrollable
         allowHorizontalScroll={false}
+        pageSize={25}
         tableClassName="table-fixed"
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
@@ -131,6 +132,6 @@ export function SettingsTools() {
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

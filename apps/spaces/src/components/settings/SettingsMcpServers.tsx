@@ -18,6 +18,7 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 export function SettingsMcpServers() {
@@ -149,30 +150,30 @@ export function SettingsMcpServers() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="MCP Servers"
-        description="Model Context Protocol servers available to the agent."
-      />
-      {error ? (
-        <p className="mb-4 text-sm text-destructive">{error}</p>
-      ) : (
-        <div className="mb-4">
+    <SettingsTablePane
+      title="MCP Servers"
+      description="Model Context Protocol servers available to the agent."
+      toolbar={
+        error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : (
           <Input
             placeholder="Search servers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
           />
-        </div>
-      )}
+        )
+      }
+    >
       <DataTable
         columns={columns}
         data={servers ?? []}
         filterValue={search}
         filterColumn="name"
-        pageSize={10}
+        scrollable
         allowHorizontalScroll={false}
+        pageSize={25}
         tableClassName="table-fixed"
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
@@ -180,6 +181,6 @@ export function SettingsMcpServers() {
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

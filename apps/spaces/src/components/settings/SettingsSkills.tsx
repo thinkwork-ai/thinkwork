@@ -8,6 +8,7 @@ import { listSkillSlugs } from "@/lib/workspace-files-api";
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 type SkillRow = { slug: string };
@@ -66,29 +67,31 @@ export function SettingsSkills() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Skills"
-        description="The tenant skill catalog. Open a skill to edit its files."
-      />
-      {error ? (
-        <p className="mb-4 text-sm text-destructive">{error}</p>
-      ) : (
-        <div className="mb-4">
+    <SettingsTablePane
+      title="Skills"
+      description="The tenant skill catalog. Open a skill to edit its files."
+      toolbar={
+        error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : (
           <Input
             placeholder="Search skills…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
           />
-        </div>
-      )}
+        )
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="slug"
-        pageSize={10}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         onRowClick={(row) =>
           navigate({
             to: "/settings/skills/$skillSlug",
@@ -101,6 +104,6 @@ export function SettingsSkills() {
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

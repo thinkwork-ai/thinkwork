@@ -7,6 +7,7 @@ import { SettingsWebhooksQuery } from "@/lib/settings-queries";
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 type WebhookRow = {
@@ -94,31 +95,33 @@ export function SettingsWebhooks() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Webhooks"
-        description="Inbound endpoints that trigger agents or routines."
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Webhooks"
+      description="Inbound endpoints that trigger agents or routines."
+      toolbar={
         <Input
           placeholder="Search webhooks…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={10}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No webhooks configured.
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

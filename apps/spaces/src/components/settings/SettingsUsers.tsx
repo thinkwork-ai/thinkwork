@@ -29,6 +29,7 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 type UserRow = {
@@ -175,26 +176,28 @@ export function SettingsUsers() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Users"
-        actions={
-          <Button onClick={() => setInviteOpen(true)}>+ Invite member</Button>
-        }
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Users"
+      actions={
+        <Button onClick={() => setInviteOpen(true)}>+ Invite member</Button>
+      }
+      toolbar={
         <Input
           placeholder="Search by name or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
-        pageSize={10}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         onRowClick={(row) =>
           navigate({
             to: "/settings/users/$userId",
@@ -216,7 +219,7 @@ export function SettingsUsers() {
           setInviteOpen(false);
         }}
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }
 

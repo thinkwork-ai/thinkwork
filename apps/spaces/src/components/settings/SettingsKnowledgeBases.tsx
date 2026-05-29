@@ -7,6 +7,7 @@ import { useTenant } from "@/context/TenantContext";
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 type KbRow = {
@@ -92,31 +93,33 @@ export function SettingsKnowledgeBases() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Knowledge Bases"
-        description="Document collections the agent can search."
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Knowledge Bases"
+      description="Document collections the agent can search."
+      toolbar={
         <Input
           placeholder="Search knowledge bases…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={10}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No knowledge bases yet.
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

@@ -7,6 +7,7 @@ import { SettingsRoutinesQuery } from "@/lib/settings-queries";
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
 } from "@/components/settings/SettingsContent";
 
 type RoutineRow = {
@@ -86,31 +87,33 @@ export function SettingsRoutines() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Routines"
-        description="Scheduled agent runs for this tenant."
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Routines"
+      description="Scheduled agent runs for this tenant."
+      toolbar={
         <Input
           placeholder="Search routines…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
         filterColumn="name"
-        pageSize={10}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No routines yet.
           </div>
         }
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }

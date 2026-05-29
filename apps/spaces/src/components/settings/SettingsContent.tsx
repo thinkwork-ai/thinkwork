@@ -39,6 +39,41 @@ export function SettingsPane({
   );
 }
 
+/**
+ * Full-height layout for table sections: header + optional toolbar pinned at
+ * top, the table area filling the rest (so a `scrollable` DataTable scrolls its
+ * body and pins pagination to the bottom — matching the Memory section).
+ */
+export function SettingsTablePane({
+  title,
+  description,
+  actions,
+  toolbar,
+  children,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+  toolbar?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col p-6">
+      <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          {description ? (
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
+      {toolbar ? <div className="mb-3 shrink-0">{toolbar}</div> : null}
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 /** A labeled group of settings (e.g. "Permissions", "Organization"). */
 export function SettingsSection({
   label,
