@@ -74,7 +74,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -142,6 +142,17 @@ build_handler "desktop-runtime-session" \
 
 build_handler "managed-delegation" \
   "$REPO_ROOT/packages/api/src/handlers/managed-delegation.ts"
+
+# Mobile agent harness model proxy: stateless Bedrock Converse call per loop
+# step. Bundles the newer Bedrock SDK (Converse + tool-use). OPTIONS handled
+# inside the Lambda before auth.
+build_handler "model-converse" \
+  "$REPO_ROOT/packages/api/src/handlers/model-converse.ts"
+
+# Mobile harness turn persistence: append a completed (client-produced) user+assistant
+# turn to an existing thread. Append-only; OPTIONS handled before auth.
+build_handler "record-turn" \
+  "$REPO_ROOT/packages/api/src/handlers/record-turn.ts"
 
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
