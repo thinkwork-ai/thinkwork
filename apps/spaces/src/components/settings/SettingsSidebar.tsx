@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, Bot, Settings as SettingsIcon, Users } from "lucide-react";
-import { IconPlanet } from "@tabler/icons-react";
+import { IconChartBar, IconPlanet } from "@tabler/icons-react";
 import { cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
@@ -28,6 +28,12 @@ const NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
+  {
+    label: "Analytics",
+    to: "/settings/analytics",
+    icon: IconChartBar,
+    operatorOnly: true,
+  },
 ];
 
 // Matches the main chat-sidebar nav item style (SidebarMenuButton): h-8, p-2,

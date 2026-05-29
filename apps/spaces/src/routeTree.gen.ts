@@ -20,6 +20,7 @@ import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settings.index";
 import { Route as AuthedSettingsSpacesRouteImport } from "./routes/_authed/settings.spaces";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
+import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
 import { Route as AuthedSettingsAgentRouteImport } from "./routes/_authed/settings.agent";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
 import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/memory";
@@ -98,6 +99,11 @@ const AuthedSettingsSpacesRoute = AuthedSettingsSpacesRouteImport.update({
 const AuthedSettingsGeneralRoute = AuthedSettingsGeneralRouteImport.update({
   id: "/general",
   path: "/general",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedSettingsAnalyticsRoute = AuthedSettingsAnalyticsRouteImport.update({
+  id: "/analytics",
+  path: "/analytics",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
 const AuthedSettingsAgentRoute = AuthedSettingsAgentRouteImport.update({
@@ -256,6 +262,7 @@ export interface FileRoutesByFullPath {
   "/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
   "/settings/agent": typeof AuthedSettingsAgentRoute;
+  "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
@@ -289,6 +296,7 @@ export interface FileRoutesByTo {
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/new": typeof AuthedShellNewRoute;
   "/settings/agent": typeof AuthedSettingsAgentRoute;
+  "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
@@ -329,6 +337,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/settings/agent": typeof AuthedSettingsAgentRoute;
+  "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/spaces": typeof AuthedSettingsSpacesRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
@@ -368,6 +377,7 @@ export interface FileRouteTypes {
     | "/memory"
     | "/new"
     | "/settings/agent"
+    | "/settings/analytics"
     | "/settings/general"
     | "/settings/spaces"
     | "/settings/"
@@ -401,6 +411,7 @@ export interface FileRouteTypes {
     | "/auth/desktop-callback"
     | "/new"
     | "/settings/agent"
+    | "/settings/analytics"
     | "/settings/general"
     | "/settings/spaces"
     | "/settings"
@@ -440,6 +451,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory"
     | "/_authed/_shell/new"
     | "/_authed/settings/agent"
+    | "/_authed/settings/analytics"
     | "/_authed/settings/general"
     | "/_authed/settings/spaces"
     | "/_authed/settings/"
@@ -552,6 +564,13 @@ declare module "@tanstack/react-router" {
       path: "/general";
       fullPath: "/settings/general";
       preLoaderRoute: typeof AuthedSettingsGeneralRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/analytics": {
+      id: "/_authed/settings/analytics";
+      path: "/analytics";
+      fullPath: "/settings/analytics";
+      preLoaderRoute: typeof AuthedSettingsAnalyticsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/agent": {
@@ -850,6 +869,7 @@ const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
 
 interface AuthedSettingsRouteChildren {
   AuthedSettingsAgentRoute: typeof AuthedSettingsAgentRoute;
+  AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsSpacesRoute: typeof AuthedSettingsSpacesRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
@@ -859,6 +879,7 @@ interface AuthedSettingsRouteChildren {
 
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAgentRoute: AuthedSettingsAgentRoute,
+  AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsSpacesRoute: AuthedSettingsSpacesRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,

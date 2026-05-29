@@ -211,3 +211,54 @@ export const SettingsInviteMemberMutation = graphql(`
     }
   }
 `);
+
+// ─── Analytics (usage cost, operator-only) ───────────────────────────────
+
+export const SettingsCostSummaryQuery = graphql(`
+  query SettingsCostSummary($tenantId: ID!) {
+    costSummary(tenantId: $tenantId) {
+      totalUsd
+      llmUsd
+      computeUsd
+      toolsUsd
+      totalInputTokens
+      totalOutputTokens
+      eventCount
+    }
+  }
+`);
+
+export const SettingsCostByAgentQuery = graphql(`
+  query SettingsCostByAgent($tenantId: ID!) {
+    costByAgent(tenantId: $tenantId) {
+      agentId
+      agentName
+      totalUsd
+      eventCount
+    }
+  }
+`);
+
+export const SettingsCostByModelQuery = graphql(`
+  query SettingsCostByModel($tenantId: ID!) {
+    costByModel(tenantId: $tenantId) {
+      model
+      totalUsd
+      inputTokens
+      outputTokens
+    }
+  }
+`);
+
+export const SettingsCostTimeSeriesQuery = graphql(`
+  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {
+    costTimeSeries(tenantId: $tenantId, days: $days) {
+      day
+      totalUsd
+      llmUsd
+      computeUsd
+      toolsUsd
+      eventCount
+    }
+  }
+`);
