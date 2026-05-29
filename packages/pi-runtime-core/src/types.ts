@@ -1,6 +1,8 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Message, Usage } from "@earendil-works/pi-ai";
 
+import type { SessionStore } from "./durable-session-manager.js";
+
 export interface ToolCostRecord {
   provider: string;
   event_type: string;
@@ -79,6 +81,14 @@ export interface RunAgentLoopArgs {
    * project context discovery). Defaults to `process.cwd()` when omitted.
    */
   cwd?: string;
+  /**
+   * Durable per-thread session store. When present (with a non-empty
+   * `threadId`), the turn resumes the thread's persisted session instead of
+   * replaying `history` as prompt text. U4.
+   */
+  sessionStore?: SessionStore;
+  /** Local scratch directory for the SDK session file (defaults under `cwd`). */
+  sessionDir?: string;
 }
 
 export interface RunAgentLoopResult {

@@ -13,6 +13,12 @@ import type {
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 
+import {
+  openDurableSession,
+  SessionConflictError,
+  type SessionLog,
+  type SessionStore,
+} from "./durable-session-manager.js";
 import { textFromAssistant } from "./history.js";
 import { collectToolCosts } from "./tool-costs.js";
 import type { RunAgentLoopArgs, RunAgentLoopResult } from "./types.js";
@@ -51,6 +57,13 @@ export interface OpenedSession {
   session: AgentSessionLike;
   /** Model id actually resolved for this turn (for the result `modelId`). */
   modelId: string;
+  /** Present when a durable per-thread session backs this turn. Resumes prior
+   *  context from storage, so the loop sends only the new message (no text
+   *  history prepend). Call after a successful turn to persist the session. */
+  persistSession?: () => Promise<void>;
+  /** True when a durable session is active (resumed or freshly seeded), so the
+   *  loop must NOT prepend conversation text — the session carries context. */
+  durable?: boolean;
 }
 
 export interface RunAgentLoopDeps {
@@ -62,6 +75,9 @@ export interface RunAgentLoopDeps {
    * verified without a live model.
    */
   openSession?: (inputs: OpenSessionInputs) => Promise<OpenedSession>;
+  /** Optional structured logger for durable-session lifecycle + persist
+   *  failures. No-op by default. */
+  log?: SessionLog;
 }
 
 export interface OpenSessionInputs {
@@ -70,6 +86,16 @@ export interface OpenSessionInputs {
   modelId: string;
   toolAllowlist: string[];
   customTools: ToolDefinition[];
+  /** When a store + threadId are present, the turn runs over a durable
+   *  per-thread session (resume instead of history replay). */
+  sessionStore?: SessionStore;
+  threadId?: string;
+  /** Local scratch dir for the SDK's session file (defaults under cwd). */
+  sessionDir?: string;
+  /** Prior conversation, used only to seed a brand-new durable session. */
+  seedHistory?: Message[];
+  /** Structured logger forwarded to the durable session path. */
+  log?: SessionLog;
 }
 
 function resolveModelIdString(modelId: unknown): string {
@@ -227,18 +253,48 @@ async function defaultOpenSession(
   });
   await resourceLoader.reload();
 
+  // Durable per-thread session: resume from storage when a store + threadId are
+  // available; otherwise fall back to an in-memory session (the loop then
+  // prepends conversation text). U4. (const ternary so the manager type infers
+  // through from the factories rather than collapsing to SessionManagerLike.)
+  const durable =
+    inputs.sessionStore && inputs.threadId
+      ? await openDurableSession({
+          store: inputs.sessionStore,
+          threadId: inputs.threadId,
+          cwd: inputs.cwd,
+          sessionDir:
+            inputs.sessionDir ??
+            path.join(inputs.cwd, PI_AGENT_DIR, "sessions"),
+          seedHistory: inputs.seedHistory,
+          factories: {
+            open: (file, dir, cwdOverride) =>
+              SessionManager.open(file, dir, cwdOverride),
+            create: (cwd, dir) => SessionManager.create(cwd, dir),
+          },
+          log: inputs.log,
+        })
+      : undefined;
+  const sessionManager =
+    durable?.sessionManager ?? SessionManager.inMemory(inputs.cwd);
+
   const { session } = await createAgentSession({
     cwd: inputs.cwd,
     tools: inputs.toolAllowlist,
     customTools: inputs.customTools,
     resourceLoader,
-    sessionManager: SessionManager.inMemory(inputs.cwd),
+    sessionManager,
     authStorage,
     modelRegistry,
     ...(model ? { model } : {}),
   });
 
-  return { session, modelId: model?.id ?? inputs.modelId };
+  return {
+    session,
+    modelId: model?.id ?? inputs.modelId,
+    durable: Boolean(durable),
+    persistSession: durable ? () => durable.persist() : undefined,
+  };
 }
 
 export async function runAgentLoop(
@@ -254,12 +310,17 @@ export async function runAgentLoop(
   const toolAllowlist = buildToolAllowlist(customTools);
   const requestedModelId = resolveModelIdString(args.modelId);
 
-  const { session, modelId } = await openSession({
+  const { session, modelId, durable, persistSession } = await openSession({
     cwd: args.cwd?.trim() || process.cwd(),
     systemPrompt: args.systemPrompt,
     modelId: requestedModelId,
     toolAllowlist,
     customTools,
+    sessionStore: args.sessionStore,
+    threadId: args.threadId || undefined,
+    sessionDir: args.sessionDir,
+    seedHistory: args.history,
+    log: deps.log,
   });
 
   try {
@@ -306,7 +367,32 @@ export async function runAgentLoop(
       }
     });
 
-    await session.prompt(buildTurnPrompt(args));
+    // A durable session carries prior context (resumed or seeded), so send only
+    // the new message. Without one, fall back to prepending conversation text.
+    await session.prompt(durable ? args.message : buildTurnPrompt(args));
+
+    // Persist the durable session only after a successful turn — a failed turn
+    // leaves the stored session at its prior good state for the retry to resume.
+    // Persistence is best-effort: the assistant reply is already valid, so a
+    // lost concurrency race (SessionConflictError) or a transient store error
+    // must NOT fail the turn and discard the reply. The `If-Match` guard already
+    // prevented any clobber; we log loudly and return the content. The next turn
+    // resumes the winner's state.
+    if (persistSession) {
+      try {
+        await persistSession();
+      } catch (error) {
+        deps.log?.({
+          level: error instanceof SessionConflictError ? "warn" : "error",
+          event:
+            error instanceof SessionConflictError
+              ? "durable_session_persist_conflict"
+              : "durable_session_persist_failed",
+          threadId: args.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const assistant = [...session.messages]
       .reverse()

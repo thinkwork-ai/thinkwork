@@ -12,6 +12,7 @@ import {
   type AgentSessionLike,
   type OpenSessionInputs,
 } from "../src/agent-loop.js";
+import { SessionConflictError } from "../src/durable-session-manager.js";
 import type { RunAgentLoopArgs } from "../src/types.js";
 
 function userMessage(text: string): AgentMessage {
@@ -438,5 +439,99 @@ describe("runAgentLoop", () => {
     expect(captured?.modelId).toBe(
       "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     );
+  });
+
+  it("passes the session store + threadId + seedHistory through to openSession", async () => {
+    let captured: OpenSessionInputs | undefined;
+    const session = makeFakeSession({ messages: [assistantMessage("ok")] });
+    const sessionStore = { read: async () => null, write: async () => "1" };
+    await runAgentLoop(
+      baseArgs({
+        threadId: "t-9",
+        history: [historyUser("prior")],
+        sessionStore,
+        sessionDir: "/tmp/sessions",
+      }),
+      {
+        openSession: async (inputs) => {
+          captured = inputs;
+          return { session, modelId: inputs.modelId };
+        },
+      },
+    );
+    expect(captured?.sessionStore).toBe(sessionStore);
+    expect(captured?.threadId).toBe("t-9");
+    expect(captured?.sessionDir).toBe("/tmp/sessions");
+    expect(captured?.seedHistory).toHaveLength(1);
+  });
+
+  it("sends only the new message (no history prepend) and persists when durable", async () => {
+    const session = makeFakeSession({ messages: [assistantMessage("ok")] });
+    let persisted = 0;
+    await runAgentLoop(
+      baseArgs({
+        message: "current",
+        history: [historyUser("earlier")],
+      }),
+      {
+        openSession: async () => ({
+          session,
+          modelId: "m",
+          durable: true,
+          persistSession: async () => {
+            persisted += 1;
+          },
+        }),
+      },
+    );
+    expect(session.promptText).toBe("current");
+    expect(session.promptText).not.toContain("Prior conversation");
+    expect(persisted).toBe(1);
+  });
+
+  it("returns the assistant reply even when persisting the durable session conflicts", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("the reply")],
+    });
+    const logged: { level: string; event: string }[] = [];
+    const result = await runAgentLoop(baseArgs(), {
+      log: (e) => logged.push({ level: e.level, event: e.event }),
+      openSession: async () => ({
+        session,
+        modelId: "m",
+        durable: true,
+        persistSession: async () => {
+          throw new SessionConflictError("raced");
+        },
+      }),
+    });
+    // The model output is valid; a lost persist race must not fail the turn.
+    expect(result.content).toBe("the reply");
+    expect(logged).toContainEqual({
+      level: "warn",
+      event: "durable_session_persist_conflict",
+    });
+  });
+
+  it("does not persist the durable session when the prompt throws", async () => {
+    const session = makeFakeSession({ messages: [] });
+    session.prompt = vi.fn(async () => {
+      throw new Error("turn failed");
+    });
+    let persisted = 0;
+    await expect(
+      runAgentLoop(baseArgs(), {
+        openSession: async () => ({
+          session,
+          modelId: "m",
+          durable: true,
+          persistSession: async () => {
+            persisted += 1;
+          },
+        }),
+      }),
+    ).rejects.toThrow("turn failed");
+    expect(persisted).toBe(0);
+    expect(session.disposed).toBe(true);
   });
 });
