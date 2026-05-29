@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
@@ -534,7 +535,8 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     expect(screen.getByText("Streaming through the route")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /thinking/i }));
+    const activity = screen.getAllByLabelText("Turn activity")[0];
+    fireEvent.click(within(activity).getByRole("button"));
     expect(screen.getByText("Browser unavailable")).toBeTruthy();
     expect(screen.getByLabelText("ThinkWork is typing")).toBeTruthy();
     expect(screen.queryByLabelText("Processing request")).toBeNull();
@@ -886,7 +888,7 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.queryByLabelText("Processing request")).toBeNull();
   });
 
-  it("shows the processing shimmer for agent-bound optimistic follow-ups", async () => {
+  it("shows the running turn surface for agent-bound optimistic follow-ups", async () => {
     taskData = { computerTasks: [] };
     threadData = {
       thread: {
@@ -908,7 +910,9 @@ describe("SpacesThreadDetailRoute", () => {
     await waitFor(() => {
       expect(screen.getByText("Ask the agent for help")).toBeTruthy();
     });
-    expect(screen.getByLabelText("Processing request")).toBeTruthy();
+    // The optimistic running turn is the single in-flight signal (KTD2).
+    expect(screen.getByText("Working…")).toBeTruthy();
+    expect(screen.queryByLabelText("Processing request")).toBeNull();
   });
 
   it("marks follow-up sends for desktop-local dispatch when local Pi is ready", async () => {
@@ -1001,7 +1005,7 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     const cloudToggle = await screen.findByRole("button", {
-      name: "Local Pi will handle this turn",
+      name: "Run this turn on local Pi (click for managed cloud)",
     });
     fireEvent.click(cloudToggle);
     fireEvent.change(screen.getByLabelText("Follow up"), {
@@ -1058,9 +1062,10 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Thinking and tool activity")).toBeTruthy();
+      expect(screen.getByLabelText("Turn activity")).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Thinking/i }));
+    const activity = screen.getAllByLabelText("Turn activity")[0];
+    fireEvent.click(within(activity).getByRole("button"));
 
     await waitFor(() => {
       expect(screen.getByText(/Managed delegation/)).toBeTruthy();

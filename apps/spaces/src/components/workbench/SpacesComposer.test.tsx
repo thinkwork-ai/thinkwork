@@ -54,12 +54,8 @@ describe("SpacesComposer focus styling", () => {
       <SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />,
     );
     const cls = container.querySelector("form")?.className ?? "";
-    expect(cls).toContain(
-      "has-[[data-slot=input-group-control]:focus-visible]:ring-0",
-    );
-    expect(cls).toContain(
-      "has-[[data-slot=input-group-control]:focus-visible]:border-border/80",
-    );
+    expect(cls).toContain("[&_[data-slot=input-group]]:!ring-0");
+    expect(cls).toContain("[&_[data-slot=input-group]]:!bg-[#262626]");
   });
 });
 
@@ -98,9 +94,6 @@ describe("SpacesComposer", () => {
     expect(
       container.querySelector(".tabler-icon-planet")?.getAttribute("class"),
     ).toContain("text-foreground");
-    expect(screen.getByRole("button", { name: "Mention" }).className).toContain(
-      "text-muted-foreground",
-    );
     expect(
       screen.getByRole("button", { name: "Attach file" }).className,
     ).toContain("text-muted-foreground");
@@ -204,7 +197,7 @@ describe("SpacesComposer", () => {
     render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
 
     expect(
-      screen.getByLabelText("Local Pi will handle this turn"),
+      screen.getByLabelText("Run this turn on local Pi (click for managed cloud)"),
     ).toBeTruthy();
   });
 
@@ -230,12 +223,12 @@ describe("SpacesComposer", () => {
     );
 
     const cloudToggle = await screen.findByRole("button", {
-      name: "Local Pi will handle this turn",
+      name: "Run this turn on local Pi (click for managed cloud)",
     });
     fireEvent.click(cloudToggle);
     expect(
       screen.getByRole("button", {
-        name: "Managed AgentCore will handle this turn",
+        name: "Run this turn on managed cloud (click for local Pi)",
       }),
     ).toBeTruthy();
 

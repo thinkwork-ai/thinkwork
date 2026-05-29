@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "urql";
-import { MoreHorizontal, Archive, Trash2 } from "lucide-react";
+import { MoreHorizontal, Archive, FileText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -28,6 +28,8 @@ import {
 } from "@/lib/graphql-queries";
 import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
 import { setThreadDeletePending } from "@/lib/pending-thread-deletes";
+import { SystemPromptDialog } from "@/components/workbench/SystemPromptDialog";
+import type { TaskThreadTurn } from "@/components/workbench/TaskThreadView";
 
 export interface AttachedArtifactSummary {
   id: string;
@@ -38,6 +40,8 @@ export interface ThreadDetailActionsProps {
   threadId: string;
   threadTitle: string;
   attachedArtifacts: AttachedArtifactSummary[];
+  /** Persisted turns, used by the read-only System Prompt viewer. */
+  turns?: TaskThreadTurn[];
   /** Test seam: override the navigate destination after archive/delete fallbacks. */
   onDoneNavigateTo?: string;
   onDeleted?: (threadId: string) => Promise<void> | void;
@@ -45,6 +49,7 @@ export interface ThreadDetailActionsProps {
 
 export function ThreadDetailActions(props: ThreadDetailActionsProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const navigate = useNavigate();
   const [, updateThread] = useMutation(UpdateThreadMutation);
   const [working, setWorking] = useState(false);
@@ -101,6 +106,19 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
             <Archive className="mr-2 h-4 w-4" />
             Archive thread
           </DropdownMenuItem>
+          <DropdownMenuItem
+            className="whitespace-nowrap"
+            data-testid="thread-actions-system-prompt"
+            // Defer the dialog open by one frame so Radix's menu close
+            // doesn't trap focus before the dialog mounts (same race the
+            // delete item guards against).
+            onSelect={() => {
+              window.setTimeout(() => setSystemPromptOpen(true), 0);
+            }}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            System Prompt
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="whitespace-nowrap"
@@ -125,6 +143,12 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
         {...props}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+      />
+
+      <SystemPromptDialog
+        open={systemPromptOpen}
+        onOpenChange={setSystemPromptOpen}
+        turns={props.turns ?? []}
       />
     </>
   );

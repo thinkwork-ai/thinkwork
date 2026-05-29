@@ -1,6 +1,4 @@
 import { Cloud, CloudOff } from "lucide-react";
-import type { DesktopLocalPiDisplayStatus } from "@/lib/desktop-runtime";
-import { useDesktopLocalPiStatus } from "@/lib/use-desktop-local-pi-status";
 import { cn } from "@/lib/utils";
 
 export type AgentRuntimePreference = "local" | "managed";
@@ -21,36 +19,30 @@ export function AgentRuntimeIndicator({
   preference: AgentRuntimePreference;
   tone?: "default" | "dark";
 }) {
-  const localPiStatus = useDesktopLocalPiStatus();
-  const localAvailable = isLocalPiAvailable(localPiStatus);
-  const mode = resolveAgentRuntimeMode(
-    agentEnabled,
-    localAvailable,
-    preference,
-  );
+  // The toggle reflects the user's choice directly (managed ↔ local). It used
+  // to gate switching-to-local on a "healthy" local-Pi status, which made the
+  // button a silent no-op whenever the sidecar wasn't reporting ready — the
+  // opposite of the point. The runtime decides any fallback at send time.
+  const mode: AgentRuntimeMode = !agentEnabled ? "disabled" : preference;
+  // managed = blue cloud, local = muted (non-blue) cloud, disabled = cloud-off.
   const Icon = mode === "disabled" ? CloudOff : Cloud;
   const title = AGENT_RUNTIME_COPY[mode];
   const isDisabled = disabled || !agentEnabled;
   const buttonClassName = cn(
-    "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+    // No hover background and no hover color-flip — the icon keeps its state
+    // color (blue = managed) instead of greying out, which read as confusing.
+    "flex size-8 shrink-0 items-center justify-center rounded-lg transition-opacity",
     tone === "dark" ? "text-white/45" : "text-muted-foreground",
     mode === "managed" && "text-[#54a9ff]",
     mode === "disabled" &&
       (tone === "dark" ? "text-white/25 opacity-70" : "opacity-45"),
-    !isDisabled &&
-      (tone === "dark"
-        ? "hover:bg-white/10 hover:text-white"
-        : "hover:bg-muted hover:text-foreground"),
+    !isDisabled && "hover:opacity-80",
     className,
   );
 
   function togglePreference() {
     if (isDisabled) return;
-    if (mode === "managed" && localAvailable) {
-      onPreferenceChange?.("local");
-      return;
-    }
-    onPreferenceChange?.("managed");
+    onPreferenceChange?.(preference === "managed" ? "local" : "managed");
   }
 
   return (
@@ -68,23 +60,8 @@ export function AgentRuntimeIndicator({
   );
 }
 
-function resolveAgentRuntimeMode(
-  agentEnabled: boolean,
-  localAvailable: boolean,
-  preference: AgentRuntimePreference,
-): AgentRuntimeMode {
-  if (!agentEnabled) return "disabled";
-  if (preference === "managed") return "managed";
-  if (localAvailable) return "local";
-  return "managed";
-}
-
-function isLocalPiAvailable(status: DesktopLocalPiDisplayStatus): boolean {
-  return status === "healthy" || status === "starting" || status === "running";
-}
-
 const AGENT_RUNTIME_COPY: Record<AgentRuntimeMode, string> = {
   disabled: "Agent is off; cloud runtime disabled",
-  local: "Local Pi will handle this turn",
-  managed: "Managed AgentCore will handle this turn",
+  local: "Run this turn on local Pi (click for managed cloud)",
+  managed: "Run this turn on managed cloud (click for local Pi)",
 };

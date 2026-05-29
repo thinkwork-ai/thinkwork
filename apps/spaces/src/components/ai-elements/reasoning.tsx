@@ -116,6 +116,13 @@ export type ReasoningTriggerProps = ComponentProps<
   typeof CollapsibleTrigger
 > & {
   getThinkingMessage?: (isStreaming: boolean, duration?: number) => ReactNode;
+  /**
+   * Leading icon shown before the thinking message. Defaults to the brain
+   * icon for genuine reasoning streams; the turn-activity surface passes
+   * `null` to drop it (the consolidated "Working…"/"Worked for Xs" header
+   * has no brain icon).
+   */
+  icon?: ReactNode;
 };
 
 const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
@@ -133,6 +140,7 @@ export const ReasoningTrigger = memo(
     className,
     children,
     getThinkingMessage = defaultGetThinkingMessage,
+    icon,
     ...props
   }: ReasoningTriggerProps) => {
     const { isStreaming, isOpen, duration } = useReasoning();
@@ -147,7 +155,7 @@ export const ReasoningTrigger = memo(
       >
         {children ?? (
           <>
-            <BrainIcon className="size-4" />
+            {icon === undefined ? <BrainIcon className="size-4" /> : icon}
             {getThinkingMessage(isStreaming, duration)}
             <ChevronRightIcon
               className={cn(

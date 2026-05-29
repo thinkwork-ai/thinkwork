@@ -20,11 +20,13 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { AtSign, Bot } from "lucide-react";
+import { Bot } from "lucide-react";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@thinkwork/ui";
@@ -252,12 +254,11 @@ export function SpacesComposer({
           />
         ) : null}
         <PromptInput
-          // Override the shared InputGroup focus styling so the empty-thread
-          // composer reads as borderless when focused — no background shift,
-          // no inner ring, no border-color flip. Border stays at
-          // border-border/80 in every state. Other PromptInput consumers
-          // (in-thread FollowUpComposer) keep the default InputGroup look.
-          className="rounded-2xl border border-border/80 bg-transparent shadow-none dark:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:border-border/80 has-[[data-slot=input-group-control]:focus-visible]:ring-0"
+          // One consistent "normal" look in every state — same visible border
+          // whether empty, filled, or focused, no dim fill, and no focus ring.
+          // We target the inner InputGroup directly and force (`!`) the values
+          // so the shared InputGroup's focus-ring + dim-bg defaults can't win.
+          className="[&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-white/10 dark:[&_[data-slot=input-group]]:!bg-[#262626]"
           accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
           maxFiles={5}
           maxFileSize={25 * 1024 * 1024}
@@ -291,7 +292,7 @@ export function SpacesComposer({
                 title={agentToggleTitle}
                 disabled={isComposerDisabled || agentForcedOn}
                 className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-80",
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
                   effectiveAgentEnabled && "text-[#54a9ff]",
                 )}
               >
@@ -303,16 +304,6 @@ export function SpacesComposer({
                 preference={runtimePreference}
                 onPreferenceChange={setRuntimePreference}
               />
-              <PromptInputButton
-                type="button"
-                variant="ghost"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => onChange(`${value}@`)}
-                aria-label="Mention"
-                title="Mention"
-              >
-                <AtSign className="h-4 w-4" />
-              </PromptInputButton>
               <PromptInputAttachButton />
               {spaces.length > 0 && selectedSpaceId && onSelectedSpaceChange ? (
                 <Select
@@ -324,22 +315,35 @@ export function SpacesComposer({
                     aria-label="Select Space"
                     title="Choose a Space"
                     className={cn(
-                      "h-8 max-w-[190px] gap-1.5 rounded-md border-0 bg-transparent px-2 text-xs shadow-none hover:bg-muted focus:ring-0",
+                      "h-8 max-w-[190px] gap-1.5 rounded-md border-0 !bg-transparent px-2 text-sm shadow-none transition-opacity hover:opacity-80 focus:ring-0 dark:!bg-transparent [&>svg:last-child]:size-4",
                       spacePickerColorClass,
                     )}
                   >
                     <IconPlanet
                       stroke={2}
-                      className={cn("size-4 shrink-0", spacePickerIconClass)}
+                      className={cn("size-5 shrink-0", spacePickerIconClass)}
                     />
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
-                  <SelectContent align="start">
-                    {spaces.map((space) => (
-                      <SelectItem key={space.id} value={space.id}>
-                        {space.name}
-                      </SelectItem>
-                    ))}
+                  <SelectContent
+                    align="start"
+                    sideOffset={6}
+                    className="rounded-xl p-1.5"
+                  >
+                    <SelectGroup>
+                      <SelectLabel className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Run in Space
+                      </SelectLabel>
+                      {spaces.map((space) => (
+                        <SelectItem
+                          key={space.id}
+                          value={space.id}
+                          className="rounded-lg py-1.5 pl-2 text-sm"
+                        >
+                          {space.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               ) : null}
