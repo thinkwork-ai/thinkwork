@@ -23,18 +23,21 @@ afterEach(() => {
   delete window.thinkworkBridge;
 });
 
-function getThinkingDisclosure(): HTMLElement {
-  const el = screen.getByLabelText("Thinking and tool activity");
+function getThinkingDisclosure(index = 0): HTMLElement {
+  const regions = screen.getAllByLabelText("Turn activity");
+  const el = regions[index];
   expect(el.getAttribute("data-state")).not.toBeNull();
   return el;
 }
 
 function openThinkingDisclosure(index = 0): HTMLElement {
-  const buttons = screen.getAllByRole("button", { name: /thinking/i });
-  fireEvent.click(buttons[index]);
-  const disclosures = screen.getAllByLabelText("Thinking and tool activity");
-  expect(disclosures[index].getAttribute("data-state")).toBe("open");
-  return disclosures[index];
+  const region = getThinkingDisclosure(index);
+  // The collapsed surface has exactly one button (the Reasoning trigger);
+  // its accessible name is the status header ("Working…", "Worked for Xs", …).
+  const trigger = within(region).getByRole("button");
+  fireEvent.click(trigger);
+  expect(region.getAttribute("data-state")).toBe("open");
+  return region;
 }
 
 describe("TaskThreadView", () => {
@@ -956,7 +959,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getAllByText("Thinking")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Turn activity")).toHaveLength(1);
     expect(screen.queryByText("Reasoning complete.")).toBeNull();
   });
 
@@ -991,15 +994,15 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getAllByText("Thinking")).toHaveLength(1);
-    // Anchor the surviving row to the authoritative turn-level container so a
-    // future regression that moves the row back into per-message rendering
+    expect(screen.getAllByLabelText("Turn activity")).toHaveLength(1);
+    // Anchor the surviving surface to the authoritative turn-level container so
+    // a future regression that moves the row back into per-message rendering
     // would fail this test rather than silently keep the count at 1.
-    expect(screen.getByLabelText("Thinking and tool activity")).toBeTruthy();
+    expect(screen.getByLabelText("Turn activity")).toBeTruthy();
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
   });
 
-  it("renders a thinking row when the thread has no messages", () => {
+  it("renders a working row when the thread has no messages", () => {
     render(
       <TaskThreadView
         thread={{
@@ -1011,7 +1014,8 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getByText("Thinking")).toBeTruthy();
+    expect(screen.getByText("Working…")).toBeTruthy();
+    expect(screen.queryByText("Thinking")).toBeNull();
   });
 
   it("renders streaming assistant chunks below persisted messages", () => {
@@ -1412,7 +1416,7 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
-  it("keeps a processing shimmer visible while an active runbook queue is working", () => {
+  it("shows the active runbook queue as the only progress signal (no standalone shimmer)", () => {
     render(
       <TaskThreadView
         thread={{
@@ -1464,7 +1468,13 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Processing request")).toBeTruthy();
+    // The standalone task-queue "Processing…" shimmer was removed (KTD2): the
+    // running queue itself is the progress signal.
+    expect(screen.queryByLabelText("Processing request")).toBeNull();
+    const promptQueue = screen.getByLabelText("Active task queue");
+    expect(
+      within(promptQueue).getByText("2 tasks · 1 completed · 1 running"),
+    ).toBeTruthy();
   });
 
   it("keeps historical completed queues out of the prompt and transcript", () => {
@@ -1883,7 +1893,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Thinking and tool activity")).toBeTruthy();
+    expect(screen.getByLabelText("Turn activity")).toBeTruthy();
     openThinkingDisclosure();
     expect(screen.getByText("Finding sources")).toBeTruthy();
     expect(screen.getByText(/Manual chat/)).toBeTruthy();
@@ -2062,7 +2072,9 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
-  it("renders the mobile-style processing shimmer while waiting for the first chunk", () => {
+  it("shows the running turn surface while waiting for the first chunk", () => {
+    // KTD2: a running turn is the single in-flight signal — the "Working…"
+    // shimmer header, not a separate "Processing…" element.
     render(
       <TaskThreadView
         thread={{
@@ -2081,13 +2093,15 @@ describe("TaskThreadView", () => {
               id: "task-1",
               status: "RUNNING",
               invocationSource: "chat_message",
+              startedAt: "2020-01-01T00:00:00Z",
             },
           ],
         }}
       />,
     );
 
-    expect(screen.getByLabelText("Processing request")).toBeTruthy();
+    expect(screen.getByText("Working…")).toBeTruthy();
+    expect(screen.queryByLabelText("Processing request")).toBeNull();
     expect(screen.queryByLabelText("ThinkWork is typing")).toBeNull();
   });
 
@@ -2366,10 +2380,60 @@ describe("TaskThreadView", () => {
     expect(disclosure.getAttribute("data-state")).toBe("closed");
   });
 
-  it("nests the Run failed row inside the Thinking disclosure when a turn errors", () => {
-    // The Run failed row lives inside Thinking now. Thinking is collapsed
-    // by default to avoid content shift, so the error is one click away.
-    // without forcing the user to expand a closed disclosure.
+  it("labels a completed turn 'Worked for Xm Ys' from its wall-clock duration", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Done",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Pull leads" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T08:00:00Z",
+              finishedAt: "2026-05-09T08:01:30Z",
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("Worked for 1m 30s")).toBeTruthy();
+    expect(screen.queryByText("Thinking")).toBeNull();
+  });
+
+  it("does not show a console-log toggle for a cloud turn with no console data", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Cloud turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Search" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T08:00:00Z",
+              finishedAt: "2026-05-09T08:00:05Z",
+              usageJson: { tools_called: ["crm_search"] },
+            },
+          ],
+        }}
+      />,
+    );
+    openThinkingDisclosure();
+    expect(screen.getByText("Finding sources")).toBeTruthy();
+    expect(screen.queryByText("view console log")).toBeNull();
+  });
+
+  it("expands a failed turn by default with the Run failed row visible", () => {
+    // R4: a failed turn defaults open so its error is not hidden behind a
+    // success-looking collapsed header. The header reads "Failed after Xs",
+    // never "Worked for Xs".
     render(
       <TaskThreadView
         thread={{
@@ -2382,6 +2446,7 @@ describe("TaskThreadView", () => {
               id: "turn-1",
               status: "failed",
               invocationSource: "chat_message",
+              startedAt: "2026-05-09T08:01:00Z",
               finishedAt: "2026-05-09T08:01:05Z",
               error: "Browser session timed out",
             },
@@ -2390,21 +2455,16 @@ describe("TaskThreadView", () => {
       />,
     );
     const disclosure = getThinkingDisclosure();
-    expect(disclosure.getAttribute("data-state")).toBe("closed");
-    expect(screen.queryByText("Run failed")).toBeNull();
-    expect(screen.queryByText("Browser session timed out")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /thinking/i }));
-    expect(getThinkingDisclosure().getAttribute("data-state")).toBe("open");
-    expect(screen.queryByText("Run failed")).toBeTruthy();
-    expect(screen.queryByText("Browser session timed out")).toBeTruthy();
+    expect(disclosure.getAttribute("data-state")).toBe("open");
+    expect(screen.getByText(/^Failed after/)).toBeTruthy();
+    expect(screen.getByText("Run failed")).toBeTruthy();
+    expect(screen.getByText("Browser session timed out")).toBeTruthy();
   });
 
-  it("defaults Thinking closed for every turn status to prevent content shift", () => {
+  it("defaults the turn surface closed for every non-failed status to prevent content shift", () => {
     // The user explicitly does not want streaming action rows pushing the
-    // page taller as a turn runs. Closing Thinking by default keeps the
-    // viewport stable; ProcessingShimmer is the only in-flight signal that
-    // grows the height (and only by one line). User can click to expand.
+    // page taller as a turn runs. Closing the surface by default keeps the
+    // viewport stable. Failed turns are the deliberate exception (open).
     for (const status of [
       "running",
       "pending",
@@ -2412,7 +2472,8 @@ describe("TaskThreadView", () => {
       "claimed",
       "completed",
       "succeeded",
-      "failed",
+      "cancelled",
+      "timed_out",
     ] as const) {
       const { unmount } = render(
         <TaskThreadView
@@ -2459,7 +2520,7 @@ describe("TaskThreadView", () => {
     const disclosure = getThinkingDisclosure();
     expect(disclosure.getAttribute("data-state")).toBe("closed");
 
-    fireEvent.click(screen.getByRole("button", { name: /thinking/i }));
+    fireEvent.click(within(disclosure).getByRole("button"));
 
     rerender(<TaskThreadView thread={{ ...baseThread }} />);
     const reRendered = getThinkingDisclosure();
@@ -2671,10 +2732,8 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    // Exactly one Thinking summary per turn, both with the labelled-region affordance.
-    const thinkingDetailsList = screen.getAllByLabelText(
-      "Thinking and tool activity",
-    );
+    // Exactly one turn surface per turn, both with the labelled-region affordance.
+    const thinkingDetailsList = screen.getAllByLabelText("Turn activity");
     expect(thinkingDetailsList).toHaveLength(2);
 
     // Chronological order: the first user's Thinking row must appear before
@@ -2685,9 +2744,10 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
-  it("keeps the Thinking summary aria-label intact on the Reasoning disclosure", () => {
-    // U2 / DL-003: dropping the <article> wrapper must not lose the labelled
-    // region affordance. Screen readers continue to find the same name.
+  it("keeps the turn-activity aria-label intact on the Reasoning disclosure", () => {
+    // The labelled region affordance survives the header relabel — screen
+    // readers find the surface by name even though the visible header is now
+    // the Codex-style "Working…" / "Worked for Xs".
     render(
       <TaskThreadView
         thread={{
@@ -2705,7 +2765,7 @@ describe("TaskThreadView", () => {
         }}
       />,
     );
-    const labelled = screen.getByLabelText("Thinking and tool activity");
+    const labelled = screen.getByLabelText("Turn activity");
     expect(labelled.getAttribute("data-state")).toBe("closed");
   });
 
@@ -2856,7 +2916,7 @@ describe("TaskThreadView", () => {
     const agentToggle = screen.getByRole("button", { name: "Send to agent" });
     const agentIcon = agentToggle.querySelector("svg");
     expect(
-      screen.getByLabelText("Managed AgentCore will handle this turn"),
+      screen.getByLabelText("Run this turn on local Pi (click for managed cloud)"),
     ).toBeTruthy();
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-[#54a9ff]");
@@ -2900,12 +2960,12 @@ describe("TaskThreadView", () => {
     );
 
     const cloudToggle = await screen.findByRole("button", {
-      name: "Local Pi will handle this turn",
+      name: "Run this turn on local Pi (click for managed cloud)",
     });
     fireEvent.click(cloudToggle);
     expect(
       screen.getByRole("button", {
-        name: "Managed AgentCore will handle this turn",
+        name: "Run this turn on managed cloud (click for local Pi)",
       }),
     ).toBeTruthy();
 
@@ -2925,7 +2985,7 @@ describe("TaskThreadView", () => {
     });
   });
 
-  it("streams local Pi diagnostic events into a collapsible console", async () => {
+  it("folds local Pi diagnostic events into the turn activity with a gated console log", async () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
     let diagnosticListener:
       | ((event: {
@@ -2958,13 +3018,22 @@ describe("TaskThreadView", () => {
         thread={{
           id: "thread-1",
           title: "Local Pi console thread",
-          lifecycleStatus: "IDLE",
+          lifecycleStatus: "RUNNING",
           messages: [{ id: "message-1", role: "USER", content: "Start" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "desktop-local",
+              startedAt: "2026-05-28T20:52:00.000Z",
+            },
+          ],
         }}
         onSendFollowUp={vi.fn()}
       />,
     );
 
+    // No bordered "Local Pi console" box exists anymore (R5).
     expect(screen.queryByLabelText("Local Pi console")).toBeNull();
     await waitFor(() => expect(diagnosticListener).not.toBeNull());
 
@@ -3000,7 +3069,22 @@ describe("TaskThreadView", () => {
       });
     });
 
-    expect(screen.getByLabelText("Local Pi console")).toBeTruthy();
+    // The events fold into the turn surface as merged step rows. Expand it.
+    openThinkingDisclosure();
+
+    // The de-duplicated local-Pi event renders as a step row; the cross-thread
+    // event is filtered out and never reaches this thread.
+    expect(
+      screen.getAllByText(/local Pi sidecar received turn/).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/other thread event/)).toBeNull();
+
+    // Raw lines live behind a quiet, collapsed-by-default "view console log"
+    // toggle — not a bordered box.
+    expect(
+      screen.queryByRole("log", { name: "Local Pi console output" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByText("view console log"));
     const output = screen.getByRole("log", {
       name: "Local Pi console output",
     });
@@ -3009,11 +3093,6 @@ describe("TaskThreadView", () => {
     expect(
       output.textContent?.match(/local Pi sidecar received turn/g),
     ).toHaveLength(1);
-
-    fireEvent.click(screen.getByRole("button", { name: /Local Pi console/i }));
-    expect(
-      screen.queryByRole("log", { name: "Local Pi console output" }),
-    ).toBeNull();
   });
 
   it("renders voice input next to the send button", () => {

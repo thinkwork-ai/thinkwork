@@ -1,5 +1,4 @@
 import {
-  AtSign,
   ArrowUp,
   AlertCircle,
   Bot,
@@ -67,6 +66,13 @@ import {
   ReasoningTrigger,
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
+import {
+  formatDuration,
+  formatTurnHeader,
+  isRunningStatus,
+  shouldDefaultExpand,
+} from "@/components/workbench/turnHeader";
+import { useTurnElapsed } from "@/components/workbench/useTurnElapsed";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
 import {
   TaskQueue,
@@ -110,8 +116,6 @@ import {
 } from "@/lib/use-desktop-local-pi-console";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
-const SHIMMER_TEXT = "Processing...";
-const SHIMMER_CHAR_DURATION_MS = 120;
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
 const COMPOSER_TRANSCRIPT_GAP_PX = 32;
 
@@ -372,21 +376,20 @@ export function TaskThreadView({
   );
   const showStreamingBuffer =
     streamingChunks.length > 0 && !hasAssistantAfterLatestUser(visibleMessages);
-  const showProcessingShimmer =
-    !showStreamingBuffer &&
-    isAwaitingAssistantResponse(thread, visibleMessages);
-  const showTaskQueueProcessingShimmer = Boolean(
-    promptTaskQueue &&
-    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
-    !showStreamingBuffer &&
-    !showProcessingShimmer,
-  );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
     (message) => message.role.toUpperCase() === "USER",
   );
   const turnByUserMessageId = mapTurnsToUserMessages(
     transcriptMessages,
+    thread.turns ?? [],
+  );
+  // Local-Pi diagnostic events fold into the per-turn activity surface
+  // (KTD2/R5): grouped by their originating turn, with turn-less main-process
+  // lines attached to the latest turn so they remain discoverable. The old
+  // bordered LocalPiConsole is gone.
+  const consoleEntriesByTurn = groupConsoleEntriesByTurn(
+    localPiConsoleEntries,
     thread.turns ?? [],
   );
   const selectedArtifact =
@@ -429,40 +432,44 @@ export function TaskThreadView({
             >
               {transcriptMessages.length === 0 ? (
                 <ThinkingRow
-                  title="Thinking"
+                  title="Working…"
+                  running
                   detail="ThinkWork is preparing this thread."
                 />
               ) : (
-                transcriptMessages.map((message, index) => (
-                  <TranscriptSegment
-                    key={message.id}
-                    message={message}
-                    turn={turnByUserMessageId.get(message.id)}
-                    isLatestUser={index === latestUserIndex}
-                    streamingChunks={
-                      index === latestUserIndex && showStreamingBuffer
-                        ? streamingChunks
-                        : []
-                    }
-                    streamState={
-                      index === latestUserIndex && showStreamingBuffer
-                        ? streamState
-                        : undefined
-                    }
-                    onOpenArtifact={artifactPanelState?.onSelectArtifact}
-                    onSendFollowUp={onSendFollowUp}
-                    isSending={isSending}
-                    threadAttachments={infoPanelState?.attachments ?? []}
-                    onDownloadAttachment={infoPanelState?.onDownloadAttachment}
-                    currentUser={currentUser}
-                    showProcessingShimmer={
-                      index === latestUserIndex && showProcessingShimmer
-                    }
-                  />
-                ))
+                transcriptMessages.map((message, index) => {
+                  const turn = turnByUserMessageId.get(message.id);
+                  return (
+                    <TranscriptSegment
+                      key={message.id}
+                      message={message}
+                      turn={turn}
+                      consoleEntries={
+                        turn ? (consoleEntriesByTurn.get(turn.id) ?? []) : []
+                      }
+                      isLatestUser={index === latestUserIndex}
+                      streamingChunks={
+                        index === latestUserIndex && showStreamingBuffer
+                          ? streamingChunks
+                          : []
+                      }
+                      streamState={
+                        index === latestUserIndex && showStreamingBuffer
+                          ? streamState
+                          : undefined
+                      }
+                      onOpenArtifact={artifactPanelState?.onSelectArtifact}
+                      onSendFollowUp={onSendFollowUp}
+                      isSending={isSending}
+                      threadAttachments={infoPanelState?.attachments ?? []}
+                      onDownloadAttachment={
+                        infoPanelState?.onDownloadAttachment
+                      }
+                      currentUser={currentUser}
+                    />
+                  );
+                })
               )}
-              {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
-              <LocalPiConsole entries={localPiConsoleEntries} />
             </div>
           </ConversationContent>
         </Conversation>
@@ -1381,7 +1388,7 @@ function TranscriptSegment({
   threadAttachments,
   onDownloadAttachment,
   currentUser,
-  showProcessingShimmer,
+  consoleEntries = [],
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
@@ -1398,7 +1405,7 @@ function TranscriptSegment({
   threadAttachments: ThreadInfoAttachment[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
   currentUser?: CurrentUserIdentity | null;
-  showProcessingShimmer: boolean;
+  consoleEntries?: DesktopLocalPiConsoleEntry[];
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
   // render via renderTypedParts (Reasoning + Tool + Response per part).
@@ -1417,7 +1424,9 @@ function TranscriptSegment({
         onDownloadAttachment={onDownloadAttachment}
         currentUser={currentUser}
       />
-      {turn ? <ThreadTurnActivity turn={turn} /> : null}
+      {turn ? (
+        <ThreadTurnActivity turn={turn} consoleEntries={consoleEntries} />
+      ) : null}
       {isLatestUser ? (
         <>
           {hasTypedParts ? (
@@ -1435,13 +1444,14 @@ function TranscriptSegment({
           ) : streamingChunks.length > 0 ? (
             <StreamingMessageBuffer chunks={streamingChunks} />
           ) : null}
-          {showProcessingShimmer ? <ProcessingShimmer /> : null}
         </>
       ) : null}
     </>
   );
 }
 
+// Full DB turn-status vocabulary that warrants a rendered surface. `skipped`
+// is intentionally absent (formatTurnHeader returns null for it).
 const RENDERED_TURN_STATUSES = new Set([
   "running",
   "pending",
@@ -1450,6 +1460,8 @@ const RENDERED_TURN_STATUSES = new Set([
   "completed",
   "succeeded",
   "failed",
+  "cancelled",
+  "timed_out",
 ]);
 
 function normalizeStatus(status: unknown) {
@@ -1458,33 +1470,54 @@ function normalizeStatus(status: unknown) {
     .trim();
 }
 
-function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
+function ThreadTurnActivity({
+  turn,
+  consoleEntries = [],
+}: {
+  turn?: TaskThreadTurn;
+  consoleEntries?: DesktopLocalPiConsoleEntry[];
+}) {
+  const status = normalizeStatus(turn?.status);
+  const running = isRunningStatus(status);
+  // One hook per turn surface (KTD3): live-elapsed only ticks while running,
+  // freezes on terminal status, and is null for not-yet-started turns.
+  const elapsedMs = useTurnElapsed(turn?.startedAt ?? null, running);
+
   if (!turn) return null;
 
-  const status = normalizeStatus(turn.status);
   const usage = parseRecord(turn.usageJson);
-  const rows = actionRowsForTurn(turn, usage);
+  const cloudRows = actionRowsForTurn(turn, usage);
+  const rows = mergeActionRows(cloudRows, consoleRowsFromEntries(consoleEntries));
+
+  // Single source of truth for the header label (KTD2): derived from
+  // turn.status, never from "assistant message present". skipped → null.
+  const durationMs = running ? elapsedMs : turnDurationMs(turn);
+  const header = formatTurnHeader(status, running, durationMs);
   const shouldRender =
-    RENDERED_TURN_STATUSES.has(status) ||
-    rows.length > 0 ||
-    Boolean(turn.error);
+    header !== null &&
+    (RENDERED_TURN_STATUSES.has(status) ||
+      rows.length > 0 ||
+      Boolean(turn.error));
   if (!shouldRender) return null;
 
-  // Thinking always defaults closed — opening it on running turns caused
-  // visible content shift as action rows streamed in (the user is reading
-  // the previous answer or composing a follow-up; the page jumping is
-  // disruptive). Failed turns also default closed; the Run failed row is
-  // available on click. Manual user toggle persists across re-renders
-  // because we no longer key the disclosure on status.
+  const elapsedLabel =
+    running && elapsedMs != null ? formatDuration(elapsedMs) : null;
+
+  // Default closed so streaming rows don't shift the page mid-read; failed
+  // turns default open so the error isn't hidden behind a success-looking
+  // collapsed header (R4). Manual toggle persists across re-renders.
   return (
     <ThinkingRow
-      title="Thinking"
+      title={header}
+      running={running}
+      elapsedLabel={elapsedLabel}
+      defaultOpen={shouldDefaultExpand(status)}
       detail={turnSummary(turn, usage)}
-      ariaLabel="Thinking and tool activity"
+      ariaLabel="Turn activity"
     >
-      {rows.map((row) => (
+      {rows.map((row, index) => (
         <ActionRow
-          key={`${turn.id}-${row.title}`}
+          key={`${turn.id}-${index}-${row.title}`}
           title={row.title}
           detail={row.detail}
           kind={row.kind}
@@ -1493,8 +1526,21 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
       {turn.error ? (
         <ActionRow title="Run failed" detail={turn.error} kind="tool" />
       ) : null}
+      {consoleEntries.length > 0 ? (
+        <ConsoleLogToggle entries={consoleEntries} />
+      ) : null}
     </ThinkingRow>
   );
+}
+
+function turnDurationMs(turn: TaskThreadTurn): number | null {
+  if (!turn.startedAt || !turn.finishedAt) return null;
+  const start = Date.parse(turn.startedAt);
+  const finish = Date.parse(turn.finishedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(finish) || finish < start) {
+    return null;
+  }
+  return finish - start;
 }
 
 // Match each USER message to its corresponding turn so multi-turn threads
@@ -1599,51 +1645,6 @@ function hasAssistantAfterLatestUser(messages: TaskThreadMessage[]) {
   return messages
     .slice(latestUserIndex + 1)
     .some((message) => message.role.toUpperCase() === "ASSISTANT");
-}
-
-function isAwaitingAssistantResponse(
-  thread: TaskThread,
-  visibleMessages: TaskThreadMessage[],
-) {
-  const latestUserIndex = findLastIndex(
-    visibleMessages,
-    (message) => message.role.toUpperCase() === "USER",
-  );
-  if (latestUserIndex < 0) return false;
-  if (hasAssistantAfterLatestUser(visibleMessages)) return false;
-  return (thread.turns ?? []).some((turn) =>
-    ["pending", "running"].includes(String(turn.status ?? "").toLowerCase()),
-  );
-}
-
-function isActiveTaskQueueStatus(status: unknown) {
-  const normalized = normalizeTaskQueueStatus(status);
-  return !["completed", "failed", "cancelled", "rejected"].includes(normalized);
-}
-
-function ProcessingShimmer() {
-  return (
-    <article
-      className="text-sm leading-6"
-      aria-label="Processing request"
-      role="status"
-    >
-      <span aria-hidden="true">
-        {SHIMMER_TEXT.split("").map((char, index) => (
-          <span
-            className="tw-shimmer-char"
-            key={`${char}-${index}`}
-            style={{
-              animationDelay: `${index * SHIMMER_CHAR_DURATION_MS}ms`,
-            }}
-          >
-            {char}
-          </span>
-        ))}
-      </span>
-      <span className="sr-only">Processing request</span>
-    </article>
-  );
 }
 
 // 10 lines x leading-5 (20px) of the user bubble's text rhythm.
@@ -2286,7 +2287,7 @@ function FollowUpComposer({
         ) : null}
         <PromptInput
           className={cn(
-            "text-white transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
+            "text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-white/10 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
             hasTaskQueue
               ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
               : "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:shadow-lg",
@@ -2325,7 +2326,7 @@ function FollowUpComposer({
                 title={agentToggleTitle}
                 disabled={disabled || isSending || agentForcedOn}
                 className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-80",
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
                   effectiveAgentEnabled && "text-[#54a9ff]",
                 )}
               >
@@ -2338,16 +2339,6 @@ function FollowUpComposer({
                 onPreferenceChange={setRuntimePreference}
                 tone="dark"
               />
-              <PromptInputButton
-                type="button"
-                variant="ghost"
-                onClick={() => composer.setText(`${composer.text}@`)}
-                aria-label="Mention"
-                title="Mention"
-                className="text-white hover:bg-white/10"
-              >
-                <AtSign className="h-4 w-4" />
-              </PromptInputButton>
               <PromptInputAttachButton />
             </PromptInputTools>
             <div className="flex items-center gap-1">
@@ -2616,13 +2607,44 @@ function statusLabel(status: string) {
   return status.replace(/-/g, " ");
 }
 
+const SHIMMER_CHAR_DURATION_MS = 120;
+
+/**
+ * Per-character shimmer matching the "Loading…" page-load treatment
+ * (`tw-shimmer-char`). Used for the running "Working…" header. No role/live
+ * wrapper of its own — the caller owns the `role="status"` region.
+ */
+function ShimmerText({ text }: { text: string }) {
+  return (
+    <span aria-hidden="true">
+      {text.split("").map((char, index) => (
+        <span
+          className="tw-shimmer-char"
+          key={`${char}-${index}`}
+          style={{ animationDelay: `${index * SHIMMER_CHAR_DURATION_MS}ms` }}
+        >
+          {char}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function ThinkingRow({
   title,
+  running = false,
+  elapsedLabel,
+  defaultOpen = false,
   detail,
   ariaLabel,
   children,
 }: {
   title: string;
+  /** Render the header in shimmer style and announce it via a live region. */
+  running?: boolean;
+  /** Live elapsed-time string shown next to a running header (aria-hidden). */
+  elapsedLabel?: string | null;
+  defaultOpen?: boolean;
   detail?: string;
   ariaLabel?: string;
   children?: ReactNode;
@@ -2631,22 +2653,46 @@ function ThinkingRow({
   // arrays (truthy in plain JS) and falsy nodes correctly; a bare children.some
   // would render an empty container when rows=[] because Boolean([]) is true.
   const hasChildren = Children.toArray(children).some(Boolean);
-  // Always defaults closed — preventing the content-shift the user
-  // explicitly called out (action rows streaming in pushed the rest of the
-  // page mid-read). Use the AI Elements Reasoning primitive so the turn-level
-  // activity panel follows the same substrate as typed reasoning parts.
+  // Codex-style consolidated header (no brain icon, no "Thinking" label):
+  // "Working…" shimmer while running, "Worked for Xm Ys" collapsed when done.
+  // Built on the AI Elements Reasoning primitive so it shares the same
+  // collapsible substrate as typed reasoning parts.
   return (
     <Reasoning
-      defaultOpen={false}
+      defaultOpen={defaultOpen}
       className="mb-0 w-fit text-muted-foreground"
       aria-label={ariaLabel}
     >
       <ReasoningTrigger
-        className="gap-3 text-base [&>svg:first-child]:text-sky-400"
-        getThinkingMessage={() => title}
+        className="gap-2 text-sm"
+        icon={null}
+        getThinkingMessage={() => (
+          <span
+            className="flex items-center gap-2"
+            role="status"
+            aria-live="polite"
+          >
+            {running ? (
+              <>
+                <ShimmerText text={title} />
+                <span className="sr-only">{title}</span>
+              </>
+            ) : (
+              <span>{title}</span>
+            )}
+            {running && elapsedLabel ? (
+              <span
+                aria-hidden="true"
+                className="font-mono text-sm text-muted-foreground/60"
+              >
+                {elapsedLabel}
+              </span>
+            ) : null}
+          </span>
+        )}
       />
       {detail || hasChildren ? (
-        <ReasoningContent className="ml-7 mt-2 max-w-none text-sm leading-6 text-muted-foreground">
+        <ReasoningContent className="ml-6 mt-2 max-w-none text-sm leading-6 text-muted-foreground">
           {detail ? <p className="max-w-xl">{detail}</p> : null}
           {hasChildren ? (
             <div className="mt-3 grid gap-2">{children}</div>
@@ -2657,12 +2703,18 @@ function ThinkingRow({
   );
 }
 
-function LocalPiConsole({
+/**
+ * Quiet "view console log" affordance for the raw local-Pi sidecar lines,
+ * rendered inside the expanded turn surface and only when console data exists
+ * (R5). Collapsed by default and intentionally un-boxed — the human-readable
+ * step rows above are the primary view; this is the verbatim debug log.
+ */
+function ConsoleLogToggle({
   entries,
 }: {
   entries: DesktopLocalPiConsoleEntry[];
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const outputRef = useRef<HTMLPreElement | null>(null);
 
   useEffect(() => {
@@ -2674,29 +2726,20 @@ function LocalPiConsole({
 
   if (entries.length === 0) return null;
 
-  const latest = entries.at(-1);
-  const summary = `${entries.length} event${entries.length === 1 ? "" : "s"}`;
-
   return (
-    <section
-      className="w-full max-w-2xl rounded-lg border border-white/10 bg-muted/20 px-4 py-3 text-muted-foreground"
-      aria-label="Local Pi console"
-    >
+    <div className="w-full text-muted-foreground">
       <button
         type="button"
-        className="flex w-full items-center gap-3 text-left text-sm transition-colors hover:text-foreground"
+        className="flex w-fit cursor-pointer items-center gap-2 text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <SquareTerminal className="size-4 shrink-0" />
-        <span className="font-medium">Local Pi console</span>
-        <span className="min-w-0 flex-1 truncate text-muted-foreground/70">
-          {latest ? `${summary} · ${latest.message}` : summary}
-        </span>
-        <ChevronDown
+        <SquareTerminal className="size-3.5 shrink-0" />
+        view console log
+        <ChevronRight
           className={cn(
-            "size-4 shrink-0 transition-transform",
-            !open && "-rotate-90",
+            "size-3.5 transition-transform",
+            open && "rotate-90",
           )}
         />
       </button>
@@ -2706,13 +2749,83 @@ function LocalPiConsole({
           role="log"
           aria-label="Local Pi console output"
           aria-live="polite"
-          className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground/80"
+          className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground/80"
         >
           {entries.map((entry) => formatLocalPiConsoleEntry(entry)).join("\n")}
         </pre>
       ) : null}
-    </section>
+    </div>
   );
+}
+
+/** Build chronological, human-readable step rows from local-Pi console events. */
+function consoleRowsFromEntries(
+  entries: DesktopLocalPiConsoleEntry[],
+): ActionRowData[] {
+  return [...entries]
+    .sort(
+      (a, b) => parseEventTimestamp(a.emittedAt) - parseEventTimestamp(b.emittedAt),
+    )
+    .map((entry) => ({
+      title: truncateRowTitle(entry.message),
+      detail: formatLocalPiConsoleEntry(entry),
+      kind: "thinking" as const,
+    }));
+}
+
+/** Concatenate cloud tool rows with console-derived rows, de-duplicated. */
+function mergeActionRows(
+  cloudRows: ActionRowData[],
+  consoleRows: ActionRowData[],
+): ActionRowData[] {
+  const seen = new Set<string>();
+  const merged: ActionRowData[] = [];
+  for (const row of [...cloudRows, ...consoleRows]) {
+    const key = `${row.title} ${row.detail ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(row);
+  }
+  return merged;
+}
+
+function truncateRowTitle(message: string): string {
+  const trimmed = message.trim();
+  return trimmed.length > 100 ? `${trimmed.slice(0, 99)}…` : trimmed;
+}
+
+/**
+ * Group local-Pi console entries by their originating turn. Entries without a
+ * `threadTurnId` (main-process diagnostics) attach to the latest turn so they
+ * stay discoverable now that the standalone console box is gone.
+ */
+function groupConsoleEntriesByTurn(
+  entries: DesktopLocalPiConsoleEntry[],
+  turns: TaskThreadTurn[],
+): Map<string, DesktopLocalPiConsoleEntry[]> {
+  const grouped = new Map<string, DesktopLocalPiConsoleEntry[]>();
+  if (entries.length === 0) return grouped;
+
+  const turnIds = new Set(turns.map((turn) => turn.id));
+  const latestTurnId = [...turns]
+    .sort(
+      (a, b) =>
+        parseEventTimestamp(a.startedAt ?? null) -
+        parseEventTimestamp(b.startedAt ?? null),
+    )
+    .at(-1)?.id;
+
+  for (const entry of entries) {
+    const targetId =
+      entry.threadTurnId && turnIds.has(entry.threadTurnId)
+        ? entry.threadTurnId
+        : latestTurnId;
+    if (!targetId) continue;
+    const bucket = grouped.get(targetId) ?? [];
+    bucket.push(entry);
+    grouped.set(targetId, bucket);
+  }
+  return grouped;
 }
 
 function formatLocalPiConsoleEntry(entry: DesktopLocalPiConsoleEntry): string {
@@ -2752,7 +2865,7 @@ function ActionRow({
           : Bot;
   return (
     <details className="group/action w-fit text-muted-foreground">
-      <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
+      <summary className="flex cursor-pointer list-none items-center gap-3 text-sm transition-colors hover:text-foreground">
         <Icon className="size-4" />
         {title}
         <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
@@ -3016,15 +3129,17 @@ function questionCardAnswerContent(
   return lines.join("\n");
 }
 
+interface ActionRowData {
+  title: string;
+  detail?: string;
+  kind: "thinking" | "tool" | "source" | "code";
+}
+
 function actionRowsForTurn(
   turn: TaskThreadTurn,
   usage: Record<string, unknown>,
-) {
-  const rows: Array<{
-    title: string;
-    detail?: string;
-    kind: "thinking" | "tool" | "source" | "code";
-  }> = [];
+): ActionRowData[] {
+  const rows: ActionRowData[] = [];
 
   const toolsCalled = parseArray(usage.tools_called)
     .map((tool) => (typeof tool === "string" ? tool : null))

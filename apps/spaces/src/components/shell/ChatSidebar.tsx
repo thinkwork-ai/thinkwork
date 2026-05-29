@@ -1519,7 +1519,7 @@ function ChatThreadRow({
                 )}
               />
               <span
-                className="min-w-0 flex-1 truncate text-sm"
+                className="min-w-0 flex-1 truncate text-sm font-normal"
                 data-thread-title-rename
               >
                 {title}

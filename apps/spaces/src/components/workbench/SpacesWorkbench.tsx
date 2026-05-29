@@ -13,7 +13,6 @@ import {
   type SpacesComposerMention,
 } from "@/components/workbench/SpacesComposer";
 import type { AgentRuntimePreference } from "@/components/workbench/AgentRuntimeIndicator";
-import { StarterCardGrid } from "@/components/workbench/StarterCardGrid";
 import type { SpaceSummary } from "@/components/spaces/space-types";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { useTenant } from "@/context/TenantContext";
@@ -385,9 +384,9 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
 
   return (
     <section className="flex min-h-full w-full flex-1 bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-5 px-4 py-8 sm:px-6">
+      <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-4 px-4 pb-[12vh] pt-8 sm:px-6">
         <header className="text-center">
-          <h1 className="text-balance text-3xl font-normal leading-tight tracking-normal sm:text-4xl">
+          <h1 className="text-balance text-2xl font-normal leading-tight tracking-normal sm:text-3xl">
             {selectedComputer?.name || "ThinkWork"}
           </h1>
         </header>
@@ -432,10 +431,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           isSubmitting={fetching || busy || computersFetching || spacesFetching}
           error={error}
         />
-
-        <div className="mt-6">
-          <StarterCardGrid onSelect={setPrompt} />
-        </div>
       </div>
     </section>
   );
