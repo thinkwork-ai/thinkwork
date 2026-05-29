@@ -9,7 +9,8 @@
     "build:iframe-shell": "vite build --config vite.iframe-shell.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "codegen": "graphql-codegen --config codegen.ts"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
@@ -71,6 +72,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@graphql-codegen/cli": "^5.0.6",
+    "@graphql-codegen/client-preset": "^4.8.2",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.0.7",
     "@testing-library/react": "^16.1.0",

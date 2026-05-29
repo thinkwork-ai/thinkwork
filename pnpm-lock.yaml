@@ -772,6 +772,12 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      '@graphql-codegen/cli':
+        specifier: ^5.0.6
+        version: 5.0.7(@types/node@25.6.0)(crossws@0.3.5)(graphql@16.13.2)(typescript@5.9.3)
+      '@graphql-codegen/client-preset':
+        specifier: ^4.8.2
+        version: 4.8.3(graphql@16.13.2)
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.19(tailwindcss@4.2.2)

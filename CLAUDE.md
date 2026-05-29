@@ -63,7 +63,7 @@ pnpm db:migrate-manual                              # drift reporter for hand-ro
 
 Some `drizzle/*.sql` files are **hand-rolled** (partial indices, CHECK constraints, precise FK ordering) and not registered in `meta/_journal.json`. They're outside `db:push`'s scope — apply via `psql "$DATABASE_URL" -f <file>`. `pnpm db:migrate-manual` reports which of their declared objects are present in the target DB; every such file must declare `-- creates: public.X` (or `-- creates-column: public.T.C`) markers in its header so the reporter can check. The `deploy.yml` workflow runs the reporter as a gate after `terraform-apply` — missing objects fail the deploy so unapplied migrations can't ship silently. Background: `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`.
 
-After editing GraphQL types, **regenerate codegen** in every consumer that has a `codegen` script: `apps/cli`, `apps/admin`, `apps/mobile`, `packages/api`. Run `pnpm --filter @thinkwork/<name> codegen`.
+After editing GraphQL types, **regenerate codegen** in every consumer that has a `codegen` script: `apps/cli`, `apps/admin`, `apps/mobile`, `apps/spaces`, `packages/api`. Run `pnpm --filter @thinkwork/<name> codegen`.
 
 ### Lambda build
 
