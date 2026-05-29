@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { getSettingsReturnTo } from "@/lib/settings-return";
 
 interface SettingsNavItem {
@@ -40,6 +41,7 @@ export function SettingsSidebar() {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isDesktop = isDesktopBuild();
 
   // Hide operator items until the role is known, to avoid a flash of operator
   // content for members.
@@ -49,6 +51,28 @@ export function SettingsSidebar() {
 
   return (
     <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-4">
+      {/* Web carries the brand header from the chat shell; desktop relies on
+          its own window chrome. */}
+      {isDesktop ? null : (
+        <Link
+          to="/"
+          className="mb-3 flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        >
+          <img
+            src="/logo.png"
+            alt="ThinkWork"
+            className="h-9 w-9 shrink-0 object-contain"
+          />
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-base font-semibold leading-none tracking-tight">
+              ThinkWork
+            </span>
+            <span className="truncate text-xs text-sidebar-foreground/55">
+              Spaces
+            </span>
+          </div>
+        </Link>
+      )}
       <button
         type="button"
         className={cn(itemClassName, "mb-3 text-sidebar-foreground/65")}
