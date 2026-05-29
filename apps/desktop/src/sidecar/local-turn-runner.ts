@@ -358,13 +358,35 @@ async function createSdkSession(
     logger,
     deps.fetchImpl ?? fetch,
   );
+  const contextEngineTools = createContextEngineTools(
+    sdk,
+    invocation,
+    logger,
+    deps.fetchImpl ?? fetch,
+  );
+  const sendEmailTools = createSendEmailTools(
+    sdk,
+    invocation,
+    logger,
+    deps.fetchImpl ?? fetch,
+  );
   const tools = [
     ...READ_ONLY_WORKSPACE_TOOLS,
     ...(webSearchTools.length > 0 ? ["web_search"] : []),
     ...(browserTools.length > 0 ? ["browser_automation"] : []),
+    ...(contextEngineTools.length > 0
+      ? ["query_context", "query_memory_context", "query_wiki_context"]
+      : []),
+    ...(sendEmailTools.length > 0 ? ["send_email"] : []),
     ...(delegationTools.length > 0 ? ["delegate_to_managed_agent"] : []),
   ];
-  const customTools = [...webSearchTools, ...browserTools, ...delegationTools];
+  const customTools = [
+    ...webSearchTools,
+    ...browserTools,
+    ...contextEngineTools,
+    ...sendEmailTools,
+    ...delegationTools,
+  ];
 
   logger.info("local Pi SDK session creating", {
     tools,
@@ -632,6 +654,240 @@ function createWebSearchTools(
             },
           ],
           results,
+        };
+      },
+    }),
+  ];
+}
+
+function createContextEngineTools(
+  sdk: PiSdkModuleLike,
+  invocation: DesktopPiRuntimeInvocation,
+  logger: RedactedLogger,
+  fetchImpl: typeof fetch,
+): unknown[] {
+  if (typeof sdk.defineTool !== "function") return [];
+  if (invocation.context_engine_enabled !== true) return [];
+  const apiUrl = stringValue(invocation.thinkwork_api_url)?.replace(/\/+$/, "");
+  const token = invocation.finalize_callback_secret;
+  const threadTurnId = invocation.thread_turn_id;
+  if (!apiUrl || !token || !threadTurnId) return [];
+
+  const config = readRecord(invocation.context_engine_config) ?? {};
+  const providerDefaults = readRecord(config.providers) ?? {};
+  const providerOptions = readRecord(config.providerOptions) ?? {};
+
+  async function jsonRpc(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<string> {
+    try {
+      const response = await fetchImpl(`${apiUrl}/mcp/context-engine`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+          "x-thread-turn-id": threadTurnId,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "local-pi-context-engine",
+          method: "tools/call",
+          params: { name, arguments: args },
+        }),
+      });
+      if (!response.ok) {
+        return `Context Engine failed: HTTP ${response.status}`;
+      }
+      const payload = (await response.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      const error = readRecord(payload.error);
+      if (error) {
+        return `Context Engine failed: ${stringValue(error.message) ?? "unknown error"}`;
+      }
+      const result = readRecord(payload.result) ?? {};
+      const content = Array.isArray(result.content) ? result.content : [];
+      const text = content
+        .map((item) => stringValue(readRecord(item)?.text))
+        .filter((value): value is string => Boolean(value))
+        .join("\n")
+        .trim();
+      return text || JSON.stringify(result.structuredContent ?? result);
+    } catch (err) {
+      return `Context Engine failed: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+
+  const sharedParams = {
+    query: Type.String({ description: "The search query." }),
+    mode: Type.Optional(Type.String({ description: '"results" or "answer".' })),
+    scope: Type.Optional(
+      Type.String({ description: '"personal", "team", or "auto".' }),
+    ),
+    depth: Type.Optional(Type.String({ description: '"quick" or "deep".' })),
+    limit: Type.Optional(Type.Number({ description: "Max results, 1-50." })),
+  };
+  const norm = (params: Record<string, unknown>) => ({
+    query: typeof params.query === "string" ? params.query.trim() : "",
+    mode: params.mode === "answer" ? "answer" : "results",
+    scope:
+      params.scope === "personal" || params.scope === "team"
+        ? params.scope
+        : "auto",
+    depth: params.depth === "deep" ? "deep" : "quick",
+    limit: Math.max(1, Math.min(Math.trunc(Number(params.limit) || 10), 50)),
+  });
+  const wrap = (text: string) => ({ content: [{ type: "text", text }] });
+
+  return [
+    sdk.defineTool({
+      name: "query_context",
+      label: "Company Brain",
+      description:
+        "Search the Thinkwork Context Engine (Company Brain) across wiki, workspace files, knowledge bases, and memory. Use this first for ordinary context lookup.",
+      parameters: Type.Object(sharedParams),
+      execute: async (_id: string, params: Record<string, unknown>) => {
+        const n = norm(params);
+        if (!n.query)
+          throw new Error("query_context requires a non-empty query");
+        logger.info("local Pi context engine query", { tool: "query_context" });
+        return wrap(
+          await jsonRpc("query_context", {
+            ...n,
+            ...(Object.keys(providerDefaults).length > 0
+              ? { providers: providerDefaults }
+              : {}),
+            ...(Object.keys(providerOptions).length > 0
+              ? { providerOptions }
+              : {}),
+          }),
+        );
+      },
+    }),
+    sdk.defineTool({
+      name: "query_memory_context",
+      label: "Memory Search",
+      description:
+        "Search only Thinkwork Hindsight Memory. Use when raw long-term memory recall is specifically requested.",
+      parameters: Type.Object(sharedParams),
+      execute: async (_id: string, params: Record<string, unknown>) => {
+        const n = norm(params);
+        if (!n.query)
+          throw new Error("query_memory_context requires a non-empty query");
+        logger.info("local Pi context engine query", {
+          tool: "query_memory_context",
+        });
+        return wrap(
+          await jsonRpc("query_memory_context", {
+            ...n,
+            ...(Object.keys(providerOptions).length > 0
+              ? { providerOptions }
+              : {}),
+          }),
+        );
+      },
+    }),
+    sdk.defineTool({
+      name: "query_wiki_context",
+      label: "Wiki Search",
+      description:
+        "Search only Thinkwork Compounding Wiki pages (entities, topics, decisions).",
+      parameters: Type.Object(sharedParams),
+      execute: async (_id: string, params: Record<string, unknown>) => {
+        const n = norm(params);
+        if (!n.query)
+          throw new Error("query_wiki_context requires a non-empty query");
+        logger.info("local Pi context engine query", {
+          tool: "query_wiki_context",
+        });
+        return wrap(await jsonRpc("query_wiki_context", n));
+      },
+    }),
+  ];
+}
+
+function createSendEmailTools(
+  sdk: PiSdkModuleLike,
+  invocation: DesktopPiRuntimeInvocation,
+  logger: RedactedLogger,
+  fetchImpl: typeof fetch,
+): unknown[] {
+  if (typeof sdk.defineTool !== "function") return [];
+  const config = readRecord(invocation.send_email_config);
+  if (!config) return [];
+  const apiUrl = (
+    stringValue(invocation.thinkwork_api_url) ?? stringValue(config.apiUrl)
+  )?.replace(/\/+$/, "");
+  const agentId = stringValue(config.agentId);
+  const token = invocation.finalize_callback_secret;
+  const threadTurnId = invocation.thread_turn_id;
+  const turnContext = readRecord(invocation.turn_context) ?? {};
+  const spaceTenantSlug =
+    stringValue(turnContext.spaceTenantSlug) ??
+    stringValue(turnContext.tenantSlug);
+  const spaceSlug = stringValue(turnContext.spaceSlug);
+  const threadId = stringValue(config.threadId);
+  if (!apiUrl || !agentId || !token || !threadTurnId) return [];
+
+  return [
+    sdk.defineTool({
+      name: "send_email",
+      label: "Send Email",
+      description:
+        'Send a plain text email from the active Space email address. Use recipient "me" for the signed-in user.',
+      parameters: Type.Object({
+        to: Type.String({
+          description:
+            'Recipient email, "me" for the signed-in user, or comma-separated recipients.',
+        }),
+        subject: Type.String({ description: "Email subject line." }),
+        body: Type.String({ description: "Plain text email body." }),
+      }),
+      execute: async (_id: string, params: Record<string, unknown>) => {
+        const to = stringValue(params.to);
+        const subject = stringValue(params.subject);
+        const body = stringValue(params.body);
+        if (!to) throw new Error("send_email requires a recipient");
+        if (!subject) throw new Error("send_email requires a subject");
+        if (!body) throw new Error("send_email requires a body");
+        if (!spaceTenantSlug || !spaceSlug) {
+          throw new Error(
+            "send_email requires active Space email context for this turn",
+          );
+        }
+        logger.info("local Pi send email requested", { agentId });
+        const response = await fetchImpl(`${apiUrl}/api/email/send`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${token}`,
+            "x-thread-turn-id": threadTurnId,
+          },
+          body: JSON.stringify({
+            agentId,
+            to,
+            subject,
+            body,
+            spaceTenantSlug,
+            spaceSlug,
+            ...(threadId ? { threadId } : {}),
+          }),
+        });
+        if (!response.ok) {
+          const detail = await response.text().catch(() => "");
+          throw new Error(
+            `Email send failed: HTTP ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
+          );
+        }
+        const result = (await response.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >;
+        return {
+          content: [{ type: "text", text: `Email sent to ${to}.` }],
+          details: result,
         };
       },
     }),
