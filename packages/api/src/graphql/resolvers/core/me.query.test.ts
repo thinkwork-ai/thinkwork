@@ -49,11 +49,10 @@ describe("me query", () => {
     mockResolveCallerUserId.mockResolvedValue("user-9");
     selectQueue.push([{ id: "user-9", email: "eric@example.com" }]);
 
-    const result = await me(
-      {},
-      {},
-      { auth: { authType: "cognito", principalId: "sub-G", email: null }, headers: {} } as any,
-    );
+    const result = await me({}, {}, {
+      auth: { authType: "cognito", principalId: "sub-G", email: null },
+      headers: {},
+    } as any);
 
     expect(mockResolveCallerUserId).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ id: "user-9", __camel: true });
@@ -62,11 +61,10 @@ describe("me query", () => {
   it("returns null for a cognito caller the resolver cannot resolve", async () => {
     mockResolveCallerUserId.mockResolvedValue(null);
 
-    const result = await me(
-      {},
-      {},
-      { auth: { authType: "cognito", principalId: "sub-G", email: null }, headers: {} } as any,
-    );
+    const result = await me({}, {}, {
+      auth: { authType: "cognito", principalId: "sub-G", email: null },
+      headers: {},
+    } as any);
 
     expect(result).toBeNull();
   });
@@ -74,14 +72,10 @@ describe("me query", () => {
   it("uses the x-principal-id header path for non-cognito callers (no resolver call)", async () => {
     selectQueue.push([{ id: "imp-user", email: "ops@example.com" }]);
 
-    const result = await me(
-      {},
-      {},
-      {
-        auth: { authType: "apikey", principalId: null },
-        headers: { "x-principal-id": "imp-user" },
-      } as any,
-    );
+    const result = await me({}, {}, {
+      auth: { authType: "apikey", principalId: null },
+      headers: { "x-principal-id": "imp-user" },
+    } as any);
 
     expect(mockResolveCallerUserId).not.toHaveBeenCalled();
     expect(result).toMatchObject({ id: "imp-user" });

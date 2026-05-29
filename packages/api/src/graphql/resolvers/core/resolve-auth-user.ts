@@ -54,7 +54,11 @@ export async function resolveCallerFromAuth(
 
   // 2. By id == sub — native users (users.id was minted from the sub).
   const [byId] = await db
-    .select({ id: users.id, tenant_id: users.tenant_id, cognito_sub: users.cognito_sub })
+    .select({
+      id: users.id,
+      tenant_id: users.tenant_id,
+      cognito_sub: users.cognito_sub,
+    })
     .from(users)
     .where(eq(users.id, principalId));
   if (byId) {
@@ -68,7 +72,11 @@ export async function resolveCallerFromAuth(
   const email = auth.email;
   if (!email) return { userId: null, tenantId: null };
   const [byEmail] = await db
-    .select({ id: users.id, tenant_id: users.tenant_id, cognito_sub: users.cognito_sub })
+    .select({
+      id: users.id,
+      tenant_id: users.tenant_id,
+      cognito_sub: users.cognito_sub,
+    })
     .from(users)
     .where(eq(users.email, email));
   if (!byEmail) return { userId: null, tenantId: null };
