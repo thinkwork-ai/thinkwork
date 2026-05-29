@@ -451,6 +451,7 @@ describe("mcp-user-memory handler", () => {
       authType: "cognito",
       principalId: "google-cognito-sub",
       email: "eric@example.com",
+      emailVerified: false,
       tenantId: null,
       agentId: null,
     });

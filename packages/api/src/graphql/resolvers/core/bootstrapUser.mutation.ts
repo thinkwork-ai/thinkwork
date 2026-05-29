@@ -86,6 +86,10 @@ export const bootstrapUser = async (
         tenant_id: pendingTenant.id,
         email,
         name,
+        // Stable identity link captured at creation, where email (and thus
+        // the Cognito sub) is guaranteed present — so the user resolves by
+        // sub forever, independent of whether later tokens carry email.
+        cognito_sub: cognitoSub,
       })
       .returning();
 
@@ -163,6 +167,8 @@ export const bootstrapUser = async (
       tenant_id: tenant.id,
       email,
       name,
+      // Stable identity link captured at creation (see paid-path note above).
+      cognito_sub: cognitoSub,
     })
     .returning();
 
