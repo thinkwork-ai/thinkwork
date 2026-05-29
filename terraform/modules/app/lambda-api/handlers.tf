@@ -241,6 +241,12 @@ resource "aws_lambda_function" "handler" {
   for_each = local.deploy_lambda_handlers ? toset([
     "graphql-http",
     "chat-agent-invoke",
+    # Mobile agent harness: cloud Bedrock Converse proxy + completed-turn
+    # persistence. Routes for these live in local.api_routes; the function
+    # names must also be listed here (this set is the for_each source for
+    # aws_lambda_function.handler, NOT derived from api_routes).
+    "model-converse",
+    "record-turn",
     # Desktop-local Pi sidecar setup endpoint. Cognito-authenticated
     # Electron shell callers receive a prepared invocation envelope and a
     # per-turn finalizer token, not the backend service secret.
