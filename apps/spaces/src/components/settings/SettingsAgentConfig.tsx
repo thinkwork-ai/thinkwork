@@ -42,7 +42,6 @@ export function SettingsAgentConfig() {
 
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
   const [model, setModel] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [filesOpen, setFilesOpen] = useState(false);
 
@@ -80,22 +79,16 @@ export function SettingsAgentConfig() {
 
   const catalog = catalogResult.data?.modelCatalog ?? [];
   const catalogFailed = !!catalogResult.error;
-  const dirty =
-    runtime !== agent?.runtime || (model ?? null) !== (agent?.model ?? null);
 
-  async function onSave() {
-    if (!tenantId || !runtime) return;
-    setSaved(false);
+  // Auto-save: any runtime/model change persists immediately (partial input).
+  async function persist(input: {
+    runtime?: AgentRuntime;
+    model?: string | null;
+  }) {
+    if (!tenantId) return;
     setErrorMsg(null);
-    const result = await save({
-      tenantId,
-      input: { runtime, model },
-    });
-    if (result.error) {
-      setErrorMsg(result.error.message);
-      return;
-    }
-    setSaved(true);
+    const result = await save({ tenantId, input });
+    if (result.error) setErrorMsg(result.error.message);
   }
 
   if (filesOpen && agent) {
@@ -126,12 +119,25 @@ export function SettingsAgentConfig() {
         title="Agent"
         description="Runtime and default model for this tenant’s agent."
       />
-      <SettingsSection label="Configuration">
+      <SettingsSection
+        label="Configuration"
+        action={
+          saveState.fetching ? (
+            <span className="text-sm text-muted-foreground">Saving…</span>
+          ) : errorMsg ? (
+            <span className="text-sm text-destructive">{errorMsg}</span>
+          ) : undefined
+        }
+      >
         <div className="space-y-5 p-5">
           <Field label="Runtime">
             <Select
               value={runtime ?? undefined}
-              onValueChange={(v) => setRuntime(v as AgentRuntime)}
+              onValueChange={(v) => {
+                const next = v as AgentRuntime;
+                setRuntime(next);
+                void persist({ runtime: next });
+              }}
             >
               <SelectTrigger className="w-60">
                 <SelectValue placeholder="Select runtime" />
@@ -157,7 +163,10 @@ export function SettingsAgentConfig() {
             ) : (
               <Select
                 value={model ?? undefined}
-                onValueChange={(v) => setModel(v)}
+                onValueChange={(v) => {
+                  setModel(v);
+                  void persist({ model: v });
+                }}
                 disabled={catalogResult.fetching}
               >
                 <SelectTrigger className="w-60">
@@ -175,18 +184,6 @@ export function SettingsAgentConfig() {
           </Field>
         </div>
       </SettingsSection>
-
-      <div className="mb-8 flex items-center gap-3">
-        <Button onClick={onSave} disabled={!dirty || saveState.fetching}>
-          {saveState.fetching ? "Saving…" : "Save"}
-        </Button>
-        {saved && !dirty ? (
-          <span className="text-sm text-muted-foreground">Saved</span>
-        ) : null}
-        {errorMsg ? (
-          <span className="text-sm text-destructive">{errorMsg}</span>
-        ) : null}
-      </div>
 
       <SettingsSection label="Workspace">
         <div className="flex items-center justify-between gap-4 p-4">
