@@ -291,7 +291,7 @@ async function defaultOpenSession(
   const sessionManager =
     durable?.sessionManager ?? SessionManager.inMemory(inputs.cwd);
 
-  const { session } = await createAgentSession({
+  const { session, extensionsResult } = await createAgentSession({
     cwd: inputs.cwd,
     tools: inputs.toolAllowlist,
     customTools: inputs.customTools,
@@ -301,6 +301,19 @@ async function defaultOpenSession(
     modelRegistry,
     ...(model ? { model } : {}),
   });
+
+  // Surface extension load failures loudly. The SDK collects factory/register
+  // errors into `extensionsResult.errors` and does NOT throw — without this an
+  // extension that fails to register (e.g. a missing provider) would silently
+  // drop its tools/hooks while the host's pre-load log still reads "loaded". U5.
+  for (const failure of extensionsResult?.errors ?? []) {
+    inputs.log?.({
+      level: "error",
+      event: "extension_load_failed",
+      extensionPath: failure.path,
+      error: failure.error,
+    });
+  }
 
   return {
     session,

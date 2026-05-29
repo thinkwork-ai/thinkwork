@@ -473,6 +473,17 @@ export async function assembleTools(
     // The turn's user message grounds the proactive session_start recall.
     const memoryExtension = createMemoryExtension({
       groundingQuery: asString(args.payload.message),
+      // Grounding is best-effort — surface a failed/timed-out recall to
+      // CloudWatch instead of letting it vanish silently.
+      onError: (error, { phase }) =>
+        logStructured({
+          level: "warn",
+          event: "memory_grounding_failed",
+          phase,
+          tenantId: args.identity.tenantId,
+          threadId: args.identity.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
     });
     extensionFactories.push(
       toExtensionFactory(memoryExtension, { memory: memoryProvider }),

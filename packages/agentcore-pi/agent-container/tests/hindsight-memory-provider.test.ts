@@ -31,6 +31,15 @@ describe("createHindsightMemoryProvider", () => {
     ).toThrow(/userId/);
   });
 
+  it("rejects a non-https endpoint at construction", () => {
+    expect(() =>
+      createHindsightMemoryProvider({
+        ...baseOptions,
+        endpoint: "http://hindsight.dev.example.com",
+      }),
+    ).toThrow(/https/);
+  });
+
   it("recall posts to the user's bank and normalizes memory units", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -136,5 +145,86 @@ describe("createHindsightMemoryProvider", () => {
       HindsightMemoryProviderError,
     );
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a 5xx and succeeds on a later attempt", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("boom", { status: 503 }))
+        .mockResolvedValueOnce(
+          jsonResponse({ memory_units: [{ text: "ok" }] }),
+        );
+      const provider = createHindsightMemoryProvider({
+        ...baseOptions,
+        fetchImpl,
+      });
+      const promise = provider.recall({ query: "x" });
+      // Advance through the first backoff (1s + jitter) so the retry fires.
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await promise;
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(result.memories).toEqual([{ id: "unit-0", content: "ok" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries transport errors and throws after exhausting attempts", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
+      const provider = createHindsightMemoryProvider({
+        ...baseOptions,
+        fetchImpl,
+      });
+      const promise = provider.recall({ query: "x" });
+      const assertion = expect(promise).rejects.toThrow(
+        HindsightMemoryProviderError,
+      );
+      // Advance past all backoffs (1s + 3s + 9s).
+      await vi.advanceTimersByTimeAsync(15_000);
+      await assertion;
+      expect(fetchImpl).toHaveBeenCalledTimes(4); // initial + 3 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not call fetch when the caller signal is already aborted", async () => {
+    const fetchImpl = vi.fn();
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+    await expect(
+      provider.recall({ query: "x" }, AbortSignal.abort()),
+    ).rejects.toThrow(/aborted/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("normalizes the `memories` response key (not just memory_units)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ memories: [{ text: "a" }] }));
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+    const result = await provider.recall({ query: "x" });
+    expect(result.memories).toEqual([{ id: "unit-0", content: "a" }]);
+  });
+
+  it("extracts reflect text from the `response` key (not just text)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ response: "synth from response key" }));
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+    const result = await provider.reflect({ query: "x" });
+    expect(result.text).toBe("synth from response key");
   });
 });

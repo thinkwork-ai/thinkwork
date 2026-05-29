@@ -80,15 +80,26 @@ export interface MemoryProvider {
   /**
    * Recall prior memories relevant to the request. Callers must follow a recall
    * with a {@link MemoryProvider.reflect} in the same turn (see the chain
-   * contract in the module doc).
+   * contract in the module doc). The optional `signal` lets the caller cancel an
+   * in-flight call — the agent-facing tools pass the turn's abort signal so a
+   * user abort / host timeout tears down the underlying request instead of
+   * orphaning it; the proactive grounding recall passes a short deadline so a
+   * degraded backing store cannot stall turn startup.
    */
-  recall(request: MemoryRecallRequest): Promise<MemoryRecallResult>;
+  recall(
+    request: MemoryRecallRequest,
+    signal?: AbortSignal,
+  ): Promise<MemoryRecallResult>;
 
   /**
    * Reflect — synthesize the memory units {@link MemoryProvider.recall}
    * surfaced into a coherent answer. The required follow-up to recall; returns
    * the synthesized text, not a write confirmation (persistence is the host's
-   * end-of-turn retain path, see the module doc).
+   * end-of-turn retain path, see the module doc). The optional `signal`
+   * cancels an in-flight call (see {@link MemoryProvider.recall}).
    */
-  reflect(request: MemoryReflectRequest): Promise<MemoryReflectResult>;
+  reflect(
+    request: MemoryReflectRequest,
+    signal?: AbortSignal,
+  ): Promise<MemoryReflectResult>;
 }

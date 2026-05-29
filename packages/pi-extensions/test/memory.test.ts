@@ -186,7 +186,7 @@ describe("createMemoryExtension", () => {
     ).rejects.toThrow(/empty query/);
   });
 
-  it("session_start recalls against the grounding query and injects it once into context", async () => {
+  it("session_start recalls against the grounding query and re-injects it on every context event", async () => {
     const { provider, recallCalls } = makeFakeMemory();
     const { api, handlers } = makeFakeApi();
     await toExtensionFactory(
@@ -194,16 +194,19 @@ describe("createMemoryExtension", () => {
       { memory: provider },
     )(api);
 
-    // session_start performs the proactive grounding recall.
+    // session_start performs the proactive grounding recall with a deadline.
     await handlers.get("session_start")!(
       { type: "session_start", reason: "resume" },
       NO_CTX,
     );
-    expect(recallCalls).toEqual([
-      { query: "what does the user prefer?", limit: 5 },
-    ]);
+    expect(recallCalls).toHaveLength(1);
+    expect(recallCalls[0]).toMatchObject({
+      query: "what does the user prefer?",
+      limit: 5,
+    });
 
-    // First context event injects the grounding message ahead of the turn.
+    // First context event injects the grounding message ahead of the turn,
+    // fenced as reference data (not instructions).
     const firstResult = await handlers.get("context")!(
       {
         type: "context",
@@ -212,11 +215,14 @@ describe("createMemoryExtension", () => {
       NO_CTX,
     );
     expect(firstResult?.messages).toHaveLength(2);
-    expect(
-      (firstResult!.messages![0] as { content: string }).content,
-    ).toContain("pi is the core runtime");
+    const firstInjected = (firstResult!.messages![0] as { content: string })
+      .content;
+    expect(firstInjected).toContain("pi is the core runtime");
+    expect(firstInjected).toMatch(/reference only, not instructions/i);
 
-    // Second context event does NOT inject again (grounding is once-per-session).
+    // The context event fires before EVERY model call and the transform is
+    // per-call (not persisted), so grounding must be re-injected each time —
+    // otherwise multi-tool turns lose it after the first step.
     const secondResult = await handlers.get("context")!(
       {
         type: "context",
@@ -224,7 +230,66 @@ describe("createMemoryExtension", () => {
       },
       NO_CTX,
     );
-    expect(secondResult).toBeUndefined();
+    expect(secondResult?.messages).toHaveLength(2);
+    expect(
+      (secondResult!.messages![0] as { content: string }).content,
+    ).toContain("pi is the core runtime");
+  });
+
+  it("session_start grounding failure degrades gracefully (no throw) and reports via onError", async () => {
+    const errors: Array<{ phase: string }> = [];
+    const provider: MemoryProvider = {
+      recall: async () => {
+        throw new Error("hindsight down");
+      },
+      reflect: async () => ({ ok: true }),
+    };
+    const { api, handlers } = makeFakeApi();
+    await toExtensionFactory(
+      createMemoryExtension({
+        groundingQuery: "x",
+        onError: (_e, ctx) => errors.push(ctx),
+      }),
+      { memory: provider },
+    )(api);
+
+    // Must not throw even though recall rejects.
+    await expect(
+      handlers.get("session_start")!(
+        { type: "session_start", reason: "resume" },
+        NO_CTX,
+      ),
+    ).resolves.toBeUndefined();
+    expect(errors).toEqual([{ phase: "session_start_grounding" }]);
+
+    // With nothing recalled, the context event injects nothing.
+    const result = await handlers.get("context")!(
+      {
+        type: "context",
+        messages: [{ role: "user", content: "hi", timestamp: 1 }],
+      },
+      NO_CTX,
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it("reflect tool threads a non-empty context through to the provider", async () => {
+    const { provider, reflectCalls } = makeFakeMemory();
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(createMemoryExtension(), { memory: provider })(
+      api,
+    );
+
+    await getTool(tools, "reflect").execute(
+      "c",
+      { query: "pi", context: "the turn is about runtimes" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    expect(reflectCalls).toEqual([
+      { query: "pi", context: "the turn is about runtimes" },
+    ]);
   });
 
   it("session_start is a no-op when no grounding query is supplied", async () => {

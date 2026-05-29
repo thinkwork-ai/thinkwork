@@ -127,10 +127,10 @@ function toReflectText(data: unknown): string | undefined {
  * exhausted 5xx retries, or transport errors after retries).
  */
 async function postJson(
-  options: Required<Pick<HindsightMemoryProviderOptions, "endpoint">> &
-    HindsightMemoryProviderOptions,
+  options: HindsightMemoryProviderOptions,
   path: string,
   body: unknown,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -139,19 +139,39 @@ async function postJson(
 
   let lastError: Error | undefined;
   for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    // A caller-initiated abort (turn cancel / grounding deadline) is terminal —
+    // never sleep or retry past it.
+    if (signal?.aborted) {
+      throw new HindsightMemoryProviderError(
+        "Hindsight call aborted by caller.",
+      );
+    }
     if (delays[attempt]! > 0) {
       await sleep(Math.max(0, delays[attempt]! + jitter()));
     }
 
     let response: Response;
     try {
+      // Compose the caller's signal with a per-attempt timeout so the caller's
+      // cancellation still wins, but a hung attempt also aborts after timeoutMs
+      // (deadline is per attempt, not across the retry chain).
+      const attemptSignal = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+        : AbortSignal.timeout(timeoutMs);
       response = await fetchImpl(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: attemptSignal,
       });
     } catch (err) {
+      // Caller-initiated abort is terminal — detect via the caller's signal
+      // directly (AbortSignal.any propagates the abort without attribution).
+      if (signal?.aborted) {
+        throw new HindsightMemoryProviderError(
+          "Hindsight call aborted by caller.",
+        );
+      }
       lastError =
         err instanceof Error
           ? err
@@ -197,6 +217,22 @@ function requireScope(options: HindsightMemoryProviderOptions): void {
       "Hindsight memory provider constructed without an endpoint.",
     );
   }
+  // Cheap defense: the endpoint is operator-set env today (no SSRF surface), but
+  // refuse plaintext so a future change that derives it from tenant/payload
+  // config can't silently send memory over http://.
+  let parsed: URL;
+  try {
+    parsed = new URL(options.endpoint);
+  } catch {
+    throw new HindsightMemoryProviderError(
+      `Hindsight memory provider endpoint is not a valid URL: ${options.endpoint}`,
+    );
+  }
+  if (parsed.protocol !== "https:") {
+    throw new HindsightMemoryProviderError(
+      `Hindsight memory provider endpoint must be https:// (got ${parsed.protocol}).`,
+    );
+  }
   if (!options.tenantId?.trim()) {
     throw new HindsightMemoryProviderError(
       "Hindsight memory provider constructed without a tenantId.",
@@ -219,10 +255,14 @@ export function createHindsightMemoryProvider(
 ): MemoryProvider {
   requireScope(options);
   const bankId = bankFor(options.userId);
-  const resolved = { ...options, endpoint: options.endpoint };
+  // Identity (endpoint/tenantId/userId) is captured in this closure at
+  // construction time — cred-snapshot-at-entry; never re-read from env mid-turn.
 
   return {
-    async recall(request: MemoryRecallRequest): Promise<MemoryRecallResult> {
+    async recall(
+      request: MemoryRecallRequest,
+      signal?: AbortSignal,
+    ): Promise<MemoryRecallResult> {
       const query = request.query?.trim();
       if (!query) {
         throw new HindsightMemoryProviderError(
@@ -230,7 +270,7 @@ export function createHindsightMemoryProvider(
         );
       }
       const data = await postJson(
-        resolved,
+        options,
         `/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`,
         {
           query,
@@ -239,6 +279,7 @@ export function createHindsightMemoryProvider(
           include: { entities: null },
           types: ["world", "experience", "observation"],
         },
+        signal,
       );
       const memories = toMemoryItems(data);
       return {
@@ -250,7 +291,10 @@ export function createHindsightMemoryProvider(
       };
     },
 
-    async reflect(request: MemoryReflectRequest): Promise<MemoryReflectResult> {
+    async reflect(
+      request: MemoryReflectRequest,
+      signal?: AbortSignal,
+    ): Promise<MemoryReflectResult> {
       const query = request.query?.trim();
       if (!query) {
         throw new HindsightMemoryProviderError(
@@ -258,9 +302,10 @@ export function createHindsightMemoryProvider(
         );
       }
       const data = await postJson(
-        resolved,
+        options,
         `/v1/default/banks/${encodeURIComponent(bankId)}/reflect`,
         { query, budget: "mid" },
+        signal,
       );
       return {
         ok: true,
