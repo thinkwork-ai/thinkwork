@@ -29,6 +29,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "UIUserInterfaceStyle": "Dark",
         "NSPhotoLibraryUsageDescription": "Allow ThinkWork to access your photos for attaching images to tickets.",
+        "NSCameraUsageDescription": "Allow ThinkWork to take a photo (e.g. a business card) to send to your agent.",
         "NSMicrophoneUsageDescription": "Allow ThinkWork to use the microphone for voice input.",
         "NSSpeechRecognitionUsageDescription": "Allow ThinkWork to use speech recognition."
       }
@@ -90,6 +91,13 @@
         "expo-notifications",
         {
           "color": "#38bdf8"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ThinkWork to attach photos (e.g. a business card) to your agent.",
+          "cameraPermission": "Allow ThinkWork to take a photo (e.g. a business card) to send to your agent."
         }
       ],
       "expo-font"

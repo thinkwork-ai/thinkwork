@@ -32,6 +32,10 @@ export type { BedrockModelProviderOptions } from "./providers/bedrock";
 export { createMcpTool } from "./tools/mcp-tool";
 export type { McpToolDef, McpCall } from "./tools/mcp-tool";
 
+// Image capture (pure mapper; the native expo launcher lives in tools/image-picker).
+export { pickImage, mimeToImageFormat } from "./capture-image";
+export type { LaunchPicker, PickerResult, PickedAsset } from "./capture-image";
+
 // Turn assembly + session storage.
 export { buildTurnContext } from "./turn-context";
 export type { TurnContext, TurnContextInput } from "./turn-context";
