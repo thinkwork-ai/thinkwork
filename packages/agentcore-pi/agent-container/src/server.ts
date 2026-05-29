@@ -112,6 +112,8 @@ import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
 import { buildSendEmailTool } from "./runtime/tools/send-email.js";
+import { buildWebSearchTool } from "./runtime/tools/web-search.js";
+import { buildContextEngineTools } from "./runtime/tools/context-engine.js";
 import {
   discoverWorkspaceSkills,
   formatWorkspaceSkills,
@@ -370,6 +372,45 @@ export async function assembleTools(
       payload: args.payload,
     });
     if (sendEmailTool) tools.push(sendEmailTool);
+  }
+
+  // Web Search (Exa/SerpApi) — tenant/template-configured, arrives as
+  // `web_search_config`. Ported from the Strands runtime (the Pi runtime had
+  // no web_search, so the model fell back to apologizing it lacked search).
+  if (
+    typeof args.payload.web_search_config === "object" &&
+    args.payload.web_search_config
+  ) {
+    const webSearchTool = buildWebSearchTool({
+      webSearchConfig: args.payload.web_search_config as Record<
+        string,
+        unknown
+      >,
+    });
+    if (webSearchTool) tools.push(webSearchTool);
+  }
+
+  // Company Brain / Context Engine — query_context + query_memory_context +
+  // query_wiki_context over the API's `/mcp/context-engine` JSON-RPC facade.
+  // Gated on `context_engine_enabled`; skipped in eval mode (user-less).
+  if (
+    args.payload.eval_mode !== true &&
+    args.payload.context_engine_enabled === true
+  ) {
+    tools.push(
+      ...buildContextEngineTools({
+        apiUrl: asString(args.payload.thinkwork_api_url),
+        apiSecret: asString(args.payload.thinkwork_api_secret),
+        tenantId: args.identity.tenantId,
+        userId: args.identity.userId,
+        agentId: args.identity.agentId,
+        contextEngineConfig:
+          typeof args.payload.context_engine_config === "object" &&
+          args.payload.context_engine_config
+            ? (args.payload.context_engine_config as Record<string, unknown>)
+            : {},
+      }),
+    );
   }
 
   // Memory (U6) — engine selector lives in env. Eval-mode invocations are
