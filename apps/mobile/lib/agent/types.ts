@@ -114,7 +114,13 @@ export interface Tool {
 export type AgentEvent =
   | { type: "assistant_text"; text: string; step: number }
   | { type: "tool_call"; call: ToolCall; step: number }
-  | { type: "tool_result"; toolCallId: string; name: string; result: ToolResult; step: number }
+  | {
+      type: "tool_result";
+      toolCallId: string;
+      name: string;
+      result: ToolResult;
+      step: number;
+    }
   | { type: "done"; stopReason: AgentStopReason; steps: number }
   | { type: "error"; error: string };
 

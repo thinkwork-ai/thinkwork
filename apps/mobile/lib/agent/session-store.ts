@@ -16,7 +16,11 @@ export interface SessionRecord {
 export interface SessionStore {
   load(sessionId: string): Promise<SessionRecord | null>;
   save(record: SessionRecord): Promise<void>;
-  append(sessionId: string, messages: Message[], at: number): Promise<SessionRecord>;
+  append(
+    sessionId: string,
+    messages: Message[],
+    at: number,
+  ): Promise<SessionRecord>;
   list(): Promise<SessionRecord[]>;
 }
 
@@ -33,7 +37,11 @@ export class InMemorySessionStore implements SessionStore {
     this.sessions.set(record.id, { ...record, messages: [...record.messages] });
   }
 
-  async append(sessionId: string, messages: Message[], at: number): Promise<SessionRecord> {
+  async append(
+    sessionId: string,
+    messages: Message[],
+    at: number,
+  ): Promise<SessionRecord> {
     const existing = this.sessions.get(sessionId);
     const next: SessionRecord = {
       id: sessionId,

@@ -19,8 +19,12 @@ describe("ToolRegistry", () => {
   });
 
   it("rejects duplicate tool names", () => {
-    const registry = new ToolRegistry([tool("dup", async () => ({ content: "" }))]);
-    expect(() => registry.register(tool("dup", async () => ({ content: "" })))).toThrow(/already registered/);
+    const registry = new ToolRegistry([
+      tool("dup", async () => ({ content: "" })),
+    ]);
+    expect(() =>
+      registry.register(tool("dup", async () => ({ content: "" }))),
+    ).toThrow(/already registered/);
   });
 
   it("executes a tool by name and returns its result", async () => {
@@ -57,7 +61,11 @@ describe("ToolRegistry", () => {
         return { content: "ran" };
       }),
     ]);
-    const result = await registry.execute("t", {}, { signal: AbortSignal.abort() });
+    const result = await registry.execute(
+      "t",
+      {},
+      { signal: AbortSignal.abort() },
+    );
     expect(ran).toBe(false);
     expect(result.isError).toBe(true);
   });

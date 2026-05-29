@@ -38,7 +38,9 @@ function addUsage(into: Usage, add?: Usage): void {
   into.outputTokens += add.outputTokens;
 }
 
-export async function runAgentTurn(options: RunAgentTurnOptions): Promise<AgentRunResult> {
+export async function runAgentTurn(
+  options: RunAgentTurnOptions,
+): Promise<AgentRunResult> {
   const {
     provider,
     registry,
@@ -82,7 +84,14 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<AgentR
       response = await provider.generate(
         // Snapshot the transcript so a provider that retains the reference never sees the
         // loop's later mutations, and can't mutate the loop's working array.
-        { system, messages: [...messages], tools: registry.specs(), model, maxTokens, temperature },
+        {
+          system,
+          messages: [...messages],
+          tools: registry.specs(),
+          model,
+          maxTokens,
+          temperature,
+        },
         signal,
       );
     } catch (err) {
@@ -96,7 +105,10 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<AgentR
     addUsage(usage, response.usage);
 
     if (response.stopReason === "error") {
-      emit({ type: "error", error: response.text || "model returned error stop reason" });
+      emit({
+        type: "error",
+        error: response.text || "model returned error stop reason",
+      });
       emit({ type: "done", stopReason: "error", steps });
       return { messages, finalText, steps, stopReason: "error", usage };
     }
@@ -126,7 +138,13 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<AgentR
         signal,
         sessionId: undefined,
       });
-      emit({ type: "tool_result", toolCallId: call.id, name: call.name, result, step: steps });
+      emit({
+        type: "tool_result",
+        toolCallId: call.id,
+        name: call.name,
+        result,
+        step: steps,
+      });
       messages.push({
         role: "tool",
         toolCallId: call.id,

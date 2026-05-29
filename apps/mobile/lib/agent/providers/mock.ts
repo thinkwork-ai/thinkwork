@@ -7,7 +7,9 @@
 
 import type { ModelProvider, ModelRequest, ModelResponse } from "../types";
 
-export type MockScript = ModelResponse[] | ((req: ModelRequest, call: number) => ModelResponse);
+export type MockScript =
+  | ModelResponse[]
+  | ((req: ModelRequest, call: number) => ModelResponse);
 
 /** Convenience: a plain text answer with no tool calls. */
 export function textResponse(text: string, modelId = "mock"): ModelResponse {
@@ -54,7 +56,9 @@ export class MockModelProvider implements ModelProvider {
     }
     const next = this.script[index];
     if (!next) {
-      throw new Error(`MockModelProvider: no scripted response for call #${index}`);
+      throw new Error(
+        `MockModelProvider: no scripted response for call #${index}`,
+      );
     }
     return next;
   }
