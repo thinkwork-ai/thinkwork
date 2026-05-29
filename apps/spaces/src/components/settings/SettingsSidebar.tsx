@@ -50,56 +50,66 @@ export function SettingsSidebar() {
   );
 
   return (
-    <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-4">
+    <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       {/* Web carries the brand header from the chat shell; desktop relies on
-          its own window chrome. */}
+          its own window chrome. Padding mirrors the shell SidebarHeader
+          (p-2 + pb-3, inner brand px-1) so the logo aligns across surfaces. */}
       {isDesktop ? null : (
-        <Link
-          to="/"
-          className="mb-3 flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-        >
-          <img
-            src="/logo.png"
-            alt="ThinkWork"
-            className="h-9 w-9 shrink-0 object-contain"
-          />
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-base font-semibold leading-none tracking-tight">
-              ThinkWork
-            </span>
-            <span className="truncate text-xs text-sidebar-foreground/55">
-              Spaces
-            </span>
-          </div>
-        </Link>
+        <div className="flex items-center gap-2 px-2 pt-2 pb-3">
+          <Link
+            to="/"
+            className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          >
+            <img
+              src="/logo.png"
+              alt="ThinkWork"
+              className="h-9 w-9 shrink-0 object-contain"
+            />
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-base font-semibold leading-none tracking-tight">
+                ThinkWork
+              </span>
+              <span className="truncate text-xs text-sidebar-foreground/55">
+                Spaces
+              </span>
+            </div>
+          </Link>
+        </div>
       )}
-      <button
-        type="button"
-        className={cn(itemClassName, "mb-3 text-sidebar-foreground/65")}
-        onClick={() => navigate({ to: getSettingsReturnTo() })}
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col px-2 pb-2",
+          isDesktop && "pt-2",
+        )}
       >
-        <ArrowLeft />
-        <span>Back to app</span>
-      </button>
-      <nav className="flex flex-col gap-0.5" aria-label="Settings sections">
-        {items.map((item) => {
-          const active = pathname.startsWith(item.to);
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={cn(
-                itemClassName,
-                active &&
-                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
-              )}
-            >
-              <item.icon />
-              <span className="truncate">{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+        <button
+          type="button"
+          className={cn(itemClassName, "mb-2 text-sidebar-foreground/65")}
+          onClick={() => navigate({ to: getSettingsReturnTo() })}
+        >
+          <ArrowLeft />
+          <span>Back to app</span>
+        </button>
+        <nav className="flex flex-col gap-0.5" aria-label="Settings sections">
+          {items.map((item) => {
+            const active = pathname.startsWith(item.to);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  itemClassName,
+                  active &&
+                    "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                )}
+              >
+                <item.icon />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
     </aside>
   );
 }
