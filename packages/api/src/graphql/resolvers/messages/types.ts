@@ -30,7 +30,8 @@ export const messageTypeResolvers = {
       return {
         type: "user",
         id: senderId,
-        displayName: user?.name ?? user?.email ?? "User",
+        displayName:
+          user?.name ?? user?.email ?? messageSenderEmail(message) ?? "User",
         avatarUrl: user?.image ?? null,
       };
     }
@@ -56,7 +57,7 @@ export const messageTypeResolvers = {
     return {
       type: senderType,
       id: senderId,
-      displayName: "User",
+      displayName: messageSenderEmail(message) ?? "User",
       avatarUrl: null,
     };
   },
@@ -114,6 +115,15 @@ function normalizeOwnerType(value: unknown, role: string): string {
 
 function normalizedRole(message: any) {
   return String(message.role ?? "").toLowerCase();
+}
+
+function messageSenderEmail(message: any) {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const senderEmail = (metadata as Record<string, unknown>).senderEmail;
+  return typeof senderEmail === "string" && senderEmail.trim().length > 0
+    ? senderEmail.trim()
+    : null;
 }
 
 export const messageMentionTypeResolvers = {
