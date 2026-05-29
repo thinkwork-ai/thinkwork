@@ -239,10 +239,13 @@ interface ThreadTurnRow {
   trigger_id?: string | null;
   agent_id?: string | null;
   invocation_source?: string | null;
+  runtime_type?: string | null;
   status?: string | null;
   started_at?: string | null;
   finished_at?: string | null;
   error?: string | null;
+  error_code?: string | null;
+  system_prompt?: string | null;
   result_json?: unknown;
   usage_json?: unknown;
   context_snapshot?: unknown;
@@ -1791,6 +1794,7 @@ function toTaskThreadTurnsFromRows(rows: ThreadTurnRow[]): TaskThreadTurn[] {
       id: row.id,
       status: row.status,
       invocationSource: row.invocation_source ?? "chat_message",
+      runtimeType: row.runtime_type ?? null,
       startedAt: row.started_at ?? row.created_at,
       finishedAt: row.finished_at,
       model: stringValue(
@@ -1800,6 +1804,8 @@ function toTaskThreadTurnsFromRows(rows: ThreadTurnRow[]): TaskThreadTurn[] {
       usageJson: row.usage_json,
       resultJson: row.result_json,
       error: row.error ?? null,
+      errorCode: row.error_code ?? null,
+      systemPrompt: row.system_prompt ?? null,
       events: [],
     }));
 }
