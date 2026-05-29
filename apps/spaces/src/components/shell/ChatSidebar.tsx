@@ -23,6 +23,7 @@ import {
   Archive,
   ArrowLeft,
   ChevronDown,
+  Clock,
   GitBranch,
   Globe,
   Keyboard,
@@ -31,7 +32,6 @@ import {
   MoreHorizontal,
   Paperclip,
   Pencil,
-  Repeat,
   Search,
   Settings,
   Shield,
@@ -653,7 +653,7 @@ export function ChatSidebar({
                 tooltip="Automations"
               >
                 <Link to="/automations">
-                  <Repeat />
+                  <Clock />
                   <span>Automations</span>
                 </Link>
               </SidebarMenuButton>
@@ -1504,10 +1504,8 @@ function ChatThreadRow({
                 threadTitleFallback: { threadId: thread.id, title },
               })}
               className={cn(
-                "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-[color,padding] hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                onPin || onUnpin
-                  ? "pr-10 group-hover/thread-row:pr-16 group-focus-within/thread-row:pr-16"
-                  : "pr-10",
+                "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                onPin || onUnpin ? "pr-12" : "pr-10",
                 active && "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
               onClick={onActivate}
