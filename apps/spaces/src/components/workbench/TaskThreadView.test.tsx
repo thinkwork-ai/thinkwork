@@ -3199,6 +3199,14 @@ describe("TaskThreadView", () => {
     fireEvent.click(screen.getByRole("option", { name: /Scott Odom/ }));
     expect(input.value).toBe("@Scott Odom ");
 
+    // Mentioning another user makes the thread multi-player, so the agent
+    // toggle auto-derives OFF (single -> on, multi -> off).
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -3213,10 +3221,44 @@ describe("TaskThreadView", () => {
             rawText: "@Scott Odom",
           },
         ],
-        true,
+        false,
         "local",
       );
     });
+  });
+
+  it("defaults the agent toggle OFF when another human has already posted", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-mp",
+          title: "Group thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "m1",
+              role: "USER",
+              content: "Hi",
+              sender: { type: "user", id: "user-current" },
+            },
+            {
+              id: "m2",
+              role: "USER",
+              content: "Hey back",
+              sender: { type: "user", id: "user-scott" },
+            },
+          ],
+        }}
+        currentUser={{ id: "user-current", name: "Eric Odom" }}
+        onSendFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 
   it("commits the highlighted mention on Tab and closes the menu on Escape", () => {

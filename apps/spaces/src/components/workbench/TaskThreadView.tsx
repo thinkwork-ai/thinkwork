@@ -95,6 +95,7 @@ import type {
 } from "@/lib/ui-message-types";
 import { useComposerState } from "@/lib/use-composer-state";
 import { cn } from "@/lib/utils";
+import { deriveAgentDefault } from "@/lib/agent-mode";
 import {
   GeneratedArtifactCard,
   GeneratedArtifactPreview,
@@ -499,6 +500,8 @@ export function TaskThreadView({
               disabled={!onSendFollowUp || isSending}
               isSending={isSending}
               mentionTargets={mentionTargets}
+              threadMessages={thread.messages}
+              currentUserId={currentUser?.id ?? null}
               prefill={composerPrefill}
               onSubmit={onSendFollowUp}
             />
@@ -2062,6 +2065,8 @@ function FollowUpComposer({
   disabled,
   isSending,
   mentionTargets,
+  threadMessages,
+  currentUserId,
   prefill,
   onSubmit,
 }: {
@@ -2070,6 +2075,8 @@ function FollowUpComposer({
   disabled?: boolean;
   isSending?: boolean;
   mentionTargets: MentionTarget[];
+  threadMessages?: TaskThreadMessage[];
+  currentUserId?: string | null;
   prefill?: { text: string; token: number } | null;
   onSubmit?: (
     content: string,
@@ -2082,7 +2089,27 @@ function FollowUpComposer({
   const composer = useComposerState(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
-  const [agentEnabled, setAgentEnabled] = useState(true);
+  const agentDefaultOn = useMemo(
+    () =>
+      deriveAgentDefault({
+        currentUserId,
+        threadMessages: (threadMessages ?? []).map((message) => ({
+          role: message.role,
+          senderType: message.sender?.type ?? null,
+          senderId: message.sender?.id ?? null,
+        })),
+        draftMentions: mentions.map((mention) => ({
+          targetType: mention.targetType,
+          targetId: mention.targetId,
+        })),
+      }).agentDefaultOn,
+    [currentUserId, threadMessages, mentions],
+  );
+  const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
+  // Whether the user has manually toggled the agent in this thread. While
+  // false, the toggle tracks the derived default; once true, the manual choice
+  // persists until the thread changes (which clears it).
+  const agentOverriddenRef = useRef(false);
   const [runtimePreference, setRuntimePreference] =
     useState<AgentRuntimePreference>("local");
   const prefillText = prefill?.text;
@@ -2133,9 +2160,19 @@ function FollowUpComposer({
     if (agentForcedOn) setAgentEnabled(true);
   }, [agentForcedOn]);
 
+  // Switching threads clears any manual override and re-derives the default.
   useEffect(() => {
-    setAgentEnabled(true);
+    agentOverriddenRef.current = false;
+    setAgentEnabled(agentDefaultOn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
+
+  // Track the derived default (single -> on, multiplayer -> off) as the draft
+  // mentions or thread history change, until the user manually overrides; the
+  // manual choice then persists within the thread.
+  useEffect(() => {
+    if (!agentOverriddenRef.current) setAgentEnabled(agentDefaultOn);
+  }, [agentDefaultOn]);
 
   useEffect(() => {
     setActiveMentionIndex(0);
@@ -2334,7 +2371,10 @@ function FollowUpComposer({
               <button
                 type="button"
                 onClick={() => {
-                  if (!agentForcedOn) setAgentEnabled((value) => !value);
+                  if (!agentForcedOn) {
+                    agentOverriddenRef.current = true;
+                    setAgentEnabled((value) => !value);
+                  }
                 }}
                 aria-label="Send to agent"
                 aria-pressed={effectiveAgentEnabled}
