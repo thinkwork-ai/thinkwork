@@ -111,23 +111,8 @@ export function SettingsUserDetail() {
         name={user.name ?? ""}
         profile={user.profile ?? null}
         onSaved={() => refetch({ requestPolicy: "network-only" })}
+        onOpenWorkspace={() => setFilesOpen(true)}
       />
-
-      <SettingsSection label="Workspace">
-        <div className="flex items-center justify-between gap-4 p-4">
-          <p className="text-sm text-muted-foreground">
-            Edit this user’s workspace — USER.md and related context files.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => setFilesOpen(true)}
-          >
-            Open workspace editor
-          </Button>
-        </div>
-      </SettingsSection>
 
       <RoleSection
         memberId={member.id}
@@ -232,11 +217,13 @@ function ProfileSection({
   name,
   profile,
   onSaved,
+  onOpenWorkspace,
 }: {
   userId: string;
   name: string;
   profile: Profile;
   onSaved: () => void;
+  onOpenWorkspace: () => void;
 }) {
   const [form, setForm] = useState({
     name,
@@ -290,7 +277,18 @@ function ProfileSection({
   }
 
   return (
-    <SettingsSection label="Profile">
+    <SettingsSection
+      label="Profile"
+      action={
+        <button
+          type="button"
+          onClick={onOpenWorkspace}
+          className="text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+        >
+          Workspace
+        </button>
+      }
+    >
       <div className="space-y-4 p-4">
         <Labeled label="Name">
           <Input

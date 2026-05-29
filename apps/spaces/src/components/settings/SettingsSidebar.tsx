@@ -24,6 +24,7 @@ interface SettingsNavItem {
 // folded into General as a "Color mode" control rather than a nav item.
 const NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
+  { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
   {
     label: "Spaces",
     to: "/settings/spaces",
@@ -31,7 +32,6 @@ const NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
-  { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
 ];
 
 // Matches the main chat-sidebar nav item style (SidebarMenuButton): h-8, p-2,
