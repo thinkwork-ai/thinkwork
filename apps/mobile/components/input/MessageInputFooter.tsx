@@ -265,35 +265,30 @@ export const MessageInputFooter = forwardRef<
                 className="p-1 active:opacity-70"
                 style={{ opacity: disabled ? 0.35 : 1 }}
               >
-                <Paperclip size={22} color={colors.mutedForeground} />
+                <Paperclip size={24} color={colors.mutedForeground} />
               </Pressable>
             )}
             {onSpacePress && (
               <Pressable
                 onPress={disabled ? undefined : onSpacePress}
                 disabled={disabled}
-                className="flex-row items-center gap-1.5 rounded-lg px-2.5 py-1.5 active:opacity-70"
-                style={{
-                  minHeight: 32,
-                  opacity: disabled ? 0.35 : 1,
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.05)",
-                }}
+                // Borderless/transparent to match the desktop composer's space picker —
+                // it sits inline with the other toolbar icons, no filled pill.
+                className="flex-row items-center gap-1.5 active:opacity-70"
+                style={{ minHeight: 32, opacity: disabled ? 0.35 : 1 }}
               >
-                <IconPlanet size={15} color={colors.mutedForeground} />
+                <IconPlanet size={24} color={colors.mutedForeground} />
                 <Text
                   style={{
                     color: colors.mutedForeground,
-                    fontSize: 13,
-                    fontWeight: "600",
-                    maxWidth: 88,
+                    fontSize: 18,
+                    maxWidth: 140,
                   }}
                   numberOfLines={1}
                 >
                   {selectedSpace?.name ?? "Default"}
                 </Text>
-                <ChevronDown size={14} color={colors.mutedForeground} />
+                <ChevronDown size={20} color={colors.mutedForeground} />
               </Pressable>
             )}
           </View>
