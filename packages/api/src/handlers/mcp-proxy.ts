@@ -66,6 +66,8 @@ const LOG_PREFIX = "[mcp-proxy]";
 interface ProxyBody {
   agentId?: string;
   name?: string;
+  server?: string;
+  tool?: string;
   arguments?: Record<string, unknown>;
 }
 
@@ -173,8 +175,15 @@ async function handleList(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const tools: Array<{
     name: string;
+    server: string;
+    tool: string;
     description?: string;
     inputSchema?: unknown;
+  }> = [];
+  const errors: Array<{
+    server: string;
+    error: string;
+    kind: "discovery" | "transport" | "unknown";
   }> = [];
 
   for (const config of configs) {
@@ -188,6 +197,11 @@ async function handleList(
         `${LOG_PREFIX} tools/list failed for ${config.name}:`,
         err instanceof Error ? err.message : err,
       );
+      errors.push({
+        server: config.name,
+        error: err instanceof Error ? err.message : String(err),
+        kind: err instanceof McpTransportError ? "transport" : "discovery",
+      });
       continue;
     }
     // Honor the per-server tool allowlist (config.tools) if present.
@@ -197,6 +211,8 @@ async function handleList(
       if (allow && !allow.has(def.name)) continue;
       tools.push({
         name: qualifyToolName(config.name, def.name),
+        server: config.name,
+        tool: def.name,
         description: def.description,
         inputSchema: def.inputSchema,
       });
@@ -211,10 +227,11 @@ async function handleList(
       userId: ctx.userId,
       servers: configs.length,
       tools: tools.length,
+      errors: errors.length,
     }),
   );
 
-  return json({ tools });
+  return json({ tools, errors });
 }
 
 async function handleCall(
@@ -222,20 +239,25 @@ async function handleCall(
   body: ProxyBody,
   ctx: { tenantId: string; userId: string },
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  if (!body.name) return error("name is required", 400);
+  if (!body.name && (!body.server || !body.tool)) {
+    return error("name or server/tool is required", 400);
+  }
   const args = body.arguments ?? {};
 
   // Resolve which server owns this tool. Prefer the server-qualified name the
   // list endpoint emits; fall back to a bare tool name resolved against the
   // single configured server (or the first that has it).
-  const split = splitQualifiedToolName(body.name);
+  const split = body.name ? splitQualifiedToolName(body.name) : null;
   let config: McpServerConfig | undefined;
   let toolName: string;
-  if (split) {
+  if (body.server && body.tool) {
+    config = configs.find((c) => c.name === body.server);
+    toolName = body.tool;
+  } else if (split) {
     config = configs.find((c) => c.name === split.serverName);
     toolName = split.toolName;
   } else {
-    toolName = body.name;
+    toolName = body.name!;
     config =
       configs.length === 1
         ? configs[0]
