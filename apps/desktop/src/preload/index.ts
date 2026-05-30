@@ -25,6 +25,9 @@ import {
   TOKENS_CHANGED_EVENT_CHANNEL,
   UPDATE_STATE_EVENT_CHANNEL,
   UPDATE_TELEMETRY_EVENT_CHANNEL,
+  RAISE_THREAD_NOTIFICATION_CHANNEL,
+  OPEN_THREAD_EVENT_CHANNEL,
+  WINDOW_FOCUS_EVENT_CHANNEL,
   DeepLinkEventSchema,
   GetDesktopConfigResponseSchema,
   GetPiStatusResponseSchema,
@@ -40,6 +43,9 @@ import {
   PiStartTurnResponseSchema,
   PiStatusEventSchema,
   ReportInstallOutcomeRequestSchema,
+  RaiseThreadNotificationRequestSchema,
+  OpenThreadEventSchema,
+  WindowFocusEventSchema,
   SetTokenStorageItemRequestSchema,
   SignOutResponseSchema,
   SignedOutEventSchema,
@@ -256,6 +262,34 @@ const bridge = {
       REPORT_INSTALL_OUTCOME_CHANNEL,
       ReportInstallOutcomeRequestSchema.parse(outcome),
     );
+  },
+  async raiseThreadNotification(request) {
+    await ipcRenderer.invoke(
+      RAISE_THREAD_NOTIFICATION_CHANNEL,
+      RaiseThreadNotificationRequestSchema.parse(request),
+    );
+  },
+  onOpenThread(listener) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ) => {
+      listener(OpenThreadEventSchema.parse(payload));
+    };
+    ipcRenderer.on(OPEN_THREAD_EVENT_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(OPEN_THREAD_EVENT_CHANNEL, wrappedListener);
+  },
+  onWindowFocusChange(listener) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ) => {
+      listener(WindowFocusEventSchema.parse(payload));
+    };
+    ipcRenderer.on(WINDOW_FOCUS_EVENT_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(WINDOW_FOCUS_EVENT_CHANNEL, wrappedListener);
   },
   pi: piBridge,
 } satisfies ThinkworkBridge;

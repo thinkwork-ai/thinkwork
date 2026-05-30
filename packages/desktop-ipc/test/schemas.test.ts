@@ -2,11 +2,14 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   ChannelSchemas,
   DeepLinkCallbackSchema,
+  OpenThreadEventSchema,
   PiDiagnosticEventSchema,
   PiSidecarStatusSchema,
+  RaiseThreadNotificationRequestSchema,
   UpdateStateSchema,
   UpdateStatusSchema,
   UpdateTelemetryEventSchema,
+  WindowFocusEventSchema,
   assertSafeSenderFrame,
   rateLimit,
   resetRateLimits,
@@ -270,6 +273,54 @@ describe("desktop IPC schemas", () => {
       channel: "latest",
       fromVersion: "1.0.0",
     });
+  });
+
+  it("validates thread-notification channel payloads", () => {
+    expect(
+      ChannelSchemas.raiseThreadNotification.request.parse({
+        threadId: "thread-1",
+        title: "Scott",
+        body: "hey there",
+        count: 3,
+      }),
+    ).toEqual({
+      threadId: "thread-1",
+      title: "Scott",
+      body: "hey there",
+      count: 3,
+    });
+    expect(
+      RaiseThreadNotificationRequestSchema.parse({
+        threadId: "thread-1",
+        title: "t",
+        body: "b",
+      }),
+    ).toEqual({ threadId: "thread-1", title: "t", body: "b" });
+    expect(
+      ChannelSchemas.raiseThreadNotification.response.parse(undefined),
+    ).toBeUndefined();
+    expect(() =>
+      RaiseThreadNotificationRequestSchema.parse({ title: "t", body: "b" }),
+    ).toThrow();
+    expect(() =>
+      RaiseThreadNotificationRequestSchema.parse({
+        threadId: "thread-1",
+        title: "t",
+        body: "b",
+        count: 1.5,
+      }),
+    ).toThrow();
+  });
+
+  it("validates open-thread and window-focus events", () => {
+    expect(OpenThreadEventSchema.parse({ threadId: "thread-1" })).toEqual({
+      threadId: "thread-1",
+    });
+    expect(() => OpenThreadEventSchema.parse({ threadId: "" })).toThrow();
+    expect(WindowFocusEventSchema.parse({ focused: true })).toEqual({
+      focused: true,
+    });
+    expect(() => WindowFocusEventSchema.parse({ focused: "yes" })).toThrow();
   });
 
   it("keeps the deep-link callback schema strict", () => {
