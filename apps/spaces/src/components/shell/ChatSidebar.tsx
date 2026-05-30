@@ -1010,56 +1010,62 @@ function orderPinnedThreads(
   ];
 }
 
+/** Unread-count chip, rendered immediately after a section's label. */
+function SectionUnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="shrink-0 rounded-full bg-sidebar-accent px-1.5 text-[10px] leading-5 text-sidebar-accent-foreground">
+      {formatCompactCount(count)}
+    </span>
+  );
+}
+
 /**
- * Trailing controls for a thread-grouped section header: unread badge, a
- * filtered indicator, and a hover/focus-revealed "…" menu (Mark all as read;
- * Show unread / Show all). Rendered as a SIBLING of the collapse trigger so
- * opening the menu never toggles the section (R2). The badge always reflects
- * the section's full true unread total — not the filtered subset (KTD-7e).
+ * Trailing controls for a thread-grouped section header: a filtered indicator
+ * and a hover/focus-revealed "…" menu (Mark all as read; Show unread / Show
+ * all). Rendered as a SIBLING of the collapse trigger so opening the menu never
+ * toggles the section (R2). The unread badge sits next to the label, not here.
  */
 function SectionHeaderControls({
   sectionId,
   label,
-  unreadCount,
   unreadThreadIds,
   filterOn,
   onMarkSectionRead,
 }: {
   sectionId: string;
   label: string;
-  unreadCount: number;
   unreadThreadIds: string[];
   filterOn: boolean;
   onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
   return (
-    <div className="ml-auto flex shrink-0 items-center gap-1 pr-1">
+    // Filter indicator and "…" menu share one slot: the filter icon shows when
+    // the section is filtered and idle; on hover (or touch / open) it gives way
+    // to the "…" trigger so the two never stack.
+    <div className="relative ml-auto size-7 shrink-0">
       {filterOn ? (
         <ListFilter
-          className="size-3.5 text-sidebar-foreground/45"
+          className="pointer-events-none absolute inset-0 m-auto size-4 text-sidebar-foreground/45 transition-opacity group-hover/section-row:opacity-0 [@media(hover:none)]:opacity-0"
           aria-label="Filtered to unread"
         />
-      ) : null}
-      {unreadCount > 0 ? (
-        <span className="rounded-full bg-sidebar-accent px-1.5 text-[10px] leading-5 text-sidebar-accent-foreground">
-          {formatCompactCount(unreadCount)}
-        </span>
       ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             aria-label={`${label} options`}
-            className="flex size-5 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-foreground/75 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+            className="absolute inset-0 flex size-7 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
           >
             <MoreHorizontal className="size-4" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           side="bottom"
-          align="end"
+          align="start"
           sideOffset={4}
           className="z-[1000] w-44"
+          onCloseAutoFocus={(event) => event.preventDefault()}
         >
           <DropdownMenuItem
             disabled={!onMarkSectionRead || unreadThreadIds.length === 0}
@@ -1131,6 +1137,7 @@ function ThreadListSection({
           >
             <button type="button" aria-label={`Toggle ${label}`}>
               <span className="min-w-0 truncate text-left">{label}</span>
+              <SectionUnreadBadge count={unreadThreadIds.length} />
               <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/section-trigger:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
             </button>
           </SidebarGroupLabel>
@@ -1138,7 +1145,6 @@ function ThreadListSection({
         <SectionHeaderControls
           sectionId={sectionId}
           label={label}
-          unreadCount={unreadThreadIds.length}
           unreadThreadIds={unreadThreadIds}
           filterOn={filterOn}
           onMarkSectionRead={onMarkSectionRead}
@@ -1339,6 +1345,7 @@ function SpaceJumpMenu({
         align="start"
         sideOffset={4}
         className="z-[1000] w-56"
+        onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <DropdownMenuLabel>Open Space</DropdownMenuLabel>
         {isLoading && spaces.length === 0 ? (
@@ -1427,6 +1434,7 @@ function SpaceThreadSection({
           >
             <button type="button" aria-label={`Toggle ${label}`}>
               <span className="min-w-0 truncate text-left">{label}</span>
+              <SectionUnreadBadge count={badgeCount} />
               <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/space-trigger:opacity-100 group-data-[state=closed]/space:-rotate-90" />
             </button>
           </SidebarGroupLabel>
@@ -1434,7 +1442,6 @@ function SpaceThreadSection({
         <SectionHeaderControls
           sectionId={sectionId}
           label={label}
-          unreadCount={badgeCount}
           unreadThreadIds={unreadThreadIds}
           filterOn={filterOn}
           onMarkSectionRead={onMarkSectionRead}

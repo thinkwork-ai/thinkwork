@@ -639,12 +639,12 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
-    // The Space section header (its name) is the collapsible label — expected.
-    // The unread badge now lives in a sibling control cluster, not inside the
-    // heading, so the heading's accessible name is exactly the Space name.
+    // No standalone "Customer Onboarding" list-title heading above the rows
+    // (the section's collapse toggle carries the label + unread badge, so its
+    // accessible name isn't an exact "Customer Onboarding" match).
     expect(
-      screen.getByRole("heading", { name: "Customer Onboarding" }),
-    ).toBeTruthy();
+      screen.queryByRole("heading", { name: "Customer Onboarding" }),
+    ).toBeNull();
     expect(screen.queryByRole("heading", { name: "Conversations" })).toBeNull();
     expect(screen.queryByText("Today")).toBeNull();
     expect(screen.queryByText("Yesterday")).toBeNull();
@@ -979,6 +979,12 @@ describe("ChatSidebar", () => {
     return screen.getByRole("button", { name: triggerName }).closest("div")!;
   }
 
+  // The unread badge lives inside the section's collapse toggle, next to the
+  // label (aria-label "Toggle <label>").
+  function sectionToggle(label: RegExp) {
+    return screen.getByRole("button", { name: label });
+  }
+
   it("shows the Chats unread-count badge and excludes read threads (R1)", () => {
     recentThreadItemsMock.length = 0;
     recentThreadItemsMock.push(
@@ -1007,8 +1013,7 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     // The Chats controls cluster shows "2" (the two unread, not the read one).
-    const controls = sectionMenu(/chats options/i).parentElement!;
-    expect(within(controls).getByText("2")).toBeTruthy();
+    expect(within(sectionToggle(/toggle chats/i)).getByText("2")).toBeTruthy();
   });
 
   it("puts no badge or options menu on action items or the Pinned section (R7)", () => {
@@ -1068,8 +1073,7 @@ describe("ChatSidebar", () => {
       }),
     );
     // Optimistic: the badge clears immediately to 0 (no "2" left in the cluster).
-    const controls = sectionMenu(/chats options/i).parentElement!;
-    expect(within(controls).queryByText("2")).toBeNull();
+    expect(within(sectionToggle(/toggle chats/i)).queryByText("2")).toBeNull();
     await waitFor(() =>
       expect(recentReexecuteMock).toHaveBeenCalledWith({
         requestPolicy: "network-only",
@@ -1113,8 +1117,11 @@ describe("ChatSidebar", () => {
         expect.stringContaining("network down"),
       ),
     );
-    const controls = sectionMenu(/chats options/i).parentElement!;
-    await waitFor(() => expect(within(controls).getByText("2")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        within(sectionToggle(/toggle chats/i)).getByText("2"),
+      ).toBeTruthy(),
+    );
   });
 
   it("filters a section to its unread threads and persists the choice (R5)", () => {
@@ -1205,9 +1212,8 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     // Space badge starts at the server unreadThreadCount (2 for space-1).
-    const spaceControls = () =>
-      sectionMenu(/customer onboarding options/i).parentElement!;
-    expect(within(spaceControls()).getByText("2")).toBeTruthy();
+    const spaceToggle = () => sectionToggle(/toggle customer onboarding/i);
+    expect(within(spaceToggle()).getByText("2")).toBeTruthy();
 
     fireEvent.click(
       within(sectionMenu(/customer onboarding options/i)).getByRole("button", {
@@ -1223,7 +1229,7 @@ describe("ChatSidebar", () => {
     // Optimistic decrement: the one loaded unread thread is marked read, so the
     // server count of 2 drops to 1 immediately (reconciles fully on refetch).
     await waitFor(() =>
-      expect(within(spaceControls()).getByText("1")).toBeTruthy(),
+      expect(within(spaceToggle()).getByText("1")).toBeTruthy(),
     );
   });
 
