@@ -1,5 +1,6 @@
 import { BrowserWindow, shell } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
+import { WINDOW_FOCUS_EVENT_CHANNEL } from "@thinkwork/desktop-ipc";
 import { isAllowedExternalUrl, isDesktopAppUrl } from "./url-allowlist.js";
 
 export interface CreateMainWindowOptions {
@@ -34,6 +35,16 @@ export function createMainWindow(
   window.once("ready-to-show", () => {
     window.show();
   });
+
+  // Push focus state to the renderer so it can suppress notifications for the
+  // thread the user is actively viewing (R5).
+  const sendFocus = (focused: boolean) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(WINDOW_FOCUS_EVENT_CHANNEL, { focused });
+    }
+  };
+  window.on("focus", () => sendFocus(true));
+  window.on("blur", () => sendFocus(false));
 
   window.on("page-title-updated", preventPageTitleUpdate);
 
