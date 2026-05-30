@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge, Button, DataTable, Input, Switch } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
@@ -12,6 +13,7 @@ import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 export function SettingsMcpServers() {
   const { tenant } = useTenant();
+  const navigate = useNavigate();
   const tenantSlug = tenant?.slug ?? null;
   const [servers, setServers] = useState<McpServer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,11 +105,16 @@ export function SettingsMcpServers() {
         header: "Enabled",
         size: 90,
         cell: ({ row }) => (
-          <Switch
-            checked={row.original.enabled}
-            disabled={pending[row.original.id]}
-            onCheckedChange={(v) => toggle(row.original.id, v)}
-          />
+          <span
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <Switch
+              checked={row.original.enabled}
+              disabled={pending[row.original.id]}
+              onCheckedChange={(v) => toggle(row.original.id, v)}
+            />
+          </span>
         ),
       },
       {
@@ -119,7 +126,10 @@ export function SettingsMcpServers() {
             size="sm"
             variant="ghost"
             disabled={pending[row.original.id]}
-            onClick={() => remove(row.original.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              remove(row.original.id);
+            }}
           >
             Remove
           </Button>
@@ -155,6 +165,12 @@ export function SettingsMcpServers() {
         allowHorizontalScroll={false}
         pageSize={25}
         tableClassName="table-fixed"
+        onRowClick={(row) =>
+          navigate({
+            to: "/settings/mcp-servers/$serverId",
+            params: { serverId: row.id },
+          })
+        }
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No MCP servers configured.

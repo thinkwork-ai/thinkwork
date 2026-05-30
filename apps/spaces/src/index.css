@@ -1,4 +1,7 @@
 @import "@thinkwork/ui/theme.css";
+/* React Flow base styles — required for the routine workflow graph (nodes,
+   edges, handles, zoom controls, attribution) to render and position. */
+@import "@xyflow/react/dist/style.css";
 
 /* Tailwind v4 scans the project root by default, but won't pick up
    Tailwind classes used inside the @thinkwork/ui workspace package
