@@ -45,6 +45,33 @@ Desktop is for end users inside a ThinkWork tenant who want Spaces as their prim
 
 Operators still configure tenant-level settings in the [Admin Web App](/applications/admin/). Personal mobile workflows, push notifications, and user-scoped integration setup still live in the [Mobile App](/applications/mobile/).
 
+## Thread notifications
+
+Desktop raises a native macOS notification when a new message lands in a thread you participate in — including when a teammate **`@`-mentions you into a brand-new thread** you haven't opened yet. Notifications fire while the app is running or in the background, and are a desktop-only feature (the web and mobile apps don't show them).
+
+**You're notified about:**
+
+- A new message in any thread you're a participant in.
+- Being mentioned into a new thread (you become a participant, so its opening message notifies you).
+- Messages from agents as well as people.
+
+**Thinkwork keeps the quiet cases quiet:**
+
+- Your own messages never notify you.
+- The thread you're actively viewing stays silent while the app is focused — you're already looking at it. (If the app is in the background, you're still notified, even for the open thread.)
+- Rapid messages in one thread coalesce into a single notification instead of a burst, so a busy thread won't flood you.
+
+**Clicking a notification** focuses the app — restoring it from the background or Dock — and opens that thread, loading it if it isn't already open.
+
+**Turning notifications on or off** is done from **Settings → General → Thread notifications** (shown in the desktop app only). The first time you enable them, macOS asks for notification permission; allow it for ThinkWork. If you've blocked notifications at the OS level, the toggle can't override that — re-enable ThinkWork in macOS System Settings → Notifications. The preference persists across restarts.
+
+<Aside type="note">
+  Notifications ride the live connection, so one can be missed during sleep or a
+  network blip, and a fully quit app receives nothing until reopened. Your unread
+  markers always reconcile when the app regains focus, so you won't lose track of
+  a thread even if its notification didn't fire.
+</Aside>
+
 ## Install
 
 Download the current macOS desktop build from the ThinkWork GitHub Releases page:
