@@ -126,13 +126,12 @@ import {
   retainConversation,
   type RetainPayloadInput,
 } from "./runtime/tools/memory-retain-client.js";
-import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
-import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
+import { runAgentCoreBrowserAutomation } from "./runtime/browser-automation-runner.js";
 import {
   discoverWorkspaceSkills,
   type WorkspaceSkill,
-} from "./runtime/tools/workspace-skills.js";
+} from "./runtime/workspace-skills.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -229,7 +228,7 @@ export interface HandlerDependencies {
    * Production callers omit this; the runtime never observes the bundle
    * after cleanup.
    */
-  onHandlerComplete?: (bundle: AssembledToolBundle) => void;
+  onHandlerComplete?: (bundle: InvocationResourceBundle) => void;
 }
 
 const defaultDependencies: HandlerDependencies = {
@@ -242,7 +241,7 @@ const defaultDependencies: HandlerDependencies = {
 // Tool assembly — pure given the snapshots + payload + factories.
 // ---------------------------------------------------------------------------
 
-export interface AssembledToolBundle {
+export interface InvocationResourceBundle {
   tools: AgentTool<any>[];
   /**
    * Plan §004 U5 — Pi extension factories loaded into the session's resource
@@ -273,7 +272,7 @@ export interface AssembledToolBundle {
   mcpProxyRegistered: boolean;
 }
 
-export interface AssembleToolsArgs {
+export interface BuildInvocationResourcesArgs {
   payload: Record<string, unknown>;
   identity: IdentitySnapshot;
   env: RuntimeEnvSnapshot;
@@ -292,7 +291,7 @@ export interface AssembleToolsArgs {
   /**
    * U16 — Per-invocation `HandleStore` allocated by the caller. The
    * scrubbing fetch passed into `createConnectMcpServer` resolves
-   * handles against THIS store; if assembleTools created its own
+   * handles against THIS store; if the resource builder created its own
    * private one, the fetch would hold a stale reference and resolve
    * would always fail. Must be the same instance across the
    * trusted-handler / MCP-connect / buildMcpTools triangle.
@@ -320,7 +319,7 @@ export interface AssembleToolsArgs {
 }
 
 /**
- * Plan §006 U4 — thrown by `assembleTools` when an `mcp.json` directTools
+ * Plan §006 U4 — thrown by the invocation resource builder when an `mcp.json` directTools
  * entry references a (server, tool) the live MCP registry did not surface
  * after connect. The trusted handler catches this in its outer try/catch
  * and surfaces a structured 500 response so the operator sees the
@@ -341,14 +340,13 @@ export class DirectToolsValidationError extends Error {
 }
 
 /**
- * Build the per-invocation tool surface. Returns the tool array plus a
- * `cleanup` queue the trusted handler drains in `finally`. Every choice
- * here is observable to the structured logger so an operator can audit
- * which tools the agent received.
+ * Build the per-invocation resource surface. The capability tools and prompt
+ * policy now come from shared extensions; this helper only binds the host
+ * providers and the remaining Pi-specific built-ins/custom tools.
  */
-export async function assembleTools(
-  args: AssembleToolsArgs,
-): Promise<AssembledToolBundle> {
+export async function buildInvocationResources(
+  args: BuildInvocationResourcesArgs,
+): Promise<InvocationResourceBundle> {
   const tools: AgentTool<any>[] = [];
   const cleanup = args.cleanup;
   // U16 — caller allocates the HandleStore so the scrubbing fetch
@@ -366,18 +364,6 @@ export async function assembleTools(
     extensionToolNames.push(...(extension.toolNames ?? []));
   };
 
-  // Run-skill (U5) — only adds the tool if the workspace has scripts.
-  const runSkill = buildRunSkillTool({
-    skills: [],
-    // U5 expects a manifest of skillId/skillDir/scripts. The legacy
-    // workspace-skills discovery returns SKILL.md descriptors, not the
-    // script-bridge manifest. Wire-up of the script-bridge manifest is a
-    // followup unit (tracked under FR-7 work). Until then run_skill is
-    // exposed only when an explicit manifest is provided via env (out of
-    // scope for U9).
-  });
-  if (runSkill) tools.push(runSkill);
-
   const sandboxInterpreterId = asString(args.payload.sandbox_interpreter_id);
   if (sandboxInterpreterId) {
     const sandboxFactory = resolveSandboxFactory(
@@ -394,24 +380,17 @@ export async function assembleTools(
   }
 
   if (args.payload.browser_automation_enabled === true) {
-    const browserTool = buildBrowserAutomationTool({
-      client: args.agentCoreClient,
-      traceId: asString(args.payload.trace_id) || undefined,
-    });
-    const executeBrowserTool = browserTool.execute as unknown as (
-      toolCallId: string,
-      params: Record<string, unknown>,
-      signal?: AbortSignal,
-    ) => Promise<AgentToolResult<unknown>>;
     addExtension(
       createBrowserAutomationExtension({
         enabled: true,
-        run: (request, signal) =>
-          executeBrowserTool(
-            "browser_automation",
-            request as unknown as Record<string, unknown>,
-            signal,
-          ),
+        run: (request) =>
+          runAgentCoreBrowserAutomation(
+            {
+              client: args.agentCoreClient,
+              traceId: asString(args.payload.trace_id) || undefined,
+            },
+            request,
+          ) as Promise<AgentToolResult<unknown>>,
       }),
     );
   }
@@ -1095,9 +1074,9 @@ export async function handleInvocation(
   const cleanup: Array<() => Promise<void>> = [];
 
   // U16 — Allocate the per-invocation HandleStore here (was previously
-  // created inside assembleTools). Both the scrubbing fetch
+  // created inside the resource builder). Both the scrubbing fetch
   // (createScrubbingFetch below) and the MCP tool builder
-  // (assembleTools → buildMcpTools) need to share this same instance
+  // (resource builder → buildMcpTools) need to share this same instance
   // so the egress fetch resolves the handle the build minted. The
   // handler's `finally` block already calls `bundle.handleStore.clear()`
   // which now operates on the same store.
@@ -1115,9 +1094,9 @@ export async function handleInvocation(
 
   // Build tools last so any setup failure above short-circuits before
   // we touch the HandleStore.
-  let bundle: AssembledToolBundle;
+  let bundle: InvocationResourceBundle;
   try {
-    bundle = await assembleTools({
+    bundle = await buildInvocationResources({
       payload: args.payload,
       identity,
       env,
@@ -1131,7 +1110,7 @@ export async function handleInvocation(
       mcpRegistry,
     });
   } catch (err) {
-    // U16 — assembleTools may have minted handles into `handleStore`
+    // U16 — the resource builder may have minted handles into `handleStore`
     // before failing (e.g., MCP transport opened then listTools timed
     // out). The runLoop's finally block is unreachable on this path, so
     // clear the store + drain any partial cleanup closures HERE to

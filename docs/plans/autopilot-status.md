@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U9 — Desktop host adopts the shared extension package
-- Active branch: `codex/pi-extensions-u9`
+- Active unit: U10 — Retire hand-assembled tool/prompt wiring
+- Active branch: `codex/pi-extensions-u10`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u9`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u10`
 - Started: 2026-05-30
-- Latest merged PR: [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853)
-- Active PR: [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854)
+- Latest merged PR: [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854)
+- Active PR: [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855)
 - CI: pending
 
 ### Active Unit Notes
@@ -137,6 +137,41 @@ Target branch: `main`
   `pnpm -r --workspace-concurrency=1 --if-present test` (3,238 passed, 9
   skipped).
 - Opened PR [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854).
+- PR [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and deleted the remote/local U9 branch.
+- Started U10 from updated `origin/main` at
+  `79fcf52108d6672f3efab15a26d3aeec5301b5ef`.
+- U10 live-consumer survey completed before destructive deletes. The
+  cloud-only `web-search`, Context Engine, `send-email`, and `run-skill`
+  hand-built tool modules were dead outside their own tests after U7/U9 moved
+  those capabilities into shared extensions. The AgentCore browser code still
+  has a live host-runner responsibility, so it is being reshaped as a
+  non-tool-builder adapter instead of deleted outright. Workspace skill
+  discovery also remains live but is no longer tool wiring, so it is being moved
+  out of `runtime/tools`.
+- U10 local implementation complete: removed dead cloud hand-built tool modules
+  and their now-redundant direct tests, renamed `assembleTools` to the narrower
+  `buildInvocationResources`, moved browser automation into a host-runner
+  adapter consumed by the shared extension, moved workspace skill discovery out
+  of `runtime/tools`, and removed the Strands-tracer-only span filter so Pi
+  runtime spans with any scope are captured when they carry a span id.
+- U10 focused verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/browser-automation.test.ts agent-container/tests/server.test.ts agent-container/tests/worker-isolation.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/lib/agentcore-spans.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and
+  `pnpm --filter @thinkwork/api typecheck`.
+- U10 package/broader verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/agentcore-pi build`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, touched-file
+  Prettier check, and `git diff --check`.
+- U10 full sequential workspace verification passed on rerun:
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,238 passed, 9
+  skipped). The first full run hit the known local Electron extraction race in
+  `apps/desktop`; rerunning `pnpm --filter @thinkwork/desktop test` passed, and
+  the full sequential suite then passed cleanly.
+- Opened PR [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855).
 
 ## Prior Run: Desktop Local Pi Sidecar
 

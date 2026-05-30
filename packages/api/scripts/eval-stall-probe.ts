@@ -353,9 +353,7 @@ async function fetchSpansForSession(
     })
     .filter(
       (record): record is { scope?: { name?: string }; spanId?: string } =>
-        record !== null &&
-        record.scope?.name === "strands.telemetry.tracer" &&
-        Boolean(record.spanId),
+        record !== null && Boolean(record.spanId),
     );
   return [...spans, ...logs];
 }

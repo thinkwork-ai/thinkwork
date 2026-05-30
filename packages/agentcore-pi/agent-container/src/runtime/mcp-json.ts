@@ -14,7 +14,7 @@
  *   - Missing file → return an empty config (the intentional default).
  *   - Malformed JSON or wrong shape → throw `McpJsonError`. The trusted
  *     handler surfaces this through the same tool-assembly-failure path
- *     as other `assembleTools` throws (drains cleanup queue, returns 500).
+ *     as other resource-builder throws (drains cleanup queue, returns 500).
  *
  * Unknown top-level keys are preserved on the returned object so a later
  * field added upstream (e.g., per-server timeouts) is forward-compatible
