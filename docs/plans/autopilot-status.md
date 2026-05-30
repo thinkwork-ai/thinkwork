@@ -6,7 +6,67 @@ status: active
 
 # Autopilot Status Ledger
 
-## Current Run: Desktop Local Pi Sidecar
+## Current Run: Pi Extensions Architecture
+
+Plan:
+`docs/plans/2026-05-29-004-refactor-pi-extensions-architecture-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: U7 — Port the remaining capabilities to extensions
+- Active branch: `codex/pi-extensions-u7`
+- Active worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u7`
+- Started: 2026-05-30
+- Latest merged PR: none in this run
+- Active PR: [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852)
+- CI: pending (local verification passed)
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the Pi extensions architecture plan and confirmed U1-U6 are already
+  merged on `origin/main`; U7 is the first active unit for this autopilot run.
+- Created isolated U7 worktree from `origin/main` at
+  `281389985953878e9c37885d098bec91a69e3b34`.
+- Main checkout had pre-existing unrelated dirty files; no user/session changes
+  were reverted or overwritten.
+- U7 local implementation complete: moved `web_search`, `browser_automation`,
+  Context Engine, `send_email`, delegation, and workspace skills behind shared
+  `@thinkwork/pi-extensions` extension factories while preserving existing
+  cloud host behavior. Browser automation remains a host-runner adapter because
+  the AWS-backed implementation is intentionally host-specific.
+- U7 cloud runtime wiring now registers migrated capability tools through the
+  extension layer and passes extension tool names into the system-prompt
+  allowlist path, with negative gating coverage proving absent configs do not
+  expose migrated tools.
+- U7 delegation is exposed as a shared extension that requires an explicit
+  `DelegationProvider`; the AgentCore cloud host has the optional seam but does
+  not register delegation until a host supplies that provider.
+- U7 review/autofix: Compound-style review surfaced missing negative gating
+  coverage, missing runtime allowlist coverage, and the delegation extension
+  seam. Added tests/fixes for all three before PR.
+- U7 focused verification passed:
+  `pnpm --filter @thinkwork/pi-extensions test`,
+  `pnpm --filter @thinkwork/pi-extensions typecheck`,
+  `pnpm --filter @thinkwork/pi-extensions build`,
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi build`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`, and targeted migrated-tool
+  server/browser/send-email/context-engine suites.
+- U7 broader verification passed: `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, touched-file Prettier check via
+  `npx --yes prettier@latest --check ...`, `git diff --check`, and
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,221 passed, 9
+  skipped).
+- Opened PR [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852).
+
+## Prior Run: Desktop Local Pi Sidecar
 
 Plan:
 `docs/plans/2026-05-28-003-feat-desktop-local-pi-sidecar-plan.md`

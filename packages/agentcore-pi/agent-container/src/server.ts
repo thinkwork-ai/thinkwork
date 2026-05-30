@@ -44,16 +44,27 @@
 import http from "node:http";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
+  createBrowserAutomationExtension,
+  createContextEngineExtension,
+  createDelegationExtension,
+  createSkillsExtension,
   createMemoryExtension,
+  createSendEmailExtension,
   createSystemPromptExtension,
+  createWebSearchExtension,
+  type AgentToolResult,
+  formatWorkspaceSkills,
   toExtensionFactory,
   type ExtensionFactory,
+  type ProviderBundle,
+  type ThinkworkExtension,
 } from "@thinkwork/pi-extensions";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 import {
   collectToolCosts,
+  type DelegationProvider,
   isFinalizeCallbackConfigured,
   normalizeHistory,
   postFinalizeCallback,
@@ -117,12 +128,8 @@ import {
 import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
-import { buildSendEmailTool } from "./runtime/tools/send-email.js";
-import { buildWebSearchTool } from "./runtime/tools/web-search.js";
-import { buildContextEngineTools } from "./runtime/tools/context-engine.js";
 import {
   discoverWorkspaceSkills,
-  formatWorkspaceSkills,
   type WorkspaceSkill,
 } from "./runtime/tools/workspace-skills.js";
 
@@ -306,6 +313,9 @@ export interface AssembleToolsArgs {
    * alongside the HandleStore.
    */
   mcpRegistry: McpToolRegistry;
+  /** Optional host seam for managed delegation. Cloud currently omits this;
+   * desktop wires its provider when it adopts shared extensions in U9. */
+  delegationProvider?: DelegationProvider;
 }
 
 /**
@@ -344,6 +354,16 @@ export async function assembleTools(
   // closure (built alongside `connectMcpServer` in handleInvocation)
   // resolves handles against the same store this build mints into.
   const handleStore = args.handleStore;
+  const extensionFactories: ExtensionFactory[] = [];
+  const extensionToolNames: string[] = [];
+  const addExtension = (
+    extension: ThinkworkExtension,
+    providers: ProviderBundle = {},
+  ) => {
+    if ((extension.toolNames?.length ?? 0) === 0) return;
+    extensionFactories.push(toExtensionFactory(extension, providers));
+    extensionToolNames.push(...(extension.toolNames ?? []));
+  };
 
   // Run-skill (U5) — only adds the tool if the workspace has scripts.
   const runSkill = buildRunSkillTool({
@@ -373,10 +393,24 @@ export async function assembleTools(
   }
 
   if (args.payload.browser_automation_enabled === true) {
-    tools.push(
-      buildBrowserAutomationTool({
-        client: args.agentCoreClient,
-        traceId: asString(args.payload.trace_id) || undefined,
+    const browserTool = buildBrowserAutomationTool({
+      client: args.agentCoreClient,
+      traceId: asString(args.payload.trace_id) || undefined,
+    });
+    const executeBrowserTool = browserTool.execute as unknown as (
+      toolCallId: string,
+      params: Record<string, unknown>,
+      signal?: AbortSignal,
+    ) => Promise<AgentToolResult<unknown>>;
+    addExtension(
+      createBrowserAutomationExtension({
+        enabled: true,
+        run: (request, signal) =>
+          executeBrowserTool(
+            "browser_automation",
+            request as unknown as Record<string, unknown>,
+            signal,
+          ),
       }),
     );
   }
@@ -385,14 +419,15 @@ export async function assembleTools(
     typeof args.payload.send_email_config === "object" &&
     args.payload.send_email_config
   ) {
-    const sendEmailTool = buildSendEmailTool({
-      sendEmailConfig: args.payload.send_email_config as Record<
-        string,
-        unknown
-      >,
-      payload: args.payload,
-    });
-    if (sendEmailTool) tools.push(sendEmailTool);
+    addExtension(
+      createSendEmailExtension({
+        sendEmailConfig: args.payload.send_email_config as Record<
+          string,
+          unknown
+        >,
+        payload: args.payload,
+      }),
+    );
   }
 
   // Web Search (Exa/SerpApi) — tenant/template-configured, arrives as
@@ -402,13 +437,14 @@ export async function assembleTools(
     typeof args.payload.web_search_config === "object" &&
     args.payload.web_search_config
   ) {
-    const webSearchTool = buildWebSearchTool({
-      webSearchConfig: args.payload.web_search_config as Record<
-        string,
-        unknown
-      >,
-    });
-    if (webSearchTool) tools.push(webSearchTool);
+    addExtension(
+      createWebSearchExtension({
+        webSearchConfig: args.payload.web_search_config as Record<
+          string,
+          unknown
+        >,
+      }),
+    );
   }
 
   // Company Brain / Context Engine — query_context + query_memory_context +
@@ -418,8 +454,9 @@ export async function assembleTools(
     args.payload.eval_mode !== true &&
     args.payload.context_engine_enabled === true
   ) {
-    tools.push(
-      ...buildContextEngineTools({
+    addExtension(
+      createContextEngineExtension({
+        enabled: true,
         apiUrl: asString(args.payload.thinkwork_api_url),
         apiSecret: asString(args.payload.thinkwork_api_secret),
         tenantId: args.identity.tenantId,
@@ -434,6 +471,12 @@ export async function assembleTools(
     );
   }
 
+  if (args.delegationProvider) {
+    addExtension(createDelegationExtension(), {
+      delegation: args.delegationProvider,
+    });
+  }
+
   // Memory — engine selector lives in env. Eval-mode invocations are user-less
   // by construction, so user-scoped memory is skipped entirely (matching
   // `eval_tools_enabled: false` semantics in the direct AgentCore eval payload).
@@ -443,8 +486,6 @@ export async function assembleTools(
   // via the resource loader's `extensionFactories` instead of hand-assembled
   // recall/reflect AgentTools. The managed AgentCore-Memory path stays as custom
   // tools until the firming plan's single-engine cutover retires it.
-  const extensionFactories: ExtensionFactory[] = [];
-  const extensionToolNames: string[] = [];
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -513,6 +554,11 @@ export async function assembleTools(
       threadId: args.identity.threadId,
     });
   }
+
+  // Workspace skills — the prompt lists installed skills, while the extension
+  // exposes `workspace_skill` so the agent can read full SKILL.md instructions
+  // on demand before applying one.
+  addExtension(createSkillsExtension({ skills: args.workspaceSkills }));
 
   // MCP (U7) — validate, mint, build.
   const rawConfigs = parseMcpConfigs(args.payload.mcp_configs);
@@ -1161,7 +1207,10 @@ export async function handleInvocation(
       createSystemPromptExtension({
         payload: args.payload,
         workspaceDir: env.workspaceDir,
-        availableToolNames: bundle.tools.map((tool) => tool.name),
+        availableToolNames: [
+          ...bundle.tools.map((tool) => tool.name),
+          ...bundle.extensionToolNames,
+        ],
         workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
         suffix: attachmentPreamble || undefined,
         onComposed: (prompt) => {
