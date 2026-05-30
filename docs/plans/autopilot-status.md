@@ -3100,53 +3100,36 @@ None.
 
 ## Status
 
-- Branch: `codex/mobile-pi-host-smoke-tools`
 - Plan: `docs/plans/2026-05-30-004-feat-mobile-pi-compatible-host-plan.md`
-- Previous closeout PR #1885 restored the CLI OAuth loopback callbacks and
-  deployed successfully.
-- Current work fixes the deployed mobile smoke harness so it verifies the same
-  extension stack the app uses instead of accidentally overriding the turn with
-  only workspace context plus MCP.
-
-## Implemented
-
-- Smoke harness now registers workspace context, `read`/`grep`/`find`/`ls`,
-  local `just-bash`, mobile-native photo/file/clipboard extensions, and bounded
-  MCP together.
-- Smoke harness reads `EXPO_PUBLIC_GRAPHQL_API_KEY` from `apps/mobile/.env` as
-  a fallback, matching the mobile app env shape.
-- Empty-output error/abort turns now persist a fallback assistant message instead
-  of failing `/api/threads/record-turn`.
-- Mention picker spacing was corrected so the candidate list is attached inside
-  the composer surface; simulator screenshot:
-  `/tmp/thinkwork-screens/mention-picker-composer-flush.png`.
+- Current branch: `codex/mobile-pi-testflight-closeout`
+- Target branch: `main`
+- PR #1886: merged and deployed.
+- TestFlight: current-main iOS build uploaded; Apple processing pending.
 
 ## Verification Log
 
-- `pnpm --filter @thinkwork/mobile test -- lib/agent/thread-turn.test.ts lib/agent/extensions/mobile-native/mobile-native.test.ts` - passed, 15 tests.
-- `pnpm --filter @thinkwork/mobile test` - passed, 182 tests.
-- `pnpm --filter @thinkwork/react-native-sdk build` - passed.
-- `pnpm --filter @thinkwork/mobile build:web` - passed.
-- `pnpm --filter @thinkwork/mobile smoke:pi-harness:dry-run` - passed.
-- Deployed dev mobile Pi smoke passed all required rows:
-  - `plain` `CHAT-898`
-  - `workspace` `CHAT-899`
-  - `workspace_tools` `CHAT-900`
-  - `mcp` `CHAT-901`
-  - `mcp_auth_failure` `CHAT-902`
-  - `bash` `CHAT-903`
-  - `image` `CHAT-904`
-  - `file` `CHAT-905`
-  - `abort` `CHAT-906`
-- `pnpm --filter @thinkwork/mobile exec tsc --noEmit` was attempted and failed
-  on existing unrelated mobile type errors; focused tests and web export passed.
+- PR #1886 (`fix(mobile): verify full Pi host smoke tools`) passed `cla`,
+  `lint`, `test`, `typecheck`, and `verify`.
+- Main deploy run `26697889314` passed after #1886 merged.
+- Deployed mobile Pi harness smokes passed against dev for:
+  `plain`, `workspace`, `workspace_tools`, `mcp`, `mcp_auth_failure`, `bash`,
+  `image`, `file`, and `abort`.
+- iOS simulator visual verification captured the mention picker attached to the
+  composer surface with no gap:
+  `/tmp/thinkwork-screens/mention-picker-composer-flush.png`.
+- EAS iOS production build created from main commit
+  `3665461ed0882ac8c99ef8e3dd3ea4db8361bf72`:
+  - Build id: `5779d0dd-2aec-46e4-939c-e691a4a80c95`
+  - Build number: `18`
+  - Submission id: `082ac8d2-1cae-4415-ac1c-e816753d336e`
+  - Artifact: `https://expo.dev/artifacts/eas/bNvynB3acLzR3BqQFYu3iT.ipa`
+  - Result: uploaded to App Store Connect; Apple processing pending.
 
 ## Remaining Gates
 
-- Open PR for `codex/mobile-pi-host-smoke-tools`, wait for CI, squash merge,
-  delete the branch, and sync `main`.
-- After deploy, trigger the current-main TestFlight build and run the on-device
-  matrix from `apps/mobile/scripts/pi-device-smoke.md`.
+- Wait for Apple to finish TestFlight processing for build 18.
+- Run the on-device TestFlight smoke matrix from
+  `apps/mobile/scripts/pi-device-smoke.md`.
 
 # Desktop Local Pi Optimistic Routing + Performance Telemetry - 2026-05-30
 
