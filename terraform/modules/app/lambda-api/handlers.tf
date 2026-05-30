@@ -790,6 +790,11 @@ locals {
     "POST /api/model/converse"    = "model-converse"
     "OPTIONS /api/model/converse" = "model-converse"
 
+    # Mobile agent harness turn persistence (append a completed turn). OPTIONS
+    # handled inside the Lambda before auth.
+    "POST /api/threads/record-turn"    = "record-turn"
+    "OPTIONS /api/threads/record-turn" = "record-turn"
+
     # Messages
     "ANY /api/messages/{proxy+}" = "messages"
     "ANY /api/messages"          = "messages"

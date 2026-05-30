@@ -10,9 +10,16 @@ import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type {
   AgentSession,
   AgentSessionEvent,
+  ExtensionFactory,
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 
+import {
+  openDurableSession,
+  SessionConflictError,
+  type SessionLog,
+  type SessionStore,
+} from "./durable-session-manager.js";
 import { textFromAssistant } from "./history.js";
 import { collectToolCosts } from "./tool-costs.js";
 import type { RunAgentLoopArgs, RunAgentLoopResult } from "./types.js";
@@ -51,6 +58,13 @@ export interface OpenedSession {
   session: AgentSessionLike;
   /** Model id actually resolved for this turn (for the result `modelId`). */
   modelId: string;
+  /** Present when a durable per-thread session backs this turn. Resumes prior
+   *  context from storage, so the loop sends only the new message (no text
+   *  history prepend). Call after a successful turn to persist the session. */
+  persistSession?: () => Promise<void>;
+  /** True when a durable session is active (resumed or freshly seeded), so the
+   *  loop must NOT prepend conversation text — the session carries context. */
+  durable?: boolean;
 }
 
 export interface RunAgentLoopDeps {
@@ -62,14 +76,38 @@ export interface RunAgentLoopDeps {
    * verified without a live model.
    */
   openSession?: (inputs: OpenSessionInputs) => Promise<OpenedSession>;
+  /** Optional structured logger for durable-session lifecycle + persist
+   *  failures. No-op by default. */
+  log?: SessionLog;
 }
 
 export interface OpenSessionInputs {
   cwd: string;
-  systemPrompt: string;
+  /**
+   * Prebuilt system prompt to override the resource loader's default with. U6
+   * makes this optional: when a system-prompt extension composes the prompt via
+   * `before_agent_start`, the host omits this and the override is not installed.
+   */
+  systemPrompt?: string;
   modelId: string;
   toolAllowlist: string[];
   customTools: ToolDefinition[];
+  /** When a store + threadId are present, the turn runs over a durable
+   *  per-thread session (resume instead of history replay). */
+  sessionStore?: SessionStore;
+  threadId?: string;
+  /** Local scratch dir for the SDK's session file (defaults under cwd). */
+  sessionDir?: string;
+  /** Prior conversation, used only to seed a brand-new durable session. */
+  seedHistory?: Message[];
+  /** Structured logger forwarded to the durable session path. */
+  log?: SessionLog;
+  /**
+   * Pi extension factories the host bound to its provider bundle. Loaded into
+   * the resource loader's `extensionFactories` (U1 mechanism) so the extensions'
+   * tools/hooks reach the session additively over the built-ins + custom tools.
+   */
+  extensionFactories?: ExtensionFactory[];
 }
 
 function resolveModelIdString(modelId: unknown): string {
@@ -153,16 +191,22 @@ export function toToolDefinition(tool: AgentTool<any>): ToolDefinition {
 
 /**
  * Build the `createAgentSession` tool allowlist. Because the allowlist gates
- * custom tools as well as built-ins, the platform tool names must be appended
- * to the full built-in set. De-duplicated so a custom tool that happens to
- * reuse a built-in name does not appear twice (it would then shadow the
- * built-in by name — acceptable, but the list itself stays unique).
+ * custom tools AND extension-registered tools as well as built-ins (the SDK
+ * enables ONLY listed names when an allowlist is provided), all three must be
+ * enumerated: the full built-in set, the custom AgentTool names, and the names
+ * of tools registered by loaded extensions (declared by the host — extension
+ * tools register during load and would otherwise be silently gated out).
+ * De-duplicated so a name appearing in more than one source is listed once.
  */
-export function buildToolAllowlist(customTools: ToolDefinition[]): string[] {
+export function buildToolAllowlist(
+  customTools: ToolDefinition[],
+  extensionToolNames: readonly string[] = [],
+): string[] {
   return [
     ...new Set([
       ...BUILTIN_TOOL_NAMES,
       ...customTools.map((tool) => tool.name),
+      ...extensionToolNames,
     ]),
   ];
 }
@@ -215,30 +259,84 @@ async function defaultOpenSession(
     modelRegistry.find("amazon-bedrock", inputs.modelId) ??
     modelRegistry.find("amazon-bedrock", DEFAULT_BEDROCK_MODEL_ID);
 
-  // Transitional system-prompt injection: U6 moves composition into a
-  // `before_agent_start` extension hook. Until then, override the resource
-  // loader's prompt with our already-composed string (desktop-proven path).
+  // System-prompt source: when the host passes a prebuilt `systemPrompt`,
+  // override the resource loader's default with it (the transitional /
+  // desktop-proven path). U6: when omitted, the system-prompt extension composes
+  // the prompt via its `before_agent_start` hook instead, so no override is
+  // installed and the hook's returned prompt governs the turn.
   const agentDir = path.join(inputs.cwd, PI_AGENT_DIR);
   await mkdir(agentDir, { recursive: true });
+  const systemPromptValue = inputs.systemPrompt;
   const resourceLoader = new DefaultResourceLoader({
     cwd: inputs.cwd,
     agentDir,
-    systemPromptOverride: () => inputs.systemPrompt,
+    ...(systemPromptValue !== undefined
+      ? { systemPromptOverride: () => systemPromptValue }
+      : {}),
+    // U5 — load thinkwork capabilities as Pi extensions via factory injection
+    // (no filesystem discovery; the U1-resolved serverless mechanism). The host
+    // built these closed over its provider bundle. Omitted/empty → no-op.
+    ...(inputs.extensionFactories && inputs.extensionFactories.length > 0
+      ? { extensionFactories: inputs.extensionFactories }
+      : {}),
   });
   await resourceLoader.reload();
 
-  const { session } = await createAgentSession({
+  // Durable per-thread session: resume from storage when a store + threadId are
+  // available; otherwise fall back to an in-memory session (the loop then
+  // prepends conversation text). U4. (const ternary so the manager type infers
+  // through from the factories rather than collapsing to SessionManagerLike.)
+  const durable =
+    inputs.sessionStore && inputs.threadId
+      ? await openDurableSession({
+          store: inputs.sessionStore,
+          threadId: inputs.threadId,
+          cwd: inputs.cwd,
+          sessionDir:
+            inputs.sessionDir ??
+            path.join(inputs.cwd, PI_AGENT_DIR, "sessions"),
+          seedHistory: inputs.seedHistory,
+          factories: {
+            open: (file, dir, cwdOverride) =>
+              SessionManager.open(file, dir, cwdOverride),
+            create: (cwd, dir) => SessionManager.create(cwd, dir),
+          },
+          log: inputs.log,
+        })
+      : undefined;
+  const sessionManager =
+    durable?.sessionManager ?? SessionManager.inMemory(inputs.cwd);
+
+  const { session, extensionsResult } = await createAgentSession({
     cwd: inputs.cwd,
     tools: inputs.toolAllowlist,
     customTools: inputs.customTools,
     resourceLoader,
-    sessionManager: SessionManager.inMemory(inputs.cwd),
+    sessionManager,
     authStorage,
     modelRegistry,
     ...(model ? { model } : {}),
   });
 
-  return { session, modelId: model?.id ?? inputs.modelId };
+  // Surface extension load failures loudly. The SDK collects factory/register
+  // errors into `extensionsResult.errors` and does NOT throw — without this an
+  // extension that fails to register (e.g. a missing provider) would silently
+  // drop its tools/hooks while the host's pre-load log still reads "loaded". U5.
+  for (const failure of extensionsResult?.errors ?? []) {
+    inputs.log?.({
+      level: "error",
+      event: "extension_load_failed",
+      extensionPath: failure.path,
+      error: failure.error,
+    });
+  }
+
+  return {
+    session,
+    modelId: model?.id ?? inputs.modelId,
+    durable: Boolean(durable),
+    persistSession: durable ? () => durable.persist() : undefined,
+  };
 }
 
 export async function runAgentLoop(
@@ -251,15 +349,24 @@ export async function runAgentLoop(
   const toolInvocations: RunAgentLoopResult["toolInvocations"] = [];
 
   const customTools = args.tools.map(toToolDefinition);
-  const toolAllowlist = buildToolAllowlist(customTools);
+  const toolAllowlist = buildToolAllowlist(
+    customTools,
+    args.extensionToolNames,
+  );
   const requestedModelId = resolveModelIdString(args.modelId);
 
-  const { session, modelId } = await openSession({
+  const { session, modelId, durable, persistSession } = await openSession({
     cwd: args.cwd?.trim() || process.cwd(),
     systemPrompt: args.systemPrompt,
     modelId: requestedModelId,
     toolAllowlist,
     customTools,
+    sessionStore: args.sessionStore,
+    threadId: args.threadId || undefined,
+    sessionDir: args.sessionDir,
+    seedHistory: args.history,
+    log: deps.log,
+    extensionFactories: args.extensionFactories,
   });
 
   try {
@@ -306,7 +413,32 @@ export async function runAgentLoop(
       }
     });
 
-    await session.prompt(buildTurnPrompt(args));
+    // A durable session carries prior context (resumed or seeded), so send only
+    // the new message. Without one, fall back to prepending conversation text.
+    await session.prompt(durable ? args.message : buildTurnPrompt(args));
+
+    // Persist the durable session only after a successful turn — a failed turn
+    // leaves the stored session at its prior good state for the retry to resume.
+    // Persistence is best-effort: the assistant reply is already valid, so a
+    // lost concurrency race (SessionConflictError) or a transient store error
+    // must NOT fail the turn and discard the reply. The `If-Match` guard already
+    // prevented any clobber; we log loudly and return the content. The next turn
+    // resumes the winner's state.
+    if (persistSession) {
+      try {
+        await persistSession();
+      } catch (error) {
+        deps.log?.({
+          level: error instanceof SessionConflictError ? "warn" : "error",
+          event:
+            error instanceof SessionConflictError
+              ? "durable_session_persist_conflict"
+              : "durable_session_persist_failed",
+          threadId: args.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const assistant = [...session.messages]
       .reverse()

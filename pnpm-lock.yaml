@@ -331,6 +331,9 @@ importers:
       '@thinkwork/desktop-ipc':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc
+      '@thinkwork/pi-extensions':
+        specifier: workspace:^
+        version: link:../../packages/pi-extensions
       '@thinkwork/pi-runtime-core':
         specifier: workspace:^
         version: link:../../packages/pi-runtime-core
@@ -603,15 +606,24 @@ importers:
 
   apps/spaces:
     dependencies:
+      '@codemirror/lang-javascript':
+        specifier: ^6.2.5
+        version: 6.2.5
       '@codemirror/lang-markdown':
         specifier: ^6.5.0
         version: 6.5.0
+      '@codemirror/lang-python':
+        specifier: ^6.2.1
+        version: 6.2.1
       '@codemirror/state':
         specifier: ^6.6.0
         version: 6.6.0
       '@codemirror/view':
         specifier: ^6.40.0
         version: 6.41.0
+      '@dagrejs/dagre':
+        specifier: ^3.0.0
+        version: 3.0.0
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -690,6 +702,9 @@ importers:
       '@urql/core':
         specifier: ^6.0.0
         version: 6.0.1(graphql@16.13.2)
+      '@xyflow/react':
+        specifier: ^12.10.2
+        version: 12.10.2(@types/react@19.1.17)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       acorn:
         specifier: ^8.16.0
         version: 8.16.0
@@ -744,9 +759,15 @@ importers:
       react-leaflet:
         specifier: ^5.0.0
         version: 5.0.0(leaflet@1.9.4)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      react-markdown:
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@19.1.17)(react@19.1.0)
       recharts:
         specifier: ^2.15.4
         version: 2.15.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
       shiki:
         specifier: ^4.0.2
         version: 4.0.2
@@ -877,6 +898,9 @@ importers:
       '@thinkwork/pi-aws':
         specifier: workspace:*
         version: link:../pi-aws
+      '@thinkwork/pi-extensions':
+        specifier: workspace:*
+        version: link:../pi-extensions
       '@thinkwork/pi-runtime-core':
         specifier: workspace:*
         version: link:../pi-runtime-core
@@ -1389,6 +1413,28 @@ importers:
       aws-sdk-client-mock:
         specifier: ^4.1.0
         version: 4.1.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+
+  packages/pi-extensions:
+    dependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: 0.76.0
+        version: 0.76.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+      '@thinkwork/pi-runtime-core':
+        specifier: workspace:*
+        version: link:../pi-runtime-core
+      typebox:
+        specifier: ^1.1.38
+        version: 1.1.38
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -18725,7 +18771,7 @@ snapshots:
       semver: 7.7.4
       sumchecker: 3.0.1
     optionalDependencies:
-      undici: 7.24.7
+      undici: 7.25.0
     transitivePeerDependencies:
       - supports-color
 
@@ -23997,7 +24043,7 @@ snapshots:
       fs-extra: 10.1.0
       hosted-git-info: 4.1.0
       isbinaryfile: 5.0.7
-      jiti: 2.6.1
+      jiti: 2.7.0
       js-yaml: 4.1.1
       json5: 2.2.3
       lazy-val: 1.0.5

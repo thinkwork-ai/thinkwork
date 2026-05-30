@@ -138,6 +138,7 @@ describe("inviteMember onboarding claim", () => {
     expect(insertCalls.map((call) => call.values)).toEqual([
       {
         id: "cognito-user-1",
+        cognito_sub: "cognito-user-1",
         tenant_id: "tenant-A",
         email: "alex@acme.example",
         name: "Alex Acme",

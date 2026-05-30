@@ -7,10 +7,22 @@ import {
   postFinalizeCallback,
   type DelegationProvider,
   type DesktopPiRuntimeInvocation,
+  type MemoryProvider,
   type PreparedDesktopPiRuntimeSession,
   type RunAgentLoopResult,
 } from "@thinkwork/pi-runtime-core";
-import { Type } from "typebox";
+import {
+  collectExtensionToolNames,
+  createBrowserAutomationExtension,
+  createContextEngineExtension,
+  createDelegationExtension,
+  createMemoryExtension,
+  createSendEmailExtension,
+  createWebSearchExtension,
+  toExtensionFactory,
+  type ProviderBundle,
+  type ThinkworkExtension,
+} from "@thinkwork/pi-extensions";
 import { createManagedDelegationClient } from "./managed-delegation-client.js";
 import { createBedrockRuntimeAdapter } from "./runtime-adapters/bedrock.js";
 import { createHindsightRuntimeAdapter } from "./runtime-adapters/hindsight.js";
@@ -88,6 +100,7 @@ export interface LocalTurnRunnerResult {
 }
 
 const READ_ONLY_WORKSPACE_TOOLS = ["read", "grep", "find", "ls"] as const;
+const HINDSIGHT_RECALL_MAX_TOKENS = 1_500;
 const PROMPT_SOURCE_FILENAMES = new Set(["AGENTS.md", "SPACE.md", "USER.md"]);
 const LOCAL_PI_AGENT_DIR = ".thinkwork-pi";
 const DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
@@ -327,12 +340,19 @@ async function createSdkSession(
     systemPrompt,
     logger,
   });
+  const extensions = createDesktopSharedExtensions(
+    sdk,
+    prepared,
+    logger,
+    deps.fetchImpl ?? fetch,
+  );
   const resourceLoader = sdk.DefaultResourceLoader
     ? new sdk.DefaultResourceLoader({
         cwd: workspaceDir,
         agentDir,
         settingsManager,
         systemPromptOverride: () => systemPrompt,
+        extensionFactories: extensions.extensionFactories,
       })
     : undefined;
   await resourceLoader?.reload?.();
@@ -340,59 +360,15 @@ async function createSdkSession(
   const bedrock = createBedrockRuntimeAdapter(prepared);
   const modelConfig = createPiSdkModelConfig(sdk, invocation, logger);
   const hindsight = createHindsightRuntimeAdapter(prepared);
-  const managedDelegation = createManagedDelegationClient({
-    apiUrl: invocation.thinkwork_api_url,
-    parentThreadTurnId: invocation.thread_turn_id,
-    finalizeCallbackSecret: invocation.finalize_callback_secret,
-  });
-  const delegationTools = createDelegationTools(sdk, managedDelegation, logger);
-  const webSearchTools = createWebSearchTools(
-    sdk,
-    invocation,
-    logger,
-    deps.fetchImpl ?? fetch,
-  );
-  const browserTools = createBrowserAutomationTools(
-    sdk,
-    invocation,
-    logger,
-    deps.fetchImpl ?? fetch,
-  );
-  const contextEngineTools = createContextEngineTools(
-    sdk,
-    invocation,
-    logger,
-    deps.fetchImpl ?? fetch,
-  );
-  const sendEmailTools = createSendEmailTools(
-    sdk,
-    invocation,
-    logger,
-    deps.fetchImpl ?? fetch,
-  );
-  const tools = [
-    ...READ_ONLY_WORKSPACE_TOOLS,
-    ...(webSearchTools.length > 0 ? ["web_search"] : []),
-    ...(browserTools.length > 0 ? ["browser_automation"] : []),
-    ...(contextEngineTools.length > 0
-      ? ["query_context", "query_memory_context", "query_wiki_context"]
-      : []),
-    ...(sendEmailTools.length > 0 ? ["send_email"] : []),
-    ...(delegationTools.length > 0 ? ["delegate_to_managed_agent"] : []),
-  ];
-  const customTools = [
-    ...webSearchTools,
-    ...browserTools,
-    ...contextEngineTools,
-    ...sendEmailTools,
-    ...delegationTools,
-  ];
+  const tools = [...READ_ONLY_WORKSPACE_TOOLS, ...extensions.toolNames];
 
   logger.info("local Pi SDK session creating", {
     tools,
-    customToolCount: customTools.length,
-    webSearchEnabled: webSearchTools.length > 0,
-    browserAutomationEnabled: browserTools.length > 0,
+    customToolCount: extensions.customTools.length,
+    extensionFactoryCount: extensions.extensionFactories.length,
+    webSearchEnabled: extensions.toolNames.includes("web_search"),
+    browserAutomationEnabled:
+      extensions.toolNames.includes("browser_automation"),
     mcpConfigCount: Array.isArray(invocation.mcp_configs)
       ? invocation.mcp_configs.length
       : 0,
@@ -405,7 +381,7 @@ async function createSdkSession(
   return sdk.createAgentSession({
     cwd: workspaceDir,
     tools,
-    customTools,
+    customTools: extensions.customTools,
     resourceLoader,
     sessionManager: sdk.SessionManager?.inMemory(),
     settingsManager,
@@ -420,6 +396,336 @@ async function createSdkSession(
       },
     },
   });
+}
+
+interface DesktopExtensionSpec {
+  extension: ThinkworkExtension;
+  providers?: ProviderBundle;
+}
+
+interface DesktopSharedExtensions {
+  toolNames: string[];
+  extensionFactories: unknown[];
+  customTools: unknown[];
+}
+
+function createDesktopSharedExtensions(
+  sdk: PiSdkModuleLike,
+  prepared: PreparedDesktopPiRuntimeSession,
+  logger: RedactedLogger,
+  fetchImpl: typeof fetch,
+): DesktopSharedExtensions {
+  const { invocation } = prepared;
+  const specs: DesktopExtensionSpec[] = [];
+  const canLoadExtensions =
+    Boolean(sdk.DefaultResourceLoader) || typeof sdk.defineTool === "function";
+
+  if (!canLoadExtensions) {
+    return { toolNames: [], extensionFactories: [], customTools: [] };
+  }
+
+  const addExtension = (
+    extension: ThinkworkExtension,
+    providers?: ProviderBundle,
+  ) => {
+    if ((extension.toolNames?.length ?? 0) === 0) return;
+    specs.push({ extension, providers });
+  };
+
+  const webSearchConfig = readWebSearchConfig(invocation.web_search_config);
+  if (webSearchConfig) {
+    addExtension(createWebSearchExtension({ webSearchConfig, fetchImpl }));
+  }
+
+  if (invocation.browser_automation_enabled === true) {
+    addExtension(
+      createBrowserAutomationExtension({
+        enabled: true,
+        run: async (request, signal) => {
+          if (!isHttpUrl(request.url)) {
+            throw new Error("browser_automation requires an http(s) URL");
+          }
+          if (!request.task) {
+            throw new Error("browser_automation requires a non-empty task");
+          }
+          logger.info("local Pi browser automation started", {
+            url: request.url,
+            taskChars: request.task.length,
+            engine: "desktop_fetch",
+          });
+          throwIfAborted(signal);
+          const result = await runLocalBrowserAutomation({
+            url: request.url,
+            task: request.task,
+            fetchImpl,
+          });
+          logger.info("local Pi browser automation completed", {
+            url: request.url,
+            title: result.title,
+            textChars: result.text.length,
+          });
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            details: result,
+          };
+        },
+      }),
+    );
+  }
+
+  const apiUrl = stringValue(invocation.thinkwork_api_url)?.replace(/\/+$/, "");
+  const threadTurnId = stringValue(invocation.thread_turn_id);
+  const finalizeToken = stringValue(invocation.finalize_callback_secret);
+  if (invocation.context_engine_enabled === true && apiUrl && finalizeToken) {
+    addExtension(
+      createContextEngineExtension({
+        enabled: true,
+        apiUrl,
+        apiSecret: finalizeToken,
+        tenantId: invocation.tenant_id,
+        userId: invocation.user_id,
+        agentId: invocation.assistant_id,
+        threadTurnId,
+        contextEngineConfig: readRecord(invocation.context_engine_config) ?? {},
+        fetchImpl,
+      }),
+    );
+  }
+
+  const sendEmailConfig = readRecord(invocation.send_email_config);
+  if (sendEmailConfig && apiUrl && finalizeToken) {
+    addExtension(
+      createSendEmailExtension({
+        sendEmailConfig: {
+          ...sendEmailConfig,
+          apiUrl: stringValue(sendEmailConfig.apiUrl) ?? apiUrl,
+          apiSecret: stringValue(sendEmailConfig.apiSecret) ?? finalizeToken,
+          threadTurnId,
+        },
+        payload: invocation,
+        fetchImpl,
+      }),
+    );
+  }
+
+  if (hindsightEnabled(prepared)) {
+    addExtension(
+      createMemoryExtension({
+        groundingQuery: invocation.message,
+        onError: (error, context) =>
+          logger.warn("local Pi memory extension warning", {
+            phase: context.phase,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+      }),
+      {
+        memory: createDesktopHindsightMemoryProvider(
+          prepared,
+          fetchImpl,
+          logger,
+        ),
+      },
+    );
+  }
+
+  const managedDelegation = createManagedDelegationClient({
+    apiUrl: invocation.thinkwork_api_url,
+    parentThreadTurnId: invocation.thread_turn_id,
+    finalizeCallbackSecret: invocation.finalize_callback_secret,
+  });
+  addExtension(createDelegationExtension(), {
+    delegation: {
+      async delegate(request) {
+        logger.info("local Pi managed delegation requested", {
+          visibility: request.visibility ?? "hidden",
+          hasTask: request.task.length > 0,
+          hasReason: typeof request.reason === "string",
+          timeoutMs: request.timeoutMs ?? null,
+        });
+        const result = await managedDelegation.delegate(request);
+        logger.info("local Pi managed delegation completed", {
+          visibility: request.visibility ?? "hidden",
+          resultStatus: stringValue(readRecord(result)?.status) ?? "unknown",
+        });
+        return result;
+      },
+    },
+  });
+
+  const extensions = specs.map((spec) => spec.extension);
+  const toolNames = collectExtensionToolNames(extensions);
+  const extensionFactories = sdk.DefaultResourceLoader
+    ? specs.map((spec) =>
+        toExtensionFactory(spec.extension, spec.providers ?? {}),
+      )
+    : [];
+  const customTools = sdk.DefaultResourceLoader
+    ? []
+    : materializeExtensionCustomTools(sdk, specs);
+
+  return { toolNames, extensionFactories, customTools };
+}
+
+function materializeExtensionCustomTools(
+  sdk: PiSdkModuleLike,
+  specs: DesktopExtensionSpec[],
+): unknown[] {
+  if (typeof sdk.defineTool !== "function") return [];
+  const customTools: unknown[] = [];
+  const pi = {
+    registerTool(tool: Record<string, unknown>) {
+      customTools.push(sdk.defineTool?.(tool) ?? tool);
+    },
+    on() {
+      return undefined;
+    },
+  };
+
+  for (const spec of specs) {
+    const result = spec.extension.register(
+      pi as unknown as Parameters<ThinkworkExtension["register"]>[0],
+      spec.providers ?? {},
+    );
+    if (result && typeof (result as Promise<void>).then === "function") {
+      throw new Error(
+        `Desktop fallback cannot synchronously materialize extension "${spec.extension.name}".`,
+      );
+    }
+  }
+  return customTools;
+}
+
+function hindsightEnabled(prepared: PreparedDesktopPiRuntimeSession): boolean {
+  const sidecarHindsight = readRecord(
+    readRecord(prepared.sidecarCredentials)?.hindsight,
+  );
+  const endpoint =
+    stringValue(prepared.invocation.hindsight_endpoint) ??
+    stringValue(sidecarHindsight?.endpoint);
+  return prepared.invocation.use_memory !== false && Boolean(endpoint);
+}
+
+function createDesktopHindsightMemoryProvider(
+  prepared: PreparedDesktopPiRuntimeSession,
+  fetchImpl: typeof fetch,
+  logger: RedactedLogger,
+): MemoryProvider {
+  const sidecarHindsight = readRecord(
+    readRecord(prepared.sidecarCredentials)?.hindsight,
+  );
+  const endpoint =
+    stringValue(prepared.invocation.hindsight_endpoint) ??
+    stringValue(sidecarHindsight?.endpoint);
+  const tenantId = prepared.invocation.tenant_id;
+  const userId = prepared.invocation.user_id;
+  if (!endpoint || !tenantId || !userId) {
+    throw new Error("Desktop Hindsight memory provider is missing scope.");
+  }
+  const bankId = `user_${userId}`;
+  const postJson = async (
+    route: string,
+    body: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown>> => {
+    const response = await fetchImpl(`${endpoint.replace(/\/$/, "")}${route}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`Hindsight ${response.status}: ${text.slice(0, 400)}`);
+    }
+    try {
+      return text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      return { text };
+    }
+  };
+
+  logger.info("local Pi memory extension enabled", {
+    tenantId,
+    bankId,
+  });
+
+  return {
+    async recall(request, signal) {
+      const query = request.query?.trim();
+      if (!query) throw new Error("recall called with an empty query.");
+      const data = await postJson(
+        `/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`,
+        {
+          query,
+          budget: "low",
+          max_tokens: HINDSIGHT_RECALL_MAX_TOKENS,
+          include: { entities: null },
+          types: ["world", "experience", "observation"],
+        },
+        signal,
+      );
+      const memories = toMemoryItems(data);
+      return {
+        memories: request.limit ? memories.slice(0, request.limit) : memories,
+        usage: data.usage,
+      };
+    },
+    async reflect(request, signal) {
+      const query = request.query?.trim();
+      if (!query) throw new Error("reflect called with an empty query.");
+      const data = await postJson(
+        `/v1/default/banks/${encodeURIComponent(bankId)}/reflect`,
+        { query, budget: "mid" },
+        signal,
+      );
+      return {
+        ok: true,
+        text: firstString(data, ["text", "response", "summary", "answer"]),
+        usage: data.usage,
+      };
+    },
+  };
+}
+
+function toMemoryItems(data: Record<string, unknown>) {
+  const raw = Array.isArray(data.memory_units)
+    ? data.memory_units
+    : Array.isArray(data.memories)
+      ? data.memories
+      : Array.isArray(data.results)
+        ? data.results
+        : [];
+  return raw
+    .map((unit, index) => {
+      const record = readRecord(unit) ?? {};
+      const content =
+        typeof unit === "string"
+          ? unit.trim()
+          : firstString(record, ["text", "content", "summary", "value"]);
+      if (!content) return null;
+      return {
+        id:
+          stringValue(record.id) ??
+          stringValue(record.memory_unit_id) ??
+          `unit-${index}`,
+        content,
+        ...(typeof record.score === "number" ? { score: record.score } : {}),
+      };
+    })
+    .filter((item): item is { id: string; content: string; score?: number } =>
+      Boolean(item),
+    );
+}
+
+function firstString(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = stringValue(record[key]);
+    if (value) return value;
+  }
+  return undefined;
 }
 
 function createPiSdkModelConfig(
@@ -593,439 +899,6 @@ function renderPromptSourceIndex(promptFiles: PromptSourceFile[]): string {
       : ["- No AGENTS.md, SPACE.md, or USER.md files were found."]),
     "",
   ].join("\n");
-}
-
-function createWebSearchTools(
-  sdk: PiSdkModuleLike,
-  invocation: DesktopPiRuntimeInvocation,
-  logger: RedactedLogger,
-  fetchImpl: typeof fetch,
-): unknown[] {
-  if (typeof sdk.defineTool !== "function") return [];
-  const config = readWebSearchConfig(invocation.web_search_config);
-  if (!config) return [];
-
-  return [
-    sdk.defineTool({
-      name: "web_search",
-      label: "Web Search",
-      description:
-        "Search the web with the tenant-configured provider. Use this for current facts, weather, recent sources, or anything that requires up-to-date web information.",
-      parameters: Type.Object({
-        query: Type.String({
-          description: "Search query to run.",
-        }),
-        limit: Type.Optional(
-          Type.Number({
-            description: "Maximum number of results to return, from 1 to 10.",
-          }),
-        ),
-      }),
-      execute: async (_toolCallId: string, params: Record<string, unknown>) => {
-        const query =
-          typeof params.query === "string" ? params.query.trim() : "";
-        const limit = clampResultLimit(
-          typeof params.limit === "number" ? params.limit : 5,
-        );
-        if (!query) {
-          throw new Error("web_search requires a non-empty query");
-        }
-        logger.info("local Pi web search requested", {
-          provider: config.provider,
-          queryChars: query.length,
-          limit,
-        });
-        const results = await runLocalWebSearch({
-          provider: config.provider,
-          apiKey: config.apiKey,
-          query,
-          limit,
-          fetchImpl,
-        });
-        logger.info("local Pi web search completed", {
-          provider: config.provider,
-          resultCount: results.length,
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ results }),
-            },
-          ],
-          results,
-        };
-      },
-    }),
-  ];
-}
-
-function createContextEngineTools(
-  sdk: PiSdkModuleLike,
-  invocation: DesktopPiRuntimeInvocation,
-  logger: RedactedLogger,
-  fetchImpl: typeof fetch,
-): unknown[] {
-  if (typeof sdk.defineTool !== "function") return [];
-  if (invocation.context_engine_enabled !== true) return [];
-  const apiUrl = stringValue(invocation.thinkwork_api_url)?.replace(/\/+$/, "");
-  const token = invocation.finalize_callback_secret;
-  const threadTurnId = invocation.thread_turn_id;
-  if (!apiUrl || !token || !threadTurnId) return [];
-
-  const config = readRecord(invocation.context_engine_config) ?? {};
-  const providerDefaults = readRecord(config.providers) ?? {};
-  const providerOptions = readRecord(config.providerOptions) ?? {};
-
-  async function jsonRpc(
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    try {
-      const response = await fetchImpl(`${apiUrl}/mcp/context-engine`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-          "x-thread-turn-id": threadTurnId,
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "local-pi-context-engine",
-          method: "tools/call",
-          params: { name, arguments: args },
-        }),
-      });
-      if (!response.ok) {
-        return `Context Engine failed: HTTP ${response.status}`;
-      }
-      const payload = (await response.json().catch(() => ({}))) as Record<
-        string,
-        unknown
-      >;
-      const error = readRecord(payload.error);
-      if (error) {
-        return `Context Engine failed: ${stringValue(error.message) ?? "unknown error"}`;
-      }
-      const result = readRecord(payload.result) ?? {};
-      const content = Array.isArray(result.content) ? result.content : [];
-      const text = content
-        .map((item) => stringValue(readRecord(item)?.text))
-        .filter((value): value is string => Boolean(value))
-        .join("\n")
-        .trim();
-      return text || JSON.stringify(result.structuredContent ?? result);
-    } catch (err) {
-      return `Context Engine failed: ${err instanceof Error ? err.message : String(err)}`;
-    }
-  }
-
-  const sharedParams = {
-    query: Type.String({ description: "The search query." }),
-    mode: Type.Optional(Type.String({ description: '"results" or "answer".' })),
-    scope: Type.Optional(
-      Type.String({ description: '"personal", "team", or "auto".' }),
-    ),
-    depth: Type.Optional(Type.String({ description: '"quick" or "deep".' })),
-    limit: Type.Optional(Type.Number({ description: "Max results, 1-50." })),
-  };
-  const norm = (params: Record<string, unknown>) => ({
-    query: typeof params.query === "string" ? params.query.trim() : "",
-    mode: params.mode === "answer" ? "answer" : "results",
-    scope:
-      params.scope === "personal" || params.scope === "team"
-        ? params.scope
-        : "auto",
-    depth: params.depth === "deep" ? "deep" : "quick",
-    limit: Math.max(1, Math.min(Math.trunc(Number(params.limit) || 10), 50)),
-  });
-  const wrap = (text: string) => ({ content: [{ type: "text", text }] });
-
-  return [
-    sdk.defineTool({
-      name: "query_context",
-      label: "Company Brain",
-      description:
-        "Search the Thinkwork Context Engine (Company Brain) across wiki, workspace files, knowledge bases, and memory. Use this first for ordinary context lookup.",
-      parameters: Type.Object(sharedParams),
-      execute: async (_id: string, params: Record<string, unknown>) => {
-        const n = norm(params);
-        if (!n.query)
-          throw new Error("query_context requires a non-empty query");
-        logger.info("local Pi context engine query", { tool: "query_context" });
-        return wrap(
-          await jsonRpc("query_context", {
-            ...n,
-            ...(Object.keys(providerDefaults).length > 0
-              ? { providers: providerDefaults }
-              : {}),
-            ...(Object.keys(providerOptions).length > 0
-              ? { providerOptions }
-              : {}),
-          }),
-        );
-      },
-    }),
-    sdk.defineTool({
-      name: "query_memory_context",
-      label: "Memory Search",
-      description:
-        "Search only Thinkwork Hindsight Memory. Use when raw long-term memory recall is specifically requested.",
-      parameters: Type.Object(sharedParams),
-      execute: async (_id: string, params: Record<string, unknown>) => {
-        const n = norm(params);
-        if (!n.query)
-          throw new Error("query_memory_context requires a non-empty query");
-        logger.info("local Pi context engine query", {
-          tool: "query_memory_context",
-        });
-        return wrap(
-          await jsonRpc("query_memory_context", {
-            ...n,
-            ...(Object.keys(providerOptions).length > 0
-              ? { providerOptions }
-              : {}),
-          }),
-        );
-      },
-    }),
-    sdk.defineTool({
-      name: "query_wiki_context",
-      label: "Wiki Search",
-      description:
-        "Search only Thinkwork Compounding Wiki pages (entities, topics, decisions).",
-      parameters: Type.Object(sharedParams),
-      execute: async (_id: string, params: Record<string, unknown>) => {
-        const n = norm(params);
-        if (!n.query)
-          throw new Error("query_wiki_context requires a non-empty query");
-        logger.info("local Pi context engine query", {
-          tool: "query_wiki_context",
-        });
-        return wrap(await jsonRpc("query_wiki_context", n));
-      },
-    }),
-  ];
-}
-
-function createSendEmailTools(
-  sdk: PiSdkModuleLike,
-  invocation: DesktopPiRuntimeInvocation,
-  logger: RedactedLogger,
-  fetchImpl: typeof fetch,
-): unknown[] {
-  if (typeof sdk.defineTool !== "function") return [];
-  const config = readRecord(invocation.send_email_config);
-  if (!config) return [];
-  const apiUrl = (
-    stringValue(invocation.thinkwork_api_url) ?? stringValue(config.apiUrl)
-  )?.replace(/\/+$/, "");
-  const agentId = stringValue(config.agentId);
-  const token = invocation.finalize_callback_secret;
-  const threadTurnId = invocation.thread_turn_id;
-  const turnContext = readRecord(invocation.turn_context) ?? {};
-  const spaceTenantSlug =
-    stringValue(turnContext.spaceTenantSlug) ??
-    stringValue(turnContext.tenantSlug);
-  const spaceSlug = stringValue(turnContext.spaceSlug);
-  const threadId = stringValue(config.threadId);
-  if (!apiUrl || !agentId || !token || !threadTurnId) return [];
-
-  return [
-    sdk.defineTool({
-      name: "send_email",
-      label: "Send Email",
-      description:
-        'Send a plain text email from the active Space email address. Use recipient "me" for the signed-in user.',
-      parameters: Type.Object({
-        to: Type.String({
-          description:
-            'Recipient email, "me" for the signed-in user, or comma-separated recipients.',
-        }),
-        subject: Type.String({ description: "Email subject line." }),
-        body: Type.String({ description: "Plain text email body." }),
-      }),
-      execute: async (_id: string, params: Record<string, unknown>) => {
-        const to = stringValue(params.to);
-        const subject = stringValue(params.subject);
-        const body = stringValue(params.body);
-        if (!to) throw new Error("send_email requires a recipient");
-        if (!subject) throw new Error("send_email requires a subject");
-        if (!body) throw new Error("send_email requires a body");
-        if (!spaceTenantSlug || !spaceSlug) {
-          throw new Error(
-            "send_email requires active Space email context for this turn",
-          );
-        }
-        logger.info("local Pi send email requested", { agentId });
-        const response = await fetchImpl(`${apiUrl}/api/email/send`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${token}`,
-            "x-thread-turn-id": threadTurnId,
-          },
-          body: JSON.stringify({
-            agentId,
-            to,
-            subject,
-            body,
-            spaceTenantSlug,
-            spaceSlug,
-            ...(threadId ? { threadId } : {}),
-          }),
-        });
-        if (!response.ok) {
-          const detail = await response.text().catch(() => "");
-          throw new Error(
-            `Email send failed: HTTP ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
-          );
-        }
-        const result = (await response.json().catch(() => ({}))) as Record<
-          string,
-          unknown
-        >;
-        return {
-          content: [{ type: "text", text: `Email sent to ${to}.` }],
-          details: result,
-        };
-      },
-    }),
-  ];
-}
-
-function createDelegationTools(
-  sdk: PiSdkModuleLike,
-  delegationProvider: DelegationProvider,
-  logger: RedactedLogger,
-): unknown[] {
-  if (typeof sdk.defineTool !== "function") return [];
-  return [
-    sdk.defineTool({
-      name: "delegate_to_managed_agent",
-      label: "Delegate",
-      description:
-        "Ask a managed AWS ThinkWork agent worker to perform hosted, long-running, risky, or cloud-isolated work.",
-      parameters: Type.Object({
-        task: Type.String({
-          description: "Concrete work for the managed agent to perform.",
-        }),
-        visibility: Type.Optional(
-          Type.Union([Type.Literal("hidden"), Type.Literal("visible")], {
-            description:
-              "Use hidden for routine helper work; visible for consequential, long-running, risky, or user-steerable work.",
-          }),
-        ),
-        reason: Type.Optional(
-          Type.String({
-            description: "Short reason the work should run in AWS.",
-          }),
-        ),
-        timeoutMs: Type.Optional(
-          Type.Number({
-            description:
-              "How long to wait for a hidden delegation result before returning accepted status.",
-          }),
-        ),
-      }),
-      execute: async (_toolCallId: string, params: Record<string, unknown>) => {
-        const task = typeof params.task === "string" ? params.task : "";
-        const visibility =
-          params.visibility === "visible" || params.visibility === "hidden"
-            ? params.visibility
-            : "hidden";
-        logger.info("local Pi managed delegation requested", {
-          visibility,
-          hasTask: task.length > 0,
-          hasReason: typeof params.reason === "string",
-          timeoutMs:
-            typeof params.timeoutMs === "number" ? params.timeoutMs : null,
-        });
-        const result = await delegationProvider.delegate({
-          task,
-          visibility,
-          reason: typeof params.reason === "string" ? params.reason : undefined,
-          timeoutMs:
-            typeof params.timeoutMs === "number" ? params.timeoutMs : undefined,
-        });
-        logger.info("local Pi managed delegation completed", {
-          visibility,
-          resultStatus: stringValue(readRecord(result)?.status) ?? "unknown",
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result),
-            },
-          ],
-          details: result,
-        };
-      },
-    }),
-  ];
-}
-
-function createBrowserAutomationTools(
-  sdk: PiSdkModuleLike,
-  invocation: DesktopPiRuntimeInvocation,
-  logger: RedactedLogger,
-  fetchImpl: typeof fetch,
-): unknown[] {
-  if (typeof sdk.defineTool !== "function") return [];
-  if (invocation.browser_automation_enabled !== true) return [];
-
-  return [
-    sdk.defineTool({
-      name: "browser_automation",
-      label: "Browser Automation",
-      description:
-        "Open a public web page locally and extract text relevant to the task. Use web_search first for current facts; use browser_automation when a specific page needs inspection.",
-      parameters: Type.Object({
-        url: Type.String({
-          description: "Absolute http(s) URL to inspect.",
-        }),
-        task: Type.String({
-          description: "What information to extract from the page.",
-        }),
-      }),
-      execute: async (_toolCallId: string, params: Record<string, unknown>) => {
-        const url = typeof params.url === "string" ? params.url.trim() : "";
-        const task = typeof params.task === "string" ? params.task.trim() : "";
-        if (!isHttpUrl(url)) {
-          throw new Error("browser_automation requires an http(s) URL");
-        }
-        if (!task) {
-          throw new Error("browser_automation requires a non-empty task");
-        }
-
-        logger.info("local Pi browser automation started", {
-          url,
-          taskChars: task.length,
-          engine: "desktop_fetch",
-        });
-        const result = await runLocalBrowserAutomation({
-          url,
-          task,
-          fetchImpl,
-        });
-        logger.info("local Pi browser automation completed", {
-          url,
-          title: result.title,
-          textChars: result.text.length,
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result),
-            },
-          ],
-          details: result,
-        };
-      },
-    }),
-  ];
 }
 
 function buildSystemPrompt(invocation: DesktopPiRuntimeInvocation): string {
@@ -1243,14 +1116,6 @@ interface LocalWebSearchConfig {
   apiKey: string;
 }
 
-interface LocalWebSearchResult {
-  id: string;
-  title: string;
-  url?: string;
-  snippet: string;
-  score: number;
-}
-
 interface LocalBrowserAutomationResult {
   url: string;
   title: string;
@@ -1286,135 +1151,12 @@ async function runLocalBrowserAutomation(args: {
   };
 }
 
-async function runLocalWebSearch(args: {
-  provider: WebSearchProvider;
-  apiKey: string;
-  query: string;
-  limit: number;
-  fetchImpl: typeof fetch;
-}): Promise<LocalWebSearchResult[]> {
-  if (args.provider === "serpapi") return runLocalSerpApiSearch(args);
-  return runLocalExaSearch(args);
-}
-
-async function runLocalExaSearch(args: {
-  apiKey: string;
-  query: string;
-  limit: number;
-  fetchImpl: typeof fetch;
-}): Promise<LocalWebSearchResult[]> {
-  const response = await args.fetchImpl("https://api.exa.ai/search", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": args.apiKey,
-      "User-Agent": "Thinkwork/1.0",
-    },
-    body: JSON.stringify({
-      query: args.query,
-      numResults: args.limit,
-      contents: { summary: true },
-    }),
-    signal: AbortSignal.timeout(25_000),
-  });
-  const payload = (await response.json().catch(() => ({}))) as {
-    results?: unknown[];
-    error?: string;
-  };
-  if (!response.ok || payload.error) {
-    throw new Error(
-      payload.error ||
-        `Exa ${response.status}: ${JSON.stringify(payload).slice(0, 200)}`,
-    );
-  }
-  return (Array.isArray(payload.results) ? payload.results : [])
-    .slice(0, args.limit)
-    .map((item, index) => normalizeExaResult(item, index))
-    .filter((item): item is LocalWebSearchResult => item !== null);
-}
-
-async function runLocalSerpApiSearch(args: {
-  apiKey: string;
-  query: string;
-  limit: number;
-  fetchImpl: typeof fetch;
-}): Promise<LocalWebSearchResult[]> {
-  const params = new URLSearchParams({
-    engine: "google",
-    q: args.query,
-    num: String(args.limit),
-    api_key: args.apiKey,
-  });
-  const response = await args.fetchImpl(
-    `https://serpapi.com/search.json?${params}`,
-    { signal: AbortSignal.timeout(10_000) },
-  );
-  const payload = (await response.json().catch(() => ({}))) as {
-    organic_results?: unknown[];
-    error?: string;
-  };
-  if (!response.ok || payload.error) {
-    throw new Error(
-      payload.error ||
-        `SerpAPI ${response.status}: ${JSON.stringify(payload).slice(0, 200)}`,
-    );
-  }
-  return (Array.isArray(payload.organic_results) ? payload.organic_results : [])
-    .slice(0, args.limit)
-    .map((item, index) => normalizeSerpApiResult(item, index))
-    .filter((item): item is LocalWebSearchResult => item !== null);
-}
-
-function normalizeExaResult(
-  item: unknown,
-  index: number,
-): LocalWebSearchResult | null {
-  const record = readRecord(item);
-  if (!record) return null;
-  const title = stringValue(record.title) || stringValue(record.url);
-  const snippet =
-    stringValue(record.summary) ||
-    stringValue(record.highlights) ||
-    cleanSearchText(stringValue(record.text));
-  if (!title || !snippet) return null;
-  return {
-    id: stringValue(record.id) ?? String(index + 1),
-    title,
-    url: stringValue(record.url),
-    snippet: snippet.slice(0, 700),
-    score: numberValue(record.score) ?? 1 / (index + 1),
-  };
-}
-
-function normalizeSerpApiResult(
-  item: unknown,
-  index: number,
-): LocalWebSearchResult | null {
-  const record = readRecord(item);
-  if (!record) return null;
-  const title = stringValue(record.title) || stringValue(record.link);
-  const snippet = stringValue(record.snippet);
-  if (!title || !snippet) return null;
-  return {
-    id: stringValue(record.position) ?? String(index + 1),
-    title,
-    url: stringValue(record.link),
-    snippet: snippet.slice(0, 700),
-    score: 1 / (index + 1),
-  };
-}
-
 function readWebSearchConfig(value: unknown): LocalWebSearchConfig | null {
   const record = readRecord(value);
   if (!record) return null;
   const provider = record.provider === "serpapi" ? "serpapi" : "exa";
   const apiKey = stringValue(record.apiKey);
   return apiKey ? { provider, apiKey } : null;
-}
-
-function clampResultLimit(value: number): number {
-  if (!Number.isFinite(value)) return 5;
-  return Math.max(1, Math.min(Math.floor(value), 10));
 }
 
 function cleanSearchText(text: string | undefined): string | undefined {
@@ -1498,8 +1240,7 @@ async function finalizeTurn(args: {
       agentSlug: args.prepared.invocation.instance_id,
       traceId: args.prepared.invocation.trace_id,
     },
-    systemPrompt:
-      args.systemPrompt ?? args.prepared.invocation.system_prompt,
+    systemPrompt: args.systemPrompt ?? args.prepared.invocation.system_prompt,
     result:
       args.status === "ok" && args.runResult
         ? { status: "ok", runResult: args.runResult, latencyMs }
@@ -1601,10 +1342,4 @@ function readRecord(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
 }

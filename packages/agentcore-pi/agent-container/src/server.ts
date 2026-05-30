@@ -43,11 +43,29 @@
 
 import http from "node:http";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import {
+  createBrowserAutomationExtension,
+  createContextEngineExtension,
+  createDelegationExtension,
+  createSkillsExtension,
+  createMemoryExtension,
+  createSendEmailExtension,
+  createSystemPromptExtension,
+  createWebSearchExtension,
+  type AgentToolResult,
+  formatWorkspaceSkills,
+  toExtensionFactory,
+  type ExtensionFactory,
+  type ProviderBundle,
+  type ThinkworkExtension,
+} from "@thinkwork/pi-extensions";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 import {
+  BUILTIN_TOOL_NAMES,
   collectToolCosts,
+  type DelegationProvider,
   isFinalizeCallbackConfigured,
   normalizeHistory,
   postFinalizeCallback,
@@ -89,15 +107,15 @@ import {
   type McpJsonConfig,
 } from "./runtime/mcp-json.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
-import { buildHindsightTools } from "./tools/hindsight.js";
 import { buildMemoryTools } from "./tools/memory.js";
+import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import {
   AuroraSessionStore,
   type AuroraSessionStoreOptions,
 } from "./sessionstore-aurora.js";
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
-import { composeSystemPrompt } from "./runtime/system-prompt.js";
+import { createS3SessionStore } from "./runtime/session-store.js";
 import {
   buildFileReadTool,
   cleanupMessageAttachments,
@@ -108,17 +126,12 @@ import {
   retainConversation,
   type RetainPayloadInput,
 } from "./runtime/tools/memory-retain-client.js";
-import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
-import { buildBrowserAutomationTool } from "./runtime/tools/browser-automation.js";
-import { buildSendEmailTool } from "./runtime/tools/send-email.js";
-import { buildWebSearchTool } from "./runtime/tools/web-search.js";
-import { buildContextEngineTools } from "./runtime/tools/context-engine.js";
+import { runAgentCoreBrowserAutomation } from "./runtime/browser-automation-runner.js";
 import {
   discoverWorkspaceSkills,
-  formatWorkspaceSkills,
   type WorkspaceSkill,
-} from "./runtime/tools/workspace-skills.js";
+} from "./runtime/workspace-skills.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -215,7 +228,7 @@ export interface HandlerDependencies {
    * Production callers omit this; the runtime never observes the bundle
    * after cleanup.
    */
-  onHandlerComplete?: (bundle: AssembledToolBundle) => void;
+  onHandlerComplete?: (bundle: InvocationResourceBundle) => void;
 }
 
 const defaultDependencies: HandlerDependencies = {
@@ -228,8 +241,23 @@ const defaultDependencies: HandlerDependencies = {
 // Tool assembly — pure given the snapshots + payload + factories.
 // ---------------------------------------------------------------------------
 
-export interface AssembledToolBundle {
+export interface InvocationResourceBundle {
   tools: AgentTool<any>[];
+  /**
+   * Plan §004 U5 — Pi extension factories loaded into the session's resource
+   * loader alongside `tools`. Each is a capability from
+   * `@thinkwork/pi-extensions` bound to its U3 provider bundle. Memory is the
+   * first (the tracer bullet); U7 ports the rest. The agent loop forwards these
+   * to `DefaultResourceLoader.extensionFactories`.
+   */
+  extensionFactories: ExtensionFactory[];
+  /**
+   * Tool names registered by the loaded extensions (e.g. memory's
+   * `recall`/`reflect`). The agent loop folds these into the
+   * `createAgentSession` allowlist — without them the SDK gates extension tools
+   * out (they register but never reach the model). U6.
+   */
+  extensionToolNames: string[];
   cleanup: Array<() => Promise<void>>;
   workspaceSkills: WorkspaceSkill[];
   handleStore: HandleStore;
@@ -244,7 +272,7 @@ export interface AssembledToolBundle {
   mcpProxyRegistered: boolean;
 }
 
-export interface AssembleToolsArgs {
+export interface BuildInvocationResourcesArgs {
   payload: Record<string, unknown>;
   identity: IdentitySnapshot;
   env: RuntimeEnvSnapshot;
@@ -263,7 +291,7 @@ export interface AssembleToolsArgs {
   /**
    * U16 — Per-invocation `HandleStore` allocated by the caller. The
    * scrubbing fetch passed into `createConnectMcpServer` resolves
-   * handles against THIS store; if assembleTools created its own
+   * handles against THIS store; if the resource builder created its own
    * private one, the fetch would hold a stale reference and resolve
    * would always fail. Must be the same instance across the
    * trusted-handler / MCP-connect / buildMcpTools triangle.
@@ -285,10 +313,13 @@ export interface AssembleToolsArgs {
    * alongside the HandleStore.
    */
   mcpRegistry: McpToolRegistry;
+  /** Optional host seam for managed delegation. Cloud currently omits this;
+   * desktop wires its provider when it adopts shared extensions in U9. */
+  delegationProvider?: DelegationProvider;
 }
 
 /**
- * Plan §006 U4 — thrown by `assembleTools` when an `mcp.json` directTools
+ * Plan §006 U4 — thrown by the invocation resource builder when an `mcp.json` directTools
  * entry references a (server, tool) the live MCP registry did not surface
  * after connect. The trusted handler catches this in its outer try/catch
  * and surfaces a structured 500 response so the operator sees the
@@ -309,32 +340,29 @@ export class DirectToolsValidationError extends Error {
 }
 
 /**
- * Build the per-invocation tool surface. Returns the tool array plus a
- * `cleanup` queue the trusted handler drains in `finally`. Every choice
- * here is observable to the structured logger so an operator can audit
- * which tools the agent received.
+ * Build the per-invocation resource surface. The capability tools and prompt
+ * policy now come from shared extensions; this helper only binds the host
+ * providers and the remaining Pi-specific built-ins/custom tools.
  */
-export async function assembleTools(
-  args: AssembleToolsArgs,
-): Promise<AssembledToolBundle> {
+export async function buildInvocationResources(
+  args: BuildInvocationResourcesArgs,
+): Promise<InvocationResourceBundle> {
   const tools: AgentTool<any>[] = [];
   const cleanup = args.cleanup;
   // U16 — caller allocates the HandleStore so the scrubbing fetch
   // closure (built alongside `connectMcpServer` in handleInvocation)
   // resolves handles against the same store this build mints into.
   const handleStore = args.handleStore;
-
-  // Run-skill (U5) — only adds the tool if the workspace has scripts.
-  const runSkill = buildRunSkillTool({
-    skills: [],
-    // U5 expects a manifest of skillId/skillDir/scripts. The legacy
-    // workspace-skills discovery returns SKILL.md descriptors, not the
-    // script-bridge manifest. Wire-up of the script-bridge manifest is a
-    // followup unit (tracked under FR-7 work). Until then run_skill is
-    // exposed only when an explicit manifest is provided via env (out of
-    // scope for U9).
-  });
-  if (runSkill) tools.push(runSkill);
+  const extensionFactories: ExtensionFactory[] = [];
+  const extensionToolNames: string[] = [];
+  const addExtension = (
+    extension: ThinkworkExtension,
+    providers: ProviderBundle = {},
+  ) => {
+    if ((extension.toolNames?.length ?? 0) === 0) return;
+    extensionFactories.push(toExtensionFactory(extension, providers));
+    extensionToolNames.push(...(extension.toolNames ?? []));
+  };
 
   const sandboxInterpreterId = asString(args.payload.sandbox_interpreter_id);
   if (sandboxInterpreterId) {
@@ -352,10 +380,17 @@ export async function assembleTools(
   }
 
   if (args.payload.browser_automation_enabled === true) {
-    tools.push(
-      buildBrowserAutomationTool({
-        client: args.agentCoreClient,
-        traceId: asString(args.payload.trace_id) || undefined,
+    addExtension(
+      createBrowserAutomationExtension({
+        enabled: true,
+        run: (request) =>
+          runAgentCoreBrowserAutomation(
+            {
+              client: args.agentCoreClient,
+              traceId: asString(args.payload.trace_id) || undefined,
+            },
+            request,
+          ) as Promise<AgentToolResult<unknown>>,
       }),
     );
   }
@@ -364,14 +399,15 @@ export async function assembleTools(
     typeof args.payload.send_email_config === "object" &&
     args.payload.send_email_config
   ) {
-    const sendEmailTool = buildSendEmailTool({
-      sendEmailConfig: args.payload.send_email_config as Record<
-        string,
-        unknown
-      >,
-      payload: args.payload,
-    });
-    if (sendEmailTool) tools.push(sendEmailTool);
+    addExtension(
+      createSendEmailExtension({
+        sendEmailConfig: args.payload.send_email_config as Record<
+          string,
+          unknown
+        >,
+        payload: args.payload,
+      }),
+    );
   }
 
   // Web Search (Exa/SerpApi) — tenant/template-configured, arrives as
@@ -381,13 +417,14 @@ export async function assembleTools(
     typeof args.payload.web_search_config === "object" &&
     args.payload.web_search_config
   ) {
-    const webSearchTool = buildWebSearchTool({
-      webSearchConfig: args.payload.web_search_config as Record<
-        string,
-        unknown
-      >,
-    });
-    if (webSearchTool) tools.push(webSearchTool);
+    addExtension(
+      createWebSearchExtension({
+        webSearchConfig: args.payload.web_search_config as Record<
+          string,
+          unknown
+        >,
+      }),
+    );
   }
 
   // Company Brain / Context Engine — query_context + query_memory_context +
@@ -397,8 +434,9 @@ export async function assembleTools(
     args.payload.eval_mode !== true &&
     args.payload.context_engine_enabled === true
   ) {
-    tools.push(
-      ...buildContextEngineTools({
+    addExtension(
+      createContextEngineExtension({
+        enabled: true,
         apiUrl: asString(args.payload.thinkwork_api_url),
         apiSecret: asString(args.payload.thinkwork_api_secret),
         tenantId: args.identity.tenantId,
@@ -413,10 +451,21 @@ export async function assembleTools(
     );
   }
 
-  // Memory (U6) — engine selector lives in env. Eval-mode invocations are
-  // user-less by construction, so user-scoped memory + hindsight tools are
-  // skipped entirely (matching `eval_tools_enabled: false` semantics in the
-  // direct AgentCore eval payload).
+  if (args.delegationProvider) {
+    addExtension(createDelegationExtension(), {
+      delegation: args.delegationProvider,
+    });
+  }
+
+  // Memory — engine selector lives in env. Eval-mode invocations are user-less
+  // by construction, so user-scoped memory is skipped entirely (matching
+  // `eval_tools_enabled: false` semantics in the direct AgentCore eval payload).
+  //
+  // Plan §004 U5 — the Hindsight path is now a Pi EXTENSION (the tracer bullet):
+  // a Hindsight-backed MemoryProvider wrapped by `createMemoryExtension`, loaded
+  // via the resource loader's `extensionFactories` instead of hand-assembled
+  // recall/reflect AgentTools. The managed AgentCore-Memory path stays as custom
+  // tools until the firming plan's single-engine cutover retires it.
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -444,24 +493,52 @@ export async function assembleTools(
         threadId: args.identity.threadId,
       });
     }
-  } else {
-    if (args.env.hindsightEndpoint) {
-      tools.push(
-        ...buildHindsightTools({
-          endpoint: args.env.hindsightEndpoint,
+  } else if (args.env.hindsightEndpoint) {
+    const memoryProvider = createHindsightMemoryProvider({
+      endpoint: args.env.hindsightEndpoint,
+      tenantId: args.identity.tenantId,
+      userId: args.identity.userId,
+    });
+    // The turn's user message grounds the proactive session_start recall.
+    const memoryExtension = createMemoryExtension({
+      groundingQuery: asString(args.payload.message),
+      // Grounding is best-effort — surface a failed/timed-out recall to
+      // CloudWatch instead of letting it vanish silently.
+      onError: (error, { phase }) =>
+        logStructured({
+          level: "warn",
+          event: "memory_grounding_failed",
+          phase,
           tenantId: args.identity.tenantId,
-          userId: args.identity.userId,
+          threadId: args.identity.threadId,
+          error: error instanceof Error ? error.message : String(error),
         }),
-      );
-    } else {
-      logStructured({
-        level: "warn",
-        event: "hindsight_skipped_no_endpoint",
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-      });
-    }
+    });
+    extensionFactories.push(
+      toExtensionFactory(memoryExtension, { memory: memoryProvider }),
+    );
+    // Fold the extension's tool names into the allowlist or recall/reflect
+    // register but never reach the model (the SDK gates to the allowlist).
+    extensionToolNames.push(...(memoryExtension.toolNames ?? []));
+    logStructured({
+      level: "info",
+      event: "memory_extension_loaded",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
+  } else {
+    logStructured({
+      level: "warn",
+      event: "hindsight_skipped_no_endpoint",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
   }
+
+  // Workspace skills — the prompt lists installed skills, while the extension
+  // exposes `workspace_skill` so the agent can read full SKILL.md instructions
+  // on demand before applying one.
+  addExtension(createSkillsExtension({ skills: args.workspaceSkills }));
 
   // MCP (U7) — validate, mint, build.
   const rawConfigs = parseMcpConfigs(args.payload.mcp_configs);
@@ -551,6 +628,8 @@ export async function assembleTools(
 
   return {
     tools,
+    extensionFactories,
+    extensionToolNames,
     cleanup,
     workspaceSkills: args.workspaceSkills,
     handleStore,
@@ -995,9 +1074,9 @@ export async function handleInvocation(
   const cleanup: Array<() => Promise<void>> = [];
 
   // U16 — Allocate the per-invocation HandleStore here (was previously
-  // created inside assembleTools). Both the scrubbing fetch
+  // created inside the resource builder). Both the scrubbing fetch
   // (createScrubbingFetch below) and the MCP tool builder
-  // (assembleTools → buildMcpTools) need to share this same instance
+  // (resource builder → buildMcpTools) need to share this same instance
   // so the egress fetch resolves the handle the build minted. The
   // handler's `finally` block already calls `bundle.handleStore.clear()`
   // which now operates on the same store.
@@ -1015,9 +1094,9 @@ export async function handleInvocation(
 
   // Build tools last so any setup failure above short-circuits before
   // we touch the HandleStore.
-  let bundle: AssembledToolBundle;
+  let bundle: InvocationResourceBundle;
   try {
-    bundle = await assembleTools({
+    bundle = await buildInvocationResources({
       payload: args.payload,
       identity,
       env,
@@ -1031,7 +1110,7 @@ export async function handleInvocation(
       mcpRegistry,
     });
   } catch (err) {
-    // U16 — assembleTools may have minted handles into `handleStore`
+    // U16 — the resource builder may have minted handles into `handleStore`
     // before failing (e.g., MCP transport opened then listTools timed
     // out). The runLoop's finally block is unreachable on this path, so
     // clear the store + drain any partial cleanup closures HERE to
@@ -1092,19 +1171,36 @@ export async function handleInvocation(
   const attachmentPreamble = formatMessageAttachmentsPreamble(
     stagedAttachments.staged,
   );
-  const systemPromptBase = await composeSystemPrompt({
-    payload: args.payload,
-    workspaceDir: env.workspaceDir,
-    availableToolNames: bundle.tools.map((tool) => tool.name),
-    workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
-  });
-  const systemPrompt = attachmentPreamble
-    ? `${systemPromptBase}\n\n---\n\n${attachmentPreamble}`
-    : systemPromptBase;
   const fileReadTool = buildFileReadTool(stagedAttachments.staged);
   if (fileReadTool) {
     bundle.tools.push(fileReadTool);
   }
+  // Plan §004 U6 — system-prompt composition runs inside the session via a
+  // `before_agent_start` extension hook instead of being hand-built here and
+  // passed as a string. The hook composes from workspace defaults + tool policy
+  // + skills (+ the attachment preamble as suffix) and reports the final prompt
+  // back through `onComposed` so we can still surface it as
+  // `composed_system_prompt` on the response.
+  let composedSystemPrompt = "";
+  bundle.extensionFactories.push(
+    toExtensionFactory(
+      createSystemPromptExtension({
+        payload: args.payload,
+        workspaceDir: env.workspaceDir,
+        availableToolNames: [
+          ...BUILTIN_TOOL_NAMES,
+          ...bundle.tools.map((tool) => tool.name),
+          ...bundle.extensionToolNames,
+        ],
+        workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
+        suffix: attachmentPreamble || undefined,
+        onComposed: (prompt) => {
+          composedSystemPrompt = prompt;
+        },
+      }),
+      {},
+    ),
+  );
   try {
     // The current invocation's model id is what pi-ai's Agent will use
     // to serialize history → Bedrock for THIS turn. We use the same id on
@@ -1115,17 +1211,48 @@ export async function handleInvocation(
       typeof args.payload.model === "string" && args.payload.model.trim()
         ? args.payload.model.trim()
         : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
-    runResult = await runLoop({
-      message: userMessage,
-      history: normalizeHistory(args.payload.messages_history, currentModelId),
-      systemPrompt,
-      tools: bundle.tools,
-      modelId: args.payload.model,
-      threadId: identity.threadId,
-      gitSha: env.gitSha,
-      identity,
-      cwd: env.workspaceDir,
-    });
+    // Durable per-thread session (U4): resume the thread's persisted Pi session
+    // from S3 instead of replaying full history as prompt text. Requires the
+    // workspace bucket + a tenant slug for isolation; otherwise the loop falls
+    // back to the transitional history-prepend path.
+    const sessionStore =
+      env.workspaceBucket && identity.tenantSlug
+        ? createS3SessionStore({
+            s3: deps.s3ClientFactory(env.awsRegion),
+            bucket: env.workspaceBucket,
+            keyPrefix: `pi-sessions/${identity.tenantSlug}/`,
+          })
+        : undefined;
+    runResult = await runLoop(
+      {
+        message: userMessage,
+        history: normalizeHistory(
+          args.payload.messages_history,
+          currentModelId,
+        ),
+        // U6 — no prebuilt system prompt; the system-prompt extension's
+        // before_agent_start hook composes and sets it for the turn.
+        tools: bundle.tools,
+        // Plan §004 U5 — load thinkwork capabilities (memory first) as Pi
+        // extensions over the resource loader, additive to the built-ins +
+        // custom tools.
+        extensionFactories: bundle.extensionFactories,
+        // U6 — fold extension tool names into the allowlist so they're actually
+        // enabled (the SDK gates to the allowlist).
+        extensionToolNames: bundle.extensionToolNames,
+        modelId: args.payload.model,
+        threadId: identity.threadId,
+        gitSha: env.gitSha,
+        identity,
+        cwd: env.workspaceDir,
+        sessionStore,
+        // Session scratch lives outside the workspace dir so the per-turn
+        // workspace S3 sync (delete-extraneous) cannot reap an in-flight
+        // session file.
+        sessionDir: "/tmp/pi-sessions",
+      },
+      { log: (entry) => logStructured(entry) },
+    );
   } catch (err) {
     runError = err;
   } finally {
@@ -1167,7 +1294,7 @@ export async function handleInvocation(
       const finalized = await postFinalizeCallback({
         payload: args.payload,
         identity,
-        systemPrompt,
+        systemPrompt: composedSystemPrompt,
         result: { status: "error", error: runError, latencyMs },
         fetchImpl,
         logger: logStructured,
@@ -1242,7 +1369,7 @@ export async function handleInvocation(
     const finalized = await postFinalizeCallback({
       payload: args.payload,
       identity,
-      systemPrompt,
+      systemPrompt: composedSystemPrompt,
       result: { status: "ok", runResult, latencyMs },
       fetchImpl,
       logger: logStructured,
@@ -1278,7 +1405,7 @@ export async function handleInvocation(
 
   const responseBody: InvocationResponse = {
     runtime: "pi",
-    composed_system_prompt: systemPrompt,
+    composed_system_prompt: composedSystemPrompt,
     pi_usage: runResult.usage,
     pi_retain: retainOutcome.error
       ? { retained: retainOutcome.retained, error: retainOutcome.error }

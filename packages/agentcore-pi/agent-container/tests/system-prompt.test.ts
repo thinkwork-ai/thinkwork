@@ -151,8 +151,11 @@ describe("composeSystemPrompt", () => {
     });
 
     expect(prompt).toContain("## Runtime Tool Policy");
+    expect(prompt).toContain("The Pi built-in `bash` tool is not available");
     expect(prompt).toContain("The `execute_code` tool is not available");
-    expect(prompt).toContain("Do not run code, simulate code execution");
+    expect(prompt).toContain(
+      "do not run code, simulate execution, or invent command output",
+    );
     expect(prompt).toContain('Do not treat vague phrases like "send me"');
   });
 
@@ -167,9 +170,23 @@ describe("composeSystemPrompt", () => {
 
     expect(prompt).toContain("The `execute_code` tool is available");
     expect(prompt).toContain(
-      "Never claim that code ran, tests passed, a script produced output",
+      "Never claim that code ran, tests passed, a command produced output",
     );
     expect(prompt).toContain("The `send_email` tool is available");
+  });
+
+  it("distinguishes Pi bash from the Code Interpreter sandbox", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: { user_id: "user-1" },
+      workspaceDir: "/tmp/workspace",
+      availableToolNames: ["bash", "execute_code"],
+      now,
+      fileReader: readerFor({ "USER.md": "X" }),
+    });
+
+    expect(prompt).toContain("Pi built-in `bash` tool is available");
+    expect(prompt).toContain("Treat `bash` and `execute_code` as distinct");
+    expect(prompt).toContain("use `bash` for the Pi workspace/shell");
   });
 
   it("appends workspace skills block when provided", async () => {

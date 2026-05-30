@@ -280,6 +280,13 @@ function makeBridge(): ThinkworkBridge & {
       return () => {};
     },
     async reportInstallOutcome() {},
+    async raiseThreadNotification() {},
+    onOpenThread() {
+      return () => {};
+    },
+    onWindowFocusChange() {
+      return () => {};
+    },
     emitDeepLink() {
       deepLinkListener?.();
     },

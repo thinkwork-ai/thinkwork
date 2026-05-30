@@ -3,20 +3,29 @@
  * Fires mutations on AppSync to trigger @aws_subscribe fan-out to WebSocket clients.
  */
 
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
+// Read AppSync config at CALL time, not module load. AgentCore warm containers
+// can boot before env injection, and tests set env after import — capturing at
+// module load locks in stale/empty values. See feedback_vitest_env_capture_timing
+// + project_agentcore_deploy_race_env.
+function appsyncConfig(): { endpoint: string; apiKey: string } {
+  return {
+    endpoint: process.env.APPSYNC_ENDPOINT || "",
+    apiKey: process.env.APPSYNC_API_KEY || "",
+  };
+}
 
 async function postToAppSync(
   mutation: string,
   variables: Record<string, unknown>,
 ): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) return;
+  const { endpoint, apiKey } = appsyncConfig();
+  if (!endpoint || !apiKey) return;
   try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ query: mutation, variables }),
     });
@@ -42,6 +51,37 @@ export async function notifyThreadUpdate(payload: {
 			}
 		}`,
     payload,
+  );
+}
+
+export async function notifyThreadActivity(payload: {
+  userId: string;
+  tenantId: string;
+  threadId: string;
+  messageId: string;
+  authorId?: string | null;
+  authorType: string;
+  snippet?: string | null;
+  threadTitle?: string | null;
+  createdAt?: string | null;
+}): Promise<void> {
+  await postToAppSync(
+    `mutation($userId: ID!, $tenantId: ID!, $threadId: ID!, $messageId: ID!, $authorId: ID, $authorType: String!, $snippet: String, $threadTitle: String, $createdAt: AWSDateTime) {
+			notifyThreadActivity(userId: $userId, tenantId: $tenantId, threadId: $threadId, messageId: $messageId, authorId: $authorId, authorType: $authorType, snippet: $snippet, threadTitle: $threadTitle, createdAt: $createdAt) {
+				userId threadId messageId authorId authorType snippet threadTitle createdAt
+			}
+		}`,
+    {
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      threadId: payload.threadId,
+      messageId: payload.messageId,
+      authorId: payload.authorId ?? null,
+      authorType: payload.authorType,
+      snippet: payload.snippet ?? null,
+      threadTitle: payload.threadTitle ?? null,
+      createdAt: payload.createdAt ?? null,
+    },
   );
 }
 

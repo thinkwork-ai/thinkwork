@@ -450,6 +450,130 @@ describe("runLocalDesktopTurn", () => {
     expect(agentDir).toContain(".thinkwork-pi");
   });
 
+  it("loads shared Thinkwork extensions through the Pi resource loader when available", async () => {
+    let loaderOptions: Record<string, unknown> | undefined;
+    let optionsSeen: Record<string, unknown> | undefined;
+    const sdk: PiSdkModuleLike = {
+      DefaultResourceLoader: class {
+        constructor(options: Record<string, unknown>) {
+          loaderOptions = options;
+        }
+
+        async reload() {}
+      },
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Ready." }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            web_search_config: { provider: "exa", apiKey: "exa_key" },
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: vi.fn(async () =>
+          Response.json({ ok: true }),
+        ) as typeof fetch,
+      },
+    );
+
+    expect(optionsSeen?.tools).toEqual(
+      expect.arrayContaining(["web_search", "delegate_to_managed_agent"]),
+    );
+    expect(optionsSeen?.customTools).toEqual([]);
+    const factories = loaderOptions?.extensionFactories as Array<
+      (pi: { registerTool: (tool: { name?: string }) => void }) => void
+    >;
+    expect(factories).toHaveLength(2);
+    const registered: Array<{ name?: string }> = [];
+    for (const factory of factories) {
+      factory({ registerTool: (tool) => registered.push(tool) });
+    }
+    expect(registered.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["web_search", "delegate_to_managed_agent"]),
+    );
+  });
+
+  it("registers shared memory tools through the desktop Hindsight provider", async () => {
+    let optionsSeen: Record<string, unknown> | undefined;
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Remembered." }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).includes("/memories/recall")) {
+        return Response.json({
+          memory_units: [{ id: "mem-1", text: "Eric prefers concise PRs." }],
+        });
+      }
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            hindsight_endpoint: "https://hindsight.example.com",
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(optionsSeen?.tools).toEqual(
+      expect.arrayContaining(["recall", "reflect"]),
+    );
+    const recallTool = (
+      optionsSeen?.customTools as Array<{
+        name?: string;
+        execute?: (
+          toolCallId: string,
+          params: Record<string, unknown>,
+        ) => Promise<unknown>;
+      }>
+    ).find((tool) => tool.name === "recall");
+    expect(recallTool).toBeTruthy();
+
+    const result = await recallTool!.execute!("call-1", {
+      query: "PR preferences",
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://hindsight.example.com/v1/default/banks/user_user-1/memories/recall",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(JSON.stringify(result)).toContain("concise PRs");
+  });
+
   it("registers browser_automation when enabled and executes it locally", async () => {
     let optionsSeen: Record<string, unknown> | undefined;
     const sdk: PiSdkModuleLike = {

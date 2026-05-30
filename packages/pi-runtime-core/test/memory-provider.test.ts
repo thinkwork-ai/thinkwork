@@ -3,25 +3,34 @@ import { describe, expect, it } from "vitest";
 import type { MemoryItem, MemoryProvider } from "../src/memory-provider.js";
 
 /**
- * In-memory stub that records its call order — proves a host can satisfy
- * recall/reflect with no concrete Hindsight client (the inert-substitutability
- * scenario for U3) and lets us assert the recall→reflect chain contract.
+ * In-memory stub that records its call order — proves a host can satisfy the
+ * read-synthesis recall/reflect chain with no concrete Hindsight client (the
+ * inert-substitutability scenario for U3) and lets us assert the recall→reflect
+ * chain contract. `reflect` synthesizes over what `recall` surfaced; it does NOT
+ * persist (persistence is the host's end-of-turn retain path — see
+ * memory-provider.ts).
  */
 function makeStub(seed: MemoryItem[] = []) {
   const store: MemoryItem[] = [...seed];
   const calls: string[] = [];
+  let lastRecalled: MemoryItem[] = [];
   const provider: MemoryProvider = {
     recall: async ({ query, limit }) => {
       calls.push("recall");
       const memories = store
         .filter((m) => m.content.includes(query))
         .slice(0, limit);
+      lastRecalled = memories;
       return { memories, usage: { input: 5, output: 0 } };
     },
-    reflect: async ({ content }) => {
+    reflect: async ({ query }) => {
       calls.push("reflect");
-      store.push({ id: `m${store.length}`, content });
-      return { ok: true, usage: { input: 0, output: 7 } };
+      // Synthesize: reason over the units the preceding recall surfaced for the
+      // same query. Returns text, never mutates the store.
+      const text = lastRecalled.length
+        ? `For "${query}": ${lastRecalled.map((m) => m.content).join("; ")}`
+        : `For "${query}": no prior memory.`;
+      return { ok: true, text, usage: { input: 0, output: 7 } };
     },
   };
   return { provider, calls, store };
@@ -39,12 +48,23 @@ describe("MemoryProvider contract", () => {
     expect(result.usage).toBeDefined();
   });
 
-  it("reflects, persisting what the turn learned, and reports usage", async () => {
-    const { provider, store } = makeStub();
-    const result = await provider.reflect({ content: "learned a new fact" });
+  it("reflects by synthesizing recalled units into an answer and reports usage", async () => {
+    const { provider } = makeStub([
+      { id: "m0", content: "pi is the core runtime" },
+    ]);
+    await provider.recall({ query: "pi" });
+    const result = await provider.reflect({ query: "pi" });
     expect(result.ok).toBe(true);
+    expect(result.text).toContain("pi is the core runtime");
     expect(result.usage).toBeDefined();
-    expect(store.at(-1)?.content).toBe("learned a new fact");
+  });
+
+  it("does not persist on reflect — the read-synthesis chain leaves the store unchanged", async () => {
+    const { provider, store } = makeStub([{ id: "m0", content: "seed" }]);
+    const before = store.length;
+    await provider.recall({ query: "seed" });
+    await provider.reflect({ query: "seed" });
+    expect(store).toHaveLength(before);
   });
 
   it("supports the recall→reflect chain in order within a turn", async () => {
@@ -52,21 +72,10 @@ describe("MemoryProvider contract", () => {
       { id: "m0", content: "prior context about pi" },
     ]);
 
-    const recalled = await provider.recall({ query: "pi" });
-    // The reflect follow-up commits what the turn learned, grounded by recall.
-    await provider.reflect({
-      content: `turn learned from: ${recalled.memories[0]?.content}`,
-    });
+    await provider.recall({ query: "pi" });
+    // The reflect follow-up synthesizes over what recall surfaced.
+    await provider.reflect({ query: "pi" });
 
     expect(calls).toEqual(["recall", "reflect"]);
-  });
-
-  it("recall surfaces a later reflection (chain round-trips through the store)", async () => {
-    const { provider } = makeStub();
-    await provider.reflect({ content: "thinkwork supersedes maniflow" });
-    const result = await provider.recall({ query: "maniflow" });
-    expect(result.memories.map((m) => m.content)).toContain(
-      "thinkwork supersedes maniflow",
-    );
   });
 });

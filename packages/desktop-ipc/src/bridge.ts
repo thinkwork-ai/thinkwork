@@ -12,6 +12,9 @@ import type {
   PiStartTurnResponse,
   RemoveTokenStorageItemRequest,
   ReportInstallOutcomeRequest,
+  RaiseThreadNotificationRequest,
+  OpenThreadEvent,
+  WindowFocusEvent,
   SessionTokens,
   SetTokenStorageItemRequest,
   SignOutResponse,
@@ -54,5 +57,13 @@ export interface ThinkworkBridge {
     listener: (event: UpdateTelemetryEvent) => void,
   ): Unsubscribe;
   reportInstallOutcome(outcome: ReportInstallOutcomeRequest): Promise<void>;
+  /** Raise a native OS notification for a thread (renderer → main). */
+  raiseThreadNotification(
+    request: RaiseThreadNotificationRequest,
+  ): Promise<void>;
+  /** Subscribe to notification-click open-thread events (main → renderer). */
+  onOpenThread(listener: (event: OpenThreadEvent) => void): Unsubscribe;
+  /** Subscribe to app window focus/blur transitions (main → renderer). */
+  onWindowFocusChange(listener: (event: WindowFocusEvent) => void): Unsubscribe;
   pi?: PiBridge;
 }

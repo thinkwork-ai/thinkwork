@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "urql";
+import { toast } from "sonner";
 import {
   Button,
   Input,
@@ -8,10 +9,17 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
+  Switch,
   useTheme,
 } from "@thinkwork/ui";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
+import { isDesktop } from "@/lib/desktop-detection";
+import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
+import {
+  setThreadNotificationsEnabled,
+  useThreadNotificationsEnabled,
+} from "@/lib/thread-notifications-pref";
 import {
   SettingsDeploymentStatusQuery,
   SettingsRenameTenantSlugMutation,
@@ -45,8 +53,9 @@ export function SettingsGeneral() {
     return (
       <SettingsPane>
         <SettingsHeader title="General" />
-        <Skeleton className="mb-4 h-44 w-full rounded-xl" />
-        <Skeleton className="h-32 w-full rounded-xl" />
+        <div className="flex items-center justify-center py-24">
+          <LoadingShimmer />
+        </div>
       </SettingsPane>
     );
   }
@@ -112,6 +121,12 @@ export function SettingsGeneral() {
         <ThemeRow />
       </SettingsSection>
 
+      {isDesktop() ? (
+        <SettingsSection label="Notifications">
+          <ThreadNotificationsRow />
+        </SettingsSection>
+      ) : null}
+
       {showOperator ? (
         <>
           <SettingsSection label="Deployment">
@@ -167,6 +182,34 @@ function ResourceRow({
       <span className="max-w-[22rem] truncate font-mono text-xs">
         {value ?? "—"}
       </span>
+    </SettingsRow>
+  );
+}
+
+function ThreadNotificationsRow() {
+  const enabled = useThreadNotificationsEnabled();
+
+  async function onToggle(next: boolean) {
+    setThreadNotificationsEnabled(next);
+    if (next) {
+      // Ask the OS for permission on enable; warn if the user has blocked it.
+      const result = await requestDesktopNotificationPermission();
+      if (result === "denied") {
+        toast.message("Notifications are blocked", {
+          description:
+            "Enable notifications for ThinkWork in your system settings to receive them.",
+        });
+      }
+    }
+  }
+
+  return (
+    <SettingsRow label="Thread notifications">
+      <Switch
+        checked={enabled}
+        onCheckedChange={(next) => void onToggle(next)}
+        aria-label="Thread notifications"
+      />
     </SettingsRow>
   );
 }

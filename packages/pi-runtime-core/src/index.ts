@@ -1,6 +1,7 @@
 export * from "./agent-loop.js";
 export * from "./delegation.js";
 export * from "./desktop-session.js";
+export * from "./durable-session-manager.js";
 export * from "./finalize-client.js";
 export * from "./history.js";
 export * from "./memory-provider.js";

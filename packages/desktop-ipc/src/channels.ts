@@ -23,6 +23,12 @@ export const START_PI_TURN_CHANNEL = "desktop:pi:start-turn";
 export const CANCEL_PI_TURN_CHANNEL = "desktop:pi:cancel-turn";
 export const PI_STATUS_EVENT_CHANNEL = "desktop:pi:status";
 export const PI_DIAGNOSTIC_EVENT_CHANNEL = "desktop:pi:diagnostic";
+// Renderer → main (invoke): raise a native thread notification.
+export const RAISE_THREAD_NOTIFICATION_CHANNEL = "desktop:notification:raise";
+// Main → renderer (send): a notification was clicked — open this thread.
+export const OPEN_THREAD_EVENT_CHANNEL = "desktop:open-thread";
+// Main → renderer (send): app window focus/blur transitions.
+export const WINDOW_FOCUS_EVENT_CHANNEL = "desktop:window-focus";
 
 export const IPC_CHANNELS = {
   GET_SESSION_TOKENS: GET_SESSION_TOKENS_CHANNEL,
@@ -49,4 +55,7 @@ export const IPC_CHANNELS = {
   CANCEL_PI_TURN: CANCEL_PI_TURN_CHANNEL,
   PI_STATUS_EVENT: PI_STATUS_EVENT_CHANNEL,
   PI_DIAGNOSTIC_EVENT: PI_DIAGNOSTIC_EVENT_CHANNEL,
+  RAISE_THREAD_NOTIFICATION: RAISE_THREAD_NOTIFICATION_CHANNEL,
+  OPEN_THREAD_EVENT: OPEN_THREAD_EVENT_CHANNEL,
+  WINDOW_FOCUS_EVENT: WINDOW_FOCUS_EVENT_CHANNEL,
 } as const;

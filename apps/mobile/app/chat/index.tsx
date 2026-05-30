@@ -210,27 +210,30 @@ export default function ChatRoute() {
             </Text>
           </Pressable>
 
-          {/* Right: read-only lifecycle badge (U9 — status picker retired) */}
-          {activeThread?.id && lifecycleLabel ? (
-            <View
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: lifecycleDotColor,
-              }}
-            >
-              <Text
-                className="text-xs font-medium"
-                style={{ color: lifecycleDotColor }}
+          {/* Right: read-only lifecycle badge (U9) */}
+          <View
+            className="flex-row items-center gap-2"
+            style={{ minWidth: 80, justifyContent: "flex-end" }}
+          >
+            {activeThread?.id && lifecycleLabel ? (
+              <View
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: lifecycleDotColor,
+                }}
               >
-                {lifecycleLabel}
-              </Text>
-            </View>
-          ) : (
-            <View style={{ width: 80 }} />
-          )}
+                <Text
+                  className="text-xs font-medium"
+                  style={{ color: lifecycleDotColor }}
+                >
+                  {lifecycleLabel}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       </View>
 

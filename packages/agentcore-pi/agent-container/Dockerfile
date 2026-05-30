@@ -2,7 +2,11 @@
 # Build from monorepo root:
 #   docker build -f packages/agentcore-pi/agent-container/Dockerfile .
 
-FROM node:20-bookworm-slim
+# Node 22: the @earendil-works/pi-* SDK requires node >=22.19 (pi-coding-agent
+# engines), and the monorepo floor is Node 22. On Node 20 the runtime cold-starts
+# fine but the first turn's createAgentSession import hits a Node 22+ API and the
+# process exits 1 ("Runtime exited with error: exit status 1").
+FROM node:22-bookworm-slim
 
 # Python 3.11 + pip for the skill-bridge subprocess (plan §005 U5).
 # Bookworm ships python 3.11 as `python3`; no separate version pin needed.
@@ -43,8 +47,14 @@ COPY packages/pi-aws/connectors/ packages/pi-aws/connectors/
 COPY packages/pi-runtime-core/package.json packages/pi-runtime-core/package.json
 COPY packages/pi-runtime-core/tsconfig.json packages/pi-runtime-core/tsconfig.json
 COPY packages/pi-runtime-core/src/ packages/pi-runtime-core/src/
+# @thinkwork/pi-extensions — shared Pi-extension capability package (plan §004
+# U5). agentcore-pi loads the memory extension from it; the source must be
+# present for the frozen install + the tsc compile against it.
+COPY packages/pi-extensions/package.json packages/pi-extensions/package.json
+COPY packages/pi-extensions/tsconfig.json packages/pi-extensions/tsconfig.json
+COPY packages/pi-extensions/src/ packages/pi-extensions/src/
 
-# All three packages must be in the install filter so their devDependencies
+# All four packages must be in the install filter so their devDependencies
 # (in particular, typescript / tsc) land in node_modules. Filtering on
 # `@thinkwork/agentcore-pi` alone pulls in its workspace deps'
 # RUNTIME deps via the workspace edge but skips their devDeps — the next
@@ -53,12 +63,15 @@ RUN corepack enable && pnpm install \
     --filter @thinkwork/agentcore-pi \
     --filter @thinkwork/pi-aws \
     --filter @thinkwork/pi-runtime-core \
+    --filter @thinkwork/pi-extensions \
     --prod=false --frozen-lockfile
 # Build the workspace deps first so their dist/ exists for the runtime import
 # path (package.json's `import` condition points at dist/src/index.js — vitest
 # tolerates raw .ts via the `types` condition, but plain Node ESM does not).
+# pi-extensions depends on pi-runtime-core, so build it after.
 RUN pnpm --filter @thinkwork/pi-aws build
 RUN pnpm --filter @thinkwork/pi-runtime-core build
+RUN pnpm --filter @thinkwork/pi-extensions build
 RUN pnpm --filter @thinkwork/agentcore-pi build
 
 ENV PORT=8080

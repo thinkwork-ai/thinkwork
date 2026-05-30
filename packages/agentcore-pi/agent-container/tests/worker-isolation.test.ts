@@ -12,7 +12,7 @@
  *   1. `scrubBearerStrings` — pure regex + literal-match primitive.
  *   2. `createScrubbingFetch` — egress interceptor: handle→bearer swap +
  *      response-body scrub.
- *   3. `assembleTools` integration — the bearer minted into a HandleStore
+ *   3. `buildInvocationResources` integration — the bearer minted into a HandleStore
  *      survives the full mcp build path through `JSON.stringify(tools)`,
  *      with no leak into tool definitions.
  *   4. Crash-redaction sketch — `scrubBearerStrings` applied to a
@@ -420,7 +420,7 @@ describe("createScrubbingFetch — duplicate-casing Authorization collision", ()
 });
 
 // ---------------------------------------------------------------------------
-// Layer 3 — assembleTools integration: bearer never appears in serialized tools.
+// Layer 3 — buildInvocationResources integration: bearer never appears in serialized tools.
 // (Already covered by the U7-era test in server.test.ts; this test extends
 // the same invariant to confirm the U16 wiring did not regress it.)
 // ---------------------------------------------------------------------------

@@ -69,6 +69,8 @@ import {
   SidebarMenuItem,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { useThreadNotifications } from "@/hooks/useThreadNotifications";
+import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
 import {
   DeleteThreadMutation,
   PinThreadMutation,
@@ -134,6 +136,12 @@ export function ChatSidebar() {
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
+  // Desktop OS notifications for thread activity (no-op in the web build).
+  const threadNotificationsEnabled = useThreadNotificationsEnabled();
+  useThreadNotifications({
+    activeThreadId: routeThreadId ?? null,
+    enabled: threadNotificationsEnabled,
+  });
   const isNewThreadRoute = location.pathname === "/new";
   const isAutomationsRoute = location.pathname === "/automations";
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1488,7 +1496,11 @@ function ChatThreadRow({
               })}
               className={cn(
                 "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                onPin || onUnpin ? "pr-12" : "pr-10",
+                confirmingDelete
+                  ? "pr-20"
+                  : onPin || onUnpin
+                    ? "pr-12"
+                    : "pr-10",
                 active && "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
               onClick={onActivate}

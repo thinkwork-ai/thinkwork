@@ -69,19 +69,12 @@ export async function fetchSpansForSession(
 
 function parseCloudWatchEvents(
   resp: CloudWatchLogEventsOutput,
-  onlyStrandsTracer: boolean,
+  requireSpanId: boolean,
 ): AgentCoreSpanRecord[] {
   return (resp.events ?? []).flatMap((event) => {
     const parsed = parseJsonObject(event.message);
     if (!parsed) return [];
-    if (
-      onlyStrandsTracer &&
-      (parsed.scope as { name?: string } | undefined)?.name !==
-        "strands.telemetry.tracer"
-    ) {
-      return [];
-    }
-    if (onlyStrandsTracer && !parsed.spanId) return [];
+    if (requireSpanId && !parsed.spanId) return [];
     return [
       {
         ...parsed,

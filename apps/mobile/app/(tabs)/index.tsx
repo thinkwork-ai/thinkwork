@@ -54,6 +54,7 @@ import {
   type ThreadFilters,
 } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
+import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
 import { Muted, Text } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -695,7 +696,8 @@ export default function ThreadsScreen() {
           : undefined;
 
       try {
-        // Atomic create + first user message (SDK 0.2.0-beta.0+).
+        // Create the thread WITHOUT firstMessage so the cloud agent is NOT triggered —
+        // the on-device Pi-inspired harness handles the first message instead.
         const newThread = await createThread({
           tenantId,
           agentId: selectedComputer.id,
@@ -704,16 +706,27 @@ export default function ThreadsScreen() {
           channel: "CHAT",
           createdByType: "user",
           createdById: currentUser?.id || user?.sub,
-          firstMessage: messageContent,
           ...(metadata ? ({ metadata } as any) : {}),
         } as any);
 
         console.log("[Threads] Thread created:", newThread.id);
         markRead(newThread.id);
         markThreadActive(newThread.id);
-
-        // Refresh thread list so the new thread appears on the home page
         reexecute({ requestPolicy: "network-only" });
+
+        // First message runs through the on-device harness (loop in Hermes → Bedrock via
+        // /api/model/converse), persisted into the new thread via record-turn.
+        try {
+          await runThreadHarnessTurn({
+            threadId: newThread.id,
+            userText: messageContent,
+            priorMessages: [],
+            agentName: selectedComputer?.name,
+          });
+          reexecute({ requestPolicy: "network-only" });
+        } catch (err) {
+          console.error("[harness] new-thread first turn failed:", err);
+        }
       } catch (e: any) {
         console.error("[Threads] Failed to create thread:", e);
         Alert.alert(
@@ -734,6 +747,7 @@ export default function ThreadsScreen() {
       markRead,
       markThreadActive,
       user?.sub,
+      selectedComputer?.name,
     ],
   );
 

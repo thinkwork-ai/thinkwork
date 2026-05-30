@@ -1,12 +1,183 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-18
-status: active
+status: complete
 ---
 
 # Autopilot Status Ledger
 
-## Current Run: Desktop Local Pi Sidecar
+## Current Run: Pi Extensions Architecture
+
+Plan:
+`docs/plans/2026-05-29-004-refactor-pi-extensions-architecture-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
+- Started: 2026-05-30
+- Completed: 2026-05-30
+- Latest merged PR: [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855)
+- Active PR: none
+- CI: passed
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the Pi extensions architecture plan and confirmed U1-U6 are already
+  merged on `origin/main`; U7 is the first active unit for this autopilot run.
+- Created isolated U7 worktree from `origin/main` at
+  `281389985953878e9c37885d098bec91a69e3b34`.
+- Main checkout had pre-existing unrelated dirty files; no user/session changes
+  were reverted or overwritten.
+- U7 local implementation complete: moved `web_search`, `browser_automation`,
+  Context Engine, `send_email`, delegation, and workspace skills behind shared
+  `@thinkwork/pi-extensions` extension factories while preserving existing
+  cloud host behavior. Browser automation remains a host-runner adapter because
+  the AWS-backed implementation is intentionally host-specific.
+- U7 cloud runtime wiring now registers migrated capability tools through the
+  extension layer and passes extension tool names into the system-prompt
+  allowlist path, with negative gating coverage proving absent configs do not
+  expose migrated tools.
+- U7 delegation is exposed as a shared extension that requires an explicit
+  `DelegationProvider`; the AgentCore cloud host has the optional seam but does
+  not register delegation until a host supplies that provider.
+- U7 review/autofix: Compound-style review surfaced missing negative gating
+  coverage, missing runtime allowlist coverage, and the delegation extension
+  seam. Added tests/fixes for all three before PR.
+- U7 focused verification passed:
+  `pnpm --filter @thinkwork/pi-extensions test`,
+  `pnpm --filter @thinkwork/pi-extensions typecheck`,
+  `pnpm --filter @thinkwork/pi-extensions build`,
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi build`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`, and targeted migrated-tool
+  server/browser/send-email/context-engine suites.
+- U7 broader verification passed: `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, touched-file Prettier check via
+  `npx --yes prettier@latest --check ...`, `git diff --check`, and
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,221 passed, 9
+  skipped).
+- Opened PR [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852).
+- PR [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, then required a rebase
+  because `main` advanced. Rebased cleanly, reran focused
+  `pi-extensions`/`agentcore-pi` tests and typechecks, passed CI again,
+  squash-merged into `main`, and deleted the remote/local U7 branch.
+- Started U8 from updated `origin/main` at
+  `25884ffd5c1976fa26fc8113d9286a54d4a9a6ed`.
+- U8 local implementation complete: reconciled built-in/custom overlap without
+  disabling Pi's built-in `bash`. `bash` remains part of the active built-in
+  allowlist and is explicitly preferred for shell commands, repository work,
+  package scripts, builds, tests, and command output. `execute_code` remains as
+  the narrower Thinkwork Code Interpreter sandbox. The system-prompt extension
+  now receives built-in tool names and explicitly distinguishes `bash` from
+  `execute_code` so the model treats them as separate execution environments
+  rather than duplicate generic code tools.
+- U8 focused verification passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/agent-loop.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/pi-extensions test -- test/system-prompt.test.ts`,
+  `pnpm --filter @thinkwork/pi-extensions typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts`,
+  and `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- U8 broader verification passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test`,
+  `pnpm --filter @thinkwork/pi-runtime-core build`,
+  `pnpm --filter @thinkwork/pi-extensions test`,
+  `pnpm --filter @thinkwork/pi-extensions build`,
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/agentcore-pi build`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`,
+  touched-file Prettier check, and `git diff --check`.
+- U8 full sequential workspace verification passed on rerun:
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,238 passed, 9
+  skipped). The first full run hit the known local Electron extraction race in
+  `apps/desktop`; rerunning the failed desktop/mobile packages and then the full
+  sequential suite passed cleanly.
+- Opened PR [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853).
+- PR [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and deleted the remote/local U8 branch.
+- Started U9 from updated `origin/main` at
+  `6d0324eeec6d6c727cc363740db3e2528cfc95ad`.
+- U9 local implementation complete: the desktop sidecar now depends on
+  `@thinkwork/pi-extensions`, builds its host tool surface from the shared
+  web-search, browser, Context Engine, send-email, memory, and delegation
+  extensions, and feeds the real Pi SDK via
+  `DefaultResourceLoader.extensionFactories`. Test SDKs without a resource
+  loader still materialize the same shared extension tool definitions into
+  `customTools`, preserving the local unit-test seam without reintroducing
+  desktop-specific tool assembly.
+- U9 shared extension compatibility update: Context Engine and send-email
+  extensions can carry the desktop `x-thread-turn-id` auth header while
+  preserving the cloud tenant/user/agent header path.
+- U9 focused verification passed:
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/pi-extensions test -- test/capabilities.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`, and
+  `pnpm --filter @thinkwork/pi-extensions typecheck`.
+- U9 package verification passed:
+  `pnpm --filter @thinkwork/pi-extensions test`,
+  `pnpm --filter @thinkwork/pi-extensions build`,
+  `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/desktop run build`, and
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`. The first full desktop
+  package test run hit the known local Electron extraction race; rerunning
+  `pnpm --filter @thinkwork/desktop test` passed cleanly.
+- U9 broader verification passed: `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `git diff --check`, and
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,238 passed, 9
+  skipped).
+- Opened PR [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854).
+- PR [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and deleted the remote/local U9 branch.
+- Started U10 from updated `origin/main` at
+  `79fcf52108d6672f3efab15a26d3aeec5301b5ef`.
+- U10 live-consumer survey completed before destructive deletes. The
+  cloud-only `web-search`, Context Engine, `send-email`, and `run-skill`
+  hand-built tool modules were dead outside their own tests after U7/U9 moved
+  those capabilities into shared extensions. The AgentCore browser code still
+  has a live host-runner responsibility, so it is being reshaped as a
+  non-tool-builder adapter instead of deleted outright. Workspace skill
+  discovery also remains live but is no longer tool wiring, so it is being moved
+  out of `runtime/tools`.
+- U10 local implementation complete: removed dead cloud hand-built tool modules
+  and their now-redundant direct tests, renamed `assembleTools` to the narrower
+  `buildInvocationResources`, moved browser automation into a host-runner
+  adapter consumed by the shared extension, moved workspace skill discovery out
+  of `runtime/tools`, and removed the Strands-tracer-only span filter so Pi
+  runtime spans with any scope are captured when they carry a span id.
+- U10 focused verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/browser-automation.test.ts agent-container/tests/server.test.ts agent-container/tests/worker-isolation.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/lib/agentcore-spans.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and
+  `pnpm --filter @thinkwork/api typecheck`.
+- U10 package/broader verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/agentcore-pi build`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, touched-file
+  Prettier check, and `git diff --check`.
+- U10 full sequential workspace verification passed on rerun:
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,238 passed, 9
+  skipped). The first full run hit the known local Electron extraction race in
+  `apps/desktop`; rerunning `pnpm --filter @thinkwork/desktop test` passed, and
+  the full sequential suite then passed cleanly.
+- Opened PR [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855).
+- PR [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and deleted the remote/local U10 branch.
+- Autopilot run complete: U7, U8, U9, and U10 are merged into `main`.
+
+## Prior Run: Desktop Local Pi Sidecar
 
 Plan:
 `docs/plans/2026-05-28-003-feat-desktop-local-pi-sidecar-plan.md`

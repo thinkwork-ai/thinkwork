@@ -41,6 +41,12 @@ export { buildTurnContext } from "./turn-context";
 export type { TurnContext, TurnContextInput } from "./turn-context";
 export { InMemorySessionStore } from "./session-store";
 export type { SessionStore, SessionRecord } from "./session-store";
+export { runThreadHarnessTurn } from "./thread-turn";
+export type {
+  RunThreadHarnessTurnInput,
+  RunThreadHarnessTurnDeps,
+  ThreadHarnessTurnResult,
+} from "./thread-turn";
 export { recordTurn } from "./persist-turn";
 export type {
   RecordTurnInput,

@@ -54,6 +54,7 @@ import {
   type WebViewSheetRef,
 } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
+import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
 import {
   useNewMessageSubscription,
   useThreadUpdatedSubscription,
@@ -1110,29 +1111,48 @@ export default function ThreadDetailRoute() {
     if (!text || !threadId) return;
     setMessageText("");
     Keyboard.dismiss();
-    await executeSendMessage({
-      input: {
-        threadId: threadId,
-        role: "USER" as any,
-        content: text,
-        senderType: "human",
-        senderId: currentUser?.id,
-      },
-    });
+    // Real messages run through the on-device Pi-inspired harness (the agent loop runs in
+    // Hermes → Bedrock via /api/model/converse), and the completed turn is persisted into
+    // the thread via record-turn so it renders through the normal message query +
+    // subscription. (No production users yet — this is the on-device agent handling live
+    // mobile messages.)
+    //
+    // Show the "Working…" indicator for the duration of the on-device turn and
+    // always clear it when the turn settles. record-turn inserts the messages
+    // directly, so there's no onNewMessage subscription event to clear it the way
+    // the cloud path does (see the onNewMessage effect) — we own the lifecycle here.
     markThreadActive(threadId);
-    // Re-fetch immediately so the new message appears and auto-scroll kicks in
+    try {
+      await runThreadHarnessTurn({
+        threadId,
+        userText: text,
+        // `messages` comes back newest-first (resolver orders desc(created_at));
+        // the harness needs chronological order so prior turns alternate correctly.
+        priorMessages: [...messages]
+          .sort(
+            (a: any, b: any) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          )
+          .map((m: any) => ({ role: m.role, content: m.content })),
+      });
+    } catch (e) {
+      console.error("[harness] thread turn failed:", e);
+    } finally {
+      clearThreadActive(threadId);
+    }
+    // Re-fetch so the persisted user + assistant messages appear and auto-scroll kicks in
     reexecuteThread({ requestPolicy: "network-only" });
     reexecuteMessages({ requestPolicy: "network-only" });
     reexecuteTurns({ requestPolicy: "network-only" });
   }, [
     messageText,
     threadId,
-    currentUser?.id,
-    executeSendMessage,
+    messages,
     reexecuteThread,
     reexecuteMessages,
     reexecuteTurns,
     markThreadActive,
+    clearThreadActive,
   ]);
 
   // Don't render stale content — wait until the correct thread is loaded

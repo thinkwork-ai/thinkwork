@@ -135,6 +135,12 @@ export const users = pgTable(
       .default(sql`gen_random_uuid()`),
     tenant_id: uuid("tenant_id").references(() => tenants.id),
     email: text("email").unique(),
+    // Cognito `sub` (always present + stable in a verified ID token). Native
+    // users have id == sub; Google-federated users get a fresh-UUID id, so the
+    // sub is stored here to give every user a stable identity link that does
+    // not depend on the optional `email` token claim. Written at user creation
+    // (bootstrapUser) and opportunistically backfilled on resolution.
+    cognito_sub: text("cognito_sub"),
     name: text("name"),
     image: text("image"),
     email_verified_at: timestamp("email_verified_at", {
@@ -160,6 +166,7 @@ export const users = pgTable(
   },
   (table) => [
     uniqueIndex("idx_users_email").on(table.email),
+    uniqueIndex("idx_users_cognito_sub").on(table.cognito_sub),
     index("idx_users_tenant_id").on(table.tenant_id),
   ],
 );

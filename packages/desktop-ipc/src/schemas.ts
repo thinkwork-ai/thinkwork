@@ -299,6 +299,36 @@ export const PiDiagnosticEventSchema = z
   })
   .strict();
 
+// ---- Thread notifications ----
+
+// Renderer → main: raise a native notification for a thread. The main process
+// coalesces per threadId so repeated raises for one thread replace rather
+// than stack.
+export const RaiseThreadNotificationRequestSchema = z
+  .object({
+    threadId: z.string().min(1),
+    title: z.string(),
+    body: z.string(),
+    count: z.number().int().positive().optional(),
+  })
+  .strict();
+export const RaiseThreadNotificationResponseSchema = VoidResponseSchema;
+
+// Main → renderer: a notification was clicked; navigate to this thread.
+export const OpenThreadEventSchema = z
+  .object({
+    threadId: z.string().min(1),
+  })
+  .strict();
+
+// Main → renderer: app window focus state (drives the "already viewing"
+// suppression gate).
+export const WindowFocusEventSchema = z
+  .object({
+    focused: z.boolean(),
+  })
+  .strict();
+
 export const ChannelSchemas = {
   getSessionTokens: {
     request: GetSessionTokensRequestSchema,
@@ -364,6 +394,10 @@ export const ChannelSchemas = {
     request: PiCancelTurnRequestSchema,
     response: PiCancelTurnResponseSchema,
   },
+  raiseThreadNotification: {
+    request: RaiseThreadNotificationRequestSchema,
+    response: RaiseThreadNotificationResponseSchema,
+  },
 } as const;
 
 export type TokenStorageSnapshot = z.infer<typeof TokenStorageSnapshotSchema>;
@@ -397,3 +431,8 @@ export type PiStartTurnRequest = z.infer<typeof PiStartTurnRequestSchema>;
 export type PiStartTurnResponse = z.infer<typeof PiStartTurnResponseSchema>;
 export type PiCancelTurnRequest = z.infer<typeof PiCancelTurnRequestSchema>;
 export type PiCancelTurnResponse = z.infer<typeof PiCancelTurnResponseSchema>;
+export type RaiseThreadNotificationRequest = z.infer<
+  typeof RaiseThreadNotificationRequestSchema
+>;
+export type OpenThreadEvent = z.infer<typeof OpenThreadEventSchema>;
+export type WindowFocusEvent = z.infer<typeof WindowFocusEventSchema>;

@@ -1,6 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import type { AuthResult } from "../../../lib/cognito-auth.js";
-import { db, eq, users } from "../../utils.js";
+import { db, eq, and, isNull, users } from "../../utils.js";
 
 /**
  * Resolve both the DB users.id AND tenant_id for a Cognito caller from a
@@ -8,10 +8,20 @@ import { db, eq, users } from "../../utils.js";
  * /api/workspaces/files, Unit 5) that don't have a GraphQLContext but need
  * the same tenant-resolution semantics as `resolveCaller`.
  *
- * Google federated Cognito JWTs don't carry custom:tenant_id, so
- * `auth.tenantId` is null for OAuth users. Native Cognito users have
- * users.id == Cognito sub, but Google OAuth users get a fresh UUID and are
- * linked by email — so we fall back to an email lookup.
+ * Resolution order for a Cognito caller (see plan 2026-05-29-006):
+ *   1. by stored `cognito_sub` — the stable, always-present link. Healed
+ *      users and users created after this shipped resolve here.
+ *   2. by `id == sub` — NATIVE users, whose users.id IS the Cognito sub.
+ *      Retained so a native user whose token lost `email` still resolves.
+ *   3. by `email` — not-yet-healed Google users (users.id is a fresh UUID
+ *      != sub). Kept as a last resort; effectively unused as users heal.
+ *   4. null — failure posture unchanged; identity-critical writes still
+ *      fail loudly, best-effort writes still fail soft (PR #1837).
+ *
+ * When a row resolves via step 2 or step 3 and has no `cognito_sub` yet, we
+ * opportunistically backfill it so the next request resolves by sub. The
+ * email-path backfill (step 3) is gated on a verified email so a recycled or
+ * unverified email can't permanently bind a sub to the wrong user row.
  */
 export async function resolveCallerFromAuth(
   auth: AuthResult,
@@ -35,22 +45,81 @@ export async function resolveCallerFromAuth(
   const principalId = auth.principalId;
   if (!principalId) return { userId: null, tenantId: null };
 
-  const [byId] = await db
+  // 1. By stored Cognito sub — the reliable primary path.
+  const [bySub] = await db
     .select({ id: users.id, tenant_id: users.tenant_id })
     .from(users)
-    .where(eq(users.id, principalId));
-  if (byId) return { userId: byId.id, tenantId: byId.tenant_id };
+    .where(eq(users.cognito_sub, principalId));
+  if (bySub) return { userId: bySub.id, tenantId: bySub.tenant_id };
 
+  // 2. By id == sub — native users (users.id was minted from the sub).
+  const [byId] = await db
+    .select({
+      id: users.id,
+      tenant_id: users.tenant_id,
+      cognito_sub: users.cognito_sub,
+    })
+    .from(users)
+    .where(eq(users.id, principalId));
+  if (byId) {
+    // Tautological write (cognito_sub = id = sub); heals native rows so the
+    // next request hits step 1 in a single lookup.
+    if (!byId.cognito_sub) await backfillCognitoSub(byId.id, principalId);
+    return { userId: byId.id, tenantId: byId.tenant_id };
+  }
+
+  // 3. By email — not-yet-healed Google users.
   const email = auth.email;
   if (!email) return { userId: null, tenantId: null };
   const [byEmail] = await db
-    .select({ id: users.id, tenant_id: users.tenant_id })
+    .select({
+      id: users.id,
+      tenant_id: users.tenant_id,
+      cognito_sub: users.cognito_sub,
+    })
     .from(users)
     .where(eq(users.email, email));
-  return {
-    userId: byEmail?.id ?? null,
-    tenantId: byEmail?.tenant_id ?? null,
-  };
+  if (!byEmail) return { userId: null, tenantId: null };
+  // Only bind the sub to this row for a VERIFIED email — an unverified or
+  // recycled email must not permanently capture another user's row + tenant.
+  if (!byEmail.cognito_sub && auth.emailVerified) {
+    await backfillCognitoSub(byEmail.id, principalId);
+  }
+  return { userId: byEmail.id, tenantId: byEmail.tenant_id };
+}
+
+/**
+ * Best-effort write of the Cognito sub onto a user row that lacks one. The
+ * `cognito_sub IS NULL` guard is load-bearing: it makes the write idempotent,
+ * a no-op for the loser of a concurrent same-user race (both write the same
+ * sub to the same row), and prevents overwriting an already-set sub. Never
+ * throws and never changes the resolved identity — a unique-constraint
+ * conflict (Postgres 23505) means a *different* sub already owns this row's
+ * link (a contended one-sub-one-row invariant) and is logged at error level
+ * for ops to audit; all other failures are transient and logged at warn.
+ */
+async function backfillCognitoSub(
+  userId: string,
+  cognitoSub: string,
+): Promise<void> {
+  try {
+    await db
+      .update(users)
+      .set({ cognito_sub: cognitoSub })
+      .where(and(eq(users.id, userId), isNull(users.cognito_sub)));
+  } catch (err) {
+    const code = (err as { code?: string } | undefined)?.code;
+    if (code === "23505") {
+      console.error(
+        `[resolve-auth-user] cognito_sub backfill conflict (23505): sub=${cognitoSub} userId=${userId} — a different sub already owns this row's link`,
+      );
+    } else {
+      console.warn(
+        `[resolve-auth-user] cognito_sub backfill failed (transient): userId=${userId}`,
+        (err as Error)?.message,
+      );
+    }
+  }
 }
 
 /**

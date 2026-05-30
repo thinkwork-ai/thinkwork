@@ -1,18 +1,96 @@
-import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
-import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Sparkles } from "lucide-react";
+import { DataTable, Input } from "@thinkwork/ui";
+import { useTenant } from "@/context/TenantContext";
+import { listSkillSlugs } from "@/lib/workspace-files-api";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
-// Skills are the tenant's S3 skill catalog, edited as a workspace. This renders
-// the same catalog files admin's Agent → Skills tab edits.
+type SkillRow = { slug: string };
+
 export function SettingsSkills() {
+  const { tenantId } = useTenant();
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [slugs, setSlugs] = useState<string[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    setError(null);
+    listSkillSlugs()
+      .then((s) => !cancelled && setSlugs(s))
+      .catch(
+        (e) =>
+          !cancelled &&
+          setError(e instanceof Error ? e.message : "Failed to load skills"),
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
+
+  const rows = useMemo<SkillRow[]>(
+    () => (slugs ?? []).map((slug) => ({ slug })),
+    [slugs],
+  );
+
+  const columns = useMemo<ColumnDef<SkillRow>[]>(
+    () => [
+      {
+        accessorKey: "slug",
+        header: "Skill",
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2 font-medium">
+            <Sparkles className="size-4 shrink-0 text-muted-foreground" />
+            {row.original.slug}
+          </span>
+        ),
+      },
+    ],
+    [],
+  );
+
   return (
-    <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <h1 className="mb-4 text-2xl font-semibold tracking-tight">Skills</h1>
-      <WorkspaceFileEditor
-        target={{ catalog: true }}
-        targetKey="catalog"
-        client={spacesWorkspaceFilesClient}
-        className="min-h-0 flex-1"
+    <SettingsTablePane
+      title="Skills"
+      loading={!slugs && !error}
+      toolbar={
+        error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : (
+          <Input
+            placeholder="Search skills…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+        )
+      }
+    >
+      <DataTable
+        columns={columns}
+        data={rows}
+        filterValue={search}
+        filterColumn="slug"
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
+        onRowClick={(row) =>
+          navigate({
+            to: "/settings/skills/$skillSlug",
+            params: { skillSlug: row.slug },
+          })
+        }
+        emptyState={
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            No skills in the catalog yet.
+          </div>
+        }
       />
-    </div>
+    </SettingsTablePane>
   );
 }

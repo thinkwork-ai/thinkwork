@@ -5,7 +5,7 @@ import {
 } from "./agentcore-spans.js";
 
 describe("fetchSpansForSession", () => {
-  it("queries span and runtime logs, keeping only span-shaped runtime records", async () => {
+  it("queries span and runtime logs, keeping Pi and Strands span-shaped runtime records", async () => {
     const sentLogGroups: Array<string | undefined> = [];
     const cloudWatch: CloudWatchLogsClientLike = {
       send: vi.fn(async (command) => {
@@ -33,11 +33,18 @@ describe("fetchSpansForSession", () => {
             },
             {
               message: JSON.stringify({
-                name: "ordinary log",
-                scope: { name: "app" },
+                name: "pi_tool_call",
+                scope: { name: "thinkwork.pi.runtime" },
                 spanId: "span-2",
               }),
               timestamp: 1_700_000_000_020,
+            },
+            {
+              message: JSON.stringify({
+                name: "ordinary log",
+                scope: { name: "app" },
+              }),
+              timestamp: 1_700_000_000_030,
             },
           ],
         };
@@ -58,6 +65,12 @@ describe("fetchSpansForSession", () => {
         scope: { name: "strands.telemetry.tracer" },
         spanId: "span-1",
         cloudWatchTimestamp: 1_700_000_000_010,
+      },
+      {
+        name: "pi_tool_call",
+        scope: { name: "thinkwork.pi.runtime" },
+        spanId: "span-2",
+        cloudWatchTimestamp: 1_700_000_000_020,
       },
     ]);
   });
