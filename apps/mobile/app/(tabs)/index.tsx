@@ -1231,10 +1231,6 @@ export default function ThreadsScreen() {
               Keyboard.dismiss();
               spacePickerRef.current?.present();
             }}
-            onPlusPress={() => {
-              Keyboard.dismiss();
-              workspacePickerRef.current?.present();
-            }}
             selectedWorkspaces={selectedWorkspaces}
             onRemoveWorkspace={(id) =>
               setSelectedWorkspaces((prev) => prev.filter((w) => w.id !== id))

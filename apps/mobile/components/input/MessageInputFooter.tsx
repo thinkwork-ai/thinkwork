@@ -19,7 +19,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowUp,
-  Plus,
   Mic,
   ChevronDown,
   Paperclip,
@@ -62,10 +61,6 @@ interface MessageInputFooterProps {
    */
   agentEnabled?: boolean;
   onToggleAgent?: () => void;
-  /** Open workspace picker (+ button) */
-  onPlusPress?: () => void;
-  /** Render the plus button dimmed and swallow presses. */
-  plusDisabled?: boolean;
   /** Open the space picker. */
   onSpacePress?: () => void;
   selectedSpace?: SelectedSpace | null;
@@ -98,8 +93,6 @@ export const MessageInputFooter = forwardRef<
     onRemoveAttachment,
     agentEnabled,
     onToggleAgent,
-    onPlusPress,
-    plusDisabled,
     onSpacePress,
     selectedSpace,
     disabled,
@@ -273,16 +266,6 @@ export const MessageInputFooter = forwardRef<
                 style={{ opacity: disabled ? 0.35 : 1 }}
               >
                 <Paperclip size={22} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-            {onPlusPress && (
-              <Pressable
-                onPress={plusDisabled || disabled ? undefined : onPlusPress}
-                disabled={plusDisabled || disabled}
-                className="p-1 active:opacity-70"
-                style={{ opacity: plusDisabled || disabled ? 0.35 : 1 }}
-              >
-                <Plus size={26} color={colors.mutedForeground} />
               </Pressable>
             )}
             {onSpacePress && (
