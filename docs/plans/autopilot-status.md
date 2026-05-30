@@ -2628,6 +2628,7 @@ None.
 ## Status
 
 - Branch: `codex/local-pi-performance`
+- PR: [#1864](https://github.com/thinkwork-ai/thinkwork/pull/1864)
 - Started: `2026-05-30`
 - Target branch: `main`
 - Root cause:
