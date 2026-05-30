@@ -1116,19 +1116,30 @@ export default function ThreadDetailRoute() {
     // the thread via record-turn so it renders through the normal message query +
     // subscription. (No production users yet — this is the on-device agent handling live
     // mobile messages.)
+    //
+    // Show the "Working…" indicator for the duration of the on-device turn and
+    // always clear it when the turn settles. record-turn inserts the messages
+    // directly, so there's no onNewMessage subscription event to clear it the way
+    // the cloud path does (see the onNewMessage effect) — we own the lifecycle here.
+    markThreadActive(threadId);
     try {
       await runThreadHarnessTurn({
         threadId,
         userText: text,
-        priorMessages: messages.map((m: any) => ({
-          role: m.role,
-          content: m.content,
-        })),
+        // `messages` comes back newest-first (resolver orders desc(created_at));
+        // the harness needs chronological order so prior turns alternate correctly.
+        priorMessages: [...messages]
+          .sort(
+            (a: any, b: any) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          )
+          .map((m: any) => ({ role: m.role, content: m.content })),
       });
     } catch (e) {
       console.error("[harness] thread turn failed:", e);
+    } finally {
+      clearThreadActive(threadId);
     }
-    markThreadActive(threadId);
     // Re-fetch so the persisted user + assistant messages appear and auto-scroll kicks in
     reexecuteThread({ requestPolicy: "network-only" });
     reexecuteMessages({ requestPolicy: "network-only" });
@@ -1141,6 +1152,7 @@ export default function ThreadDetailRoute() {
     reexecuteMessages,
     reexecuteTurns,
     markThreadActive,
+    clearThreadActive,
   ]);
 
   // Don't render stale content — wait until the correct thread is loaded
