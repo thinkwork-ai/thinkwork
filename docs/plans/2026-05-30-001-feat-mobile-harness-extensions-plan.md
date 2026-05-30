@@ -274,6 +274,7 @@ Two new server routes (`/api/mcp/tools/list`, `/api/mcp/tools/call`); everything
 - **`before_agent_start` result shape (U1):** mirror Pi's `BeforeAgentStartEvent { systemPrompt }` + `BeforeAgentStartEventResult { systemPrompt? }` (cloud #1847 is the reference).
 - **Tenant MCP endpoint resolution (U2):** confirm where the cloud agent's `mcp_configs` / tenant MCP URL come from (Strands/SSM/DB) and reuse. If only the Builder MCP (`api.thinkwork.ai/mcp/builder`) is available, target it first.
 - **Bundled-SDK decision (U2):** whether `mcp-proxy` inlines an SDK or externalizes `@aws-sdk/*` — depends on upstream transport (plain `fetch` JSON-RPC needs nothing extra).
+- **U3 tool-shape fork (register-N vs single `mcp()` proxy):** `pi-mcp-adapter` (Nico Bailon, real-Pi extension) exposes ONE proxy `mcp()` tool with lazy discovery instead of registering N verbose MCP tool defs — ~200 tokens vs hundreds. On a phone (small context, slow tokens) the single-proxy shape may beat register-N. Decide at U3: register one harness `Tool` per def (current plan) vs one `mcp` proxy tool. Adapter itself is Node-only (can't run in Hermes); a parallel session is wiring it into a Node host, so U2 could later forward to that host's HTTP MCP endpoint instead of talking to the tenant MCP server directly.
 - **Extension extraction trigger:** after a second extension lands, extract `apps/mobile/lib/agent/` → `packages/pi-hermes`. Not this plan.
 - **Empty-tool UX:** how the agent phrases "no tool for that" (base system prompt already covers the general case).
 
