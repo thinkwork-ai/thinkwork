@@ -11,6 +11,7 @@ import { BedrockModelProvider } from "./providers/bedrock";
 import { createAgentSession } from "./session";
 import { buildTurnContext } from "./turn-context";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
+import { workspaceContextExtension } from "./extensions/workspace-context-extension";
 import { recordTurn } from "./persist-turn";
 import type { ExtensionFactory } from "./extensions/types";
 import type { ImagePart, Message, ModelProvider, Tool } from "./types";
@@ -32,6 +33,10 @@ export interface RunThreadHarnessTurnInput {
    * no platform tools (plain chat); built-ins still apply.
    */
   agentId?: string;
+  /** Current human user id, used to load the user-scoped USER.md context. */
+  userId?: string;
+  /** Active Space id, used to load direct Space workspace context when available. */
+  spaceId?: string;
   tools?: Tool[];
   /**
    * Images attached to this user message (model-vision input — e.g. a business
@@ -91,7 +96,16 @@ export async function runThreadHarnessTurn(
   // are preserved — extensions are additive.
   const extensions =
     deps.extensions ??
-    (input.agentId ? [mcpToolsExtension({ agentId: input.agentId })] : []);
+    [
+      input.userId || input.agentId || input.spaceId
+        ? workspaceContextExtension({
+            userId: input.userId,
+            agentId: input.agentId,
+            spaceId: input.spaceId,
+          })
+        : null,
+      input.agentId ? mcpToolsExtension({ agentId: input.agentId }) : null,
+    ].filter((ext): ext is ExtensionFactory => Boolean(ext));
   const session = createAgentSession({
     modelProvider: provider,
     systemPrompt: system,

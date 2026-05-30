@@ -17,6 +17,7 @@ export type { AgentSession, AgentSessionConfig } from "./session";
 // Pi-style extensions (the customization seam — registerTool + on(event) + logger).
 export { defineExtension } from "./extensions/define-extension";
 export { loadExtensions } from "./extensions/load-extensions";
+export { workspaceContextExtension } from "./extensions/workspace-context-extension";
 export type { LoadedExtensions } from "./extensions/load-extensions";
 export type {
   ExtensionAPI,
