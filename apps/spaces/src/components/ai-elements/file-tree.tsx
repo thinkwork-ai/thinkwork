@@ -37,7 +37,13 @@ export const FileTree = ({
   ...props
 }: FileTreeProps) => (
   <FileTreeContext.Provider value={{ selectedPath, onSelect }}>
-    <div className={cn("font-mono text-sm", className)} role="tree" {...props}>
+    {/* w-max + min-w-full lets rows grow past the pane so the scroll container
+        scrolls horizontally instead of truncating deep paths. */}
+    <div
+      className={cn("w-max min-w-full font-mono text-sm", className)}
+      role="tree"
+      {...props}
+    >
       {children}
     </div>
   </FileTreeContext.Provider>
@@ -75,7 +81,7 @@ export const FileTreeFolder = ({
         ) : (
           <FolderIcon className="size-4 shrink-0 text-blue-500" />
         )}
-        <span className="truncate">{name}</span>
+        <span className="whitespace-nowrap">{name}</span>
       </button>
       {expanded ? <div className="ml-4 border-l pl-2">{children}</div> : null}
     </div>
@@ -106,7 +112,7 @@ export const FileTreeFile = ({ path, name, icon }: FileTreeFileProps) => {
       <span className="shrink-0">
         {icon ?? <FileIcon className="size-4 text-muted-foreground" />}
       </span>
-      <span className="truncate">{name}</span>
+      <span className="whitespace-nowrap">{name}</span>
     </button>
   );
 };
