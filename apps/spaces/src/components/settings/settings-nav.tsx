@@ -102,7 +102,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Local Workspace",
+    label: "Workspace",
     to: "/settings/local-workspace",
     icon: FolderTree,
     desktopOnly: true,

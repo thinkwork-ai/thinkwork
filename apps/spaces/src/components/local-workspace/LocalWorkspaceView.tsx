@@ -74,8 +74,8 @@ export function LocalWorkspaceView({ bridge }: LocalWorkspaceViewProps) {
   // root (main.tsx), so it's always present for this route.
   const { refresh, treeLoading, available } = ws;
   usePageHeaderActions({
-    title: "Local Workspace",
-    breadcrumbs: [{ label: "Local Workspace" }],
+    title: "Workspace",
+    breadcrumbs: [{ label: "Workspace" }],
     action: available ? (
       <Button
         variant="ghost"
@@ -95,7 +95,7 @@ export function LocalWorkspaceView({ bridge }: LocalWorkspaceViewProps) {
 
   if (!available) {
     return (
-      <Centered>Local Workspace is only available in the desktop app.</Centered>
+      <Centered>Workspace is only available in the desktop app.</Centered>
     );
   }
 
